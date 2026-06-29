@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Memoscape",
+    "slug": "memoscape",
+    "version": "0.1.0",
+    "sdkVersion": "54.0.0",
+    "scheme": "memoscape",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.letsgettoworkbro.memoscape"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.letsgettoworkbro.memoscape"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
