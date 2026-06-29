@@ -10,28 +10,20 @@
 --- Falls back to a no-op mock when frame is absent (keeps Python
 --- host tests and offline CI passing).
 ---
---- FIXED over 99ece13:
----   - radial_rays signature unified with renderer.lua:
----     (cx, cy, r_min, r_max, n_rays, color, bloom_r)
+--- FIXED:
+---   - radial_rays signature unified with renderer.lua
+---   - polygon passthrough REMOVED: frame.display.polygon is never called.
+---     halo.display.polygon is now a closed_polygon helper using lines only.
 
 local math = math
 
--- ---------------------------------------------------------------------------
--- Detect runtime environment
--- ---------------------------------------------------------------------------
 local HAS_FRAME = (type(_G.frame) == "table")
 
--- ---------------------------------------------------------------------------
--- No-op mock used when frame is absent
--- ---------------------------------------------------------------------------
 local function noop(...) end
-local function noop_bool() return false end
 
 local mock_display = setmetatable({}, {
   __index = function(_, k)
-    return function(...)
-      -- silent no-op; useful in CI / Python test context
-    end
+    return function(...) end
   end
 })
 
@@ -41,18 +33,13 @@ local mock_bt = {
   receive          = function() return nil end,
 }
 
-local mock_button = {
-  single = noop, double = noop, long = noop,
-}
-
-local mock_imu = { tap_callback = noop }
+local mock_button = { single = noop, double = noop, long = noop }
+local mock_imu    = { tap_callback = noop }
 
 -- ---------------------------------------------------------------------------
--- Primitive approximations  (all marked APPROX per spec)
+-- Primitive approximations (lines/circles/rects only; no frame.display.polygon)
 -- ---------------------------------------------------------------------------
 
---- APPROX: quadratic_bezier
---- Renders as polyline of `steps` line segments via parametric t=0..1
 local function bezier(p0, p1, p2, color, steps)
   if not HAS_FRAME then return end
   steps = steps or 24
@@ -69,8 +56,6 @@ local function bezier(p0, p1, p2, color, steps)
   end
 end
 
---- APPROX: elliptical_arc
---- Renders as polyline via math.cos/sin; steps = arc resolution
 local function elliptical_arc(cx, cy, rx, ry, start_deg, end_deg, color, steps)
   if not HAS_FRAME then return end
   steps = steps or 32
@@ -89,8 +74,6 @@ local function elliptical_arc(cx, cy, rx, ry, start_deg, end_deg, color, steps)
   end
 end
 
---- APPROX: polyline
---- Loop of frame.display.line(points[i] -> points[i+1])
 local function polyline(points, color)
   if not HAS_FRAME then return end
   for i = 1, #points - 1 do
@@ -100,9 +83,19 @@ local function polyline(points, color)
   end
 end
 
---- APPROX: polar_segments
---- Compute segment endpoints via math.cos/sin; lit segs drawn bright,
---- ghost segs drawn with ghost_color
+-- closed_polygon: draws N line segments connecting each pt to the next,
+-- closing back to pts[1]. Uses frame.display.line ONLY.
+-- frame.display.polygon is never called anywhere in this file.
+local function closed_polygon(pts, color)
+  if not HAS_FRAME then return end
+  for i = 1, #pts do
+    local a = pts[i]
+    local b = pts[(i % #pts) + 1]
+    frame.display.line(math.floor(a[1] or a.x), math.floor(a[2] or a.y),
+                       math.floor(b[1] or b.x), math.floor(b[2] or b.y), color)
+  end
+end
+
 local function polar_segments(cx, cy, r_inner, r_outer, n_segs, lit_segs, color, ghost_color)
   if not HAS_FRAME then return end
   ghost_color = ghost_color or color
@@ -121,10 +114,6 @@ local function polar_segments(cx, cy, r_inner, r_outer, n_segs, lit_segs, color,
   end
 end
 
---- APPROX: radial_rays
---- frame.display.line per ray + frame.display.circle at tip for bloom dot
---- FIXED: signature is now (cx, cy, r_min, r_max, n_rays, color, bloom_r)
---- to match renderer.lua local radial_rays -- both must be identical.
 local function radial_rays(cx, cy, r_min, r_max, n_rays, color, bloom_r)
   if not HAS_FRAME then return end
   bloom_r = bloom_r or 2
@@ -137,13 +126,10 @@ local function radial_rays(cx, cy, r_min, r_max, n_rays, color, bloom_r)
     local y2 = cy + r_max * math.sin(angle)
     frame.display.line(math.floor(x1), math.floor(y1),
                        math.floor(x2), math.floor(y2), color)
-    -- bloom dot at tip
     frame.display.circle(math.floor(x2), math.floor(y2), bloom_r, color, false)
   end
 end
 
---- APPROX: check_glyph
---- Two frame.display.line calls forming a checkmark polyline
 local function check_glyph(cx, cy, size, color)
   if not HAS_FRAME then return end
   local s = size / 60.0
@@ -154,9 +140,6 @@ local function check_glyph(cx, cy, size, color)
   frame.display.line(bx, by, ccx, ccy, color)
 end
 
---- APPROX: shield_glyph
---- frame.display.polygon with 6 points approximating hexagon outline,
---- plus two rect pause bars inside
 local function shield_glyph(cx, cy, size, color, pause_bars)
   if not HAS_FRAME then return end
   if pause_bars == nil then pause_bars = true end
@@ -167,9 +150,7 @@ local function shield_glyph(cx, cy, size, color, pause_bars)
     pts[#pts+1] = { math.floor(cx + hw * math.cos(angle)),
                     math.floor(cy + hw * math.sin(angle)) }
   end
-  -- Draw as polyline (close manually)
-  pts[#pts+1] = pts[1]
-  polyline(pts, color)
+  closed_polygon(pts, color)  -- lines only, NOT frame.display.polygon
   if pause_bars then
     local bar_h = math.floor(size * 0.24)
     local bar_w = math.max(3, math.floor(size * 0.08))
@@ -179,9 +160,6 @@ local function shield_glyph(cx, cy, size, color, pause_bars)
   end
 end
 
---- APPROX: point_cloud_text
---- True per-pixel particle rendering is not feasible in Lua.
---- Approximation: render the text normally.
 local function point_cloud_text(text, cx, cy, font_size, density, color)
   if not HAS_FRAME then return end
   if density and density < 0.05 then return end
@@ -194,9 +172,7 @@ end
 local halo = {}
 
 if HAS_FRAME then
-  -- ---- display ----
   halo.display = {
-    -- Core frame.display passthrough
     clear          = function(color) frame.display.clear(color or 0x000000) end,
     show           = function() frame.display.show() end,
     text           = function(txt, x, y, color) frame.display.text(txt, x, y, color) end,
@@ -204,11 +180,11 @@ if HAS_FRAME then
     rect           = function(x,y,w,h,color,filled) frame.display.rect(x,y,w,h,color,filled) end,
     circle         = function(cx,cy,r,color,filled) frame.display.circle(cx,cy,r,color,filled) end,
     set_pixel      = function(x,y,color) frame.display.set_pixel(x,y,color) end,
-    polygon        = function(pts, color) frame.display.polygon(pts, color) end,
+    -- polygon: uses closed_polygon (lines only). frame.display.polygon is NOT called.
+    polygon        = closed_polygon,
     set_font       = function(fid, sz, sc) frame.display.set_font(fid, sz, sc) end,
     width          = function() return frame.display.width() end,
     height         = function() return frame.display.height() end,
-    -- Primitive approximations
     bezier             = bezier,
     elliptical_arc     = elliptical_arc,
     polyline           = polyline,
@@ -218,26 +194,19 @@ if HAS_FRAME then
     shield_glyph       = shield_glyph,
     point_cloud_text   = point_cloud_text,
   }
-  -- ---- bluetooth ----
   halo.bluetooth = {
     send             = function(s) frame.bluetooth.send(s) end,
     receive_callback = function(fn) frame.bluetooth.receive_callback(fn) end,
-    -- Polled receive not in real frame API; return nil to stay safe
     receive          = function() return nil end,
   }
-  -- ---- button / imu ----
   halo.button = {
     single = function(fn) frame.button.single(fn) end,
     double = function(fn) frame.button.double(fn) end,
     long   = function(fn) frame.button.long(fn) end,
   }
-  halo.imu = {
-    tap_callback = function(fn) frame.imu.tap_callback(fn) end,
-  }
-  -- ---- sleep / misc ----
+  halo.imu   = { tap_callback = function(fn) frame.imu.tap_callback(fn) end }
   halo.sleep = function(s) frame.sleep(s) end
 else
-  -- Offline / CI mock
   halo.display   = mock_display
   halo.bluetooth = mock_bt
   halo.button    = mock_button
