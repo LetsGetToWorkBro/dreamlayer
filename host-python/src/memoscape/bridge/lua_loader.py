@@ -41,6 +41,10 @@ MANDATORY_REQUIRE_PATHS = {
     "lib/queue",
     "lib/constants",
     "ble/protocol",
+    # Confirmed present in repo: halo-lua/app/commands.lua
+    "app/commands",
+    # Confirmed present in repo: halo-lua/ble/message_types.lua
+    "ble/message_types",
 }
 
 
@@ -102,7 +106,7 @@ def collect_lua(
         print("=== require() key mapping ===")
         for key in sorted(bundle):
             rk = _path_to_require_key(key)
-            mark = "✓" if rk in MANDATORY_REQUIRE_PATHS or key == "main.lua" else "?"
+            mark = "\u2713" if rk in MANDATORY_REQUIRE_PATHS or key == "main.lua" else "?"
             print(f"  {mark}  {key}  ->  require('{rk}')")
         print()
 
