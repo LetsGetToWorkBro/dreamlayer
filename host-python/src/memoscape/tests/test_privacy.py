@@ -1,20 +1,28 @@
 from memoscape.simulator import scenarios
 from memoscape.memory.privacy import PrivacyGate
+from memoscape.memory.proactive import ProactiveEngine
+from memoscape.memory.db import MemoryDB
+
 
 def test_pause_blocks_capture():
     orch, blocked = scenarios.privacy_pause()
     assert orch.privacy.paused is True
     assert blocked is None
 
+
 def test_gate_logic():
     g = PrivacyGate()
     assert g.allow_capture() is True
-    g.pause(); assert g.allow_capture() is False
-    g.resume(); assert g.allow_capture() is True
+    g.pause()
+    assert g.allow_capture() is False
+    g.resume()
+    assert g.allow_capture() is True
+
 
 def test_paused_card_renders():
     orch, _ = scenarios.privacy_pause()
     assert orch.bridge.last_card["type"] == "PrivacyPausedCard"
+
 
 def test_paused_card_text():
     orch, _ = scenarios.privacy_pause()
@@ -22,14 +30,78 @@ def test_paused_card_text():
     assert c["primary"] == "Memory paused"
     assert "Nothing is being captured" in c["lines"]
 
+
 def test_resume_allows_capture_again():
     orch, blocked, saved = scenarios.resume_after_pause()
     assert blocked is None
     assert saved is not None
 
+
 def test_emulator_refuses_content_while_paused():
     from memoscape.bridge.emulator_bridge import EmulatorBridge
-    b = EmulatorBridge(); b.connect()
+    b = EmulatorBridge()
+    b.connect()
     b.inject_event("privacy_pause")
     b.send_card({"type": "ObjectRecallCard", "primary": "Keys"})
     assert b.last_card["type"] == "PrivacyPausedCard"
+
+
+# ---------------------------------------------------------------------------
+# NEW: proactive surfacing must be blocked while paused
+# ---------------------------------------------------------------------------
+def test_proactive_blocked_during_pause():
+    """ProactiveEngine must return None when a paused PrivacyGate is supplied."""
+    db = MemoryDB(":memory:")
+    privacy = PrivacyGate()
+
+    # Seed a high-confidence place memory
+    pid = db.add_place("Office", "work_office")
+    db.add_memory(
+        "conversation",
+        "You discussed the invoice",
+        confidence=0.8,
+        place_id=pid,
+        meta={"person": "Jordan"},
+    )
+
+    engine = ProactiveEngine(db, privacy=privacy)
+
+    # Sanity: not paused → should surface
+    assert engine.on_place("work_office") is not None
+
+    # Pause → must return None
+    privacy.pause()
+    assert engine.on_place("work_office") is None
+
+    # Resume → surfaces again
+    privacy.resume()
+    assert engine.on_place("work_office") is not None
+
+
+def test_orchestrator_on_place_blocked_during_pause():
+    """orchestrator.on_place() must return None while paused."""
+    _, card_before = scenarios.proactive_recall()
+    assert card_before is not None
+
+    # Build a fresh orch in the paused state
+    import json
+    from memoscape.simulator.scenarios import new_orch
+    o = new_orch()
+    o.bridge.connect()
+    # Seed a proactive memory
+    place_data = json.loads(open(
+        __import__('os').path.join(
+            __import__('os').path.dirname(__file__),
+            "..", "simulator", "fixtures", "place_invoice_memory.json"
+        )
+    ).read())
+    pid = o.db.add_place(place_data["place"]["name"], place_data["place"]["signature"])
+    o.db.add_memory(
+        "conversation", place_data["summary"],
+        confidence=place_data["confidence"], place_id=pid,
+        meta={"person": place_data["person"]},
+    )
+    # Pause, then trigger proactive
+    o.pause()
+    result = o.on_place(place_data["place"]["signature"])
+    assert result is None
