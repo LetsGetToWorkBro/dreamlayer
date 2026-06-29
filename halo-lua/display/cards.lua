@@ -70,7 +70,7 @@ function M.object_recall(o)
     confidence = conf,
     conf_color = conf_color(conf),
     -- Visual: Bezier trace, diamond jewel+orbit arcs, place at curve endpoint,
-    --         detail in [ … ] bracket
+    --         detail in [ ... ] bracket
   }
 end
 
@@ -125,7 +125,7 @@ function M.privacy_paused()
     type       = "PrivacyPausedCard",
     dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.PrivacyPausedCard or 0,
     primary    = "Memory paused",
-    -- Visual: shield+pause-bars glyph, breach halo (340° arc), red/amber palette
+    -- Visual: shield+pause-bars glyph, breach halo (340 deg arc), red/amber palette
   }
 end
 

@@ -1,5 +1,5 @@
 --- display/layout.lua
---- Shared layout constants and helper functions for the 256×256 display.
+--- Shared layout constants and helper functions for the 256x256 display.
 ---
 --- All pixel values are absolute, origin top-left.
 --- Coordinate system matches frame.display and cards.lua.

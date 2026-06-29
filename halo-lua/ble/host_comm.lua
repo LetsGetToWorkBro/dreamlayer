@@ -54,7 +54,7 @@ function M.on_receive(raw)
   -- complete is a JSON string; decode it
   local ok, msg = pcall(M._decode, complete)
   if not ok then
-    -- malformed JSON — log and discard
+    -- malformed JSON -- log and discard
     if _G.halo and _G.halo.log then
       _G.halo.log("[host_comm] JSON decode error: " .. tostring(msg))
     end

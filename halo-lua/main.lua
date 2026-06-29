@@ -19,7 +19,7 @@ local E           = require("app.events")
 local HAS_FRAME = (type(_G.frame) == "table")
 
 -- ---------------------------------------------------------------------------
--- BLE → state machine event mapping
+-- BLE -> state machine event mapping
 -- ---------------------------------------------------------------------------
 local BUTTON_MAP = {
   single = E.EVENTS.single_click,

@@ -90,7 +90,7 @@ local function elliptical_arc(cx, cy, rx, ry, start_deg, end_deg, color, steps)
 end
 
 --- APPROX: polyline
---- Loop of frame.display.line(points[i] → points[i+1])
+--- Loop of frame.display.line(points[i] -> points[i+1])
 local function polyline(points, color)
   if not HAS_FRAME then return end
   for i = 1, #points - 1 do
@@ -124,7 +124,7 @@ end
 --- APPROX: radial_rays
 --- frame.display.line per ray + frame.display.circle at tip for bloom dot
 --- FIXED: signature is now (cx, cy, r_min, r_max, n_rays, color, bloom_r)
---- to match renderer.lua local radial_rays — both must be identical.
+--- to match renderer.lua local radial_rays -- both must be identical.
 local function radial_rays(cx, cy, r_min, r_max, n_rays, color, bloom_r)
   if not HAS_FRAME then return end
   bloom_r = bloom_r or 2

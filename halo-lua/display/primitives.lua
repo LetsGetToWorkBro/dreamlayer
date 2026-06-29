@@ -66,11 +66,11 @@ end
 --- @param x     number
 --- @param y     number
 --- @param text  string
---- @param _size number  font-size token — passed to set_font if you wire it; otherwise ignored
+--- @param _size number  font-size token -- passed to set_font if you wire it; otherwise ignored
 --- @param color number  0xRRGGBB integer
 function primitives.text_center(x, y, text, _size, color)
   if not HAS_FRAME then return end
-  -- frame.display.text(txt, x, y, color_int) — no table argument
+  -- frame.display.text(txt, x, y, color_int) -- no table argument
   frame.display.text(tostring(text), math.floor(x), math.floor(y), color)
 end
 
