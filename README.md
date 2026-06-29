@@ -1,31 +1,57 @@
 # Memoscape
 
-**A private memory layer for the real world.**
+> A private memory layer for Brilliant Labs Halo smart glasses.
 
-Memoscape is a premium experience layer for **Brilliant Labs Halo** smart glasses.
-It is a host-driven Halo application stack that *feels* like a branded OS: it owns
-onboarding, capture, memory, recall, HUD rendering, and privacy.
+Memoscape gives Halo wearers instant, on-glasses recall for the things that slip through the cracks: where you left your keys, what you promised someone, what happened last time you were in this place.
 
-> Status: **Pre-hardware build.** Everything here runs against the Halo emulator
-> and deterministic mocks. The day Halo arrives we pair it, upload the Lua runtime,
-> connect the host bridge, and run the first on-device memory recall demo.
+## Project layout
 
-## Repo layout
-- `docs/` — product spec, architecture, HUD design system, privacy, demos, device-day plan
-- `halo-lua/` — Lua 5.3 application that runs on the Halo VM (`main.lua` autoruns)
-- `host-python/` — host app + emulator harness + memory engine + tests
-- `phone-app/` — lightweight Expo/React Native scaffold (future host UI)
-- `scripts/` — runnable emulator + demo + export + test runners
-- `assets/` — exported HUD samples and palettes
-
-## Quick start
-```bash
-cd host-python
-pip install -e .
-python ../scripts/run_emulator.py
-python ../scripts/run_demo_object_recall.py
-python ../scripts/run_tests.py
+```
+memoscape/
+  host-python/          Python host — emulator bridge, real BLE bridge, memory engine
+    src/memoscape/
+      bridge/           BridgeBase + EmulatorBridge + RealBridge (brilliant-ble)
+      memory/           SQLite DB, retrieval, proactive, privacy gate
+      pipelines/        Vision + speech extraction (mock → real swap point)
+      app/              Orchestrator, intents, answer builder
+      hud/              Card schema, renderer (Pillow), HUD export
+      simulator/        Scenario helpers + 10 JSON fixtures
+      tests/            41 pytest tests (7 modules)
+  halo-lua/             Lua app for Halo display runtime
+  phone-app/            Expo / React Native companion app
+    app/                Expo Router screens: now, memories, settings, onboarding
+    src/ui/             Design system — theme tokens, components
+    src/services/       OnboardingService (5-step data-driven flow)
+    src/state/          Zustand stores: onboarding, halo, memory
+  scripts/              Runnable demo scripts
+  assets/hud/samples/   Exported 256x256 PNG HUD card previews
 ```
 
-## Critical path status
-See `docs/IMPLEMENTATION_PLAN.md` for what is complete vs blocked on hardware.
+## Quick start
+
+```bash
+# Install Python host
+cd host-python
+pip install -e .[dev]
+
+# Run tests
+pytest
+
+# Run emulator demo
+python scripts/run_demo_wallet.py
+
+# Install phone app deps
+cd phone-app && npm install && npx expo start
+```
+
+## Tests
+
+41 tests across 7 modules — all pass.
+
+```
+pytest host-python/src/memoscape/tests
+```
+
+## Device day checklist
+
+See `FIRST_DEVICE_TEST_PLAN.md`.

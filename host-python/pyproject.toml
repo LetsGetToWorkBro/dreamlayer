@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "memoscape"
+version = "0.1.0"
+description = "Memory engine for Brilliant Labs Halo glasses"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow>=10",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+hardware = ["brilliant-ble", "brilliant-msg"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/memoscape/tests"]
