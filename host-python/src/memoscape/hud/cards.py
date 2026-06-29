@@ -62,19 +62,18 @@ def object_recall(
 ) -> dict:
     """Build an ObjectRecallCard payload.
 
+    primary = object name (the thing being searched for).
+    place   = location answer; lives in its own 'place' key and in lines[].
+
     Accepts either a dict or positional/keyword args.
-
-    Dict keys accepted:  object | name | summary, place | location,
-                          detail | near, last_seen | footer, confidence.
-
-    Deprecated key mapping kept for callers that still pass ``primary`` for
-    the object name (old convention).
+    Dict keys: object | name | summary, place | location,
+               detail | near, last_seen | footer, confidence.
     """
     if isinstance(data, dict):
-        object_name = _d(data, "object",    ("name", "summary"))
-        place       = _d(data, "place",      ("location",), place)
-        detail      = _d(data, "detail",     ("near",),     detail)
-        last_seen   = _d(data, "last_seen",  ("footer",),   last_seen)
+        object_name = _d(data, "object",   ("name", "summary"))
+        place       = _d(data, "place",     ("location",),  place)
+        detail      = _d(data, "detail",    ("near",),      detail)
+        last_seen   = _d(data, "last_seen", ("footer",),    last_seen)
         confidence  = data.get("confidence", confidence)
     else:
         object_name = data  # positional first arg = object name
@@ -85,11 +84,11 @@ def object_recall(
     return {
         "type":       "ObjectRecallCard",
         "dismiss_ms": 3500,
-        "object":     object_name,
-        "primary":    place,           # place is the hero answer
+        "primary":    object_name,   # the object name is the hero identifier
+        "place":      place,         # location answer
         "detail":     detail,
         "last_seen":  last_seen,
-        "footer":     last_seen,       # alias so old tests keep passing
+        "footer":     last_seen,     # alias
         "confidence": confidence,
         "conf_color": T.conf_color(confidence),
         "lines":      [object_name, place, detail, last_seen],
@@ -118,13 +117,12 @@ def commitment_recall(
     """Build a CommitmentRecallCard payload.
 
     Accepts either a dict or positional/keyword args.
-
     Dict keys: person, task | primary, due | footer, confidence.
     """
     if isinstance(data, dict):
         person     = _d(data, "person")
-        task       = _d(data, "task",   ("primary",), task)
-        due        = _d(data, "due",    ("footer",),  due)
+        task       = _d(data, "task",  ("primary",), task)
+        due        = _d(data, "due",   ("footer",),  due)
         confidence = data.get("confidence", confidence)
     else:
         person = data  # positional first arg = person name
@@ -136,7 +134,7 @@ def commitment_recall(
         "primary":    task,
         "eyebrow":    f"You promised {person}",
         "due":        due,
-        "footer":     due,              # alias for tests
+        "footer":     due,
         "confidence": confidence,
         "conf_color": T.conf_color(confidence),
         "lines":      [f"You promised {person}", task, due],
@@ -154,7 +152,7 @@ def proactive_memory(
 ) -> dict:
     """Build a ProactiveMemoryCard payload.
 
-    Accepts either a dict ``{summary, person, confidence}`` or positional args
+    Accepts either a dict {summary, person, confidence} or positional args
     where the first arg is the summary string.
     """
     if isinstance(data, dict):
@@ -219,7 +217,7 @@ def error_card(msg: str = "Try again") -> dict:
         "lines":      ["Something went wrong", msg],
     }
 
-# Backwards-compat alias used by old tests and answer_builder
+# Backwards-compat alias
 error = error_card
 
 
@@ -235,36 +233,35 @@ def low_confidence() -> dict:
 
 # ---------------------------------------------------------------------------
 # ALL_SAMPLES — one instance of every card type for smoke-testing.
-# test_all_samples_have_type iterates this dict.
 # ---------------------------------------------------------------------------
 
 ALL_SAMPLES: dict[str, dict] = {
-    "ready":              ready(),
-    "saved_memory":       saved_memory("House keys"),
-    "query_listening":    query_listening(),
-    "loading":            loading(),
-    "object_recall":      object_recall({
-        "object":    "Keys",
-        "place":     "Kitchen table",
-        "detail":    "Beside notebook",
-        "last_seen": "Last seen 7:42 PM",
+    "ready":             ready(),
+    "saved_memory":      saved_memory("House keys"),
+    "query_listening":   query_listening(),
+    "loading":           loading(),
+    "object_recall":     object_recall({
+        "object":     "Keys",
+        "place":      "Kitchen table",
+        "detail":     "Beside notebook",
+        "last_seen":  "Last seen 7:42 PM",
         "confidence": 0.88,
     }),
-    "commitment_recall":  commitment_recall({
+    "commitment_recall": commitment_recall({
         "person":     "Jordan",
         "task":       "Send the invoice",
         "due":        "Tomorrow before noon",
         "confidence": 0.72,
     }),
-    "proactive_memory":   proactive_memory({
+    "proactive_memory":  proactive_memory({
         "summary":    "You discussed the invoice",
         "person":     "Jordan",
         "confidence": 0.70,
     }),
-    "person_context":     person_context(
+    "person_context":    person_context(
         "Jordan", headline="Sent invoice Wed", detail="Last seen today"
     ),
-    "privacy_paused":     privacy_paused(),
-    "error":              error_card("BLE timeout"),
-    "low_confidence":     low_confidence(),
+    "privacy_paused":    privacy_paused(),
+    "error":             error_card("BLE timeout"),
+    "low_confidence":    low_confidence(),
 }
