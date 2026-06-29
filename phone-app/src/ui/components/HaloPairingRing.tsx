@@ -1,4 +1,5 @@
-import { View, Animated, Easing, useEffect, useRef } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Animated, Easing } from "react-native";
 import { colors } from "../theme/colors";
 
 export function HaloPairingRing({ scanning }: { scanning: boolean }) {
