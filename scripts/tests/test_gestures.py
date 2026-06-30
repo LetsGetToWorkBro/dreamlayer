@@ -25,11 +25,12 @@ EMA / stream design
 -------------------
 The EMA seeded=false branch sets value=x on the very first sample, so
 the first leg of a standalone stream crosses threshold on sample 1.
-Subsequent legs, and any leg in a sequential stream where the axis EMA
-was already seeded, must travel via the filter:
-  alpha=0.35, strength=35, threshold=28:  6 samples to cross (use 8)
-  alpha=0.35, strength=32, threshold=28:  7 samples to cross (use 8)
-All stream builders therefore use 8 samples on EVERY leg.
+Subsequent legs must travel via the filter from the opposite extreme:
+  alpha=0.35, strength=35 -> strength*0.65, threshold=28: 6 samples
+  alpha=0.35, strength=25 -> strength*0.65, threshold=20: 6 samples
+  alpha=0.35, strength=32 -> strength*0.65, threshold=28: 7 samples
+All non-first legs use 8 samples to guarantee the crossing from any
+prior EMA value, including from the deepest opposite extreme.
 """
 from __future__ import annotations
 
@@ -163,7 +164,8 @@ def _samples(ax=0.0, ay=0.0, az=0.0, count=1, start_ms=0):
 
 
 # NOD  (Y-axis: +peak → -peak → rest)
-# 8 samples per leg ensures crossing regardless of prior EMA state.
+# Leg1 snaps EMA on sample 1.  Leg2 uses 8 samples to cross from the
+# positive extreme regardless of prior EMA state.
 # Total: (8+8+3)*20 = 380 ms
 def _nod_stream(start_ms=0, strength=35.0):
     t = start_ms
@@ -174,16 +176,15 @@ def _nod_stream(start_ms=0, strength=35.0):
 
 
 # DOUBLE NOD: + - + - within gesture_window_ms=600 ms
-# 4 legs x 8 samples x 20ms = 640ms -- just over 600ms window.
-# Use 5 samples on legs 1,3 (first positive legs); EMA snaps on first
-# sample of a fresh stream so 5 is enough to cross, and we need total
-# time < 600ms:  (5+8+5+8)*20 = 520ms < 600ms.  Legs 2,4 use 8 to
-# guarantee the negative crossing from any prior EMA value.
+# Leg1 snaps on sample 1 (5 samples is enough to be > threshold).
+# Legs 2, 3, 4 all use 8 samples to guarantee crossing from the deepest
+# opposite extreme (~±29.7 after a full leg of ±35).
+# Total: (5+8+8+8)*20 = 580 ms < 600 ms window.
 def _double_nod_stream(start_ms=0, strength=35.0):
     t = start_ms
     s  = _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
     s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
-    s += _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
+    s += _samples(0,  strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0,  0,        0, 3, t)
     return s
@@ -202,22 +203,25 @@ def _shake_stream(start_ms=0, strength=32.0):
     return s
 
 
-# GLANCE  (Z-axis: brief +crossing then explicit return to negative)
-# After the hold samples, one sample at -strength forces a -crossing in
-# cz, making match_glance return nil and triggering the GLANCE_PEEK fire
-# in the else-branch.  Two rest samples then clear _tilt_active before it
-# accumulates enough duration for TILT_REVEAL.
+# GLANCE  (Z-axis: brief +crossing then return to negative)
+# After the hold, 6 samples of -strength drive EMA from +25 down through
+# -threshold_tilt=-20 (crosses at sample 6, t=220ms).  That adds a -1
+# crossing to cz, making match_glance return nil and triggering the
+# GLANCE_PEEK fire in the else-branch.  Duration at fire = 220ms <
+# peek_max_ms=350ms.  TILT_REVEAL is not triggered: _tilt_active starts
+# at the first -strength sample but the hold is only ~100ms < 400ms.
+# 2 rest samples follow to fully reset _tilt_active.
 def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
     t   = start_ms
     n   = max(1, duration_ms // DT_MS)
     s   = _samples(0, 0,  strength, n, t);  t += n * DT_MS
-    s  += _samples(0, 0, -strength, 1, t);  t += DT_MS
+    s  += _samples(0, 0, -strength, 6, t);  t += 6 * DT_MS
     s  += _samples(0, 0,  0,        2, t)
     return s
 
 
 # TILT  (Z-axis: sustained negative for hold_tilt_ms=400 ms)
-# EMA snaps to strength on sample 1 → below threshold_tilt=-20 immediately.
+# EMA snaps to strength on sample 1 → below -threshold_tilt immediately.
 # 500 ms stream fires at ~400 ms.
 def _tilt_stream(start_ms=0, strength=-25.0, duration_ms=500):
     t  = start_ms
