@@ -1,7 +1,7 @@
 """
 pytest tests for halo-lua/app/imu_gesture.lua.
 
-Runs the Lua classifier under lupa (Lua 5.4 via Python bindings).
+Runs the Lua classifier under lupa (Lua 5.4/5.5 via Python bindings).
 Falls back gracefully with a clear skip message if lupa is not installed.
 
 Install: uv add lupa
@@ -10,9 +10,7 @@ All tests are pure synthetic IMU streams — no hardware, no BLE.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -38,9 +36,20 @@ requires_lupa = pytest.mark.skipif(
 
 # ---------------------------------------------------------------------------
 # Lua runtime fixture
-# NOTE: unpack_returned_tuples=False (default) so require() returns the
-# module table directly, not a (table, path) tuple.
+#
+# NOTE: lua55 (and some lua54 builds) ignore unpack_returned_tuples=False
+# and always return require() as (table, path). We normalise in
+# _lua_require() by checking whether the result is a tuple and taking [0].
 # ---------------------------------------------------------------------------
+
+def _lua_require(rt, module: str):
+    """require() a Lua module and always return just the table."""
+    result = rt.eval(f"require('{module}')")
+    # lupa may return (table, path) as a Python tuple
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
 
 @pytest.fixture(scope="module")
 def lua():
@@ -57,91 +66,64 @@ def lua():
 def gesture_module(lua):
     """Fresh require of imu_gesture for each test (clears module cache)."""
     lua.execute("package.loaded['app.imu_gesture'] = nil")
-    return lua.eval("require('app.imu_gesture')")
-
-
-# ---------------------------------------------------------------------------
-# Helper: build a Lua table from a Python dict for passing config overrides.
-# lupa accepts keyword args to lua.table(); we unpack the dict that way.
-# ---------------------------------------------------------------------------
-
-def _lua_cfg(lua, d: dict):
-    """Convert a Python dict to a lupa Lua table."""
-    return lua.table(**d)
+    return _lua_require(lua, "app.imu_gesture")
 
 
 # ---------------------------------------------------------------------------
 # Stream builder helpers
 # ---------------------------------------------------------------------------
 
-FPS   = 50          # samples per second
-DT_MS = 1000 // FPS # 20 ms per sample
+FPS   = 50
+DT_MS = 1000 // FPS
 
 
-def _samples(
-    ax: float = 0.0,
-    ay: float = 0.0,
-    az: float = 0.0,
-    count: int = 1,
-    start_ms: int = 0,
-) -> list[tuple[float, float, float, int]]:
-    """Flat-field samples at given axes for `count` frames."""
+def _samples(ax=0.0, ay=0.0, az=0.0, count=1, start_ms=0):
     return [(ax, ay, az, start_ms + i * DT_MS) for i in range(count)]
 
 
-def _nod_stream(start_ms: int = 0, strength: float = 35.0) -> list[tuple]:
-    """One forward-back nod: +Y peak then -Y peak."""
-    stream = []
-    stream += _samples(0, strength, 0, 3, start_ms)
-    stream += _samples(0, 0, 0, 2, start_ms + 60)
-    stream += _samples(0, -strength, 0, 3, start_ms + 100)
-    stream += _samples(0, 0, 0, 3, start_ms + 160)
-    return stream
+def _nod_stream(start_ms=0, strength=35.0):
+    s = []
+    s += _samples(0,  strength, 0, 3, start_ms)
+    s += _samples(0,  0,        0, 2, start_ms + 60)
+    s += _samples(0, -strength, 0, 3, start_ms + 100)
+    s += _samples(0,  0,        0, 3, start_ms + 160)
+    return s
 
 
-def _double_nod_stream(start_ms: int = 0, strength: float = 35.0) -> list[tuple]:
-    """Two nods in sequence."""
-    s1 = _nod_stream(start_ms, strength)
-    s2 = _nod_stream(start_ms + 280, strength)
-    return s1 + s2
+def _double_nod_stream(start_ms=0, strength=35.0):
+    return _nod_stream(start_ms, strength) + _nod_stream(start_ms + 280, strength)
 
 
-def _shake_stream(start_ms: int = 0, strength: float = 32.0) -> list[tuple]:
-    """Left-right-left head shake: −X, +X, −X."""
-    stream = []
-    stream += _samples(-strength, 0, 0, 3, start_ms)
-    stream += _samples(0,         0, 0, 2, start_ms + 60)
-    stream += _samples( strength, 0, 0, 3, start_ms + 100)
-    stream += _samples(0,         0, 0, 2, start_ms + 160)
-    stream += _samples(-strength, 0, 0, 3, start_ms + 200)
-    stream += _samples(0,         0, 0, 3, start_ms + 260)
-    return stream
+def _shake_stream(start_ms=0, strength=32.0):
+    s = []
+    s += _samples(-strength, 0, 0, 3, start_ms)
+    s += _samples( 0,        0, 0, 2, start_ms + 60)
+    s += _samples( strength, 0, 0, 3, start_ms + 100)
+    s += _samples( 0,        0, 0, 2, start_ms + 160)
+    s += _samples(-strength, 0, 0, 3, start_ms + 200)
+    s += _samples( 0,        0, 0, 3, start_ms + 260)
+    return s
 
 
-def _glance_stream(start_ms: int = 0, strength: float = 25.0,
-                   duration_ms: int = 120) -> list[tuple]:
-    """Brief upward tilt then return to neutral."""
-    stream = []
-    n_hold = max(1, duration_ms // DT_MS)
-    stream += _samples(0, 0,  strength, 3, start_ms)
-    stream += _samples(0, 0,  strength, n_hold, start_ms + 60)
-    stream += _samples(0, 0,  0,        3, start_ms + 60 + n_hold * DT_MS)
-    return stream
+def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
+    n = max(1, duration_ms // DT_MS)
+    s = []
+    s += _samples(0, 0, strength, 3,    start_ms)
+    s += _samples(0, 0, strength, n,    start_ms + 60)
+    s += _samples(0, 0, 0,        3,    start_ms + 60 + n * DT_MS)
+    return s
 
 
-def _tilt_stream(start_ms: int = 0, strength: float = -25.0,
-                 duration_ms: int = 500) -> list[tuple]:
-    """Sustained downward tilt for TILT_REVEAL."""
-    n_hold = max(1, duration_ms // DT_MS)
-    stream = []
-    stream += _samples(0, 0, strength, n_hold, start_ms)
-    stream += _samples(0, 0, 0,        3, start_ms + n_hold * DT_MS)
-    return stream
+def _tilt_stream(start_ms=0, strength=-25.0, duration_ms=500):
+    n = max(1, duration_ms // DT_MS)
+    s = []
+    s += _samples(0, 0, strength, n, start_ms)
+    s += _samples(0, 0, 0,        3, start_ms + n * DT_MS)
+    return s
 
 
-def _feed_stream(G, stream: list[tuple]) -> list[tuple[str, float]]:
-    """Feed all samples and collect (gesture_name, confidence) pairs fired."""
-    fired: list[tuple[str, float]] = []
+def _feed_stream(G, stream):
+    fired = []
 
     def on_gesture(name, confidence):
         fired.append((str(name), float(confidence)))
@@ -160,38 +142,27 @@ def _feed_stream(G, stream: list[tuple]) -> list[tuple[str, float]]:
 class TestNodSave:
     def test_single_nod_fires(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _nod_stream())
-        names = [f[0] for f in fired]
-        assert "NOD_SAVE" in names
+        assert "NOD_SAVE" in [f[0] for f in _feed_stream(G, _nod_stream())]
 
     def test_nod_confidence_above_threshold(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _nod_stream())
-        for name, conf in fired:
+        for name, conf in _feed_stream(G, _nod_stream()):
             if name == "NOD_SAVE":
                 assert conf >= 0.70
 
     def test_weak_nod_below_threshold_ignored(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _nod_stream(strength=5.0))
-        names = [f[0] for f in fired]
-        assert "NOD_SAVE" not in names
+        assert "NOD_SAVE" not in [f[0] for f in _feed_stream(G, _nod_stream(strength=5.0))]
 
     def test_nod_cooldown_prevents_double_fire(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        s1 = _nod_stream(start_ms=0)
-        s2 = _nod_stream(start_ms=200)
-        fired = _feed_stream(G, s1 + s2)
-        nod_fires = [f for f in fired if f[0] == "NOD_SAVE"]
-        assert len(nod_fires) == 1
+        fired = _feed_stream(G, _nod_stream(0) + _nod_stream(200))
+        assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_nod_fires_again_after_cooldown(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        s1 = _nod_stream(start_ms=0)
-        s2 = _nod_stream(start_ms=1000)
-        fired = _feed_stream(G, s1 + s2)
-        nod_fires = [f for f in fired if f[0] == "NOD_SAVE"]
-        assert len(nod_fires) == 2
+        fired = _feed_stream(G, _nod_stream(0) + _nod_stream(1000))
+        assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -202,21 +173,15 @@ class TestNodSave:
 class TestDoubleNod:
     def test_double_nod_fires(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _double_nod_stream())
-        names = [f[0] for f in fired]
-        assert "DOUBLE_NOD" in names
+        assert "DOUBLE_NOD" in [f[0] for f in _feed_stream(G, _double_nod_stream())]
 
     def test_double_nod_not_shadowed_by_single_nod(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _double_nod_stream())
-        names = [f[0] for f in fired]
-        assert "DOUBLE_NOD" in names
+        assert "DOUBLE_NOD" in [f[0] for f in _feed_stream(G, _double_nod_stream())]
 
     def test_single_nod_does_not_fire_double_nod(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _nod_stream())
-        names = [f[0] for f in fired]
-        assert "DOUBLE_NOD" not in names
+        assert "DOUBLE_NOD" not in [f[0] for f in _feed_stream(G, _nod_stream())]
 
 
 # ---------------------------------------------------------------------------
@@ -227,30 +192,22 @@ class TestDoubleNod:
 class TestShakeDismiss:
     def test_shake_fires(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _shake_stream())
-        names = [f[0] for f in fired]
-        assert "SHAKE_DISMISS" in names
+        assert "SHAKE_DISMISS" in [f[0] for f in _feed_stream(G, _shake_stream())]
 
     def test_shake_confidence_above_threshold(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _shake_stream())
-        for name, conf in fired:
+        for name, conf in _feed_stream(G, _shake_stream()):
             if name == "SHAKE_DISMISS":
                 assert conf >= 0.70
 
     def test_weak_shake_ignored(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _shake_stream(strength=5.0))
-        names = [f[0] for f in fired]
-        assert "SHAKE_DISMISS" not in names
+        assert "SHAKE_DISMISS" not in [f[0] for f in _feed_stream(G, _shake_stream(strength=5.0))]
 
     def test_shake_cooldown(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        s1 = _shake_stream(start_ms=0)
-        s2 = _shake_stream(start_ms=300)
-        fired = _feed_stream(G, s1 + s2)
-        shake_fires = [f for f in fired if f[0] == "SHAKE_DISMISS"]
-        assert len(shake_fires) == 1
+        fired = _feed_stream(G, _shake_stream(0) + _shake_stream(300))
+        assert len([f for f in fired if f[0] == "SHAKE_DISMISS"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -261,15 +218,11 @@ class TestShakeDismiss:
 class TestGlancePeek:
     def test_glance_fires(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _glance_stream())
-        names = [f[0] for f in fired]
-        assert "GLANCE_PEEK" in names
+        assert "GLANCE_PEEK" in [f[0] for f in _feed_stream(G, _glance_stream())]
 
     def test_long_tilt_not_glance(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _glance_stream(duration_ms=600))
-        names = [f[0] for f in fired]
-        assert "GLANCE_PEEK" not in names
+        assert "GLANCE_PEEK" not in [f[0] for f in _feed_stream(G, _glance_stream(duration_ms=600))]
 
 
 # ---------------------------------------------------------------------------
@@ -280,15 +233,11 @@ class TestGlancePeek:
 class TestTiltReveal:
     def test_tilt_fires_when_held(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _tilt_stream(duration_ms=500))
-        names = [f[0] for f in fired]
-        assert "TILT_REVEAL" in names
+        assert "TILT_REVEAL" in [f[0] for f in _feed_stream(G, _tilt_stream(duration_ms=500))]
 
     def test_brief_tilt_does_not_fire(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _tilt_stream(duration_ms=200))
-        names = [f[0] for f in fired]
-        assert "TILT_REVEAL" not in names
+        assert "TILT_REVEAL" not in [f[0] for f in _feed_stream(G, _tilt_stream(duration_ms=200))]
 
 
 # ---------------------------------------------------------------------------
@@ -299,28 +248,22 @@ class TestTiltReveal:
 class TestNoiseImmunity:
     def test_flat_zero_fires_nothing(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        stream = _samples(0, 0, 0, 100, 0)
-        fired = _feed_stream(G, stream)
-        assert fired == []
+        assert _feed_stream(G, _samples(0, 0, 0, 100, 0)) == []
 
     def test_low_noise_fires_nothing(self, lua, gesture_module):
         import random
         rng = random.Random(42)
-        G   = gesture_module.new(lua.table())
+        G = gesture_module.new(lua.table())
         stream = [(rng.uniform(-8, 8), rng.uniform(-8, 8), rng.uniform(-8, 8), i * DT_MS)
                   for i in range(150)]
-        fired = _feed_stream(G, stream)
-        assert fired == []
+        assert _feed_stream(G, stream) == []
 
     def test_reset_clears_state(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        half = _samples(0, 35.0, 0, 3, 0)
-        _feed_stream(G, half)
+        _feed_stream(G, _samples(0, 35.0, 0, 3, 0))
         G.reset()
-        second_half = _samples(0, -35.0, 0, 3, 400)
-        fired = _feed_stream(G, second_half)
-        names = [f[0] for f in fired]
-        assert "NOD_SAVE" not in names
+        fired = _feed_stream(G, _samples(0, -35.0, 0, 3, 400))
+        assert "NOD_SAVE" not in [f[0] for f in fired]
 
 
 # ---------------------------------------------------------------------------
@@ -331,20 +274,15 @@ class TestNoiseImmunity:
 class TestMultiGesture:
     def test_nod_does_not_trigger_shake(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _nod_stream())
-        names = [f[0] for f in fired]
-        assert "SHAKE_DISMISS" not in names
+        assert "SHAKE_DISMISS" not in [f[0] for f in _feed_stream(G, _nod_stream())]
 
     def test_shake_does_not_trigger_nod(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        fired = _feed_stream(G, _shake_stream())
-        names = [f[0] for f in fired]
-        assert "NOD_SAVE" not in names
+        assert "NOD_SAVE" not in [f[0] for f in _feed_stream(G, _shake_stream())]
 
     def test_sequential_nod_then_shake(self, lua, gesture_module):
         G = gesture_module.new(lua.table())
-        s = _nod_stream(start_ms=0) + _shake_stream(start_ms=1200)
-        fired = _feed_stream(G, s)
+        fired = _feed_stream(G, _nod_stream(0) + _shake_stream(1200))
         names = [f[0] for f in fired]
         assert "NOD_SAVE"      in names
         assert "SHAKE_DISMISS" in names
@@ -358,23 +296,17 @@ class TestMultiGesture:
 class TestCustomConfig:
     def test_higher_threshold_ignores_normal_nod(self, lua, gesture_module):
         G = gesture_module.new(lua.table(threshold_nod=60))
-        fired = _feed_stream(G, _nod_stream(strength=35.0))
-        names = [f[0] for f in fired]
-        assert "NOD_SAVE" not in names
+        assert "NOD_SAVE" not in [f[0] for f in _feed_stream(G, _nod_stream(strength=35.0))]
 
     def test_wider_cooldown_prevents_second_gesture(self, lua, gesture_module):
         G = gesture_module.new(lua.table(cooldown_ms=2000))
-        s = _nod_stream(start_ms=0) + _nod_stream(start_ms=1000)
-        fired = _feed_stream(G, s)
-        nods = [f for f in fired if f[0] == "NOD_SAVE"]
-        assert len(nods) == 1
+        fired = _feed_stream(G, _nod_stream(0) + _nod_stream(1000))
+        assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_shorter_cooldown_allows_rapid_fire(self, lua, gesture_module):
         G = gesture_module.new(lua.table(cooldown_ms=100))
-        s = _nod_stream(start_ms=0) + _nod_stream(start_ms=400)
-        fired = _feed_stream(G, s)
-        nods = [f for f in fired if f[0] == "NOD_SAVE"]
-        assert len(nods) >= 2
+        fired = _feed_stream(G, _nod_stream(0) + _nod_stream(400))
+        assert len([f for f in fired if f[0] == "NOD_SAVE"]) >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +316,7 @@ class TestCustomConfig:
 @pytest.mark.skipif(HAS_LUPA, reason="lupa is installed")
 def test_lupa_not_installed_inform():
     pytest.skip(
-        "Gesture tests require lupa (Lua 5.4 Python bindings).\n"
+        "Gesture tests require lupa (Lua 5.4/5.5 Python bindings).\n"
         "Install with: uv add lupa\n"
         "Then re-run: uv run pytest scripts/tests/test_gestures.py -v"
     )
