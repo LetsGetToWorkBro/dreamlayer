@@ -23,8 +23,12 @@ This sidesteps three lupa gotchas that caused all prior versions to fail:
 
 EMA / stream design
 -------------------
-No EMA seeding or priming samples.  With alpha=0.35, feeding 5 samples
-at ±35 crosses threshold ±28 organically (EMA reaches ~28.9 on sample 4).
+The EMA seeded=false branch sets value=x on the very first sample, so
+the first leg of every stream crosses threshold immediately.  Subsequent
+legs must travel from the opposite extreme; at alpha=0.35 that takes:
+  * 6 samples to go ±35 → ∓28   (nod threshold=28, strength=35)
+  * 7 samples to go ±32 → ∓28   (shake threshold=28, strength=32)
+Stream builders add one extra sample of margin on each return leg.
 """
 from __future__ import annotations
 
@@ -72,11 +76,6 @@ def lua():
 # (gesture_name, confidence) tuples that fired during the stream.
 # ---------------------------------------------------------------------------
 
-def _lua_require(rt, module: str):
-    result = rt.eval(f"require('{module}')")
-    return result[0] if isinstance(result, tuple) else result
-
-
 def _cfg_to_lua(cfg: dict) -> str:
     """Serialise a Python cfg dict to Lua table field lines."""
     parts = []
@@ -86,7 +85,8 @@ def _cfg_to_lua(cfg: dict) -> str:
         elif isinstance(v, (int, float)):
             parts.append(f"  {k} = {v},")
         elif isinstance(v, str):
-            parts.append(f'  {k} = "{v.replace(chr(34), chr(92)+chr(34))}",')  
+            escaped = v.replace('\\', '\\\\').replace('"', '\\"')
+            parts.append(f'  {k} = "{escaped}",')
     return "\n".join(parts)
 
 
@@ -104,12 +104,11 @@ def _run_lua(lua, stream, **cfg):
     Execute one complete gesture-classifier run inside Lua.
     Returns [(name, confidence), ...] for every gesture that fired.
     """
-    cfg_fields  = _cfg_to_lua(cfg)
-    stream_lit  = _stream_to_lua(stream)
+    cfg_fields = _cfg_to_lua(cfg)
+    stream_lit = _stream_to_lua(stream)
 
     script = f"""
       do
-        -- fresh module each call
         package.loaded['app.imu_gesture'] = nil
         local M = require('app.imu_gesture')
 
@@ -127,7 +126,6 @@ def _run_lua(lua, stream, **cfg):
           G:feed(v[1], v[2], v[3], v[4])
         end
 
-        -- store results where Python can read them
         _last_fired = fired
       end
     """
@@ -166,41 +164,48 @@ def _samples(ax=0.0, ay=0.0, az=0.0, count=1, start_ms=0):
 
 
 # NOD  (Y-axis: +peak → -peak → rest)
-# EMA alpha=0.35: 5 samples at 35 → EMA ~28.9 > threshold 28 on sample 4.
+# First leg: EMA snaps to strength on sample 1 → crosses +28 immediately.
+# Return leg: EMA travels from +35 → must reach -28; needs 6 samples at -35
+# (alpha=0.35: takes ~6 samples from +35 to cross -28). Use 8 for margin.
 def _nod_stream(start_ms=0, strength=35.0):
     t = start_ms
     s  = _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
-    s += _samples(0, -strength, 0, 5, t);  t += 5 * DT_MS
+    s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0,  0,        0, 3, t)
     return s
 
 
 # DOUBLE NOD: + - + - within gesture_window_ms=600 ms
-# 4 legs × 5 × 20 ms = 400 ms < 600 ms
+# legs: 5+, 8-, 8+, 8-  = (5+8+8+8)*20 = 580 ms < 600 ms
 def _double_nod_stream(start_ms=0, strength=35.0):
     t = start_ms
     s  = _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
-    s += _samples(0, -strength, 0, 5, t);  t += 5 * DT_MS
-    s += _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
-    s += _samples(0, -strength, 0, 5, t);  t += 5 * DT_MS
+    s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
+    s += _samples(0,  strength, 0, 8, t);  t += 8 * DT_MS
+    s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0,  0,        0, 3, t)
     return s
 
 
-# SHAKE  (X-axis: 3 alternating crossings)
+# SHAKE  (X-axis: -crossing, +crossing, -crossing)
+# First leg (1 sample): EMA snaps to -strength → crosses -28 immediately.
+# Leg2 (+strength): EMA from -32 must reach +28; needs 7 samples. Use 8.
+# Leg3 (-strength): EMA from ~+29 must reach -28; needs 7 samples. Use 8.
+# Total: (1+8+8)*20 = 340 ms < gesture_window_ms=600 ms
 def _shake_stream(start_ms=0, strength=32.0):
     t = start_ms
-    s  = _samples(-strength, 0, 0, 5, t);  t += 5 * DT_MS
-    s += _samples( strength, 0, 0, 5, t);  t += 5 * DT_MS
-    s += _samples(-strength, 0, 0, 5, t);  t += 5 * DT_MS
+    s  = _samples(-strength, 0, 0, 1, t);  t += 1 * DT_MS
+    s += _samples( strength, 0, 0, 8, t);  t += 8 * DT_MS
+    s += _samples(-strength, 0, 0, 8, t);  t += 8 * DT_MS
     s += _samples( 0,        0, 0, 3, t)
     return s
 
 
 # GLANCE  (Z-axis: brief +crossing then return within peek_max_ms=350 ms)
+# rise=6 samples so EMA reliably crosses threshold_tilt=20 at strength=25.
 def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
     t    = start_ms
-    rise = 4   # samples for EMA to cross threshold_tilt=20 at strength=25
+    rise = 6
     n    = max(1, duration_ms // DT_MS)
     s  = _samples(0, 0, strength, rise + n, t);  t += (rise + n) * DT_MS
     s += _samples(0, 0, 0,                3, t)
@@ -208,6 +213,8 @@ def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
 
 
 # TILT  (Z-axis: sustained negative for hold_tilt_ms=400 ms)
+# EMA snaps to strength on sample 1 (< threshold_tilt=-20 immediately).
+# 500 ms stream > hold_tilt_ms=400 ms → fires at ~400 ms.
 def _tilt_stream(start_ms=0, strength=-25.0, duration_ms=500):
     t  = start_ms
     n  = max(1, duration_ms // DT_MS)
@@ -326,18 +333,15 @@ class TestNoiseImmunity:
         assert _run_lua(lua, stream) == []
 
     def test_reset_clears_state(self, lua, gesture_module=None):
-        # Feed +peak (no -peak yet), reset, then feed -peak only: NOD needs + then -
         script = f"""
           do
             package.loaded['app.imu_gesture'] = nil
             local M = require('app.imu_gesture')
             local fired = {{}}
             local G = M.new({{on_gesture = function(n,c) fired[#fired+1]={{n,c}} end}})
-            -- partial nod: only +peak, no -peak
             for i = 0, 4 do G:feed(0, 35, 0, i*20) end
             G:reset()
-            -- after reset, feed -peak only: should not produce a NOD_SAVE
-            for i = 0, 4 do G:feed(0, -35, 0, 400 + i*20) end
+            for i = 0, 7 do G:feed(0, -35, 0, 400 + i*20) end
             _last_fired = fired
           end
         """
@@ -373,7 +377,7 @@ class TestMultiGesture:
 @requires_lupa
 class TestCustomConfig:
     def test_higher_threshold_ignores_normal_nod(self, lua, gesture_module=None):
-        # threshold_nod=60 > EMA peak ~28.9 at strength=35 → no crossing
+        # threshold_nod=60: EMA of strength=35 never exceeds 35 < 60 → no crossing
         fired = _run_lua(lua, _nod_stream(strength=35.0), threshold_nod=60)
         assert "NOD_SAVE" not in _names(fired)
 
