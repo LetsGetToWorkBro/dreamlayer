@@ -171,7 +171,143 @@ def low_confidence() -> dict:
     }
 
 
-# ------------------------------------------------------------------ new cards
+# ------------------------------------------------------------------ privacy cards
+
+def forget_last_card(label: str = "") -> dict:
+    """ForgetLastCard — confirm + wipe the most recently saved memory.
+
+    Shown after user triggers a forget gesture or voice command.
+    dismiss_ms=0 so it stays until the user explicitly confirms or cancels.
+    """
+    display_label = label if label else "last memory"
+    return {
+        "type":        "ForgetLastCard",
+        "dismiss_ms":  0,
+        "label":       display_label,
+        "primary":     f"Forget \u201c{display_label}\u201d?",
+        "eyebrow":     "MEMORY WIPE",
+        "detail":      "Hold to confirm  \u2022  Tap to cancel",
+        "footer":      "This cannot be undone",
+        "lines":       ["MEMORY WIPE", f"Forget \u201c{display_label}\u201d?", "Hold to confirm"],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 68,  "size": "sm",   "color": T.PRIVACY_DANGER,  "tracking": 4},
+            "separator": {"x1": 48, "x2": 208, "y": 84},
+            "primary":   {"x": 128, "y": 116, "size": "md",   "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 148, "size": "sm",   "color": T.TEXT_SECONDARY},
+            "footer":    {"x": 128, "y": 172, "size": "sm",   "color": T.PRIVACY_CAUTION},
+            "shield":    {"x": 128, "y": 44,  "r": 10,        "color": T.PRIVACY_DANGER},
+        },
+    }
+
+
+def private_zone_card(zone: str = "this area") -> dict:
+    """PrivateZoneCard — location-triggered privacy notice.
+
+    Surfaced when GPS / BLE beacon puts the user inside a marked private zone
+    (home, medical, legal, etc.).  Memory capture is suspended automatically;
+    this card confirms that to the user.
+    """
+    return {
+        "type":        "PrivateZoneCard",
+        "dismiss_ms":  0,
+        "zone":        zone,
+        "primary":     "Private zone",
+        "eyebrow":     "CAPTURE SUSPENDED",
+        "detail":      zone,
+        "footer":      "Memory resumes when you leave",
+        "lines":       ["CAPTURE SUSPENDED", "Private zone", zone],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.PRIVACY_CAUTION, "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 80},
+            "primary":   {"x": 128, "y": 112, "size": "hero", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 144, "size": "md",   "color": T.TEXT_SECONDARY},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+            "shield":    {"x": 128, "y": 40,  "r": 10,        "color": T.PRIVACY_CAUTION},
+        },
+    }
+
+
+def consent_required_card(context: str = "") -> dict:
+    """ConsentRequiredCard — explicit opt-in gate before a sensitive operation.
+
+    Shown before Memoscape accesses a new data source (calendar, contacts, etc.)
+    or when a third party would receive memory data.  Requires affirmative hold.
+    """
+    ctx_line = context if context else "a new data source"
+    return {
+        "type":        "ConsentRequiredCard",
+        "dismiss_ms":  0,
+        "context":     ctx_line,
+        "primary":     "Allow access?",
+        "eyebrow":     "CONSENT REQUIRED",
+        "detail":      ctx_line,
+        "footer":      "Hold to allow  \u2022  Tap to deny",
+        "lines":       ["CONSENT REQUIRED", "Allow access?", ctx_line],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.WARNING_AMBER,   "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 80},
+            "primary":   {"x": 128, "y": 112, "size": "hero", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 144, "size": "md",   "color": T.TEXT_SECONDARY},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.WARNING_AMBER},
+            "lock":      {"x": 128, "y": 40,  "r": 10,        "color": T.WARNING_AMBER},
+        },
+    }
+
+
+# ------------------------------------------------------------------ Puente bridge
+
+def live_caption_card(
+    original: str = "",
+    translation: str = "",
+    src_lang: str = "es",
+    dst_lang: str = "en",
+    confidence: float | None = None,
+    speaker: str | None = None,
+) -> dict:
+    """LiveCaptionCard — real-time Puente caption with translation overlay.
+
+    Bridges Memoscape's display pipeline to Puente's Spanish-English
+    live caption feed.  The original utterance shows as the footer;
+    the translation is the hero element.
+    """
+    eyebrow_parts = [src_lang.upper(), "\u2192", dst_lang.upper()]
+    if speaker:
+        eyebrow_parts = [speaker.split()[0]] + eyebrow_parts
+    eyebrow = " ".join(eyebrow_parts)
+
+    primary = translation if translation else original
+    if len(primary) > 48:
+        primary = primary[:47] + "\u2026"
+    footer = original if translation else ""
+    if len(footer) > 48:
+        footer = footer[:47] + "\u2026"
+
+    return {
+        "type":        "LiveCaptionCard",
+        "dismiss_ms":  0,
+        "original":    original,
+        "translation": translation,
+        "src_lang":    src_lang,
+        "dst_lang":    dst_lang,
+        "speaker":     speaker,
+        "primary":     primary,
+        "eyebrow":     eyebrow,
+        "footer":      footer,
+        "confidence":  confidence,
+        "conf_color":  T.conf_color(confidence),
+        "lines":       [eyebrow, primary, footer],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 62,  "size": "sm",   "color": T.ACCENT_MEMORY,   "tracking": 2},
+            "separator": {"x1": 48, "x2": 208, "y": 78},
+            "primary":   {"x": 128, "y": 114, "size": "md",   "color": T.TEXT_PRIMARY},
+            "footer":    {"x": 128, "y": 160, "size": "sm",   "color": T.TEXT_GHOST},
+            "conf_dot":  {"x": 128, "y": 185, "r": 3},
+            "lang_pill": {"x": 128, "y": 40,  "color": T.ACCENT_MEMORY_DIM},
+        },
+    }
+
+
+# ------------------------------------------------------------------ existing cards (unchanged)
 
 def commitment_drift(
     data,
@@ -287,35 +423,35 @@ def deviation_alert(
 
 
 ALL_SAMPLES: dict[str, dict] = {
-    "ready":             ready(),
-    "saved_memory":      saved_memory("House keys"),
-    "query_listening":   query_listening(),
-    "loading":           loading(),
-    "object_recall":     object_recall({
+    "ready":               ready(),
+    "saved_memory":        saved_memory("House keys"),
+    "query_listening":     query_listening(),
+    "loading":             loading(),
+    "object_recall":       object_recall({
         "object":     "Keys",
         "place":      "Kitchen table",
         "detail":     "Beside blue notebook",
         "last_seen":  "Last seen 7:42 PM",
         "confidence": 0.88,
     }),
-    "commitment_recall": commitment_recall({
+    "commitment_recall":   commitment_recall({
         "person":     "Jordan",
         "task":       "Send the invoice",
         "due":        "Tomorrow before noon",
         "confidence": 0.72,
     }),
-    "proactive_memory":  proactive_memory({
+    "proactive_memory":    proactive_memory({
         "summary":    "You discussed the invoice",
         "person":     "Jordan",
         "confidence": 0.70,
     }),
-    "person_context":    person_context(
+    "person_context":      person_context(
         "Jordan", headline="Sent invoice Wed", detail="Last seen today"
     ),
-    "privacy_paused":    privacy_paused(),
-    "error":             error_card("BLE timeout"),
-    "low_confidence":    low_confidence(),
-    "commitment_drift":  commitment_drift({
+    "privacy_paused":      privacy_paused(),
+    "error":               error_card("BLE timeout"),
+    "low_confidence":      low_confidence(),
+    "commitment_drift":    commitment_drift({
         "task":        "Send invoice",
         "person":      "Jordan",
         "drift_state": "cracking",
@@ -323,7 +459,7 @@ ALL_SAMPLES: dict[str, dict] = {
         "due":         "Tomorrow before noon",
         "confidence":  0.78,
     }),
-    "time_scrub_node":   time_scrub_node(
+    "time_scrub_node":     time_scrub_node(
         summary="Keys at kitchen counter",
         kind="object",
         ts_label="09:42",
@@ -331,11 +467,23 @@ ALL_SAMPLES: dict[str, dict] = {
         total=7,
         confidence=0.91,
     ),
-    "deviation_alert":   deviation_alert(
+    "deviation_alert":     deviation_alert(
         prior_summary="I'll send the invoice tomorrow",
         new_summary="I never said I'd send anything",
         score=0.71,
         prior_confidence=0.80,
         new_confidence=0.85,
+    ),
+    # --- new ---
+    "forget_last":         forget_last_card("House keys"),
+    "private_zone":        private_zone_card("Home office"),
+    "consent_required":    consent_required_card("Calendar access"),
+    "live_caption":        live_caption_card(
+        original="No te preocupes, yo me encargo",
+        translation="Don't worry, I'll take care of it",
+        src_lang="es",
+        dst_lang="en",
+        confidence=0.92,
+        speaker="Jordan",
     ),
 }
