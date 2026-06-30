@@ -15,6 +15,14 @@ Lupa notes
 * Python functions cannot be reliably written into Lua table fields after
   construction via attribute assignment.  Instead we inject a Lua-side
   collector table at new() time and read it back from Python after feeding.
+
+EMA priming note
+----------------
+The gesture classifier uses an EMA smoother (alpha=0.35).  Starting from
+rest (value=0) it takes ~8 samples at full amplitude before the smoothed
+signal crosses the ±threshold (default ±28).  Every stream builder in this
+file prepends PRIME_SAMPLES samples at peak amplitude so the EMA is settled
+before the gesture window opens.
 """
 from __future__ import annotations
 
@@ -36,6 +44,10 @@ requires_lupa = pytest.mark.skipif(
     not HAS_LUPA,
     reason="lupa not installed — run: uv add lupa",
 )
+
+# Number of samples needed for EMA (alpha=0.35) to cross the default ±28
+# threshold when starting from zero.  Empirically verified: 10 is sufficient.
+PRIME_SAMPLES = 10
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +107,6 @@ def _new_with_collector(M, lua, **cfg):
 def _collect(lua, fired_ref):
     """Convert the Lua-side fired list to Python [(name, confidence), ...]."""
     results = []
-    # lupa Lua tables are 1-indexed iterables
     i = 1
     while True:
         entry = fired_ref[i]
@@ -134,39 +145,64 @@ def _samples(ax=0.0, ay=0.0, az=0.0, count=1, start_ms=0):
 
 
 def _nod_stream(start_ms=0, strength=35.0):
-    s  = _samples(0,  strength, 0, 3, start_ms)
-    s += _samples(0,  0,        0, 2, start_ms + 60)
-    s += _samples(0, -strength, 0, 3, start_ms + 100)
-    s += _samples(0,  0,        0, 3, start_ms + 160)
+    """
+    Vertical nod: up → neutral → down → neutral.
+    Prepends PRIME_SAMPLES at +strength so the EMA is settled past +threshold
+    before the crossing window opens.
+    """
+    t = start_ms
+    s  = _samples(0,  strength, 0, PRIME_SAMPLES, t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples(0,  0,        0, 3,              t);  t += 3 * DT_MS
+    s += _samples(0, -strength, 0, PRIME_SAMPLES,  t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples(0,  0,        0, 3,              t)
     return s
 
 
 def _double_nod_stream(start_ms=0, strength=35.0):
-    return _nod_stream(start_ms, strength) + _nod_stream(start_ms + 280, strength)
+    first  = _nod_stream(start_ms, strength)
+    # Second nod starts after the first stream ends; compute its end time.
+    second_start = first[-1][3] + DT_MS * 4   # small gap between nods
+    second = _nod_stream(second_start, strength)
+    return first + second
 
 
 def _shake_stream(start_ms=0, strength=32.0):
-    s  = _samples(-strength, 0, 0, 3, start_ms)
-    s += _samples( 0,        0, 0, 2, start_ms + 60)
-    s += _samples( strength, 0, 0, 3, start_ms + 100)
-    s += _samples( 0,        0, 0, 2, start_ms + 160)
-    s += _samples(-strength, 0, 0, 3, start_ms + 200)
-    s += _samples( 0,        0, 0, 3, start_ms + 260)
+    """
+    Lateral shake: left → neutral → right → neutral → left → neutral.
+    Primed on each polarity.
+    """
+    t = start_ms
+    s  = _samples(-strength, 0, 0, PRIME_SAMPLES, t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples( 0,        0, 0, 2,              t);  t += 2 * DT_MS
+    s += _samples( strength, 0, 0, PRIME_SAMPLES,  t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples( 0,        0, 0, 2,              t);  t += 2 * DT_MS
+    s += _samples(-strength, 0, 0, PRIME_SAMPLES,  t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples( 0,        0, 0, 3,              t)
     return s
 
 
 def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
+    """
+    Brief upward glance on Z-axis.  Primed first so EMA crosses threshold,
+    then held for duration_ms.
+    """
+    t  = start_ms
+    s  = _samples(0, 0, strength, PRIME_SAMPLES, t);  t += PRIME_SAMPLES * DT_MS
     n  = max(1, duration_ms // DT_MS)
-    s  = _samples(0, 0, strength, 3, start_ms)
-    s += _samples(0, 0, strength, n, start_ms + 60)
-    s += _samples(0, 0, 0,        3, start_ms + 60 + n * DT_MS)
+    s += _samples(0, 0, strength, n,             t);  t += n * DT_MS
+    s += _samples(0, 0, 0,        3,             t)
     return s
 
 
 def _tilt_stream(start_ms=0, strength=-25.0, duration_ms=500):
+    """
+    Sustained downward tilt on Z-axis.  Primed then held for duration_ms.
+    """
+    t  = start_ms
     n  = max(1, duration_ms // DT_MS)
-    s  = _samples(0, 0, strength, n, start_ms)
-    s += _samples(0, 0, 0,        3, start_ms + n * DT_MS)
+    s  = _samples(0, 0, strength, PRIME_SAMPLES, t);  t += PRIME_SAMPLES * DT_MS
+    s += _samples(0, 0, strength, n,             t);  t += n * DT_MS
+    s += _samples(0, 0, 0,        3,             t)
     return s
 
 
@@ -192,11 +228,12 @@ class TestNodSave:
         assert "NOD_SAVE" not in _names(_run(gesture_module, lua, _nod_stream(strength=5.0)))
 
     def test_nod_cooldown_prevents_double_fire(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(200))
+        nod_duration_ms = (PRIME_SAMPLES * 2 + 6) * DT_MS
+        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(nod_duration_ms + 20))
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_nod_fires_again_after_cooldown(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(1000))
+        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(2000))
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 2
 
 
@@ -234,7 +271,8 @@ class TestShakeDismiss:
         assert "SHAKE_DISMISS" not in _names(_run(gesture_module, lua, _shake_stream(strength=5.0)))
 
     def test_shake_cooldown(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _shake_stream(0) + _shake_stream(300))
+        shake_duration_ms = (PRIME_SAMPLES * 3 + 7) * DT_MS
+        fired = _run(gesture_module, lua, _shake_stream(0) + _shake_stream(shake_duration_ms + 20))
         assert len([f for f in fired if f[0] == "SHAKE_DISMISS"]) == 1
 
 
@@ -301,7 +339,9 @@ class TestMultiGesture:
         assert "NOD_SAVE" not in _names(_run(gesture_module, lua, _shake_stream()))
 
     def test_sequential_nod_then_shake(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _nod_stream(0) + _shake_stream(1200))
+        nod   = _nod_stream(0)
+        shake = _shake_stream(nod[-1][3] + 1200)
+        fired = _run(gesture_module, lua, nod + shake)
         names = _names(fired)
         assert "NOD_SAVE"      in names
         assert "SHAKE_DISMISS" in names
@@ -318,11 +358,14 @@ class TestCustomConfig:
         assert "NOD_SAVE" not in _names(fired)
 
     def test_wider_cooldown_prevents_second_gesture(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(1000), cooldown_ms=2000)
+        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(2000), cooldown_ms=5000)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_shorter_cooldown_allows_rapid_fire(self, lua, gesture_module):
-        fired = _run(gesture_module, lua, _nod_stream(0) + _nod_stream(400), cooldown_ms=100)
+        nod_duration_ms = (PRIME_SAMPLES * 2 + 6) * DT_MS
+        fired = _run(gesture_module, lua,
+                     _nod_stream(0) + _nod_stream(nod_duration_ms + 50),
+                     cooldown_ms=100)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) >= 2
 
 
