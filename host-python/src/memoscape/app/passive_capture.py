@@ -7,9 +7,9 @@ from ..memory.ring_buffer import SemanticRingBuffer
 class SilentCapture:
     """Privacy-gated, rate-limited passive ingestion entrypoint.
 
-    Accepts already-available scene dicts or transcript strings, converts them
-    to MemoryEvents via the existing orchestrator ingestion methods, and stores
-    only semantic events in the in-memory ring buffer. No raw media persists.
+    Accepts scene dicts or transcript strings, converts them to MemoryEvents
+    via the existing orchestrator ingestion methods, and stores only semantic
+    events in the in-memory ring buffer. No raw media persists.
     """
 
     def __init__(
@@ -23,11 +23,15 @@ class SilentCapture:
         self.ring = ring
         self.privacy = privacy
         self.min_interval_ms = max(0, int(min_interval_ms))
-        self._last_capture_ms = 0
+        self._last_capture_ms: int | None = None  # None = never captured
 
     def _allow_now(self, now_ms: int) -> bool:
         if not self.privacy.allow_capture():
             return False
+        # Always allow the very first capture regardless of interval
+        if self._last_capture_ms is None:
+            self._last_capture_ms = now_ms
+            return True
         if (now_ms - self._last_capture_ms) < self.min_interval_ms:
             return False
         self._last_capture_ms = now_ms

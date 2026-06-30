@@ -11,6 +11,14 @@ from memoscape.memory.ring_buffer import SemanticRingBuffer
 from memoscape.pipelines.ingest import MemoryEvent
 
 
+# vision.extract_object_memory expects nested dicts for object and place
+_SCENE = {
+    "object":     {"name": "keys", "near": "mug"},
+    "place":      {"name": "kitchen table"},
+    "confidence": 0.9,
+}
+
+
 def _orch(cfg: Config | None = None) -> Orchestrator:
     return Orchestrator(EmulatorBridge(), db_path=":memory:", config=cfg or Config())
 
@@ -27,7 +35,7 @@ class TestSemanticRingBuffer:
 
     def test_latest_kind_filter(self):
         ring = SemanticRingBuffer(capacity=10)
-        ring.append(MemoryEvent(kind="object", summary="keys", confidence=0.9))
+        ring.append(MemoryEvent(kind="object", summary="keys",   confidence=0.9))
         ring.append(MemoryEvent(kind="person", summary="Jordan", confidence=0.8))
         ring.append(MemoryEvent(kind="object", summary="wallet", confidence=0.9))
         objects = ring.latest(kind="object")
@@ -45,10 +53,10 @@ class TestSemanticRingBuffer:
 
 class TestSilentCapture:
     def test_scene_capture_rate_limited(self):
+        """First call succeeds; second call within the interval is blocked."""
         o = _orch()
-        scene = {"object": "keys", "place": "kitchen table", "detail": "", "confidence": 0.9}
-        first  = o.on_scene_frame(scene, now_ms=1000)
-        second = o.on_scene_frame(scene, now_ms=1500)  # too soon
+        first  = o.on_scene_frame(_SCENE, now_ms=1000)
+        second = o.on_scene_frame(_SCENE, now_ms=1500)  # within default 4000 ms window
         assert first is not None
         assert second is None
 
@@ -56,9 +64,8 @@ class TestSilentCapture:
         cfg = Config()
         cfg.capture_min_interval_ms = 1000
         o = _orch(cfg)
-        scene = {"object": "keys", "place": "table", "detail": "", "confidence": 0.9}
-        first  = o.on_scene_frame(scene, now_ms=0)
-        second = o.on_scene_frame(scene, now_ms=1001)  # past interval
+        first  = o.on_scene_frame(_SCENE, now_ms=0)
+        second = o.on_scene_frame(_SCENE, now_ms=1001)  # past the 1 s interval
         assert first is not None
         assert second is not None
 
