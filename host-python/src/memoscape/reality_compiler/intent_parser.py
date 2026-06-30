@@ -101,6 +101,7 @@ class IntentParser:
         for fn in [
             self._try_interval_timer,
             self._try_overtime_timer,
+            self._try_react_timer,
             self._try_round_timer,
             self._try_stopwatch,
             self._try_simple_counter,
@@ -111,7 +112,6 @@ class IntentParser:
             self._try_next_class,
             self._try_text_subtitles,
             self._try_habit_reminder,
-            self._try_react_timer,
             self._try_gesture_repeater,
             self._try_speaker_indicator,
         ]:
@@ -258,7 +258,7 @@ class IntentParser:
         if not _contains(t, "reminder", "remind", "habit", "nudge"):
             return None
         interval = _parse_int(t, r'every\s+(\d+)\s*(?:minute|min)') or 30
-        text_m = re.search(r'remind(?:er)?\s+(?:me\s+)?(?:to\s+)?["\']?([^"\',\.]+)', t)
+        text_m = re.search(r'remind(?:er)?\s+(?:me\s+)?(?:to\s+)?["\']?([^"\',.]+)', t)
         reminder_text = text_m.group(1).strip().capitalize() if text_m else "Reminder"
         return HabitReminderIntent(
             reminder_text=reminder_text,
