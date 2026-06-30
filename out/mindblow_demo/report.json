@@ -1,0 +1,67 @@
+{
+  "scenario": "mindblow_demo",
+  "description": "The flagship demo: connect, save, ask, recall objects, person context, commitment, privacy",
+  "total_steps": 8,
+  "steps_with_output": 8,
+  "steps_blank": 0,
+  "gif_frames": 8,
+  "gif_bytes": 11222,
+  "steps": [
+    {
+      "step": 0,
+      "action": "connect",
+      "label": "00_connect",
+      "lit_pixels": 410,
+      "duration_ms": 602
+    },
+    {
+      "step": 1,
+      "action": "card",
+      "label": "01_savedmemory_parked_level_3_\u2022_blu",
+      "lit_pixels": 957,
+      "duration_ms": 604
+    },
+    {
+      "step": 2,
+      "action": "button",
+      "label": "02_btn_double",
+      "lit_pixels": 410,
+      "duration_ms": 604
+    },
+    {
+      "step": 3,
+      "action": "button",
+      "label": "03_btn_single",
+      "lit_pixels": 343,
+      "duration_ms": 601
+    },
+    {
+      "step": 4,
+      "action": "card",
+      "label": "04_objectrecall_keys",
+      "lit_pixels": 1026,
+      "duration_ms": 604
+    },
+    {
+      "step": 5,
+      "action": "card",
+      "label": "05_personcontext_maya",
+      "lit_pixels": 1166,
+      "duration_ms": 602
+    },
+    {
+      "step": 6,
+      "action": "card",
+      "label": "06_commitmentrecall_maya",
+      "lit_pixels": 1784,
+      "duration_ms": 604
+    },
+    {
+      "step": 7,
+      "action": "button",
+      "label": "07_btn_long",
+      "lit_pixels": 1917,
+      "duration_ms": 604
+    }
+  ]
+}
