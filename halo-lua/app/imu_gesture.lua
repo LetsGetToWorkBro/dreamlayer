@@ -248,12 +248,11 @@ function M:feed(ax, ay, az, now_ms)
   end
 
   -- NOD_SAVE
+  -- Do NOT clear peaks_y here: subsequent crossings must remain visible so
+  -- that a double-nod can still be detected after the first nod fires.
   local conf_nod = match_nod(cy)
   if conf_nod then
-    if self:_fire(GESTURE.NOD_SAVE, conf_nod, now_ms) then
-      self._peaks_y.crossings, self._peaks_y._t = {}, {}
-      return
-    end
+    self:_fire(GESTURE.NOD_SAVE, conf_nod, now_ms)
   end
 
   -- SHAKE_DISMISS

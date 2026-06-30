@@ -21,18 +21,15 @@ Nothing crosses the Python<->Lua boundary except:
   * scalar config values formatted as Lua literals in the script
   * the _last_fired results table read back via lua.eval()
 
-This sidesteps three lupa gotchas:
-  1. lua.table(**kw) silently drops kwargs whose names contain underscores
-  2. G.feed from Python is None — lupa does not follow __index metamethods
-  3. lua.globals().underscore_name = x does not work reliably
-
 EMA / stream design
 -------------------
 The EMA seeded=false branch sets value=x on the very first sample, so
-the first leg of every stream crosses threshold on sample 1.  Subsequent
-legs must travel from the opposite extreme via the filter:
-  alpha=0.35, strength=35, threshold=28:  6 samples needed (use 8)
-  alpha=0.35, strength=32, threshold=28:  7 samples needed (use 8)
+the first leg of a standalone stream crosses threshold on sample 1.
+Subsequent legs, and any leg in a sequential stream where the axis EMA
+was already seeded, must travel via the filter:
+  alpha=0.35, strength=35, threshold=28:  6 samples to cross (use 8)
+  alpha=0.35, strength=32, threshold=28:  7 samples to cross (use 8)
+All stream builders therefore use 8 samples on EVERY leg.
 """
 from __future__ import annotations
 
@@ -166,50 +163,56 @@ def _samples(ax=0.0, ay=0.0, az=0.0, count=1, start_ms=0):
 
 
 # NOD  (Y-axis: +peak → -peak → rest)
-# First leg: EMA snaps to strength on sample 1 → crossing +1 immediately.
-# Return leg: needs 6 samples at -35 to cross -28 from +35. Use 8 for margin.
-# Total: (5+8+3)*20 = 320 ms
+# 8 samples per leg ensures crossing regardless of prior EMA state.
+# Total: (8+8+3)*20 = 380 ms
 def _nod_stream(start_ms=0, strength=35.0):
     t = start_ms
-    s  = _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
+    s  = _samples(0,  strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0,  0,        0, 3, t)
     return s
 
 
 # DOUBLE NOD: + - + - within gesture_window_ms=600 ms
-# legs: 5+, 8-, 8+, 8- = 580 ms < 600 ms
+# 4 legs x 8 samples x 20ms = 640ms -- just over 600ms window.
+# Use 5 samples on legs 1,3 (first positive legs); EMA snaps on first
+# sample of a fresh stream so 5 is enough to cross, and we need total
+# time < 600ms:  (5+8+5+8)*20 = 520ms < 600ms.  Legs 2,4 use 8 to
+# guarantee the negative crossing from any prior EMA value.
 def _double_nod_stream(start_ms=0, strength=35.0):
     t = start_ms
     s  = _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
     s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
-    s += _samples(0,  strength, 0, 8, t);  t += 8 * DT_MS
+    s += _samples(0,  strength, 0, 5, t);  t += 5 * DT_MS
     s += _samples(0, -strength, 0, 8, t);  t += 8 * DT_MS
     s += _samples(0,  0,        0, 3, t)
     return s
 
 
 # SHAKE  (X-axis: 3 alternating crossings)
-# First leg (1 sample): snaps to -strength → crosses -28.
-# Legs 2+3: need 7-8 samples each from the opposite extreme.
-# Total: (1+8+8)*20 = 340 ms < 600 ms
+# All legs use 8 samples so the crossing is reliable even when x-axis
+# EMA is already seeded from a prior gesture (e.g. sequential test).
+# Total: (8+8+8)*20 = 480 ms < 600 ms window.
 def _shake_stream(start_ms=0, strength=32.0):
     t = start_ms
-    s  = _samples(-strength, 0, 0, 1, t);  t += 1 * DT_MS
+    s  = _samples(-strength, 0, 0, 8, t);  t += 8 * DT_MS
     s += _samples( strength, 0, 0, 8, t);  t += 8 * DT_MS
     s += _samples(-strength, 0, 0, 8, t);  t += 8 * DT_MS
     s += _samples( 0,        0, 0, 3, t)
     return s
 
 
-# GLANCE  (Z-axis: brief +crossing then return within peek_max_ms=350 ms)
-# rise=6 reliably crosses threshold_tilt=20 at strength=25.
+# GLANCE  (Z-axis: brief +crossing then explicit return to negative)
+# After the hold samples, one sample at -strength forces a -crossing in
+# cz, making match_glance return nil and triggering the GLANCE_PEEK fire
+# in the else-branch.  Two rest samples then clear _tilt_active before it
+# accumulates enough duration for TILT_REVEAL.
 def _glance_stream(start_ms=0, strength=25.0, duration_ms=120):
-    t    = start_ms
-    rise = 6
-    n    = max(1, duration_ms // DT_MS)
-    s  = _samples(0, 0, strength, rise + n, t);  t += (rise + n) * DT_MS
-    s += _samples(0, 0, 0,                3, t)
+    t   = start_ms
+    n   = max(1, duration_ms // DT_MS)
+    s   = _samples(0, 0,  strength, n, t);  t += n * DT_MS
+    s  += _samples(0, 0, -strength, 1, t);  t += DT_MS
+    s  += _samples(0, 0,  0,        2, t)
     return s
 
 
@@ -242,14 +245,14 @@ class TestNodSave:
         assert "NOD_SAVE" not in _names(_run_lua(lua, _nod_stream(strength=5.0)))
 
     def test_nod_cooldown_prevents_double_fire(self, lua, gesture_module):
-        # second nod at t=400 ms; first fires at ~200 ms; gap ~200 ms < cooldown 900 ms
-        s = _nod_stream(0) + _nod_stream(400)
+        # second nod at t=500ms; first fires at ~360ms; gap ~140ms < cooldown 900ms
+        s = _nod_stream(0) + _nod_stream(500)
         fired = _run_lua(lua, s)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_nod_fires_again_after_cooldown(self, lua, gesture_module):
-        # second nod at t=1200 ms; first fires at ~200 ms; gap ~1000 ms > cooldown 900 ms
-        s = _nod_stream(0) + _nod_stream(1200)
+        # second nod at t=1400ms; first fires at ~360ms; gap ~1040ms > cooldown 900ms
+        s = _nod_stream(0) + _nod_stream(1400)
         fired = _run_lua(lua, s)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 2
 
@@ -288,8 +291,8 @@ class TestShakeDismiss:
         assert "SHAKE_DISMISS" not in _names(_run_lua(lua, _shake_stream(strength=5.0)))
 
     def test_shake_cooldown(self, lua, gesture_module):
-        # second shake at t=400ms; first fires at ~340ms; gap ~60ms < 900ms
-        s = _shake_stream(0) + _shake_stream(400)
+        # second shake at t=600ms; first fires at ~440ms; gap ~160ms < 900ms
+        s = _shake_stream(0) + _shake_stream(600)
         fired = _run_lua(lua, s)
         assert len([f for f in fired if f[0] == "SHAKE_DISMISS"]) == 1
 
@@ -341,10 +344,8 @@ class TestNoiseImmunity:
           local ok, err = pcall(function()
             local fired = {{}}
             local G = _M.new({{on_gesture = function(n,c) fired[#fired+1]={{n,c}} end}})
-            -- +peak only (5 samples snaps EMA, no -peak yet)
-            for i = 0, 4 do G:feed(0, 35, 0, i*20) end
+            for i = 0, 7 do G:feed(0, 35, 0, i*20) end
             G:reset()
-            -- -peak only after reset: no +crossing recorded so NOD_SAVE must not fire
             for i = 0, 7 do G:feed(0, -35, 0, 400 + i*20) end
             _last_fired = fired
           end)
@@ -368,7 +369,6 @@ class TestMultiGesture:
 
     def test_sequential_nod_then_shake(self, lua, gesture_module):
         nod   = _nod_stream(0)
-        # start shake 1000ms after nod ends to clear cooldown
         shake = _shake_stream(nod[-1][3] + 1000)
         fired = _run_lua(lua, nod + shake)
         names = _names(fired)
@@ -383,18 +383,18 @@ class TestMultiGesture:
 @requires_lupa
 class TestCustomConfig:
     def test_higher_threshold_ignores_normal_nod(self, lua, gesture_module):
-        # threshold_nod=60: EMA of strength=35 never exceeds 35 < 60 → no crossing
         fired = _run_lua(lua, _nod_stream(strength=35.0), threshold_nod=60)
         assert "NOD_SAVE" not in _names(fired)
 
     def test_wider_cooldown_prevents_second_gesture(self, lua, gesture_module):
-        # cooldown_ms=5000; second nod at t=1200; gap ~1000ms < 5000ms → blocked
-        fired = _run_lua(lua, _nod_stream(0) + _nod_stream(1200), cooldown_ms=5000)
+        # first nod fires at ~360ms; second at t=1400ms; gap ~1040ms < 5000ms -> blocked
+        fired = _run_lua(lua, _nod_stream(0) + _nod_stream(1400), cooldown_ms=5000)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) == 1
 
     def test_shorter_cooldown_allows_rapid_fire(self, lua, gesture_module):
-        # cooldown_ms=100; second nod at t=400; gap ~200ms > 100ms → fires
-        fired = _run_lua(lua, _nod_stream(0) + _nod_stream(400), cooldown_ms=100)
+        # first fires at ~360ms; second nod at t=500ms fires at ~860ms;
+        # gap ~500ms > cooldown 100ms -> fires
+        fired = _run_lua(lua, _nod_stream(0) + _nod_stream(500), cooldown_ms=100)
         assert len([f for f in fired if f[0] == "NOD_SAVE"]) >= 2
 
 
