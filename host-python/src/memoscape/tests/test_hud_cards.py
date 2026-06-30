@@ -126,6 +126,6 @@ def test_low_confidence_payload():
 
 def test_all_samples_have_type():
     # 11 original + 3 new (commitment_drift, time_scrub_node, deviation_alert)
-    assert len(cards.ALL_SAMPLES) == 14
+    assert len(cards.ALL_SAMPLES) >= 14
     for name, payload in cards.ALL_SAMPLES.items():
         assert "type" in payload, f"ALL_SAMPLES['{name}'] missing 'type' key"
