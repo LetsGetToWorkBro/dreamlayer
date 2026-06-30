@@ -128,12 +128,18 @@ class TestStepLabel:
 
 
 # ---------------------------------------------------------------------------
-# make_contact_sheet
+# make_contact_sheet & make_gif helpers
+# Each frame has a unique background color so Pillow's GIF writer
+# cannot coalesce them into a single frame.
 # ---------------------------------------------------------------------------
 
 def _fake_frames(n):
-    return [(f"{i:02d}_step_{i}", Image.new("RGB", (256, 256), (0, 0, 0)))
-            for i in range(n)]
+    frames = []
+    for i in range(n):
+        img = Image.new("RGB", (256, 256), (max(1, i * 40 % 256), i * 20 % 256, 255 - i * 30 % 256))
+        img.putpixel((i % 256, 0), (255, 255, 255))
+        frames.append((f"{i:02d}_step_{i}", img))
+    return frames
 
 
 class TestContactSheet:
