@@ -1,5 +1,7 @@
 # Memoscape
 
+![pytest](https://github.com/LetsGetToWorkBro/memoscape/actions/workflows/pytest.yml/badge.svg)
+
 > A private memory layer for Brilliant Labs Halo smart glasses.
 
 Memoscape gives Halo wearers instant, on-glasses recall for the things that slip through the cracks: where you left your keys, what you promised someone, what happened last time you were in this place.
@@ -11,12 +13,12 @@ memoscape/
   host-python/          Python host — emulator bridge, real BLE bridge, memory engine
     src/memoscape/
       bridge/           BridgeBase + EmulatorBridge + RealBridge (brilliant-ble)
-      memory/           SQLite DB, retrieval, proactive, privacy gate
-      pipelines/        Vision + speech extraction (mock → real swap point)
+      memory/           SQLite DB, retrieval, proactive, privacy gate, embeddings
+      pipelines/        Three-tier NLP: regex (T1) → spaCy (T2) → GPT-4o-mini (T3)
       app/              Orchestrator, intents, answer builder
       hud/              Card schema, renderer (Pillow), HUD export
       simulator/        Scenario helpers + 10 JSON fixtures
-      tests/            41 pytest tests (7 modules)
+      tests/            80 pytest tests (9 modules)
   halo-lua/             Lua app for Halo display runtime
   phone-app/            Expo / React Native companion app
     app/                Expo Router screens: now, memories, settings, onboarding
@@ -34,7 +36,7 @@ memoscape/
 cd host-python
 pip install -e .[dev]
 
-# Run tests
+# Run tests (no API key needed)
 pytest
 
 # Run emulator demo
@@ -44,12 +46,20 @@ python scripts/run_demo_wallet.py
 cd phone-app && npm install && npx expo start
 ```
 
+### Optional: real LLM + embeddings
+
+Set `OPENAI_API_KEY` in your environment to activate:
+- **Tier 3 extraction** — GPT-4o-mini for long or ambiguous transcripts
+- **Semantic embeddings** — `text-embedding-3-small` for accurate recall
+
+Without the key, the engine falls back to regex extraction + hash-based embeddings automatically.
+
 ## Tests
 
-41 tests across 7 modules — all pass.
+80 tests across 9 modules — all pass. CI runs on every push via GitHub Actions.
 
-```
-pytest host-python/src/memoscape/tests
+```bash
+pytest host-python
 ```
 
 ## Device day checklist
