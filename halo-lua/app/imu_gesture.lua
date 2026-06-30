@@ -208,7 +208,7 @@ function M.new(opts)
                     sy and (sy > cfg.threshold_nod   and 1 or (sy < -cfg.threshold_nod   and -1 or 0)) or 0),
     _peaks_z    = new_peaks(cfg.threshold_tilt,
                     sz and (sz > cfg.threshold_tilt  and 1 or (sz < -cfg.threshold_tilt  and -1 or 0)) or 0),
-    _cooldowns  = {},   -- gesture_name -> last_fired_ms
+    _cooldowns  = {},   -- gesture_name -> last_fired_ms (nil means never fired)
     -- tilt-hold tracking
     _tilt_start  = nil,
     _tilt_active = false,
@@ -303,13 +303,14 @@ function M:feed(ax, ay, az, now_ms)
 end
 
 -- ---------------------------------------------------------------------------
--- Fire a gesture if not on cooldown
+-- Fire a gesture if not on cooldown.
 -- Returns true if the gesture was fired.
 -- ---------------------------------------------------------------------------
 
 function M:_fire(name, confidence, now_ms)
-  local last = self._cooldowns[name] or 0
-  if (now_ms - last) < self.cfg.cooldown_ms then return false end
+  local last = self._cooldowns[name]
+  -- nil means this gesture has never fired: always allow the first fire.
+  if last and (now_ms - last) < self.cfg.cooldown_ms then return false end
   self._cooldowns[name] = now_ms
   self.on_gesture(name, confidence)
   return true
