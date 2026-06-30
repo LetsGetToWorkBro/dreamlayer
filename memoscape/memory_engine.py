@@ -151,10 +151,12 @@ class MemoryEngine:
             card_count=app.fsm.ctx.card_count,
         )
 
+        provider_crashed = False
         try:
             result = await self._provider(ctx)
         except Exception as exc:
             self._error_count += 1
+            provider_crashed = True
             log.error("RecallProvider raised: %s", exc)
             result = RecallResult(
                 card_type="SavedMemoryCard",
@@ -169,7 +171,13 @@ class MemoryEngine:
             result.card_type, result.confidence, result.source, elapsed,
         )
 
-        card = self._select_card(result)
+        # On provider crash use the error card as-is — skip confidence gating
+        # so source="error_fallback" is preserved rather than rewritten to "fallback".
+        if provider_crashed:
+            card = result.to_memory_card()
+        else:
+            card = self._select_card(result)
+
         await app.show_card(card)
 
     # ------------------------------------------------------------------
