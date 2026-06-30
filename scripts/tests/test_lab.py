@@ -5,9 +5,9 @@ import struct
 import io
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageSequence
 
-# halo_lab is now safe to import without halo_emulator installed
+# halo_lab is safe to import without halo_emulator installed
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from halo_lab import (
     ble_frame,
@@ -169,13 +169,6 @@ class TestMakeGif:
     def test_frame_count(self):
         frames = _fake_frames(5)
         gif    = make_gif(frames)
-        buf    = io.BytesIO(gif)
-        img    = Image.open(buf)
-        n = 0
-        try:
-            while True:
-                n += 1
-                img.seek(img.tell() + 1)
-        except EOFError:
-            pass
+        img    = Image.open(io.BytesIO(gif))
+        n      = sum(1 for _ in ImageSequence.Iterator(img))
         assert n == len(frames)
