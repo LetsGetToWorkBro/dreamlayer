@@ -4,6 +4,10 @@
 --- CardQueue is wired here as the display layer between the FSM and renderer.
 --- Cards arrive via BLE → state_machine.set_card() → queue:push()
 --- The tick loop calls queue:tick() every frame → renderer.show_card() on change.
+---
+--- Cinematic transitions: renderer.bind(time_fn) is called at boot to wire
+--- the monotonic clock. renderer.dismiss() is called when the queue expires
+--- a card so the EXIT animation plays before the card disappears.
 
 require("compat.frame_adapter")
 
@@ -32,33 +36,32 @@ local function now_ms()
   return math.floor((os.clock() - _boot_t) * 1000)
 end
 
--- Last card shown to renderer — used to detect changes and avoid redundant draws
+-- Last card shown to renderer — used to detect changes and avoid redundant starts
 local _last_shown = nil
 
 -- ---------------------------------------------------------------------------
 -- Priority mapping: which card types are URGENT vs CONTEXT vs AMBIENT
 -- ---------------------------------------------------------------------------
 local CARD_PRIORITY = {
-  ObjectRecallCard     = CardQueue.URGENT,   -- user triggered recall
-  CommitmentRecallCard = CardQueue.URGENT,   -- user triggered recall
-  QueryListeningCard   = CardQueue.URGENT,   -- direct button press
-  LoadingCard          = CardQueue.URGENT,   -- direct button press
-  ReadyCard            = CardQueue.URGENT,   -- connect/boot
-  PrivacyPausedCard    = CardQueue.URGENT,   -- privacy toggle
-  ProactiveMemoryCard  = CardQueue.CONTEXT,  -- AI proactive surface
-  PersonContextCard    = CardQueue.CONTEXT,  -- AI proactive surface
-  SavedMemoryCard      = CardQueue.CONTEXT,  -- confirmation feedback
+  ObjectRecallCard     = CardQueue.URGENT,
+  CommitmentRecallCard = CardQueue.URGENT,
+  QueryListeningCard   = CardQueue.URGENT,
+  LoadingCard          = CardQueue.URGENT,
+  ReadyCard            = CardQueue.URGENT,
+  PrivacyPausedCard    = CardQueue.URGENT,
+  ProactiveMemoryCard  = CardQueue.CONTEXT,
+  PersonContextCard    = CardQueue.CONTEXT,
+  SavedMemoryCard      = CardQueue.CONTEXT,
   ErrorCard            = CardQueue.CONTEXT,
   LowConfidenceCard    = CardQueue.AMBIENT,
 }
 
 local function card_priority(card)
   return CARD_PRIORITY[card and card.type] or CardQueue.CONTEXT
- end
+end
 
 -- ---------------------------------------------------------------------------
 -- Inbound BLE dispatch
--- msg is a fully decoded table from host_comm.on_receive()
 -- ---------------------------------------------------------------------------
 local function process_inbound(msg)
   if not msg or not msg.t then return end
@@ -74,8 +77,8 @@ local function process_inbound(msg)
     if ev then state_machine.dispatch(ev) end
 
   elseif t == MT.IMU_TAP then
-    -- IMU tap — dismiss current card immediately
     queue:dismiss(now_ms())
+    renderer.dismiss()
     state_machine.dispatch(E.EVENTS.imu_tap)
 
   elseif t == MT.CONNECT then
@@ -89,7 +92,6 @@ local function process_inbound(msg)
     state_machine.dispatch(E.EVENTS.host_disconnected)
 
   elseif t == MT.CARD then
-    -- state_machine.set_card() will call queue_card() via the injected hook
     state_machine.set_card(msg.payload or msg)
 
   elseif t == MT.COMMAND then
@@ -105,7 +107,6 @@ local function process_inbound(msg)
   end
 end
 
--- Raw BLE callback: feed every chunk through host_comm framing reassembler.
 local function on_ble_raw(raw)
   local msg = host_comm.on_receive(raw)
   if msg then process_inbound(msg) end
@@ -113,7 +114,6 @@ end
 
 -- ---------------------------------------------------------------------------
 -- queue_card: enqueue a card with correct priority
--- Injected into state_machine so set_card() goes through the queue.
 -- ---------------------------------------------------------------------------
 local function queue_card(card)
   if not card then return end
@@ -126,7 +126,9 @@ end
 local function boot()
   host_comm.bind(_G.halo.bluetooth)
 
-  -- Pass queue_card as the show hook so every card goes through the queue
+  -- Wire monotonic clock into renderer for animation timing
+  renderer.bind(nil, now_ms)
+
   state_machine.init(renderer, nil, function(old, new_state, _)
     -- Uncomment for debug: print("[fsm] " .. old .. " -> " .. new_state)
   end, queue_card)
@@ -138,6 +140,7 @@ local function boot()
     frame.button.long(function()      state_machine.dispatch(E.EVENTS.long_press)   end)
     frame.imu.tap_callback(function()
       queue:dismiss(now_ms())
+      renderer.dismiss()
       state_machine.dispatch(E.EVENTS.imu_tap)
     end)
   end
@@ -153,18 +156,29 @@ boot()
 -- ---------------------------------------------------------------------------
 while true do
   local ok, err = pcall(function()
-    -- Drive queue auto-dismiss; show card only when it changes
-    local active = queue:tick(now_ms())
+    local t = now_ms()
+
+    -- Drive queue auto-dismiss
+    local active = queue:tick(t)
+
     if active ~= _last_shown then
       _last_shown = active
       if active then
+        -- New card: show_card() starts ENTER (crossfades if one is already showing)
         renderer.show_card(active)
       else
+        -- Queue expired: begin EXIT animation, then fall back to ready card
+        renderer.dismiss()
+        -- Ready card will be shown after EXIT completes on next nil→show_card
+        -- We delay it one tick so the exit plays; state_machine handles it
+        -- via the dismiss_timer event path which calls show(cards.ready())
         renderer.show_card(cards.ready())
       end
     end
 
+    -- Advance animations and push frame
     renderer.tick()
+
     if HAS_FRAME then frame.sleep(0.05) end
   end)
   if not ok then
