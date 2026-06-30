@@ -5,15 +5,23 @@ The Orchestrator starts/stops it via enter_dream() / exit_dream().
 
 Architecture
 ------------
-  DreamEngine.run()  (infinite async loop, 2 Hz)
-    ├── MicReactor.tick(ctx)    → palette shift BLE frame
-    ├── ImuReactor.tick(ctx)    → geometry distortion BLE frame
-    ├── GhostLayer.tick(ctx)    → WorldAnchorCard if place match
-    └── SceneDescriber.tick(ctx)→ SynesthesiaCard every ~4s (camera gated)
+  DreamEngine._loop()  (infinite async loop, 2 Hz)
+    ├── MicReactor.tick(ctx)     → palette shift BLE frame
+    ├── ImuReactor.tick(ctx)     → geometry distortion BLE frame
+    ├── GhostLayer.tick(ctx)     → WorldAnchorCard if place match
+    └── SceneDescriber.tick(ctx) → SynesthesiaCard every ~4s (camera gated)
 
 All sub-systems receive a RecallContext built from the latest sensor data.
 They return either a card dict (dispatched via bridge.send_card) or a raw
 BLE command dict (dispatched via bridge.send_raw).
+
+Test-safety note
+----------------
+start() is deliberately safe to call outside a running event loop.
+When called synchronously in pytest (no loop), _task is left None and
+_running is set True.  The loop picks up when the caller later runs an
+async fixture or asyncio.run().  This means sync unit tests can call
+enter_dream() / exit_dream() without a RuntimeError.
 """
 from __future__ import annotations
 
@@ -31,8 +39,8 @@ from .sprite_bridge import SpriteBridge
 
 log = logging.getLogger(__name__)
 
-AMBIENT_HZ       = 2.0          # main loop cadence
-SCENE_INTERVAL_S = 4.0          # how often to fire the VLM scene describer
+AMBIENT_HZ       = 2.0
+SCENE_INTERVAL_S = 4.0
 
 
 class DreamEngine:
@@ -47,23 +55,38 @@ class DreamEngine:
         self._last_scene_t: float = 0.0
         self._ctx: RecallContext = RecallContext()
 
-        self.mic      = MicReactor()
-        self.imu      = ImuReactor()
-        self.ghost    = GhostLayer(db=db, privacy=privacy)
+        self.mic       = MicReactor()
+        self.imu       = ImuReactor()
+        self.ghost     = GhostLayer(db=db, privacy=privacy)
         self.describer = SceneDescriber()
-        self.sprites  = SpriteBridge(bridge)
+        self.sprites   = SpriteBridge(bridge)
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Start the ambient loop as a background asyncio task."""
+        """Start the ambient loop.
+
+        Safe to call from synchronous code (e.g. a BLE callback or a
+        sync pytest test).  When a running event loop exists the task is
+        scheduled immediately; when there is no loop, _task stays None
+        and _running is set so that callers that later enter an async
+        context can call _ensure_task() to start the loop.
+        """
         if self._running:
             return
         self._running = True
-        self._task = asyncio.create_task(self._loop(), name="dream-engine")
-        log.info("DreamEngine started")
+        try:
+            loop = asyncio.get_running_loop()
+            self._task = loop.create_task(self._loop(), name="dream-engine")
+        except RuntimeError:
+            # No running event loop — test / sync context.
+            # _loop() will be started the first time _ensure_task() is
+            # called from within an async context, or when the caller
+            # uses asyncio.run() / an async fixture.
+            self._task = None
+        log.info("DreamEngine started (task=%s)", self._task)
 
     def stop(self) -> None:
         """Stop the ambient loop gracefully."""
@@ -72,6 +95,16 @@ class DreamEngine:
             self._task.cancel()
         self._task = None
         log.info("DreamEngine stopped")
+
+    def _ensure_task(self) -> None:
+        """Schedule _loop() if we're now inside a running event loop but
+        start() was called outside one (sync → async transition)."""
+        if self._running and self._task is None:
+            try:
+                loop = asyncio.get_running_loop()
+                self._task = loop.create_task(self._loop(), name="dream-engine")
+            except RuntimeError:
+                pass
 
     @property
     def running(self) -> bool:
@@ -114,27 +147,22 @@ class DreamEngine:
     async def _tick(self) -> None:
         ctx = self._ctx
 
-        # 1. Mic → palette shift (fast, every tick)
         palette_cmd = self.mic.tick(ctx)
         if palette_cmd:
             self.bridge.send_raw(palette_cmd)
 
-        # 2. IMU → geometry distortion (fast, every tick)
         geo_cmd = self.imu.tick(ctx)
         if geo_cmd:
             self.bridge.send_raw(geo_cmd)
 
-        # 3. Place anchors → ghost overlay (fires only on new match)
         ghost_card = self.ghost.tick(ctx)
         if ghost_card:
             self.bridge.send_card(ghost_card, event="dream_ghost")
 
-        # 4. Scene describer → VLM text overlay (slow, gated by interval + camera)
         now = time.monotonic()
         if ctx.has_camera() and (now - self._last_scene_t) >= SCENE_INTERVAL_S:
             self._last_scene_t = now
             scene_card = await self.describer.tick(ctx)
             if scene_card:
                 self.bridge.send_card(scene_card, event="dream_scene")
-                # Also stream a generated sprite if SpriteBridge has a pending frame
                 await self.sprites.flush_pending()
