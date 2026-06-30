@@ -5,9 +5,9 @@ import struct
 import io
 from pathlib import Path
 
-import pytest
 from PIL import Image
 
+# halo_lab is now safe to import without halo_emulator installed
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from halo_lab import (
     ble_frame,
@@ -51,23 +51,28 @@ class TestValidateScenario:
 
     def test_valid_mindblow(self):
         s = self._load("mindblow_demo")
-        if s: assert validate_scenario(s) == []
+        if s:
+            assert validate_scenario(s) == []
 
     def test_valid_all_cards(self):
         s = self._load("all_cards")
-        if s: assert validate_scenario(s) == []
+        if s:
+            assert validate_scenario(s) == []
 
     def test_valid_button_flow(self):
         s = self._load("button_flow")
-        if s: assert validate_scenario(s) == []
+        if s:
+            assert validate_scenario(s) == []
 
     def test_valid_privacy_flow(self):
         s = self._load("privacy_flow")
-        if s: assert validate_scenario(s) == []
+        if s:
+            assert validate_scenario(s) == []
 
     def test_valid_puente_caption(self):
         s = self._load("puente_caption")
-        if s: assert validate_scenario(s) == []
+        if s:
+            assert validate_scenario(s) == []
 
     def test_missing_name(self):
         assert any("name" in e for e in validate_scenario({"steps": []}))
@@ -169,7 +174,8 @@ class TestMakeGif:
         n = 0
         try:
             while True:
-                n += 1; img.seek(img.tell() + 1)
+                n += 1
+                img.seek(img.tell() + 1)
         except EOFError:
             pass
         assert n == len(frames)

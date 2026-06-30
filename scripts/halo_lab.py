@@ -18,7 +18,7 @@ Outputs per scenario in out/<scenario_name>/:
 
 Requirements:
     uv sync  (Pillow already in pyproject.toml)
-    halo_emulator on PYTHONPATH (from brilliant_sdk)
+    halo_emulator on PYTHONPATH (from brilliant_sdk) -- only needed for run_scenario()
 """
 
 import argparse
@@ -35,12 +35,10 @@ except ImportError:
     print("ERROR: Pillow not found. Run: uv sync")
     sys.exit(1)
 
-try:
-    from halo_emulator import HaloEmulator
-except ImportError:
-    print("ERROR: halo_emulator not found.")
-    print("Clone brilliant_sdk and install: pip install -e packages/halo-emulator")
-    sys.exit(1)
+# NOTE: halo_emulator is intentionally NOT imported at module level.
+# It is only imported inside run_scenario() so that all pure functions
+# (validate_scenario, make_gif, make_contact_sheet, etc.) remain importable
+# and fully testable without the emulator installed.
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -199,10 +197,17 @@ def make_gif(frames, step_ms: int = 1200, hold_ms: int = 2500) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Run one scenario
+# Run one scenario  (halo_emulator imported HERE, not at module level)
 # ---------------------------------------------------------------------------
 def run_scenario(scenario: dict, lua_src: Path, out_dir: Path,
                  settle_ms: int = 600, verbose: bool = True) -> dict:
+    try:
+        from halo_emulator import HaloEmulator
+    except ImportError:
+        print("ERROR: halo_emulator not found.")
+        print("Clone brilliant_sdk and install: pip install -e packages/halo-emulator")
+        sys.exit(1)
+
     out_dir.mkdir(parents=True, exist_ok=True)
     steps   = scenario["steps"]
     frames  = []
