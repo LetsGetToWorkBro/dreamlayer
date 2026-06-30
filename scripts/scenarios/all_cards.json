@@ -1,0 +1,28 @@
+{
+  "name": "all_cards",
+  "description": "Cycle through every card type once \u2014 visual regression reference",
+  "steps": [
+    { "action": "connect", "at": 0.0 },
+    { "action": "card",    "at": 0.4,
+      "card_type": "ObjectRecallCard",
+      "payload": { "object": "KEYS", "place": "KITCHEN", "last_seen": "2h ago", "confidence": 0.91 } },
+    { "action": "card",    "at": 1.2,
+      "card_type": "CommitmentRecallCard",
+      "payload": { "person": "MAYA", "task": "send launch deck", "due": "today 5pm", "confidence": 0.87 } },
+    { "action": "card",    "at": 2.0,
+      "card_type": "ProactiveMemoryCard",
+      "payload": { "summary": "Ask about the launch plan", "person": "Maya" } },
+    { "action": "card",    "at": 2.8,
+      "card_type": "PersonContextCard",
+      "payload": { "person": "DR LEE", "headline": "Cardiologist", "detail": "Last visit Apr 2" } },
+    { "action": "card",    "at": 3.6,
+      "card_type": "SavedMemoryCard",
+      "payload": { "primary": "Parked level 3 \u2022 blue pillar" } },
+    { "action": "card",    "at": 4.4,
+      "card_type": "ErrorCard",
+      "payload": { "primary": "No memory connection" } },
+    { "action": "command", "at": 5.2, "kind": "ask",     "note": "QueryListeningCard" },
+    { "action": "command", "at": 6.0, "kind": "loading", "note": "LoadingCard" },
+    { "action": "button",  "at": 6.8, "kind": "long",   "note": "PrivacyPausedCard" }
+  ]
+}

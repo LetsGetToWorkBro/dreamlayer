@@ -1,0 +1,29 @@
+{
+  "name": "mindblow_demo",
+  "description": "The flagship demo: connect, save, ask, recall objects, person context, commitment, privacy",
+  "steps": [
+    { "action": "connect",  "at": 0.0,  "note": "Glasses pair with host" },
+    { "action": "card",     "at": 0.5,
+      "card_type": "SavedMemoryCard",
+      "payload": { "primary": "Parked level 3 \u2022 blue pillar" },
+      "note": "User taps and says remember this" },
+    { "action": "button",   "at": 2.0,  "kind": "double", "note": "Dismiss back to ready" },
+    { "action": "button",   "at": 2.8,  "kind": "single", "note": "Single click to query" },
+    { "action": "card",     "at": 4.0,
+      "card_type": "ObjectRecallCard",
+      "payload": { "object": "KEYS", "place": "KITCHEN", "detail": "counter bowl",
+                   "last_seen": "2h ago", "confidence": 0.91 },
+      "note": "Memory engine: keys in kitchen" },
+    { "action": "card",     "at": 7.0,
+      "card_type": "PersonContextCard",
+      "payload": { "person": "MAYA", "headline": "Launch planning",
+                   "detail": "Prefers concise updates" },
+      "note": "Proactive: about to meet Maya" },
+    { "action": "card",     "at": 9.5,
+      "card_type": "CommitmentRecallCard",
+      "payload": { "person": "MAYA", "task": "send launch deck",
+                   "due": "today 5pm", "confidence": 0.87 },
+      "note": "Glasses remember the promise" },
+    { "action": "button",   "at": 12.0, "kind": "long", "note": "Long press for privacy" }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "button_flow",
+  "description": "Verify all button inputs drive the correct FSM transitions",
+  "steps": [
+    { "action": "connect",  "at": 0.0 },
+    { "action": "button",   "at": 0.5,  "kind": "single",  "note": "connected -> query_listening" },
+    { "action": "button",   "at": 1.5,  "kind": "single",  "note": "cancel query -> connected" },
+    { "action": "card",     "at": 2.0,
+      "card_type": "ObjectRecallCard",
+      "payload": { "object": "WALLET", "place": "DESK", "last_seen": "1h ago", "confidence": 0.88 } },
+    { "action": "button",   "at": 3.5,  "kind": "double",  "note": "showing_card -> dismiss" },
+    { "action": "button",   "at": 4.5,  "kind": "long",    "note": "connected -> privacy_paused" },
+    { "action": "button",   "at": 5.5,  "kind": "single",  "note": "privacy_paused -> resume" },
+    { "action": "imu_tap",  "at": 6.5,  "note": "IMU tap while connected" }
+  ]
+}

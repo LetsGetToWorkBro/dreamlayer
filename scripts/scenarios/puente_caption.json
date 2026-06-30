@@ -1,0 +1,20 @@
+{
+  "name": "puente_caption",
+  "description": "Live translation captions via Puente \u2014 Spanish/English demo",
+  "steps": [
+    { "action": "connect", "at": 0.0 },
+    { "action": "card",    "at": 0.5,
+      "card_type": "LiveCaptionCard",
+      "payload": { "speaker": "MAM\u00c1", "source": "\u00bfd\u00f3nde estacionaste?",
+                   "translation": "Where did you park?", "confidence": 0.97 } },
+    { "action": "card",    "at": 2.0,
+      "card_type": "LiveCaptionCard",
+      "payload": { "speaker": "MAM\u00c1", "source": "Hay que salir pronto.",
+                   "translation": "We need to leave soon.", "confidence": 0.99 } },
+    { "action": "card",    "at": 3.5,
+      "card_type": "LiveCaptionCard",
+      "payload": { "speaker": "YOU", "source": "Level 3, near the blue pillar.",
+                   "translation": "Nivel 3, junto al pilar azul.", "confidence": 0.96 } },
+    { "action": "button",  "at": 5.0, "kind": "long", "note": "Caption pause" }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "privacy_flow",
+  "description": "Trust and privacy: show how memory pauses and resumes gracefully",
+  "steps": [
+    { "action": "connect",  "at": 0.0 },
+    { "action": "card",     "at": 0.5,
+      "card_type": "SavedMemoryCard",
+      "payload": { "primary": "Coffee with Jen at 2pm" } },
+    { "action": "button",   "at": 2.0,  "kind": "long",   "note": "Enter private mode" },
+    { "action": "card",     "at": 3.0,
+      "card_type": "ObjectRecallCard",
+      "payload": { "object": "NOTEBOOK", "place": "BAG",
+                   "last_seen": "30m ago", "confidence": 0.95 },
+      "note": "Host tries to send card during privacy" },
+    { "action": "button",   "at": 5.0,  "kind": "single", "note": "Resume from privacy" },
+    { "action": "card",     "at": 5.8,
+      "card_type": "CommitmentRecallCard",
+      "payload": { "person": "JEN", "task": "bring notebook",
+                   "due": "2pm today", "confidence": 0.80 } }
+  ]
+}
