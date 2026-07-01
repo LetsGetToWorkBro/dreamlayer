@@ -1,0 +1,26 @@
+     0.0s   [enter armed] ROLLING ROUNDS / READY / double-tap: start
+     0.0s   [double → rolling] ROLLING / 3:00
+     1.0s   [rolling ROLLING] ROLLING / 2:59
+     2.0s   [rolling ROLLING] ROLLING / 2:58
+   170.0s ⋯ [fold 2:48] ⋯ 2:48 ⋯
+   170.5s ● [pulse] ROLLING / 10
+   171.0s ● [pulse] ROLLING / 9
+   171.5s ● [pulse] ROLLING / 9
+   172.0s ● [pulse] ROLLING / 8
+   172.5s ● [pulse] ROLLING / 8
+   173.0s ● [pulse] ROLLING / 7
+   173.5s ● [pulse] ROLLING / 7
+   174.0s ● [pulse] ROLLING / 6
+   174.5s ● [pulse] ROLLING / 6
+   175.0s ● [pulse] ROLLING / 5
+   175.5s ● [pulse] ROLLING / 5
+   176.0s ● [pulse] ROLLING / 4
+   176.5s ● [pulse] ROLLING / 4
+   177.0s ● [pulse] ROLLING / 3
+   177.5s ● [pulse] ROLLING / 3
+   178.0s ● [pulse] ROLLING / 2
+   178.5s ● [pulse] ROLLING / 2
+   179.0s ● [pulse] ROLLING / 1
+   179.5s ● [pulse] ROLLING / 1
+   180.0s   [enter rolling] ROLLING / 3:00
+   180.0s   [loop closes — run-through complete] ROLLING / 3:00

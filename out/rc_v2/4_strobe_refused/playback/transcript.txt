@@ -1,0 +1,26 @@
+     0.0s   [enter armed] STROBE DRILL
+     1.0s   [enter round] 30
+     2.0s   [round 29] 29
+     3.0s   [round 28] 28
+    20.5s ⋯ [fold 18] ⋯ 18 ⋯
+    21.0s ● [pulse] 10
+    21.5s ● [pulse] 9
+    22.0s ● [pulse] 9
+    22.5s ● [pulse] 8
+    23.0s ● [pulse] 8
+    23.5s ● [pulse] 7
+    24.0s ● [pulse] 7
+    24.5s ● [pulse] 6
+    25.0s ● [pulse] 6
+    25.5s ● [pulse] 5
+    26.0s ● [pulse] 5
+    26.5s ● [pulse] 4
+    27.0s ● [pulse] 4
+    27.5s ● [pulse] 3
+    28.0s ● [pulse] 3
+    28.5s ● [pulse] 2
+    29.0s ● [pulse] 2
+    29.5s ● [pulse] 1
+    30.0s ● [pulse] 1
+    30.5s   [round] 
+    30.5s   [end] 

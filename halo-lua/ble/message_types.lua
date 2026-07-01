@@ -32,6 +32,15 @@ local MT = {
   PARSE_ERROR     = "parse_error",
   EVENT           = "event",
 
+  -- Reality Compiler v2 figments (host <-> app/figment_stage.lua;
+  -- Python side mirrored in reality_compiler/v2/transport.py — keep in sync)
+  FIGMENT_PUT     = "figment_put",     -- host -> Halo: store figment (inactive)
+  FIGMENT_SWAP    = "figment_swap",    -- host -> Halo: hot-swap between ticks
+  FIGMENT_REVOKE  = "figment_revoke",  -- host -> Halo: stop + clear, go ambient
+  FIGMENT_TEXT    = "figment_text",    -- host -> Halo: push into the text slot
+  FIGMENT_ACK     = "figment_ack",     -- Halo -> host: put/swap/revoke result
+  FIGMENT_EVENT   = "figment_event",   -- Halo -> host: rate-limited emit
+
   -- Button event values (msg.ev)
   BTN_SINGLE      = "single",
   BTN_DOUBLE      = "double",

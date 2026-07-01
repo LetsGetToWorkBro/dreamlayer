@@ -1,0 +1,10 @@
+     0.0s   [enter armed] WATER BREAK
+     1.0s   [enter w] W / 20
+     2.0s   [w W] W / 19
+     3.0s   [w W] W / 18
+    16.5s ⋯ [fold 14] ⋯ 14 ⋯
+    17.5s   [w] W / 3
+    18.5s   [w] W / 2
+    19.5s   [w] W / 1
+    20.5s   [w] 
+    20.5s   [end] 

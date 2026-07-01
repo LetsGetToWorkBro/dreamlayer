@@ -1,0 +1,231 @@
+[
+ {
+  "t": "figment_put",
+  "id": "a9b0f35c17f0",
+  "figment": {
+   "id": "a9b0f35c17f0",
+   "name": "Round timer",
+   "version": 2,
+   "initial": "armed",
+   "scenes": {
+    "armed": {
+     "id": "armed",
+     "lines": [
+      {
+       "content": "ROUND TIMER",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "content": "READY",
+       "row": 1,
+       "size": "lg",
+       "color": "text_primary"
+      },
+      {
+       "content": "double-tap: start",
+       "row": 3,
+       "size": "sm",
+       "color": "text_secondary"
+      }
+     ],
+     "on": {
+      "double": {
+       "target": "round"
+      }
+     }
+    },
+    "over": {
+     "id": "over",
+     "lines": [
+      {
+       "content": "OVER",
+       "row": 1,
+       "size": "lg",
+       "color": "accent_attention"
+      }
+     ],
+     "duration_sec": 3.0,
+     "on_timeout": [
+      {
+       "target": "armed"
+      }
+     ]
+    },
+    "overtime": {
+     "id": "overtime",
+     "lines": [
+      {
+       "content": "OT",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "content": "{remaining}",
+       "row": 1,
+       "size": "lg",
+       "color": "text_primary"
+      }
+     ],
+     "duration_sec": 20.0,
+     "tick": "countdown",
+     "on_timeout": [
+      {
+       "target": "over"
+      }
+     ],
+     "pulse": {
+      "window_sec": 5,
+      "color": "accent_error",
+      "rate_hz": 2.0
+     }
+    },
+    "round": {
+     "id": "round",
+     "lines": [
+      {
+       "content": "ROUND",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "content": "{remaining}",
+       "row": 1,
+       "size": "lg",
+       "color": "text_primary"
+      }
+     ],
+     "duration_sec": 180.0,
+     "tick": "countdown",
+     "on_timeout": [
+      {
+       "target": "overtime"
+      }
+     ],
+     "on": {
+      "double": {
+       "target": "armed"
+      }
+     },
+     "pulse": {
+      "window_sec": 10,
+      "color": "accent_error",
+      "rate_hz": 2.0
+     }
+    }
+   },
+   "meta": {
+    "origin": "v1_lift",
+    "v1_type": "round_timer"
+   }
+  },
+  "hash": "2a5c0f0e973af3cb"
+ },
+ {
+  "t": "figment_swap",
+  "id": "a9b0f35c17f0"
+ },
+ {
+  "t": "figment_put",
+  "id": "20b93520406e",
+  "figment": {
+   "id": "20b93520406e",
+   "name": "Rolling rounds",
+   "version": 2,
+   "initial": "armed",
+   "scenes": {
+    "armed": {
+     "id": "armed",
+     "lines": [
+      {
+       "content": "ROLLING ROUNDS",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "content": "READY",
+       "row": 1,
+       "size": "lg",
+       "color": "text_primary"
+      },
+      {
+       "content": "double-tap: start",
+       "row": 3,
+       "size": "sm",
+       "color": "text_secondary"
+      }
+     ],
+     "on": {
+      "double": {
+       "target": "rolling"
+      }
+     }
+    },
+    "rolling": {
+     "id": "rolling",
+     "lines": [
+      {
+       "content": "ROLLING",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "content": "{remaining}",
+       "row": 1,
+       "size": "lg",
+       "color": "text_primary"
+      }
+     ],
+     "duration_sec": 180.0,
+     "tick": "countdown",
+     "on_timeout": [
+      {
+       "target": "rolling"
+      }
+     ],
+     "pulse": {
+      "window_sec": 10.0,
+      "color": "accent_attention",
+      "rate_hz": 2.0
+     }
+    }
+   },
+   "meta": {
+    "scene_beats": {
+     "rolling": 2,
+     "armed": 0
+    },
+    "origin": "rehearsal"
+   }
+  },
+  "hash": "da8bb768279a25c7"
+ },
+ {
+  "t": "figment_swap",
+  "id": "20b93520406e"
+ },
+ {
+  "t": "figment_put",
+  "id": "10a560e63b84",
+  "figment": {
+   "id": "10a560e63b84",
+   "name": "Spar night",
+   "version": 2,
+   "initial": "armed",
+   "scenes": {
+    "armed": {
+     "id": "armed",
+     "lines": [
+      {
+       "content": "SPAR NIGHT",
+       "row": 0,
+       "size": "sm",
+       "color": "text_secondary"
+      },
+      {
+       "

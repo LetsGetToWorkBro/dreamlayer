@@ -1,0 +1,32 @@
+{
+  "sessions": {
+    "1_v1_round_timer": {
+      "ok": true,
+      "playback_frames": 42,
+      "deployed": true
+    },
+    "2_rolling_rounds": {
+      "ok": true,
+      "playback_frames": 26,
+      "deployed": true,
+      "authoring_beats": 4
+    },
+    "3_spar_night": {
+      "ok": true,
+      "playback_frames": 40,
+      "deployed": true
+    },
+    "4_strobe_refused": {
+      "refused": true,
+      "teach": "CAN'T DO THAT (beat 2): your beat 2 asks the screen to change faster than 4\u00d7/sec \u2014 Halo breathes, it doesn't strobe \u2192 try \"pulse\" instead",
+      "corrected_ok": true,
+      "playback_frames": 26
+    },
+    "5_hot_swap_revoke": {
+      "deploy": true,
+      "swap": true,
+      "revoke": true,
+      "revoked_redeploy_refused": true
+    }
+  }
+}

@@ -1,0 +1,42 @@
+     0.0s   [enter armed] ROUND TIMER / READY / double-tap: start
+     0.0s   [double → round] ROUND / 3:00
+     1.0s   [round ROUND] ROUND / 2:59
+     2.0s   [round ROUND] ROUND / 2:58
+   170.0s ⋯ [fold 2:48] ⋯ 2:48 ⋯
+   170.5s ● [pulse] ROUND / 10
+   171.0s ● [pulse] ROUND / 9
+   171.5s ● [pulse] ROUND / 9
+   172.0s ● [pulse] ROUND / 8
+   172.5s ● [pulse] ROUND / 8
+   173.0s ● [pulse] ROUND / 7
+   173.5s ● [pulse] ROUND / 7
+   174.0s ● [pulse] ROUND / 6
+   174.5s ● [pulse] ROUND / 6
+   175.0s ● [pulse] ROUND / 5
+   175.5s ● [pulse] ROUND / 5
+   176.0s ● [pulse] ROUND / 4
+   176.5s ● [pulse] ROUND / 4
+   177.0s ● [pulse] ROUND / 3
+   177.5s ● [pulse] ROUND / 3
+   178.0s ● [pulse] ROUND / 2
+   178.5s ● [pulse] ROUND / 2
+   179.0s ● [pulse] ROUND / 1
+   179.5s ● [pulse] ROUND / 1
+   180.0s   [enter overtime] OT / 20
+   181.0s   [overtime OT] OT / 19
+   182.0s   [overtime OT] OT / 18
+   195.0s ⋯ [fold 13] ⋯ 13 ⋯
+   195.5s ● [pulse] OT / 5
+   196.0s ● [pulse] OT / 4
+   196.5s ● [pulse] OT / 4
+   197.0s ● [pulse] OT / 3
+   197.5s ● [pulse] OT / 3
+   198.0s ● [pulse] OT / 2
+   198.5s ● [pulse] OT / 2
+   199.0s ● [pulse] OT / 1
+   199.5s ● [pulse] OT / 1
+   200.0s   [enter over] OVER
+   201.0s   [over] OVER
+   202.0s   [over] OVER
+   203.0s   [enter armed] ROUND TIMER / READY / double-tap: start
+   203.0s   [waiting (event-only)] ROUND TIMER / READY / double-tap: start

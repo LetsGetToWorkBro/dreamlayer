@@ -1,0 +1,3 @@
+CAN'T DO THAT (beat 2): your beat 2 asks the screen to change faster than 4×/sec — Halo breathes, it doesn't strobe → try "pulse" instead
+[BUDGETS VIOLATED] scenes=2 display<=30Hz emit<=0/s
+  ✗ pulse_rate [scene round]: pulse 30.0Hz > max 4.0Hz — the display budget

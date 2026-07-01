@@ -1,0 +1,40 @@
+     0.0s   [enter armed] SPAR NIGHT / READY / double-tap: start
+     0.0s   [double → drilling] DRILLING / 1:00 / 0 count / 1/5
+     1.0s   [drilling DRILLING] DRILLING / 59 / 0 count / 1/5
+     2.0s   [drilling DRILLING] DRILLING / 58 / 0 count / 1/5
+    56.0s ⋯ [fold 54] ⋯ 54 ⋯
+    57.0s   [drilling] DRILLING / 3 / 0 count / 1/5
+    58.0s   [drilling] DRILLING / 2 / 0 count / 1/5
+    59.0s   [drilling] DRILLING / 1 / 0 count / 1/5
+    60.0s   [enter rolling] ROLLING / 3:00
+    61.0s   [rolling ROLLING] ROLLING / 2:59
+    62.0s   [rolling ROLLING] ROLLING / 2:58
+   230.0s ⋯ [fold 2:48] ⋯ 2:48 ⋯
+   230.5s ● [pulse] ROLLING / 10
+   231.0s ● [pulse] ROLLING / 9
+   231.5s ● [pulse] ROLLING / 9
+   232.0s ● [pulse] ROLLING / 8
+   232.5s ● [pulse] ROLLING / 8
+   233.0s ● [pulse] ROLLING / 7
+   233.5s ● [pulse] ROLLING / 7
+   234.0s ● [pulse] ROLLING / 6
+   234.5s ● [pulse] ROLLING / 6
+   235.0s ● [pulse] ROLLING / 5
+   235.5s ● [pulse] ROLLING / 5
+   236.0s ● [pulse] ROLLING / 4
+   236.5s ● [pulse] ROLLING / 4
+   237.0s ● [pulse] ROLLING / 3
+   237.5s ● [pulse] ROLLING / 3
+   238.0s ● [pulse] ROLLING / 2
+   238.5s ● [pulse] ROLLING / 2
+   239.0s ● [pulse] ROLLING / 1
+   239.5s ● [pulse] ROLLING / 1
+   240.0s   [enter drilling] DRILLING / 1:00 / 0 count / 2/5
+   241.0s   [drilling DRILLING] DRILLING / 59 / 0 count / 2/5
+   242.0s   [drilling DRILLING] DRILLING / 58 / 0 count / 2/5
+   296.0s ⋯ [fold 54] ⋯ 54 ⋯
+   297.0s   [drilling] DRILLING / 3 / 0 count / 2/5
+   298.0s   [drilling] DRILLING / 2 / 0 count / 2/5
+   299.0s   [drilling] DRILLING / 1 / 0 count / 2/5
+   300.0s   [enter rolling] ROLLING / 3:00
+   300.0s   [loop closes — run-through complete] ROLLING / 3:00

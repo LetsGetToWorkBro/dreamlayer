@@ -9,6 +9,7 @@ export default function Layout() {
       headerShown:            false,
     }}>
       <Tabs.Screen name="now"         options={{ title: "Now" }} />
+      <Tabs.Screen name="rehearsal"   options={{ title: "Rehearsal" }} />
       <Tabs.Screen name="memories"    options={{ title: "Memories" }} />
       <Tabs.Screen name="settings"    options={{ title: "Settings" }} />
       <Tabs.Screen name="onboarding"  options={{ href: null }} />

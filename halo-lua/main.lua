@@ -7,6 +7,10 @@ local CardQueue  = require("card_queue")
 local HostComm   = require("ble.host_comm")   -- already wires DC via require
 local DreamRend  = require("display.dream_renderer")
 local PAL        = require("display.palette")
+local Figment    = require("app.figment_stage") -- Reality Compiler v2 stage
+
+-- figment_put/swap/revoke/text arrive as BLE envelopes → stage handlers
+Figment.register(HostComm)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)
@@ -64,6 +68,13 @@ local function process_inbound(msg)
       CardQueue.push({ type = "ReadyCard" }, CardQueue.AMBIENT)
     end
 
+  elseif t == "button" and Figment.is_running() then
+    -- while a figment holds the stage, physical buttons drive it
+    local ev = msg.ev or ""
+    if ev == "single" or ev == "double" or ev == "long" then
+      Figment.on_event(ev)
+    end
+
   elseif t == "double_tap" then
     -- Host sends t="double_tap" to mirror the gesture back for Lua FSM;
     -- actual dream enter/exit is handled in host_comm_dream via dream_enter/exit.
@@ -99,7 +110,11 @@ local function tick()
   end
 
   -- Render
-  if HostComm.dream_active() then
+  if Figment.is_running() then
+    -- a deployed figment owns the display; it renders via its bound
+    -- display API and yields the stage the moment it ends or is revoked
+    Figment.tick(0.05)
+  elseif HostComm.dream_active() then
     -- Dream Mode: draw ambient layer then any pending dream cards
     DreamRend.draw_frame()
     local card = CardQueue.peek()
@@ -121,6 +136,14 @@ end
 -- ---------------------------------------------------------------------------
 -- Boot
 -- ---------------------------------------------------------------------------
+-- Give the figment stage its whitelisted effects: display, host send,
+-- battery. This is the entire capability surface a figment can reach.
+Figment.bind({
+  display = _G.halo and _G.halo.display or nil,
+  send    = HostComm.send,
+  battery = _G.halo and _G.halo.battery_level or nil,
+})
+
 if _G.halo and _G.halo.runloop then
   _G.halo.runloop(tick)
 else
