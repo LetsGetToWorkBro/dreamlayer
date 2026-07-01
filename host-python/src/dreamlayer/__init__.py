@@ -7,10 +7,11 @@ Package layout
   dreamlayer.reality_compiler — Intent parser → codegen → emulator → validator → deployer
   dreamlayer.truth_lens       — 9-stage multimodal deception analysis
   dreamlayer.social_lens      — Contact face-binding, labeling, per-contact baselines
+  dreamlayer.orchestrator     — Central coordinator, mode management
 
-Internal engine (unchanged public name):
-  memoscape/                  — memory storage, pipelines, orchestration
+Internal engine (memory storage & pipelines):
+  memoscape/                  — memory storage, pipelines (internal)
   halo_bridge.py              — BLE hardware transport
 """
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = []
