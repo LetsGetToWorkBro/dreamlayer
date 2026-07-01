@@ -1,67 +1,88 @@
-# Memoscape
+# DreamLayer
 
-![pytest](https://github.com/LetsGetToWorkBro/memoscape/actions/workflows/pytest.yml/badge.svg)
+> *A memory layer for the real world.*
 
-> A private memory layer for Brilliant Labs Halo smart glasses.
+DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Halo smart glasses. It gives you ambient memory, precision analysis lenses, and programmable AR behaviors — all running on-device, privately.
 
-Memoscape gives Halo wearers instant, on-glasses recall for the things that slip through the cracks: where you left your keys, what you promised someone, what happened last time you were in this place.
+---
 
-## Project layout
+## Experience Layers
+
+| Layer | Name | What it does |
+|---|---|---|
+| Ambient state | **Dream Mode** | Passive listening, background sensing, double-tap entry point |
+| Memory resurfacing | **Ghost Layer** | WorldAnchorCards, memory echoes, contextual recalls |
+| Clear retrieval | **Lucid Recall** | On-demand face/name/fact answer cards |
+| Behavior builder | **Reality Compiler** | Plain English → validated Lua behaviors deployed to glasses |
+
+## Precision Lenses
+
+| Lens | What it does |
+|---|---|
+| **Truth Lens** | 9-stage multimodal deception analysis: face → AU → voice → linguistic → fusion → HUD |
+| **Social Lens** | Contact face-binding, real-time labeling, per-contact baselines |
+
+## Module Map
 
 ```
-memoscape/
-  host-python/          Python host — emulator bridge, real BLE bridge, memory engine
-    src/memoscape/
-      bridge/           BridgeBase + EmulatorBridge + RealBridge (brilliant-ble)
-      memory/           SQLite DB, retrieval, proactive, privacy gate, embeddings
-      pipelines/        Three-tier NLP: regex (T1) → spaCy (T2) → GPT-4o-mini (T3)
-      app/              Orchestrator, intents, answer builder
-      hud/              Card schema, renderer (Pillow), HUD export
-      simulator/        Scenario helpers + 10 JSON fixtures
-      tests/            80 pytest tests (9 modules)
-  halo-lua/             Lua app for Halo display runtime
-  phone-app/            Expo / React Native companion app
-    app/                Expo Router screens: now, memories, settings, onboarding
-    src/ui/             Design system — theme tokens, components
-    src/services/       OnboardingService (5-step data-driven flow)
-    src/state/          Zustand stores: onboarding, halo, memory
-  scripts/              Runnable demo scripts
-  assets/hud/samples/   Exported 256x256 PNG HUD card previews
+dreamlayer/
+├── dream_mode/          # Ambient loop, Ghost Layer, WorldAnchorCards
+├── lucid_recall/        # Query router → SocialLens / MemoryIndex → HUD card
+├── reality_compiler/    # Intent parser → codegen → emulator → validator → deployer
+├── truth_lens/          # 9-stage deception analysis pipeline
+├── social_lens/         # Contact recognition, labeling, baseline storage
+├── hud/                 # Card definitions, renderer, framebuffer pipeline
+├── memory/              # Anchors, storage, retrieval, ranking
+├── pipelines/           # Audio, vision, IMU, place context ingestion
+├── orchestrator/        # Central coordinator, mode management
+└── bridge/              # BLE protocol, hardware translation
 ```
 
-## Quick start
+## Quick Start
 
-```bash
-# Install Python host
-cd host-python
-pip install -e .[dev]
+```python
+# Truth Lens — deception analysis
+from dreamlayer.truth_lens import TruthLens
 
-# Run tests (no API key needed)
-pytest
+tl = TruthLens(contact_registry=my_contacts)
+tl.feed_frame(camera_frame)
+tl.feed_audio(mic_fft, mic_amplitude)
+tl.feed_transcript(asr_text)
+result = tl.tick()
+if result:
+    card = result.to_hud_card()  # → HUD renderer
 
-# Run emulator demo
-python scripts/run_demo_wallet.py
+# Social Lens — contact recognition
+from dreamlayer.social_lens import SocialLens
 
-# Install phone app deps
-cd phone-app && npm install && npx expo start
+sl = SocialLens(contacts=my_contacts)
+result = sl.identify(camera_frame)  # on double-tap
+card = result.to_hud_card()
+
+# Lucid Recall — on-demand queries
+from dreamlayer.lucid_recall import LucidRecall
+
+lr = LucidRecall(social_lens=sl)
+result = lr.query("Who is this?", camera_frame=frame)
+card = result.to_hud_card()
 ```
 
-### Optional: real LLM + embeddings
+## Privacy
 
-Set `OPENAI_API_KEY` in your environment to activate:
-- **Tier 3 extraction** — GPT-4o-mini for long or ambiguous transcripts
-- **Semantic embeddings** — `text-embedding-3-small` for accurate recall
+- All processing on-device (phone). Nothing leaves the device by default.
+- No stranger identification. Social Lens only matches your personal contacts.
+- Audio, video, and embeddings are never stored or transmitted.
+- Privacy gate (`allow_capture()`) respected across all lenses.
 
-Without the key, the engine falls back to regex extraction + hash-based embeddings automatically.
+## Internal Engine
 
-## Tests
+`memoscape/` — memory storage, pipelines, orchestration (internal name, unchanged)  
+`halo_bridge.py` — BLE hardware transport layer
 
-80 tests across 9 modules — all pass. CI runs on every push via GitHub Actions.
+## Roadmap
 
-```bash
-pytest host-python
-```
+Future lenses: **Health Lens** · **Focus Lens** · **Skill Lens**
 
-## Device day checklist
+---
 
-See `FIRST_DEVICE_TEST_PLAN.md`.
+*DreamLayer is built for Brilliant Labs Halo. Internal engine: Memoscape.*
