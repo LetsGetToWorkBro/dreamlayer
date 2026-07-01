@@ -14,7 +14,7 @@ try:
 except ImportError:
     LUPA_AVAILABLE = False
 
-LUA_ROOT = pathlib.Path(__file__).parents[5] / "halo-lua"
+LUA_ROOT = pathlib.Path(__file__).parents[4] / "halo-lua"
 
 
 def _make_runtime():

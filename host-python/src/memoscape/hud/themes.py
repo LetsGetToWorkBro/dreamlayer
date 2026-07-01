@@ -30,6 +30,24 @@ WARNING_AMBER     = 0xFF6600
 # If it packs ARGB into one int with alpha in top byte: 0x08FFFFFF
 GHOST_WHITE       = 0xFFFFFF
 
+# --- Halo Cinema v1: dynamic palette slot bank (mirrors palette.lua) ---
+# Slots 1-6 are runtime-reassignable via {t:"palette"} frames /
+# frame.display.assign_color_ycbcr. Slot 0 and 7-15 are static.
+# Air tier: sky/energy/drift_*; Ghost tier: ghost_text; fx is shared
+# (Truth Ripple warm pulse, DeviationAlert ring). Prism fringes alias the
+# drift slots — dream mode and card crossfades are mutually exclusive.
+DYNAMIC_SLOTS = {
+    "sky":        1,
+    "energy":     2,
+    "drift_a":    3,
+    "drift_b":    4,
+    "ghost_text": 5,
+    "fx":         6,
+    # card-mode aliases
+    "prism_cool": 3,
+    "prism_warm": 4,
+}
+
 
 def to_rgb(hexval: int) -> tuple[int, int, int]:
     return ((hexval >> 16) & 0xFF, (hexval >> 8) & 0xFF, hexval & 0xFF)
