@@ -61,14 +61,14 @@ class LinguisticFrame:
         """Heuristic 0-1 deception score from linguistic features."""
         score = 0.0
         # High hedging = uncertainty / distancing
-        score += min(self.hedging_rate / 0.15, 0.30)
+        score += min(self.hedging_rate / 0.15, 1.0) * 0.30
         # Low first-person = distancing from statements
         first_person_dev = max(0.0, 0.08 - self.first_person_rate)
-        score += min(first_person_dev / 0.08, 0.25)
+        score += min(first_person_dev / 0.08, 1.0) * 0.25
         # High complexity = over-qualification
-        score += min(self.complexity_score, 0.25) * 0.8
+        score += min(self.complexity_score, 1.0) * 0.25
         # High negation = defensive language
-        score += min(self.negation_rate / 0.10, 0.20)
+        score += min(self.negation_rate / 0.10, 1.0) * 0.20
         return min(score, 1.0)
 
 
