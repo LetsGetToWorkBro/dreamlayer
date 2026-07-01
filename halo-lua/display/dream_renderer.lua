@@ -205,7 +205,10 @@ function M.render_world_anchor(card, now_ms)
   if not HAS_FRAME then return end
   local summary = card.primary or ""
   local detail  = card.detail  or ""
-  if #summary > 32 then summary = summary:sub(1, 31) .. "\xE2\x80\xA6" end
+  -- 22-char cap + rows 192/208/222 keep ghost text inside the circular
+  -- safe chord (the old 210/226/242 rows clipped at the display edge)
+  if #summary > 22 then summary = summary:sub(1, 21) .. "\xE2\x80\xA6" end
+  if #detail  > 22 then detail  = detail:sub(1, 21) .. "\xE2\x80\xA6" end
 
   now_ms = now_ms or math.floor(os.clock() * 1000)
   local key = (card.anchor_id or "") .. "|" .. summary
@@ -216,10 +219,10 @@ function M.render_world_anchor(card, now_ms)
   local A = require("display.animations")
   local t = math.min(1, (now_ms - _anchor_t0) / A.SIG_GHOSTWAKE_MS)
 
-  TR.ghost_wake_text(CX, 210, "\xE2\x80\xA2 MEMORY ECHO \xE2\x80\xA2", "sm", t, _anchor_t0)
-  TR.ghost_wake_text(CX, 226, summary,                      "sm", t, _anchor_t0 + 977)
+  TR.ghost_wake_text(CX, 192, "\xE2\x80\xA2 MEMORY ECHO \xE2\x80\xA2", "sm", t, _anchor_t0)
+  TR.ghost_wake_text(CX, 208, summary, "sm", t, _anchor_t0 + 977)
   if detail ~= "" then
-    TR.ghost_wake_text(CX, 242, detail, "sm", t, _anchor_t0 + 1954)
+    TR.ghost_wake_text(CX, 222, detail, "sm", t, _anchor_t0 + 1954)
   end
 end
 

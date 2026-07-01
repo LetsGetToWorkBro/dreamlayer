@@ -24,6 +24,10 @@ def _hex_to_rgb(h: int) -> tuple[int, int, int]:
     return T.to_rgb(h)
 
 
+def _ellipsize(text: str, max_chars: int) -> str:
+    return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
+
+
 def _font(size_token: str) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     px = FONT_PX.get(size_token, 13)
     candidates = [
@@ -177,10 +181,13 @@ def draw_polar_segments(
     color: int,
     alpha_lit: int = 255,
     alpha_dim: int = 35,
+    skip_indices: list[int] | None = None,
 ) -> None:
     r_, g_, b_ = _hex_to_rgb(color)
     step = 360.0 / count
     for i in range(count):
+        if skip_indices and i in skip_indices:
+            continue
         angle = math.radians(i * step - 90)
         xi = cx + r_inner * math.cos(angle)
         yi = cy + r_inner * math.sin(angle)
@@ -327,7 +334,12 @@ class CardRenderer:
         self._mask = _mask()
 
     def render(self, card: dict) -> Image.Image:
-        img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 255))
+        # RGB canvas: Pillow's "RGBA" draw mode only alpha-BLENDS on RGB
+        # images. On an RGBA base the ink alpha is stored, not blended, and
+        # was then discarded by putalpha() — so every alpha= dim in this
+        # file rendered fully opaque (vision pass 3 finding: the commitment
+        # card's alpha-18 link fill was a solid pill hiding the due text).
+        img = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         draw = ImageDraw.Draw(img, "RGBA")
         dispatch = {
             "ReadyCard":            self._ready,
@@ -349,6 +361,7 @@ class CardRenderer:
         fn = dispatch.get(card.get("type", ""))
         if fn:
             fn(draw, card)
+        img = img.convert("RGBA")
         img.putalpha(self._mask)
         return img
 
@@ -527,7 +540,7 @@ class CardRenderer:
         t_j = 0.45
         apex_x = (1-t_j)**2 * p0[0] + 2*(1-t_j)*t_j * p1[0] + t_j**2 * p2[0]
         apex_y = (1-t_j)**2 * p0[1] + 2*(1-t_j)*t_j * p1[1] + t_j**2 * p2[1]
-        jd = 6  # bigger diamond — clearly visible
+        jd = 4  # pass-1 vision fix: 6px diamond + wide bloom swallowed the trace
         r_, g_, b_ = _hex_to_rgb(jewel_color)
         draw.polygon([
             (apex_x,      apex_y - jd),
@@ -536,12 +549,12 @@ class CardRenderer:
             (apex_x - jd, apex_y),
         ], fill=(r_, g_, b_, 255))
         # Jewel bloom
-        self._dot(draw, apex_x, apex_y, jd + 4, jewel_color, alpha=35)
+        self._dot(draw, apex_x, apex_y, jd + 3, jewel_color, alpha=25)
 
-        # --- ORBIT ARCS around jewel (radius=12, 3 × 120°) ---
+        # --- ORBIT ARCS around jewel (radius=10, 3 × 90°) ---
         for phase in [0, 120, 240]:
-            draw_elliptical_arc(draw, apex_x, apex_y, 12, 12,
-                                phase, 90, 1, jewel_color, alpha=180)
+            draw_elliptical_arc(draw, apex_x, apex_y, 10, 10,
+                                phase, 90, 1, jewel_color, alpha=160)
 
         # --- HERO PLACE TEXT — right-weighted, large, NOT centered ---
         # Teal ghost glow layer first
@@ -626,13 +639,24 @@ class CardRenderer:
             self._text_rgba(draw, CX, 52, name[:1].upper(), "md",
                             T.TEXT_PRIMARY, alpha=230)
 
+        # Crown segments only (skip the bottom three): the 90°-region
+        # segments used to strike through the why-line (pass-1 vision fix)
         draw_polar_segments(draw, CX, 100, 38, 56, 12, [0, 1, 2],
-                            T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35)
+                            T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35,
+                            skip_indices=[5, 6, 7])
         self._text(draw, CX, 100, name, "lg", T.MEMORY_TRACE)
         self._hline(draw, 72, 184, 116, T.BORDER_SUBTLE)
-        self._multiline_text(draw, CX, 140, why or headline, "md",
-                             T.TEXT_PRIMARY, max_width=192)
-        self._text_rgba(draw, CX, 164, detail, "sm", T.TEXT_SECONDARY, alpha=200)
+        if why:
+            # spec: exactly ONE line of "why this person matters right now"
+            why_line = why if len(why) <= 34 else why[:33] + "…"
+            self._text(draw, CX, 138, why_line, "sm", T.TEXT_PRIMARY)
+            self._text_rgba(draw, CX, 158, headline, "xs",
+                            T.TEXT_SECONDARY, alpha=170)
+            self._text_rgba(draw, CX, 176, detail, "xs", T.TEXT_GHOST, alpha=150)
+        else:
+            self._multiline_text(draw, CX, 140, headline, "md",
+                                 T.TEXT_PRIMARY, max_width=176)
+            self._text_rgba(draw, CX, 168, detail, "sm", T.TEXT_SECONDARY, alpha=200)
         if conf is not None:
             self._dot(draw, CX, 186, 3, T.conf_color(conf))
 
@@ -681,9 +705,11 @@ class CardRenderer:
         verdict = card.get("verdict") or card.get("primary") or ""
         conf    = card.get("confidence")
 
+        # Rings r=34..66 (4px pitch) leave a clear r<34 core so the verdict
+        # word never fights the ring strokes (pass-1 vision fix).
         for i in range(9):
             stage = stages[i] if i < len(stages) else {}
-            r = 20 + i * 4
+            r = 34 + i * 4
             # ghost track
             self._circle(draw, CX, CY, r, 1, T.BORDER_SUBTLE, alpha=44)
             sweep = max(0.0, min(1.0, stage.get("confidence", 0.0))) * 360
@@ -692,9 +718,18 @@ class CardRenderer:
                     stage.get("direction", "insufficient"), T.TEXT_GHOST)
                 self._arc(draw, CX, CY, r, -90, -90 + sweep, 2, color, alpha=235)
 
+        # Black backing capsule so ring strokes never cross the verdict
+        # glyphs (pass-3 vision fix; device mirrors with a filled rect)
+        font = _font("md")
+        try:
+            tw = font.getlength(verdict)
+        except AttributeError:
+            tw = len(verdict) * 8
+        draw.rectangle([CX - tw / 2 - 5, CY - 15, CX + tw / 2 + 5, CY + 4],
+                       fill=(0, 0, 0, 255))
         self._text(draw, CX, CY - 6, verdict, "md", T.TEXT_PRIMARY)
         if conf is not None:
-            self._dot(draw, CX, CY + 14, 3, T.conf_color(conf))
+            self._dot(draw, CX, CY + 16, 3, T.conf_color(conf))
         footer = card.get("footer") or ""
         if footer:
             self._text_rgba(draw, CX, 208, footer, "xs", T.TEXT_GHOST, alpha=150)
@@ -703,13 +738,16 @@ class CardRenderer:
     def _world_anchor(self, draw, card):
         """WorldAnchorCard — ghost-tier memory echo at the bottom of the
         display (Ghost Wake settles to this frame on-device)."""
-        summary = (card.get("primary") or "")[:32]
-        detail  = card.get("detail") or ""
-        self._text_rgba(draw, CX, 196, "• MEMORY ECHO •", "xs",
+        # Rows 192/208/222 and a 22-char cap keep every glyph inside the
+        # circular safe chord — the old 196/214/230 rows clipped the detail
+        # line at the display edge (pass-1 vision fix).
+        summary = _ellipsize(card.get("primary") or "", 22)
+        detail  = _ellipsize(card.get("detail") or "", 22)
+        self._text_rgba(draw, CX, 192, "• MEMORY ECHO •", "xs",
                         T.TEXT_GHOST, alpha=120)
-        self._text_rgba(draw, CX, 214, summary, "sm", T.TEXT_GHOST, alpha=170)
+        self._text_rgba(draw, CX, 208, summary, "sm", T.TEXT_GHOST, alpha=170)
         if detail:
-            self._text_rgba(draw, CX, 230, detail, "xs", T.TEXT_GHOST, alpha=110)
+            self._text_rgba(draw, CX, 222, detail, "xs", T.TEXT_GHOST, alpha=110)
 
     def _synesthesia(self, draw, card):
         """SynesthesiaCard. v1: hero phrase. v2 (Halo Cinema v1): phrase in

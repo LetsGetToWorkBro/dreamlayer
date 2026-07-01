@@ -10,7 +10,6 @@ build/
 venv/
 .env
 *.db
-assets/hud/samples/*.png
 node_modules/
 .expo/
 *.tsbuildinfo

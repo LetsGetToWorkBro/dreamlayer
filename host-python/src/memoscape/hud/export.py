@@ -18,7 +18,8 @@ def export_all(out_dir: str) -> list[str]:
     # Generate contact sheet
     sheet_dir = os.path.dirname(out_dir)  # assets/hud/
     sheet_path = os.path.join(sheet_dir, "contact_sheet.png")
-    draw_contact_sheet(card_images, sheet_path)
+    # 5x5 grid fits the full Halo Cinema v1 card library
+    draw_contact_sheet(card_images, sheet_path, grid_cols=5, grid_rows=5)
     print("saved contact_sheet", sheet_path)
     return paths
 

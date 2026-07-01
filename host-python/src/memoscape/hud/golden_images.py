@@ -71,6 +71,12 @@ DEFAULT_CARD_KEYS = [
     "private_zone",
     "consent_required",
     "live_caption",
+    # Halo Cinema v1
+    "truth_gauge",
+    "person_context_v2",
+    "world_anchor",
+    "synesthesia",
+    "synesthesia_v2",
 ]
 
 

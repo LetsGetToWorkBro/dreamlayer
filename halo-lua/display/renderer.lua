@@ -123,17 +123,21 @@ local function closed_poly(pts,color)
   end
 end
 
-local function polar_segs(cx,cy,ri,ro,n,lit,color,ghost)
+local function polar_segs(cx,cy,ri,ro,n,lit,color,ghost,skip)
   if not HAS_FRAME then return end
   ghost = ghost or 0x2A3C44
   local lit_set={}
   for _,v in ipairs(lit) do lit_set[v]=true end
+  local skip_set={}
+  if skip then for _,v in ipairs(skip) do skip_set[v]=true end end
   local step=(2*math.pi)/n
   for i=0,n-1 do
+    if not skip_set[i] then
     local a=step*i-math.pi/2
     local xi=cx+ri*math.cos(a); local yi=cy+ri*math.sin(a)
     local xo=cx+ro*math.cos(a); local yo=cy+ro*math.sin(a)
     frame.display.line(floor(xi),floor(yi),floor(xo),floor(yo), lit_set[i] and color or ghost)
+    end
   end
 end
 
@@ -314,16 +318,16 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     bezier(46,90,200,62,155,150,P.memory_trace,32)
     local jx=floor(46*0.3025+2*0.55*0.45*200+0.2025*155)
     local jy=floor(90*0.3025+2*0.55*0.45*62 +0.2025*150)
-    local jd=floor(6*sc)
+    local jd=floor(4*sc)
     if jd>=1 then
       frame.display.line(jx,jy-jd,jx+jd,jy,jcol)
       frame.display.line(jx+jd,jy,jx,jy+jd,jcol)
       frame.display.line(jx,jy+jd,jx-jd,jy,jcol)
       frame.display.line(jx-jd,jy,jx,jy-jd,jcol)
     end
-    arc(jx,jy,floor(12*sc),  0, 90,jcol,8)
-    arc(jx,jy,floor(12*sc),120,210,jcol,8)
-    arc(jx,jy,floor(12*sc),240,330,jcol,8)
+    arc(jx,jy,floor(10*sc),  0, 90,jcol,8)
+    arc(jx,jy,floor(10*sc),120,210,jcol,8)
+    arc(jx,jy,floor(10*sc),240,330,jcol,8)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     frame.display.text(place,155,150,P.text_primary)
@@ -391,7 +395,7 @@ local function draw_person_context(card, sc, enter_t, exit_t)
   local why      = card.why      or ""
   local detail   = card.detail   or ""
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle)
+    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
     frame.display.text(name,CX,100,P.memory_trace)
     if card.has_avatar then
       -- chord arpeggio around the avatar sprite (drawn at top center by
@@ -403,10 +407,16 @@ local function draw_person_context(card, sc, enter_t, exit_t)
     frame.display.line(floor(lerp(CX,72,sc)),116, floor(lerp(CX,184,sc)),116, P.border_subtle)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(why ~= "" and why or headline,CX,140,P.text_primary)
+    -- spec: exactly ONE line of "why this person matters right now"
+    local line = why ~= "" and why or headline
+    if #line > 34 then line = line:sub(1, 33) .. "\xE2\x80\xA6" end
+    frame.display.text(line,CX,138,P.text_primary)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(detail,CX,164,P.text_secondary)
+    if why ~= "" and headline ~= "" then
+      frame.display.text(headline,CX,158,P.text_secondary)
+    end
+    frame.display.text(detail,CX,176,P.text_ghost)
   end
 end
 
@@ -707,7 +717,8 @@ end
 -- ENTER uses Truth Ripple from card.origin (eye landmark), handled by the
 -- signature dispatcher; reduce_motion draws all rings statically.
 -- ---------------------------------------------------------------------------
-local GAUGE_R0    = 20
+-- r=34..66: the clear r<34 core keeps the verdict word off the rings
+local GAUGE_R0    = 34
 local GAUGE_PITCH = 4
 
 local GAUGE_DIR_COLOR = {
@@ -739,13 +750,16 @@ local function draw_truth_gauge(card, sc, enter_t, exit_t, idle_t)
   end
 
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    -- black backing capsule keeps ring strokes off the verdict glyphs
+    local half_w = floor(#verdict * T.avg_w_with_tracking("md", 0) / 2) + 5
+    frame.display.rect(CX - half_w, CY - 15, half_w * 2, 19, P.background, true)
     frame.display.text(verdict, CX, CY - 6, P.text_primary)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and conf then
     local jcol = (conf >= 0.75 and P.confidence_high)
               or (conf >= 0.40 and P.confidence_med)
               or  P.confidence_low
-    frame.display.circle(CX, CY + 14, 3, jcol, true)
+    frame.display.circle(CX, CY + 16, 3, jcol, true)
   end
 end
 
