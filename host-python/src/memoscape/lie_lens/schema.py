@@ -58,17 +58,23 @@ class LinguisticFrame:
     word_count: int
 
     def deception_score(self) -> float:
-        """Heuristic 0-1 deception score from linguistic features."""
+        """Heuristic 0-1 deception score from linguistic features.
+
+        Each channel contributes fraction-of-saturation × channel weight
+        (weights: hedging .30, first-person .25, complexity .25,
+        negation .20). The previous form capped the *fraction* at the
+        weight instead of scaling it, so calm speech scored ~0.43.
+        """
         score = 0.0
-        # High hedging = uncertainty / distancing
-        score += min(self.hedging_rate / 0.15, 0.30)
+        # High hedging = uncertainty / distancing (saturates at 15%)
+        score += min(self.hedging_rate / 0.15, 1.0) * 0.30
         # Low first-person = distancing from statements
         first_person_dev = max(0.0, 0.08 - self.first_person_rate)
-        score += min(first_person_dev / 0.08, 0.25)
+        score += min(first_person_dev / 0.08, 1.0) * 0.25
         # High complexity = over-qualification
-        score += min(self.complexity_score, 0.25) * 0.8
-        # High negation = defensive language
-        score += min(self.negation_rate / 0.10, 0.20)
+        score += min(self.complexity_score, 1.0) * 0.25
+        # High negation = defensive language (saturates at 10%)
+        score += min(self.negation_rate / 0.10, 1.0) * 0.20
         return min(score, 1.0)
 
 
@@ -103,6 +109,22 @@ class ContactBaseline:
             delta2 = v - self.au_mean[i]
             # Approximate std (simplified)
             self.au_std[i] = max(0.01, abs(delta * delta2) ** 0.5 if n > 1 else 0.1)
+
+        def upd(mean: dict, std: dict, name: str, v: float) -> None:
+            m = mean.get(name, 0.0)
+            delta = v - m
+            m += delta / n
+            mean[name] = m
+            std[name] = max(0.01, abs(delta * (v - m)) ** 0.5 if n > 1 else 0.1)
+
+        for name in ("pitch_mean_hz", "pitch_variance", "jitter_pct",
+                     "shimmer_pct", "hesitation_rate", "pause_ratio",
+                     "speech_rate_norm", "energy_db"):
+            upd(self.prosody_mean, self.prosody_std, name, getattr(prosody, name))
+        for name in ("hedging_rate", "first_person_rate",
+                     "complexity_score", "negation_rate"):
+            upd(self.linguistic_mean, self.linguistic_std, name, getattr(linguistic, name))
+
         # Mark calibrated
         self.is_calibrated = n >= self.MIN_CALIBRATION_SAMPLES
 

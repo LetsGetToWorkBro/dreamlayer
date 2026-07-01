@@ -248,6 +248,22 @@ class RealBridge(BridgeBase):
         msg = {"t": "card", "payload": payload, "event": event}
         self._run(self._send_raw(msg))
 
+    def send_raw(self, obj: dict) -> None:
+        """Send a raw dream/ambient frame (palette / geometry / line_field /
+        sprite / sprite_avatar / dream_enter / dream_exit).
+
+        Privacy gate: while paused, only mode-control frames pass — palette
+        and sprite frames derive from live mic/camera signal and must never
+        cross the pause boundary (mirrors emulator_bridge.send_raw).
+        """
+        from .base import PAUSE_ALLOWED_RAW
+        self._require_connected()
+        with self._paused_lock:
+            paused = self._paused
+        if paused and obj.get("t") not in PAUSE_ALLOWED_RAW:
+            return
+        self._run(self._send_raw(obj))
+
     async def _send_raw(self, obj: dict) -> None:
         """JSON-encode obj and send over BLE, chunking at _MTU_PAYLOAD_BYTES.
 
