@@ -1,10 +1,20 @@
 # DreamLayer laptop companion
 
-The small program you run **on your laptop** so the Object Lens can show your
-recent files and battery when you look at it through the glasses.
+The small program you run **on your laptop** so **Oracle** (the Object lens)
+can surface your live desk context — recent files and battery — when you look
+at the laptop through the glasses.
 
-It reads that from your OS and serves it on your local network on the
-DreamLayer companion contract:
+> **Two different things live in this folder:**
+> - **The companion** (`dreamlayer_companion.py`) — this file. Serves *live*
+>   context (recent files, battery) over one tiny HTTP contract. Stdlib only.
+> - **The Brain installer** (`install-macos.sh`) — sets up the larger
+>   **DreamLayer Brain** (indexed knowledge + AI + control panel). See the
+>   [bottom section](#the-bigger-brain).
+
+## What the companion does
+
+It reads a little context from your OS and serves it on your local network on
+the DreamLayer companion contract:
 
 ```
 GET  http://<this-laptop>:7777/dreamlayer/context
@@ -70,13 +80,14 @@ WantedBy=default.target
 **Windows** — Task Scheduler → Create Task → Trigger: *At log on* → Action:
 `python`, arguments `C:\path\dreamlayer_companion.py --token rune-birch`.
 
-## The bigger Brain (files, model, history, control panel)
+## The bigger Brain
 
 This companion serves *live* context (recent files, battery). The **DreamLayer
-Brain** is the larger app that turns your Mac mini into a private knowledge +
-AI node — index chosen folders, drag-drop files in, pick your model (Ollama),
-ask questions grounded in your own files, and keep a query history, all from a
-web control panel:
+Brain** is the larger app that turns your Mac mini into the local **brain** for
+the whole system — a private knowledge + AI node the phone and glasses tap:
+index chosen folders, drag-drop files in, pick your model (Ollama), ask
+questions grounded in your own files, keep a query history, and pair devices —
+all from a polished web control panel.
 
 One-command Mac mini setup (Ollama + models + launch-at-login):
 
@@ -86,18 +97,25 @@ One-command Mac mini setup (Ollama + models + launch-at-login):
 ```
 
 Or run it directly: `python -m dreamlayer.ai_brain.server --token rune-birch`.
-It also reads iMessage + Mail (when enabled) and can draft→approve→send.
-See [`docs/AI_BRAIN.md`](../docs/AI_BRAIN.md) and
-[`docs/OLLAMA_SETUP.md`](../docs/OLLAMA_SETUP.md). The phone connects with
-`connect_brain(router, url, token)`.
+
+Once it's up, connecting it is **one code**: the panel's *Connections → Pair a
+phone* hands out a `dreamlayer:…` code the phone scans or pastes (Brain tab →
+*Pair a device*). That flips the phone from *phone-is-the-brain* to using the
+Mac mini's bigger model + your files. Cloud and Incognito are independent
+switches on both ends. The Brain also reads iMessage + Mail (when enabled) and
+can draft → approve → send.
+
+- **Install & pair, step by step:** [`docs/TESTING.md`](../docs/TESTING.md)
+- **The tiered brain + the three switches:** [`docs/AI_BRAIN.md`](../docs/AI_BRAIN.md)
+- **Local models:** [`docs/OLLAMA_SETUP.md`](../docs/OLLAMA_SETUP.md)
 
 ## How it fits DreamLayer
 
-The phone side is already built (`object_lens.integrations.laptop_data_source`
-wrapped in a `PolledSource`, feeding `LaptopProvider`). This agent is the
-other end of that contract. Anything else that answers those three lines — a
-different language, a soil sensor, an OBD dongle — plugs into the exact same
-phone-side machinery; only the reader changes.
+The phone side is already built: `object_lens.integrations.laptop_data_source`
+wrapped in a `PolledSource`, feeding `LaptopProvider` (an Oracle provider).
+This agent is the other end of that contract. Anything else that answers those
+three lines — a different language, a soil sensor, an OBD dongle — plugs into
+the exact same phone-side machinery; only the reader changes.
 
 ## Security
 
