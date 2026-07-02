@@ -33,6 +33,8 @@ from typing import Optional
 from ..orchestrator.recall_context import RecallContext
 from .mic_reactor import MicReactor
 from .imu_reactor import ImuReactor
+from .weather_ledger import WeatherLedger
+from .yesterlight import YesterlightController
 from .ghost_layer import GhostLayer
 from .place_reactor import PlaceReactor
 from .scene_describer import SceneDescriber
@@ -62,6 +64,8 @@ class DreamEngine:
         self.place     = PlaceReactor()
         self.describer = SceneDescriber()
         self.sprites   = SpriteBridge(bridge)
+        self.weather   = WeatherLedger(privacy=privacy)
+        self.yesterlight = YesterlightController(self.weather)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -152,6 +156,9 @@ class DreamEngine:
         palette_cmd = self.mic.tick(ctx)
         if palette_cmd:
             self.bridge.send_raw(palette_cmd)
+            # the room's memory of its own light (Yesterlight replay source)
+            self.weather.record(ctx.place_signature, palette_cmd,
+                                ctx.mic_amplitude)
 
         # PlaceReactor runs after MicReactor by contract: while a place bias
         # is ramping, the ambient trust signal wins the drift_b slot.
@@ -170,6 +177,11 @@ class DreamEngine:
         ghost_card = self.ghost.tick(ctx)
         if ghost_card:
             self.bridge.send_card(ghost_card, event="dream_ghost")
+
+        # Yesterlight runs after the live weather so a replay's palette
+        # frame wins the slots while the scrub is held
+        for frame in self.yesterlight.tick(ctx):
+            self.bridge.send_raw(frame)
 
         now = time.monotonic()
         if ctx.has_camera() and (now - self._last_scene_t) >= SCENE_INTERVAL_S:
