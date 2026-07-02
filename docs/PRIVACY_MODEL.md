@@ -1,7 +1,7 @@
-# Memoscape — Privacy Model
+# DreamLayer — Privacy Model
 
 ## Philosophy
-Memoscape is a *trusted* memory layer, not a surveillance product. Privacy is a
+DreamLayer is a *trusted* memory layer, not a surveillance product. Privacy is a
 first-class, visible feature.
 
 ## Capture model

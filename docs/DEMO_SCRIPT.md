@@ -1,4 +1,4 @@
-# Memoscape — Demo Script
+# DreamLayer — Demo Script
 
 All demos run headless against the emulator + deterministic fixtures.
 

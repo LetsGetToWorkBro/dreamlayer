@@ -1,36 +1,28 @@
-"""dream_mode — Ambient loop, Ghost Layer, WorldAnchorCards.
+"""dream/ — DreamLayer Dream Mode (Synesthesia Engine).
 
-Entry point: DreamEngine
-
-    from dreamlayer.dream_mode import DreamEngine
-
-    engine = DreamEngine(bridge=halo_bridge, db=memory_db)
-    engine.start()          # begins 2 Hz ambient loop
-    engine.feed_mic(fft, amplitude)
-    engine.feed_imu(pose, delta)
-    engine.feed_place(signature, anchors)
-    engine.stop()
-
-Sub-systems
------------
-  MicReactor      — audio → palette shift BLE frame
-  ImuReactor      — motion → geometry distortion BLE frame
-  GhostLayer      — place match → WorldAnchorCard
-  SceneDescriber  — camera → SynesthesiaCard every ~4s
-  SpriteBridge    — sprite animation dispatcher
+Public surface:
+    DreamEngine      — orchestrates all dream sub-systems
+    MicReactor       — mic FFT → palette shift commands
+    ImuReactor       — IMU delta → distortion / line-field commands
+    GhostLayer       — place anchors → WorldAnchorCard ghost overlays
+    PlaceReactor     — place familiarity → ambient trust palette bias
+    SceneDescriber   — camera frame → LFM2-VL → SynesthesiaCard text
+    SpriteBridge     — 16-color PNG → TxSprite → BLE bitmap stream
 """
 from .engine import DreamEngine
-from .ghost_layer import GhostLayer
-from .imu_reactor import ImuReactor
 from .mic_reactor import MicReactor
+from .imu_reactor import ImuReactor
+from .ghost_layer import GhostLayer
+from .place_reactor import PlaceReactor
 from .scene_describer import SceneDescriber
 from .sprite_bridge import SpriteBridge
 
 __all__ = [
     "DreamEngine",
-    "GhostLayer",
-    "ImuReactor",
     "MicReactor",
+    "ImuReactor",
+    "GhostLayer",
+    "PlaceReactor",
     "SceneDescriber",
     "SpriteBridge",
 ]

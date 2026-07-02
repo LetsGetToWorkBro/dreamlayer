@@ -13,8 +13,7 @@ lupa = pytest.importorskip("lupa")
 from dreamlayer.reality_compiler.v2 import (   # noqa: E402
     RealityCompilerV2, Stage, lift, transport,
 )
-# TODO(rename): dreamlayer.reality_compiler.schema after rename PR lands
-from memoscape.reality_compiler.schema import SimpleCounterIntent  # noqa: E402
+from dreamlayer.reality_compiler.schema import SimpleCounterIntent  # noqa: E402
 
 HALO_LUA = Path(__file__).resolve().parents[4] / "halo-lua"
 

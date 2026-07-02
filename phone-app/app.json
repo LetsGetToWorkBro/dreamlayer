@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "Memoscape",
-    "slug": "memoscape",
+    "name": "DreamLayer",
+    "slug": "dreamlayer",
     "version": "0.1.0",
     "sdkVersion": "54.0.0",
-    "scheme": "memoscape",
+    "scheme": "dreamlayer",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.letsgettoworkbro.memoscape"
+      "bundleIdentifier": "com.letsgettoworkbro.dreamlayer"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.letsgettoworkbro.memoscape"
+      "package": "com.letsgettoworkbro.dreamlayer"
     },
     "plugins": ["expo-router"],
     "experiments": {

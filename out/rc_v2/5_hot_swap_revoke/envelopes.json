@@ -1,9 +1,9 @@
 [
  {
   "t": "figment_put",
-  "id": "a9b0f35c17f0",
+  "id": "d4185236b5b8",
   "figment": {
-   "id": "a9b0f35c17f0",
+   "id": "d4185236b5b8",
    "name": "Round timer",
    "version": 2,
    "initial": "armed",
@@ -122,17 +122,17 @@
     "v1_type": "round_timer"
    }
   },
-  "hash": "2a5c0f0e973af3cb"
+  "hash": "0f47eb0f46d285c7"
  },
  {
   "t": "figment_swap",
-  "id": "a9b0f35c17f0"
+  "id": "d4185236b5b8"
  },
  {
   "t": "figment_put",
-  "id": "20b93520406e",
+  "id": "11db14e979f3",
   "figment": {
-   "id": "20b93520406e",
+   "id": "11db14e979f3",
    "name": "Rolling rounds",
    "version": 2,
    "initial": "armed",
@@ -203,17 +203,17 @@
     "origin": "rehearsal"
    }
   },
-  "hash": "da8bb768279a25c7"
+  "hash": "12e770caa23d6c61"
  },
  {
   "t": "figment_swap",
-  "id": "20b93520406e"
+  "id": "11db14e979f3"
  },
  {
   "t": "figment_put",
-  "id": "10a560e63b84",
+  "id": "683666db908a",
   "figment": {
-   "id": "10a560e63b84",
+   "id": "683666db908a",
    "name": "Spar night",
    "version": 2,
    "initial": "armed",

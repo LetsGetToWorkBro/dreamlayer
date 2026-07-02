@@ -1,4 +1,4 @@
-# Memoscape — First Device Day Test Plan
+# DreamLayer — First Device Day Test Plan
 
 Run top-to-bottom the moment Halo arrives. Log every result in the issue table.
 

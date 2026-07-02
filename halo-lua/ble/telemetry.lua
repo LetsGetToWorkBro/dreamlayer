@@ -1,5 +1,5 @@
 --- ble/telemetry.lua
---- Memoscape Halo — outbound event telemetry.
+--- DreamLayer Halo — outbound event telemetry.
 ---
 --- Glasses report key lifecycle events back to the host so the Python
 --- side can build feedback loops (adaptive confidence, session analytics,

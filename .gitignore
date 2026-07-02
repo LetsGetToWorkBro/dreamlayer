@@ -14,3 +14,4 @@ node_modules/
 .expo/
 *.tsbuildinfo
 out/
+.pytest_cache/

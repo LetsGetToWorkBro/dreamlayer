@@ -4,8 +4,7 @@ import pytest
 from dreamlayer.reality_compiler.v2 import (
     lift, verify, Stage, run_through, RealityCompilerV2, ALL_V1_TYPES,
 )
-# TODO(rename): dreamlayer.reality_compiler.schema after rename PR lands
-from memoscape.reality_compiler.schema import (
+from dreamlayer.reality_compiler.schema import (
     RoundTimerIntent, OvertimeTimerIntent, StopwatchIntent,
     IntervalTimerIntent, SimpleCounterIntent, BatteryWarningIntent,
     TeleprompterIntent, CoachingCueIntent, PointsMarkerIntent,
@@ -152,8 +151,7 @@ class TestV1TextSurface:
 
     def test_superset_the_five_v1_never_shipped(self):
         # these five had no template in v1's library — get() raised KeyError
-        # TODO(rename): dreamlayer.reality_compiler.template_library after rename PR lands
-        from memoscape.reality_compiler.template_library import get
+        from dreamlayer.reality_compiler.template_library import get
         for intent in (OvertimeTimerIntent(), NextClassIntent(),
                        TextSubtitlesIntent(), GestureRepeaterIntent(),
                        SpeakerIndicatorIntent()):

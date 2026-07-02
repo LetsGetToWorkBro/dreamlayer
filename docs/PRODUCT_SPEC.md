@@ -1,7 +1,7 @@
-# Memoscape — Product Spec
+# DreamLayer — Product Spec
 
 ## Summary
-Memoscape is a private memory layer for Brilliant Labs Halo. It makes the glasses
+DreamLayer is a private memory layer for Brilliant Labs Halo. It makes the glasses
 feel like they *gained memory*: glanceable recall of objects, commitments, and
 places, delivered as calm, Apple-like answer cards in-eye.
 

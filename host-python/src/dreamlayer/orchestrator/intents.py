@@ -1,13 +1,10 @@
-"""orchestrator/intents.py — Intent enum for user gesture/voice actions."""
-from enum import Enum, auto
-
-
-class Intent(Enum):
-    DOUBLE_TAP       = auto()   # enter Dream Mode / trigger active lens
-    SINGLE_TAP       = auto()   # dismiss card
-    LONG_PRESS       = auto()   # enter Lucid Recall query
-    SWIPE_FORWARD    = auto()   # next card
-    SWIPE_BACK       = auto()   # previous card
-    VOICE_QUERY      = auto()   # ASR utterance received
-    WAKE_WORD        = auto()   # wake word detected
-    PLACE_CHANGE     = auto()   # GPS/WiFi place signature changed
+import re
+def classify(query):
+    q = query.lower()
+    if "promis" in q or ("tell" in q and "i" in q):
+        m = re.search(r"promis[ed]*\s+(\w+)", q)
+        return {"intent":"commitment_recall","person": m.group(1).title() if m else None}
+    if any(w in q for w in ("where","left","find","keys","phone","wallet","glasses","bag")):
+        obj = next((c for c in ("keys","phone","wallet","glasses","bag") if c in q), None)
+        return {"intent":"object_recall","object":obj}
+    return {"intent":"unknown"}

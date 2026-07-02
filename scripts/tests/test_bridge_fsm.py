@@ -1,5 +1,5 @@
 """
-pytest tests for halo_bridge.py and memoscape/fsm.py.
+pytest tests for halo_bridge.py and dreamlayer/fsm.py.
 All pure — no BLE hardware, no emulator required.
 """
 import json
@@ -20,8 +20,8 @@ from halo_bridge import (
     dry_run_scenario,
 )
 from halo_lab import ble_frame, validate_scenario
-from memoscape.fsm import (
-    MemoscapeFSM, State, Event, MemoryCard, FSMContext,
+from dreamlayer.fsm import (
+    DreamLayerFSM, State, Event, MemoryCard, FSMContext,
     _TRANSITIONS,
 )
 
@@ -127,22 +127,22 @@ class TestDryRun:
 
 class TestFSMConnect:
     def test_starts_disconnected(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         assert fsm.state == State.DISCONNECT
 
     def test_connect_moves_to_idle(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         assert fsm.state == State.IDLE
 
     def test_disconnect_from_idle(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.send(Event.BLE_DISCONNECT)
         assert fsm.state == State.DISCONNECT
 
     def test_connect_clears_privacy(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.send(Event.BUTTON_LONG)
         assert fsm.state == State.PRIVACY
@@ -153,7 +153,7 @@ class TestFSMConnect:
 
 class TestFSMListening:
     def _connected(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         return fsm
 
@@ -185,7 +185,7 @@ class TestFSMListening:
 
 class TestFSMCard:
     def _idle(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         return fsm
 
@@ -234,7 +234,7 @@ class TestFSMCard:
 
 class TestFSMPrivacy:
     def _idle(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         return fsm
 
@@ -288,18 +288,18 @@ class TestFSMPrivacy:
 
 class TestFSMHistory:
     def test_history_tracks_states(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.send(Event.BUTTON_SINGLE)
         assert State.IDLE in fsm.ctx.history
 
     def test_previous_state(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         assert fsm.ctx.previous_state() == State.DISCONNECT
 
     def test_reset_clears_history(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.reset()
         assert fsm.ctx.history == []
@@ -309,26 +309,26 @@ class TestFSMHistory:
 class TestFSMTransitionCallback:
     def test_callback_fires_on_transition(self):
         log = []
-        fsm = MemoscapeFSM(on_transition=lambda p, e, n: log.append((p, e, n)))
+        fsm = DreamLayerFSM(on_transition=lambda p, e, n: log.append((p, e, n)))
         fsm.send(Event.BLE_CONNECT)
         assert log == [(State.DISCONNECT, Event.BLE_CONNECT, State.IDLE)]
 
     def test_callback_not_fired_on_unknown_event(self):
         log = []
-        fsm = MemoscapeFSM(on_transition=lambda p, e, n: log.append((p, e, n)))
+        fsm = DreamLayerFSM(on_transition=lambda p, e, n: log.append((p, e, n)))
         fsm.send(Event.BUTTON_SINGLE)   # no transition from DISCONNECT
         assert log == []
 
 
 class TestFSMUnknownEvents:
     def test_unknown_event_ignored(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         prev = fsm.state
         fsm.send(Event.BUTTON_SINGLE)   # no transition from DISCONNECT
         assert fsm.state == prev
 
     def test_double_click_idle_noop(self):
-        fsm = MemoscapeFSM()
+        fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.send(Event.BUTTON_DOUBLE)
         assert fsm.state == State.IDLE

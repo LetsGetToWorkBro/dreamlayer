@@ -1,5 +1,5 @@
 --- display/diagnostics.lua
---- Memoscape Halo — diagnostics overlay.
+--- DreamLayer Halo — diagnostics overlay.
 ---
 --- Activated by: long_press (toggle on/off).
 --- Verbosity cycled by: single_click while open (MINIMAL → NORMAL → VERBOSE → MINIMAL).

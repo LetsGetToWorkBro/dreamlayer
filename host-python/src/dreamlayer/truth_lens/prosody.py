@@ -1,17 +1,39 @@
-"""truth_lens/prosody.py — Voice stress / prosody analysis."""
+"""truth_lens/prosody.py — Voice stress / prosody analysis.
+
+Extracts ProsodyFrame from raw mic FFT + amplitude data.
+This is the audio stage of Lie Lens — it supersedes the
+stand-alone lie_sense module.
+
+Features extracted
+------------------
+  pitch_mean_hz     fundamental frequency mean
+  pitch_variance    F0 variance (elevated = stress)
+  jitter_pct        cycle-to-cycle pitch irregularity
+  shimmer_pct       cycle-to-cycle amplitude irregularity
+  hesitation_rate   filled-pause proxy (amplitude dip + pitch drop events/sec)
+  pause_ratio       fraction of window that is silence
+  speech_rate_norm  voiced-frame density relative to rolling baseline
+  energy_db         RMS energy in dB
+"""
 from __future__ import annotations
+
 import math
+from collections import deque
 from typing import Optional
+
 import numpy as np
+
 from .schema import ProsodyFrame
 
+# FFT / sample-rate constants (16kHz @ 512-point FFT)
 SAMPLE_RATE_HZ = 16_000
 FFT_SIZE = 512
 BIN_HZ = SAMPLE_RATE_HZ / FFT_SIZE
 F0_MIN_BIN = int(80 / BIN_HZ)
 F0_MAX_BIN = int(400 / BIN_HZ)
+
 SILENCE_THRESHOLD = 0.02
-FRAMES_PER_WINDOW = 40
+FRAMES_PER_WINDOW = 40          # ~250ms at ~160 frames/sec
 
 
 def _estimate_f0(fft: Optional[np.ndarray]) -> Optional[float]:
@@ -28,6 +50,8 @@ def _to_db(amp: float) -> float:
 
 
 class ProsodyAnalyzer:
+    """Accumulates mic frames and emits ProsodyFrames one window at a time."""
+
     def __init__(self, frames_per_window: int = FRAMES_PER_WINDOW):
         self.frames_per_window = frames_per_window
         self._ffts: list = []
@@ -36,6 +60,7 @@ class ProsodyAnalyzer:
 
     def feed(self, mic_fft: Optional[np.ndarray],
              amplitude: Optional[float]) -> Optional[ProsodyFrame]:
+        """Add one frame. Returns ProsodyFrame when a window is complete."""
         self._ffts.append(mic_fft)
         self._amps.append(amplitude or 0.0)
         if len(self._ffts) >= self.frames_per_window:
@@ -50,10 +75,14 @@ class ProsodyAnalyzer:
         f0s = [f0 for fft in ffts if (f0 := _estimate_f0(fft)) is not None]
         pitch_mean = sum(f0s) / len(f0s) if f0s else 0.0
         pitch_var = float(np.var(f0s)) if len(f0s) > 1 else 0.0
+
+        # Jitter
         jitter = 0.0
         if len(f0s) >= 2:
             diffs = [abs(f0s[i] - f0s[i-1]) for i in range(1, len(f0s))]
             jitter = (sum(diffs) / len(diffs)) / max(pitch_mean, 1.0) * 100
+
+        # Shimmer
         shimmer = 0.0
         voiced_amps = [a for a in amps if a >= SILENCE_THRESHOLD]
         if len(voiced_amps) >= 2:
@@ -61,8 +90,12 @@ class ProsodyAnalyzer:
                      for i in range(1, len(voiced_amps))]
             mean_amp = sum(voiced_amps) / len(voiced_amps)
             shimmer = (sum(diffs) / len(diffs)) / max(mean_amp, 1e-6) * 100
+
+        # Pause ratio
         silent = sum(1 for a in amps if a < SILENCE_THRESHOLD)
         pause_ratio = silent / len(amps)
+
+        # Hesitation rate: rapid amplitude dips in voiced regions
         hesitations = sum(
             1 for i in range(1, len(amps))
             if amps[i-1] >= SILENCE_THRESHOLD
@@ -71,10 +104,14 @@ class ProsodyAnalyzer:
         )
         window_sec = len(amps) / max(SAMPLE_RATE_HZ / FFT_SIZE, 1)
         hesitation_rate = hesitations / max(window_sec, 0.001)
+
+        # Speech rate
         voiced_density = 1.0 - pause_ratio
         speech_rate = voiced_density / max(self._baseline_density, 0.01)
         self._baseline_density = 0.95 * self._baseline_density + 0.05 * voiced_density
+
         energy_db = _to_db(sum(amps) / len(amps))
+
         return ProsodyFrame(
             pitch_mean_hz=round(pitch_mean, 2),
             pitch_variance=round(pitch_var, 2),

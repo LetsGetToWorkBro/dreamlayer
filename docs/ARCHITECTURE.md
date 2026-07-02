@@ -1,7 +1,7 @@
-# Memoscape — Architecture
+# DreamLayer — Architecture
 
 ## System overview
-Memoscape is a **host-driven** stack. The phone/host runs intelligence and the
+DreamLayer is a **host-driven** stack. The phone/host runs intelligence and the
 memory engine; Halo renders cards and emits input events over BLE.
 
 ```

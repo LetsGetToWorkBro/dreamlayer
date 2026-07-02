@@ -11,7 +11,7 @@ Run this checklist the first time a real Halo unit is available.
 ## 1. Connection
 
 ```python
-from memoscape.bridge.real_bridge import RealBridge
+from dreamlayer.bridge.real_bridge import RealBridge
 b = RealBridge(address="XX:XX:XX:XX:XX:XX")   # or None for auto-scan
 info = b.connect()
 print(info)   # expect {"device": "halo", "fw": "...", "lua": "5.3", "mock": False}
@@ -28,13 +28,13 @@ b.load_lua_app("../halo-lua")
 ```
 
 - [ ] No upload exceptions
-- [ ] Halo display shows Memoscape ready state after autorun
+- [ ] Halo display shows DreamLayer ready state after autorun
 - [ ] `main.lua` runs on device (check Halo log output)
 
 ## 3. Card rendering
 
 ```python
-from memoscape.hud.cards import ALL_SAMPLES
+from dreamlayer.hud.cards import ALL_SAMPLES
 for name, card in ALL_SAMPLES.items():
     b.send_card(card)
     input(f"Check {name} on Halo — press Enter")
@@ -55,8 +55,8 @@ for name, card in ALL_SAMPLES.items():
 ## 5. Full orchestrator smoke test
 
 ```python
-from memoscape.app.orchestrator import Orchestrator
-from memoscape.bridge.real_bridge import RealBridge
+from dreamlayer.orchestrator.orchestrator import Orchestrator
+from dreamlayer.bridge.real_bridge import RealBridge
 o = Orchestrator(RealBridge())
 info = o.boot("../halo-lua")
 print("Booted:", info)

@@ -1,5 +1,5 @@
 --- app/imu_gesture.lua
---- IMU gesture classifier for Memoscape Halo.
+--- IMU gesture classifier for DreamLayer Halo.
 ---
 --- Recognises five gestures from raw accelerometer samples:
 ---

@@ -17,8 +17,7 @@ the deprecation path.
 """
 from __future__ import annotations
 
-# TODO(rename): dreamlayer.reality_compiler.schema after rename PR lands
-from memoscape.reality_compiler.schema import (
+from dreamlayer.reality_compiler.schema import (
     BehaviorIntent, RoundTimerIntent, OvertimeTimerIntent,
     StopwatchIntent, IntervalTimerIntent, SimpleCounterIntent,
     BatteryWarningIntent, TeleprompterIntent, CoachingCueIntent,

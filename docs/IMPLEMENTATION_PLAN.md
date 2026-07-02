@@ -1,4 +1,4 @@
-# Memoscape — Implementation Plan
+# DreamLayer — Implementation Plan
 
 ## Complete in this repo
 - Full product + architecture + HUD + privacy docs

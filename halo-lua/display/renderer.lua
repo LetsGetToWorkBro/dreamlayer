@@ -1,5 +1,5 @@
 --- display/renderer.lua
---- Halo Cinema v1 transition system for Memoscape Halo.
+--- Halo Cinema v1 transition system for DreamLayer Halo.
 ---
 --- Three animation phases per card, routed per card type through the
 --- SIGNATURES table to display/transitions.lua (docs/HALO_CINEMA_V1.md):

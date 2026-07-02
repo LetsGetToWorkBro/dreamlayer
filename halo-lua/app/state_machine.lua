@@ -1,5 +1,5 @@
 -- app/state_machine.lua
--- Real finite-state machine for Memoscape Halo.
+-- Real finite-state machine for DreamLayer Halo.
 --
 -- States:
 --   boot         -> startup event -> ready

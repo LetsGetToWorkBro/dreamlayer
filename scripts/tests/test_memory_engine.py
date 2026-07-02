@@ -1,5 +1,5 @@
 """
-pytest tests for memoscape/memory_engine.py.
+pytest tests for dreamlayer/memory_engine.py.
 All pure — no network, no BLE hardware.
 """
 from __future__ import annotations
@@ -13,14 +13,14 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
 
-from memoscape.memory_engine import (
+from dreamlayer.memory_engine import (
     EngineConfig,
     MemoryEngine,
     RecallContext,
     RecallResult,
     _stub_provider,
 )
-from memoscape.fsm import MemoryCard, State
+from dreamlayer.fsm import MemoryCard, State
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ def _mock_app(
     card_count:   int = 0,
     fsm_state:    State = State.LOADING,
 ) -> MagicMock:
-    """Minimal MemoscapeApp stand-in the engine can call show_card() on."""
+    """Minimal DreamLayerApp stand-in the engine can call show_card() on."""
     app = MagicMock()
     app.fsm.ctx.listen_count = listen_count
     app.fsm.ctx.card_count   = card_count
@@ -300,15 +300,15 @@ class TestSwapProvider:
 
 
 # ---------------------------------------------------------------------------
-# Integration: engine wired into a real MemoscapeApp
+# Integration: engine wired into a real DreamLayerApp
 # ---------------------------------------------------------------------------
 
 class TestEngineIntegration:
     @pytest.mark.asyncio
     async def test_engine_wired_to_app_reaches_card_state(self):
         """Full integration: engine as on_loading drives FSM to CARD."""
-        from memoscape.app import AppConfig, MemoscapeApp
-        from memoscape.fsm import Event
+        from dreamlayer.app import AppConfig, DreamLayerApp
+        from dreamlayer.fsm import Event
 
         async def provider(ctx):
             return RecallResult(
@@ -321,7 +321,7 @@ class TestEngineIntegration:
 
         engine = MemoryEngine(provider=provider)
         cfg    = AppConfig(device_address="AA:BB:CC:DD:EE:FF", log_level="WARNING")
-        app    = MemoscapeApp(config=cfg, on_loading=engine)
+        app    = DreamLayerApp(config=cfg, on_loading=engine)
 
         app._fsm.send(Event.BLE_CONNECT)
         app._fsm.send(Event.BUTTON_SINGLE)
@@ -337,8 +337,8 @@ class TestEngineIntegration:
     @pytest.mark.asyncio
     async def test_engine_fallback_still_reaches_card_state(self):
         """Even with a low-confidence provider, FSM ends up at CARD (fallback card)."""
-        from memoscape.app import AppConfig, MemoscapeApp
-        from memoscape.fsm import Event
+        from dreamlayer.app import AppConfig, DreamLayerApp
+        from dreamlayer.fsm import Event
 
         async def weak_provider(ctx):
             return RecallResult(
@@ -349,7 +349,7 @@ class TestEngineIntegration:
 
         engine = MemoryEngine(provider=weak_provider)
         cfg    = AppConfig(device_address="AA:BB:CC:DD:EE:FF", log_level="WARNING")
-        app    = MemoscapeApp(config=cfg, on_loading=engine)
+        app    = DreamLayerApp(config=cfg, on_loading=engine)
 
         app._fsm.send(Event.BLE_CONNECT)
         app._fsm.send(Event.BUTTON_SINGLE)
