@@ -6,28 +6,27 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 
 ---
 
-## Experience Layers
+## The six lenses
 
-| Layer | Name | What it does |
+Everything DreamLayer does groups into six lenses — the whole product in one
+glance. (The canonical grouping lives in code at `dreamlayer/lenses.py`; the
+full breakdown is in [docs/LENSES.md](docs/LENSES.md).)
+
+| Lens | For | Includes |
 |---|---|---|
-| Ambient state | **Dream Mode** | Passive listening, background sensing, double-tap entry point |
-| Memory resurfacing | **Ghost Layer** | WorldAnchorCards, memory echoes, contextual recalls |
-| Clear retrieval | **Lucid Recall** | On-demand face/name/fact answer cards |
-| Behavior builder | **Reality Compiler** | Rehearsal: perform a behavior once, a verified Figment runs it forever |
-| Sleep cycle | **REM** | The glasses dream the day recombined — and the dreaming IS memory consolidation |
-| Time scrub | **Yesterlight** | Roll your head back: the room replays its own recorded light |
-| Voice shapes | **Timbre** | Known voices glow as waveforms at the rim; strangers are static |
-| Future ghosts | **Premonition** | Your rhythms shimmer ahead of the now-notch, precision-gated |
-| Your climate | **Inner Weather** | Your body churns the core; the room storms the rim |
-| Two wearers | **Confluence** | Bonded skies entangle: converge and they merge, drift and they split |
-| Living promises | **Commitment Drift** | Commitments are HUD physics objects — bloom, crack, and shatter by behavior and time |
-| Living light | **Palette Cycling** | The demoscene trick: the quiet sky flows like an aurora by recolouring slots, not redrawing pixels — zero-cost motion on-device |
-| Personal RPG | **Saga** | Commitments become quests: complete them for XP, build streaks, rescue one from the brink for a bonus |
-| Hands-free how-to | **Wayfinding** | A step list compiled to a verified Figment you tap through; timed steps advance themselves |
-| Your own truth | **Candor** | The inward twin of Truth Lens: new statements checked against your own memories — never the cloud — flagging when they can't both be true |
-| Belief genealogy | **Provenance Lens** | Point it at a claim and it traces where that belief entered your head — who told you, when, corroborated or contested |
-| Wonder | **Prism Lens** | Turns the world into a reactive psychedelic overlay — kaleidoscopic, sound- and motion-driven, built on palette cycling |
-| Invisible UI | **Object Lens** | Look at a thing → a contextual panel: what you already know about it, plus pluggable integrations (laptop files, tire pressure). Objects only, never people |
+| 🧠 **Memory** | your life, remembered | Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition |
+| 👤 **People** | who's around you | Social Lens · Timbre · Name Capture |
+| ⚖️ **Truth** | what's true, and where beliefs come from | Truth Lens · Candor · Provenance Lens |
+| 🌍 **World** | understand what you look at | Object Lens · AI Brain · Puente |
+| 🎯 **Life** | do, keep, and build | Commitment Drift · Saga · Reality Compiler (Rehearsal + Wayfinding) |
+| 🤝 **Together** | two wearers, one sky | Confluence |
+
+Two things run underneath all of them:
+
+- **Privacy Veil** — the spine. One gesture and the glasses go fully deaf and
+  blind. Nothing seen, heard, or kept.
+- **Atmosphere** — the ambient light and feel: Inner Weather, the Prism Lens,
+  and Palette Cycling.
 
 ## Precision Lenses
 
