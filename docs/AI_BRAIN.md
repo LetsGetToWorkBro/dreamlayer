@@ -1,11 +1,21 @@
 # DreamLayer AI Brain — design spec
 
-**Status:** decisions resolved (§8). **Phase 1 built** — router, brain
-interfaces, deterministic mocks, the AI Object Lens, and knowledge queries
-(folded into Lucid Recall), all wired into the orchestrator behind the cloud
-opt-in gate. Phases 2–4 (real Mac mini model, file/mail indexing, opt-in
-cloud) still to build. Code: `host-python/src/dreamlayer/ai_brain/`; demo:
-`scripts/run_demo_ai_brain.py`; tests: `test_ai_brain.py`.
+**Status:** decisions resolved (§8). **Phases 1–4 built.**
+- **P1** — router, interfaces, mocks, AI Object Lens, knowledge → Lucid Recall.
+- **P2** — the **Brain app** (`ai_brain/server/`, runs on the Mac mini): a
+  local index over your chosen folders, a control panel, and the API; the
+  phone connects via `RemoteVisionBrain`/`RemoteKnowledgeBrain` (`connect_brain`).
+  Vision uses the Ollama backend seam (keyword retrieval works with no model).
+- **P3** — the config layer: folders, drag-drop upload, model choice, and
+  **query history**, all editable from the control panel. Email/iMessage read
+  and the draft→approve send flow remain macOS-specific seams (see §7).
+- **P4** — the **opt-in cloud tier** (`CloudVisionBrain`/`CloudKnowledgeBrain`),
+  gated by `opt_in_cloud()`.
+
+Run the Brain: `python -m dreamlayer.ai_brain.server --token <t>` →
+control panel at `http://<mac-mini>:7777/`. Demos:
+`scripts/run_demo_ai_brain.py` (tiers), `scripts/run_demo_brain_app.py`
+(the app). Tests: `test_ai_brain.py`, `test_ai_brain_server.py`.
 
 ## 1. The idea in one line
 
