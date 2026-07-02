@@ -24,6 +24,10 @@ def _hex_to_rgb(h: int) -> tuple[int, int, int]:
     return T.to_rgb(h)
 
 
+def _ellipsize(text: str, max_chars: int) -> str:
+    return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
+
+
 def _font(size_token: str) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     px = FONT_PX.get(size_token, 13)
     candidates = [
@@ -177,10 +181,13 @@ def draw_polar_segments(
     color: int,
     alpha_lit: int = 255,
     alpha_dim: int = 35,
+    skip_indices: list[int] | None = None,
 ) -> None:
     r_, g_, b_ = _hex_to_rgb(color)
     step = 360.0 / count
     for i in range(count):
+        if skip_indices and i in skip_indices:
+            continue
         angle = math.radians(i * step - 90)
         xi = cx + r_inner * math.cos(angle)
         yi = cy + r_inner * math.sin(angle)
@@ -327,7 +334,12 @@ class CardRenderer:
         self._mask = _mask()
 
     def render(self, card: dict) -> Image.Image:
-        img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 255))
+        # RGB canvas: Pillow's "RGBA" draw mode only alpha-BLENDS on RGB
+        # images. On an RGBA base the ink alpha is stored, not blended, and
+        # was then discarded by putalpha() — so every alpha= dim in this
+        # file rendered fully opaque (vision pass 3 finding: the commitment
+        # card's alpha-18 link fill was a solid pill hiding the due text).
+        img = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         draw = ImageDraw.Draw(img, "RGBA")
         dispatch = {
             "ReadyCard":            self._ready,
@@ -341,10 +353,15 @@ class CardRenderer:
             "PrivacyPausedCard":    self._privacy_paused,
             "ErrorCard":            self._error_card,
             "LowConfidenceCard":    self._low_confidence,
+            # Halo Cinema v1
+            "TruthLensCard":        self._truth_gauge,
+            "WorldAnchorCard":      self._world_anchor,
+            "SynesthesiaCard":      self._synesthesia,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
             fn(draw, card)
+        img = img.convert("RGBA")
         img.putalpha(self._mask)
         return img
 
@@ -523,7 +540,7 @@ class CardRenderer:
         t_j = 0.45
         apex_x = (1-t_j)**2 * p0[0] + 2*(1-t_j)*t_j * p1[0] + t_j**2 * p2[0]
         apex_y = (1-t_j)**2 * p0[1] + 2*(1-t_j)*t_j * p1[1] + t_j**2 * p2[1]
-        jd = 6  # bigger diamond — clearly visible
+        jd = 4  # pass-1 vision fix: 6px diamond + wide bloom swallowed the trace
         r_, g_, b_ = _hex_to_rgb(jewel_color)
         draw.polygon([
             (apex_x,      apex_y - jd),
@@ -532,12 +549,12 @@ class CardRenderer:
             (apex_x - jd, apex_y),
         ], fill=(r_, g_, b_, 255))
         # Jewel bloom
-        self._dot(draw, apex_x, apex_y, jd + 4, jewel_color, alpha=35)
+        self._dot(draw, apex_x, apex_y, jd + 3, jewel_color, alpha=25)
 
-        # --- ORBIT ARCS around jewel (radius=12, 3 × 120°) ---
+        # --- ORBIT ARCS around jewel (radius=10, 3 × 90°) ---
         for phase in [0, 120, 240]:
-            draw_elliptical_arc(draw, apex_x, apex_y, 12, 12,
-                                phase, 90, 1, jewel_color, alpha=180)
+            draw_elliptical_arc(draw, apex_x, apex_y, 10, 10,
+                                phase, 90, 1, jewel_color, alpha=160)
 
         # --- HERO PLACE TEXT — right-weighted, large, NOT centered ---
         # Teal ghost glow layer first
@@ -601,15 +618,47 @@ class CardRenderer:
                             "sm", T.MEMORY_TRACE, alpha=200)
 
     def _person_context(self, draw, card):
+        """PersonContextCard. v2 (Halo Cinema v1): `why` replaces the
+        headline as the primary line, and a confidence halo (chord arcs)
+        rings the 32×32 avatar zone when has_avatar is set — avatars only
+        ever exist for registered contacts."""
         name     = card.get("primary") or ""
         headline = card.get("headline") or ""
+        why      = card.get("why") or ""
         detail   = card.get("detail") or ""
+        conf     = card.get("confidence")
+
+        if card.get("has_avatar"):
+            # avatar zone at top center: chord arpeggio arcs, sweep = conf
+            sweep = (conf or 1.0) * 360
+            for i, r in enumerate((18, 23, 28)):
+                self._arc(draw, CX, 52, r, -90, -90 + sweep, 1,
+                          T.ACCENT_MEMORY, alpha=200 - i * 55)
+            # avatar placeholder ring (sprite streams separately on-device)
+            self._circle(draw, CX, 52, 15, 1, T.BORDER_SUBTLE, alpha=160)
+            self._text_rgba(draw, CX, 52, name[:1].upper(), "md",
+                            T.TEXT_PRIMARY, alpha=230)
+
+        # Crown segments only (skip the bottom three): the 90°-region
+        # segments used to strike through the why-line (pass-1 vision fix)
         draw_polar_segments(draw, CX, 100, 38, 56, 12, [0, 1, 2],
-                            T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35)
+                            T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35,
+                            skip_indices=[5, 6, 7])
         self._text(draw, CX, 100, name, "lg", T.MEMORY_TRACE)
         self._hline(draw, 72, 184, 116, T.BORDER_SUBTLE)
-        self._multiline_text(draw, CX, 140, headline, "md", T.TEXT_PRIMARY, max_width=192)
-        self._text_rgba(draw, CX, 164, detail, "sm", T.TEXT_SECONDARY, alpha=200)
+        if why:
+            # spec: exactly ONE line of "why this person matters right now"
+            why_line = why if len(why) <= 34 else why[:33] + "…"
+            self._text(draw, CX, 138, why_line, "sm", T.TEXT_PRIMARY)
+            self._text_rgba(draw, CX, 158, headline, "xs",
+                            T.TEXT_SECONDARY, alpha=170)
+            self._text_rgba(draw, CX, 176, detail, "xs", T.TEXT_GHOST, alpha=150)
+        else:
+            self._multiline_text(draw, CX, 140, headline, "md",
+                                 T.TEXT_PRIMARY, max_width=176)
+            self._text_rgba(draw, CX, 168, detail, "sm", T.TEXT_SECONDARY, alpha=200)
+        if conf is not None:
+            self._dot(draw, CX, 186, 3, T.conf_color(conf))
 
     def _privacy_paused(self, draw, card):
         self._arc(draw, CX, CY, 108, 10, 350, 1, T.PRIVACY_DANGER, alpha=34)
@@ -635,6 +684,113 @@ class CardRenderer:
                   fill=(r_, g_, b_, 255), width=2)
         err_msg = card.get("primary", "Try again")
         self._text_rgba(draw, CX, CY + 52, err_msg, "xs", T.TEXT_GHOST, alpha=180)
+
+    # ------------------------------------------------------------------
+    # Halo Cinema v1 cards
+    # ------------------------------------------------------------------
+
+    _GAUGE_DIR_COLOR = {
+        "truthful":     T.ACCENT_SUCCESS,
+        "deceptive":    T.ACCENT_ATTENTION,
+        "insufficient": T.TEXT_GHOST,
+    }
+
+    def _truth_gauge(self, draw, card):
+        """TruthLensCard — 9-ring gauge. Rings r=20..52 (4px pitch), one per
+        analysis stage, filled clockwise from 12 o'clock by stage
+        confidence, colored by signal direction. Center: verdict word +
+        confidence dot. (Truth Ripple entry is device-side motion; the
+        golden shows the settled frame.)"""
+        stages  = card.get("stages") or []
+        verdict = card.get("verdict") or card.get("primary") or ""
+        conf    = card.get("confidence")
+
+        # Rings r=34..66 (4px pitch) leave a clear r<34 core so the verdict
+        # word never fights the ring strokes (pass-1 vision fix).
+        for i in range(9):
+            stage = stages[i] if i < len(stages) else {}
+            r = 34 + i * 4
+            # ghost track
+            self._circle(draw, CX, CY, r, 1, T.BORDER_SUBTLE, alpha=44)
+            sweep = max(0.0, min(1.0, stage.get("confidence", 0.0))) * 360
+            if sweep > 4:
+                color = self._GAUGE_DIR_COLOR.get(
+                    stage.get("direction", "insufficient"), T.TEXT_GHOST)
+                self._arc(draw, CX, CY, r, -90, -90 + sweep, 2, color, alpha=235)
+
+        # Black backing capsule so ring strokes never cross the verdict
+        # glyphs (pass-3 vision fix; device mirrors with a filled rect)
+        font = _font("md")
+        try:
+            tw = font.getlength(verdict)
+        except AttributeError:
+            tw = len(verdict) * 8
+        draw.rectangle([CX - tw / 2 - 5, CY - 15, CX + tw / 2 + 5, CY + 4],
+                       fill=(0, 0, 0, 255))
+        self._text(draw, CX, CY - 6, verdict, "md", T.TEXT_PRIMARY)
+        if conf is not None:
+            self._dot(draw, CX, CY + 16, 3, T.conf_color(conf))
+        footer = card.get("footer") or ""
+        if footer:
+            self._text_rgba(draw, CX, 208, footer, "xs", T.TEXT_GHOST, alpha=150)
+        self._text_rgba(draw, CX, 46, "TRUTH LENS", "xs", T.TEXT_GHOST, alpha=140)
+
+    def _world_anchor(self, draw, card):
+        """WorldAnchorCard — ghost-tier memory echo at the bottom of the
+        display (Ghost Wake settles to this frame on-device)."""
+        # Rows 192/208/222 and a 22-char cap keep every glyph inside the
+        # circular safe chord — the old 196/214/230 rows clipped the detail
+        # line at the display edge (pass-1 vision fix).
+        summary = _ellipsize(card.get("primary") or "", 22)
+        detail  = _ellipsize(card.get("detail") or "", 22)
+        self._text_rgba(draw, CX, 192, "• MEMORY ECHO •", "xs",
+                        T.TEXT_GHOST, alpha=120)
+        self._text_rgba(draw, CX, 208, summary, "sm", T.TEXT_GHOST, alpha=170)
+        if detail:
+            self._text_rgba(draw, CX, 222, detail, "xs", T.TEXT_GHOST, alpha=110)
+
+    def _synesthesia(self, draw, card):
+        """SynesthesiaCard. v1: hero phrase. v2 (Halo Cinema v1): phrase in
+        the top half at ghost tier + the 3-shape gestural sprite composed
+        into the bottom half."""
+        desc = card.get("primary") or ""
+        if card.get("version") != 2:
+            self._text_rgba(draw, CX, 100, "DREAM", "xs", T.ACCENT_MEMORY, alpha=200)
+            self._hline(draw, 64, 192, 116, T.BORDER_SUBTLE)
+            self._multiline_text(draw, CX, 148, desc, "md", T.TEXT_PRIMARY,
+                                 max_width=176)
+            return
+
+        # v2 composition
+        self._text_rgba(draw, CX, 64, "DREAM", "xs", T.TEXT_GHOST, alpha=140)
+        self._multiline_text(draw, CX, 96, desc, "md", T.TEXT_PRIMARY,
+                             max_width=176)
+        self._hline(draw, 48, 208, 126, T.BORDER_SUBTLE)
+
+        dom = card.get("dominant_color") or T.ACCENT_MEMORY
+        r_, g_, b_ = _hex_to_rgb(dom)
+        dim = (r_ // 3, g_ // 3, b_ // 3, 255)
+        for s in (card.get("shapes") or [])[:3]:
+            # sprite space is 128×128 anchored at (64, 128)
+            x = 64 + s.get("x", 64)
+            y = 128 + s.get("y", 64) * 0.75   # keep inside the circle
+            size = s.get("size", 24)
+            half = size / 2
+            kind = s.get("kind", "circle")
+            if kind == "circle":
+                draw.ellipse([x - half, y - half, x + half, y + half],
+                             outline=(r_, g_, b_, 255), width=2)
+                draw.ellipse([x - half - 4, y - half - 4, x + half + 4, y + half + 4],
+                             outline=dim, width=1)
+            elif kind == "line":
+                draw.line([x - half, y, x + half, y], fill=(r_, g_, b_, 255), width=2)
+                draw.line([x - half, y + 4, x + half, y + 4], fill=dim, width=1)
+            elif kind == "rect":
+                draw.rectangle([x - half, y - half / 2, x + half, y + half / 2],
+                               outline=(r_, g_, b_, 255), width=2)
+            else:  # triangle
+                pts = [(x, y - half), (x + half, y + half), (x - half, y + half)]
+                draw.polygon(pts, outline=(r_, g_, b_, 255))
 
     def _low_confidence(self, draw, card):
         draw_point_cloud_text(

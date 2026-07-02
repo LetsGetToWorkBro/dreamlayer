@@ -96,7 +96,8 @@ class LLMClient:
         if context.get("location"):
             user_parts.append(f'Current location: {context["location"]}')
         if context.get("people"):
-            user_parts.append(f'Known people present: {', '.join(context["people"])}')
+            people = ", ".join(context["people"])
+            user_parts.append(f"Known people present: {people}")
         user_msg = "\n".join(user_parts)
 
         model = getattr(self._config, "llm_model", "gpt-4o-mini")

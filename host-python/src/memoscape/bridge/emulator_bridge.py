@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .base import BridgeBase
+from .base import BridgeBase, PAUSE_ALLOWED_RAW
 from .lua_loader import collect_lua
 
 class EmulatorBridge(BridgeBase):
@@ -9,6 +9,8 @@ class EmulatorBridge(BridgeBase):
         self._bundle: dict[str, str] = {}
         self.state = "boot"
         self.last_card: dict | None = None
+        self.raw_frames: list[dict] = []   # dream/raw frames, in send order
+        self.dream_active = False
         try:
             import halo_emulator  # type: ignore
             self._emu = halo_emulator
@@ -38,6 +40,22 @@ class EmulatorBridge(BridgeBase):
             return
         self.last_card = payload
         self.state = "paused" if payload.get("type") == "PrivacyPausedCard" else "showing_card"
+
+    def send_raw(self, obj: dict) -> None:
+        """Record a raw frame (dream palette/geometry/line_field/sprite).
+
+        Mirrors real_bridge semantics: while privacy-paused, only mode
+        control frames (dream_enter/dream_exit) pass — no frame that could
+        carry captured signal crosses the pause gate.
+        """
+        t = obj.get("t")
+        if self.state == "paused" and t not in PAUSE_ALLOWED_RAW:
+            return
+        if t == "dream_enter":
+            self.dream_active = True
+        elif t == "dream_exit":
+            self.dream_active = False
+        self.raw_frames.append(obj)
 
     def inject_event(self, name: str, payload: dict | None = None) -> None:
         if name == "privacy_pause":

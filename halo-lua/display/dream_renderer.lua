@@ -1,33 +1,46 @@
 --- display/dream_renderer.lua
---- Dream Mode renderer: palette shader + particle system + ghost overlay.
+--- Dream Mode renderer: palette weather + particle system + ghost overlay.
 ---
---- Called by host_comm_dream.lua when t="palette" or t="geometry" frames arrive.
---- Also exports render_world_anchor() and render_synesthesia() for card types.
+--- Called by host_comm_dream.lua when t="palette", t="geometry" or
+--- t="line_field" frames arrive. Also exports render_world_anchor(),
+--- render_synesthesia() and draw_synesthesia_v2() for card types.
 ---
---- Architecture
---- -----------
+--- Architecture (Halo Cinema v1)
+--- -----------------------------
 --- DreamRenderer maintains:
----   _particles[]   -- 24 particle positions driven by mic energy
----   _line_field[]  -- 8 line vectors driven by IMU yaw
----   _palette_t     -- current palette animation target
+---   _particles[]     -- 24 particle positions driven by mic energy
+---   _line_field_v2[] -- 12 curl-noise vectors streamed from ImuReactor
+---   _line_angles[]   -- legacy 8-vector fallback (t="geometry" only)
+---
+--- Palette weather (mic_reactor.py) animates the reserved Air-tier slots:
+---   sky(1), energy(2), drift_a(3), drift_b(4) — see palette.reserve_dynamic.
 ---
 --- All state is updated on every host_comm tick (2 Hz) and rendered
 --- at the display refresh rate (up to 20fps via frame.runloop).
 
 local P    = require("display/primitives")
 local PAL  = require("display/palette")
+local TR   = require("display.transitions")
 local math = math
 
 local HAS_FRAME = (type(_G.frame) == "table")
 
 local M = {}
 
+-- Reserve the Air-tier dynamic slots (idempotent; mirrors themes.py
+-- DYNAMIC_SLOTS so host palette frames land on the slots we draw with).
+PAL.reserve_dynamic("sky",     PAL.accent_memory_dim, 1)
+PAL.reserve_dynamic("energy",  PAL.accent_memory,     2)
+PAL.reserve_dynamic("drift_a", PAL.border_subtle,     3)
+PAL.reserve_dynamic("drift_b", PAL.border_subtle,     4)
+
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
 local W, H       = 256, 256          -- display dimensions
 local N_PARTICLES = 24
-local N_LINES     = 8
+local N_LINES     = 8                -- legacy fallback field
+local N_LINES_V2  = 12               -- curl-noise field (Line Field 2.0)
 local CX, CY      = W/2, H/2
 
 -- ---------------------------------------------------------------------------
@@ -35,6 +48,9 @@ local CX, CY      = W/2, H/2
 -- ---------------------------------------------------------------------------
 local _particles  = {}
 local _line_angles = {}
+local _line_field_v2 = nil   -- 12 {x1,y1,x2,y2} vectors from t="line_field"
+local _anchor_key    = nil   -- Ghost Wake timing: current anchor identity
+local _anchor_t0     = 0     -- ms when the current anchor first rendered
 local _scatter_t   = 0
 local _scatter_dur = 0
 local _palette_target = {}    -- list of {idx, y, cb, cr} from mic reactor
@@ -124,6 +140,14 @@ end
 
 function M.draw_line_field()
   if not HAS_FRAME then return end
+  -- Line Field 2.0: prefer the streamed curl-noise vectors
+  if _line_field_v2 then
+    for _, v in ipairs(_line_field_v2) do
+      frame.display.line(v[1], v[2], v[3], v[4], PAL.dynamic_color("sky"))
+    end
+    return
+  end
+  -- Legacy 8-vector radial fallback (no line_field frames received yet)
   local len = 40 + _geo_intensity * 60
   for i, angle in ipairs(_line_angles) do
     local x1 = CX + math.cos(angle) * len
@@ -136,6 +160,26 @@ function M.draw_line_field()
       PAL.text_ghost
     )
   end
+end
+
+-- ---------------------------------------------------------------------------
+-- Line Field 2.0 handler (t="line_field")
+-- msg.v is a flat array of 12*4 ints: {x1,y1,x2,y2, x1,y1,...} — one MTU
+-- frame. Curl-noise + gyroscopic damping happen host-side (imu_reactor.py).
+-- ---------------------------------------------------------------------------
+function M.on_line_field(msg)
+  local flat = msg and msg.v
+  if type(flat) ~= "table" then return end
+  local vecs = {}
+  for i = 1, math.min(#flat, N_LINES_V2 * 4), 4 do
+    vecs[#vecs + 1] = {
+      math.floor(flat[i]     or CX),
+      math.floor(flat[i + 1] or CY),
+      math.floor(flat[i + 2] or CX),
+      math.floor(flat[i + 3] or CY),
+    }
+  end
+  _line_field_v2 = vecs
 end
 
 -- ---------------------------------------------------------------------------
@@ -155,16 +199,30 @@ end
 -- Ghost anchor renderer
 -- ---------------------------------------------------------------------------
 
-function M.render_world_anchor(card)
-  -- Renders at bottom of display, very dim (text_ghost color)
+function M.render_world_anchor(card, now_ms)
+  -- Ghost Wake (S2): text condenses from ambient jitter at the bottom of
+  -- the display over SIG_GHOSTWAKE_MS, then settles at ghost-tier luma.
   if not HAS_FRAME then return end
   local summary = card.primary or ""
   local detail  = card.detail  or ""
-  if #summary > 32 then summary = summary:sub(1, 31) .. "\u2026" end
-  P.text_center(CX, 210, "\u2022 MEMORY ECHO \u2022", "sm", PAL.text_ghost)
-  P.text_center(CX, 226, summary,                      "sm", PAL.text_ghost)
+  -- 22-char cap + rows 192/208/222 keep ghost text inside the circular
+  -- safe chord (the old 210/226/242 rows clipped at the display edge)
+  if #summary > 22 then summary = summary:sub(1, 21) .. "\xE2\x80\xA6" end
+  if #detail  > 22 then detail  = detail:sub(1, 21) .. "\xE2\x80\xA6" end
+
+  now_ms = now_ms or math.floor(os.clock() * 1000)
+  local key = (card.anchor_id or "") .. "|" .. summary
+  if key ~= _anchor_key then
+    _anchor_key = key
+    _anchor_t0  = now_ms
+  end
+  local A = require("display.animations")
+  local t = math.min(1, (now_ms - _anchor_t0) / A.SIG_GHOSTWAKE_MS)
+
+  TR.ghost_wake_text(CX, 192, "\xE2\x80\xA2 MEMORY ECHO \xE2\x80\xA2", "sm", t, _anchor_t0)
+  TR.ghost_wake_text(CX, 208, summary, "sm", t, _anchor_t0 + 977)
   if detail ~= "" then
-    P.text_center(CX, 242, detail, "sm", PAL.text_ghost)
+    TR.ghost_wake_text(CX, 222, detail, "sm", t, _anchor_t0 + 1954)
   end
 end
 
@@ -180,6 +238,30 @@ function M.render_synesthesia(card)
   -- Separator
   frame.display.line(64, 116, 192, 116, PAL.border_subtle)
   P.text_center(CX, 148, desc, "md", PAL.text_primary)
+end
+
+-- ---------------------------------------------------------------------------
+-- SynesthesiaCard v2 (Halo Cinema v1, Phase 3)
+-- Composes the 3-shape gestural sprite (bottom half, streamed separately as
+-- a 128×128 TxSprite anchored at y=128) with the 6-word phrase (top half,
+-- ghost tier). The sprite arrives via t="sprite" with anchor="bottom"; this
+-- draws the text composition and the seam accent.
+-- ---------------------------------------------------------------------------
+
+function M.draw_synesthesia_v2(card)
+  if not HAS_FRAME then return end
+  local desc = card.primary or ""
+  -- Top half: phrase at ghost tier (materials handles the ghost slot luma)
+  local MAT = require("display.materials")
+  MAT.draw_ghost_text(CX, 64, "DREAM", "sm", 0.7)
+  P.text_center(CX, 96, desc, "md", PAL.text_primary)
+  -- Seam: hairline where the sprite's half begins
+  frame.display.line(48, 126, 208, 126, PAL.border_subtle)
+  -- Bottom half belongs to the sprite (on_sprite draws it at y=128).
+  -- If the sprite has not arrived yet, echo the dominant color as a hint.
+  if not card.sprite_seen and card.dominant_color then
+    frame.display.circle(CX, 190, 24, card.dominant_color, false)
+  end
 end
 
 -- ---------------------------------------------------------------------------

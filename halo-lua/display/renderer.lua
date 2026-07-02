@@ -1,19 +1,24 @@
 --- display/renderer.lua
---- Cinematic transition system for Memoscape Halo.
+--- Halo Cinema v1 transition system for Memoscape Halo.
 ---
---- Three animation phases per card:
----   ENTER  180 ms  ease_out_expo   iris-open: scale 0.94→1, staggered layers
----   HOLD   ∞        —              breathe pulse + card-specific idle
----   EXIT   120 ms  linear          ripple dismiss: contract + fade
+--- Three animation phases per card, routed per card type through the
+--- SIGNATURES table to display/transitions.lua (docs/HALO_CINEMA_V1.md):
+---   ENTER  per-signature   iris (default 240ms) | comet (460ms) |
+---                          ripple (400ms) — staggered layers throughout
+---   HOLD   ∞               confidence_halo on recall cards +
+---                          card-specific idle (spinner / waveform / pulse)
+---   EXIT   120 ms  linear  exit_contract: geometry contracts, text cuts
 ---
 --- Special behaviours:
----   PrivacyPausedCard   → shield slam (rings expand radially, glyph delayed)
+---   PrivacyPausedCard   → rumble dim then shield slam (rings, glyph delayed)
 ---   LoadingCard         → spinner angle advances each tick during HOLD
 ---   QueryListeningCard  → waveform phase advances each tick during HOLD
 ---   CommitmentDriftCard → confidence dot pulses during HOLD
 ---   DeviationAlertCard  → ripple ring expands during HOLD
----   show_card(new) during ENTER/HOLD → crossfade: old card exits while new
----                                       card enters simultaneously
+---   TruthLensCard       → 9-ring gauge, Truth Ripple entry
+---   show_card(new) during ENTER/HOLD → Prism Slide: outgoing card refracts
+---                                       while the new card irises in
+---   settings.reduce_motion → every signature renders its static variant
 ---
 --- Public API (unchanged from callers):
 ---   renderer.bind(time_fn)     — wire monotonic clock (called once at boot)
@@ -26,22 +31,14 @@ local math  = math
 local P     = require("display.palette")
 local T     = require("display.typography")
 local A     = require("display.animations")
+local E     = require("lib.easing")
+local TR    = require("display.transitions")
 
 local HAS_FRAME = (type(_G.frame) == "table")
 
--- ---------------------------------------------------------------------------
--- Easing functions
--- ---------------------------------------------------------------------------
-local function ease_out_expo(t)
-  if t >= 1 then return 1 end
-  return 1 - math.pow(2, -10 * t)
-end
-
-local function ease_in_out_sine(t)
-  return (1 - math.cos(math.pi * t)) / 2
-end
-
-local function ease_linear(t) return t end
+local ease_out_expo    = E.out_expo
+local ease_in_out_sine = E.in_out_sine
+local ease_linear      = E.linear
 
 -- ---------------------------------------------------------------------------
 -- Animation state
@@ -126,17 +123,21 @@ local function closed_poly(pts,color)
   end
 end
 
-local function polar_segs(cx,cy,ri,ro,n,lit,color,ghost)
+local function polar_segs(cx,cy,ri,ro,n,lit,color,ghost,skip)
   if not HAS_FRAME then return end
   ghost = ghost or 0x2A3C44
   local lit_set={}
   for _,v in ipairs(lit) do lit_set[v]=true end
+  local skip_set={}
+  if skip then for _,v in ipairs(skip) do skip_set[v]=true end end
   local step=(2*math.pi)/n
   for i=0,n-1 do
+    if not skip_set[i] then
     local a=step*i-math.pi/2
     local xi=cx+ri*math.cos(a); local yi=cy+ri*math.sin(a)
     local xo=cx+ro*math.cos(a); local yo=cy+ro*math.sin(a)
     frame.display.line(floor(xi),floor(yi),floor(xo),floor(yo), lit_set[i] and color or ghost)
+    end
   end
 end
 
@@ -317,16 +318,16 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     bezier(46,90,200,62,155,150,P.memory_trace,32)
     local jx=floor(46*0.3025+2*0.55*0.45*200+0.2025*155)
     local jy=floor(90*0.3025+2*0.55*0.45*62 +0.2025*150)
-    local jd=floor(6*sc)
+    local jd=floor(4*sc)
     if jd>=1 then
       frame.display.line(jx,jy-jd,jx+jd,jy,jcol)
       frame.display.line(jx+jd,jy,jx,jy+jd,jcol)
       frame.display.line(jx,jy+jd,jx-jd,jy,jcol)
       frame.display.line(jx-jd,jy,jx,jy-jd,jcol)
     end
-    arc(jx,jy,floor(12*sc),  0, 90,jcol,8)
-    arc(jx,jy,floor(12*sc),120,210,jcol,8)
-    arc(jx,jy,floor(12*sc),240,330,jcol,8)
+    arc(jx,jy,floor(10*sc),  0, 90,jcol,8)
+    arc(jx,jy,floor(10*sc),120,210,jcol,8)
+    arc(jx,jy,floor(10*sc),240,330,jcol,8)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     frame.display.text(place,155,150,P.text_primary)
@@ -382,22 +383,40 @@ local function draw_proactive_memory(card, sc, enter_t, exit_t)
   end
 end
 
+-- PersonContextCard v2 (Social Lens, Halo Cinema v1 Phase 4):
+--   name is PRIMARY; card.why carries "why this person matters right now"
+--   (highest-scoring memory involving them in the last 30 days);
+--   card.has_avatar marks that a 32×32 contact avatar sprite was streamed
+--   separately — the chord arpeggio rings its position. Avatars only ever
+--   exist for registered contacts (enforced host-side).
 local function draw_person_context(card, sc, enter_t, exit_t)
   local name     = card.primary  or ""
   local headline = card.headline or ""
+  local why      = card.why      or ""
   local detail   = card.detail   or ""
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle)
+    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
     frame.display.text(name,CX,100,P.memory_trace)
+    if card.has_avatar then
+      -- chord arpeggio around the avatar sprite (drawn at top center by
+      -- the sprite handler); confidence shapes the arc sweep
+      TR.chord(enter_t, CX, 56, card.confidence or 1)
+    end
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     frame.display.line(floor(lerp(CX,72,sc)),116, floor(lerp(CX,184,sc)),116, P.border_subtle)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(headline,CX,140,P.text_primary)
+    -- spec: exactly ONE line of "why this person matters right now"
+    local line = why ~= "" and why or headline
+    if #line > 34 then line = line:sub(1, 33) .. "\xE2\x80\xA6" end
+    frame.display.text(line,CX,138,P.text_primary)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(detail,CX,164,P.text_secondary)
+    if why ~= "" and headline ~= "" then
+      frame.display.text(headline,CX,158,P.text_secondary)
+    end
+    frame.display.text(detail,CX,176,P.text_ghost)
   end
 end
 
@@ -672,16 +691,75 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
     end
   end
 
-  -- Hold-phase: ripple ring expands outward then resets
+  -- Hold-phase: ripple ring expands outward then resets.
+  -- Kill list #4: no fake alpha via arc step-count flicker — the ring dims
+  -- honestly through the fx dynamic slot's luma.
   if enter_t >= 1.0 and exit_t == 0 then
     local ripple_period = 2400  -- ms per cycle
     local rp = (idle_t % ripple_period) / ripple_period
     local rr = floor(lerp(6, 44, rp) * sc)
-    local alpha = 1.0 - rp  -- conceptual; Frame doesn't support alpha, so dim via smaller arc
     if rr >= 4 then
-      local steps = math.max(4, floor(alpha * 20))
-      arc(CX, CY, rr, 0, 360, P.warning_amber, steps)
+      P.set_dynamic_y("fx", (1.0 - rp) * 520)
+      arc(CX, CY, rr, 0, 360, P.dynamic_color("fx"), 20)
     end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- TruthLensCard — 9-ring gauge (Halo Cinema v1, Phase 4)
+-- One ring per analysis stage: face, AU, voice, prosody, linguistic,
+-- narrative, fusion, aggregate, verdict.  Ring i sits at radius
+-- GAUGE_R0 + (i-1)*GAUGE_PITCH, filled clockwise from 12 o'clock by that
+-- stage's confidence, colored by its signal direction:
+--   truthful → accent_success, deceptive → accent_attention,
+--   insufficient → text_ghost.
+-- Center holds the fused verdict word + a confidence dot.
+-- ENTER uses Truth Ripple from card.origin (eye landmark), handled by the
+-- signature dispatcher; reduce_motion draws all rings statically.
+-- ---------------------------------------------------------------------------
+-- r=34..66: the clear r<34 core keeps the verdict word off the rings
+local GAUGE_R0    = 34
+local GAUGE_PITCH = 4
+
+local GAUGE_DIR_COLOR = {
+  truthful     = P.accent_success,
+  deceptive    = P.accent_attention,
+  insufficient = P.text_ghost,
+}
+
+local function draw_truth_gauge(card, sc, enter_t, exit_t, idle_t)
+  local stages  = card.stages or {}
+  local verdict = card.verdict or card.primary or ""
+  local conf    = card.confidence
+
+  for i = 1, 9 do
+    local stage = stages[i] or {}
+    local r = floor((GAUGE_R0 + (i - 1) * GAUGE_PITCH) * math.max(sc, 0.01))
+    if r >= 2 then
+      -- ghost track
+      arc(CX, CY, r, 0, 360, P.border_subtle, 24)
+      -- stage fill: clockwise from 12 o'clock, sweep = stage confidence.
+      -- Rings draw on sequentially during ENTER (ring i gated at i/9).
+      local ring_gate = TR.reduce_motion() and 1 or clamp(enter_t * 9 - (i - 1), 0, 1)
+      local sweep = clamp(stage.confidence or 0, 0, 1) * 360 * ring_gate
+      if sweep > 4 then
+        local color = GAUGE_DIR_COLOR[stage.direction or "insufficient"] or P.text_ghost
+        arc(CX, CY, r, -90, -90 + sweep, color, 28)
+      end
+    end
+  end
+
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    -- black backing capsule keeps ring strokes off the verdict glyphs
+    local half_w = floor(#verdict * T.avg_w_with_tracking("md", 0) / 2) + 5
+    frame.display.rect(CX - half_w, CY - 15, half_w * 2, 19, P.background, true)
+    frame.display.text(verdict, CX, CY - 6, P.text_primary)
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and conf then
+    local jcol = (conf >= 0.75 and P.confidence_high)
+              or (conf >= 0.40 and P.confidence_med)
+              or  P.confidence_low
+    frame.display.circle(CX, CY + 16, 3, jcol, true)
   end
 end
 
@@ -709,33 +787,106 @@ local DRAW = {
   CommitmentDriftCard   = function(c,sc,et,xt,it) draw_commitment_drift(c,sc,et,xt,it)    end,
   TimeScrubNodeCard     = function(c,sc,et,xt,it) draw_time_scrub_node(c,sc,et,xt,it)     end,
   DeviationAlertCard    = function(c,sc,et,xt,it) draw_deviation_alert(c,sc,et,xt,it)     end,
+  -- Halo Cinema v1 lenses
+  TruthLensCard         = function(c,sc,et,xt,it) draw_truth_gauge(c,sc,et,xt,it)         end,
 }
 
 -- ---------------------------------------------------------------------------
--- Internal composite: draw one card with animated scale & stagger
+-- Signature routing (Halo Cinema v1, docs/HALO_CINEMA_V1.md §1.1)
+-- enter: iris (S1, default) | comet (S6) | ripple (S5) | slam (legacy shield)
+-- hold : halo (S4) on recall cards; card-specific idles stay in DRAW fns
+-- exit : contract (shared); Prism Slide (S3) replaces it during crossfade
+-- ---------------------------------------------------------------------------
+local SIGNATURES = {
+  ObjectRecallCard     = { enter = "iris",   hold = "halo" },
+  CommitmentRecallCard = { enter = "iris",   hold = "halo" },
+  ProactiveMemoryCard  = { enter = "comet",  hold = "halo" },
+  PersonContextCard    = { enter = "iris",   hold = "halo" },
+  TruthLensCard        = { enter = "ripple" },
+  PrivacyPausedCard    = { enter = "slam" },
+}
+
+local DEFAULT_SIGNATURE = { enter = "iris" }
+
+local function signature_for(card)
+  return (card and SIGNATURES[card.type]) or DEFAULT_SIGNATURE
+end
+
+local function enter_ms_for(card)
+  local sig = signature_for(card)
+  if sig.enter == "slam" then return A.ENTER_DURATION_MS end
+  return TR.enter_duration(sig.enter)
+end
+
+-- ---------------------------------------------------------------------------
+-- Internal composite: draw one card, routed through its motion signature.
+-- ENTER — signature-specific (iris ring, comet flight, truth ripple, slam)
+-- HOLD  — confidence halo on recall cards + card idle
+-- EXIT  — exit_contract: geometry contracts, text cuts at t=0.4 (the draw
+--         fns' stagger gates suppress text when enter_t < 0)
 -- ---------------------------------------------------------------------------
 local function composite(card, phase, elapsed_ms, idle_t)
   if not card then return end
   local fn = DRAW[card.type]
   if not fn then return end
+  local sig = signature_for(card)
 
   local enter_t, exit_t, sc
 
   if phase == "enter" then
-    local raw = clamp(elapsed_ms / A.ENTER_DURATION_MS, 0, 1)
-    enter_t   = raw
-    exit_t    = 0
-    sc        = lerp(A.ENTER_SCALE_FROM, 1.0, ease_out_expo(raw))
+    local dur = enter_ms_for(card)
+    local raw = (dur <= 0) and 1.0 or clamp(elapsed_ms / dur, 0, 1)
+    exit_t = 0
+
+    if sig.enter == "comet" and not TR.reduce_motion() then
+      -- S6: comet travels first; the card blooms on arrival
+      local comet_frac = A.SIG_COMET_MS / (A.SIG_COMET_MS + A.SIG_IRIS_MS)
+      if raw < comet_frac then
+        TR.memory_comet(raw / comet_frac, card.weeks_old or 0, CX, CY - 10)
+        return
+      end
+      raw = (raw - comet_frac) / (1 - comet_frac)
+    end
+
+    enter_t = raw
+    sc      = 1.0   -- kill list #1: no more 0.94 uniform scale wobble
+
+    if sig.enter == "slam" then
+      -- sub-bass rumble dims the ambient field before the shield slams
+      TR.rumble(clamp(elapsed_ms / A.SIG_RUMBLE_MS, 0, 1))
+    end
+
+    fn(card, sc, enter_t, exit_t, idle_t or 0)
+
+    if sig.enter == "iris" or sig.enter == "comet" then
+      TR.iris_bloom(raw, card.conf_color or P.accent_memory)
+    elseif sig.enter == "ripple" then
+      local origin = card.origin or {}
+      TR.truth_ripple(raw, origin.x, origin.y)
+    end
+    if sig.enter == "comet" and TR.reduce_motion() then
+      -- static recency tick preserves the entry-angle information
+      TR.memory_comet(1, card.weeks_old or 0, CX, CY - 10)
+    end
+    return
+
   elseif phase == "exit" then
     local raw = clamp(elapsed_ms / A.EXIT_DURATION_MS, 0, 1)
-    enter_t   = 1.0
-    exit_t    = raw
-    -- ripple: contract back toward 0.94 then to 0
-    sc        = lerp(1.0, 0.0, ease_linear(raw))
+    exit_t = raw
+    local scale, text_ok = TR.exit_contract(raw)
+    sc      = scale
+    -- enter_t < 0 fails every stagger gate: text cuts, geometry contracts
+    enter_t = text_ok and 1.0 or -1.0
+
   else -- hold
     enter_t = 1.0
     exit_t  = 0
     sc      = 1.0
+    if sig.hold == "halo" and card.confidence then
+      -- S4: halo underneath the card content; radius+sweep encode confidence
+      TR.confidence_halo(idle_t or 0, card.confidence,
+                         card.conf_color or P.accent_memory_dim)
+    end
   end
 
   fn(card, sc, enter_t, exit_t, idle_t or 0)
@@ -749,20 +900,28 @@ end
 --- Called once from main.lua boot before the loop starts.
 function renderer.bind(disp, time_fn)
   if type(time_fn) == "function" then _now_fn = time_fn end
+  -- Reserve the Cinema v1 dynamic palette slots up front so the first
+  -- crossfade / ghost fade never pays the reservation cost mid-frame.
+  local ok, MAT = pcall(require, "display.materials")
+  if ok and MAT then MAT.init() end
 end
 
 --- Begin ENTER animation for card.
---- If a card is already visible, simultaneously begins EXIT on the old one
---- (memory trace morph / crossfade).
+--- If a card is already visible, simultaneously begins its Prism Slide
+--- refraction while the new card irises in (S3 crossfade).
 function renderer.show_card(card)
   if not card then
     renderer.dismiss()
     return
   end
+  -- Honor settings.reduce_motion, read once per card ENTER
+  local ok, settings = pcall(require, "system.settings")
+  if ok and settings and settings.get then
+    TR.set_reduce_motion(settings.get("reduce_motion"))
+  end
   local now = _now_ms()
   -- If something is showing, capture it as the outgoing card
   if _card and _phase ~= "exit" then
-    -- Compute how far through exit the previous card was already
     _prev_card   = _card
     _prev_exit_t = 0
     _prev_start  = now
@@ -791,8 +950,8 @@ function renderer.tick()
   local elapsed = now - _phase_start
   local idle_t  = _idle_t
 
-  -- Advance phase
-  if _phase == "enter" and elapsed >= A.ENTER_DURATION_MS then
+  -- Advance phase (ENTER duration is signature-specific)
+  if _phase == "enter" and elapsed >= enter_ms_for(_card) then
     _phase       = "hold"
     _phase_start = now
     elapsed      = 0
@@ -810,21 +969,23 @@ function renderer.tick()
     return
   end
 
-  -- Advance outgoing crossfade
+  -- Advance outgoing crossfade (Prism Slide runs on its own clock)
   if _prev_card then
     local prev_elapsed = now - _prev_start
-    _prev_exit_t = clamp(prev_elapsed / A.EXIT_DURATION_MS, 0, 1)
+    _prev_exit_t = clamp(prev_elapsed / A.SIG_PRISM_MS, 0, 1)
     if _prev_exit_t >= 1 then
       _prev_card = nil  -- crossfade complete
+      TR.prism_slide(1)  -- restore fringe slots
     end
   end
 
   -- Composite frame
   frame.display.clear(0x000000)
 
-  -- Draw outgoing card (exiting) underneath
+  -- Draw outgoing card (refracting out) underneath
   if _prev_card then
     composite(_prev_card, "exit", (now - _prev_start), 0)
+    TR.prism_slide(_prev_exit_t)
   end
 
   -- Draw incoming card on top

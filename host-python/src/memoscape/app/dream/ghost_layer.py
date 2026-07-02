@@ -52,8 +52,11 @@ class GhostLayer:
 
         for anchor in sorted_anchors[:MAX_GHOSTS_PER_TICK]:
             key = anchor.get("id") or anchor.get("summary", "")[:40]
-            last = self._shown.get(key, 0.0)
-            if (now - last) < GHOST_COOLDOWN_S:
+            # None (never shown) — a 0.0 sentinel suppresses the first
+            # emission on hosts whose monotonic clock is younger than the
+            # cooldown (fresh VMs boot with monotonic() < 120s)
+            last = self._shown.get(key)
+            if last is not None and (now - last) < GHOST_COOLDOWN_S:
                 continue
             self._shown[key] = now
             return C.world_anchor_card(
