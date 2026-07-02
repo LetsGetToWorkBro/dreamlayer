@@ -113,6 +113,7 @@ class ShoppingProvider(PanelProvider):
     shop_fn(label, attributes) -> {"cheaper": str, "reviews": str, ...}
     """
     name = "shopping"
+    facet = "shop"
 
     def __init__(self, shop_fn: Callable[[str, dict], dict]):
         self._shop = shop_fn

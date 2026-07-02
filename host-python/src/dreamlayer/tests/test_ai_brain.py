@@ -145,9 +145,11 @@ class TestOrchestratorWiring:
         ans = orc.ask_brain("what's the rent")
         assert ans is not None and "2400" in ans.text
         assert any(f.get("t") == "card" for f in orc.bridge.raw)
-        # cloud opt-in flips the gate
-        assert orc.brain.cloud_opt_in is False
-        orc.opt_in_cloud(True)
+        # connected by default (product posture); private mode is the opt-out
+        assert orc.brain.cloud_opt_in is True
+        orc.set_private_mode(True)
+        assert orc.brain.cloud_opt_in is False and orc.private_mode is True
+        orc.set_private_mode(False)
         assert orc.brain.cloud_opt_in is True
 
     def test_ask_brain_is_veil_gated(self):

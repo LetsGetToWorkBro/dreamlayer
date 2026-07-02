@@ -32,8 +32,15 @@ class ObjectLens:
         self._privacy = privacy or _AlwaysOn()
         self._now = now_fn or time.time
 
-    def look(self, frame, now: Optional[float] = None) -> Optional[ObjectPanel]:
-        """Recognise the object in view and build its panel, or None."""
+    def look(self, frame, now: Optional[float] = None,
+             facets: Optional[set] = None) -> Optional[ObjectPanel]:
+        """Recognise the object in view and build its panel, or None.
+
+        facets selects the intent: None = everything; {"own"} = only your own
+        facts (private, instant); {"ai"} = let an AI explain/translate it;
+        {"shop"} = prices & reviews. So a glance shows your facts, and asking
+        for more escalates to the AI or shopping facet.
+        """
         if not self._privacy.allow_capture():
             return None                       # veiled: blind
         sighting = self.recognizer.recognize(frame)
@@ -41,7 +48,7 @@ class ObjectLens:
             return None
         sighting.frame = frame                # so a vision brain can explain it
         now = now if now is not None else self._now()
-        panel = self.registry.build_panel(sighting, now=now)
+        panel = self.registry.build_panel(sighting, now=now, facets=facets)
         # a bare identification (no rows) is still a valid, useful panel:
         # "that's a mug" — so we return it even when empty.
         return panel

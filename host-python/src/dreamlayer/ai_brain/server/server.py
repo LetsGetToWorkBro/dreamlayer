@@ -116,7 +116,7 @@ class Brain:
     def apply_config(self, updates: dict) -> None:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
-                  "email_enabled", "cloud_enabled"):
+                  "email_enabled", "cloud_enabled", "network_mode"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()
@@ -186,6 +186,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "stats": brain.index.stats()})
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": brain.history.recent(30)})
+            elif path == "/dreamlayer/pair":
+                # a pairing code for the phone — only handed to the local panel
+                if not self._from_localhost():
+                    self._json(403, {"error": "pairing is local-only"}); return
+                from ...pairing import PairingBundle, encode_pairing
+                url = "http://" + (self.headers.get("Host") or "127.0.0.1")
+                bundle = PairingBundle(brain_url=url, token=brain.config.token)
+                self._json(200, {"code": encode_pairing(bundle), "url": url})
             else:
                 self._json(404, {"error": "not found"})
 

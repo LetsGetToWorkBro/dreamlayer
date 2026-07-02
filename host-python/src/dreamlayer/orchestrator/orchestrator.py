@@ -70,10 +70,14 @@ class Orchestrator:
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
-        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge. Inert until
-        # a tier is enabled (on-device / Mac mini / opt-in cloud), so it ships
-        # off by default. Cloud is never crossed without opt_in_cloud().
-        self.brain = BrainRouter()
+        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge — on-device →
+        # Mac mini → cloud. Product default is "connected": cloud allowed, so
+        # the best answer wins wherever you are; on-device is the airplane-mode
+        # fallback. Advanced users flip set_private_mode() for home-LAN-only.
+        self.brain = BrainRouter(cloud_opt_in=True)
+        self.private_mode = False
+        self.brain_mode = "connected"         # connected | home | phone
+        self.glasses_id = None                # set at pairing
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -416,10 +420,15 @@ class Orchestrator:
             self.bridge.send_card(result.card, event="provenance")
         return result
 
-    def look_at_object(self, frame, now: float | None = None):
-        """Object Lens: recognise the object in view and surface its
-        contextual panel. Veil-gated; objects only (people are Social Lens)."""
-        panel = self.object_lens.look(frame, now=now)
+    def look_at_object(self, frame, now: float | None = None, facet=None):
+        """Oracle (Object Lens): recognise the object and surface its panel.
+
+        facet picks the intent — None = everything; "own" = your own facts
+        (private, instant glance); "ai" = let an AI explain/translate it;
+        "shop" = prices & reviews. Veil-gated; objects only (people are
+        Social Lens)."""
+        facets = {facet} if facet else None
+        panel = self.object_lens.look(frame, now=now, facets=facets)
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
@@ -462,9 +471,38 @@ class Orchestrator:
         return answer
 
     def opt_in_cloud(self, on: bool = True) -> None:
-        """Allow cloud AI tiers for this session (off by default). Nothing
-        crosses to the cloud until this is called."""
+        """Allow or forbid cloud AI tiers for this session."""
         self.brain.opt_in_cloud(on)
+
+    def set_brain_mode(self, mode: str, cloud: bool | None = None) -> None:
+        """Where the intelligence lives (two independent axes: local brain +
+        cloud):
+          connected — on-device → Mac mini → cloud (default; best answer wins)
+          home      — on-device + Mac mini, no cloud (private, needs your LAN)
+          phone     — on-device only; the phone IS the brain. Cloud is off by
+                      default (the airplane/no-service case) but can be turned
+                      on with cloud=True — phone-primary, cloud for hard cases.
+
+        `cloud` overrides the per-mode default when given, so any mode can run
+        with or without the cloud tier.
+        """
+        if mode not in ("connected", "home", "phone"):
+            raise ValueError(f"unknown brain mode: {mode!r}")
+        self.brain_mode = mode
+        use_cloud = (mode == "connected") if cloud is None else cloud
+        self.brain.opt_in_cloud(use_cloud)
+        self.brain.set_local_only(mode == "phone")
+        self.private_mode = not use_cloud
+
+    def use_cloud(self, on: bool = True) -> None:
+        """Turn the cloud tier on/off without changing where the local brain
+        lives — works in phone mode too."""
+        self.brain.opt_in_cloud(on)
+        self.private_mode = not on
+
+    def set_private_mode(self, on: bool = True) -> None:
+        """Advanced opt-out: home mode (on-device + Mac mini, no cloud)."""
+        self.set_brain_mode("home" if on else "connected")
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)

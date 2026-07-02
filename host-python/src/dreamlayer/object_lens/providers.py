@@ -33,6 +33,11 @@ def _age_note(data: dict) -> str:
 
 class PanelProvider:
     name = "provider"
+    # which intent this provider answers, so a glance can ask for one:
+    #   "own"  — your own facts (private, instant, the default glance)
+    #   "ai"   — an AI explains/translates it (needs a brain tier)
+    #   "shop" — prices & reviews from the open web (opt-in cloud)
+    facet = "own"
 
     def matches(self, sighting: ObjectSighting) -> bool:
         raise NotImplementedError
@@ -204,6 +209,8 @@ class AIProvider(PanelProvider):
     """
     name = "ai"
 
+    facet = "ai"
+
     def __init__(self, router, want: str = "quick"):
         self._router = router
         self._want = want
@@ -238,11 +245,14 @@ class ProviderRegistry:
         self._providers.append(provider)
 
     def build_panel(self, sighting: ObjectSighting,
-                    now: Optional[float] = None) -> ObjectPanel:
+                    now: Optional[float] = None,
+                    facets: Optional[set] = None) -> ObjectPanel:
         rows: list[PanelRow] = []
         sources: list[str] = []
         for prov in self._providers:
             try:
+                if facets is not None and getattr(prov, "facet", "own") not in facets:
+                    continue                  # this glance asked for a different facet
                 if not prov.matches(sighting):
                     continue
                 prov_rows = prov.build(sighting, now=now) or []

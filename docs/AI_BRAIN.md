@@ -51,6 +51,42 @@ explains it → cloud only if you enabled it and nothing local sufficed.**
 The laptop "brain" (Tier 2) is the reframed laptop — not an object you look
 at, but a private compute + knowledge node the whole system taps.
 
+### 2a. Brain modes — where the brain lives, and the cloud switch
+
+Two **independent** axes, not one dial. *Where the local brain lives* and
+*whether the cloud tier is allowed* are set separately, so any combination is
+valid (`Orchestrator.set_brain_mode(mode, cloud=…)`, `use_cloud(on)`):
+
+| Mode | Local brain | Cloud default | Needs internet? |
+|---|---|---|---|
+| **connected** *(default)* | on-device → Mac mini | **on** | for cloud only; Mac mini works on LAN |
+| **home** | on-device → Mac mini | off | no — LAN only |
+| **phone** | on-device only (phone **is** the brain) | off | no |
+
+**Phone mode can still turn cloud on** (`set_brain_mode("phone", cloud=True)`
+or `use_cloud(True)`): that's *no Mac mini, but reach the cloud for hard
+cases* — the right setup for someone who doesn't own a computer but has
+service. `local_only` skips only the Mac-mini remote tier; the cloud gate is
+independent.
+
+**What cloud ON buys you (vs. off):**
+
+| Capability | Cloud OFF (on-device / LAN) | Cloud ON |
+|---|---|---|
+| Name an object (Oracle) | ✓ fast, offline | ✓ (same Tier 0) |
+| DreamLayer's own memory, people, waypaths | ✓ always local | ✓ |
+| Search *your* files & mail (Lucid Recall) | ✓ on the Mac mini | ✓ |
+| Deep "explain / tell me more" on an object | ✓ Mac mini; **phone mode: coarse** | ✓ frontier VLM, richest |
+| Rare/obscure knowledge not in your files | ✗ ("nothing local matches") | ✓ |
+| Translation (Rosetta / Puente) breadth | ✓ common langs on-device | ✓ widest coverage |
+| Works in airplane mode | ✓ | ✗ (cloud tier needs a connection) |
+
+Rule of thumb: **everything that is *yours* — memory, people, your files,
+naming objects — works with cloud off.** Turning cloud on only adds reach for
+the *hardest, non-personal* asks (obscure facts, richest object explanations,
+long-tail translation), and always as an explicit, per-session opt-in.
+Nothing marked private ever leaves regardless of mode.
+
 ## 3. Interfaces (the seams)
 
 Small, stable contracts so any model/provider drops in. All are already the
@@ -132,8 +168,13 @@ Provenance can trace it.
 
 ## 8. Decisions (resolved)
 
-1. **Cloud posture** — **off by default**, opt-in per session for hard cases,
-   with a visible "left the device" indicator.
+1. **Cloud posture** *(revised)* — **connected by default**: cloud is allowed
+   so the best answer wins wherever you are, and on-device is the airplane-mode
+   fallback (DreamLayer works phone-only, just more limited). The Mac mini
+   brain runs over the internet by default too. **Advanced users** flip
+   `set_private_mode()` / `network_mode="lan_only"` to keep everything
+   on-device and home-LAN, no cloud. (Privacy Veil and "private events never
+   leave" still hold in either mode.)
 2. **Knowledge base** — the brain lives on an **always-on Mac mini (Apple
    Silicon)** and indexes **chosen directories** (a configurable watch-list),
    plus **email and iMessage read**. It can also **send** email/iMessage —

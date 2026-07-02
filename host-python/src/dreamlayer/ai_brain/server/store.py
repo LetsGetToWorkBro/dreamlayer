@@ -26,8 +26,15 @@ class BrainConfig:
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
-    cloud_enabled: bool = False     # opt-in cloud tier (Phase 4)
+    # network posture (product default = connected): "connected" reaches the
+    # internet + cloud; "lan_only" is the advanced home-only mode.
+    network_mode: str = "connected"
+    cloud_enabled: bool = True      # cloud tier allowed by default
     token: str = ""                 # pairing secret the phone must send
+
+    @property
+    def lan_only(self) -> bool:
+        return self.network_mode == "lan_only"
 
     def add_folder(self, path: str) -> bool:
         p = str(Path(path).expanduser())

@@ -98,6 +98,15 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </div>
 
   <div class="card">
+    <h2>Pair a phone</h2>
+    <p style="color:var(--muted);margin:0 0 12px">One code brings the whole
+      trio together — phone, this Brain, and your glasses. Open the phone app
+      and scan (or paste) the code below.</p>
+    <div class="row"><button onclick="pair()">Show pairing code</button></div>
+    <div id="pairout"></div>
+  </div>
+
+  <div class="card">
     <h2>History</h2>
     <ul id="history" class="hist"></ul>
   </div>
@@ -154,6 +163,16 @@ async function ask(){
     `<div class="src">${esc(r.tier)} · ${esc((r.sources||[]).join(", "))}</div></div>`
     :`<div class="ans">nothing in your files matches that yet.</div>`;
   loadHistory();
+}
+async function pair(){
+  const out=document.getElementById("pairout");
+  out.innerHTML="<div class='ans'>generating…</div>";
+  const r=await api("/dreamlayer/pair");
+  if(!r||!r.code){out.innerHTML="<div class='ans'>pairing is only available "+
+    "from the Brain itself (open this panel on the Mac mini).</div>";return;}
+  out.innerHTML=`<div class="ans"><div class="mono" style="word-break:break-all">`+
+    `${esc(r.code)}</div><div class="src">scan on the phone, or paste this code · `+
+    `${esc(r.url)}</div></div>`;
 }
 async function loadHistory(){
   const h=await api("/dreamlayer/history");const ul=document.getElementById("history");

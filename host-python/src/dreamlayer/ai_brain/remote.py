@@ -29,6 +29,7 @@ def _urllib_post(url: str, payload: dict, headers: dict,
 class _RemoteBrain:
     tier = "laptop"
     is_cloud = False
+    is_remote = True             # reachable over the network, not on-device
 
     def __init__(self, base_url: str, token: str = "",
                  http_post: Optional[Callable] = None, timeout: float = 30.0):
