@@ -74,6 +74,11 @@ class DreamEngine:
         self.timbre    = TimbreReactor(baselines=narrative,
                                        privacy=privacy)
         self.inner     = InnerWeather(privacy=privacy)
+        # confluence: optional EntangledSky (dreamlayer.confluence) —
+        # set by the app layer when a bond goes live; the engine only
+        # forwards its frames and exposes the weather it would share
+        self.confluence = None
+        self.last_palette_colors: list = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -164,6 +169,7 @@ class DreamEngine:
         palette_cmd = self.mic.tick(ctx)
         if palette_cmd:
             self.bridge.send_raw(palette_cmd)
+            self.last_palette_colors = palette_cmd.get("colors") or []
             # the room's memory of its own light (Yesterlight replay source)
             self.weather.record(ctx.place_signature, palette_cmd,
                                 ctx.mic_amplitude)
@@ -199,6 +205,13 @@ class DreamEngine:
         # transient gestures — churn rides a separate renderer channel)
         for frame in self.inner.tick(ctx):
             self.bridge.send_raw(frame)
+
+        # the entangled sky, when a bond is live — runs last so a merged
+        # or split sky overrides this tick's solo weather
+        if self.confluence is not None:
+            for frame in self.confluence.tick(self.inner.state,
+                                              self.last_palette_colors):
+                self.bridge.send_raw(frame)
 
         now = time.monotonic()
         if ctx.has_camera() and (now - self._last_scene_t) >= SCENE_INTERVAL_S:

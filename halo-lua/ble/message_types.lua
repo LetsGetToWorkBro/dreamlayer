@@ -48,6 +48,17 @@ local MT = {
   -- Python side dream_mode/timbre_reactor.py MSG_TIMBRE — keep in sync
   TIMBRE          = "timbre",
 
+  -- Confluence: two wearers, one entangled sky (host -> Halo)
+  -- {t="confluence", mode="merged"|"split"|"solo", tg=0..100,
+  --  seam_dd=deci-deg?, gap_deg=?, peer_rgb={r,g,b}?}
+  -- Python side confluence/entangle.py MSG_CONFLUENCE — keep in sync
+  CONFLUENCE      = "confluence",
+
+  -- TinCan: silent gesture ping from the bonded peer (host -> Halo)
+  -- {t="tincan", side_dd=deci-deg, pulses=[ms,…], gap_ms=n}
+  -- Python side confluence/tincan.py MSG_TINCAN — keep in sync
+  TINCAN          = "tincan",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",

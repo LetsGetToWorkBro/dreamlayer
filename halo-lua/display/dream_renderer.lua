@@ -30,6 +30,12 @@ local M = {}
 -- Inner Weather: the wearer's own climate (churn channel, {t="geometry"})
 local _churn = 0.0
 
+-- Confluence: the entangled sky's device share ({t="confluence"})
+local _confluence = nil      -- { mode=, tg=, seam_deg=, gap_deg=, peer_rgb= }
+
+-- TinCan: the partner's silent ping ({t="tincan"})
+local _tincan = nil          -- { side_deg=, pulses={ms}, gap_ms=, t0_ms= }
+
 -- Timbre: the current voice's rim waveform ({t="timbre"}), short-lived
 local _timbre = nil          -- { known=, side_deg=, points={12}, until_ms= }
 local TIMBRE_TTL_MS = 2500
@@ -49,6 +55,97 @@ function M.on_timbre(msg, now_ms)
 end
 
 function M.churn() return _churn end
+
+--- BLE handler ({t="confluence"}): merged/split/solo sky state. All
+--- color math happened on the phone; the device only draws the seam
+--- and the peer's half-band.
+function M.on_confluence(msg)
+  if not msg or not msg.mode then return end
+  if msg.mode == "solo" then
+    _confluence = nil
+    return
+  end
+  _confluence = {
+    mode     = msg.mode,
+    tg       = msg.tg or 50,
+    seam_deg = (msg.seam_dd or -900) / 10,
+    gap_deg  = msg.gap_deg or 16,
+    peer_rgb = msg.peer_rgb,
+  }
+end
+
+function M.confluence() return _confluence end
+
+--- BLE handler ({t="tincan"}): the partner's ping — a pulse train at
+--- their bearing, consumed over the following seconds.
+function M.on_tincan(msg, now_ms)
+  if not msg or not msg.pulses or #msg.pulses == 0 then return end
+  _tincan = {
+    side_deg = (msg.side_dd or 900) / 10,
+    pulses   = msg.pulses,
+    gap_ms   = msg.gap_ms or 220,
+    t0_ms    = now_ms or 0,
+  }
+end
+
+function M.tincan() return _tincan end
+
+local function draw_confluence(now_ms)
+  if not _confluence or not HAS_FRAME then return end
+  if _confluence.mode == "split" then
+    -- the peer's half-sky: an arc band opposite the seam, their color
+    local rgb = _confluence.peer_rgb or {60, 70, 75}
+    local color = rgb[1] * 65536 + rgb[2] * 256 + rgb[3]
+    local seam = _confluence.seam_deg
+    local gap  = _confluence.gap_deg
+    local steps = 40
+    for i = 0, steps do
+      -- peer owns the far half: seam+gap … seam+180-gap
+      local deg = seam + gap + (180 - 2 * gap) * i / steps
+      local rad = math.rad(deg)
+      local x = 128 + 100 * math.cos(rad)
+      local y = 128 + 100 * math.sin(rad)
+      frame.display.circle(math.floor(x), math.floor(y), 1, color, true)
+    end
+    -- the seam itself: two quiet ticks where the fronts meet
+    for _, d in ipairs({ seam, seam + 180 }) do
+      local rad = math.rad(d)
+      frame.display.line(
+        math.floor(128 + 94 * math.cos(rad)),
+        math.floor(128 + 94 * math.sin(rad)),
+        math.floor(128 + 106 * math.cos(rad)),
+        math.floor(128 + 106 * math.sin(rad)),
+        PAL.text_ghost)
+    end
+  end
+  -- merged mode draws nothing extra: one sky, no seam — the absence IS
+  -- the message
+end
+
+local function draw_tincan(now_ms)
+  if not _tincan or not HAS_FRAME then return end
+  local t = (now_ms or 0) - _tincan.t0_ms
+  local cursor = 0
+  local active = false
+  for _, ms in ipairs(_tincan.pulses) do
+    if t >= cursor and t < cursor + ms then
+      active = true
+      break
+    end
+    cursor = cursor + ms + _tincan.gap_ms
+  end
+  if t > cursor + 800 then
+    _tincan = nil
+    return
+  end
+  if active then
+    local rad = math.rad(_tincan.side_deg)
+    local x = 128 + 104 * math.cos(rad)
+    local y = 128 + 104 * math.sin(rad)
+    frame.display.circle(math.floor(x), math.floor(y), 3,
+                         PAL.accent_memory, true)
+  end
+end
 
 function M.timbre(now_ms)
   if _timbre and now_ms and _timbre.until_ms and now_ms > _timbre.until_ms then
@@ -347,6 +444,8 @@ function M.draw_frame(now_ms)
   -- NOTE: ghost anchor and synesthesia overlays are drawn by the card
   -- renderer when their respective cards are in the queue.
   draw_timbre(now_ms)
+  draw_confluence(now_ms)
+  draw_tincan(now_ms)
 end
 
 return M

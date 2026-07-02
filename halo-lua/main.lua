@@ -26,6 +26,11 @@ HostComm.register(MT.YESTERLIGHT,
 -- Timbre: known-voice waveforms land in the dream renderer
 HostComm.register(MT.TIMBRE,
                   function(msg) DreamRend.on_timbre(msg) end)
+-- Confluence: the entangled sky; TinCan: the partner's silent ping
+HostComm.register(MT.CONFLUENCE,
+                  function(msg) DreamRend.on_confluence(msg) end)
+HostComm.register(MT.TINCAN,
+                  function(msg) DreamRend.on_tincan(msg) end)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)
