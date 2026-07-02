@@ -22,6 +22,9 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 | Two wearers | **Confluence** | Bonded skies entangle: converge and they merge, drift and they split |
 | Living promises | **Commitment Drift** | Commitments are HUD physics objects — bloom, crack, and shatter by behavior and time |
 | Living light | **Palette Cycling** | The demoscene trick: the quiet sky flows like an aurora by recolouring slots, not redrawing pixels — zero-cost motion on-device |
+| Personal RPG | **Life Quest Engine** | Commitments become quests: complete them for XP, build streaks, rescue one from the brink for a bonus |
+| Hands-free how-to | **Instant Skill Overlay** | A step list compiled to a verified Figment you tap through; timed steps advance themselves |
+| Your own truth | **Fact Consistency** | New statements checked against your own memories — never the cloud — flagging when they can't both be true |
 
 ## Precision Lenses
 

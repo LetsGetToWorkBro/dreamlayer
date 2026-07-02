@@ -28,8 +28,10 @@ from .transport import (
 )
 from .deployer import StageDeployer, DeployRecord
 from .compiler import RealityCompilerV2, TextCompileResult
+from .skill import compile_skill, parse_skill, Step
 
 __all__ = [
+    "compile_skill", "parse_skill", "Step",
     "Figment", "Scene", "TextLine", "PulseSpec", "CounterDecl", "CounterOp",
     "Guard", "Transition", "FigmentError", "END", "SELF",
     "verify", "verify_or_raise", "BudgetReport", "Violation",
