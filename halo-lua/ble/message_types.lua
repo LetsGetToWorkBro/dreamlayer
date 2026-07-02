@@ -22,6 +22,15 @@ local MT = {
   CARD            = "card",
   COMMAND         = "command",
 
+  -- Dream Mode / Halo Cinema v1 raw frames (host -> Halo)
+  PALETTE         = "palette",        -- palette weather {colors=[{idx,y,cb,cr}]}
+  GEOMETRY        = "geometry",       -- legacy particle/line distortion
+  LINE_FIELD      = "line_field",     -- Line Field 2.0 {v=[48 ints]}
+  SPRITE          = "sprite",         -- TxSprite bitmap {data, x?, y?}
+  SPRITE_AVATAR   = "sprite_avatar",  -- 32x32 contact avatar (contacts ONLY)
+  DREAM_ENTER     = "dream_enter",
+  DREAM_EXIT      = "dream_exit",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",

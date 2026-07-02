@@ -93,7 +93,12 @@ local function render_dream_card(card)
   if ct == "WorldAnchorCard" then
     DreamRend.render_world_anchor(card)
   elseif ct == "SynesthesiaCard" then
-    DreamRend.render_synesthesia(card)
+    -- v2 payloads (Halo Cinema v1) compose phrase + gestural sprite
+    if card.version == 2 then
+      DreamRend.draw_synesthesia_v2(card)
+    else
+      DreamRend.render_synesthesia(card)
+    end
   end
 end
 

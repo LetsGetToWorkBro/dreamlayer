@@ -61,15 +61,19 @@ class SpriteBridge:
 
     def __init__(self, bridge) -> None:
         self._bridge = bridge
-        self._pending: Optional[bytes] = None   # packed TxSprite bytes
+        # (packed TxSprite bytes, msg type, x, y) or None
+        self._pending: Optional[tuple] = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def queue_image(self, image: "Image.Image") -> bool:
+    def queue_image(self, image: "Image.Image", x: int = 1, y: int = 1,
+                    msg_type: str = "sprite") -> bool:
         """Quantize image to 4bpp and queue for next flush_pending().
 
+        x/y anchor the sprite on the display (SynesthesiaCard v2 sends
+        y=128 for its bottom-half gesture; avatars send their placement).
         Returns True if queued, False if degraded (no brilliant-msg / PIL).
         """
         if not _HAS_PIL or not _HAS_BRILLIANT_MSG:
@@ -78,7 +82,7 @@ class SpriteBridge:
         try:
             png_bytes = _to_4bpp_png(image)
             sprite    = TxSprite.from_indexed_png_bytes(png_bytes)
-            self._pending = sprite.pack()
+            self._pending = (sprite.pack(), msg_type, x, y)
             return True
         except Exception as exc:
             log.warning("SpriteBridge.queue_image error: %s", exc)
@@ -88,22 +92,23 @@ class SpriteBridge:
         """Send the pending sprite frame if one exists. Fire-and-forget."""
         if self._pending is None:
             return False
-        data   = self._pending
+        data, msg_type, x, y = self._pending
         self._pending = None
         try:
-            self._bridge.send_raw({"t": "sprite", "data": data})
+            self._bridge.send_raw({"t": msg_type, "data": data, "x": x, "y": y})
             return True
         except Exception as exc:
             log.warning("SpriteBridge.flush_pending error: %s", exc)
             return False
 
-    def queue_from_bytes(self, png_bytes: bytes) -> bool:
+    def queue_from_bytes(self, png_bytes: bytes, x: int = 1, y: int = 1,
+                         msg_type: str = "sprite") -> bool:
         """Queue a pre-encoded 4bpp indexed PNG directly."""
         if not _HAS_BRILLIANT_MSG:
             return False
         try:
             sprite = TxSprite.from_indexed_png_bytes(png_bytes)
-            self._pending = sprite.pack()
+            self._pending = (sprite.pack(), msg_type, x, y)
             return True
         except Exception as exc:
             log.warning("SpriteBridge.queue_from_bytes error: %s", exc)
@@ -112,6 +117,50 @@ class SpriteBridge:
     @property
     def has_pending(self) -> bool:
         return self._pending is not None
+
+
+# ---------------------------------------------------------------------------
+# Gestural sprite rendering (SynesthesiaCard v2, Halo Cinema v1)
+# ---------------------------------------------------------------------------
+
+GESTURE_SIZE = 128    # 128×128 @ 4bpp ≈ 4KB packed — well under 8KB budget
+
+
+def render_gesture(sprite) -> Optional["Image.Image"]:
+    """Render a GesturalSprite (dominant color + 3 abstract shapes) to a
+    128×128 image for the bottom half of SynesthesiaCard v2.
+
+    Shapes draw as outlines in the dominant color with one dim echo each,
+    matching the Air-tier material rules (never solid fills).
+    """
+    if not _HAS_PIL:
+        return None
+    from PIL import ImageDraw
+
+    img = Image.new("RGB", (GESTURE_SIZE, GESTURE_SIZE), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    dom = sprite.dominant
+    color = ((dom >> 16) & 0xFF, (dom >> 8) & 0xFF, dom & 0xFF)
+    dim   = tuple(c // 3 for c in color)
+
+    for s in sprite.shapes[:3]:
+        kind, x, y, size = s["kind"], s["x"], s["y"], s["size"]
+        half = size // 2
+        if kind == "circle":
+            draw.ellipse([x - half, y - half, x + half, y + half], outline=color, width=2)
+            draw.ellipse([x - half - 4, y - half - 4, x + half + 4, y + half + 4],
+                         outline=dim, width=1)
+        elif kind == "line":
+            draw.line([x - half, y, x + half, y], fill=color, width=2)
+            draw.line([x - half, y + 4, x + half, y + 4], fill=dim, width=1)
+        elif kind == "rect":
+            draw.rectangle([x - half, y - half // 2, x + half, y + half // 2],
+                           outline=color, width=2)
+        else:  # triangle
+            pts = [(x, y - half), (x + half, y + half), (x - half, y + half)]
+            draw.polygon(pts, outline=color)
+            draw.polygon([(px, py + 3) for px, py in pts], outline=dim)
+    return img
 
 
 # ---------------------------------------------------------------------------

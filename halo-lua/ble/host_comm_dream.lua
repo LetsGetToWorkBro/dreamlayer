@@ -26,7 +26,9 @@ local _dream_active = false
 function M.register(dispatch)
   dispatch["palette"]     = M.on_palette
   dispatch["geometry"]    = M.on_geometry
+  dispatch["line_field"]  = M.on_line_field
   dispatch["sprite"]      = M.on_sprite
+  dispatch["sprite_avatar"] = M.on_sprite   -- same decode path; x/y placement
   dispatch["dream_enter"] = M.on_dream_enter
   dispatch["dream_exit"]  = M.on_dream_exit
 end
@@ -48,10 +50,19 @@ function M.on_geometry(msg)
   DR.on_geometry(msg)
 end
 
+function M.on_line_field(msg)
+  -- msg: {t="line_field", v=[x1,y1,x2,y2, ...12 vectors]}
+  -- Line Field 2.0: curl-noise vectors computed host-side (imu_reactor.py),
+  -- one MTU frame per tick.
+  DR.on_line_field(msg)
+end
+
 function M.on_sprite(msg)
-  -- msg: {t="sprite", data=binary_packed_sprite}
+  -- msg: {t="sprite", data=binary_packed_sprite, x=int?, y=int?}
   -- The brilliant-msg layer has already reassembled the chunked BLE frames.
-  -- msg.data is the raw packed TxSprite payload.
+  -- msg.data is the raw packed TxSprite payload. Optional x/y anchor the
+  -- sprite (SynesthesiaCard v2 sends y=128 for its bottom-half sprite;
+  -- Social Lens avatars send their 32×32 placement).
   if not msg.data then return end
   local HAS_FRAME = (type(_G.frame) == "table")
   if not HAS_FRAME then return end
@@ -62,7 +73,7 @@ function M.on_sprite(msg)
   end)
   if not ok or not spr then return end
   frame.display.bitmap(
-    1, 1,
+    msg.x or 1, msg.y or 1,
     spr.width,
     2 ^ spr.bpp,
     0,

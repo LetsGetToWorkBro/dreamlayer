@@ -283,6 +283,39 @@ def live_caption_card(
     }
 
 
+# ------------------------------------------------------------------ lens cards
+
+def truth_gauge_card(
+    verdict: str = "UNCERTAIN",
+    stages: list[dict] | None = None,
+    confidence: float | None = None,
+    deception_prob: float = 0.0,
+    origin: dict | None = None,
+    footer: str = "",
+) -> dict:
+    """TruthLensCard — 9-ring gauge (Halo Cinema v1, Phase 4).
+
+    One ring per analysis stage (face, au, voice, prosody, linguistic,
+    narrative, fusion, aggregate, verdict). Each stage dict carries
+    {name, confidence, direction} where direction colors the ring:
+    truthful → accent_success, deceptive → accent_attention,
+    insufficient → text_ghost. Entry uses the Truth Ripple signature from
+    `origin` (eye landmark); reduce_motion draws all rings statically.
+    """
+    return {
+        "type":           "TruthLensCard",
+        "dismiss_ms":     5000,
+        "verdict":        verdict,
+        "primary":        verdict,
+        "confidence":     confidence,
+        "deception_prob": round(deception_prob, 3),
+        "stages":         stages or [],
+        "origin":         origin or {"x": 128, "y": 96},
+        "footer":         footer,
+        "lines":          ["TRUTH LENS", verdict],
+    }
+
+
 # ------------------------------------------------------------------ dream cards
 
 def world_anchor_card(
@@ -344,6 +377,42 @@ def synesthesia_card(
             "eyebrow":   {"x": 128, "y": 88,  "size": "sm",   "color": T.ACCENT_MEMORY, "tracking": 4},
             "separator": {"x1": 64, "x2": 192, "y": 104},
             "primary":   {"x": 128, "y": 140, "size": "md",   "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
+def synesthesia_card_v2(
+    description: str = "",
+    dominant_color: int = 0x2CC79A,
+    shapes: list[dict] | None = None,
+    confidence: float | None = None,
+) -> dict:
+    """SynesthesiaCard v2 (Halo Cinema v1) — phrase + gestural sprite.
+
+    Composes the 6-word phrase (top half, ghost tier) with a 3-shape
+    gestural sprite (bottom half, streamed separately as a 128×128 4bpp
+    TxSprite anchored at y=128). `shapes` carries the sprite spec so the
+    phone preview can draw the identical composition without the sprite
+    payload.
+    """
+    display = description[:72] if len(description) > 72 else description
+    return {
+        "type":           "SynesthesiaCard",
+        "version":        2,
+        "dismiss_ms":     4000,
+        "description":    description,
+        "primary":        display,
+        "eyebrow":        "DREAM",
+        "dominant_color": dominant_color,
+        "shapes":         shapes or [],
+        "sprite_seen":    False,
+        "confidence":     confidence,
+        "lines":          ["DREAM", display],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm", "color": T.TEXT_GHOST, "tracking": 4},
+            "primary":   {"x": 128, "y": 96,  "size": "md", "color": T.TEXT_PRIMARY},
+            "separator": {"x1": 48, "x2": 208, "y": 126},
+            "sprite":    {"x": 64,  "y": 128, "w": 128, "h": 128},
         },
     }
 
@@ -507,6 +576,34 @@ ALL_SAMPLES: dict[str, dict] = {
     "person_context":      person_context(
         "Jordan", headline="Sent invoice Wed", detail="Last seen today"
     ),
+    "truth_gauge":         truth_gauge_card(
+        verdict="ELEVATED",
+        confidence=0.74,
+        deception_prob=0.71,
+        footer="Jordan",
+        stages=[
+            {"name": "face",       "confidence": 0.92, "direction": "truthful"},
+            {"name": "au",         "confidence": 0.61, "direction": "deceptive"},
+            {"name": "voice",      "confidence": 0.55, "direction": "deceptive"},
+            {"name": "prosody",    "confidence": 0.48, "direction": "deceptive"},
+            {"name": "linguistic", "confidence": 0.35, "direction": "truthful"},
+            {"name": "narrative",  "confidence": 0.0,  "direction": "insufficient"},
+            {"name": "fusion",     "confidence": 0.74, "direction": "deceptive"},
+            {"name": "aggregate",  "confidence": 0.74, "direction": "deceptive"},
+            {"name": "verdict",    "confidence": 0.71, "direction": "deceptive"},
+        ],
+    ),
+    "person_context_v2": {
+        **person_context(
+            "Jordan", headline="Studio Atlas  •  Producer",
+            detail="Met 2026-06-24",
+        ),
+        "why":        "Jordan asked about the invoice deadline",
+        "confidence": 0.88,
+        "conf_color": T.conf_color(0.88),
+        "has_avatar": True,
+        "contact_id": "c-jordan-001",
+    },
     "privacy_paused":      privacy_paused(),
     "error":               error_card("BLE timeout"),
     "low_confidence":      low_confidence(),
@@ -553,6 +650,15 @@ ALL_SAMPLES: dict[str, dict] = {
     ),
     "synesthesia":         synesthesia_card(
         description="soft amber ritual familiar warmth",
+    ),
+    "synesthesia_v2":      synesthesia_card_v2(
+        description="warm cafe hum, cups and patience",
+        dominant_color=0xE06B52,
+        shapes=[
+            {"kind": "circle",   "x": 44,  "y": 56, "size": 36},
+            {"kind": "line",     "x": 64,  "y": 92, "size": 48},
+            {"kind": "triangle", "x": 96,  "y": 48, "size": 16},
+        ],
     ),
     "palette_shift":       palette_shift_card(
         colors=[{"idx": 1, "y": 420, "cb": 560, "cr": 450}],

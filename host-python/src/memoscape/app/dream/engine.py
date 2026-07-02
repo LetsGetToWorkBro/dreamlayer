@@ -34,8 +34,9 @@ from ..recall_context import RecallContext
 from .mic_reactor import MicReactor
 from .imu_reactor import ImuReactor
 from .ghost_layer import GhostLayer
+from .place_reactor import PlaceReactor
 from .scene_describer import SceneDescriber
-from .sprite_bridge import SpriteBridge
+from .sprite_bridge import SpriteBridge, render_gesture
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class DreamEngine:
         self.mic       = MicReactor()
         self.imu       = ImuReactor()
         self.ghost     = GhostLayer(db=db, privacy=privacy)
+        self.place     = PlaceReactor()
         self.describer = SceneDescriber()
         self.sprites   = SpriteBridge(bridge)
 
@@ -151,9 +153,19 @@ class DreamEngine:
         if palette_cmd:
             self.bridge.send_raw(palette_cmd)
 
+        # PlaceReactor runs after MicReactor by contract: while a place bias
+        # is ramping, the ambient trust signal wins the drift_b slot.
+        place_cmd = self.place.tick(ctx)
+        if place_cmd:
+            self.bridge.send_raw(place_cmd)
+
         geo_cmd = self.imu.tick(ctx)
         if geo_cmd:
             self.bridge.send_raw(geo_cmd)
+
+        field_cmd = self.imu.line_field(ctx)
+        if field_cmd:
+            self.bridge.send_raw(field_cmd)
 
         ghost_card = self.ghost.tick(ctx)
         if ghost_card:
@@ -165,4 +177,10 @@ class DreamEngine:
             scene_card = await self.describer.tick(ctx)
             if scene_card:
                 self.bridge.send_card(scene_card, event="dream_scene")
+                # Stream the gestural sprite for the card's bottom half
+                gesture = self.describer.last_sprite
+                if gesture is not None:
+                    img = render_gesture(gesture)
+                    if img is not None:
+                        self.sprites.queue_image(img, x=64, y=128)
                 await self.sprites.flush_pending()

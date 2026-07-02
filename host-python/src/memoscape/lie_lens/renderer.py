@@ -25,8 +25,16 @@ CONFIDENCE_THRESHOLD = 0.25
 class LieLensRenderer:
     """Converts a LieLensResult into HUD render instructions."""
 
-    def render(self, result: Optional[LieLensResult]) -> Optional[dict]:
-        """Return a HUD card dict, or None if nothing should be displayed."""
+    def render(self, result: Optional[LieLensResult],
+               origin: Optional[dict] = None) -> Optional[dict]:
+        """Return a HUD card dict, or None if nothing should be displayed.
+
+        Halo Cinema v1: emits the TruthLensCard 9-ring gauge (one ring per
+        analysis stage, filled by stage confidence, colored by signal
+        direction) with a Truth Ripple entry from the eye landmark
+        `origin`. The legacy flat LieLensCard payload remains available
+        via result.to_hud_card() for downstream consumers.
+        """
         if result is None:
             return None
 
@@ -40,7 +48,7 @@ class LieLensRenderer:
         if c.deception_prob < DISPLAY_THRESHOLD:
             return None
 
-        card = result.to_hud_card()
+        card = result.to_gauge_card(origin=origin)
 
         # Enrich renderer hints
         card["renderer_hints"] = self._build_hints(c)

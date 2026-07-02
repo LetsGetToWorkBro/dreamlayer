@@ -58,16 +58,22 @@ class LinguisticFrame:
     word_count: int
 
     def deception_score(self) -> float:
-        """Heuristic 0-1 deception score from linguistic features."""
+        """Heuristic 0-1 deception score from linguistic features.
+
+        Each channel contributes fraction-of-saturation × channel weight
+        (weights: hedging .30, first-person .25, complexity .25,
+        negation .20). The previous form capped the *fraction* at the
+        weight instead of scaling it, so calm speech scored ~0.43.
+        """
         score = 0.0
-        # High hedging = uncertainty / distancing
+        # High hedging = uncertainty / distancing (saturates at 15%)
         score += min(self.hedging_rate / 0.15, 1.0) * 0.30
         # Low first-person = distancing from statements
         first_person_dev = max(0.0, 0.08 - self.first_person_rate)
         score += min(first_person_dev / 0.08, 1.0) * 0.25
         # High complexity = over-qualification
         score += min(self.complexity_score, 1.0) * 0.25
-        # High negation = defensive language
+        # High negation = defensive language (saturates at 10%)
         score += min(self.negation_rate / 0.10, 1.0) * 0.20
         return min(score, 1.0)
 
@@ -103,6 +109,22 @@ class ContactBaseline:
             delta2 = v - self.au_mean[i]
             # Approximate std (simplified)
             self.au_std[i] = max(0.01, abs(delta * delta2) ** 0.5 if n > 1 else 0.1)
+
+        def upd(mean: dict, std: dict, name: str, v: float) -> None:
+            m = mean.get(name, 0.0)
+            delta = v - m
+            m += delta / n
+            mean[name] = m
+            std[name] = max(0.01, abs(delta * (v - m)) ** 0.5 if n > 1 else 0.1)
+
+        for name in ("pitch_mean_hz", "pitch_variance", "jitter_pct",
+                     "shimmer_pct", "hesitation_rate", "pause_ratio",
+                     "speech_rate_norm", "energy_db"):
+            upd(self.prosody_mean, self.prosody_std, name, getattr(prosody, name))
+        for name in ("hedging_rate", "first_person_rate",
+                     "complexity_score", "negation_rate"):
+            upd(self.linguistic_mean, self.linguistic_std, name, getattr(linguistic, name))
+
         # Mark calibrated
         self.is_calibrated = n >= self.MIN_CALIBRATION_SAMPLES
 
@@ -198,4 +220,79 @@ class LieLensResult:
                     int(c.linguistic_z * 5) if c.linguistic_z > 1.5 else 0
                 ),
             },
+        }
+
+    # ------------------------------------------------------------------
+    # Halo Cinema v1: 9-ring gauge card (docs/HALO_CINEMA_V1.md Phase 4)
+    # ------------------------------------------------------------------
+
+    # Ordered gauge stages: 7 analysis rings + aggregate + verdict
+    GAUGE_STAGES = (
+        "face", "au", "voice", "prosody", "linguistic",
+        "narrative", "fusion", "aggregate", "verdict",
+    )
+
+    def gauge_stages(self) -> list[dict]:
+        """Per-stage {name, confidence, direction} for the 9-ring gauge.
+
+        direction: "truthful" | "deceptive" | "insufficient" — a stage with
+        no data reads insufficient (slate ring), matching the design rule
+        that absence of evidence is displayed, never hidden.
+        """
+        c = self.credibility
+
+        def z_stage(name: str, z: float, present: bool) -> dict:
+            if not present:
+                return {"name": name, "confidence": 0.0, "direction": "insufficient"}
+            strength = min(abs(z) / 3.0, 1.0)
+            direction = "deceptive" if z > 1.0 else "truthful"
+            return {"name": name, "confidence": round(max(strength, 0.15), 3),
+                    "direction": direction}
+
+        has_face  = self.au_frame is not None
+        has_voice = self.prosody_frame is not None
+        has_ling  = self.linguistic_frame is not None
+
+        face_conf = self.au_frame.face_confidence if has_face else 0.0
+        stages = [
+            {"name": "face", "confidence": round(face_conf, 3),
+             "direction": "truthful" if has_face else "insufficient"},
+            z_stage("au", c.micro_expression_z, has_face),
+            {"name": "voice",
+             "confidence": round(self.prosody_frame.stress_score(), 3) if has_voice else 0.0,
+             "direction": ("deceptive" if has_voice and c.voice_stress_z > 1.0
+                           else "truthful" if has_voice else "insufficient")},
+            z_stage("prosody", c.voice_stress_z, has_voice),
+            z_stage("linguistic", c.linguistic_z, has_ling),
+            {"name": "narrative", "confidence": 0.0, "direction": "insufficient"},
+            {"name": "fusion", "confidence": round(c.confidence, 3),
+             "direction": "deceptive" if c.deception_prob >= 0.5 else "truthful"},
+            {"name": "aggregate", "confidence": round(c.confidence, 3),
+             "direction": "deceptive" if c.deception_prob >= 0.5 else "truthful"},
+            {"name": "verdict", "confidence": round(c.deception_prob, 3),
+             "direction": "deceptive" if c.deception_prob >= 0.5 else "truthful"},
+        ]
+        return stages
+
+    def to_gauge_card(self, origin: Optional[dict] = None) -> dict:
+        """Render as a TruthLensCard 9-ring gauge payload.
+
+        origin: {"x", "y"} eye-landmark display coords for the Truth Ripple
+        entry signature; defaults to the upper face zone (128, 96).
+        """
+        c = self.credibility
+        stages = self.gauge_stages()
+        return {
+            "type": "TruthLensCard",
+            "dismiss_ms": 5000,
+            "verdict": c.label,
+            "primary": c.label,
+            "confidence": round(c.confidence, 2),
+            "deception_prob": round(c.deception_prob, 2),
+            "stages": stages,
+            "origin": origin or {"x": 128, "y": 96},
+            "is_stranger": c.is_stranger,
+            "footer": self.contact_name or ("Stranger" if c.is_stranger else "Unknown"),
+            "lines": ["TRUTH LENS", c.label,
+                      f"{round(c.deception_prob * 100)}% deception signal"],
         }

@@ -57,4 +57,27 @@ function layout.in_circle(x, y)
     return (dx * dx + dy * dy) <= (layout.RADIUS * layout.RADIUS)
 end
 
+--- Safe-area inset radius (16px inside the circular clip).
+layout.SAFE_INSET_RADIUS = layout.RADIUS - 16
+
+--- Debug-build guard: assert that a circle of radius r centred at (x, y)
+--- stays inside the circular safe area. Only raises when debug builds set
+--- layout.DEBUG = true (draw calls must never crash production).
+--- @param x number  centre x
+--- @param y number  centre y
+--- @param r number  radius of the drawn element (0 for points/text anchors)
+--- @return  boolean true if inside the safe area
+function layout.assert_safe(x, y, r)
+    r = r or 0
+    local dx = x - layout.CX
+    local dy = y - layout.CY
+    local ok = (math.sqrt(dx * dx + dy * dy) + r) <= layout.SAFE_INSET_RADIUS
+    if layout.DEBUG and not ok then
+        error(string.format(
+            "layout.assert_safe: element at (%d,%d) r=%d escapes safe radius %d",
+            math.floor(x), math.floor(y), math.floor(r), layout.SAFE_INSET_RADIUS))
+    end
+    return ok
+end
+
 return layout
