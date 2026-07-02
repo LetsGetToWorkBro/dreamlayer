@@ -72,21 +72,41 @@ docs, README, halo-lua comments, phone-app, `.env.example`, and demo
 scripts updated. Zero tracked files contain `memoscape`, `lie_lens`,
 `face_recall`, or their camel-case forms.
 
-## Out of scope / known notes
+## Known notes
 
-- **GitHub repo slug** is still `memoscape` (and the default clone
-  directory with it). Renaming the repo is a Settings action on GitHub;
-  old URLs redirect after rename.
+- **GitHub repo slug**: renamed to `DreamLayer` by the owner
+  (2026-07-02). GitHub redirects the old `memoscape` URLs — existing
+  clones, the CI checkout, and old links keep working without changes.
 - **Env var rename is breaking** for anyone with `MEMOSCAPE_*` in a local
   `.env` — intentional per "the name is gone," called out here instead of
   shipping a compat shim.
-- **Pre-existing breakage, unchanged by this PR:**
-  `scripts/run_demo_wallet.py` and `scripts/run_demo_multi_commit.py`
-  import a module-level `render` that PR #8's renderer refactor moved into
-  `CardRenderer.render` — they were already broken on main before this
-  migration and fail identically after it.
+- **Legacy demo scripts repaired** (follow-up commit on this PR):
+  PR #8's renderer refactor had silently removed the module-level
+  `render()` that `run_demo_wallet.py` / `run_demo_multi_commit.py` were
+  built on — both were already broken on main. Restored `render()` as a
+  thin delegate over a shared `CardRenderer`, and hardened
+  `_object_recall` to accept the simulator's structured
+  `{"name": …, "near": …}` payloads alongside halo_lab's flat strings.
+  All four legacy demos (`wallet`, `multi_commit`, `edge_cases`,
+  `cinema`) now run.
 - Git history (old commit messages, merged PR titles) necessarily retains
   the old names.
+
+## Divergence-fix proof (added after review)
+
+To confirm no bugfix was stranded in a stale copy, origin/main's
+`memoscape/*` trees were re-extracted, run through the identical
+path-move + rename pipeline, and diffed against this branch's
+`dreamlayer/*`:
+
+- host package: the **only** differences are the nine relative-import
+  fixes required by the new layout (`..recall_context` →
+  `..orchestrator.recall_context` ×6, `...hud` → `..hud`, `.dream` →
+  `..dream_mode`, `..app.orchestrator` → `..orchestrator.orchestrator`).
+- root package: **byte-identical**.
+- Spot-checked markers all present post-migration: the #8 ghost-layer
+  young-clock fix, `place_reactor.py`, the Truth Lens 9-ring gauge
+  renderer, and the corrected `deception_score` channel weighting.
 
 ## Verification
 

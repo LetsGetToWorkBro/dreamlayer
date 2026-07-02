@@ -510,10 +510,17 @@ class CardRenderer:
           - DETAIL: bracketed, 2px below hero, ghost
           - FOOTER: ghost, near bottom
         """
-        obj_name = (card.get("object") or card.get("primary") or "").upper()
-        place    = card.get("place") or ""
-        detail   = card.get("detail") or ""
-        footer   = card.get("last_seen") or card.get("footer") or ""
+        def _name(v) -> str:
+            # simulator scenarios send {"name": …, "near"/"signature": …}
+            # structures; halo_lab samples send flat strings — accept both
+            if isinstance(v, dict):
+                return str(v.get("name") or v.get("near") or "")
+            return str(v or "")
+
+        obj_name = _name(card.get("object") or card.get("primary")).upper()
+        place    = _name(card.get("place"))
+        detail   = _name(card.get("detail"))
+        footer   = _name(card.get("last_seen") or card.get("footer"))
         conf     = card.get("confidence")
         jewel_color = T.conf_color(conf)
 
@@ -806,3 +813,21 @@ class CardRenderer:
         self._dot(draw, 107, 180, 2, T.TEXT_GHOST, alpha=80)
         self._dot(draw, 128, 184, 2, T.TEXT_GHOST, alpha=60)
         self._dot(draw, 149, 180, 2, T.TEXT_GHOST, alpha=80)
+
+
+# ---------------------------------------------------------------------------
+# Module-level convenience API
+# ---------------------------------------------------------------------------
+# The Cinema refactor moved rendering into CardRenderer and silently dropped
+# the module-level render() that the legacy demo scripts were built on.
+# Restore it as a thin delegate over one shared renderer.
+
+_default_renderer: "CardRenderer | None" = None
+
+
+def render(card: dict) -> Image.Image:
+    """Render one HUD card dict to a 256x256 image."""
+    global _default_renderer
+    if _default_renderer is None:
+        _default_renderer = CardRenderer()
+    return _default_renderer.render(card)
