@@ -23,10 +23,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
+import threading
+import time
+
 from ..schema import Answer
 from .store import BrainConfig, QueryHistory
 from .index import FileIndex
 from .backends import OllamaBackend, make_synthesizer, vision_answer
+from .macos_sources import collect_documents
 from .panel import render_panel
 
 TOKEN_HEADER = "X-DreamLayer-Token"
@@ -35,13 +39,67 @@ TOKEN_HEADER = "X-DreamLayer-Token"
 class Brain:
     """The Brain's live state: config + index + history, rebuilt on change."""
 
-    def __init__(self, cfg_dir: Path | str):
+    def __init__(self, cfg_dir: Path | str, sources_fn=None):
         self.cfg_dir = Path(cfg_dir)
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
         self.index = FileIndex(self.config)
+        # macOS message/mail documents (folded in when email is enabled)
+        self._sources_fn = sources_fn or collect_documents
+        self._sig = None
+        self._watch_stop: threading.Event | None = None
         self._wire_model()
+        self.reindex()
+
+    def reindex(self) -> dict:
         self.index.reindex()
+        if self.config.email_enabled:
+            try:
+                self.index.add_documents(self._sources_fn(self.config))
+            except Exception:
+                pass
+        self._sig = self._signature()
+        return self.index.stats()
+
+    # -- auto-reindex when watched folders change ------------------------
+
+    def _signature(self):
+        sig = []
+        for folder in self.config.folders:
+            base = Path(folder).expanduser()
+            if base.is_dir():
+                try:
+                    for f in base.rglob("*"):
+                        if f.is_file():
+                            sig.append((str(f), f.stat().st_mtime_ns))
+                except OSError:
+                    pass
+        return tuple(sorted(sig))
+
+    def poll(self) -> bool:
+        """Reindex if the watched folders changed since last scan."""
+        if self._signature() != self._sig:
+            self.reindex()
+            return True
+        return False
+
+    def start_watching(self, interval: float = 3.0) -> None:
+        if self._watch_stop is not None:
+            return
+        self._watch_stop = threading.Event()
+
+        def loop():
+            while not self._watch_stop.wait(interval):
+                try:
+                    self.poll()
+                except Exception:
+                    pass
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_watching(self) -> None:
+        if self._watch_stop is not None:
+            self._watch_stop.set()
+            self._watch_stop = None
 
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
@@ -142,18 +200,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     brain.config.add_folder(b.get("path", ""))
                 elif b.get("action") == "remove":
                     brain.config.remove_folder(b.get("path", ""))
-                brain.save(); brain.index.reindex()
+                brain.save(); brain.reindex()
                 self._json(200, {"config": brain.config.public(),
                                  "stats": brain.index.stats()})
             elif path == "/dreamlayer/config":
                 brain.apply_config(self._body())
-                brain.index.reindex()
+                brain.reindex()
                 self._json(200, {"config": brain.config.public()})
             elif path == "/dreamlayer/upload":
                 folder = (qs.get("folder", [""])[0])
                 name = Path(qs.get("name", ["dropped.txt"])[0]).name
                 ok = _write_upload(brain, folder, name, self._raw())
-                brain.index.reindex()
+                brain.reindex()
                 self._json(200 if ok else 400,
                            {"ok": ok, "stats": brain.index.stats()})
             elif path == "/dreamlayer/brain/ask":

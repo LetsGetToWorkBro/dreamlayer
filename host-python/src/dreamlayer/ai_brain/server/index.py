@@ -73,6 +73,14 @@ class FileIndex:
                     self._passages.append((path.name, p))
         return self.stats()
 
+    def add_documents(self, docs: list[tuple[str, str]]) -> dict:
+        """Fold in extra (name, text) documents — e.g. iMessage/Mail — that
+        aren't files on disk. Called after reindex()."""
+        for name, text in docs:
+            for p in _passages(text):
+                self._passages.append((name, p))
+        return self.stats()
+
     def stats(self) -> dict:
         return {"folders": len(self.config.folders),
                 "passages": len(self._passages),

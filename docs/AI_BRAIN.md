@@ -7,8 +7,12 @@
   phone connects via `RemoteVisionBrain`/`RemoteKnowledgeBrain` (`connect_brain`).
   Vision uses the Ollama backend seam (keyword retrieval works with no model).
 - **P3** — the config layer: folders, drag-drop upload, model choice, and
-  **query history**, all editable from the control panel. Email/iMessage read
-  and the draft→approve send flow remain macOS-specific seams (see §7).
+  **query history**, all editable from the control panel; **auto-reindex**
+  when watched folders change. **Mac mini sources** (`macos_sources.py`):
+  iMessage (chat.db) and Mail (.emlx) read and folded into the index when
+  email is enabled, plus a **draft → approve → send** path that never sends
+  silently. Setup: `laptop-companion/install-macos.sh` +
+  [`docs/OLLAMA_SETUP.md`](OLLAMA_SETUP.md).
 - **P4** — the **opt-in cloud tier** (`CloudVisionBrain`/`CloudKnowledgeBrain`),
   gated by `opt_in_cloud()`.
 

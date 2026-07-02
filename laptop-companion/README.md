@@ -78,12 +78,17 @@ AI node — index chosen folders, drag-drop files in, pick your model (Ollama),
 ask questions grounded in your own files, and keep a query history, all from a
 web control panel:
 
+One-command Mac mini setup (Ollama + models + launch-at-login):
+
 ```bash
-python -m dreamlayer.ai_brain.server --token rune-birch
-# control panel at http://<mac-mini>:7777/
+./install-macos.sh --token rune-birch
+# then open the control panel at http://<mac-mini>:7777/
 ```
 
-See [`docs/AI_BRAIN.md`](../docs/AI_BRAIN.md). The phone connects to it with
+Or run it directly: `python -m dreamlayer.ai_brain.server --token rune-birch`.
+It also reads iMessage + Mail (when enabled) and can draft→approve→send.
+See [`docs/AI_BRAIN.md`](../docs/AI_BRAIN.md) and
+[`docs/OLLAMA_SETUP.md`](../docs/OLLAMA_SETUP.md). The phone connects with
 `connect_brain(router, url, token)`.
 
 ## How it fits DreamLayer
