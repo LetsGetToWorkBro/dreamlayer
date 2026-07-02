@@ -474,19 +474,31 @@ class Orchestrator:
         """Allow or forbid cloud AI tiers for this session."""
         self.brain.opt_in_cloud(on)
 
-    def set_brain_mode(self, mode: str) -> None:
-        """Where the intelligence lives:
+    def set_brain_mode(self, mode: str, cloud: bool | None = None) -> None:
+        """Where the intelligence lives (two independent axes: local brain +
+        cloud):
           connected — on-device → Mac mini → cloud (default; best answer wins)
           home      — on-device + Mac mini, no cloud (private, needs your LAN)
-          phone     — on-device only; the phone IS the brain (fully offline,
-                      more limited)
+          phone     — on-device only; the phone IS the brain. Cloud is off by
+                      default (the airplane/no-service case) but can be turned
+                      on with cloud=True — phone-primary, cloud for hard cases.
+
+        `cloud` overrides the per-mode default when given, so any mode can run
+        with or without the cloud tier.
         """
         if mode not in ("connected", "home", "phone"):
             raise ValueError(f"unknown brain mode: {mode!r}")
         self.brain_mode = mode
-        self.brain.opt_in_cloud(mode == "connected")
+        use_cloud = (mode == "connected") if cloud is None else cloud
+        self.brain.opt_in_cloud(use_cloud)
         self.brain.set_local_only(mode == "phone")
-        self.private_mode = mode != "connected"
+        self.private_mode = not use_cloud
+
+    def use_cloud(self, on: bool = True) -> None:
+        """Turn the cloud tier on/off without changing where the local brain
+        lives — works in phone mode too."""
+        self.brain.opt_in_cloud(on)
+        self.private_mode = not on
 
     def set_private_mode(self, on: bool = True) -> None:
         """Advanced opt-out: home mode (on-device + Mac mini, no cloud)."""

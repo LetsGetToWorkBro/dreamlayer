@@ -53,9 +53,11 @@ class BrainRouter:
     # -- routing ---------------------------------------------------------
 
     def _allowed(self, brain) -> bool:
-        if self.local_only and (getattr(brain, "is_cloud", False)
-                                or getattr(brain, "is_remote", False)):
-            return False                      # phone-only: skip Mac mini + cloud
+        # local_only ("the phone is the brain") skips the Mac-mini remote tier
+        # only — cloud stays an independent choice you can still turn on.
+        if self.local_only and getattr(brain, "is_remote", False):
+            return False
+        # cloud tiers are gated solely by the cloud opt-in, in any mode.
         return self.cloud_opt_in or not getattr(brain, "is_cloud", False)
 
     def explain(self, frame, label: str,

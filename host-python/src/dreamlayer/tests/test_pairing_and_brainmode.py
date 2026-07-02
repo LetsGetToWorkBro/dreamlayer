@@ -21,6 +21,14 @@ class FakeRemoteKnowledge:
         return Answer(text="from the mac mini", tier="laptop")
 
 
+class FakeCloudKnowledge:
+    tier, is_cloud, is_remote = "cloud", True, False
+
+    def ask(self, q):
+        from dreamlayer.ai_brain import Answer
+        return Answer(text="from the cloud", tier="cloud")
+
+
 # ---------------------------------------------------------------------------
 # Pairing code
 # ---------------------------------------------------------------------------
@@ -76,6 +84,23 @@ class TestBrainModes:
         orc = self._orc()
         orc.set_brain_mode("phone")
         assert orc.brain.local_only and not orc.brain.cloud_opt_in
+
+    def test_phone_can_still_opt_into_cloud(self):
+        # no Mac mini, but internet — phone-primary, cloud for hard cases
+        orc = self._orc()
+        orc.set_brain_mode("phone", cloud=True)
+        assert orc.brain.local_only and orc.brain.cloud_opt_in
+        assert not orc.private_mode                # cloud on ⇒ not private
+        orc.use_cloud(False)                        # flip cloud off, stay phone
+        assert orc.brain.local_only and not orc.brain.cloud_opt_in
+        assert orc.private_mode
+
+    def test_phone_with_cloud_skips_mac_mini_reaches_cloud(self):
+        router = BrainRouter(cloud_opt_in=True, local_only=True)
+        router.add_knowledge(FakeRemoteKnowledge())            # mac mini (skip)
+        router.add_knowledge(FakeCloudKnowledge())             # cloud (allowed)
+        ans = router.ask("anything")
+        assert ans is not None and ans.text == "from the cloud"
 
     def test_phone_mode_skips_the_remote_tier(self):
         router = BrainRouter(cloud_opt_in=True)
