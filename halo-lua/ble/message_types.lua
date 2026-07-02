@@ -43,6 +43,11 @@ local MT = {
   -- Python side dream_mode/yesterlight.py MSG_YESTERLIGHT — keep in sync
   YESTERLIGHT     = "yesterlight",
 
+  -- Timbre: known-voice waveform at the rim (host -> Halo)
+  -- {t="timbre", known=0|1, side_dd=deci-deg, points=[12 ints 1..15]}
+  -- Python side dream_mode/timbre_reactor.py MSG_TIMBRE — keep in sync
+  TIMBRE          = "timbre",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",

@@ -27,6 +27,56 @@ local HAS_FRAME = (type(_G.frame) == "table")
 
 local M = {}
 
+-- Timbre: the current voice's rim waveform ({t="timbre"}), short-lived
+local _timbre = nil          -- { known=, side_deg=, points={12}, until_ms= }
+local TIMBRE_TTL_MS = 2500
+local TIMBRE_R = 104         -- waveform centerline radius (inside the rim)
+local TIMBRE_SPAN = 36       -- degrees of arc the 12 points occupy
+
+--- BLE handler ({t="timbre"}): a known contact's visual timbre, or a
+--- stranger's gray static, at the side the voice came from.
+function M.on_timbre(msg, now_ms)
+  if not msg or not msg.points then return end
+  _timbre = {
+    known    = (msg.known or 0) == 1,
+    side_deg = (msg.side_dd or -900) / 10,
+    points   = msg.points,
+    until_ms = (now_ms or 0) + TIMBRE_TTL_MS,
+  }
+end
+
+function M.timbre(now_ms)
+  if _timbre and now_ms and _timbre.until_ms and now_ms > _timbre.until_ms then
+    _timbre = nil
+  end
+  return _timbre
+end
+
+local function draw_timbre(now_ms)
+  if not _timbre then return end
+  if now_ms and _timbre.until_ms and now_ms > _timbre.until_ms then
+    _timbre = nil
+    return
+  end
+  if not HAS_FRAME then return end
+  local color = _timbre.known and PAL.accent_memory or PAL.text_ghost
+  local n = #_timbre.points
+  local prev_x, prev_y = nil, nil
+  for i = 1, n do
+    local deg = _timbre.side_deg - TIMBRE_SPAN / 2
+                + TIMBRE_SPAN * (i - 1) / (n - 1)
+    local r = TIMBRE_R + (_timbre.points[i] - 8)   -- amplitude off centerline
+    local rad = math.rad(deg)
+    local x = 128 + r * math.cos(rad)
+    local y = 128 + r * math.sin(rad)
+    if prev_x then
+      frame.display.line(math.floor(prev_x), math.floor(prev_y),
+                         math.floor(x), math.floor(y), color)
+    end
+    prev_x, prev_y = x, y
+  end
+end
+
 -- Reserve the Air-tier dynamic slots (idempotent; mirrors themes.py
 -- DYNAMIC_SLOTS so host palette frames land on the slots we draw with).
 PAL.reserve_dynamic("sky",     PAL.accent_memory_dim, 1)
@@ -279,6 +329,7 @@ function M.draw_frame(now_ms)
   M.draw_particles()
   -- NOTE: ghost anchor and synesthesia overlays are drawn by the card
   -- renderer when their respective cards are in the queue.
+  draw_timbre(now_ms)
 end
 
 return M

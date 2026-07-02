@@ -23,6 +23,9 @@ HostComm.register(MT.HORIZON, function(msg) Horizon.on_frame(msg) end)
 -- Yesterlight scrub state rides the same plotter
 HostComm.register(MT.YESTERLIGHT,
                   function(msg) Horizon.on_yesterlight(msg) end)
+-- Timbre: known-voice waveforms land in the dream renderer
+HostComm.register(MT.TIMBRE,
+                  function(msg) DreamRend.on_timbre(msg) end)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)
