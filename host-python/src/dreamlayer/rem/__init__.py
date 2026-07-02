@@ -22,10 +22,12 @@ from .cycle import REMCycle, DreamReel, DreamScene
 from .poet import DreamPoet
 from .bias import RetrievalBias, event_key
 from .reel import render_reel, reel_transcript
+from .nightly import NightWatch
 
 __all__ = [
     "REMCycle", "DreamReel", "DreamScene",
     "DreamPoet",
     "RetrievalBias", "event_key",
     "render_reel", "reel_transcript",
+    "NightWatch",
 ]

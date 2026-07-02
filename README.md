@@ -13,7 +13,13 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 | Ambient state | **Dream Mode** | Passive listening, background sensing, double-tap entry point |
 | Memory resurfacing | **Ghost Layer** | WorldAnchorCards, memory echoes, contextual recalls |
 | Clear retrieval | **Lucid Recall** | On-demand face/name/fact answer cards |
-| Behavior builder | **Reality Compiler** | Plain English → validated Lua behaviors deployed to glasses |
+| Behavior builder | **Reality Compiler** | Rehearsal: perform a behavior once, a verified Figment runs it forever |
+| Sleep cycle | **REM** | The glasses dream the day recombined — and the dreaming IS memory consolidation |
+| Time scrub | **Yesterlight** | Roll your head back: the room replays its own recorded light |
+| Voice shapes | **Timbre** | Known voices glow as waveforms at the rim; strangers are static |
+| Future ghosts | **Premonition** | Your rhythms shimmer ahead of the now-notch, precision-gated |
+| Your climate | **Inner Weather** | Your body churns the core; the room storms the rim |
+| Two wearers | **Confluence** | Bonded skies entangle: converge and they merge, drift and they split |
 
 ## Precision Lenses
 
@@ -28,7 +34,9 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 dreamlayer/
 ├── dream_mode/          # Ambient loop, Ghost Layer, WorldAnchorCards
 ├── lucid_recall/        # Query router → SocialLens / MemoryIndex → HUD card
-├── reality_compiler/    # Intent parser → codegen → emulator → validator → deployer
+├── reality_compiler/    # v1 text pipeline + v2 Rehearsal → Figment → fixed stage
+├── rem/                 # The sleep cycle: dream, consolidate, morning reel
+├── confluence/          # Bonds, the entangled sky, TinCan, Crossing, Duet, gifts
 ├── truth_lens/          # 9-stage deception analysis pipeline
 ├── social_lens/         # Contact recognition, labeling, baseline storage
 ├── hud/                 # Card definitions, renderer, framebuffer pipeline

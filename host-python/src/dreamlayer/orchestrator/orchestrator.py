@@ -19,6 +19,10 @@ from .time_scrub import TimeScrubSession
 from .tell import TellEngine
 from .state import HostState
 from ..dream_mode import DreamEngine
+from ..dream_mode.premonition import RecurrenceModel
+from ..rem import RetrievalBias
+from ..rem.nightly import NightWatch
+from ..confluence.taps import TapCollector
 from . import intents, answer_builder
 from ..hud import cards
 
@@ -55,8 +59,19 @@ class Orchestrator:
         self._scrub_session: TimeScrubSession | None = None
         self.tell_engine = TellEngine(self.ring)
 
+        # REM: last night's verdicts brighten the morning; Premonition:
+        # future ghosts. Both feed the composer; both are inert when empty.
+        vault_dir = getattr(cfg, "vault_dir", None)
+        self.rem_bias = (RetrievalBias.load(vault_dir) if vault_dir
+                         else RetrievalBias())
+        self.nightwatch = NightWatch(vault_dir) if vault_dir else None
+        self.premonition = RecurrenceModel()
+        self._premonition_seen_ts = 0.0
+
         # Meridian: the Horizon Frame composer (docs/cinema_v2/horizon_frame.md)
-        self.horizon = HorizonComposer(self.ring, self.drift_engine)
+        self.horizon = HorizonComposer(self.ring, self.drift_engine,
+                                       rem=self.rem_bias,
+                                       premonition=self.premonition)
 
         # Dream Mode engine (starts stopped; activated on double_tap)
         self.dream = DreamEngine(
@@ -64,6 +79,12 @@ class Orchestrator:
             db=self.db,
             privacy=self.privacy,
         )
+
+        # Confluence: attached by the app layer when a bond goes live
+        self.bonds = None
+        self.tincan = None
+        self.tap_collector = TapCollector()
+        self.confluence_outbox: list[dict] = []
 
         # Wire vision pipeline into SceneDescriber if LLM available
         if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
@@ -195,8 +216,95 @@ class Orchestrator:
     def tick(self) -> dict | None:
         """Drive passive event injection (~4 Hz) and the Horizon Frame
         stream (rate-limited inside the composer)."""
+        self._premonition_sweep()
+        self._tincan_sweep()
         self.tick_horizon()
         return self.passive.tick()
+
+    def _premonition_sweep(self) -> None:
+        """New ring events teach (and confirm) the recurrence model —
+        a landed event hardens any ghost that predicted it."""
+        newest = self._premonition_seen_ts
+        for buffered in self.ring.since(self._premonition_seen_ts + 1e-6):
+            ev = buffered.event
+            meta = getattr(ev, "meta", None) or {}
+            if meta.get("private"):
+                continue
+            self.premonition.confirm(getattr(ev, "kind", "memory"),
+                                     getattr(ev, "summary", ""),
+                                     buffered.ts, meta.get("place"))
+            newest = max(newest, buffered.ts)
+        self._premonition_seen_ts = newest
+
+    def _tincan_sweep(self) -> None:
+        """A finished tap pattern becomes a ping for the bonded peer.
+        The app layer drains confluence_outbox to the peer's phone."""
+        if self.tincan is None:
+            return
+        pattern = self.tap_collector.tick()
+        if pattern:
+            wire = self.tincan.compose(pattern)
+            if wire:
+                self.confluence_outbox.append(wire)
+
+    # ------------------------------------------------------------------
+    # Confluence (two-wearer) plumbing
+    # ------------------------------------------------------------------
+
+    def attach_confluence(self, bonds, sky) -> None:
+        """A bond went live: entangle the sky and arm the tin can."""
+        from ..confluence import TinCan
+        self.bonds = bonds
+        self.tincan = TinCan(bonds)
+        self.dream.confluence = sky
+
+    def detach_confluence(self) -> None:
+        self.bonds = None
+        self.tincan = None
+        self.dream.confluence = None
+
+    def receive_confluence(self, wire: dict) -> None:
+        """One entry point for everything the peer's phone sends."""
+        from ..confluence import TinCan, unwrap_gift
+        if self.bonds is None:
+            return
+        if "ping" in wire:
+            if self.bonds.receive_weather(wire) is not None:
+                self.bridge.send_raw(TinCan.render_frame(wire))
+        elif "gift" in wire:
+            for frame in unwrap_gift(self.bonds, wire):
+                self.bridge.send_raw(frame)
+        elif self.dream.confluence is not None:
+            self.dream.confluence.receive(wire)
+
+    def outgoing_weather(self) -> dict | None:
+        """My weather packet for the peer this tick (app layer sends)."""
+        if self.bonds is None:
+            return None
+        pkt = self.bonds.send_weather(self.dream.inner.state,
+                                      self.dream.last_palette_colors)
+        return pkt.to_wire() if pkt else None
+
+    def on_speaker(self, speaker: str | None,
+                   direction_deg: float | None = None) -> None:
+        """The social/truth stack identified (or failed to identify) the
+        current voice — Timbre renders it at the rim in Dream Mode."""
+        self.dream._ctx.speaker = speaker
+        if direction_deg is not None:
+            self.dream._ctx.extra["voice_direction_deg"] = direction_deg
+
+    def maybe_dream_tonight(self, charging: bool):
+        """The NightWatch gate: run REM when charging at night, apply the
+        verdicts to the durable bias the Horizon already reads."""
+        if self.nightwatch is None:
+            return None
+        reel = self.nightwatch.maybe_run(charging, self.ring,
+                                         drift=self.drift_engine,
+                                         privacy=self.privacy)
+        if reel is not None:
+            self.rem_bias = RetrievalBias.load(self.nightwatch.vault_dir)
+            self.horizon._rem = self.rem_bias
+        return reel
 
     def tick_horizon(self, now: float | None = None) -> dict | None:
         """Compose and send the day-ring when due or changed. While
@@ -362,6 +470,11 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def _on_event(self, name, payload):
+        # in Dream Mode with a live bond, single taps feed the tin can
+        if name == "single_click" and self.state.is_dream() \
+                and self.tincan is not None:
+            self.tap_collector.collect("single")
+            return
         if name == "long_press":
             self.pause() if not self.privacy.paused else self.resume()
         elif name == "double_tap":

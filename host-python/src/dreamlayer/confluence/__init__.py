@@ -27,6 +27,7 @@ from .tincan import TinCan, MSG_TINCAN
 from .crossing import SharedRhythms, RhythmClaim, export_claims, crossings
 from .duet import DuetSession, keep_for_both
 from .gift import wrap_gift, unwrap_gift, GIFT_PLAY_S
+from .taps import TapCollector
 
 __all__ = [
     "BondManager", "Bond", "BondOffer", "WeatherPacket", "BOND_TTL_S",
@@ -35,4 +36,5 @@ __all__ = [
     "SharedRhythms", "RhythmClaim", "export_claims", "crossings",
     "DuetSession", "keep_for_both",
     "wrap_gift", "unwrap_gift", "GIFT_PLAY_S",
+    "TapCollector",
 ]
