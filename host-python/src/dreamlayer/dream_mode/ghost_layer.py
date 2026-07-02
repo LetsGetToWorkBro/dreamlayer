@@ -29,7 +29,11 @@ class GhostLayer:
             if sig != ctx.place_signature:
                 continue
             now = time.monotonic()
-            if now - self._last_emit.get(sig, 0.0) < self._cooldown_s:
+            # None (never emitted) — a 0.0 sentinel suppresses the first
+            # emission on hosts whose monotonic clock is younger than the
+            # cooldown (fresh VMs boot with monotonic() < 30s)
+            last = self._last_emit.get(sig)
+            if last is not None and now - last < self._cooldown_s:
                 continue
             self._last_emit[sig] = now
             return self._build_card(anchor)
