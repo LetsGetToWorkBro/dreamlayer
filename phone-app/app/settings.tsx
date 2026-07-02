@@ -1,14 +1,16 @@
 import React from "react";
 import { View, Text, Switch, SafeAreaView, StyleSheet, TouchableOpacity, Alert } from "react-native";
-import { useHaloStore }   from "../src/state/useHaloStore";
+import { useRouter } from "expo-router";
+import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";
-import { colors }    from "../src/ui/theme/colors";
+import { useBrainStore } from "../src/state/useBrainStore";
+import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 
 function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
   return (
     <View style={s.row}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingRight: 12 }}>
         <Text style={[typography.body, { color: colors.textPrimary }]}>{label}</Text>
         {sub && <Text style={[typography.caption, { color: colors.textSecondary }]}>{sub}</Text>}
       </View>
@@ -18,26 +20,66 @@ function Row({ label, sub, right }: { label: string; sub?: string; right: React.
 }
 
 export default function Settings() {
+  const router = useRouter();
   const { paused, togglePause, connected } = useHaloStore();
   const { service } = useMemoryStore();
+  const incognito = useBrainStore((s) => s.incognito);
+  const setIncognito = useBrainStore((s) => s.setIncognito);
+
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Erase", style: "destructive", onPress: () => { service.purgeAll(); } },
+      { text: "Erase", style: "destructive", onPress: () => service.purgeAll() },
     ]);
+
   return (
     <SafeAreaView style={s.safe}>
       <Text style={[typography.title, s.heading]}>Settings</Text>
+
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy</Text>
-        <Row label="Pause memory capture" sub="Nothing is captured while paused"
-          right={<Switch value={paused} onValueChange={togglePause} trackColor={{ true: colors.statusPaused }} />} />
+        <Row
+          label="Incognito mode"
+          sub="Cloud off + capture paused for this session"
+          right={
+            <Switch
+              value={incognito}
+              onValueChange={setIncognito}
+              trackColor={{ true: colors.accentAttention, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Pause memory capture"
+          sub="Nothing is captured while paused"
+          right={
+            <Switch
+              value={paused}
+              onValueChange={togglePause}
+              trackColor={{ true: colors.statusPaused, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
       </View>
+
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Device</Text>
-        <Row label="Halo" sub={connected ? "Connected" : "Not connected"}
-          right={<Text style={[typography.caption, { color: connected ? colors.accentSuccess : colors.textSecondary }]}>{connected ? "\u25CF" : "\u25CB"}</Text>} />
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Devices & brain</Text>
+        <Row
+          label="Glasses"
+          sub={connected ? "Connected" : "Not connected"}
+          right={
+            <Text style={[typography.caption, { color: connected ? colors.accentSuccess : colors.textSecondary }]}>
+              {connected ? "●" : "○"}
+            </Text>
+          }
+        />
+        <TouchableOpacity onPress={() => router.push("/brain")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Pair devices, connect your Mac mini, cloud →</Text>
+        </TouchableOpacity>
       </View>
+
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentError, marginBottom: 14 }]}>Danger zone</Text>
         <TouchableOpacity onPress={confirmPurge} style={s.danger}>
@@ -47,10 +89,12 @@ export default function Settings() {
     </SafeAreaView>
   );
 }
+
 const s = StyleSheet.create({
-  safe:    { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: colors.background },
   heading: { color: colors.textPrimary, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8 },
   section: { marginHorizontal: 24, marginTop: 32 },
-  row:     { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  danger:  { paddingVertical: 16, alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.accentError },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  linkRow: { paddingVertical: 14 },
+  danger: { paddingVertical: 16, alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.accentError },
 });
