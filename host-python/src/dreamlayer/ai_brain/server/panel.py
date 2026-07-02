@@ -1,9 +1,11 @@
 """ai_brain/server/panel.py — the control panel served at /.
 
-A self-contained local web UI: manage watched folders, drag-drop files in,
-pick the model, flip connections, ask a question, and see your history.
-Vanilla JS, no build step. The token is injected when the panel is opened
-from the Mac mini itself (localhost); a remote browser gets a blank field.
+A self-contained local web UI, polished to match the phone app's design
+language (docs: phone-app/DESIGN.md): the same dark palette, 8-pt rhythm,
+soft "arrive" motion, tactile controls, and toast feedback instead of jarring
+reloads. Vanilla JS/CSS, no build step, no external requests. The token is
+injected only when the panel is opened from the Mac mini itself (localhost);
+a remote browser gets a blank field and must be told the token.
 """
 from __future__ import annotations
 
@@ -16,109 +18,224 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
 <style>
-  :root{--bg:#070A0B;--surf:#0E1518;--line:#1C2E33;--memory:#2CC79A;
-        --text:#ECF0F1;--muted:#93A6AD;--ghost:#55666C;--bloom:#7A6BE0}
+  :root{
+    --bg:#000000; --surf:#0E1416; --surf2:#141F23; --line:#1F2A2E;
+    --memory:#2FD4C4; --attention:#FF6B5E; --success:#56D364; --error:#FF5C5C;
+    --text:#FFFFFF; --muted:#8A9BA3; --ghost:#55666C;
+    --r-sm:10px; --r-lg:18px; --r-pill:999px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-       font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{max-width:840px;margin:0 auto;padding:28px 20px 80px}
-  h1{font-weight:300;letter-spacing:-.02em;font-size:1.9rem;margin:0 0 4px}
-  .eyebrow{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.22em;
-           text-transform:uppercase;color:var(--memory)}
-  .card{background:var(--surf);border:1px solid var(--line);border-radius:14px;
-        padding:18px 18px 20px;margin-top:16px}
-  h2{font-weight:400;font-size:1.05rem;margin:0 0 12px;letter-spacing:-.01em}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  input,select{background:#0A1113;border:1px solid var(--line);color:var(--text);
-        border-radius:9px;padding:9px 11px;font:inherit}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1100px 620px at 50% -8%, rgba(47,212,196,.10), transparent 60%),
+      var(--bg);
+    color:var(--text); -webkit-font-smoothing:antialiased;
+    font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px 96px}
+
+  /* --- top bar ------------------------------------------------------- */
+  .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+       padding:20px 0 16px;margin-bottom:6px;
+       background:linear-gradient(var(--bg) 72%,transparent);backdrop-filter:blur(6px)}
+  .brand{font-weight:600;letter-spacing:-.01em;font-size:1.05rem}
+  .brand b{color:var(--memory);font-weight:600}
+  .live{display:flex;align-items:center;gap:7px;margin-left:auto;color:var(--muted);
+        font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--success);
+        box-shadow:0 0 0 0 rgba(86,211,100,.6);animation:pulse 2.4s var(--ease) infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(86,211,100,.5)}70%{box-shadow:0 0 0 7px rgba(86,211,100,0)}100%{box-shadow:0 0 0 0 rgba(86,211,100,0)}}
+
+  h1{font-weight:700;letter-spacing:-.025em;font-size:2.4rem;margin:6px 0 2px}
+  .sub{color:var(--muted);margin:0 0 22px}
+  .stat{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--surf);
+        border:1px solid var(--line);border-radius:var(--r-pill);
+        padding:6px 12px;font-size:.82rem;color:var(--muted)}
+  .chip b{color:var(--text);font-weight:600}
+  .chip.on{border-color:rgba(47,212,196,.5);color:var(--memory)}
+
+  /* --- cards --------------------------------------------------------- */
+  main>section{background:var(--surf);border:1px solid var(--line);
+        border-radius:var(--r-lg);padding:20px;margin-bottom:14px;
+        opacity:0;transform:translateY(14px);animation:rise .5s var(--ease) forwards}
+  main>section:nth-child(1){animation-delay:.02s}
+  main>section:nth-child(2){animation-delay:.07s}
+  main>section:nth-child(3){animation-delay:.12s}
+  main>section:nth-child(4){animation-delay:.17s}
+  main>section:nth-child(5){animation-delay:.22s}
+  @keyframes rise{to{opacity:1;transform:none}}
+  h2{font-weight:600;font-size:1.12rem;margin:0 0 4px;letter-spacing:-.01em}
+  .eyebrow{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2em;
+           text-transform:uppercase;color:var(--memory);margin-bottom:8px}
+  .lead{color:var(--muted);font-size:.92rem;margin:0 0 16px}
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   input[type=text]{flex:1;min-width:180px}
-  button{background:var(--memory);color:#04120d;border:0;border-radius:9px;
-         padding:9px 15px;font:inherit;font-weight:600;cursor:pointer}
-  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400}
-  ul{list-style:none;margin:8px 0 0;padding:0}
-  li{display:flex;justify-content:space-between;align-items:center;gap:10px;
-     padding:8px 0;border-top:1px solid var(--line);font-size:.94rem}
-  li .path{font:13px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all}
-  .drop{margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;
-        padding:22px;text-align:center;color:var(--ghost);transition:.15s}
-  .drop.hot{border-color:var(--memory);color:var(--memory);background:rgba(44,199,154,.05)}
-  .stat{display:flex;gap:22px;color:var(--muted);font-size:.9rem;margin-top:6px}
-  .stat b{color:var(--text);font-weight:500}
-  .ans{margin-top:12px;padding:12px 14px;border-left:2px solid var(--memory);
-       background:#0A1113;border-radius:0 9px 9px 0}
-  .ans .src{font:12px ui-monospace,Menlo,monospace;color:var(--ghost);margin-top:6px}
-  .hist{font-size:.9rem}
-  .hist .q{color:var(--text)}.hist .a{color:var(--muted)}
-  .hist .t{font:11px ui-monospace,Menlo,monospace;color:var(--bloom);text-transform:uppercase}
-  label.tog{display:flex;gap:9px;align-items:center;color:var(--muted);cursor:pointer}
-  .mono{font:13px ui-monospace,Menlo,monospace}
-  .muted{color:var(--muted);font-size:.92rem}
-  a{color:var(--memory)}
-  .conn{display:flex;gap:16px;align-items:center;justify-content:space-between;
-        padding:14px 0;border-bottom:1px solid var(--line)}
-  .conn-t{font-size:1rem;color:var(--text)}
-  .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:52ch}
-  .sw{position:relative;display:inline-block;width:46px;height:26px;flex:none;cursor:pointer}
+  input,select{background:#0A1113;border:1px solid var(--line);color:var(--text);
+        border-radius:var(--r-sm);padding:11px 13px;font:inherit;transition:border-color .15s}
+  input:focus,select:focus{outline:none;border-color:var(--memory)}
+  input::placeholder{color:var(--ghost)}
+
+  button{background:var(--memory);color:#04120d;border:0;border-radius:var(--r-sm);
+         padding:11px 16px;font:inherit;font-weight:600;cursor:pointer;
+         transition:transform .12s var(--ease),filter .15s}
+  button:hover{filter:brightness(1.06)}
+  button:active{transform:scale(.96)}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:500}
+  button.ghost:hover{color:var(--text);border-color:var(--muted);filter:none}
+  button.sm{padding:8px 12px;font-size:.85rem}
+
+  /* connections rows + switches */
+  .conn{display:flex;gap:18px;align-items:center;justify-content:space-between;
+        padding:16px 0;border-top:1px solid var(--line)}
+  .conn:first-of-type{border-top:0;padding-top:4px}
+  .conn-t{font-size:1rem}
+  .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:46ch}
+  .sw{position:relative;display:inline-block;width:48px;height:28px;flex:none;cursor:pointer}
   .sw input{opacity:0;width:0;height:0;position:absolute}
   .sw .track{position:absolute;inset:0;background:#0A1113;border:1px solid var(--line);
-        border-radius:999px;transition:.15s}
-  .sw .track:before{content:"";position:absolute;left:3px;top:2px;width:20px;height:20px;
-        border-radius:50%;background:var(--ghost);transition:.15s}
-  .sw input:checked + .track{background:rgba(44,199,154,.25);border-color:var(--memory)}
+        border-radius:var(--r-pill);transition:background .2s var(--ease),border-color .2s}
+  .sw .track:before{content:"";position:absolute;left:3px;top:2px;width:21px;height:21px;
+        border-radius:50%;background:var(--ghost);transition:transform .2s var(--ease),background .2s}
+  .sw input:checked + .track{background:rgba(47,212,196,.22);border-color:var(--memory)}
   .sw input:checked + .track:before{transform:translateX(20px);background:var(--memory)}
-  .sw input:checked + .track.red{background:rgba(224,107,82,.25);border-color:#E06B52}
-  .sw input:checked + .track.red:before{background:#E06B52}
-  .sw input:disabled + .track{opacity:.4}
-</style></head><body><div class="wrap">
-  <span class="eyebrow">DreamLayer</span>
+  .sw input:checked + .track.red{background:rgba(255,107,94,.22);border-color:var(--attention)}
+  .sw input:checked + .track.red:before{background:var(--attention)}
+  .sw input:disabled + .track{opacity:.4;cursor:not-allowed}
+
+  /* folders list */
+  ul{list-style:none;margin:6px 0 0;padding:0}
+  li.folder{display:flex;justify-content:space-between;align-items:center;gap:12px;
+     padding:12px 0;border-top:1px solid var(--line)}
+  li.folder:first-child{border-top:0}
+  .path{font:13px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all}
+  .path:before{content:"";display:inline-block;width:7px;height:7px;border-radius:2px;
+        background:var(--memory);margin-right:9px;vertical-align:middle;opacity:.8}
+  .drop{margin-top:14px;border:1.5px dashed var(--line);border-radius:14px;
+        padding:26px;text-align:center;color:var(--ghost);
+        transition:border-color .15s,color .15s,background .15s}
+  .drop.hot{border-color:var(--memory);color:var(--memory);background:rgba(47,212,196,.06)}
+  .empty{color:var(--ghost);font-size:.9rem;padding:14px 0;text-align:center}
+
+  /* segmented control */
+  .seg{display:inline-flex;background:#0A1113;border:1px solid var(--line);
+       border-radius:var(--r-pill);padding:3px;gap:2px}
+  .seg button{background:transparent;color:var(--muted);border-radius:var(--r-pill);
+       padding:8px 16px;font-weight:500}
+  .seg button.on{background:var(--memory);color:#04120d;font-weight:600}
+  .fold{max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s}
+  .fold.open{max-height:220px;opacity:1;margin-top:12px}
+
+  /* answer */
+  .ans{margin-top:14px;padding:14px 16px;background:#0A1113;border-radius:var(--r-sm);
+       border-left:2px solid var(--memory);animation:rise .35s var(--ease) both}
+  .ans .src{display:inline-flex;gap:8px;align-items:center;font:11px ui-monospace,Menlo,monospace;
+       color:var(--ghost);margin-top:8px}
+  .tier{background:rgba(47,212,196,.14);color:var(--memory);border-radius:var(--r-pill);
+       padding:2px 8px;text-transform:uppercase;letter-spacing:.08em}
+  .shimmer{height:14px;border-radius:6px;margin:6px 0;
+       background:linear-gradient(90deg,#0A1113,#182228,#0A1113);
+       background-size:200% 100%;animation:sh 1.1s linear infinite}
+  .shimmer.s2{width:70%}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  /* pairing code */
+  .paircode{margin-top:14px;background:#0A1113;border:1px solid var(--line);
+       border-radius:var(--r-sm);padding:14px;animation:rise .35s var(--ease) both}
+  .paircode .code{font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--memory);
+       word-break:break-all;user-select:all}
+  .paircode .foot{display:flex;justify-content:space-between;align-items:center;
+       gap:12px;margin-top:12px;flex-wrap:wrap}
+  .paircode .foot .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
+
+  /* history */
+  .hist li{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+       padding:12px 0;border-top:1px solid var(--line)}
+  .hist li:first-child{border-top:0}
+  .hist .q{color:var(--text)} .hist .a{color:var(--muted);font-size:.9rem;margin-top:2px}
+  .hist .t{font:10px ui-monospace,Menlo,monospace;color:var(--memory);
+       text-transform:uppercase;letter-spacing:.08em;flex:none;padding-top:3px}
+
+  label.tog{display:flex;gap:10px;align-items:center;color:var(--muted);cursor:pointer}
+  label.tog input{accent-color:var(--memory)}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:30px;transform:translate(-50%,20px);
+       background:var(--surf2);border:1px solid var(--line);border-radius:var(--r-pill);
+       padding:11px 20px;color:var(--text);font-size:.9rem;opacity:0;pointer-events:none;
+       transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:50;
+       box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #toast .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+       background:var(--success);margin-right:9px;vertical-align:middle}
+  a{color:var(--memory)}
+</style></head><body>
+<div class="wrap">
+  <div class="bar">
+    <span class="brand"><b>Dream</b>Layer</span>
+    <span class="live"><span class="dot"></span><span id="livetext">Brain online</span></span>
+  </div>
+
   <h1>Brain</h1>
+  <p class="sub" id="sub">This Mac mini is the brain — your files, your memory, your reach.</p>
   <div class="stat" id="stat"></div>
 
-  <div class="card">
-    <h2>Connections</h2>
-    <p class="muted" style="margin:0 0 14px">This Mac mini is the brain. Pair your
-      phone (which brings the glasses), choose how far its reach goes, or shut
-      the doors with Incognito.</p>
+  <main>
+  <section>
+    <div class="eyebrow">Connections</div>
+    <h2>Reach &amp; devices</h2>
+    <p class="lead">Pair your phone (it brings the glasses), choose how far the
+      brain reaches, or shut the doors with Incognito.</p>
     <div class="conn">
       <div>
         <div class="conn-t">Cloud</div>
         <div class="conn-s">Reach the frontier for the hardest, non-personal asks —
-          obscure facts, richest object explanations, widest translation. Your own
-          files, memory and people never need it. Nothing private ever leaves.</div>
+          obscure facts, the richest object explanations, widest translation. Your
+          own files, memory and people never need it. Nothing private ever leaves.</div>
       </div>
       <label class="sw"><input type="checkbox" id="cloud" onchange="saveConn()"><span class="track"></span></label>
     </div>
     <div class="conn">
       <div>
         <div class="conn-t">Incognito</div>
-        <div class="conn-s">Home-only shield: stays on your LAN, forces cloud off,
-          and nothing is logged. Flip it for a private stretch.</div>
+        <div class="conn-s">A private stretch: stays on your LAN, forces cloud off,
+          and logs nothing. Flip it on when you want the doors shut.</div>
       </div>
       <label class="sw"><input type="checkbox" id="incognito" onchange="saveConn()"><span class="track red"></span></label>
     </div>
-    <div class="conn" style="border-bottom:0">
+    <div class="conn">
       <div>
         <div class="conn-t">Phone &amp; glasses</div>
-        <div class="conn-s" id="pairhint">Show a code your phone scans once — it wires
-          the phone, this Brain, and your glasses together.</div>
+        <div class="conn-s">One code wires the phone, this Brain, and your glasses
+          together. Open the DreamLayer app → Brain → Pair a device, then scan or
+          paste this.</div>
       </div>
-      <button onclick="pair()">Pair a phone</button>
+      <button id="pairbtn" onclick="pair()">Pair a phone</button>
     </div>
     <div id="pairout"></div>
-  </div>
+  </section>
 
-  <div class="card">
+  <section>
+    <div class="eyebrow">Knowledge</div>
     <h2>Folders it reads</h2>
+    <p class="lead">Everything in these folders is searchable — notes, PDFs, mail
+      exports. Files never leave your Mac mini.</p>
     <ul id="folders"></ul>
-    <div class="row" style="margin-top:12px">
-      <input type="text" id="folderPath" placeholder="/Users/you/Documents/DreamLayer">
+    <div class="row" style="margin-top:14px">
+      <input type="text" id="folderPath" placeholder="/Users/you/Documents/DreamLayer"
+             onkeydown="if(event.key==='Enter')addFolder()">
       <button onclick="addFolder()">Add folder</button>
     </div>
-    <div class="drop" id="drop">drag &amp; drop files here to add them to
+    <div class="drop" id="drop">Drag &amp; drop files here → add them to
       <select id="dropTarget" style="margin:0 4px"></select></div>
-  </div>
+  </section>
 
-  <div class="card">
+  <section>
+    <div class="eyebrow">Recall</div>
     <h2>Ask your stuff</h2>
     <div class="row">
       <input type="text" id="q" placeholder="where's the lease? what does Marcus owe me?"
@@ -126,125 +243,177 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <button onclick="ask()">Ask</button>
     </div>
     <div id="answer"></div>
-  </div>
+  </section>
 
-  <div class="card">
+  <section>
+    <div class="eyebrow">Intelligence</div>
     <h2>Model</h2>
-    <div class="row">
-      <label class="tog"><input type="radio" name="model" value="keyword" id="mk"> Keyword (no model, works now)</label>
-      <label class="tog"><input type="radio" name="model" value="ollama" id="mo"> Ollama (local model)</label>
+    <p class="lead">Keyword search works with no model at all. Add Ollama on this
+      Mac mini for written answers and vision.</p>
+    <div class="seg" id="modelSeg">
+      <button data-m="keyword" onclick="pickModel('keyword')">Keyword</button>
+      <button data-m="ollama" onclick="pickModel('ollama')">Ollama</button>
     </div>
-    <div class="row" style="margin-top:10px">
-      <input type="text" id="ourl" placeholder="http://127.0.0.1:11434" style="max-width:220px">
-      <input type="text" id="ochat" placeholder="chat model, e.g. llama3.2" style="max-width:190px">
-      <input type="text" id="ovis" placeholder="vision model" style="max-width:170px">
+    <div class="fold" id="ollamaFields">
+      <div class="row">
+        <input type="text" id="ourl" placeholder="http://127.0.0.1:11434" style="max-width:230px">
+        <input type="text" id="ochat" placeholder="chat model · llama3.2" style="max-width:200px">
+        <input type="text" id="ovis" placeholder="vision model" style="max-width:180px">
+      </div>
     </div>
-    <div class="row" style="margin-top:10px">
+    <div class="row" style="margin-top:16px;justify-content:space-between">
       <label class="tog"><input type="checkbox" id="email"> Read email &amp; iMessage</label>
-      <button onclick="saveModel()">Save</button>
+      <button class="sm" onclick="saveModel()">Save</button>
     </div>
-  </div>
+  </section>
 
-  <div class="card">
+  <section>
+    <div class="eyebrow">Log</div>
     <h2>History</h2>
     <ul id="history" class="hist"></ul>
-  </div>
+  </section>
+  </main>
 </div>
+<div id="toast"></div>
 <script>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
 const api=(p,o={})=>fetch(p,Object.assign({headers:H},o)).then(r=>r.json());
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const $=id=>document.getElementById(id);
+let modelSel="keyword";
+
+let toastT;
+function toast(msg){
+  const t=$("toast"); t.innerHTML='<span class="dot"></span>'+esc(msg);
+  t.classList.add("show"); clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove("show"),1900);
+}
 
 async function load(){
-  const c=await api("/dreamlayer/config");
+  let c;
+  try{ c=await api("/dreamlayer/config"); }
+  catch(e){ $("livetext").textContent="offline"; return; }
+  if(c.error){ $("sub").textContent="Enter this Brain's token to manage it."; return; }
   const incog=c.config.network_mode==="lan_only";
-  document.getElementById("stat").innerHTML=
-    `<span><b>${c.stats.files}</b> files</span><span><b>${c.stats.passages}</b> passages</span>`+
-    `<span>model <b>${c.config.model}</b></span>`+
-    `<span>cloud <b>${incog?"off":(c.config.cloud_enabled?"on":"off")}</b></span>`+
-    (incog?`<span style="color:var(--memory)">incognito</span>`:``);
-  const fl=document.getElementById("folders");fl.innerHTML="";
-  const dt=document.getElementById("dropTarget");dt.innerHTML="";
-  (c.config.folders||[]).forEach(f=>{
-    fl.innerHTML+=`<li><span class="path">${esc(f)}</span>`+
-      `<button class="ghost" onclick="rmFolder('${esc(f)}')">remove</button></li>`;
+  const cloudOn=!incog && !!c.config.cloud_enabled;
+  $("stat").innerHTML=
+    chip(`<b>${c.stats.files}</b> files`)+
+    chip(`<b>${c.stats.passages}</b> passages`)+
+    chip(`model <b>${esc(c.config.model)}</b>`)+
+    chip(`cloud <b>${cloudOn?"on":"off"}</b>`, cloudOn)+
+    (incog?chip("incognito", true):"");
+
+  // folders
+  const fl=$("folders"), dt=$("dropTarget"); fl.innerHTML=""; dt.innerHTML="";
+  const folders=c.config.folders||[];
+  if(!folders.length){ fl.innerHTML='<li class="empty">No folders yet — add one below to give your Brain something to read.</li>'; }
+  folders.forEach(f=>{
+    fl.innerHTML+=`<li class="folder"><span class="path">${esc(f)}</span>`+
+      `<button class="ghost sm" onclick="rmFolder('${esc(f)}')">Remove</button></li>`;
     dt.innerHTML+=`<option>${esc(f)}</option>`;
   });
-  document.getElementById("mk").checked=c.config.model==="keyword";
-  document.getElementById("mo").checked=c.config.model==="ollama";
-  document.getElementById("ourl").value=c.config.ollama_url||"";
-  document.getElementById("ochat").value=c.config.ollama_chat_model||"";
-  document.getElementById("ovis").value=c.config.ollama_vision_model||"";
-  document.getElementById("email").checked=!!c.config.email_enabled;
-  // cloud is held off while incognito (LAN-only) is on
-  const cloud=document.getElementById("cloud");
-  cloud.checked=!incog && !!c.config.cloud_enabled;
-  cloud.disabled=incog;
-  document.getElementById("incognito").checked=incog;
+
+  // model
+  pickModel(c.config.model==="ollama"?"ollama":"keyword", true);
+  $("ourl").value=c.config.ollama_url||"";
+  $("ochat").value=c.config.ollama_chat_model||"";
+  $("ovis").value=c.config.ollama_vision_model||"";
+  $("email").checked=!!c.config.email_enabled;
+
+  // connections
+  const cloud=$("cloud"); cloud.checked=cloudOn; cloud.disabled=incog;
+  $("incognito").checked=incog;
   loadHistory();
 }
+function chip(html,on){ return `<span class="chip${on?" on":""}">${html}</span>`; }
+
+function pickModel(m, silent){
+  modelSel=m;
+  document.querySelectorAll("#modelSeg button").forEach(b=>
+    b.classList.toggle("on", b.dataset.m===m));
+  $("ollamaFields").classList.toggle("open", m==="ollama");
+  if(!silent && m==="keyword") saveModel(true);
+}
+
 async function saveConn(){
-  const incog=document.getElementById("incognito").checked;
+  const incog=$("incognito").checked;
+  const cloud=$("cloud").checked;
+  $("cloud").disabled=incog;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
     network_mode: incog?"lan_only":"connected",
-    cloud_enabled: incog?false:document.getElementById("cloud").checked})});
+    cloud_enabled: incog?false:cloud})});
+  toast(incog?"Incognito on — cloud off, LAN only":(cloud?"Cloud on":"Cloud off"));
   load();
 }
 async function addFolder(){
-  const p=document.getElementById("folderPath").value.trim();if(!p)return;
+  const el=$("folderPath"), p=el.value.trim(); if(!p) return;
   await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"add",path:p})});
-  document.getElementById("folderPath").value="";load();
+  el.value=""; toast("Folder added — indexing"); load();
 }
 async function rmFolder(p){
-  await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"remove",path:p})});load();
+  await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"remove",path:p})});
+  toast("Folder removed"); load();
 }
-async function saveModel(){
+async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
-    model:document.getElementById("mo").checked?"ollama":"keyword",
-    ollama_url:document.getElementById("ourl").value,
-    ollama_chat_model:document.getElementById("ochat").value,
-    ollama_vision_model:document.getElementById("ovis").value,
-    email_enabled:document.getElementById("email").checked})});load();
+    model:modelSel,
+    ollama_url:$("ourl").value, ollama_chat_model:$("ochat").value,
+    ollama_vision_model:$("ovis").value, email_enabled:$("email").checked})});
+  if(!silent) toast("Saved");
+  load();
 }
 async function ask(){
-  const q=document.getElementById("q").value.trim();if(!q)return;
-  const a=document.getElementById("answer");a.innerHTML="<div class='ans'>thinking…</div>";
+  const q=$("q").value.trim(); if(!q) return;
+  $("answer").innerHTML='<div class="ans"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
   const r=await api("/dreamlayer/brain/ask",{method:"POST",body:JSON.stringify({query:q})});
-  a.innerHTML=r&&r.text?`<div class="ans">${esc(r.text)}`+
-    `<div class="src">${esc(r.tier)} · ${esc((r.sources||[]).join(", "))}</div></div>`
-    :`<div class="ans">nothing in your files matches that yet.</div>`;
+  $("answer").innerHTML = r&&r.text
+    ? `<div class="ans">${esc(r.text)}<div class="src">`+
+      `<span class="tier">${esc(r.tier||"local")}</span>${esc((r.sources||[]).join(", "))}</div></div>`
+    : `<div class="ans" style="border-left-color:var(--ghost);color:var(--muted)">Nothing in your files matches that yet.</div>`;
   loadHistory();
 }
 async function pair(){
-  const out=document.getElementById("pairout");
-  out.innerHTML="<div class='ans'>generating…</div>";
-  const r=await api("/dreamlayer/pair");
-  if(!r||!r.code){out.innerHTML="<div class='ans'>pairing is only available "+
-    "from the Brain itself (open this panel on the Mac mini).</div>";return;}
-  out.innerHTML=`<div class="ans"><div class="mono" style="word-break:break-all">`+
-    `${esc(r.code)}</div><div class="src">scan on the phone, or paste this code · `+
-    `${esc(r.url)}</div></div>`;
+  const out=$("pairout");
+  out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
+  let r; try{ r=await api("/dreamlayer/pair"); }catch(e){ r=null; }
+  if(!r||!r.code){
+    out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
+      'Pairing is only offered from the Brain itself — open this panel on the Mac mini.</div></div>';
+    return;
+  }
+  window._pairCode=r.code;
+  out.innerHTML=`<div class="paircode"><div class="code" id="thecode">${esc(r.code)}</div>`+
+    `<div class="foot"><span class="url">${esc(r.url)}</span>`+
+    `<button class="sm" onclick="copyPair()">Copy code</button></div></div>`;
+  toast("Pairing code ready");
+}
+function copyPair(){
+  const code=window._pairCode||"";
+  if(navigator.clipboard){ navigator.clipboard.writeText(code).then(()=>toast("Copied to clipboard")); }
+  else{ const r=document.createRange(); r.selectNode($("thecode"));
+        getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected — ⌘C to copy"); }
 }
 async function loadHistory(){
-  const h=await api("/dreamlayer/history");const ul=document.getElementById("history");
-  ul.innerHTML=(h.items||[]).map(x=>
+  const h=await api("/dreamlayer/history");
+  $("history").innerHTML=(h.items||[]).map(x=>
     `<li><div><div class="q">${esc(x.query)}</div>`+
     `<div class="a">${esc(x.answer)}</div></div><span class="t">${esc(x.tier)}</span></li>`).join("")
-    ||"<li style='color:var(--ghost)'>no questions yet</li>";
+    || '<li class="empty">No questions yet — ask your Brain something above.</li>';
 }
+
 // drag & drop upload
-const drop=document.getElementById("drop");
+const drop=$("drop");
 ["dragover","dragenter"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("hot")}));
 ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("hot")}));
 drop.addEventListener("drop",async ev=>{
-  const folder=document.getElementById("dropTarget").value;
+  const folder=$("dropTarget").value; let n=0;
   for(const f of ev.dataTransfer.files){
     const body=await f.text();
     await fetch("/dreamlayer/upload?folder="+encodeURIComponent(folder)+"&name="+encodeURIComponent(f.name),
-      {method:"POST",headers:TOKEN?{"X-DreamLayer-Token":TOKEN}:{},body});
+      {method:"POST",headers:TOKEN?{"X-DreamLayer-Token":TOKEN}:{},body}); n++;
   }
-  load();
+  toast(n===1?"1 file added":n+" files added"); load();
 });
 load();
 </script></body></html>"""
