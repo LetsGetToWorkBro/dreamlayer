@@ -21,6 +21,14 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from .schema import ObjectSighting, PanelRow, ObjectPanel
+from .polled import humanize_age
+
+
+def _age_note(data: dict) -> str:
+    """A '(2h ago)' marker when a polled snapshot has gone stale."""
+    if data.get("_stale") and data.get("_age_s") is not None:
+        return humanize_age(data["_age_s"])
+    return ""
 
 
 class PanelProvider:
@@ -144,7 +152,8 @@ class LaptopProvider(_SourceProvider):
                                  kind="action", source=self.name))
         if "battery" in data:
             rows.append(PanelRow(label="battery", value=f"{data['battery']}%",
-                                 kind="stat", source=self.name))
+                                 detail=_age_note(data), kind="stat",
+                                 source=self.name))
         return rows
 
 
@@ -154,13 +163,14 @@ class CarProvider(_SourceProvider):
 
     def _rows(self, data):
         rows = []
+        note = _age_note(data)
         tp = data.get("tire_pressure")
         if tp is not None:
             rows.append(PanelRow(label="tire pressure", value=f"{tp} psi",
-                                 kind="stat", source=self.name))
+                                 detail=note, kind="stat", source=self.name))
         if "fuel" in data:
             rows.append(PanelRow(label="fuel", value=f"{data['fuel']}%",
-                                 kind="stat", source=self.name))
+                                 detail=note, kind="stat", source=self.name))
         return rows
 
 

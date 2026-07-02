@@ -58,10 +58,59 @@ the built-in providers read only your own on-device memory. External data
 appears only through providers you explicitly register. Orchestrator:
 `look_at_object(frame)`.
 
+## Filling the seams (making an integration real)
+
+A provider's `data_source` is called on every glance, so a real source must
+never be hit on that path. Two pieces make it production-safe.
+
+### `PolledSource` — the wrapper every real source needs
+
+`object_lens/polled.py`. Wrap any `fetch_fn` once and it becomes safe to
+glance at:
+
+```python
+src = PolledSource(read_obd_dongle, ttl=60)   # fetch at most every 60s
+registry.register(CarProvider(src))
+```
+
+- **instant** — calling it returns the last cached snapshot immediately.
+- **background** — a stale cache triggers a refresh *off* the glance path;
+  the result lands when it arrives (a slow fetch never blocks the HUD).
+- **stale, not blank** — a failed or slow fetch keeps the last good data and
+  marks it stale, so the panel shows `34 psi (2h ago)` (via `_age_s` /
+  `_stale` meta keys the seam providers read) instead of freezing.
+
+### Reference integration — the laptop companion
+
+`object_lens/integrations/laptop_companion.py`. The worked example: a
+companion agent on your laptop serves context over the LAN, offline, on a
+three-line contract:
+
+```
+GET  {base_url}/dreamlayer/context      header  X-DreamLayer-Token: <token>
+200  {"recent_files": [...], "battery": 82, "hostname": "studio-mbp"}
+```
+
+Phone side is two lines:
+
+```python
+src = PolledSource(laptop_data_source("http://studio-mbp.local:7777", token))
+registry.register(LaptopProvider(src))
+```
+
+`serve_companion(...)` is an in-process reference server implementing the
+same contract, so the whole round-trip — companion → data_source →
+PolledSource → provider → panel — is tested over **real localhost HTTP** and
+runs in the demo. A production macOS/Windows agent is out of scope for this
+repo, but anything speaking those three lines drops straight in. The same
+shape covers a BLE soil sensor or an OBD dongle — only the `fetch_fn`
+changes.
+
 ## Try it
 
 ```
-python scripts/run_demo_object_lens.py
+python scripts/run_demo_object_lens.py        # the lens over several objects
+python scripts/run_demo_object_companion.py    # a real integration, end to end
 ```
 
 Looks at a laptop, a book you own, a mug with a note, a car, and a plant —

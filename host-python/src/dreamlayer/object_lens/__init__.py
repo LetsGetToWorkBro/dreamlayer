@@ -19,11 +19,13 @@ from .providers import (
     ProviderRegistry, PanelProvider, MemoryProvider, NoteProvider,
     LaptopProvider, CarProvider, PlantProvider,
 )
+from .polled import PolledSource, humanize_age
 from .schema import ObjectSighting, ObjectPanel, PanelRow
 
 __all__ = [
     "ObjectLens", "ObjectRecognizer", "PERSON_LABELS", "DEFAULT_TAXONOMY",
     "ProviderRegistry", "PanelProvider", "MemoryProvider", "NoteProvider",
     "LaptopProvider", "CarProvider", "PlantProvider",
+    "PolledSource", "humanize_age",
     "ObjectSighting", "ObjectPanel", "PanelRow",
 ]
