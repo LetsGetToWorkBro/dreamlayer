@@ -4,6 +4,9 @@
 --- Dream Mode is activated by a double-tap event from the host.
 
 local CardQueue  = require("card_queue")
+-- card_queue is a class (CardQueue.new() + method calls); one queue
+-- instance drives the whole HUD. Priority constants stay on the class.
+local Cards      = CardQueue.new()
 local HostComm   = require("ble.host_comm")   -- already wires DC via require
 local DreamRend  = require("display.dream_renderer")
 local PAL        = require("display.palette")
@@ -56,16 +59,17 @@ local function process_inbound(msg)
   if t == "card" then
     local ptype    = msg.card_type or msg.type or "ObjectRecallCard"
     local priority = CARD_PRIORITY[ptype] or CardQueue.CONTEXT
-    CardQueue.push(msg, priority)
+    msg.type = ptype   -- queue and renderers key on .type; hosts send card_type
+    Cards:push(msg, priority)
 
   elseif t == "command" then
     local cmd = msg.cmd or msg.command or ""
     if cmd == "show_ready" then
-      CardQueue.push({ type = "ReadyCard" }, CardQueue.AMBIENT)
+      Cards:push({ type = "ReadyCard" }, CardQueue.AMBIENT)
     elseif cmd == "ask" then
-      CardQueue.push({ type = "QueryListeningCard" }, CardQueue.URGENT)
+      Cards:push({ type = "QueryListeningCard" }, CardQueue.URGENT)
     elseif cmd == "resume" then
-      CardQueue.push({ type = "ReadyCard" }, CardQueue.AMBIENT)
+      Cards:push({ type = "ReadyCard" }, CardQueue.AMBIENT)
     end
 
   elseif t == "button" and Figment.is_running() then
@@ -80,7 +84,7 @@ local function process_inbound(msg)
     -- actual dream enter/exit is handled in host_comm_dream via dream_enter/exit.
     -- Here we just update card queue behaviour.
     if HostComm.dream_active() then
-      CardQueue.clear()
+      Cards:clear()
     end
   end
 end
@@ -122,7 +126,7 @@ local function tick()
   elseif HostComm.dream_active() then
     -- Dream Mode: draw ambient layer then any pending dream cards
     DreamRend.draw_frame()
-    local card = CardQueue.peek()
+    local card = Cards:peek()
     if card then
       render_dream_card(card)
       -- Auto-dismiss dream cards after their dismiss_ms
@@ -130,7 +134,7 @@ local function tick()
     end
   else
     -- Memory Mode: normal card queue rendering
-    local card = CardQueue.peek()
+    local card = Cards:peek()
     if card then
       -- card rendering handled by existing display/cards.lua pipeline
       -- (unchanged from pre-dream main.lua)
@@ -141,6 +145,12 @@ end
 -- ---------------------------------------------------------------------------
 -- Boot
 -- ---------------------------------------------------------------------------
+-- Bind the BLE channel so device→host sends (figment acks, telemetry)
+-- actually leave the device — HostComm.send drops silently when unbound.
+if _G.halo and _G.halo.bluetooth then
+  HostComm.bind(_G.halo.bluetooth)
+end
+
 -- Give the figment stage its whitelisted effects: display, host send,
 -- battery. This is the entire capability surface a figment can reach.
 Figment.bind({
