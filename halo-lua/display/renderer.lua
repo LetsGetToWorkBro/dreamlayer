@@ -793,6 +793,48 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- Layout-driven cards (ForgetLast / PrivateZone / ConsentRequired /
+-- LiveCaption). These payloads self-describe via card.layout (hud/cards.py
+-- builds it); v1 queued them URGENT and then drew NOTHING for them — a
+-- consent prompt rendered as a black screen (found during the Meridian
+-- golden pass; the committed goldens were black discs too). One generic
+-- renderer honors the layout on both sides.
+-- ---------------------------------------------------------------------------
+local function draw_layout_card(card, sc, enter_t, exit_t)
+  local layout = card.layout or {}
+  local function row(name, text, fallback_y, fallback_color, stagger_ms)
+    if not text or text == "" then return end
+    if not layer_ok(enter_t, stagger_ms) then return end
+    local spec = layout[name] or {}
+    frame.display.text(text, floor(spec.x or CX), floor(spec.y or fallback_y),
+                       spec.color or fallback_color)
+  end
+  local sep = layout.separator
+  if sep and layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    frame.display.line(floor(sep.x1 or 48), floor(sep.y or 80),
+                       floor(sep.x2 or 208), floor(sep.y or 80),
+                       P.border_subtle)
+  end
+  local glyph = layout.shield or layout.lock
+  if glyph and layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    shield_glyph(floor(glyph.x or CX), floor(glyph.y or 44),
+                 floor((glyph.r or 10) * 2 * sc), glyph.color or P.privacy_caution,
+                 layout.shield ~= nil)
+  end
+  row("eyebrow", card.eyebrow, 64, P.text_secondary, A.STAGGER_EYEBROW_MS)
+  row("primary", card.primary, 112, P.text_primary,  A.STAGGER_PRIMARY_MS)
+  row("detail",  card.detail,  144, P.text_secondary, A.STAGGER_DETAIL_MS)
+  row("footer",  card.footer,  168, P.text_ghost,     A.STAGGER_FOOTER_MS)
+  if card.confidence and layout.conf_dot then
+    local d = layout.conf_dot
+    local jcol = (card.confidence >= 0.75 and P.confidence_high)
+              or (card.confidence >= 0.40 and P.confidence_med)
+              or  P.confidence_low
+    frame.display.circle(floor(d.x or CX), floor(d.y or 185), d.r or 3, jcol, true)
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -818,6 +860,12 @@ local DRAW = {
   DeviationAlertCard    = function(c,sc,et,xt,it) draw_deviation_alert(c,sc,et,xt,it)     end,
   -- Meridian lens presentation
   TruthLensCard         = function(c,sc,et,xt,it,tt) draw_testimony(c,sc,et,xt,it,tt)     end,
+  -- layout-driven cards (v1 queued these and drew nothing — see
+  -- draw_layout_card)
+  ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
+  PrivateZoneCard       = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
+  ConsentRequiredCard   = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
+  LiveCaptionCard       = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
 }
 
 -- ---------------------------------------------------------------------------

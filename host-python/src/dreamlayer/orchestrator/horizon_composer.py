@@ -131,13 +131,16 @@ class HorizonComposer:
                 conf = float(getattr(rec.event, "confidence", 0.5) or 0.5)
                 marks.append((deg, KIND_PROMISE * 100 + state * 10 + 2, conf))
 
-        # -- cap: drop lowest-confidence memories first, never promises
+        # -- cap: drop lowest-confidence memories first, never promises.
+        # When the cap forces drops, reserve one slot for the elder tick —
+        # the overflow indicator must always fit (a full dial that hides
+        # its own truncation would read as "covered everything").
         if len(marks) > MARKS_MAX:
             memories = sorted(
                 (m for m in marks if m[1] // 100 in (KIND_MEMORY, KIND_PERSON)),
                 key=lambda m: m[2],
             )
-            keep_drop = len(marks) - MARKS_MAX
+            keep_drop = len(marks) - (MARKS_MAX - 1)
             dropping = {id(m) for m in memories[:keep_drop]}
             marks = [m for m in marks if id(m) not in dropping]
             if dropping:

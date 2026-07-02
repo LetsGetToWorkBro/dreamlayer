@@ -363,6 +363,13 @@ class CardRenderer:
             "CommitmentDriftCard":  self._commitment_drift,
             "TimeScrubNodeCard":    self._time_scrub_node,
             "DeviationAlertCard":   self._deviation_alert,
+            # …and the four layout-driven cards NEITHER side drew (a
+            # consent prompt rendered as a black screen on device; found
+            # during the Meridian golden pass)
+            "ForgetLastCard":       self._layout_card,
+            "PrivateZoneCard":      self._layout_card,
+            "ConsentRequiredCard":  self._layout_card,
+            "LiveCaptionCard":      self._layout_card,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
@@ -942,6 +949,57 @@ class CardRenderer:
         self._multiline_text(draw, CX, 142, new, "sm", T.TEXT_PRIMARY,
                              max_width=160)
         self._dot(draw, CX, 170, max(2, int(2 + score * 3)), score_col)
+
+    def _layout_card(self, draw, card):
+        """Generic renderer for the layout-driven cards (ForgetLast /
+        PrivateZone / ConsentRequired / LiveCaption): the payload
+        self-describes rows via card['layout'] (built in cards.py).
+        Mirrors halo-lua/display/renderer.lua draw_layout_card."""
+        layout = card.get("layout") or {}
+
+        sep = layout.get("separator")
+        if sep:
+            self._hline(draw, sep.get("x1", 48), sep.get("x2", 208),
+                        sep.get("y", 80), T.BORDER_SUBTLE, alpha=170)
+
+        glyph = layout.get("shield") or layout.get("lock")
+        if glyph:
+            import math as _math
+            gx, gy = glyph.get("x", CX), glyph.get("y", 44)
+            gr = glyph.get("r", 10)
+            color = glyph.get("color", T.PRIVACY_CAUTION)
+            pts = []
+            for i in range(6):
+                a = _math.radians(60 * i - 30)
+                pts.append((gx + gr * _math.cos(a), gy + gr * _math.sin(a)))
+            draw.polygon(pts, outline=T.to_rgba(color, 1.0))
+            if layout.get("shield"):
+                bh = max(3, int(gr * 0.5))
+                bw = max(2, int(gr * 0.18))
+                gap = max(2, int(gr * 0.15))
+                draw.rectangle([gx - gap - bw, gy - bh / 2, gx - gap, gy + bh / 2],
+                               fill=T.to_rgba(color, 1.0))
+                draw.rectangle([gx + gap, gy - bh / 2, gx + gap + bw, gy + bh / 2],
+                               fill=T.to_rgba(color, 1.0))
+
+        def row(name, text, fallback_y, fallback_color, size="sm"):
+            if not text:
+                return
+            spec = layout.get(name) or {}
+            self._text(draw, spec.get("x", CX), spec.get("y", fallback_y),
+                       text, spec.get("size", size),
+                       spec.get("color", fallback_color))
+
+        row("eyebrow", card.get("eyebrow"), 64, T.TEXT_SECONDARY, "xs")
+        row("primary", card.get("primary"), 112, T.TEXT_PRIMARY, "md")
+        row("detail",  card.get("detail"),  144, T.TEXT_SECONDARY)
+        row("footer",  card.get("footer"),  168, T.TEXT_GHOST, "xs")
+
+        conf = card.get("confidence")
+        if conf is not None and layout.get("conf_dot"):
+            d = layout["conf_dot"]
+            self._dot(draw, d.get("x", CX), d.get("y", 185), d.get("r", 3),
+                      T.conf_color(conf))
 
     def _low_confidence(self, draw, card):
         draw_point_cloud_text(

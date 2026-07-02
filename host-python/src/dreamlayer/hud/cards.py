@@ -660,8 +660,9 @@ ALL_SAMPLES: dict[str, dict] = {
             {"kind": "triangle", "x": 96,  "y": 48, "size": 16},
         ],
     ),
-    "palette_shift":       palette_shift_card(
-        colors=[{"idx": 1, "y": 420, "cb": 560, "cr": 450}],
-        mood="voice",
-    ),
+    # PaletteShiftCard is deliberately NOT in ALL_SAMPLES: it is a palette
+    # command carrier, not a drawable card — neither renderer draws it, so
+    # its "golden" could only ever be a black disc, and Meridian's golden
+    # contract forbids committing black frames as references
+    # (docs/CINEMA_V2_GOLDEN_REVIEW.md).
 }
