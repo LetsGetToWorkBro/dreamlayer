@@ -18,5 +18,32 @@ statically-budgeted scene-machine), and a fixed on-device stage runs it.
         rc.keep(result.figment)
         rc.deploy(result.figment.id)
 """
-# Re-export the v1 implementation for backward compatibility
-from memoscape.reality_compiler import *  # noqa: F401,F403  # TODO(rename): dreamlayer.reality_compiler after rename PR lands
+from .compiler import RealityCompiler, CompileResult
+from .intent_parser import IntentParser
+from .schema import (
+    BehaviorIntent, RoundTimerIntent, OvertimeTimerIntent,
+    StopwatchIntent, IntervalTimerIntent, SimpleCounterIntent,
+    BatteryWarningIntent, TeleprompterIntent, CoachingCueIntent,
+    PointsMarkerIntent, NextClassIntent, TextSubtitlesIntent,
+    HabitReminderIntent, ReactTimerIntent, GestureRepeaterIntent,
+    SpeakerIndicatorIntent, ValidationError,
+)
+from .codegen import CodeGenerator
+from .emulator import HaloEmulator
+from .validator import EmulatorValidator
+from .deployer import HaloDeployer
+
+__all__ = [
+    "RealityCompiler", "CompileResult",
+    "IntentParser",
+    "BehaviorIntent", "RoundTimerIntent", "OvertimeTimerIntent",
+    "StopwatchIntent", "IntervalTimerIntent", "SimpleCounterIntent",
+    "BatteryWarningIntent", "TeleprompterIntent", "CoachingCueIntent",
+    "PointsMarkerIntent", "NextClassIntent", "TextSubtitlesIntent",
+    "HabitReminderIntent", "ReactTimerIntent", "GestureRepeaterIntent",
+    "SpeakerIndicatorIntent", "ValidationError",
+    "CodeGenerator",
+    "HaloEmulator",
+    "EmulatorValidator",
+    "HaloDeployer",
+]

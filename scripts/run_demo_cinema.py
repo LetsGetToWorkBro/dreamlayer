@@ -10,7 +10,7 @@ PNG frame sequence to out/cinema_reel/ (20 fps → 900 frames, 256×256):
   4. Privacy pause → shield slam → blackout w/ breathing hex glyph  (10s)
 
 Timing constants mirror halo-lua/display/animations.lua (SIG_*). The
-still-frame card layouts come from memoscape.hud.renderer so the reel and
+still-frame card layouts come from dreamlayer.hud.renderer so the reel and
 the goldens can never diverge.
 
 Usage:
@@ -28,9 +28,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "host-python", 
 
 from PIL import Image, ImageDraw  # noqa: E402
 
-from memoscape.hud import themes as T                       # noqa: E402
-from memoscape.hud.cards import ALL_SAMPLES                  # noqa: E402
-from memoscape.hud.renderer import SIZE, CX, CY, CardRenderer, _mask  # noqa: E402
+from dreamlayer.hud import themes as T                       # noqa: E402
+from dreamlayer.hud.cards import ALL_SAMPLES                  # noqa: E402
+from dreamlayer.hud.renderer import SIZE, CX, CY, CardRenderer, _mask  # noqa: E402
 
 FPS = 20
 OUT = os.path.join(os.path.dirname(__file__), "..", "out", "cinema_reel")

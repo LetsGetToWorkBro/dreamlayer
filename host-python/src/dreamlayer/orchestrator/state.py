@@ -1,11 +1,18 @@
-"""orchestrator/state.py — AppState enum for DreamLayer mode machine."""
-from enum import Enum, auto
+from dataclasses import dataclass
 
 
-class AppState(Enum):
-    IDLE            = auto()
-    DREAM_MODE      = auto()
-    LUCID_RECALL    = auto()
-    REALITY_COMPILE = auto()
-    TRUTH_LENS      = auto()
-    SOCIAL_LENS     = auto()
+@dataclass
+class HostState:
+    connected: bool = False
+    paused: bool = False
+    last_card_type: str = ""
+    mode: str = "MEMORY"   # "MEMORY" | "DREAM"
+
+    def is_dream(self) -> bool:
+        return self.mode == "DREAM"
+
+    def enter_dream(self) -> None:
+        self.mode = "DREAM"
+
+    def exit_dream(self) -> None:
+        self.mode = "MEMORY"

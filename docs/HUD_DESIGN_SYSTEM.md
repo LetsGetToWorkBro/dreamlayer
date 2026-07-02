@@ -1,4 +1,4 @@
-# Memoscape — HUD Design System
+# DreamLayer — HUD Design System
 
 ## Philosophy
 Calm, glanceable, premium. One thought at a time. The HUD should feel composed,

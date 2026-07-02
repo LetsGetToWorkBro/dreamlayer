@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 scripts/halo_bridge.py
-Memoscape Bridge — play a Lab scenario on a real connected Halo device over BLE.
+DreamLayer Bridge — play a Lab scenario on a real connected Halo device over BLE.
 
 Usage:
     uv run python scripts/halo_bridge.py --list-devices
@@ -187,7 +187,7 @@ async def play_scenario(scenario: dict, device_address: str,
 # ---------------------------------------------------------------------------
 
 async def async_main() -> None:
-    parser = argparse.ArgumentParser(description="Memoscape Bridge — real Halo BLE playback")
+    parser = argparse.ArgumentParser(description="DreamLayer Bridge — real Halo BLE playback")
     parser.add_argument("scenario", nargs="?", help="Path to .json scenario file")
     parser.add_argument("--list-devices", action="store_true",
                         help="Scan for nearby Halo devices and exit")

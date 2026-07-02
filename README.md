@@ -76,7 +76,7 @@ card = result.to_hud_card()
 
 ## Internal Engine
 
-`memoscape/` — memory storage, pipelines, orchestration (internal name, unchanged)  
+`dreamlayer/` — memory storage, pipelines, orchestration (internal name, unchanged)  
 `halo_bridge.py` — BLE hardware transport layer
 
 ## Roadmap
@@ -85,4 +85,4 @@ Future lenses: **Health Lens** · **Focus Lens** · **Skill Lens**
 
 ---
 
-*DreamLayer is built for Brilliant Labs Halo. Internal engine: Memoscape.*
+*DreamLayer is built for Brilliant Labs Halo. Internal engine: DreamLayer.*

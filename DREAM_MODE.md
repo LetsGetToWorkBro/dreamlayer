@@ -1,7 +1,7 @@
 # Dream Mode — Developer Guide
 
 Dream Mode is a continuous ambient perception layer that runs in parallel with
-Memoscape's normal memory engine.  Instead of responding to user queries, it
+DreamLayer's normal memory engine.  Instead of responding to user queries, it
 listens to the environment (mic, camera, IMU, place) and renders the emotional
 texture of the world directly onto the glasses display.
 
@@ -42,11 +42,11 @@ Halo Lua (dream_renderer.lua):
 
 ```python
 # Install dream dependencies
-pip install memoscape[dream]
+pip install dreamlayer[dream]
 
 # Dream Mode activates automatically on double_tap event from glasses.
 # To trigger manually in tests / CLI:
-from memoscape.app.orchestrator import Orchestrator
+from dreamlayer.orchestrator.orchestrator import Orchestrator
 orc = Orchestrator(bridge)
 orc.enter_dream()
 
@@ -81,7 +81,7 @@ available and the 4-second scene interval has elapsed.
 
 ## Adding a New Dream Reactor
 
-1. Create `host-python/src/memoscape/app/dream/my_reactor.py`
+1. Create `host-python/src/dreamlayer/app/dream/my_reactor.py`
 2. Implement `tick(ctx: RecallContext) -> Optional[dict]` returning a BLE command dict or card dict
 3. Import and instantiate in `DreamEngine.__init__`
 4. Call `my_reactor.tick(ctx)` in `DreamEngine._tick()`

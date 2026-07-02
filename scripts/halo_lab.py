@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 scripts/halo_lab.py
-Memoscape Lab — run scripted emulator scenarios, capture frames, export GIF + contact sheet.
+DreamLayer Lab — run scripted emulator scenarios, capture frames, export GIF + contact sheet.
 
 Usage:
-    cd ~/memoscape
+    cd ~/dreamlayer
     uv run python scripts/halo_lab.py scripts/scenarios/mindblow_demo.json
     uv run python scripts/halo_lab.py scripts/scenarios/  # run all scenarios
     uv run python scripts/halo_lab.py --list
@@ -166,7 +166,7 @@ def make_contact_sheet(frames, scenario_name: str, cols: int = 4):
     H = rows * (th + label_h + pad) + pad + 36
     sheet = Image.new("RGB", (W, H), (12, 12, 12))
     draw  = ImageDraw.Draw(sheet)
-    draw.text((pad, 8), f"Memoscape Lab \u2014 {scenario_name}", fill=(160, 160, 160))
+    draw.text((pad, 8), f"DreamLayer Lab \u2014 {scenario_name}", fill=(160, 160, 160))
     for idx, (label, img) in enumerate(frames):
         col = idx % cols
         row = idx // cols
@@ -273,7 +273,7 @@ def run_scenario(scenario: dict, lua_src: Path, out_dir: Path,
 # CLI
 # ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Memoscape Lab \u2014 emulator scenario runner")
+    parser = argparse.ArgumentParser(description="DreamLayer Lab \u2014 emulator scenario runner")
     parser.add_argument("scenario", nargs="?",
                         help="Path to .json scenario file or directory")
     parser.add_argument("--list",     action="store_true", help="List available scenarios")

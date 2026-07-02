@@ -1,4 +1,4 @@
---- main.lua  —  Memoscape Halo entry-point
+--- main.lua  —  DreamLayer Halo entry-point
 ---
 --- Boots the card queue FSM, wires BLE host-comm, and runs the tick loop.
 --- Dream Mode is activated by a double-tap event from the host.
@@ -153,7 +153,7 @@ if _G.halo and _G.halo.runloop then
   _G.halo.runloop(tick)
 else
   -- Emulator / test: expose tick for external test harness
-  _G._memoscape_tick = tick
+  _G._dreamlayer_tick = tick
 end
 
 return { tick = tick, CARD_PRIORITY = CARD_PRIORITY }

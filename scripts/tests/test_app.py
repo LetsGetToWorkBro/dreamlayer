@@ -1,5 +1,5 @@
 """
-pytest tests for memoscape/app.py.
+pytest tests for dreamlayer/app.py.
 All pure — no BLE hardware, no real network.
 Bleak is mocked so tests run anywhere.
 """
@@ -17,15 +17,15 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
 
-from memoscape.app import (
+from dreamlayer.app import (
     AppConfig,
-    MemoscapeApp,
+    DreamLayerApp,
     _decode_frame,
     _encode_frame,
     _scan_for_halo,
     HALO_NAME_PREFIX,
 )
-from memoscape.fsm import Event, MemoryCard, State
+from dreamlayer.fsm import Event, MemoryCard, State
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ def _make_app(
     on_loading=None,
     device_address="AA:BB:CC:DD:EE:FF",
     loading_timeout=5.0,
-) -> MemoscapeApp:
+) -> DreamLayerApp:
     cfg = AppConfig(
         device_address=device_address,
         loading_timeout=loading_timeout,
@@ -50,10 +50,10 @@ def _make_app(
         reconnect_tries=1,
         log_level="WARNING",
     )
-    return MemoscapeApp(config=cfg, on_loading=on_loading)
+    return DreamLayerApp(config=cfg, on_loading=on_loading)
 
 
-def _make_app_no_autoload(**kwargs) -> MemoscapeApp:
+def _make_app_no_autoload(**kwargs) -> DreamLayerApp:
     """No on_loading → FSM stays at LISTENING after single-click."""
     return _make_app(on_loading=None, **kwargs)
 
@@ -116,7 +116,7 @@ class TestAppConfig:
 
 
 # ---------------------------------------------------------------------------
-# MemoscapeApp construction
+# DreamLayerApp construction
 # ---------------------------------------------------------------------------
 
 class TestAppInit:
@@ -127,7 +127,7 @@ class TestAppInit:
         assert _make_app().fsm is not None
 
     def test_default_config_used_when_none(self):
-        assert MemoscapeApp().config.reconnect_base == 1.0
+        assert DreamLayerApp().config.reconnect_base == 1.0
 
     def test_stop_before_run_safe(self):
         _make_app().stop()
@@ -310,7 +310,7 @@ class TestBackoff:
 
         async def fake_sleep(s): delays.append(s)
 
-        with patch("memoscape.app.asyncio.sleep", side_effect=fake_sleep):
+        with patch("dreamlayer.app.asyncio.sleep", side_effect=fake_sleep):
             await app._backoff_sleep()
             await app._backoff_sleep()
             await app._backoff_sleep()
@@ -326,7 +326,7 @@ class TestBackoff:
 
         async def fake_sleep(s): delays.append(s)
 
-        with patch("memoscape.app.asyncio.sleep", side_effect=fake_sleep):
+        with patch("dreamlayer.app.asyncio.sleep", side_effect=fake_sleep):
             await app._backoff_sleep()
             await app._backoff_sleep()
 
@@ -353,7 +353,7 @@ class TestScanForHalo:
         mock_scanner = MagicMock()
         mock_scanner.discover = AsyncMock(return_value=[d1, d2, d3])
 
-        with patch("memoscape.app.BleakScanner", mock_scanner):
+        with patch("dreamlayer.app.BleakScanner", mock_scanner):
             result = await _scan_for_halo(5.0)
 
         # "Phone" filtered; d2 RSSI=-45 beats d1 RSSI=-60
@@ -368,7 +368,7 @@ class TestScanForHalo:
         mock_scanner = MagicMock()
         mock_scanner.discover = AsyncMock(return_value=[d1, d2])
 
-        with patch("memoscape.app.BleakScanner", mock_scanner):
+        with patch("dreamlayer.app.BleakScanner", mock_scanner):
             result = await _scan_for_halo(5.0)
 
         assert result is None
@@ -379,7 +379,7 @@ class TestScanForHalo:
         mock_scanner = MagicMock()
         mock_scanner.discover = AsyncMock(return_value=[d])
 
-        with patch("memoscape.app.BleakScanner", mock_scanner):
+        with patch("dreamlayer.app.BleakScanner", mock_scanner):
             result = await _scan_for_halo(5.0)
 
         assert result == "AA:BB:CC:DD:EE:FF"

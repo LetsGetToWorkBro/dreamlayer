@@ -136,7 +136,7 @@ CARD_SPECS: dict[str, CardSpec] = {
     "SavedMemoryCard":      CardSpec("SavedMemoryCard",      "SAVED",     "Memory saved",     "",                 "",          1.00, "✓"),
     "LowConfidenceCard":    CardSpec("LowConfidenceCard",    "UNSURE",    "Not sure",         "",                 "",          0.20, "?"),
     "ErrorCard":            CardSpec("ErrorCard",            "ERROR",     "Try again",        "",                 "",          0.00, "⚠"),
-    "ReadyCard":            CardSpec("ReadyCard",            "READY",     "Memoscape",        "",                 "",          1.00, "○"),
+    "ReadyCard":            CardSpec("ReadyCard",            "READY",     "DreamLayer",        "",                 "",          1.00, "○"),
     "QueryListeningCard":   CardSpec("QueryListeningCard",   "LISTENING", "∿∿∿∿∿",              "",                 "",          1.00, "◔"),
     "LoadingCard":          CardSpec("LoadingCard",          "LOADING",   "Thinking…",        "",                 "",          1.00, "↺"),
     "PrivacyPausedCard":    CardSpec("PrivacyPausedCard",    "PRIVACY",   "Memory paused",    "",                 "",          1.00, "▣"),
@@ -383,7 +383,7 @@ def save_gif(frames: list[Image.Image], path: Path, fps: int) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Memoscape animation lifecycle previewer")
+    parser = argparse.ArgumentParser(description="DreamLayer animation lifecycle previewer")
     parser.add_argument("--card",  default=None, help="Single card type to render")
     parser.add_argument("--fps",   type=int, default=FPS_DEFAULT)
     parser.add_argument("--scale", type=int, default=1, choices=[1, 2])

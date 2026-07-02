@@ -122,4 +122,4 @@ private_zone, consent_required, live_caption, low_confidence, error,
 person_context v1, synesthesia v1, palette_shift) passed inspection after
 the systemic alpha fix with no card-specific patches. The goldens are now
 committed (previously gitignored) so CI can pixel-diff against them via
-`python -m memoscape.hud.golden_images --suite --dir assets/hud/samples`.
+`python -m dreamlayer.hud.golden_images --suite --dir assets/hud/samples`.

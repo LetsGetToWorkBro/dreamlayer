@@ -2,7 +2,7 @@
 --- Semantic color tokens + Halo Cinema v1 dynamic palette slot bank.
 ---
 --- Static tokens (never reassigned at runtime) mirror
---- host-python/src/memoscape/hud/themes.py — keep the two in sync.
+--- host-python/src/dreamlayer/hud/themes.py — keep the two in sync.
 ---
 --- Dynamic bank (Halo Cinema v1, docs/HALO_CINEMA_V1.md §1.2):
 --- the 4bpp display has no alpha; "opacity" is faked by animating the

@@ -95,8 +95,7 @@ class RealityCompilerV2:
         Deprecated: kept so every v1 phrasing keeps working. Reuses the
         v1 IntentParser (offline pattern-matcher) unchanged.
         """
-        # TODO(rename): dreamlayer.reality_compiler.intent_parser after rename PR lands
-        from memoscape.reality_compiler.intent_parser import IntentParser
+        from dreamlayer.reality_compiler.intent_parser import IntentParser
 
         intent = IntentParser().parse(text)
         fig = compat.lift(intent)

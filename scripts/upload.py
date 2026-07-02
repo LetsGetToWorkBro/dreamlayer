@@ -4,12 +4,12 @@ scripts/upload.py
 Deploy halo-lua/ to a paired Brilliant Labs Halo over BLE.
 
 Usage:
-    cd ~/memoscape
+    cd ~/dreamlayer
     uv run --extra hardware python scripts/upload.py            # auto-detect device
     uv run --extra hardware python scripts/upload.py --run      # upload + run main.lua
     uv run --extra hardware python scripts/upload.py --verify   # checksum verify after upload
     uv run --extra hardware python scripts/upload.py --ls       # list files on device
-    uv run --extra hardware python scripts/upload.py --wipe     # wipe /memoscape/ on device first
+    uv run --extra hardware python scripts/upload.py --wipe     # wipe /dreamlayer/ on device first
 
 Requirements:
     uv sync --extra hardware   (installs brilliant-ble, brilliant-msg)
@@ -36,7 +36,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 REPO_ROOT  = Path(__file__).resolve().parent.parent
 LUA_SRC    = REPO_ROOT / "halo-lua"
-DEVICE_DIR = "/memoscape"          # root path on the Halo filesystem
+DEVICE_DIR = "/dreamlayer"          # root path on the Halo filesystem
 MAIN_FILE  = "main.lua"            # entry point
 EXCLUDE    = {".git", "__pycache__", ".DS_Store", "*.pyc", "*.swp"}
 
@@ -150,7 +150,7 @@ async def main():
     parser.add_argument("--run",    action="store_true", help="Run main.lua after upload")
     parser.add_argument("--verify", action="store_true", help="Checksum verify after each file upload")
     parser.add_argument("--ls",     action="store_true", help="List files on device (no upload)")
-    parser.add_argument("--wipe",   action="store_true", help="Delete /memoscape/ on device before upload")
+    parser.add_argument("--wipe",   action="store_true", help="Delete /dreamlayer/ on device before upload")
     parser.add_argument("--dry-run",action="store_true", help="Show files that would be uploaded, then exit")
     args = parser.parse_args()
 
