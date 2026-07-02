@@ -27,6 +27,7 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 | Your own truth | **Candor** | The inward twin of Truth Lens: new statements checked against your own memories — never the cloud — flagging when they can't both be true |
 | Belief genealogy | **Provenance Lens** | Point it at a claim and it traces where that belief entered your head — who told you, when, corroborated or contested |
 | Wonder | **Prism Lens** | Turns the world into a reactive psychedelic overlay — kaleidoscopic, sound- and motion-driven, built on palette cycling |
+| Invisible UI | **Object Lens** | Look at a thing → a contextual panel: what you already know about it, plus pluggable integrations (laptop files, tire pressure). Objects only, never people |
 
 ## Precision Lenses
 
@@ -46,6 +47,7 @@ dreamlayer/
 ├── confluence/          # Bonds, the entangled sky, TinCan, Crossing, Duet, gifts
 ├── truth_lens/          # 9-stage deception analysis pipeline
 ├── social_lens/         # Contact recognition, labeling, baseline storage
+├── object_lens/         # Look at a thing → contextual panel (objects, not people)
 ├── hud/                 # Card definitions, renderer, framebuffer pipeline
 ├── memory/              # Anchors, storage, retrieval, ranking
 ├── pipelines/           # Audio, vision, IMU, place context ingestion

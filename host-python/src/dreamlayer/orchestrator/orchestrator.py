@@ -20,6 +20,7 @@ from .tell import TellEngine
 from .consistency import ConsistencyEngine
 from .provenance import ProvenanceLens
 from .quest import QuestLog
+from ..object_lens import ObjectLens
 from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
@@ -64,6 +65,10 @@ class Orchestrator:
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
+        # Object Lens: look at a thing -> a contextual panel (objects, not
+        # people). Ships with the memory provider; register integration
+        # seams (laptop/car/plant) at the app layer.
+        self.object_lens = ObjectLens(ring=self.ring, privacy=self.privacy)
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -393,6 +398,14 @@ class Orchestrator:
         if result.found:
             self.bridge.send_card(result.card, event="provenance")
         return result
+
+    def look_at_object(self, frame, now: float | None = None):
+        """Object Lens: recognise the object in view and surface its
+        contextual panel. Veil-gated; objects only (people are Social Lens)."""
+        panel = self.object_lens.look(frame, now=now)
+        if panel is not None:
+            self.bridge.send_card(panel.to_hud_card(), event="object_panel")
+        return panel
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)
