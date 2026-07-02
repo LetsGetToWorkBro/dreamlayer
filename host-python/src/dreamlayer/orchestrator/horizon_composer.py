@@ -31,6 +31,7 @@ CADENCE_S = 5.0
 
 # code = kind*100 + state*10 + luma
 KIND_MEMORY, KIND_PROMISE, KIND_PERSON, KIND_ELDER, KIND_FUTURE_CAP = 1, 2, 3, 4, 5
+KIND_PREMONITION = 6   # future ghost (dream_mode/premonition.py)
 
 _DRIFT_STATE_CODE = {
     "blooming": 1, "healthy": 2, "drifting": 3, "cracking": 4, "shattered": 5,
@@ -55,7 +56,8 @@ def _luma_tier(confidence: float) -> int:
 class HorizonComposer:
     """Stateless per-call composition + rate limiting + seq numbering."""
 
-    def __init__(self, ring, drift=None, now_fn=None, rem=None):
+    def __init__(self, ring, drift=None, now_fn=None, rem=None,
+                 premonition=None):
         self._ring = ring
         self._drift = drift
         self._now = now_fn or time.time
@@ -63,6 +65,9 @@ class HorizonComposer:
         # night promoted wake up one luma tier brighter; boosted marks
         # also survive the 48-mark cap preferentially.
         self._rem = rem
+        # premonition: optional RecurrenceModel — future ghosts shimmer
+        # ahead of the now-notch, always luma 1, dropped first at the cap
+        self._premonition = premonition
         self._seq = 0
         self._last_emit: float = 0.0
         self._last_wire: Optional[str] = None
@@ -164,6 +169,23 @@ class HorizonComposer:
             marks = [m for m in marks if id(m) not in dropping]
             if dropping:
                 elder_needed = True   # the day is bigger than the dial shows
+
+        # -- future ghosts (Premonition): faint marks ahead of now,
+        # never displacing real marks — they only fill spare capacity
+        if self._premonition is not None:
+            room = MARKS_MAX - len(marks) - 2   # keep space for elder/cap
+            if room > 0:
+                try:
+                    preds = self._premonition.predict(now)
+                except Exception:
+                    preds = []
+                for pred in preds[:room]:
+                    hours_until = (pred.expected_ts - now) / 3600.0
+                    if not 0.0 < hours_until <= WINDOW_HOURS:
+                        continue
+                    deg = NOW_DEG - hours_until * DEG_PER_HOUR
+                    marks.append((deg, KIND_PREMONITION * 100 + 1,
+                                  pred.confidence))
 
         if elder_needed and len(marks) < MARKS_MAX:
             marks.append((ELDER_DEG, KIND_ELDER * 100 + 1, 1.0))
