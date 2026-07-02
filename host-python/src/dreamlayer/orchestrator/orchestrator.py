@@ -17,6 +17,8 @@ from .commitment_drift import CommitmentDriftEngine
 from .horizon_composer import HorizonComposer
 from .time_scrub import TimeScrubSession
 from .tell import TellEngine
+from .consistency import ConsistencyEngine
+from .quest import QuestLog
 from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
@@ -58,10 +60,14 @@ class Orchestrator:
         self.drift_engine = CommitmentDriftEngine(self.ring)
         self._scrub_session: TimeScrubSession | None = None
         self.tell_engine = TellEngine(self.ring)
+        # On-device fact consistency: new statements vs your own memories.
+        self.consistency = ConsistencyEngine(self.ring)
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
         vault_dir = getattr(cfg, "vault_dir", None)
+        # Life Quest Engine: Commitment Drift, told as a personal RPG.
+        self.quest = QuestLog(self.drift_engine, vault_dir=vault_dir)
         self.rem_bias = (RetrievalBias.load(vault_dir) if vault_dir
                          else RetrievalBias())
         self.nightwatch = NightWatch(vault_dir) if vault_dir else None
@@ -330,6 +336,51 @@ class Orchestrator:
     def break_commitment(self, subject: str, now: float | None = None):
         """Mark a commitment broken — shatter and pin."""
         return self.drift_engine.break_(subject, now=now)
+
+    # ------------------------------------------------------------------
+    # Life Quest Engine (Commitment Drift as a personal RPG)
+    # ------------------------------------------------------------------
+
+    def quests(self, now: float | None = None):
+        """Active commitments, seen as quests (most-imperilled first)."""
+        return self.quest.quests(now=now)
+
+    def complete_quest(self, subject: str, now: float | None = None):
+        """Keep a commitment: award XP, extend the streak, surface a reward."""
+        reward = self.quest.complete(subject, now=now)
+        if reward is not None:
+            self.bridge.send_card(reward.to_hud_card(), event="quest_complete")
+        return reward
+
+    def abandon_quest(self, subject: str, now: float | None = None) -> bool:
+        return self.quest.abandon(subject, now=now)
+
+    def quest_stats(self):
+        return self.quest.stats()
+
+    # ------------------------------------------------------------------
+    # Instant Skill Overlay (a procedure compiled to a Figment)
+    # ------------------------------------------------------------------
+
+    def build_skill(self, name: str, text: str):
+        """Compile a step list into a budget-verified Figment ready to deploy.
+        Returns (figment, budget_report)."""
+        from ..reality_compiler.v2 import compile_skill, parse_skill
+        return compile_skill(name, parse_skill(text))
+
+    # ------------------------------------------------------------------
+    # On-device fact consistency
+    # ------------------------------------------------------------------
+
+    def check_consistency(self, claim: str, now: float | None = None):
+        """Flag when a new statement contradicts your own recorded memories.
+        Veil-gated; surfaces a card when it fires. Never touches the cloud."""
+        if not self.privacy.allow_capture():
+            return None
+        result = self.consistency.check(claim, now=now)
+        if result.fired:
+            self.bridge.send_card(result.card, event="consistency")
+        return result
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)
