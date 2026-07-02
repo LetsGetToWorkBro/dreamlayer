@@ -70,6 +70,22 @@ WantedBy=default.target
 **Windows** — Task Scheduler → Create Task → Trigger: *At log on* → Action:
 `python`, arguments `C:\path\dreamlayer_companion.py --token rune-birch`.
 
+## The bigger Brain (files, model, history, control panel)
+
+This companion serves *live* context (recent files, battery). The **DreamLayer
+Brain** is the larger app that turns your Mac mini into a private knowledge +
+AI node — index chosen folders, drag-drop files in, pick your model (Ollama),
+ask questions grounded in your own files, and keep a query history, all from a
+web control panel:
+
+```bash
+python -m dreamlayer.ai_brain.server --token rune-birch
+# control panel at http://<mac-mini>:7777/
+```
+
+See [`docs/AI_BRAIN.md`](../docs/AI_BRAIN.md). The phone connects to it with
+`connect_brain(router, url, token)`.
+
 ## How it fits DreamLayer
 
 The phone side is already built (`object_lens.integrations.laptop_data_source`

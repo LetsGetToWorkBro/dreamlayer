@@ -10,8 +10,14 @@ from .brains import (
     VisionBrain, KnowledgeBrain, MockVisionBrain, MockKnowledgeBrain,
 )
 from .router import BrainRouter
+from .remote import (
+    RemoteVisionBrain, RemoteKnowledgeBrain, connect_brain,
+)
+from .cloud import CloudVisionBrain, CloudKnowledgeBrain
 
 __all__ = [
     "Answer", "VisionBrain", "KnowledgeBrain",
     "MockVisionBrain", "MockKnowledgeBrain", "BrainRouter",
+    "RemoteVisionBrain", "RemoteKnowledgeBrain", "connect_brain",
+    "CloudVisionBrain", "CloudKnowledgeBrain",
 ]
