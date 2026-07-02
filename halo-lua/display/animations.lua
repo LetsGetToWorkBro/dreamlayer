@@ -65,7 +65,7 @@ M.DISMISS_MS = {
   CommitmentRecallCard = 4000,
   ProactiveMemoryCard  = 3500,
   PersonContextCard    = 3500,
-  PrivacyPausedCard    =    0,
+  PrivacyVeilCard    =    0,
   ErrorCard            = 4000,
   LowConfidenceCard    = 3000,
   TruthLensCard        = 5000,
@@ -121,7 +121,7 @@ M.SIG_CHIME_MS       = 220    -- memory saved: single expanding ring
 M.SIG_CHIME_R_FROM   = 8
 M.SIG_CHIME_R_TO     = 28
 M.SIG_CHORD_STEP_MS  = 40     -- person recognized: 3-arc arpeggio step
-M.SIG_RUMBLE_MS      = 100    -- privacy pause: full-field dim pre-slam
+M.SIG_RUMBLE_MS      = 100    -- privacy veil: full-field dim pre-slam
 M.SIG_RUMBLE_Y_DROP  = 160    -- dynamic slot luma drop during rumble
 
 return M

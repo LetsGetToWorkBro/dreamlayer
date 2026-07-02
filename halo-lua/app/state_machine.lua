@@ -5,13 +5,13 @@
 --   boot         -> startup event -> ready
 --   ready        -> host_connected -> connected
 --                -> single_click  -> query_listening
---                -> long_press    -> privacy_paused
+--                -> long_press    -> privacy_veil
 --   connected    -> card_received  -> showing_card
 --                -> command_received (ask) -> query_listening
---                -> command_received (pause) -> privacy_paused
+--                -> command_received (pause) -> privacy_veil
 --                -> command_received (show_ready) -> ready
 --                -> single_click  -> query_listening
---                -> long_press    -> privacy_paused
+--                -> long_press    -> privacy_veil
 --                -> host_disconnected -> ready
 --   showing_card -> single_click  -> connected  (dismiss)
 --                -> double_click  -> connected  (dismiss)
@@ -21,7 +21,7 @@
 --   query_listening -> card_received -> showing_card
 --                   -> single_click  -> connected  (cancel)
 --                   -> host_disconnected -> ready
---   privacy_paused  -> long_press    -> connected  (resume)
+--   privacy_veil  -> long_press    -> connected  (resume)
 --                   -> command_received (resume) -> connected
 --                   -> host_disconnected -> ready
 --
@@ -89,8 +89,8 @@ TRANSITIONS["ready"] = {
     show(cards().query_listening())
   end,
   [E.EVENTS.long_press] = function(_)
-    transition("privacy_paused")
-    show(cards().privacy_paused())
+    transition("privacy_veil")
+    show(cards().privacy_veil())
   end,
   [E.EVENTS.card_received] = function(payload)
     transition("showing_card")
@@ -109,8 +109,8 @@ TRANSITIONS["connected"] = {
       transition("query_listening")
       show(cards().query_listening())
     elseif kind == "pause" then
-      transition("privacy_paused")
-      show(cards().privacy_paused())
+      transition("privacy_veil")
+      show(cards().privacy_veil())
     elseif kind == "show_ready" or kind == "reset" then
       transition("ready")
       show(cards().ready())
@@ -123,8 +123,8 @@ TRANSITIONS["connected"] = {
     show(cards().query_listening())
   end,
   [E.EVENTS.long_press] = function(_)
-    transition("privacy_paused")
-    show(cards().privacy_paused())
+    transition("privacy_veil")
+    show(cards().privacy_veil())
   end,
   [E.EVENTS.host_disconnected] = function(_)
     transition("ready")
@@ -145,8 +145,8 @@ TRANSITIONS["showing_card"] = {
     show(cards().ready())
   end,
   [E.EVENTS.long_press] = function(_)
-    transition("privacy_paused")
-    show(cards().privacy_paused())
+    transition("privacy_veil")
+    show(cards().privacy_veil())
   end,
   [E.EVENTS.imu_tap] = function(_)
     transition("connected")
@@ -168,8 +168,8 @@ TRANSITIONS["query_listening"] = {
     show(cards().ready())
   end,
   [E.EVENTS.long_press] = function(_)
-    transition("privacy_paused")
-    show(cards().privacy_paused())
+    transition("privacy_veil")
+    show(cards().privacy_veil())
   end,
   [E.EVENTS.host_disconnected] = function(_)
     transition("ready")
@@ -177,7 +177,7 @@ TRANSITIONS["query_listening"] = {
   end,
 }
 
-TRANSITIONS["privacy_paused"] = {
+TRANSITIONS["privacy_veil"] = {
   [E.EVENTS.long_press] = function(_)
     transition("connected")
     show(cards().ready())
@@ -247,8 +247,8 @@ function M.set_card(msg_payload)
     card = C.query_listening()
   elseif t == "LoadingCard" then
     card = C.loading()
-  elseif t == "PrivacyPausedCard" then
-    card = C.privacy_paused()
+  elseif t == "PrivacyVeilCard" then
+    card = C.privacy_veil()
   elseif t == "ErrorCard" then
     card = C.error_card(msg_payload.primary)
   elseif t == "LowConfidenceCard" then

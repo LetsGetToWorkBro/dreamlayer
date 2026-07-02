@@ -238,7 +238,7 @@ Halo has no speaker. Each "sound" maps to exactly one renderer function:
 |---|---|---|
 | **Chime** (memory saved) | single 1px ring, r 8→28, 220ms, out_expo, accent_success — one clean overtone | `transitions.chime(cx, cy)` |
 | **Chord** (person recognized) | three arcs (r 32/40/48) light in 3×40ms arpeggio around the avatar halo, then hold | `transitions.chord(cx, cy, conf)` |
-| **Sub-bass rumble** (privacy pause) | full-field 2-frame dim: dynamic slots 1–6 Y −160 for 100ms, then shield slam proceeds — the room gets quieter before the door shuts | `transitions.rumble()` |
+| **Sub-bass rumble** (privacy veil) | full-field 2-frame dim: dynamic slots 1–6 Y −160 for 100ms, then shield slam proceeds — the room gets quieter before the door shuts | `transitions.rumble()` |
 | **High shimmer** (proactive surface) | Memory Comet's tail widens 1px for its final 80ms — arrival sparkle | built into `transitions.comet` |
 
 ---

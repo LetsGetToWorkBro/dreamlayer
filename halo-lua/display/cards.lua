@@ -120,11 +120,11 @@ function M.person_context(p)
   }
 end
 
-function M.privacy_paused()
+function M.privacy_veil()
   return {
-    type       = "PrivacyPausedCard",
-    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.PrivacyPausedCard or 0,
-    primary    = "Memory paused",
+    type       = "PrivacyVeilCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.PrivacyVeilCard or 0,
+    primary    = "Privacy Veil",
     -- Visual: shield+pause-bars glyph, breach halo (340 deg arc), red/amber palette
   }
 end

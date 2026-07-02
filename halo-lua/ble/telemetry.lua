@@ -12,7 +12,7 @@
 ---   CARD_SHOWN        card became active in renderer (card_type, priority)
 ---   CARD_DISMISSED    card was dismissed by user tap or auto-expire
 ---                     (card_type, method: "tap"|"expire"|"superseded")
----   PRIVACY_PAUSED    device entered privacy state
+---   PRIVACY_VEIL    device entered privacy state
 ---   PRIVACY_RESUMED   device left privacy state
 ---   QUERY_CANCELLED   user cancelled an in-flight query (double-click)
 ---   BLE_ERROR         BLE receive error (raw string)
@@ -30,7 +30,7 @@ local telemetry = {}
 -- ---------------------------------------------------------------------------
 telemetry.CARD_SHOWN      = "CARD_SHOWN"
 telemetry.CARD_DISMISSED  = "CARD_DISMISSED"
-telemetry.PRIVACY_PAUSED  = "PRIVACY_PAUSED"
+telemetry.PRIVACY_VEIL  = "PRIVACY_VEIL"
 telemetry.PRIVACY_RESUMED = "PRIVACY_RESUMED"
 telemetry.QUERY_CANCELLED = "QUERY_CANCELLED"
 telemetry.BLE_ERROR       = "BLE_ERROR"

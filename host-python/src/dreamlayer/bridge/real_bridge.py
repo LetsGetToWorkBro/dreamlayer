@@ -243,7 +243,7 @@ class RealBridge(BridgeBase):
         self._require_connected()
         with self._paused_lock:
             paused = self._paused
-        if paused and payload.get("type") != "PrivacyPausedCard":
+        if paused and payload.get("type") != "PrivacyVeilCard":
             return
         msg = {"t": "card", "payload": payload, "event": event}
         self._run(self._send_raw(msg))

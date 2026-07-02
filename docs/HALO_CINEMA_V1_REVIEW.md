@@ -101,7 +101,7 @@ to catch.
   `HALO_CINEMA_V1_RISKS.md` as a founder-taste question, not changed
   unilaterally.
 
-## commitment_recall.png / loading.png / ready.png / privacy_paused.png (existing)
+## commitment_recall.png / loading.png / ready.png / privacy_veil.png (existing)
 
 - **Pass 1 (commitment):** third chain link rendered as a solid green pill
   with the due text invisible inside it (green-on-green). This was the

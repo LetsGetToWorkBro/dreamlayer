@@ -36,8 +36,8 @@ Expected HUD:
 - You discussed the invoice
 - With Jordan
 
-## Demo 4 — Privacy Pause
-Triggered via `privacy_pause` event in the emulator; renders **PrivacyPausedCard**.
+## Demo 4 — Privacy Veil
+Triggered via `privacy_pause` event in the emulator; renders **PrivacyVeilCard**.
 Expected HUD:
-- Memory paused
+- Privacy Veil engaged
 - Nothing is being captured

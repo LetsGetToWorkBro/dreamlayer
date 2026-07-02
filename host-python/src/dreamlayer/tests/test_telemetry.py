@@ -47,7 +47,7 @@ def tel_rt():
 def test_event_constants_exported(tel_rt):
     assert tel_rt.eval("_tel.CARD_SHOWN")      == "CARD_SHOWN"
     assert tel_rt.eval("_tel.CARD_DISMISSED")  == "CARD_DISMISSED"
-    assert tel_rt.eval("_tel.PRIVACY_PAUSED")  == "PRIVACY_PAUSED"
+    assert tel_rt.eval("_tel.PRIVACY_VEIL")  == "PRIVACY_VEIL"
     assert tel_rt.eval("_tel.PRIVACY_RESUMED") == "PRIVACY_RESUMED"
     assert tel_rt.eval("_tel.QUERY_CANCELLED") == "QUERY_CANCELLED"
     assert tel_rt.eval("_tel.BLE_ERROR")       == "BLE_ERROR"
@@ -75,10 +75,10 @@ def test_emit_card_dismissed(tel_rt):
     assert msg["method"]    == "tap"
 
 
-def test_emit_privacy_paused(tel_rt):
-    tel_rt.execute("_tel.emit(_tel.PRIVACY_PAUSED, {})")
+def test_emit_privacy_veil(tel_rt):
+    tel_rt.execute("_tel.emit(_tel.PRIVACY_VEIL, {})")
     msg = tel_rt.eval("_emitted[1]")
-    assert msg["event"] == "PRIVACY_PAUSED"
+    assert msg["event"] == "PRIVACY_VEIL"
 
 
 def test_emit_query_cancelled(tel_rt):
@@ -121,7 +121,7 @@ def test_emit_no_transport_no_crash(tel_rt):
 # ---------------------------------------------------------------------------
 
 def test_multiple_emissions_accumulate(tel_rt):
-    for ev in ["CARD_SHOWN", "CARD_DISMISSED", "PRIVACY_PAUSED"]:
+    for ev in ["CARD_SHOWN", "CARD_DISMISSED", "PRIVACY_VEIL"]:
         tel_rt.execute(f"_tel.emit(_tel.{ev}, {{}})") 
     count = tel_rt.eval("#_emitted")
     assert count == 3

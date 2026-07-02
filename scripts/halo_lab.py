@@ -68,7 +68,7 @@ CARD_REQUIRED: dict[str, list[str]] = {
     "LiveCaptionCard":      ["translation"],
     "LowConfidenceCard":    ["primary"],
     "QueryListeningCard":   [],
-    "PrivacyPausedCard":    [],
+    "PrivacyVeilCard":    [],
     "LoadingCard":          [],
 }
 

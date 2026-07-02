@@ -12,7 +12,7 @@ first-class, visible feature.
 
 ## Paused state
 - Long-press (or `privacy_pause` command) instantly enters `paused`.
-- A dedicated **PrivacyPausedCard** makes the state unmistakable in-eye.
+- A dedicated **PrivacyVeilCard** makes the state unmistakable in-eye.
 - While paused, capture helpers **bypass** all camera/mic triggers (enforced in
   `capture/scheduler.lua` and tested in `test_privacy.py`).
 

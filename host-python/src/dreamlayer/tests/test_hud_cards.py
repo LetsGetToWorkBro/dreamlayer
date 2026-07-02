@@ -85,12 +85,12 @@ def test_proactive_footer_no_person():
 
 
 # ---------------------------------------------------------------------------
-# PrivacyPausedCard
+# PrivacyVeilCard
 # ---------------------------------------------------------------------------
 
 def test_privacy_payload():
-    c = cards.privacy_paused()
-    assert c["primary"] == "Memory paused"
+    c = cards.privacy_veil()
+    assert c["primary"] == "Privacy Veil"
     assert "Nothing is being captured" in c["lines"]
 
 

@@ -21,13 +21,13 @@ def test_gate_logic():
 
 def test_paused_card_renders():
     orch, _ = scenarios.privacy_pause()
-    assert orch.bridge.last_card["type"] == "PrivacyPausedCard"
+    assert orch.bridge.last_card["type"] == "PrivacyVeilCard"
 
 
 def test_paused_card_text():
     orch, _ = scenarios.privacy_pause()
     c = orch.bridge.last_card
-    assert c["primary"] == "Memory paused"
+    assert c["primary"] == "Privacy Veil"
     assert "Nothing is being captured" in c["lines"]
 
 
@@ -43,7 +43,7 @@ def test_emulator_refuses_content_while_paused():
     b.connect()
     b.inject_event("privacy_pause")
     b.send_card({"type": "ObjectRecallCard", "primary": "Keys"})
-    assert b.last_card["type"] == "PrivacyPausedCard"
+    assert b.last_card["type"] == "PrivacyVeilCard"
 
 
 # ---------------------------------------------------------------------------

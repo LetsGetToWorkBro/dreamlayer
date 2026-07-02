@@ -8,7 +8,7 @@ IDLE        Device connected, no active operation.
 LISTENING  Button single-click; audio capture active.
 LOADING    Processing / waiting for AI response.
 CARD        A memory card is displayed.
-PRIVACY     Memory paused; no capture or display.
+PRIVACY_VEIL  Privacy Veil; no capture or display.
 DISCONNECT Device not connected.
 
 Transitions are driven by Events (button presses, BLE messages, timeouts).
@@ -32,7 +32,7 @@ class State(Enum):
     LISTENING   = auto()
     LOADING     = auto()
     CARD        = auto()
-    PRIVACY     = auto()
+    PRIVACY_VEIL = auto()
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ _TRANSITIONS: dict[tuple[State, Event], tuple[State, str]] = {
     (State.LISTENING,   Event.BLE_DISCONNECT):  (State.DISCONNECT, "on_disconnect"),
     (State.LOADING,     Event.BLE_DISCONNECT):  (State.DISCONNECT, "on_disconnect"),
     (State.CARD,        Event.BLE_DISCONNECT):  (State.DISCONNECT, "on_disconnect"),
-    (State.PRIVACY,     Event.BLE_DISCONNECT):  (State.DISCONNECT, "on_disconnect"),
+    (State.PRIVACY_VEIL,     Event.BLE_DISCONNECT):  (State.DISCONNECT, "on_disconnect"),
 
     # --- Listening ---
     (State.IDLE,        Event.BUTTON_SINGLE):   (State.LISTENING,  "on_listen_start"),
@@ -128,14 +128,14 @@ _TRANSITIONS: dict[tuple[State, Event], tuple[State, str]] = {
     (State.IDLE,        Event.BUTTON_DOUBLE):   (State.IDLE,       "noop"),
 
     # --- Privacy ---
-    (State.IDLE,        Event.BUTTON_LONG):     (State.PRIVACY,    "on_privacy_enter"),
-    (State.CARD,        Event.BUTTON_LONG):     (State.PRIVACY,    "on_privacy_enter"),
-    (State.LISTENING,   Event.BUTTON_LONG):     (State.PRIVACY,    "on_privacy_enter"),
-    (State.PRIVACY,     Event.BUTTON_LONG):     (State.IDLE,       "on_privacy_exit"),
-    (State.PRIVACY,     Event.BUTTON_SINGLE):   (State.PRIVACY,    "noop"),
-    (State.PRIVACY,     Event.BUTTON_DOUBLE):   (State.PRIVACY,    "noop"),
-    (State.PRIVACY,     Event.CARD_RECEIVED):   (State.PRIVACY,    "noop"),  # suppress during privacy
-    (State.PRIVACY,     Event.PRIVACY_TOGGLE):  (State.IDLE,       "on_privacy_exit"),
+    (State.IDLE,        Event.BUTTON_LONG):     (State.PRIVACY_VEIL,    "on_privacy_enter"),
+    (State.CARD,        Event.BUTTON_LONG):     (State.PRIVACY_VEIL,    "on_privacy_enter"),
+    (State.LISTENING,   Event.BUTTON_LONG):     (State.PRIVACY_VEIL,    "on_privacy_enter"),
+    (State.PRIVACY_VEIL,     Event.BUTTON_LONG):     (State.IDLE,       "on_privacy_exit"),
+    (State.PRIVACY_VEIL,     Event.BUTTON_SINGLE):   (State.PRIVACY_VEIL,    "noop"),
+    (State.PRIVACY_VEIL,     Event.BUTTON_DOUBLE):   (State.PRIVACY_VEIL,    "noop"),
+    (State.PRIVACY_VEIL,     Event.CARD_RECEIVED):   (State.PRIVACY_VEIL,    "noop"),  # suppress during privacy
+    (State.PRIVACY_VEIL,     Event.PRIVACY_TOGGLE):  (State.IDLE,       "on_privacy_exit"),
 
     # --- IMU tap (dismiss from loading too) ---
     (State.LOADING,     Event.IMU_TAP):         (State.IDLE,       "on_dismiss"),

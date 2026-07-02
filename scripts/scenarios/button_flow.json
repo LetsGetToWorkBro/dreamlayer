@@ -9,8 +9,8 @@
       "card_type": "ObjectRecallCard",
       "payload": { "object": "WALLET", "place": "DESK", "last_seen": "1h ago", "confidence": 0.88 } },
     { "action": "button",   "at": 3.5,  "kind": "double",  "note": "showing_card -> dismiss" },
-    { "action": "button",   "at": 4.5,  "kind": "long",    "note": "connected -> privacy_paused" },
-    { "action": "button",   "at": 5.5,  "kind": "single",  "note": "privacy_paused -> resume" },
+    { "action": "button",   "at": 4.5,  "kind": "long",    "note": "connected -> privacy_veil" },
+    { "action": "button",   "at": 5.5,  "kind": "single",  "note": "privacy_veil -> resume" },
     { "action": "imu_tap",  "at": 6.5,  "note": "IMU tap while connected" }
   ]
 }

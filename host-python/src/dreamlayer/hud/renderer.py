@@ -350,7 +350,7 @@ class CardRenderer:
             "CommitmentRecallCard": self._commitment_recall,
             "ProactiveMemoryCard":  self._proactive_memory,
             "PersonContextCard":    self._person_context,
-            "PrivacyPausedCard":    self._privacy_paused,
+            "PrivacyVeilCard":    self._privacy_veil,
             "ErrorCard":            self._error_card,
             "LowConfidenceCard":    self._low_confidence,
             # Halo Cinema v1
@@ -667,11 +667,11 @@ class CardRenderer:
         if conf is not None:
             self._dot(draw, CX, 186, 3, T.conf_color(conf))
 
-    def _privacy_paused(self, draw, card):
+    def _privacy_veil(self, draw, card):
         self._arc(draw, CX, CY, 108, 10, 350, 1, T.PRIVACY_DANGER, alpha=34)
         self._circle(draw, CX, CY, 88, 1, T.PRIVACY_DANGER, alpha=18)
         draw_shield_glyph(draw, (CX, CY - 14), 52, 2, T.PRIVACY_DANGER, alpha=255, pause_bars=True)
-        self._text_rgba(draw, CX, CY + 32, "PAUSED", "sm", T.PRIVACY_CAUTION, alpha=220)
+        self._text_rgba(draw, CX, CY + 32, "PRIVACY VEIL", "sm", T.PRIVACY_CAUTION, alpha=220)
         self._text_rgba(draw, CX, CY + 48, "Nothing is captured", "xs", T.TEXT_GHOST, alpha=140)
 
     def _error_card(self, draw, card):

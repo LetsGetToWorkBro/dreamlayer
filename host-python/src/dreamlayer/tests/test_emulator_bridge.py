@@ -14,13 +14,13 @@ def test_paused_blocks_content_card():
     b.inject_event("privacy_pause")
     assert b.state == "paused"
     b.send_card({"type": "ObjectRecallCard", "primary": "Keys"})
-    assert b.last_card["type"] == "PrivacyPausedCard"
+    assert b.last_card["type"] == "PrivacyVeilCard"
 
 def test_privacy_card_always_passes_through():
     b = EmulatorBridge(); b.connect()
     b.inject_event("privacy_pause")
-    b.send_card({"type": "PrivacyPausedCard", "primary": "Memory paused"})
-    assert b.last_card["type"] == "PrivacyPausedCard"
+    b.send_card({"type": "PrivacyVeilCard", "primary": "Privacy Veil"})
+    assert b.last_card["type"] == "PrivacyVeilCard"
 
 def test_resume_allows_content():
     b = EmulatorBridge(); b.connect()

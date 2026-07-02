@@ -7,7 +7,7 @@ PNG frame sequence to out/cinema_reel/ (20 fps → 900 frames, 256×256):
   1. Dream Mode boot → palette weather forms → line field emerges   (10s)
   2. Person walks up → Social Lens ring → PersonContextCard v2      (10s)
   3. Same person tells a story → Truth Lens 9-ring gauge → verdict  (15s)
-  4. Privacy pause → shield slam → blackout w/ breathing hex glyph  (10s)
+  4. Privacy Veil → shield slam → blackout w/ breathing hex glyph  (10s)
 
 Timing constants mirror halo-lua/display/animations.lua (SIG_*). The
 still-frame card layouts come from dreamlayer.hud.renderer so the reel and
@@ -205,7 +205,7 @@ def scene_truth(t: float, dur: float) -> Image.Image:
 
 
 # ---------------------------------------------------------------------------
-# Scene 4 — Privacy pause (rumble → shield slam → breathing blackout)
+# Scene 4 — Privacy Veil (rumble → shield slam → breathing blackout)
 # ---------------------------------------------------------------------------
 
 def scene_privacy(t: float, dur: float) -> Image.Image:
@@ -237,7 +237,7 @@ def scene_privacy(t: float, dur: float) -> Image.Image:
             d.rectangle([CX + 3, CY - 14 - bh, CX + 7, CY - 14 + bh], fill=(rr, g, b, 255))
     if t > 1.2:
         rr, g, b = _rgb(T.PRIVACY_CAUTION)
-        d.text((CX, CY + 32), "PAUSED", fill=(rr, g, b, 220), anchor="mm")
+        d.text((CX, CY + 32), "PRIVACY VEIL", fill=(rr, g, b, 220), anchor="mm")
         rr, g, b = _rgb(T.TEXT_GHOST)
         d.text((CX, CY + 48), "Nothing is captured", fill=(rr, g, b, 140), anchor="mm")
     # total blackout with breathing status_paused hex glyph

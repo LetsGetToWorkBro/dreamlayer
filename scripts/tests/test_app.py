@@ -164,7 +164,7 @@ class TestOnRx:
     def test_button_long_enters_privacy(self):
         app = self._app()
         app._on_rx(None, _make_frame({"t": "button", "kind": "long"}))
-        assert app.state == State.PRIVACY
+        assert app.state == State.PRIVACY_VEIL
 
     def test_imu_tap_ignored_in_idle(self):
         app = self._app()
@@ -422,7 +422,7 @@ class TestFSMIntegration:
         }))
         assert app.state == State.CARD
         app._on_rx(None, _make_frame({"t": "button", "kind": "long"}))
-        assert app.state == State.PRIVACY
+        assert app.state == State.PRIVACY_VEIL
         app._on_rx(None, _make_frame({"t": "button", "kind": "long"}))
         assert app.state == State.IDLE
 
@@ -430,7 +430,7 @@ class TestFSMIntegration:
         app = _make_app_no_autoload()
         app._fsm.send(Event.BLE_CONNECT)
         app._on_rx(None, _make_frame({"t": "button", "kind": "long"}))
-        assert app.state == State.PRIVACY
+        assert app.state == State.PRIVACY_VEIL
         app._fsm.send(Event.BLE_DISCONNECT)
         assert app.state == State.DISCONNECT
         assert app.fsm.ctx.privacy_active is False

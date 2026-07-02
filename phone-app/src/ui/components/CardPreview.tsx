@@ -176,7 +176,7 @@ function TruthGauge({ card }: { card: HaloCard }) {
   );
 }
 
-function PrivacyPaused() {
+function PrivacyVeil() {
   const hex = Array.from({ length: 6 }, (_, i) => {
     const a = ((60 * i - 30) * Math.PI) / 180;
     return `${CX + 26 * Math.cos(a)},${CY - 14 + 26 * Math.sin(a)}`;
@@ -259,7 +259,7 @@ const DISPATCH: Record<string, React.ComponentType<{ card: HaloCard }>> = {
   CommitmentRecallCard: CommitmentRecall,
   PersonContextCard: PersonContext,
   TruthLensCard: TruthGauge,
-  PrivacyPausedCard: PrivacyPaused as any,
+  PrivacyVeilCard: PrivacyVeil as any,
   WorldAnchorCard: WorldAnchor,
   SynesthesiaCard: SynesthesiaV2,
 };

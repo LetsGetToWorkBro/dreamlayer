@@ -49,7 +49,7 @@ for name, card in ALL_SAMPLES.items():
 - [ ] Long-press physical button on Halo
 - [ ] Host receives `privacy_pause` event via `_on_inbound`
 - [ ] `b._paused` becomes `True`
-- [ ] Content cards are dropped; only `PrivacyPausedCard` passes through
+- [ ] Content cards are dropped; only `PrivacyVeilCard` passes through
 - [ ] Second long-press resumes capture
 
 ## 5. Full orchestrator smoke test

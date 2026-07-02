@@ -36,10 +36,10 @@ class EmulatorBridge(BridgeBase):
         elif kind == "ask":                  self.state = "listening"
 
     def send_card(self, payload: dict, event: str = "answer_ready") -> None:
-        if self.state == "paused" and payload.get("type") != "PrivacyPausedCard":
+        if self.state == "paused" and payload.get("type") != "PrivacyVeilCard":
             return
         self.last_card = payload
-        self.state = "paused" if payload.get("type") == "PrivacyPausedCard" else "showing_card"
+        self.state = "paused" if payload.get("type") == "PrivacyVeilCard" else "showing_card"
 
     def send_raw(self, obj: dict) -> None:
         """Record a raw frame (dream palette/geometry/line_field/sprite).
@@ -60,7 +60,7 @@ class EmulatorBridge(BridgeBase):
     def inject_event(self, name: str, payload: dict | None = None) -> None:
         if name == "privacy_pause":
             self.state = "paused"
-            self.last_card = {"type": "PrivacyPausedCard", "primary": "Memory paused",
+            self.last_card = {"type": "PrivacyVeilCard", "primary": "Privacy Veil",
                               "lines": ["Nothing is being captured"]}
         elif name == "privacy_resume":
             self.state = "ready"

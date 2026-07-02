@@ -64,7 +64,7 @@ DISMISS_MS: dict[str, int] = {
     "CommitmentRecallCard": 4000,
     "ProactiveMemoryCard":  3500,
     "PersonContextCard":    3500,
-    "PrivacyPausedCard":    0,
+    "PrivacyVeilCard":    0,
     "ErrorCard":         4000,
     "LowConfidenceCard": 3000,
 }
@@ -81,7 +81,7 @@ CARD_ORDER = [
     "ReadyCard",
     "QueryListeningCard",
     "LoadingCard",
-    "PrivacyPausedCard",
+    "PrivacyVeilCard",
 ]
 
 # ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ CARD_SPECS: dict[str, CardSpec] = {
     "ReadyCard":            CardSpec("ReadyCard",            "READY",     "DreamLayer",        "",                 "",          1.00, "○"),
     "QueryListeningCard":   CardSpec("QueryListeningCard",   "LISTENING", "∿∿∿∿∿",              "",                 "",          1.00, "◔"),
     "LoadingCard":          CardSpec("LoadingCard",          "LOADING",   "Thinking…",        "",                 "",          1.00, "↺"),
-    "PrivacyPausedCard":    CardSpec("PrivacyPausedCard",    "PRIVACY",   "Memory paused",    "",                 "",          1.00, "▣"),
+    "PrivacyVeilCard":    CardSpec("PrivacyVeilCard",    "PRIVACY",   "Privacy Veil",    "",                 "",          1.00, "▣"),
 }
 
 
@@ -223,7 +223,7 @@ def _render_frame(
                       cx + int(r_base*ri), cy + int(r_base*ri)],
                      -40, 200, fill=(ec,ec,ec), width=scale)
 
-    elif ct == "PrivacyPausedCard":
+    elif ct == "PrivacyVeilCard":
         # Shield outline + breach halo + pause bars
         shield_pts = [
             (cx, cy - r_base),

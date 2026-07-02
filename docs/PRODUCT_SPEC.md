@@ -25,7 +25,7 @@ emotionally impressive, useful in seconds, visually restrained but magical.
 - **Object recall** — "Where did I leave my keys?"
 - **Commitment recall** — "What did I promise Jordan?"
 - **Proactive place memory** — surfacing prior context when you return somewhere
-- **Privacy pause** — instantly, visibly stop capture
+- **Privacy Veil** — instantly, visibly stop capture
 
 ## Non-goals (this phase)
 - No firmware-level custom OS / Zephyr fork
@@ -36,4 +36,4 @@ emotionally impressive, useful in seconds, visually restrained but magical.
 
 ## Demo flows
 See `DEMO_SCRIPT.md`. Four end-to-end simulated demos: Object Recall,
-Commitment Recall, Proactive Place Memory, Privacy Pause.
+Commitment Recall, Proactive Place Memory, Privacy Veil.

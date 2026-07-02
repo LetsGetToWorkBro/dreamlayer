@@ -10,7 +10,7 @@
 ---   EXIT   120 ms  linear  exit_contract: geometry contracts, text cuts
 ---
 --- Special behaviours:
----   PrivacyPausedCard   → rumble dim then shield slam (rings, glyph delayed)
+---   PrivacyVeilCard   → rumble dim then shield slam (rings, glyph delayed)
 ---   LoadingCard         → spinner angle advances each tick during HOLD
 ---   QueryListeningCard  → waveform phase advances each tick during HOLD
 ---   CommitmentDriftCard → confidence dot pulses during HOLD
@@ -421,7 +421,7 @@ local function draw_person_context(card, sc, enter_t, exit_t)
 end
 
 -- Shield slam: outer rings expand radially; glyph appears only after rings complete
-local function draw_privacy_paused(sc, enter_t, exit_t)
+local function draw_privacy_veil(sc, enter_t, exit_t)
   -- Rings slam outward: at enter_t=0 they're r=0, at enter_t=0.6 they're full size
   local ring_t = clamp(enter_t / 0.6, 0, 1)
   local ring_sc = ease_out_expo(ring_t)
@@ -433,7 +433,7 @@ local function draw_privacy_paused(sc, enter_t, exit_t)
     shield_glyph(CX,CY-14,floor(52*ease_out_expo(glyph_t)*sc),P.privacy_danger,true)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text("PAUSED",CX,CY+32,P.privacy_caution)
+    frame.display.text("PRIVACY VEIL",CX,CY+32,P.privacy_caution)
     frame.display.text("Nothing is captured",CX,CY+48,P.text_ghost)
   end
 end
@@ -780,7 +780,7 @@ local DRAW = {
   CommitmentRecallCard  = function(c,sc,et,xt,it) draw_commitment_recall(c,sc,et,xt)      end,
   ProactiveMemoryCard   = function(c,sc,et,xt,it) draw_proactive_memory(c,sc,et,xt)       end,
   PersonContextCard     = function(c,sc,et,xt,it) draw_person_context(c,sc,et,xt)         end,
-  PrivacyPausedCard     = function(c,sc,et,xt,it) draw_privacy_paused(sc,et,xt)           end,
+  PrivacyVeilCard     = function(c,sc,et,xt,it) draw_privacy_veil(sc,et,xt)           end,
   ErrorCard             = function(c,sc,et,xt,it) draw_error(c,sc,et,xt)                  end,
   LowConfidenceCard     = function(c,sc,et,xt,it) draw_low_confidence(sc,et,xt)           end,
   -- new engines
@@ -803,7 +803,7 @@ local SIGNATURES = {
   ProactiveMemoryCard  = { enter = "comet",  hold = "halo" },
   PersonContextCard    = { enter = "iris",   hold = "halo" },
   TruthLensCard        = { enter = "ripple" },
-  PrivacyPausedCard    = { enter = "slam" },
+  PrivacyVeilCard    = { enter = "slam" },
 }
 
 local DEFAULT_SIGNATURE = { enter = "iris" }

@@ -113,7 +113,7 @@ def test_ble_rx_increments(diag):
 
 def test_ble_tx_increments(diag):
     diag.execute("_diag.ble_tx('CARD_DISMISSED')")
-    diag.execute("_diag.ble_tx('PRIVACY_PAUSED')")
+    diag.execute("_diag.ble_tx('PRIVACY_VEIL')")
     assert True
 
 

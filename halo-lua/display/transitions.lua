@@ -324,7 +324,7 @@ function transitions.chord(t, cx, cy, confidence)
   end
 end
 
---- Rumble: privacy pause pre-slam. Full-field dim of every dynamic slot.
+--- Rumble: privacy veil pre-slam. Full-field dim of every dynamic slot.
 function transitions.rumble(t)
   MAT.init()
   if _reduce_motion then return end

@@ -290,7 +290,7 @@ class Orchestrator:
     def pause(self):
         self.privacy.pause()
         self.bridge.inject_event("privacy_pause")
-        self.bridge.send_card(cards.privacy_paused(), event="privacy_pause")
+        self.bridge.send_card(cards.privacy_veil(), event="privacy_pause")
 
     def resume(self):
         self.privacy.resume()

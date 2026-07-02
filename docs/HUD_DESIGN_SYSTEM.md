@@ -52,7 +52,7 @@ Never scatter raw hex in logic — use `palette.lua` / `themes.py` tokens.
 
 ## All HUD states (cards)
 ReadyCard, SavedMemoryCard, QueryListeningCard, LoadingCard, ObjectRecallCard,
-CommitmentRecallCard, ProactiveMemoryCard, PersonContextCard, PrivacyPausedCard,
+CommitmentRecallCard, ProactiveMemoryCard, PersonContextCard, PrivacyVeilCard,
 ErrorCard, LowConfidenceCard.
 
 ## Do / Don't

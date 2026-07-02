@@ -140,12 +140,12 @@ def person_context(person: str, headline: str = "", detail: str = "") -> dict:
     }
 
 
-def privacy_paused() -> dict:
+def privacy_veil() -> dict:
     return {
-        "type":     "PrivacyPausedCard",
+        "type":     "PrivacyVeilCard",
         "dismiss_ms": 0,
-        "primary":  "Memory paused",
-        "lines":    ["Memory paused", "Nothing is being captured"],
+        "primary":  "Privacy Veil",
+        "lines":    ["Privacy Veil", "Nothing is being captured"],
     }
 
 
@@ -604,7 +604,7 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
-    "privacy_paused":      privacy_paused(),
+    "privacy_veil":      privacy_veil(),
     "error":               error_card("BLE timeout"),
     "low_confidence":      low_confidence(),
     "commitment_drift":    commitment_drift({

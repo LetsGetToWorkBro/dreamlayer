@@ -145,7 +145,7 @@ class TestFSMConnect:
         fsm = DreamLayerFSM()
         fsm.send(Event.BLE_CONNECT)
         fsm.send(Event.BUTTON_LONG)
-        assert fsm.state == State.PRIVACY
+        assert fsm.state == State.PRIVACY_VEIL
         fsm.send(Event.BLE_DISCONNECT)
         fsm.send(Event.BLE_CONNECT)
         assert not fsm.ctx.privacy_active
@@ -241,7 +241,7 @@ class TestFSMPrivacy:
     def test_long_press_enters_privacy(self):
         fsm = self._idle()
         fsm.send(Event.BUTTON_LONG)
-        assert fsm.state == State.PRIVACY
+        assert fsm.state == State.PRIVACY_VEIL
         assert fsm.ctx.privacy_active is True
 
     def test_long_press_exits_privacy(self):
@@ -256,7 +256,7 @@ class TestFSMPrivacy:
         card = MemoryCard(card_type="ObjectRecallCard", payload={"object": "KEYS"})
         fsm.send(Event.BUTTON_LONG)
         fsm.send(Event.CARD_RECEIVED, payload=card)
-        assert fsm.state == State.PRIVACY   # stays in PRIVACY
+        assert fsm.state == State.PRIVACY_VEIL   # stays in PRIVACY
         assert fsm.ctx.card_count == 0      # card NOT displayed
 
     def test_privacy_toggle_exits(self):
@@ -269,7 +269,7 @@ class TestFSMPrivacy:
         fsm = self._idle()
         fsm.send(Event.BUTTON_LONG)
         fsm.send(Event.BUTTON_SINGLE)
-        assert fsm.state == State.PRIVACY
+        assert fsm.state == State.PRIVACY_VEIL
 
     def test_privacy_clears_card(self):
         fsm  = self._idle()
@@ -283,7 +283,7 @@ class TestFSMPrivacy:
         fsm = self._idle()
         fsm.send(Event.BUTTON_SINGLE)
         fsm.send(Event.BUTTON_LONG)
-        assert fsm.state == State.PRIVACY
+        assert fsm.state == State.PRIVACY_VEIL
 
 
 class TestFSMHistory:
@@ -360,7 +360,7 @@ class TestTransitionTable:
             assert isinstance(ns, State)
 
     def test_disconnect_reachable_from_all_active_states(self):
-        active = {State.IDLE, State.LISTENING, State.LOADING, State.CARD, State.PRIVACY}
+        active = {State.IDLE, State.LISTENING, State.LOADING, State.CARD, State.PRIVACY_VEIL}
         reachable = {
             s for (s, e), (ns, _) in _TRANSITIONS.items()
             if e == Event.BLE_DISCONNECT and ns == State.DISCONNECT

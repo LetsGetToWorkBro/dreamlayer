@@ -92,7 +92,7 @@ available and the 4-second scene interval has elapsed.
 - `brilliant-msg` not installed: `SpriteBridge` no-ops silently, palette + geometry still work
 - No API key: `SceneDescriber` falls back to cycling mood phrases
 - No camera frame: `SceneDescriber` skips entirely
-- Privacy paused: `GhostLayer` suppresses all ghost overlays
+- Privacy Veil: `GhostLayer` suppresses all ghost overlays
 
 ## Hardware Notes
 

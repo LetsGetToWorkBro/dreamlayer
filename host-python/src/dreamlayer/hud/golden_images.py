@@ -61,7 +61,7 @@ DEFAULT_CARD_KEYS = [
     "commitment_recall",
     "proactive_memory",
     "person_context",
-    "privacy_paused",
+    "privacy_veil",
     "error",
     "low_confidence",
     "commitment_drift",

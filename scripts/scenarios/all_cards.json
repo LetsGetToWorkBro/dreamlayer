@@ -23,6 +23,6 @@
       "payload": { "primary": "No memory connection" } },
     { "action": "command", "at": 5.2, "kind": "ask",     "note": "QueryListeningCard" },
     { "action": "command", "at": 6.0, "kind": "loading", "note": "LoadingCard" },
-    { "action": "button",  "at": 6.8, "kind": "long",   "note": "PrivacyPausedCard" }
+    { "action": "button",  "at": 6.8, "kind": "long",   "note": "PrivacyVeilCard" }
   ]
 }
