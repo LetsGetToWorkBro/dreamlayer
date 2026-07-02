@@ -8,6 +8,7 @@ export default function Layout() {
       tabBarInactiveTintColor:colors.textSecondary,
       headerShown:            false,
     }}>
+      <Tabs.Screen name="brain"       options={{ title: "Brain" }} />
       <Tabs.Screen name="now"         options={{ title: "Now" }} />
       <Tabs.Screen name="rehearsal"   options={{ title: "Rehearsal" }} />
       <Tabs.Screen name="confluence"  options={{ title: "Confluence" }} />

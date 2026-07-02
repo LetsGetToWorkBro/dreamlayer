@@ -61,7 +61,7 @@ class TestPairingCode:
 
 
 # ---------------------------------------------------------------------------
-# Brain modes — connected / home / phone
+# The three brain switches — phone default · Mac mini upgrade · cloud · incognito
 # ---------------------------------------------------------------------------
 
 class TestBrainModes:
@@ -70,30 +70,50 @@ class TestBrainModes:
         from dreamlayer.orchestrator.orchestrator import Orchestrator
         return Orchestrator(FakeBridge())
 
-    def test_default_connected(self):
+    def test_default_is_phone_brain_cloud_on(self):
         orc = self._orc()
-        assert orc.brain_mode == "connected"
-        assert orc.brain.cloud_opt_in and not orc.brain.local_only
+        # the phone is the brain until a Mac mini is paired; cloud on by default
+        assert orc.brain.local_only and orc.brain.cloud_opt_in
+        assert not orc.incognito
+        assert orc.brain_status() == {"brain": "phone", "cloud": True,
+                                      "incognito": False, "glasses": False}
 
-    def test_home_drops_cloud_keeps_mac_mini(self):
+    def test_connect_mac_mini_upgrades_the_local_brain(self):
+        orc = self._orc()
+        orc.connect_mac_mini(True)
+        assert not orc.brain.local_only
+        assert orc.brain_status()["brain"] == "mac_mini"
+        orc.connect_mac_mini(False)                 # drop it → back to phone
+        assert orc.brain.local_only
+
+    def test_cloud_is_its_own_switch(self):
+        orc = self._orc()
+        orc.use_cloud(False)
+        assert orc.brain.local_only and not orc.brain.cloud_opt_in
+        orc.use_cloud(True)
+        assert orc.brain.cloud_opt_in
+
+    def test_incognito_forces_cloud_off_and_restores(self):
+        orc = self._orc()
+        assert orc.brain.cloud_opt_in                # remembered preference: on
+        orc.set_incognito(True)
+        assert orc.incognito and not orc.brain.cloud_opt_in
+        # you cannot re-enable cloud while incognito holds it down
+        orc.use_cloud(True)
+        assert not orc.brain.cloud_opt_in
+        # leaving incognito restores the remembered preference (on)
+        orc.set_incognito(False)
+        assert orc.brain.cloud_opt_in
+
+    def test_compat_shim_still_maps_modes(self):
         orc = self._orc()
         orc.set_brain_mode("home")
         assert not orc.brain.cloud_opt_in and not orc.brain.local_only
-
-    def test_phone_is_the_brain_on_device_only(self):
-        orc = self._orc()
-        orc.set_brain_mode("phone")
+        assert orc.brain_mode == "home"
+        orc.set_brain_mode("connected")
+        assert orc.brain.cloud_opt_in and not orc.brain.local_only
+        orc.set_brain_mode("phone", cloud=False)
         assert orc.brain.local_only and not orc.brain.cloud_opt_in
-
-    def test_phone_can_still_opt_into_cloud(self):
-        # no Mac mini, but internet — phone-primary, cloud for hard cases
-        orc = self._orc()
-        orc.set_brain_mode("phone", cloud=True)
-        assert orc.brain.local_only and orc.brain.cloud_opt_in
-        assert not orc.private_mode                # cloud on ⇒ not private
-        orc.use_cloud(False)                        # flip cloud off, stay phone
-        assert orc.brain.local_only and not orc.brain.cloud_opt_in
-        assert orc.private_mode
 
     def test_phone_with_cloud_skips_mac_mini_reaches_cloud(self):
         router = BrainRouter(cloud_opt_in=True, local_only=True)

@@ -51,23 +51,23 @@ explains it → cloud only if you enabled it and nothing local sufficed.**
 The laptop "brain" (Tier 2) is the reframed laptop — not an object you look
 at, but a private compute + knowledge node the whole system taps.
 
-### 2a. Brain modes — where the brain lives, and the cloud switch
+### 2a. The three brain switches (not one dial)
 
-Two **independent** axes, not one dial. *Where the local brain lives* and
-*whether the cloud tier is allowed* are set separately, so any combination is
-valid (`Orchestrator.set_brain_mode(mode, cloud=…)`, `use_cloud(on)`):
+There is no "mode picker." There are three independent switches the phone app
+and the Mac mini panel both expose:
 
-| Mode | Local brain | Cloud default | Needs internet? |
-|---|---|---|---|
-| **connected** *(default)* | on-device → Mac mini | **on** | for cloud only; Mac mini works on LAN |
-| **home** | on-device → Mac mini | off | no — LAN only |
-| **phone** | on-device only (phone **is** the brain) | off | no |
+| Switch | What it does | Default |
+|---|---|---|
+| **Mac mini** (`connect_mac_mini`) | upgrades the local brain from the phone's small on-device model to the Mac mini's bigger model **+ your indexed files**, when it's reachable | off → **the phone is the brain** |
+| **Cloud** (`use_cloud`) | reach the frontier cloud for the hardest, *non-personal* asks — works in any brain | **on** |
+| **Incognito** (`set_incognito`) | privacy shield: forces cloud **off** for the session and pauses capture; restores your cloud preference when you leave | off |
 
-**Phone mode can still turn cloud on** (`set_brain_mode("phone", cloud=True)`
-or `use_cloud(True)`): that's *no Mac mini, but reach the cloud for hard
-cases* — the right setup for someone who doesn't own a computer but has
-service. `local_only` skips only the Mac-mini remote tier; the cloud gate is
-independent.
+The phone is the brain until you connect a Mac mini — that's the honest
+default (works anywhere, no computer required). Connecting a Mac mini is the
+obvious upgrade; the cloud switch is orthogonal to both, so *"no computer, but
+reach the cloud for hard cases"* (`connect_mac_mini(False)` + `use_cloud(True)`)
+is a first-class setup. `local_only` skips only the Mac-mini remote tier; the
+cloud gate is independent. Incognito is the old "home/private" mode, renamed.
 
 **What cloud ON buys you (vs. off):**
 

@@ -52,11 +52,60 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .hist .t{font:11px ui-monospace,Menlo,monospace;color:var(--bloom);text-transform:uppercase}
   label.tog{display:flex;gap:9px;align-items:center;color:var(--muted);cursor:pointer}
   .mono{font:13px ui-monospace,Menlo,monospace}
+  .muted{color:var(--muted);font-size:.92rem}
   a{color:var(--memory)}
+  .conn{display:flex;gap:16px;align-items:center;justify-content:space-between;
+        padding:14px 0;border-bottom:1px solid var(--line)}
+  .conn-t{font-size:1rem;color:var(--text)}
+  .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:52ch}
+  .sw{position:relative;display:inline-block;width:46px;height:26px;flex:none;cursor:pointer}
+  .sw input{opacity:0;width:0;height:0;position:absolute}
+  .sw .track{position:absolute;inset:0;background:#0A1113;border:1px solid var(--line);
+        border-radius:999px;transition:.15s}
+  .sw .track:before{content:"";position:absolute;left:3px;top:2px;width:20px;height:20px;
+        border-radius:50%;background:var(--ghost);transition:.15s}
+  .sw input:checked + .track{background:rgba(44,199,154,.25);border-color:var(--memory)}
+  .sw input:checked + .track:before{transform:translateX(20px);background:var(--memory)}
+  .sw input:checked + .track.red{background:rgba(224,107,82,.25);border-color:#E06B52}
+  .sw input:checked + .track.red:before{background:#E06B52}
+  .sw input:disabled + .track{opacity:.4}
 </style></head><body><div class="wrap">
   <span class="eyebrow">DreamLayer</span>
   <h1>Brain</h1>
   <div class="stat" id="stat"></div>
+
+  <div class="card">
+    <h2>Connections</h2>
+    <p class="muted" style="margin:0 0 14px">This Mac mini is the brain. Pair your
+      phone (which brings the glasses), choose how far its reach goes, or shut
+      the doors with Incognito.</p>
+    <div class="conn">
+      <div>
+        <div class="conn-t">Cloud</div>
+        <div class="conn-s">Reach the frontier for the hardest, non-personal asks —
+          obscure facts, richest object explanations, widest translation. Your own
+          files, memory and people never need it. Nothing private ever leaves.</div>
+      </div>
+      <label class="sw"><input type="checkbox" id="cloud" onchange="saveConn()"><span class="track"></span></label>
+    </div>
+    <div class="conn">
+      <div>
+        <div class="conn-t">Incognito</div>
+        <div class="conn-s">Home-only shield: stays on your LAN, forces cloud off,
+          and nothing is logged. Flip it for a private stretch.</div>
+      </div>
+      <label class="sw"><input type="checkbox" id="incognito" onchange="saveConn()"><span class="track red"></span></label>
+    </div>
+    <div class="conn" style="border-bottom:0">
+      <div>
+        <div class="conn-t">Phone &amp; glasses</div>
+        <div class="conn-s" id="pairhint">Show a code your phone scans once — it wires
+          the phone, this Brain, and your glasses together.</div>
+      </div>
+      <button onclick="pair()">Pair a phone</button>
+    </div>
+    <div id="pairout"></div>
+  </div>
 
   <div class="card">
     <h2>Folders it reads</h2>
@@ -92,18 +141,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     </div>
     <div class="row" style="margin-top:10px">
       <label class="tog"><input type="checkbox" id="email"> Read email &amp; iMessage</label>
-      <label class="tog"><input type="checkbox" id="cloud"> Allow cloud for hard cases</label>
       <button onclick="saveModel()">Save</button>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>Pair a phone</h2>
-    <p style="color:var(--muted);margin:0 0 12px">One code brings the whole
-      trio together — phone, this Brain, and your glasses. Open the phone app
-      and scan (or paste) the code below.</p>
-    <div class="row"><button onclick="pair()">Show pairing code</button></div>
-    <div id="pairout"></div>
   </div>
 
   <div class="card">
@@ -119,9 +158,12 @@ const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]
 
 async function load(){
   const c=await api("/dreamlayer/config");
+  const incog=c.config.network_mode==="lan_only";
   document.getElementById("stat").innerHTML=
     `<span><b>${c.stats.files}</b> files</span><span><b>${c.stats.passages}</b> passages</span>`+
-    `<span>model <b>${c.config.model}</b></span>`;
+    `<span>model <b>${c.config.model}</b></span>`+
+    `<span>cloud <b>${incog?"off":(c.config.cloud_enabled?"on":"off")}</b></span>`+
+    (incog?`<span style="color:var(--memory)">incognito</span>`:``);
   const fl=document.getElementById("folders");fl.innerHTML="";
   const dt=document.getElementById("dropTarget");dt.innerHTML="";
   (c.config.folders||[]).forEach(f=>{
@@ -135,8 +177,19 @@ async function load(){
   document.getElementById("ochat").value=c.config.ollama_chat_model||"";
   document.getElementById("ovis").value=c.config.ollama_vision_model||"";
   document.getElementById("email").checked=!!c.config.email_enabled;
-  document.getElementById("cloud").checked=!!c.config.cloud_enabled;
+  // cloud is held off while incognito (LAN-only) is on
+  const cloud=document.getElementById("cloud");
+  cloud.checked=!incog && !!c.config.cloud_enabled;
+  cloud.disabled=incog;
+  document.getElementById("incognito").checked=incog;
   loadHistory();
+}
+async function saveConn(){
+  const incog=document.getElementById("incognito").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
+    network_mode: incog?"lan_only":"connected",
+    cloud_enabled: incog?false:document.getElementById("cloud").checked})});
+  load();
 }
 async function addFolder(){
   const p=document.getElementById("folderPath").value.trim();if(!p)return;
@@ -152,8 +205,7 @@ async function saveModel(){
     ollama_url:document.getElementById("ourl").value,
     ollama_chat_model:document.getElementById("ochat").value,
     ollama_vision_model:document.getElementById("ovis").value,
-    email_enabled:document.getElementById("email").checked,
-    cloud_enabled:document.getElementById("cloud").checked})});load();
+    email_enabled:document.getElementById("email").checked})});load();
 }
 async function ask(){
   const q=document.getElementById("q").value.trim();if(!q)return;

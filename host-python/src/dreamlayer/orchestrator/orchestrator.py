@@ -70,13 +70,19 @@ class Orchestrator:
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
-        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge — on-device →
-        # Mac mini → cloud. Product default is "connected": cloud allowed, so
-        # the best answer wins wherever you are; on-device is the airplane-mode
-        # fallback. Advanced users flip set_private_mode() for home-LAN-only.
-        self.brain = BrainRouter(cloud_opt_in=True)
-        self.private_mode = False
-        self.brain_mode = "connected"         # connected | home | phone
+        # AI brain (docs/AI_BRAIN.md): three independent switches, not one dial.
+        #   • the phone is the brain by default (on-device, works anywhere);
+        #     connect_mac_mini() upgrades it with a bigger local brain + your
+        #     files when your Mac mini is reachable.
+        #   • use_cloud() is its own switch — cloud reach for the hardest,
+        #     non-personal asks, on in any brain. On by default (best answer
+        #     wherever you are); nothing private ever leaves regardless.
+        #   • set_incognito() is the privacy shield — forces cloud off and
+        #     pauses capture for the session (replaces the old "home" mode).
+        self.brain = BrainRouter(cloud_opt_in=True, local_only=True)
+        self._cloud_pref = True               # remembered across incognito
+        self.mac_mini_connected = False       # phone is the brain until paired
+        self.incognito = False
         self.glasses_id = None                # set at pairing
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
@@ -470,39 +476,70 @@ class Orchestrator:
                 event="brain_answer")
         return answer
 
-    def opt_in_cloud(self, on: bool = True) -> None:
-        """Allow or forbid cloud AI tiers for this session."""
-        self.brain.opt_in_cloud(on)
+    # -- the three brain switches ---------------------------------------
 
-    def set_brain_mode(self, mode: str, cloud: bool | None = None) -> None:
-        """Where the intelligence lives (two independent axes: local brain +
-        cloud):
-          connected — on-device → Mac mini → cloud (default; best answer wins)
-          home      — on-device + Mac mini, no cloud (private, needs your LAN)
-          phone     — on-device only; the phone IS the brain. Cloud is off by
-                      default (the airplane/no-service case) but can be turned
-                      on with cloud=True — phone-primary, cloud for hard cases.
-
-        `cloud` overrides the per-mode default when given, so any mode can run
-        with or without the cloud tier.
-        """
-        if mode not in ("connected", "home", "phone"):
-            raise ValueError(f"unknown brain mode: {mode!r}")
-        self.brain_mode = mode
-        use_cloud = (mode == "connected") if cloud is None else cloud
-        self.brain.opt_in_cloud(use_cloud)
-        self.brain.set_local_only(mode == "phone")
-        self.private_mode = not use_cloud
+    def connect_mac_mini(self, connected: bool = True) -> None:
+        """Add (or drop) your Mac mini as the local brain. When connected the
+        router uses its bigger local model + your indexed files; when not, the
+        phone is the brain (on-device only, more limited but works anywhere)."""
+        self.mac_mini_connected = connected
+        self.brain.set_local_only(not connected)
 
     def use_cloud(self, on: bool = True) -> None:
-        """Turn the cloud tier on/off without changing where the local brain
-        lives — works in phone mode too."""
-        self.brain.opt_in_cloud(on)
-        self.private_mode = not on
+        """The cloud switch — reach for the hardest, non-personal asks. Its own
+        control, independent of where the local brain lives; remembered across
+        incognito. No-op on the router while incognito holds cloud off."""
+        self._cloud_pref = on
+        if not self.incognito:
+            self.brain.opt_in_cloud(on)
+
+    def set_incognito(self, on: bool = True) -> None:
+        """Privacy shield for a session: forces the cloud off (restoring your
+        preference when you leave) and marks the session private. Capture is
+        paused at the app layer. Replaces the old 'home'/private mode."""
+        self.incognito = on
+        self.brain.opt_in_cloud(False if on else self._cloud_pref)
+
+    def brain_status(self) -> dict:
+        """A compact snapshot for the phone app / panel to render."""
+        return {
+            "brain":     "mac_mini" if self.mac_mini_connected else "phone",
+            "cloud":     bool(self.brain.cloud_opt_in),
+            "incognito": self.incognito,
+            "glasses":   bool(self.glasses_id),
+        }
+
+    # -- back-compat aliases (the model is the three switches above) -----
+
+    @property
+    def private_mode(self) -> bool:
+        return self.incognito
+
+    @property
+    def brain_mode(self) -> str:
+        if self.incognito:
+            return "home"
+        return "phone" if self.brain.local_only else "connected"
+
+    def opt_in_cloud(self, on: bool = True) -> None:
+        self.use_cloud(on)
 
     def set_private_mode(self, on: bool = True) -> None:
-        """Advanced opt-out: home mode (on-device + Mac mini, no cloud)."""
-        self.set_brain_mode("home" if on else "connected")
+        self.set_incognito(on)
+
+    def set_brain_mode(self, mode: str, cloud: bool | None = None) -> None:
+        """Compat shim over the three switches:
+          connected — Mac mini on, cloud on         (best answer wins)
+          home      — Mac mini on, incognito         (private, no cloud)
+          phone     — phone is the brain             (cloud per `cloud`)"""
+        if mode not in ("connected", "home", "phone"):
+            raise ValueError(f"unknown brain mode: {mode!r}")
+        self.set_incognito(mode == "home")
+        self.connect_mac_mini(mode != "phone")
+        if cloud is not None:
+            self.use_cloud(cloud)
+        elif mode == "connected":
+            self.use_cloud(True)
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)
