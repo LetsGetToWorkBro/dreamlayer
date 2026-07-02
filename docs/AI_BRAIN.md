@@ -1,6 +1,11 @@
-# DreamLayer AI Brain — design spec (draft for review)
+# DreamLayer AI Brain — design spec
 
-**Status:** proposal, not built. This is the spec to steer before coding.
+**Status:** decisions resolved (§8). **Phase 1 built** — router, brain
+interfaces, deterministic mocks, the AI Object Lens, and knowledge queries
+(folded into Lucid Recall), all wired into the orchestrator behind the cloud
+opt-in gate. Phases 2–4 (real Mac mini model, file/mail indexing, opt-in
+cloud) still to build. Code: `host-python/src/dreamlayer/ai_brain/`; demo:
+`scripts/run_demo_ai_brain.py`; tests: `test_ai_brain.py`.
 
 ## 1. The idea in one line
 
@@ -100,9 +105,10 @@ Provenance can trace it.
 
 ## 7. Phased build
 
-1. **Router + interfaces + MockBrain** — deterministic, works today. AI Object
-   Lens end to end with a mock ("that's a snake plant · water every 2–3 wks").
-   Tests + demo. *No model required to prove the whole pipeline.*
+1. **Router + interfaces + MockBrain** — ✅ **done.** Deterministic, works
+   today. AI Object Lens end to end with a mock ("snake plant · water every
+   2–3 wks"), tier escalation, the cloud opt-in gate, and knowledge queries
+   over your own docs. Tests + demo. *No model required to prove the pipeline.*
 2. **Laptop brain (vision)** — `/dreamlayer/brain/explain` hosting a real
    local VLM; phone client + `PolledSource`; escalation from Tier 0.
 3. **Personal Knowledge Brain** — index your own files on the laptop (local
@@ -110,18 +116,30 @@ Provenance can trace it.
 4. **Cloud tier (opt-in)** — the existing LLM client behind the consent gate,
    for the hardest asks only.
 
-## 8. Open decisions for you to steer
+## 8. Decisions (resolved)
 
-1. **Cloud posture** — recommend **off by default**, opt-in per session for
-   hard cases. (Alternatives: on-by-default, or never/cloud-free.)
-2. **Knowledge base scope** — start with **files/notes** on the laptop?
-   Add emails/photos later? (Bigger scope = bigger build + more to index.)
-3. **"Look at anything" extras** — include **read/translate text** you look
-   at (menus, signs)? Cheap, high-value; recommend yes.
-4. **Local model target** — left abstract until Phase 2; the seam doesn't
-   care which VLM. (We pick when we get there.)
-5. **Naming** — "AI Object Lens" for the vision half; the knowledge half
-   could be its own lens (e.g. **Oracle**, or fold into Lucid Recall).
+1. **Cloud posture** — **off by default**, opt-in per session for hard cases,
+   with a visible "left the device" indicator.
+2. **Knowledge base** — the brain lives on an **always-on Mac mini (Apple
+   Silicon)** and indexes **chosen directories** (a configurable watch-list),
+   plus **email and iMessage read**. It can also **send** email/iMessage —
+   but only through a **draft → you approve → send** consent flow (an
+   outbound action is never taken silently; see Phase 3). iMessage reads from
+   `~/Library/Messages/chat.db`; sending via AppleScript to Messages/Mail.
+3. **Read/translate visual text** — **yes.** Scope boundary with **Puente**
+   (`orchestrator/puente_bridge.py`): Puente is the **ear** (real-time
+   voice/conversation translation → LiveCaptionCard); the AI Object Lens is
+   the **eye** (text you *look at* — a menu, a sign — OCR'd + translated).
+   Complementary, no duplication; the Object Lens may reuse Puente's caption
+   card styling but not its pipeline.
+4. **Local model** — target the Mac mini with **Ollama** (least friction:
+   local HTTP, OpenAI-compatible API, vision models + an embedding model for
+   RAG in one install). **MLX** is the higher-performance alternative later.
+   The seam (`VisionBrain` / `KnowledgeBrain`) doesn't care which.
+5. **Naming** — the **knowledge half folds into Lucid Recall** (it *is*
+   "ask and receive," now extended from your memory to your files/mail), so
+   no new lens there. The **vision half is the AI Object Lens**. ("Oracle"
+   was a nice name we consciously don't need — Lucid Recall already is it.)
 
 ## 9. What "mind-blowing" looks like when this lands
 

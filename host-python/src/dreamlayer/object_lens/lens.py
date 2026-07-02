@@ -39,6 +39,7 @@ class ObjectLens:
         sighting = self.recognizer.recognize(frame)
         if sighting is None:
             return None
+        sighting.frame = frame                # so a vision brain can explain it
         now = now if now is not None else self._now()
         panel = self.registry.build_panel(sighting, now=now)
         # a bare identification (no rows) is still a valid, useful panel:

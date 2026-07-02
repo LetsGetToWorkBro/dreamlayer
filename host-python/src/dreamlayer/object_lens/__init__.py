@@ -17,7 +17,7 @@ from .lens import ObjectLens
 from .recognizer import ObjectRecognizer, PERSON_LABELS, DEFAULT_TAXONOMY
 from .providers import (
     ProviderRegistry, PanelProvider, MemoryProvider, NoteProvider,
-    LaptopProvider, CarProvider, PlantProvider,
+    LaptopProvider, CarProvider, PlantProvider, AIProvider,
 )
 from .polled import PolledSource, humanize_age
 from .schema import ObjectSighting, ObjectPanel, PanelRow
@@ -25,7 +25,7 @@ from .schema import ObjectSighting, ObjectPanel, PanelRow
 __all__ = [
     "ObjectLens", "ObjectRecognizer", "PERSON_LABELS", "DEFAULT_TAXONOMY",
     "ProviderRegistry", "PanelProvider", "MemoryProvider", "NoteProvider",
-    "LaptopProvider", "CarProvider", "PlantProvider",
+    "LaptopProvider", "CarProvider", "PlantProvider", "AIProvider",
     "PolledSource", "humanize_age",
     "ObjectSighting", "ObjectPanel", "PanelRow",
 ]

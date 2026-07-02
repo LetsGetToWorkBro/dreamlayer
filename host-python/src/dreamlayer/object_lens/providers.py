@@ -191,6 +191,42 @@ class PlantProvider(_SourceProvider):
 
 
 # ---------------------------------------------------------------------------
+# AI brain — "look at anything, an AI explains it"
+# ---------------------------------------------------------------------------
+
+class AIProvider(PanelProvider):
+    """Explains any object via the AI brain router (docs/AI_BRAIN.md).
+
+    Inert until the router has an allowed vision tier, so it ships off by
+    default and lights up when a brain (Mac mini / opt-in cloud) is enabled.
+    Answers are cached per label for the session so repeated glances don't
+    re-run the model; the tier that answered is shown for provenance.
+    """
+    name = "ai"
+
+    def __init__(self, router, want: str = "quick"):
+        self._router = router
+        self._want = want
+        self._cache: dict[str, object] = {}
+
+    def matches(self, sighting) -> bool:
+        return self._router.has_vision()
+
+    def build(self, sighting, now=None) -> list[PanelRow]:
+        key = sighting.key()
+        if key not in self._cache:
+            self._cache[key] = self._router.explain(
+                getattr(sighting, "frame", None), sighting.label,
+                want=self._want)
+        ans = self._cache[key]
+        if ans is None or ans.is_empty():
+            return []
+        tier = f" ({ans.tier})" if ans.tier else ""
+        return [PanelRow(label="about", detail=ans.text, kind="info",
+                         source=self.name + tier)]
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 

@@ -17,6 +17,9 @@ class ObjectSighting:
     label: str
     confidence: float               # 0-1
     attributes: dict = field(default_factory=dict)   # colour, brand, text…
+    # the frame it was seen in, for a vision brain to explain. Not part of
+    # identity and never serialised.
+    frame: object = field(default=None, repr=False, compare=False)
 
     def key(self) -> str:
         return self.label.strip().lower()

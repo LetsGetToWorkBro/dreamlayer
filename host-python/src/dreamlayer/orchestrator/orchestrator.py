@@ -20,7 +20,8 @@ from .tell import TellEngine
 from .consistency import ConsistencyEngine
 from .provenance import ProvenanceLens
 from .quest import QuestLog
-from ..object_lens import ObjectLens
+from ..object_lens import ObjectLens, AIProvider
+from ..ai_brain import BrainRouter
 from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
@@ -65,10 +66,15 @@ class Orchestrator:
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
+        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge. Inert until
+        # a tier is enabled (on-device / Mac mini / opt-in cloud), so it ships
+        # off by default. Cloud is never crossed without opt_in_cloud().
+        self.brain = BrainRouter()
         # Object Lens: look at a thing -> a contextual panel (objects, not
-        # people). Ships with the memory provider; register integration
-        # seams (laptop/car/plant) at the app layer.
+        # people). Ships with the memory provider + the (inert) AI explainer;
+        # register integration seams (laptop/car/plant) at the app layer.
         self.object_lens = ObjectLens(ring=self.ring, privacy=self.privacy)
+        self.object_lens.registry.register(AIProvider(self.brain))
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -406,6 +412,32 @@ class Orchestrator:
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
+
+    # ------------------------------------------------------------------
+    # AI brain — knowledge queries (folds into Lucid Recall) + cloud gate
+    # ------------------------------------------------------------------
+
+    def ask_brain(self, query: str):
+        """Ask your own knowledge (files/mail on the Mac mini brain). Returns
+        an Answer, attributed to the tier that answered. Veil-gated."""
+        if not self.privacy.allow_capture():
+            return None
+        answer = self.brain.ask(query)
+        if answer is not None and not answer.is_empty():
+            self.bridge.send_card(
+                cards.answer_card(answer.text, sources=answer.sources,
+                                  tier=answer.tier)
+                if hasattr(cards, "answer_card") else
+                {"type": "AnswerCard", "primary": answer.text,
+                 "footer": f"{answer.tier} · {', '.join(answer.sources)}",
+                 "lines": [answer.text]},
+                event="brain_answer")
+        return answer
+
+    def opt_in_cloud(self, on: bool = True) -> None:
+        """Allow cloud AI tiers for this session (off by default). Nothing
+        crosses to the cloud until this is called."""
+        self.brain.opt_in_cloud(on)
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)
