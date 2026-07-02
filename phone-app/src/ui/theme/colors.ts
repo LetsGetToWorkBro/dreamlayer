@@ -36,7 +36,7 @@ export const haloPalette = {
   memoryTrace:     "#00FFAA",
   confidenceLow:   "#FFAA00",
   confidenceMed:   "#00FFAA",
-  confidenceHigh:  "#AA00FF",
+  confidenceHigh:  "#B8FFE9", // Meridian: retired the off-family violet
   privacyDanger:   "#FF4444",
   privacyCaution:  "#FF8800",
   warningAmber:    "#FF6600",

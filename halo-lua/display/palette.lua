@@ -42,7 +42,12 @@ M.status_paused     = 0x8FA8B2
 M.memory_trace      = 0x00FFAA
 M.confidence_low    = 0xFFAA00
 M.confidence_med    = 0x00FFAA
-M.confidence_high   = 0xAA00FF
+M.confidence_high   = 0xB8FFE9  -- Meridian: v1's 0xAA00FF violet read
+                                -- off-family next to the teal system
+                                -- (flagged in HALO_CINEMA_V1_RISKS.md and
+                                -- CINEMA_V1_JUDGMENT.md); highest
+                                -- confidence is now the brightest member
+                                -- of the family, not a foreign hue
 M.privacy_danger    = 0xFF4444
 M.privacy_caution   = 0xFF8800
 M.warning_amber     = 0xFF6600

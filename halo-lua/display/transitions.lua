@@ -91,6 +91,18 @@ end
 -- ---------------------------------------------------------------------------
 local GHOSTWAKE_CHAR_W = 10   -- matches typography AVG_W.sm
 
+-- UTF-8 aware character split. v1 iterated BYTES (text:sub(i,i)), which
+-- sliced multi-byte glyphs — the "• MEMORY ECHO •" bullets the anchor
+-- renderer actually sends became three garbage draws per bullet on
+-- device. Found by the Meridian raster harness (Phase 5 golden pass).
+local function utf8_chars(s)
+  local chars = {}
+  for ch in s:gmatch("[%z\x01-\x7F\xC2-\xFD][\x80-\xBF]*") do
+    chars[#chars + 1] = ch
+  end
+  return chars
+end
+
 function transitions.ghost_wake_text(x, y, text, size, t, seed_ms)
   MAT.init()
   text = tostring(text)
@@ -105,10 +117,11 @@ function transitions.ghost_wake_text(x, y, text, size, t, seed_ms)
   local amp   = A.SIG_GHOSTWAKE_JITTER_PX * (1 - E.in_out_cubic(t))
   local seed  = (seed_ms or 0) * 0.004
   local color = P.dynamic_color("ghost_text")
-  local n     = #text
+  local chars = utf8_chars(text)
+  local n     = #chars
   local x0    = x - floor(n * GHOSTWAKE_CHAR_W / 2)
   for i = 1, n do
-    local ch = text:sub(i, i)
+    local ch = chars[i]
     if ch ~= " " then
       local jx = E.perlin1d(seed + i * 7.13)  * amp
       local jy = E.perlin1d(seed + i * 13.7 + 51) * amp
