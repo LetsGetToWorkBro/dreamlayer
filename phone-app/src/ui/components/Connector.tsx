@@ -1,7 +1,8 @@
 import React from "react";
-import { View, Text, Switch, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, Switch, StyleSheet } from "react-native";
 import { colors } from "../theme/colors";
 import { typography } from "../theme/typography";
+import { Tappable } from "./Tappable";
 
 /** A card grouping one connector (glasses, Mac mini, cloud, incognito). */
 export function ConnectorCard({
@@ -89,9 +90,8 @@ export function PillButton({
   ghost?: boolean;
 }) {
   return (
-    <TouchableOpacity
+    <Tappable
       onPress={onPress}
-      activeOpacity={0.8}
       style={[
         s.pill,
         ghost
@@ -102,7 +102,7 @@ export function PillButton({
       <Text style={[typography.body, { fontWeight: "600", color: ghost ? colors.textSecondary : colors.background }]}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </Tappable>
   );
 }
 

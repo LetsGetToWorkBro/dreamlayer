@@ -42,14 +42,14 @@ export default function Onboarding() {
   const handleCta = async () => {
     if (isPairStep) {
       try { await connect(); } catch (_) {}
-      complete(); router.replace("/now");
+      complete(); router.replace("/brain");
     } else { advance(); }
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       {!isPairStep && (
-        <TouchableOpacity style={styles.skip} onPress={() => { complete(); router.replace("/now"); }}>
+        <TouchableOpacity style={styles.skip} onPress={() => { complete(); router.replace("/brain"); }}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Skip</Text>
         </TouchableOpacity>
       )}
