@@ -27,6 +27,9 @@ local HAS_FRAME = (type(_G.frame) == "table")
 
 local M = {}
 
+-- Inner Weather: the wearer's own climate (churn channel, {t="geometry"})
+local _churn = 0.0
+
 -- Timbre: the current voice's rim waveform ({t="timbre"}), short-lived
 local _timbre = nil          -- { known=, side_deg=, points={12}, until_ms= }
 local TIMBRE_TTL_MS = 2500
@@ -44,6 +47,8 @@ function M.on_timbre(msg, now_ms)
     until_ms = (now_ms or 0) + TIMBRE_TTL_MS,
   }
 end
+
+function M.churn() return _churn end
 
 function M.timbre(now_ms)
   if _timbre and now_ms and _timbre.until_ms and now_ms > _timbre.until_ms then
@@ -153,6 +158,12 @@ function M.update_particles(intensity, mode)
       p.vx = p.vx * 0.92
       p.vy = p.vy * 0.92
     end
+    -- Inner Weather: the wearer's climate churns the core — random-walk
+    -- agitation scaled by state, still confined to r <= 96 below
+    if _churn > 0.02 then
+      p.vx = p.vx + (math.random() - 0.5) * _churn * 1.6
+      p.vy = p.vy + (math.random() - 0.5) * _churn * 1.6
+    end
     p.x = p.x + p.vx
     p.y = p.y + p.vy
     -- Wrap around display edges
@@ -227,6 +238,12 @@ end
 -- ---------------------------------------------------------------------------
 
 function M.on_geometry(cmd)
+  -- Inner Weather rides the geometry type on its own channel: churn
+  -- modulates the core without clobbering transient rotate/scatter
+  if cmd.mode == "churn" then
+    _churn = cmd.intensity or 0.0
+    return
+  end
   _geo_mode      = cmd.mode      or "rotate"
   _geo_intensity = cmd.intensity or 0.0
   local yr = cmd.yaw_rate   or 0.0

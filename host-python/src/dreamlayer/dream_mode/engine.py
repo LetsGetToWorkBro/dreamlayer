@@ -33,6 +33,7 @@ from typing import Optional
 from ..orchestrator.recall_context import RecallContext
 from .mic_reactor import MicReactor
 from .imu_reactor import ImuReactor
+from .inner_weather import InnerWeather
 from .timbre_reactor import TimbreReactor
 from .weather_ledger import WeatherLedger
 from .yesterlight import YesterlightController
@@ -72,6 +73,7 @@ class DreamEngine:
         # their timbre at the rim; without it strangers still static
         self.timbre    = TimbreReactor(baselines=narrative,
                                        privacy=privacy)
+        self.inner     = InnerWeather(privacy=privacy)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -192,6 +194,11 @@ class DreamEngine:
         timbre_cmd = self.timbre.tick(ctx)
         if timbre_cmd:
             self.bridge.send_raw(timbre_cmd)
+
+        # the wearer's own climate churns the core (after the IMU's
+        # transient gestures — churn rides a separate renderer channel)
+        for frame in self.inner.tick(ctx):
+            self.bridge.send_raw(frame)
 
         now = time.monotonic()
         if ctx.has_camera() and (now - self._last_scene_t) >= SCENE_INTERVAL_S:
