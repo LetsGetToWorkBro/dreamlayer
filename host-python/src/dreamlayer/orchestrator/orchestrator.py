@@ -20,8 +20,12 @@ from .tell import TellEngine
 from .consistency import ConsistencyEngine
 from .provenance import ProvenanceLens
 from .quest import QuestLog
-from ..object_lens import ObjectLens, AIProvider
+from .waypath import WaypathLens
+from ..object_lens import (
+    ObjectLens, AIProvider, LabelProvider, RosettaProvider, DietaryProfile,
+)
 from ..ai_brain import BrainRouter
+from ..rosetta import RosettaLens
 from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
@@ -75,6 +79,13 @@ class Orchestrator:
         # register integration seams (laptop/car/plant) at the app layer.
         self.object_lens = ObjectLens(ring=self.ring, privacy=self.privacy)
         self.object_lens.registry.register(AIProvider(self.brain))
+        # Label (your own facts about a product) + Rosetta (translate seen text)
+        self.dietary = DietaryProfile()
+        self.rosetta = RosettaLens()          # translate_fn wired by the app
+        self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
+        self.object_lens.registry.register(RosettaProvider(self.rosetta))
+        # Waypath: point-me-to-my-things from anchors
+        self.waypath = WaypathLens()
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -412,6 +423,22 @@ class Orchestrator:
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
+
+    def find_way(self, subject: str, heading_deg: float = 0.0):
+        """Waypath Lens: where is my <thing> / where do I go, as a direction
+        + distance from your own anchors. Veil-gated."""
+        if not self.privacy.allow_capture():
+            return None
+        cue = self.waypath.locate(subject, heading_deg)
+        card = self.waypath.to_hud_card(cue)
+        if card is not None:
+            self.bridge.send_card(card, event="waypath")
+        return cue
+
+    def translate_seen(self, text: str, target: str = "en"):
+        """Rosetta Lens (the eye): translate text you look at. Puente is the
+        ear (live voice translation)."""
+        return self.rosetta.read(text, target=target)
 
     # ------------------------------------------------------------------
     # AI brain — knowledge queries (folds into Lucid Recall) + cloud gate

@@ -132,7 +132,9 @@ class TestOrchestratorWiring:
         assert not any(r.label == "about" for r in panel.rows)
         # enable the Mac mini brain -> the same glance now explains
         orc.brain.add_vision(MockVisionBrain("laptop", LAPTOP_FACTS))
-        orc.object_lens.registry._providers[-1]._cache.clear()
+        for p in orc.object_lens.registry._providers:      # clear the AI cache
+            if isinstance(p, AIProvider):
+                p._cache.clear()
         panel = orc.look_at_object(frame())
         assert any(r.label == "about" for r in panel.rows)
 

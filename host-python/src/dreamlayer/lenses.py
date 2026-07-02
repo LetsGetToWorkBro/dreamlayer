@@ -46,6 +46,8 @@ LENSES: list[Lens] = [
                 "dreamlayer.dream_mode.yesterlight"),
         Feature("premonition", "Premonition", "your rhythms shimmer ahead of now",
                 "dreamlayer.dream_mode.premonition"),
+        Feature("waypath", "Waypath Lens", "point-me-to-my-things: direction + distance from your anchors",
+                "dreamlayer.orchestrator.waypath"),
     ]),
     Lens("people", "People", "who's around you", [
         Feature("social_lens", "Social Lens", "recognise your own contacts (never strangers)",
@@ -64,11 +66,15 @@ LENSES: list[Lens] = [
                 "dreamlayer.orchestrator.provenance"),
     ]),
     Lens("world", "World", "understand what you look at", [
-        Feature("object_lens", "Object Lens", "look at a thing → a contextual panel",
+        Feature("oracle", "Oracle", "look at anything → know it (recognise + panel)",
                 "dreamlayer.object_lens"),
+        Feature("label", "Label Lens", "your own facts about a product: dietary rules, ownership, returns",
+                "dreamlayer.object_lens.label"),
         Feature("ai_brain", "AI Brain", "name/explain anything; ask your own files",
                 "dreamlayer.ai_brain"),
-        Feature("puente", "Puente", "live voice translation (the ear; Object Lens is the eye)",
+        Feature("rosetta", "Rosetta Lens", "translate text you look at (the eye)",
+                "dreamlayer.rosetta"),
+        Feature("puente", "Puente", "live voice translation (the ear)",
                 "dreamlayer.orchestrator.puente_bridge"),
     ]),
     Lens("life", "Life", "do, keep, and build", [

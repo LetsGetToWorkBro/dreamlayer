@@ -22,6 +22,8 @@ The resting state and everything about recall.
   memory consolidation.
 - **Yesterlight** — roll your head back and the room replays its own light.
 - **Premonition** — your rhythms shimmer just ahead of the now-notch.
+- **Waypath Lens** — "where is it / where do I go": your keys are 12m to your
+  left, the exit is behind you — direction + distance from your own anchors.
 
 ## 👤 People — *who's around you*
 
@@ -45,12 +47,17 @@ One family, three directions.
 
 ## 🌍 World — *understand what you look at*
 
-- **Object Lens** — look at a thing → a contextual panel (objects, not
-  people).
+- **Oracle** — look at anything → know it: recognise the object and show a
+  contextual panel (objects, not people). The flagship of World.
+- **Label Lens** — your own facts about a product/food/menu: dietary rules
+  you set ("you're avoiding dairy"), whether you own or returned it,
+  allergens. Privacy-safe half of "superhuman shopping"; the prices/reviews
+  half rides the opt-in cloud tier.
 - **AI Brain** — name and explain anything; ask your own files/mail. Tiered:
   on-device → your Mac mini → opt-in cloud.
-- **Puente** — live voice translation. The *ear*; the Object Lens's read/
-  translate is the *eye*.
+- **Rosetta Lens** — translate text you *look at* (a menu, a sign): the eye.
+- **Puente** — live voice translation: the ear. Together, Rosetta + Puente
+  are "understand any language."
 
 ## 🎯 Life — *do, keep, and build*
 

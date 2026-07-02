@@ -14,10 +14,10 @@ full breakdown is in [docs/LENSES.md](docs/LENSES.md).)
 
 | Lens | For | Includes |
 |---|---|---|
-| 🧠 **Memory** | your life, remembered | Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition |
+| 🧠 **Memory** | your life, remembered | Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition · Waypath Lens |
 | 👤 **People** | who's around you | Social Lens · Timbre · Name Capture |
 | ⚖️ **Truth** | what's true, and where beliefs come from | Truth Lens · Candor · Provenance Lens |
-| 🌍 **World** | understand what you look at | Object Lens · AI Brain · Puente |
+| 🌍 **World** | understand what you look at | Oracle · Label Lens · AI Brain · Rosetta Lens · Puente |
 | 🎯 **Life** | do, keep, and build | Commitment Drift · Saga · Reality Compiler (Rehearsal + Wayfinding) |
 | 🤝 **Together** | two wearers, one sky | Confluence |
 
