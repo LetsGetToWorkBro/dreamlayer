@@ -38,6 +38,11 @@ local MT = {
   -- horizon_composer.py — keep in sync)
   HORIZON         = "horizon",
 
+  -- Yesterlight: in-place time scrub (host -> Halo)
+  -- {t="yesterlight", active=0|1, notch_dd=deci-deg, echo_dd=deci-deg?}
+  -- Python side dream_mode/yesterlight.py MSG_YESTERLIGHT — keep in sync
+  YESTERLIGHT     = "yesterlight",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",

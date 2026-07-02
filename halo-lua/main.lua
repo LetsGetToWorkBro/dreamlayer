@@ -20,6 +20,9 @@ Figment.register(HostComm)
 
 -- Meridian: composed day-ring frames land in the horizon plotter
 HostComm.register(MT.HORIZON, function(msg) Horizon.on_frame(msg) end)
+-- Yesterlight scrub state rides the same plotter
+HostComm.register(MT.YESTERLIGHT,
+                  function(msg) Horizon.on_yesterlight(msg) end)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)

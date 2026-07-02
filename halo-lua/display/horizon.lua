@@ -33,6 +33,7 @@ local _seq           = -1
 local _paused        = false
 local _last_frame_ms = nil
 local _highlight     = nil   -- { deg=, until_ms= }
+local _scrub         = nil   -- { deg= } (Yesterlight detached notch)
 local _pulse         = nil   -- { deg=, until_ms= }
 
 local KIND_MEMORY, KIND_PROMISE, KIND_PERSON, KIND_ELDER, KIND_FUTURE_CAP =
@@ -271,7 +272,31 @@ function M.draw(opts)
   end
 
   draw_notch(now, opts.reduce_motion)
+
+  -- Yesterlight: the visited hour gets its own still notch, in the
+  -- paused hue — the past does not breathe
+  if _scrub then
+    radial_tick(_scrub.deg, 96, fl(96 + A.MER_NOW_LEN_MIN + 2),
+                P.status_paused, 2)
+  end
 end
+
+--- Yesterlight ({t="yesterlight"}): while active the now-notch detaches
+--- and a scrub notch marks the visited hour; an optional echo brightens
+--- the anchor living at that hour (same provenance path as set_highlight).
+function M.on_yesterlight(msg, now_ms)
+  if not msg then return end
+  if (msg.active or 0) == 1 and msg.notch_dd then
+    _scrub = { deg = msg.notch_dd / 10 }
+    if msg.echo_dd then
+      M.set_highlight(msg.echo_dd / 10, now_ms)
+    end
+  else
+    _scrub = nil
+  end
+end
+
+function M.scrub() return _scrub end
 
 function M.set_highlight(deg, now_ms)
   _highlight = { deg = deg, until_ms = (now_ms or M._now_ms()) + A.MER_HIGHLIGHT_MS }
@@ -291,7 +316,7 @@ function M.last_frame_ms() return _last_frame_ms end
 
 function M.reset()
   _marks, _seq, _paused, _last_frame_ms = {}, -1, false, nil
-  _highlight, _pulse = nil, nil
+  _highlight, _pulse, _scrub = nil, nil, nil
 end
 
 return M
