@@ -101,10 +101,14 @@ registry.register(LaptopProvider(src))
 `serve_companion(...)` is an in-process reference server implementing the
 same contract, so the whole round-trip — companion → data_source →
 PolledSource → provider → panel — is tested over **real localhost HTTP** and
-runs in the demo. A production macOS/Windows agent is out of scope for this
-repo, but anything speaking those three lines drops straight in. The same
-shape covers a BLE soil sensor or an OBD dongle — only the `fetch_fn`
-changes.
+runs in the demo. The same shape covers a BLE soil sensor or an OBD dongle —
+only the `fetch_fn` changes.
+
+**The actual laptop agent** you run on a real Mac/Windows/Linux machine lives
+in [`laptop-companion/`](../laptop-companion/) — a stdlib-only script that
+reads recent files + battery from the OS and serves this contract, with
+launch-at-login instructions. `test_laptop_companion_agent.py` proves it
+interoperates with the phone-side client over real HTTP.
 
 ## Try it
 
