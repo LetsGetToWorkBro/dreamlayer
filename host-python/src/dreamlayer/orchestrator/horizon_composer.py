@@ -55,13 +55,25 @@ def _luma_tier(confidence: float) -> int:
 class HorizonComposer:
     """Stateless per-call composition + rate limiting + seq numbering."""
 
-    def __init__(self, ring, drift=None, now_fn=None):
+    def __init__(self, ring, drift=None, now_fn=None, rem=None):
         self._ring = ring
         self._drift = drift
         self._now = now_fn or time.time
+        # rem: optional RetrievalBias (dreamlayer.rem) — memories the
+        # night promoted wake up one luma tier brighter; boosted marks
+        # also survive the 48-mark cap preferentially.
+        self._rem = rem
         self._seq = 0
         self._last_emit: float = 0.0
         self._last_wire: Optional[str] = None
+
+    def _rem_boost(self, kind: str, summary: str) -> float:
+        if self._rem is None:
+            return 0.0
+        try:
+            return max(0.0, float(self._rem.boost_for(kind, summary)))
+        except Exception:
+            return 0.0
 
     # -- geometry -------------------------------------------------------
 
@@ -114,7 +126,12 @@ class HorizonComposer:
                 continue
             deg = self.angle_for_ts(buffered.ts, now)
             k = KIND_PERSON if kind in _PERSON_KINDS else KIND_MEMORY
-            marks.append((deg, k * 100 + _luma_tier(conf), conf))
+            tier = _luma_tier(conf)
+            boost = self._rem_boost(kind or "memory",
+                                    getattr(ev, "summary", "") or "")
+            if boost >= 0.15:
+                tier = min(2, tier + 1)   # the night kept this one
+            marks.append((deg, k * 100 + tier, conf + boost))
 
         # -- promises from the drift engine
         if self._drift is not None:
@@ -129,6 +146,8 @@ class HorizonComposer:
                     future_cap_needed = True
                     continue
                 conf = float(getattr(rec.event, "confidence", 0.5) or 0.5)
+                conf += self._rem_boost(
+                    "promise", getattr(rec.event, "summary", "") or "")
                 marks.append((deg, KIND_PROMISE * 100 + state * 10 + 2, conf))
 
         # -- cap: drop lowest-confidence memories first, never promises.
