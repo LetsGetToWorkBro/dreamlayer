@@ -76,6 +76,8 @@ class Orchestrator:
         # fallback. Advanced users flip set_private_mode() for home-LAN-only.
         self.brain = BrainRouter(cloud_opt_in=True)
         self.private_mode = False
+        self.brain_mode = "connected"         # connected | home | phone
+        self.glasses_id = None                # set at pairing
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -472,11 +474,23 @@ class Orchestrator:
         """Allow or forbid cloud AI tiers for this session."""
         self.brain.opt_in_cloud(on)
 
+    def set_brain_mode(self, mode: str) -> None:
+        """Where the intelligence lives:
+          connected — on-device → Mac mini → cloud (default; best answer wins)
+          home      — on-device + Mac mini, no cloud (private, needs your LAN)
+          phone     — on-device only; the phone IS the brain (fully offline,
+                      more limited)
+        """
+        if mode not in ("connected", "home", "phone"):
+            raise ValueError(f"unknown brain mode: {mode!r}")
+        self.brain_mode = mode
+        self.brain.opt_in_cloud(mode == "connected")
+        self.brain.set_local_only(mode == "phone")
+        self.private_mode = mode != "connected"
+
     def set_private_mode(self, on: bool = True) -> None:
-        """Advanced: keep everything on-device / your home LAN — no cloud.
-        The default is connected (cloud allowed); this is the opt-out."""
-        self.private_mode = on
-        self.brain.opt_in_cloud(not on)
+        """Advanced opt-out: home mode (on-device + Mac mini, no cloud)."""
+        self.set_brain_mode("home" if on else "connected")
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)

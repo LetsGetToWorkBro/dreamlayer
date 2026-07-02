@@ -22,10 +22,13 @@ from .brains import VisionBrain, KnowledgeBrain
 
 
 class BrainRouter:
-    def __init__(self, cloud_opt_in: bool = False):
+    def __init__(self, cloud_opt_in: bool = False, local_only: bool = False):
         self._vision: list[VisionBrain] = []
         self._knowledge: list[KnowledgeBrain] = []
         self.cloud_opt_in = cloud_opt_in
+        # local_only: use ONLY on-device tiers — no Mac mini, no cloud. This
+        # is "the phone is the brain" (fully offline, more limited).
+        self.local_only = local_only
 
     # -- registration (in preference order) -----------------------------
 
@@ -40,12 +43,19 @@ class BrainRouter:
         beyond the session — the caller re-opts each time."""
         self.cloud_opt_in = on
 
+    def set_local_only(self, on: bool = True) -> None:
+        """On-device only — the phone is the brain (fully offline)."""
+        self.local_only = on
+
     def has_vision(self) -> bool:
         return any(self._allowed(b) for b in self._vision)
 
     # -- routing ---------------------------------------------------------
 
     def _allowed(self, brain) -> bool:
+        if self.local_only and (getattr(brain, "is_cloud", False)
+                                or getattr(brain, "is_remote", False)):
+            return False                      # phone-only: skip Mac mini + cloud
         return self.cloud_opt_in or not getattr(brain, "is_cloud", False)
 
     def explain(self, frame, label: str,

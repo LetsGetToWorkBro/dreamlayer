@@ -186,6 +186,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "stats": brain.index.stats()})
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": brain.history.recent(30)})
+            elif path == "/dreamlayer/pair":
+                # a pairing code for the phone — only handed to the local panel
+                if not self._from_localhost():
+                    self._json(403, {"error": "pairing is local-only"}); return
+                from ...pairing import PairingBundle, encode_pairing
+                url = "http://" + (self.headers.get("Host") or "127.0.0.1")
+                bundle = PairingBundle(brain_url=url, token=brain.config.token)
+                self._json(200, {"code": encode_pairing(bundle), "url": url})
             else:
                 self._json(404, {"error": "not found"})
 
