@@ -38,6 +38,7 @@ local _pulse         = nil   -- { deg=, until_ms= }
 
 local KIND_MEMORY, KIND_PROMISE, KIND_PERSON, KIND_ELDER, KIND_FUTURE_CAP =
   1, 2, 3, 4, 5
+local KIND_PREMONITION = 6   -- future ghost (shimmers, never breathes loud)
 
 local function fl(n) return math.floor(n + 0.5) end
 local function polar(r, deg)
@@ -91,7 +92,7 @@ function M.on_frame(msg, now_ms)
     local kind  = math.floor(code / 100)
     local state = math.floor(code / 10) % 10
     local luma  = code % 10
-    if kind < KIND_MEMORY or kind > KIND_FUTURE_CAP or luma > 2 then
+    if kind < KIND_MEMORY or kind > KIND_PREMONITION or luma > 2 then
       return false
     end
     if #marks >= A.MER_MARKS_MAX then break end
@@ -171,6 +172,23 @@ local function draw_promise(mk, stack)
   end
 end
 
+--- A future ghost: a dim dot ahead of now that shimmers on a slow
+--- phase (reduce_motion: a static dim dot — probability stays visible,
+--- the flicker goes). Never brighter than a real luma-1 mark.
+local function draw_premonition(mk, now_ms, reduce_motion)
+  local visible = true
+  if not reduce_motion then
+    local phase = ((now_ms or 0) + fl(mk.deg * 37)) % 1400
+    visible = phase < 980   -- ~70% duty shimmer, desynced per mark
+  end
+  if visible then
+    local x, y = polar(A.MER_MARK_BASE_R, mk.deg)
+    if HAS_FRAME then
+      frame.display.circle(fl(x), fl(y), 1, P.text_ghost, true)
+    end
+  end
+end
+
 local function draw_notch(now_ms, reduce_motion)
   local len
   if reduce_motion then
@@ -246,6 +264,9 @@ function M.draw(opts)
       local stack = promise_stack[key] or 0
       promise_stack[key] = stack + 1
       draw_promise(mk, math.min(stack, 2))
+    elseif mk.kind == KIND_PREMONITION then
+      -- future ghosts stay in dream light too: probability is weather
+      draw_premonition(mk, now, opts.reduce_motion)
     elseif mk.kind == KIND_ELDER then
       radial_tick(A.MER_ELDER_DEG, A.MER_MARK_BASE_R, A.MER_MARK_BASE_R + 4,
                   P.text_ghost)
