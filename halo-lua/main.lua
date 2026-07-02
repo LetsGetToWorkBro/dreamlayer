@@ -9,6 +9,7 @@ local CardQueue  = require("card_queue")
 local Cards      = CardQueue.new()
 local HostComm   = require("ble.host_comm")   -- already wires DC via require
 local DreamRend  = require("display.dream_renderer")
+local Prism      = require("display.prism")
 local PAL        = require("display.palette")
 local Figment    = require("app.figment_stage") -- Reality Compiler v2 stage
 local MT         = require("ble.message_types")
@@ -31,6 +32,8 @@ HostComm.register(MT.CONFLUENCE,
                   function(msg) DreamRend.on_confluence(msg) end)
 HostComm.register(MT.TINCAN,
                   function(msg) DreamRend.on_tincan(msg) end)
+-- Prism Lens: the psychedelic kaleidoscope overlay
+HostComm.register(MT.PRISM, function(msg) Prism.on_prism(msg) end)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)
@@ -145,6 +148,12 @@ local function tick()
     -- a deployed figment owns the display; it renders via its bound
     -- display API and yields the stage the moment it ends or is revoked
     Figment.tick(0.05)
+  elseif Prism.is_active() then
+    -- Prism Lens: the psychedelic kaleidoscope owns the display while on
+    local has_frame = (type(_G.frame) == "table")
+    if has_frame then frame.display.clear(0x000000) end
+    Prism.draw(_tick_ms)
+    if has_frame then frame.display.show() end
   elseif HostComm.dream_active() then
     -- Dream Mode: same terrain, different light (cinema_v2/weather.md) —
     -- the dimmed horizon under the weather, then any pending dream cards

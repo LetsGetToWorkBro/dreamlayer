@@ -18,6 +18,7 @@ from .horizon_composer import HorizonComposer
 from .time_scrub import TimeScrubSession
 from .tell import TellEngine
 from .consistency import ConsistencyEngine
+from .provenance import ProvenanceLens
 from .quest import QuestLog
 from .state import HostState
 from ..dream_mode import DreamEngine
@@ -60,8 +61,9 @@ class Orchestrator:
         self.drift_engine = CommitmentDriftEngine(self.ring)
         self._scrub_session: TimeScrubSession | None = None
         self.tell_engine = TellEngine(self.ring)
-        # On-device fact consistency: new statements vs your own memories.
+        # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
+        self.provenance = ProvenanceLens(self.ring)
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -380,6 +382,16 @@ class Orchestrator:
         result = self.consistency.check(claim, now=now)
         if result.fired:
             self.bridge.send_card(result.card, event="consistency")
+        return result
+
+    def trace_provenance(self, claim: str, now: float | None = None):
+        """Provenance Lens: trace a belief to its origin and standing in your
+        own memory. Veil-gated; surfaces a card when a source is found."""
+        if not self.privacy.allow_capture():
+            return None
+        result = self.provenance.trace(claim, now=now)
+        if result.found:
+            self.bridge.send_card(result.card, event="provenance")
         return result
 
     def tick_drift(self, now: float | None = None) -> list[dict]:

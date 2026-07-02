@@ -1,4 +1,6 @@
-"""quest.py — the Life Quest Engine: your commitments, as a personal RPG.
+"""quest.py — Saga (the Life Quest Engine): your commitments, as a personal RPG.
+
+Display name: **Saga**. The class stays QuestLog.
 
 A narrative skin on Commitment Drift. The hard part already exists: a
 commitment is a living object with a state ladder (blooming → shattered),

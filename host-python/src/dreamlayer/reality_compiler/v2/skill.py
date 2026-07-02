@@ -1,4 +1,8 @@
-"""v2/skill.py — Instant Skill Overlay: a procedure you step through hands-free.
+"""v2/skill.py — Wayfinding: a procedure you step through hands-free.
+
+Display name: **Wayfinding** — the linear-procedure authoring mode of the
+Reality Compiler, alongside Rehearsal (reactive behaviors). Symbols stay
+compile_skill / parse_skill / Step.
 
 Cooking, a repair, a BJJ sequence — a curated list of steps that plays on
 the HUD and advances at your pace: a tap moves to the next step, a timed

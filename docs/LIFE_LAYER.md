@@ -1,4 +1,7 @@
-# The life layer — Quests, Skill Overlays, Consistency
+# The life layer — Saga, Wayfinding, Candor
+
+(Display names. The code symbols stay `QuestLog`, `compile_skill`,
+`ConsistencyEngine` — no symbol churn.)
 
 Three features that make everyday life legible on the glasses. None is a new
 subsystem; each is a thin, well-tested layer on substrate DreamLayer already
@@ -8,9 +11,9 @@ Try them together: `python scripts/run_demo_life_layer.py`
 
 ---
 
-## Life Quest Engine — your commitments, as a personal RPG
+## Saga — your commitments, as a personal RPG
 
-`orchestrator/quest.py`
+`orchestrator/quest.py` (the Life Quest Engine)
 
 Commitment Drift already models a promise as a living object with a state
 ladder (blooming → shattered), behavior signals (nudge/keep/break), and
@@ -33,7 +36,7 @@ status you can read.
 Orchestrator: `quests()`, `complete_quest()`, `abandon_quest()`,
 `quest_stats()`. A completion surfaces a `QuestRewardCard`.
 
-## Instant Skill Overlay — a procedure you step through hands-free
+## Wayfinding — a procedure you step through hands-free
 
 `reality_compiler/v2/skill.py`
 
@@ -54,9 +57,9 @@ cost is provable before signing.
 
 Orchestrator: `build_skill(name, text)` → a deploy-ready verified Figment.
 
-## Fact Consistency — does this contradict what you already recorded?
+## Candor — does this contradict what you already recorded?
 
-`orchestrator/consistency.py`
+`orchestrator/consistency.py` (the inward twin of Truth Lens)
 
 The privacy-respecting reimagining of "fact-check". No cloud, no web, no
 external claim of truth — it only ever compares a new statement against *your

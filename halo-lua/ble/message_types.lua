@@ -59,6 +59,11 @@ local MT = {
   -- Python side confluence/tincan.py MSG_TINCAN — keep in sync
   TINCAN          = "tincan",
 
+  -- Prism Lens: the psychedelic kaleidoscope overlay (host -> Halo)
+  -- {t="prism", active=0|1, intensity=0..100, symmetry=n, hue_rate=n}
+  -- Python side dream_mode/prism.py MSG_PRISM — keep in sync
+  PRISM           = "prism",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",

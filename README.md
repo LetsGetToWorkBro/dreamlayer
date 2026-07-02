@@ -22,9 +22,11 @@ DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/) Ha
 | Two wearers | **Confluence** | Bonded skies entangle: converge and they merge, drift and they split |
 | Living promises | **Commitment Drift** | Commitments are HUD physics objects — bloom, crack, and shatter by behavior and time |
 | Living light | **Palette Cycling** | The demoscene trick: the quiet sky flows like an aurora by recolouring slots, not redrawing pixels — zero-cost motion on-device |
-| Personal RPG | **Life Quest Engine** | Commitments become quests: complete them for XP, build streaks, rescue one from the brink for a bonus |
-| Hands-free how-to | **Instant Skill Overlay** | A step list compiled to a verified Figment you tap through; timed steps advance themselves |
-| Your own truth | **Fact Consistency** | New statements checked against your own memories — never the cloud — flagging when they can't both be true |
+| Personal RPG | **Saga** | Commitments become quests: complete them for XP, build streaks, rescue one from the brink for a bonus |
+| Hands-free how-to | **Wayfinding** | A step list compiled to a verified Figment you tap through; timed steps advance themselves |
+| Your own truth | **Candor** | The inward twin of Truth Lens: new statements checked against your own memories — never the cloud — flagging when they can't both be true |
+| Belief genealogy | **Provenance Lens** | Point it at a claim and it traces where that belief entered your head — who told you, when, corroborated or contested |
+| Wonder | **Prism Lens** | Turns the world into a reactive psychedelic overlay — kaleidoscopic, sound- and motion-driven, built on palette cycling |
 
 ## Precision Lenses
 

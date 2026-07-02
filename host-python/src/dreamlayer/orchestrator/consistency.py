@@ -1,5 +1,8 @@
-"""consistency.py — on-device fact consistency: does this contradict what
-you already recorded?
+"""consistency.py — Candor: does this contradict what you already recorded?
+
+Display name: **Candor** — the inward twin of Truth Lens (Truth Lens judges
+others' credibility; Candor keeps your own story honest). Class stays
+ConsistencyEngine.
 
 The privacy-respecting reimagining of "fact-check": no cloud, no web, no
 external claim-of-truth. It only ever compares a new statement against
@@ -63,6 +66,27 @@ def _has_negator(words: list[str]) -> bool:
     return any(w in _NEGATORS for w in words)
 
 
+def contradicts(claim: str, prior: str, min_shared: int = 2):
+    """Pairwise contradiction test over a shared subject. Returns
+    (reason, detail) or None. Shared by Candor and the Provenance Lens."""
+    claim_words = _words(claim)
+    claim_keys = _keywords(claim)
+    if len(claim_keys & _keywords(prior)) < min_shared:
+        return None                       # not clearly the same subject
+    pwords = _words(prior)
+    if _has_negator(claim_words) != _has_negator(pwords):
+        return ("negation", "one asserts, one denies")
+    pset, cset = set(pwords), set(claim_words)
+    for a, b in _ANTONYMS:
+        if (a in pset and b in cset) or (b in pset and a in cset):
+            return ("antonym", f"{a} vs {b}")
+    cnums = set(_NUM.findall(claim.lower()))
+    pnums = set(_NUM.findall(prior.lower()))
+    if pnums and cnums and pnums.isdisjoint(cnums):
+        return ("value", f"{sorted(pnums)[0]} vs {sorted(cnums)[0]}")
+    return None
+
+
 @dataclass
 class ConsistencyResult:
     fired: bool
@@ -96,36 +120,11 @@ class ConsistencyEngine:
 
     def check(self, claim: str, now: Optional[float] = None) -> ConsistencyResult:
         """Compare `claim` against the memory baseline for a contradiction."""
-        claim_words = _words(claim)
-        claim_keys = _keywords(claim)
-        claim_neg = _has_negator(claim_words)
-        claim_nums = set(_NUM.findall(claim.lower()))
-
         for ev in self._baseline():
             prior = getattr(ev, "summary", "") or ""
-            pwords = _words(prior)
-            shared = claim_keys & _keywords(prior)
-            if len(shared) < self.min_shared:
-                continue                      # not clearly the same subject
-
-            # 1) negation: same subject, exactly one side denies it
-            if claim_neg != _has_negator(pwords):
-                return self._fire("negation", prior, claim,
-                                  "one asserts, one denies")
-
-            # 2) antonym: opposite states named over the shared subject
-            pset, cset = set(pwords), set(claim_words)
-            for a, b in _ANTONYMS:
-                if (a in pset and b in cset) or (b in pset and a in cset):
-                    return self._fire("antonym", prior, claim, f"{a} vs {b}")
-
-            # 3) value: same subject, different numbers/times
-            pnums = set(_NUM.findall(prior.lower()))
-            if pnums and claim_nums and pnums.isdisjoint(claim_nums):
-                return self._fire(
-                    "value", prior, claim,
-                    f"{sorted(pnums)[0]} vs {sorted(claim_nums)[0]}")
-
+            clash = contradicts(claim, prior, self.min_shared)
+            if clash is not None:
+                return self._fire(clash[0], prior, claim, clash[1])
         return ConsistencyResult(False, "", "", claim, "", None)
 
     def _fire(self, reason, prior, claim, detail) -> ConsistencyResult:
