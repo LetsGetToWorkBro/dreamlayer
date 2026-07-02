@@ -18,6 +18,7 @@ dependencies = [
 dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0"]
 hardware = ["brilliant-ble", "brilliant-msg"]
 dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
+puente   = ["websockets>=12"]                # Puente live-caption WS ingress
 
 [tool.pytest.ini_options]
 testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]

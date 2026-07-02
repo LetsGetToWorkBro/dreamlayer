@@ -9,6 +9,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = ["openai>=1.30"]
+puente = ["websockets>=12"]   # scripts/puente_live.py WS caption ingress
 dev = [
     "pytest>=9.0",
     "pytest-asyncio>=1.0",
