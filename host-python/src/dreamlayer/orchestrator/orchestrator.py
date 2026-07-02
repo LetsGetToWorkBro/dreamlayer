@@ -70,10 +70,12 @@ class Orchestrator:
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
-        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge. Inert until
-        # a tier is enabled (on-device / Mac mini / opt-in cloud), so it ships
-        # off by default. Cloud is never crossed without opt_in_cloud().
-        self.brain = BrainRouter()
+        # AI brain (docs/AI_BRAIN.md): tiered vision + knowledge — on-device →
+        # Mac mini → cloud. Product default is "connected": cloud allowed, so
+        # the best answer wins wherever you are; on-device is the airplane-mode
+        # fallback. Advanced users flip set_private_mode() for home-LAN-only.
+        self.brain = BrainRouter(cloud_opt_in=True)
+        self.private_mode = False
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -416,10 +418,15 @@ class Orchestrator:
             self.bridge.send_card(result.card, event="provenance")
         return result
 
-    def look_at_object(self, frame, now: float | None = None):
-        """Object Lens: recognise the object in view and surface its
-        contextual panel. Veil-gated; objects only (people are Social Lens)."""
-        panel = self.object_lens.look(frame, now=now)
+    def look_at_object(self, frame, now: float | None = None, facet=None):
+        """Oracle (Object Lens): recognise the object and surface its panel.
+
+        facet picks the intent — None = everything; "own" = your own facts
+        (private, instant glance); "ai" = let an AI explain/translate it;
+        "shop" = prices & reviews. Veil-gated; objects only (people are
+        Social Lens)."""
+        facets = {facet} if facet else None
+        panel = self.object_lens.look(frame, now=now, facets=facets)
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
@@ -462,9 +469,14 @@ class Orchestrator:
         return answer
 
     def opt_in_cloud(self, on: bool = True) -> None:
-        """Allow cloud AI tiers for this session (off by default). Nothing
-        crosses to the cloud until this is called."""
+        """Allow or forbid cloud AI tiers for this session."""
         self.brain.opt_in_cloud(on)
+
+    def set_private_mode(self, on: bool = True) -> None:
+        """Advanced: keep everything on-device / your home LAN — no cloud.
+        The default is connected (cloud allowed); this is the opt-out."""
+        self.private_mode = on
+        self.brain.opt_in_cloud(not on)
 
     def tick_drift(self, now: float | None = None) -> list[dict]:
         alert_records = self.drift_engine.tick(now=now)

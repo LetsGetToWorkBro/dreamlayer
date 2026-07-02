@@ -116,7 +116,7 @@ class Brain:
     def apply_config(self, updates: dict) -> None:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
-                  "email_enabled", "cloud_enabled"):
+                  "email_enabled", "cloud_enabled", "network_mode"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()

@@ -132,8 +132,13 @@ Provenance can trace it.
 
 ## 8. Decisions (resolved)
 
-1. **Cloud posture** — **off by default**, opt-in per session for hard cases,
-   with a visible "left the device" indicator.
+1. **Cloud posture** *(revised)* — **connected by default**: cloud is allowed
+   so the best answer wins wherever you are, and on-device is the airplane-mode
+   fallback (DreamLayer works phone-only, just more limited). The Mac mini
+   brain runs over the internet by default too. **Advanced users** flip
+   `set_private_mode()` / `network_mode="lan_only"` to keep everything
+   on-device and home-LAN, no cloud. (Privacy Veil and "private events never
+   leave" still hold in either mode.)
 2. **Knowledge base** — the brain lives on an **always-on Mac mini (Apple
    Silicon)** and indexes **chosen directories** (a configurable watch-list),
    plus **email and iMessage read**. It can also **send** email/iMessage —

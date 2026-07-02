@@ -13,6 +13,7 @@ from .schema import PanelRow
 
 class RosettaProvider(PanelProvider):
     name = "rosetta"
+    facet = "ai"
 
     def __init__(self, rosetta, target: str = "en"):
         self._rosetta = rosetta
