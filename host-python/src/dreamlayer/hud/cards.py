@@ -441,11 +441,14 @@ _FACT_STYLE = {
 
 
 def fact_check(verdict: str = "unverified", speaker: str = "them",
-               claim: str = "", basis: str = "", detail: str = "") -> dict:
+               claim: str = "", basis: str = "", detail: str = "",
+               corroboration: str = "") -> dict:
     """Veritas — a quiet fact-check on what's being said, sized to be read at a
     glance while the conversation continues. Green when a claim checks out, amber
     when it doesn't, attention-red when the speaker contradicts their own earlier
-    words. `basis` is the one-line why (the correction, or what they said before)."""
+    words. `basis` is the one-line why (the correction, or what they said before).
+    `corroboration` is the Discernment tag — how the *delivery* and any *pattern*
+    line up (e.g. "elevated · seen before") — folded into the footer."""
     eyebrow, color, earcon = _FACT_STYLE.get(verdict, _FACT_STYLE["unverified"])
     body = (claim or "").strip()
     if len(body) > 90:
@@ -453,20 +456,24 @@ def fact_check(verdict: str = "unverified", speaker: str = "them",
     why = (basis or "").strip()
     if len(why) > 96:
         why = why[:95] + "…"
+    foot = " · ".join(x for x in [speaker.strip(), (corroboration or "").strip()] if x)
+    if len(foot) > 40:
+        foot = foot[:39] + "…"
     return {
         "type":       "FactCheckCard",
         "dismiss_ms": 7000,
         "verdict":    verdict,
         "speaker":    speaker,
+        "corroboration": corroboration,
         "eyebrow":    eyebrow,
         "primary":    body or "—",
         "detail":     why,
-        "footer":     speaker,
+        "footer":     foot,
         "earcon":     earcon,
         "haptic":     "double" if verdict in ("disputed", "self_contradiction") else "tick",
         "flash":      verdict in ("disputed", "self_contradiction"),
         "color":      color,
-        "lines":      [eyebrow, body, why, speaker],
+        "lines":      [eyebrow, body, why, foot],
         "layout": {
             "ring":      {"x": 128, "y": 56, "r": 10, "color": color,
                           "flash": verdict in ("disputed", "self_contradiction")},
@@ -901,7 +908,8 @@ ALL_SAMPLES: dict[str, dict] = {
     "fact_check":          fact_check(
         verdict="self_contradiction", speaker="Marcus",
         claim="The deal closed at three million.",
-        basis="earlier: “we settled at two million”"),
+        basis="earlier: “we settled at two million”",
+        corroboration="elevated · seen before"),
     "answer_ahead":        answer_ahead(
         question="When did we last ship to Denver?",
         answer="March 14th — two pallets.",

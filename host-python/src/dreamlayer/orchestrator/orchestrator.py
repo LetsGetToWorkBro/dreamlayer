@@ -163,6 +163,10 @@ class Orchestrator:
         from .veritas import Veritas
         self.veritas = Veritas(verify_fn=self._verify_claim)
         self.factcheck_on = False
+        # Discernment: fuse Veritas (content) with Truth Lens (delivery, fed via
+        # note_credibility) and the pattern of prior flags into one graded read.
+        self._credibility: dict = {}           # speaker -> latest CredibilityVector
+        self._speaker_flags: dict = {}         # speaker -> how often they've flagged
         # Answer-ahead — overhears a question aimed at you and surfaces the
         # answer from your own knowledge in time to say it yourself. No wake
         # word. Off by default; answers route through _answer_question (the same
@@ -1003,13 +1007,35 @@ class Orchestrator:
         """Turn the live fact-checker (Veritas) on or off."""
         self.factcheck_on = on
 
+    def note_credibility(self, speaker: str, vector) -> None:
+        """Truth Lens seam: hand in the current delivery read (a CredibilityVector)
+        for whoever's speaking, so Discernment can fuse *how* they said it with
+        *what* they said. The live face/voice pipeline is the device seam."""
+        self._credibility[(speaker or "").strip().lower()] = vector
+
     def _fact_check(self, utterance) -> None:
         prior = [x.text for x in self.conversation.by_speaker(utterance.speaker)
                  if x is not utterance]
         res = self.veritas.check(utterance.text, utterance.speaker,
                                  prior=prior, now=utterance.ts)
-        if res.fired and res.card is not None:
-            self.bridge.send_card(res.card, event="fact_check")
+        if not res.fired or res.card is None:
+            return
+        # Discernment: fuse the content verdict with the current delivery read
+        # (Truth Lens, if a recent one exists) and the pattern of prior flags.
+        from .discernment import discern
+        who = (utterance.speaker or "").strip().lower()
+        cred = self._credibility.get(who)
+        history = self._speaker_flags.get(who, 0)
+        d = discern(res, credibility=cred, history=history)
+        self._speaker_flags[who] = history + 1
+        card = res.card
+        if d.corroboration:                    # re-render the footer with the fused tag
+            card = cards.fact_check(verdict=res.verdict, speaker=utterance.speaker or "them",
+                                    claim=res.claim, basis=res.basis, detail=res.detail,
+                                    corroboration=d.corroboration)
+        card["stance"] = d.stance
+        card["headline"] = d.headline
+        self.bridge.send_card(card, event="fact_check")
 
     def _verify_claim(self, claim: str):
         """World-check: hand a checkable claim to your knowledge tiers and read
