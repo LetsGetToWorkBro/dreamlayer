@@ -57,6 +57,53 @@ def _xp_floor(level: int) -> int:
     return 100 * (level - 1) * level // 2
 
 
+# a named identity for each level band — you're not just "level 7", you're a Ranger
+RANKS = [(1, "Novice"), (3, "Apprentice"), (5, "Adept"), (8, "Ranger"),
+         (12, "Champion"), (18, "Sage"), (25, "Legend")]
+
+
+def rank_for_level(level: int) -> str:
+    title = RANKS[0][1]
+    for lvl, name in RANKS:
+        if level >= lvl:
+            title = name
+    return title
+
+
+@dataclass(frozen=True)
+class Achievement:
+    id: str
+    name: str
+    detail: str
+
+
+# unlockable badges — pure milestones over the lifetime tally
+ACHIEVEMENTS = [
+    Achievement("first_step",  "First Step",   "Complete your first quest"),
+    Achievement("rescuer",     "Rescuer",      "Save a quest from the brink"),
+    Achievement("on_a_roll",   "On a Roll",    "Reach a 5× streak"),
+    Achievement("unstoppable", "Unstoppable",  "Reach a 10× streak"),
+    Achievement("devoted",     "Devoted",      "Complete 25 quests"),
+    Achievement("adept",       "Adept",        "Reach level 5"),
+    Achievement("veteran",     "Veteran",      "Reach level 10"),
+]
+_ACH_BY_ID = {a.id: a for a in ACHIEVEMENTS}
+ACHIEVEMENTS_ORDER = [a.id for a in ACHIEVEMENTS]
+
+
+def _earned(tally: dict) -> set[str]:
+    """Which achievement ids the lifetime tally qualifies for."""
+    got: set[str] = set()
+    if tally.get("completed", 0) >= 1:   got.add("first_step")
+    if tally.get("rescues", 0) >= 1:     got.add("rescuer")
+    if tally.get("best_streak", 0) >= 5: got.add("on_a_roll")
+    if tally.get("best_streak", 0) >= 10:got.add("unstoppable")
+    if tally.get("completed", 0) >= 25:  got.add("devoted")
+    if tally.get("level", 1) >= 5:       got.add("adept")
+    if tally.get("level", 1) >= 10:      got.add("veteran")
+    return got
+
+
 @dataclass
 class Quest:
     """One commitment, seen as a quest."""
@@ -98,23 +145,34 @@ class QuestReward:
     leveled_up: bool
     streak: int
     rescued: bool
+    rank: str = "Novice"
+    new_rank: bool = False                        # crossed into a new rank band
+    new_achievements: list = field(default_factory=list)   # names unlocked now
 
     def to_hud_card(self) -> dict:
-        head = "LEVEL UP" if self.leveled_up else "QUEST COMPLETE"
+        head = ("RANK UP" if self.new_rank else
+                "LEVEL UP" if self.leveled_up else "QUEST COMPLETE")
         lines = [head, f"+{self.xp} XP"]
         if self.streak >= 2:
             lines.append(f"{self.streak}× streak")
         if self.rescued:
             lines.append("rescued from the brink")
+        for a in self.new_achievements:
+            lines.append(f"★ {a}")
+        detail = f"{self.rank} · Level {self.level}"
         return {
             "type": "QuestRewardCard",
-            "dismiss_ms": 5000,
+            "dismiss_ms": 6000 if (self.new_rank or self.new_achievements) else 5000,
             "eyebrow": head,
             "primary": f"+{self.xp} XP",
-            "detail": f"Level {self.level}",
-            "footer": (f"{self.streak}× streak" if self.streak >= 2 else ""),
+            "detail": detail,
+            "footer": (f"★ {self.new_achievements[0]}" if self.new_achievements
+                       else f"{self.streak}× streak" if self.streak >= 2 else ""),
             "color": "accent_success",
             "leveled_up": self.leveled_up,
+            "new_rank": self.new_rank,
+            "rank": self.rank,
+            "achievements": list(self.new_achievements),
             "lines": lines,
         }
 
@@ -125,6 +183,13 @@ class QuestStats:
     level: int
     streak: int
     level_progress: float       # 0..1 toward the next level
+    rank: str = "Novice"
+    xp_to_next: int = 0         # XP remaining to the next level
+    best_streak: int = 0
+    completed: int = 0
+    abandoned: int = 0
+    rescues: int = 0
+    achievements: list = field(default_factory=list)   # unlocked names
 
 
 class QuestLog:
@@ -137,8 +202,18 @@ class QuestLog:
         self._vault = Path(vault_dir) if vault_dir else None
         self.xp = 0
         self.streak = 0
+        # lifetime tallies + unlocked achievements (durable, on-device)
+        self.best_streak = 0
+        self.completed = 0
+        self.abandoned = 0
+        self.rescues = 0
+        self.achievements: set[str] = set()
         if self._vault:
             self._load()
+
+    def _tally(self) -> dict:
+        return {"completed": self.completed, "rescues": self.rescues,
+                "best_streak": self.best_streak, "level": level_for_xp(self.xp)}
 
     # -- reading the quests ---------------------------------------------
 
@@ -179,15 +254,27 @@ class QuestLog:
         self._drift.keep(subject, now=now)
 
         self.streak += 1
+        self.completed += 1
+        if rescued:
+            self.rescues += 1
+        self.best_streak = max(self.best_streak, self.streak)
         before = level_for_xp(self.xp)
         gain = (BASE_XP + (RESCUE_XP if rescued else 0)
                 + STREAK_XP * (self.streak - 1))
         self.xp += gain
         after = level_for_xp(self.xp)
+        # newly-unlocked achievements (diff the lifetime tally against what we had)
+        earned = _earned(self._tally())
+        fresh = earned - self.achievements
+        self.achievements |= earned
         self._save()
         return QuestReward(
             subject=subject, xp=gain, total_xp=self.xp, level=after,
-            leveled_up=after > before, streak=self.streak, rescued=rescued)
+            leveled_up=after > before, streak=self.streak, rescued=rescued,
+            rank=rank_for_level(after),
+            new_rank=rank_for_level(after) != rank_for_level(before),
+            new_achievements=[_ACH_BY_ID[i].name for i in ACHIEVEMENTS_ORDER
+                              if i in fresh])
 
     def abandon(self, subject: str, now: Optional[float] = None) -> bool:
         now = now if now is not None else self._now()
@@ -195,6 +282,7 @@ class QuestLog:
         if rec is None:
             return False
         self.streak = 0                       # the chain breaks
+        self.abandoned += 1
         self._save()
         return True
 
@@ -208,8 +296,13 @@ class QuestLog:
         level = level_for_xp(self.xp)
         floor, ceil = _xp_floor(level), _xp_floor(level + 1)
         span = max(1, ceil - floor)
-        return QuestStats(xp=self.xp, level=level, streak=self.streak,
-                          level_progress=min(1.0, (self.xp - floor) / span))
+        names = [_ACH_BY_ID[i].name for i in ACHIEVEMENTS_ORDER if i in self.achievements]
+        return QuestStats(
+            xp=self.xp, level=level, streak=self.streak,
+            level_progress=min(1.0, (self.xp - floor) / span),
+            rank=rank_for_level(level), xp_to_next=max(0, ceil - self.xp),
+            best_streak=self.best_streak, completed=self.completed,
+            abandoned=self.abandoned, rescues=self.rescues, achievements=names)
 
     def _reward_preview(self, rec: DriftRecord) -> int:
         rescued = rec.state in ("drifting", "cracking")
@@ -228,6 +321,11 @@ class QuestLog:
                 d = json.loads(p.read_text())
                 self.xp = int(d.get("xp", 0))
                 self.streak = int(d.get("streak", 0))
+                self.best_streak = int(d.get("best_streak", self.streak))
+                self.completed = int(d.get("completed", 0))
+                self.abandoned = int(d.get("abandoned", 0))
+                self.rescues = int(d.get("rescues", 0))
+                self.achievements = set(d.get("achievements", []))
             except (ValueError, KeyError, json.JSONDecodeError):
                 pass
 
@@ -237,4 +335,8 @@ class QuestLog:
         self._vault.mkdir(parents=True, exist_ok=True)
         self._path().write_text(json.dumps(
             {"xp": self.xp, "streak": self.streak,
+             "best_streak": self.best_streak, "completed": self.completed,
+             "abandoned": self.abandoned, "rescues": self.rescues,
+             "achievements": sorted(self.achievements),
+             "rank": rank_for_level(level_for_xp(self.xp)),
              "level": level_for_xp(self.xp)}))
