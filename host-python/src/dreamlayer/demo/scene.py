@@ -80,6 +80,20 @@ def _fade_gain(t: float, beat: Beat) -> float:
     return max(0.0, min(up, down))
 
 
+def _ease(t: float, beat: Beat):
+    """Per-frame (opacity, scale, dy) for a beat — a subtle ease-in: the card
+    fades up while it settles from 0.94→1.0 and drifts a touch upward, so the
+    montage feels produced rather than a slideshow. dy is a fraction of frame h."""
+    gain = _fade_gain(t, beat)
+    if beat.fade <= 0:
+        return gain, 1.0, 0.0
+    intro = max(0.0, min(1.0, (t - beat.t_in) / beat.fade))
+    e = 1.0 - (1.0 - intro) ** 3               # ease-out cubic
+    scale = 0.94 + 0.06 * e
+    dy = (1.0 - e) * 0.015                      # settles upward
+    return gain, scale, dy
+
+
 def render_scene(scene: Scene, out_dir, preview_scale: float = 0.25,
                  preview_fps: int = 10) -> dict:
     """Export overlays + manifest + preview.gif + poster.png. Returns the manifest."""
@@ -129,12 +143,13 @@ def _compose_frame(plate_rgb: np.ndarray, overlays, t: float,
     acc = plate_rgb.copy()
     for beat, ov in overlays:
         if beat.t_in <= t < beat.t_out:
-            gain = _fade_gain(t, beat)
+            gain, escale, dy = _ease(t, beat)
             if gain <= 0:
                 continue
-            sov = ov.resize((max(1, int(ov.width * scale)),
-                             max(1, int(ov.height * scale))), Image.LANCZOS)
-            cx, cy = beat.anchor[0] * w, beat.anchor[1] * h
+            s = scale * escale
+            sov = ov.resize((max(1, int(ov.width * s)),
+                             max(1, int(ov.height * s))), Image.LANCZOS)
+            cx, cy = beat.anchor[0] * w, (beat.anchor[1] + dy) * h
             acc = add_over(acc, sov, (cx, cy), gain)
     return Image.fromarray(np.clip(acc, 0, 255).astype(np.uint8), "RGB")
 

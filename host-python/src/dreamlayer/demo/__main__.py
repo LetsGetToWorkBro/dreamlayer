@@ -34,6 +34,15 @@ def main(argv: list[str]) -> int:
     name = args[0] if args else "sampler"
     out = args[1] if len(args) > 1 else f"demo_out/{name}"
 
+    if name == "all":
+        from .storyboards import build_all
+        root = args[1] if len(args) > 1 else "demo_out"
+        manifests = build_all(root)
+        for nm, m in manifests.items():
+            print(f"rendered '{nm}' → {root}/{nm} "
+                  f"({len(m['beats'])} beats, {m['duration']}s)")
+        return 0
+
     scene = None
     if name != "sampler":
         try:
