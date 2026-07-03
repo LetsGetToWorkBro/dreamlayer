@@ -106,6 +106,11 @@ class Orchestrator:
         self.brain_url = ""                    # set at pairing (the Mac mini)
         self.brain_token = ""
         self._msg_poll_stop = None
+        # Anticipation engine: the right card at the right moment, unasked —
+        # place + time + person tied into one ranked moment, deduped, veil-gated.
+        # (Distinct from self.proactive, which fires place-signature triggers.)
+        from .anticipation import AnticipationEngine
+        self.anticipation = AnticipationEngine()
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -613,6 +618,17 @@ class Orchestrator:
         if self._msg_poll_stop is not None:
             self._msg_poll_stop.set()
             self._msg_poll_stop = None
+
+    def anticipate_tick(self, context) -> list:
+        """Surface the right anticipatory cards for this moment. Silenced by
+        the Privacy Veil; the engine itself de-dupes so nothing nags. Returns
+        the cues it flashed."""
+        if not self.privacy.allow_capture():
+            return []
+        cues = self.anticipation.tick(context)
+        for c in cues:
+            self.bridge.send_card(c.card, event="anticipate")
+        return cues
 
     # -- back-compat aliases (the model is the three switches above) -----
 
