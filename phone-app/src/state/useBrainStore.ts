@@ -22,6 +22,9 @@ export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
 export type CalendarEvent = { title: string; ts: number; place?: string };
 export type ActivityItem = { ts: number; kind: string; text?: string; query?: string; tier?: string };
+export type RewindItem = { ts: number; kind: string; text: string };
+export type RewindBlock = { hour: number; label: string; count: number; items: RewindItem[] };
+export type CueKind = "event" | "person" | "place";
 export type BrainMessage = {
   channel: string; // "imessage" | "email"
   who: string;
@@ -40,6 +43,8 @@ type BrainState = {
   notifyTexts: boolean; // texts pop up on the glasses
   notifyEmails: boolean; // emails pop up on the glasses (separate)
   summarizeEmails: boolean; // Brain shortens long emails before relaying
+  focus: boolean; // turn the interruptions down (distinct from incognito)
+  cues: Record<CueKind, boolean>; // which proactive cue kinds are on
   hydrated: boolean;
 
   // derived
@@ -69,10 +74,14 @@ type BrainState = {
   // engines surfaced in the app
   proactiveCards: boolean;
   setProactiveCards: (on: boolean) => void;
+  setFocus: (on: boolean) => void;
+  setCue: (kind: CueKind, on: boolean) => void;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
+  removeEvent: (e: { title: string; ts: number }) => Promise<CalendarEvent[]>;
   getActivity: () => Promise<ActivityItem[]>;
+  getRewind: () => Promise<RewindBlock[]>;
 
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
@@ -95,6 +104,8 @@ function persist(s: BrainState) {
     notifyEmails: s.notifyEmails,
     summarizeEmails: s.summarizeEmails,
     proactiveCards: s.proactiveCards,
+    focus: s.focus,
+    cues: s.cues,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -145,6 +156,8 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   notifyEmails: true,
   summarizeEmails: false,
   proactiveCards: true,
+  focus: false,
+  cues: { event: true, person: true, place: true },
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -251,6 +264,16 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     persist(get());
   },
 
+  setFocus: (on) => {
+    set({ focus: on });
+    persist(get());
+  },
+
+  setCue: (kind, on) => {
+    set({ cues: { ...get().cues, [kind]: on } });
+    persist(get());
+  },
+
   sendVoice: async (text) => {
     const m = get().macMini;
     if (!m.connected || !m.url) return { intent: "ask", answer: "" };
@@ -279,6 +302,31 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     try {
       const r = await brainFetch(m, "/dreamlayer/calendar", { method: "POST", body: JSON.stringify(e) });
       return (await r.json()).items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  removeEvent: async (e) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/calendar", {
+        method: "POST",
+        body: JSON.stringify({ remove: true, title: e.title, ts: e.ts }),
+      });
+      return (await r.json()).items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  getRewind: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/rewind");
+      return (await r.json()).blocks ?? [];
     } catch {
       return [];
     }

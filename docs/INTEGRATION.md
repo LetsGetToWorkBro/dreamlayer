@@ -33,6 +33,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/messages/recent` | token | recent Messages + Mail for the glasses **(seam: macOS reader)** |
 | `/dreamlayer/calendar` | token | upcoming events **(seam: agenda.json / EventKit)** |
 | `/dreamlayer/model/status` | token | Ollama reachability + which configured models are pulled |
+| `/dreamlayer/people` | token | the dossier registry — everyone you've introduced `{name, note, tags, ts}` |
+| `/dreamlayer/rewind` | token | today merged into hour blocks — activity + messages + events `{blocks[], count}` |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token (for the panel) |
 | `/dreamlayer/pair` | **local** | a `dreamlayer:` pairing code carrying the **LAN** brain_url + token |
@@ -47,6 +49,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/brief` | token | `{agenda?, since?}` → morning brief `{text, bullets, missed}` |
 | `/dreamlayer/replies` | token | `{text}` → `{replies: [3 short replies]}` |
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → reindex |
+| `/dreamlayer/calendar` | token | `{title, ts, place}` adds an event; `{remove:true, title, ts}` removes → `{items}` |
+| `/dreamlayer/people` | token | `{name, note?, tags?}` upserts a person; `{remove:true, name}` removes → `{items}` |
 | `/dreamlayer/upload?folder=&name=` | token | raw file body → dropped into a watched folder |
 | `/dreamlayer/config` | token | partial config patch (model, cloud, filters, quiet hours, …) |
 | `/dreamlayer/reindex` | token | `{}` → rebuild the index now |
@@ -87,6 +91,15 @@ device seams are the callables they accept.
   knows. Cards: `hud/cards.py: spoken_caption`, `person_dossier`. **Seam:** the
   same mic + ASR that feeds voice, plus optional speaker diarization for the
   `speaker` label.
+- **Focus mode** — `orchestrator.set_focus(minutes)` / `clear_focus()` /
+  `focus_active()` turns the *interruptions* down (anticipation cards, live
+  captions, message pop-ups) for a stretch while **capture keeps running** —
+  distinct from Incognito, which pauses capture. The gates live in
+  `anticipate_tick`, `ingest_caption`, and `poll_messages`.
+- **Proactive-cue picker** — `orchestrator.set_cue(kind, on)` /
+  `cue_kinds()` toggle which anticipatory kinds surface (`event` / `person` /
+  `place`); the engine (`AnticipationEngine.set_kind`) drops muted kinds before
+  the cooldown pass.
 - **Brain routing** — `BrainRouter` (device → Mac mini → cloud) with the three
   switches (`connect_mac_mini` / `use_cloud` / `set_incognito`).
 

@@ -75,9 +75,23 @@ def _match_place(a: str, b: str) -> bool:
 class AnticipationEngine:
     """Turns context into a small, ranked, de-duplicated set of cues."""
 
+    KINDS = ("event", "person", "place")
+
     def __init__(self, cooldown_s: float = 300.0):
         self.cooldown_s = cooldown_s
         self._shown: dict[str, float] = {}
+        # which cue kinds are allowed — the app's proactive-cue picker toggles
+        # these (event = "leave now", person = who's in front of you, place =
+        # what you left here). All on by default.
+        self.enabled_kinds: set[str] = set(self.KINDS)
+
+    def set_kind(self, kind: str, on: bool = True) -> None:
+        if kind not in self.KINDS:
+            return
+        if on:
+            self.enabled_kinds.add(kind)
+        else:
+            self.enabled_kinds.discard(kind)
 
     def tick(self, ctx: Context) -> list[Cue]:
         cues: list[Cue] = []
@@ -108,9 +122,11 @@ class AnticipationEngine:
                         key=f"place:{_norm(a.subject)}:{_norm(a.place)}", kind="place",
                         card=cards.here_reminder(a.subject, a.place), priority=1))
 
-        # rank, then drop anything shown within the cooldown
+        # rank, drop disabled cue kinds, then drop anything shown within cooldown
         out: list[Cue] = []
         for c in sorted(cues, key=lambda c: -c.priority):
+            if c.kind not in self.enabled_kinds:
+                continue
             if ctx.now - self._shown.get(c.key, -1e9) >= self.cooldown_s:
                 self._shown[c.key] = ctx.now
                 out.append(c)

@@ -28,6 +28,7 @@ export default function Layout() {
       <Tabs.Screen name="memories" options={{ title: "Memories" }} />
       <Tabs.Screen name="settings" options={{ title: "Settings" }} />
       {/* reachable from Settings → Labs, kept out of the bar for a clean 5 */}
+      <Tabs.Screen name="rewind" options={{ href: null }} />
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="confluence" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null }} />

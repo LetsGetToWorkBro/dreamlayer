@@ -33,6 +33,10 @@ export default function Settings() {
   const setSummarizeEmails = useBrainStore((s) => s.setSummarizeEmails);
   const proactiveCards = useBrainStore((s) => s.proactiveCards);
   const setProactiveCards = useBrainStore((s) => s.setProactiveCards);
+  const focus = useBrainStore((s) => s.focus);
+  const setFocus = useBrainStore((s) => s.setFocus);
+  const cues = useBrainStore((s) => s.cues);
+  const setCue = useBrainStore((s) => s.setCue);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -54,6 +58,42 @@ export default function Settings() {
               value={proactiveCards}
               onValueChange={setProactiveCards}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        {proactiveCards ? (
+          <View style={s.subGroup}>
+            {(
+              [
+                ["event", "Events — “leave in 8 min”"],
+                ["person", "People — who’s in front of you"],
+                ["place", "Places — what you left here"],
+              ] as const
+            ).map(([kind, label]) => (
+              <Row
+                key={kind}
+                label={label}
+                right={
+                  <Switch
+                    value={cues[kind]}
+                    onValueChange={(v) => setCue(kind, v)}
+                    trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+                    thumbColor={colors.textPrimary}
+                  />
+                }
+              />
+            ))}
+          </View>
+        ) : null}
+        <Row
+          label="Focus mode"
+          sub="Turn the interruptions down — cards, captions, and pop-ups hush; capture keeps running (unlike incognito)"
+          right={
+            <Switch
+              value={focus}
+              onValueChange={setFocus}
+              trackColor={{ true: "#8FB8FF", false: colors.borderSubtle }}
               thumbColor={colors.textPrimary}
             />
           }
@@ -138,6 +178,9 @@ export default function Settings() {
 
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Labs</Text>
+        <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/rehearsal")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Rehearsal — the Reality Compiler →</Text>
         </TouchableOpacity>
@@ -162,5 +205,6 @@ const s = StyleSheet.create({
   section: { marginHorizontal: 24, marginTop: 32 },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   linkRow: { paddingVertical: 14 },
+  subGroup: { paddingLeft: 16, borderLeftWidth: 2, borderLeftColor: colors.borderSubtle, marginLeft: 2 },
   danger: { paddingVertical: 16, alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.accentError },
 });

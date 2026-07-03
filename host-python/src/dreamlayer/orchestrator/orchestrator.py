@@ -118,6 +118,10 @@ class Orchestrator:
         from .conversation import ConversationLedger
         self.conversation = ConversationLedger()
         self.captions_on = True                 # show live captions on the glasses
+        # Focus mode: a stretch with the interruptions turned down (anticipation,
+        # captions, message pop-ups). Distinct from Incognito — capture keeps
+        # running. 0 = off; set_focus(minutes) arms it.
+        self.focus_until = 0.0
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -576,7 +580,7 @@ class Orchestrator:
             is_email = m.get("channel") == "email"
             if not (self.notify_emails if is_email else self.notify_texts):
                 continue
-            if not self.privacy.allow_capture():
+            if not self.privacy.allow_capture() or self.focus_active():
                 continue
             if is_email:
                 body = m.get("summary") or (f"{m['subject']} — {m.get('text','')}"
@@ -629,11 +633,39 @@ class Orchestrator:
     def set_anticipation(self, on: bool = True) -> None:
         self.anticipation_on = on
 
+    def set_cue(self, kind: str, on: bool = True) -> None:
+        """Toggle one proactive-cue kind (event / person / place) — the app's
+        cue picker. Off kinds simply don't surface."""
+        self.anticipation.set_kind(kind, on)
+
+    def cue_kinds(self) -> dict:
+        """Which cue kinds are on right now (for the app's picker state)."""
+        return {k: (k in self.anticipation.enabled_kinds)
+                for k in self.anticipation.KINDS}
+
+    # -- focus mode: a stretch with the interruptions turned down --------
+    # Distinct from Incognito (which pauses *capture*): focus keeps capturing
+    # and answering you, but holds back the unasked stuff — anticipatory cards,
+    # live captions, and message pop-ups — for a set number of minutes.
+
+    def set_focus(self, minutes: float = 25.0) -> float:
+        import time
+        self.focus_until = time.time() + max(0.0, minutes) * 60.0
+        return self.focus_until
+
+    def clear_focus(self) -> None:
+        self.focus_until = 0.0
+
+    def focus_active(self, now: float | None = None) -> bool:
+        import time
+        return (now if now is not None else time.time()) < getattr(self, "focus_until", 0.0)
+
     def anticipate_tick(self, context) -> list:
         """Surface the right anticipatory cards for this moment. Silenced by
-        the Privacy Veil; the engine itself de-dupes so nothing nags. Returns
-        the cues it flashed."""
-        if not self.anticipation_on or not self.privacy.allow_capture():
+        the Privacy Veil and by Focus mode; the engine itself de-dupes so
+        nothing nags. Returns the cues it flashed."""
+        if (not self.anticipation_on or not self.privacy.allow_capture()
+                or self.focus_active()):
             return []
         cues = self.anticipation.tick(context)
         for c in cues:
@@ -670,7 +702,8 @@ class Orchestrator:
         if not self.privacy.allow_capture():
             return None
         u = self.conversation.add(text, speaker, ts)
-        if u is not None and show and self.captions_on:
+        if (u is not None and show and self.captions_on
+                and not self.focus_active()):
             self.bridge.send_card(
                 cards.spoken_caption(u.speaker, u.text), event="caption")
         return u
