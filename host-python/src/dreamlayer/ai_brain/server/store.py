@@ -137,6 +137,9 @@ class QueryHistory:
     def prune(self, days: int) -> int:
         return _prune_jsonl(self.path, days)
 
+    def restore(self, items) -> None:
+        _restore_jsonl(self.path, items)
+
 
 class ActivityLog:
     """Everything the Brain did — folders, files, searches, cloud/incognito
@@ -169,6 +172,17 @@ class ActivityLog:
 
     def prune(self, days: int) -> int:
         return _prune_jsonl(self.path, days)
+
+    def restore(self, items) -> None:
+        _restore_jsonl(self.path, items)
+
+
+def _restore_jsonl(path: Path, items) -> None:
+    """Rewrite a jsonl log from a newest-first list (as recent() returns)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        for rec in reversed(list(items or [])):
+            f.write(json.dumps(rec) + "\n")
 
 
 def _prune_jsonl(path: Path, days: int) -> int:

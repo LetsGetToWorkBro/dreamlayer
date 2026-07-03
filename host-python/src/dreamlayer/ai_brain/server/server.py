@@ -213,6 +213,35 @@ class Brain:
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
+    def export_backup(self) -> dict:
+        """A full, restorable snapshot of the Brain — config (incl. secrets),
+        query history, activity, and agenda. Handed out only to the local
+        panel, so it never crosses the network."""
+        return {
+            "version": _version(),
+            "config": asdict(self.config),
+            "history": self.history.recent(2000),
+            "activity": self.activity.recent(2000),
+            "agenda": self.calendar(200),
+        }
+
+    def import_backup(self, data: dict) -> None:
+        from .store import field_list
+        cfg = data.get("config") or {}
+        known = {f.name for f in field_list(BrainConfig)}
+        for k, v in cfg.items():
+            if k in known:
+                setattr(self.config, k, v)
+        self.save()
+        if isinstance(data.get("history"), list):
+            self.history.restore(data["history"])
+        if isinstance(data.get("activity"), list):
+            self.activity.restore(data["activity"])
+        if isinstance(data.get("agenda"), list):
+            (self.cfg_dir / "agenda.json").write_text(json.dumps(data["agenda"]))
+        self._wire_model()
+        self.reindex()
+
     def calendar(self, limit: int = 10) -> list:
         """Upcoming events for the glasses + the brief. Reads
         <cfg>/agenda.json (a list of {title, ts, place}); a native EventKit
@@ -377,6 +406,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 if not self._from_localhost():
                     self._json(403, {"error": "local-only"}); return
                 self._json(200, {"token": brain.config.token})
+            elif path == "/dreamlayer/backup":
+                if not self._from_localhost():
+                    self._json(403, {"error": "backup is local-only"}); return
+                self._json(200, brain.export_backup())
             elif path == "/dreamlayer/health":
                 import shutil
                 try:
@@ -521,6 +554,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     self._json(403, {"error": "local-only"}); return
                 from .backends import cloud_test
                 self._json(200, cloud_test(brain.config))
+            elif path == "/dreamlayer/restore":
+                if not self._from_localhost():
+                    self._json(403, {"error": "restore is local-only"}); return
+                brain.import_backup(self._body())
+                brain.activity.add("config", "Restored from a backup")
+                self._json(200, {"ok": True, "config": brain.config.public()})
             elif path == "/dreamlayer/message/draft":
                 from .macos_sources import MessageDraft, build_send_script
                 b = self._body()
