@@ -354,6 +354,33 @@ def spoken_caption(speaker: str = "", text: str = "") -> dict:
     }
 
 
+def listening(source: str = "voice", earcon: bool = True, haptic: bool = True) -> dict:
+    """Oracle is listening — the reassurance cue the moment it wakes. A soft
+    ring/glow in the display, plus (device seams) a short earcon and a haptic
+    tick so you know it heard you without staring at the HUD. Stays until the
+    command lands (dismiss_ms=0)."""
+    how = {"voice": "Hey Oracle", "tap": "tap", "gaze": "look",
+           "raise": "raise", "gesture": "gesture"}.get(source, source)
+    return {
+        "type":       "ListeningCard",
+        "dismiss_ms": 0,
+        "primary":    "Listening…",
+        "eyebrow":    "ORACLE",
+        "detail":     f"woke by {how}",
+        "source":     source,
+        "earcon":     "wake" if earcon else "",     # runtime plays a chime
+        "haptic":     "tick" if haptic else "",     # runtime buzzes once
+        "pulse":      True,                          # renderer animates the ring
+        "lines":      ["ORACLE", "Listening…"],
+        "layout": {
+            "ring":      {"x": 128, "y": 110, "r": 30, "color": T.ACCENT_MEMORY, "pulse": True},
+            "eyebrow":   {"x": 128, "y": 156, "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
+            "primary":   {"x": 128, "y": 178, "size": "md", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 200, "size": "sm", "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def morning_brief(text: str = "", bullets=None) -> dict:
     """The day's brief, flashed on the glasses the moment you put the Halo on.
     Short synthesis up top, the first couple of points beneath."""
@@ -734,6 +761,7 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
+    "listening":           listening(source="voice"),
     "morning_brief":       morning_brief(
         text="Two meetings and the lease is due Friday. Marcus texted twice.",
         bullets=["Standup at 9:00 AM", "1 new text (from Marcus)", "Reminder: file the taxes"],

@@ -79,10 +79,16 @@ device seams are the callables they accept.
   person into ranked, de-duped, veil-gated cards
   (`orchestrator/anticipation.py`: `Context`, `Event`, `Anchor`, `Commitment`).
   Feed it live context each tick.
-- **Voice** — `orchestrator.handle_voice(text)` routes a **transcribed** line to
-  an intent (recall/locate/reply/brief/missed/ask); `orchestrator/voice.py:
-  parse_intent` is the grammar. **Seam:** the mic + speech-to-text that produces
-  `text`, and wake-word spotting.
+- **Oracle (wake + voice)** — `orchestrator.hear(text)` is the wake pipeline:
+  "Hey Oracle …" wakes the assistant and runs the command; while it's listening
+  (a ~20s session) follow-ups need no wake word (continuous-conversation mode);
+  otherwise the line is ignored. `activate(source)` wakes it hands-free by
+  **tap / gaze / raise** (`set_wake_source` toggles each). On wake it shows a
+  **Listening** ring plus an earcon + haptic tick (`set_wake_feedback` toggles
+  visual/audio/haptic). Underneath, `handle_voice(text)` routes an intent
+  (recall/locate/reply/brief/missed/ask); `voice.py: detect_wake / parse_intent`
+  is the grammar. **Seam:** the mic + ASR that produces `text`, the tap/gaze/
+  raise signals, and the runtime that plays the earcon / buzzes the haptic.
 - **Message pop-ups** — `orchestrator.poll_messages_once(http_get)` /
   `start_message_polling()` fetch the Brain feed and flash new incoming
   messages (idempotent, veil-gated, per-channel toggles). **Seam:** `http_get`

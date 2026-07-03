@@ -25,6 +25,8 @@ export type ActivityItem = { ts: number; kind: string; text?: string; query?: st
 export type RewindItem = { ts: number; kind: string; text: string };
 export type RewindBlock = { hour: number; label: string; count: number; items: RewindItem[] };
 export type CueKind = "event" | "person" | "place";
+export type WakeSource = "voice" | "tap" | "gaze" | "raise";
+export type WakeFeedback = "visual" | "audio" | "haptic";
 export type BrainMessage = {
   channel: string; // "imessage" | "email"
   who: string;
@@ -45,6 +47,8 @@ type BrainState = {
   summarizeEmails: boolean; // Brain shortens long emails before relaying
   focus: boolean; // turn the interruptions down (distinct from incognito)
   cues: Record<CueKind, boolean>; // which proactive cue kinds are on
+  wakeSources: Record<WakeSource, boolean>; // how Oracle can be woken
+  wakeFeedback: Record<WakeFeedback, boolean>; // how it shows it's listening
   hydrated: boolean;
 
   // derived
@@ -76,6 +80,8 @@ type BrainState = {
   setProactiveCards: (on: boolean) => void;
   setFocus: (on: boolean) => void;
   setCue: (kind: CueKind, on: boolean) => void;
+  setWakeSource: (source: WakeSource, on: boolean) => void;
+  setWakeFeedback: (kind: WakeFeedback, on: boolean) => void;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
@@ -107,6 +113,8 @@ function persist(s: BrainState) {
     proactiveCards: s.proactiveCards,
     focus: s.focus,
     cues: s.cues,
+    wakeSources: s.wakeSources,
+    wakeFeedback: s.wakeFeedback,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -159,6 +167,8 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   proactiveCards: true,
   focus: false,
   cues: { event: true, person: true, place: true },
+  wakeSources: { voice: true, tap: true, gaze: true, raise: true },
+  wakeFeedback: { visual: true, audio: true, haptic: true },
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -272,6 +282,16 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   setCue: (kind, on) => {
     set({ cues: { ...get().cues, [kind]: on } });
+    persist(get());
+  },
+
+  setWakeSource: (source, on) => {
+    set({ wakeSources: { ...get().wakeSources, [source]: on } });
+    persist(get());
+  },
+
+  setWakeFeedback: (kind, on) => {
+    set({ wakeFeedback: { ...get().wakeFeedback, [kind]: on } });
     persist(get());
   },
 

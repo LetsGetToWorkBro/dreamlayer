@@ -124,6 +124,14 @@ class Orchestrator:
         # dossier. Starts empty; Contacts sync fills it.
         from ..social_lens import SocialLens
         self.social = SocialLens(privacy=self.privacy)
+        # Oracle — the assistant. "Hey Oracle" wakes it; tap / gaze / raise are
+        # multimodal alternatives. On wake it shows a Listening ring + (device
+        # seams) an earcon and a haptic tick, then stays open a short session so
+        # follow-ups need no wake word.
+        self.oracle_until = 0.0
+        self.oracle_session_s = 20.0
+        self.wake_sources = {"voice", "tap", "gaze", "raise"}
+        self.wake_feedback = {"visual": True, "audio": True, "haptic": True}
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -648,6 +656,73 @@ class Orchestrator:
         """Which cue kinds are on right now (for the app's picker state)."""
         return {k: (k in self.anticipation.enabled_kinds)
                 for k in self.anticipation.KINDS}
+
+    # -- Oracle: wake word + multimodal activation + listening feedback --
+
+    def set_wake_source(self, source: str, on: bool = True) -> None:
+        """Enable/disable a way to wake Oracle (voice / tap / gaze / raise)."""
+        if on:
+            self.wake_sources.add(source)
+        else:
+            self.wake_sources.discard(source)
+
+    def set_wake_feedback(self, kind: str, on: bool = True) -> None:
+        """Toggle a listening cue (visual ring / audio earcon / haptic tick)."""
+        if kind in self.wake_feedback:
+            self.wake_feedback[kind] = on
+
+    def oracle_listening(self, now: float | None = None) -> bool:
+        import time
+        return (now if now is not None else time.time()) < self.oracle_until
+
+    def begin_listening(self, source: str = "voice", now: float | None = None):
+        """Open Oracle's listening session and show the reassurance cue — a
+        Listening ring plus (device seams) an earcon and a haptic tick, per the
+        wake_feedback toggles. Returns the card."""
+        import time
+        now = now if now is not None else time.time()
+        self.oracle_until = now + self.oracle_session_s
+        fb = self.wake_feedback
+        card = cards.listening(source, earcon=fb["audio"], haptic=fb["haptic"])
+        if fb["visual"]:
+            self.bridge.send_card(card, event="listening")
+        return card
+
+    def end_listening(self) -> None:
+        self.oracle_until = 0.0
+
+    def activate(self, source: str, now: float | None = None):
+        """Wake Oracle without a phrase — a tap, a gaze/dwell, or a raise-to-
+        speak gesture (the device seam decides which). Enters listening if that
+        source is enabled; returns the Listening card or None."""
+        if source not in self.wake_sources:
+            return None
+        return self.begin_listening(source, now)
+
+    def hear(self, text: str, now: float | None = None) -> dict:
+        """The wake pipeline for a transcribed line (ASR is the device seam).
+
+          • opens with "Hey Oracle" → wake, then run the command if one follows;
+          • Oracle already listening (session window) → treat as a follow-up,
+            no wake word needed (continuous-conversation mode);
+          • otherwise → idle (Oracle wasn't addressed).
+        Each command extends the session so a back-and-forth flows."""
+        import time
+        from .voice import detect_wake
+        now = now if now is not None else time.time()
+        heard, remainder = detect_wake(text)
+        if heard:
+            if "voice" not in self.wake_sources:
+                return {"intent": "idle"}
+            self.begin_listening("voice", now)
+            if remainder:
+                self.oracle_until = now + self.oracle_session_s
+                return self.handle_voice(remainder)
+            return {"intent": "listening"}
+        if self.oracle_listening(now):
+            self.oracle_until = now + self.oracle_session_s     # follow-up extends
+            return self.handle_voice(text)
+        return {"intent": "idle"}
 
     # -- focus mode: a stretch with the interruptions turned down --------
     # Distinct from Incognito (which pauses *capture*): focus keeps capturing

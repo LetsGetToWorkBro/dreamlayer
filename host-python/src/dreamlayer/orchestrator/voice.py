@@ -1,11 +1,11 @@
-"""orchestrator/voice.py — "Hey DreamLayer" intent routing.
+"""orchestrator/voice.py — "Hey Oracle" wake + intent routing.
 
 Hands-free is the whole point of glasses, so this turns a spoken line into a
 structured intent the orchestrator can act on. The microphone + speech-to-text
 is a device seam (ASR isn't done here); this layer takes the *transcribed
-text* and figures out what you meant:
+text*, strips the wake phrase (detect_wake), and figures out what you meant:
 
-    "Hey DreamLayer, what did Marcus need?"   → recall(query)
+    "Hey Oracle, what did Marcus need?"       → recall(query)
     "where did I leave my bike?"              → locate(subject="bike")
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
     "brief me" / "what's my day"              → brief
@@ -20,7 +20,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-WAKE = ("hey dreamlayer", "ok dreamlayer", "dreamlayer")
+# Oracle is DreamLayer's assistant. "Hey Oracle" is the primary wake phrase;
+# the rest are graceful variants (and the old DreamLayer names, kept working).
+ASSISTANT_NAME = "Oracle"
+WAKE = ("hey oracle", "ok oracle", "okay oracle", "oracle",
+        "hey dreamlayer", "ok dreamlayer", "dreamlayer")
 
 
 @dataclass
@@ -29,15 +33,21 @@ class Intent:
     args: dict = field(default_factory=dict)
 
 
-def strip_wake(text: str) -> str:
-    """Drop a leading wake phrase (and stray punctuation) if present."""
+def detect_wake(text: str) -> tuple[bool, str]:
+    """(heard_wake, remainder). True if a leading wake phrase is present; the
+    remainder is whatever command followed it ('' if the wake stood alone)."""
     t = (text or "").strip()
     low = t.lower()
     for w in WAKE:
-        if low.startswith(w):
-            t = t[len(w):]
-            break
-    return t.lstrip(" ,.!—-").strip()
+        # match the phrase as a whole leading token, not a prefix of a word
+        if low == w or low.startswith(w + " ") or low.startswith(w + ","):
+            return True, t[len(w):].lstrip(" ,.!—-").strip()
+    return False, t
+
+
+def strip_wake(text: str) -> str:
+    """Drop a leading wake phrase (and stray punctuation) if present."""
+    return detect_wake(text)[1]
 
 
 def parse_intent(text: str) -> Intent:

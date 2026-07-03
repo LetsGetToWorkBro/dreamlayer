@@ -37,6 +37,10 @@ export default function Settings() {
   const setFocus = useBrainStore((s) => s.setFocus);
   const cues = useBrainStore((s) => s.cues);
   const setCue = useBrainStore((s) => s.setCue);
+  const wakeSources = useBrainStore((s) => s.wakeSources);
+  const setWakeSource = useBrainStore((s) => s.setWakeSource);
+  const wakeFeedback = useBrainStore((s) => s.wakeFeedback);
+  const setWakeFeedback = useBrainStore((s) => s.setWakeFeedback);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -158,6 +162,62 @@ export default function Settings() {
             />
           }
         />
+      </View>
+
+      <View style={s.section}>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Oracle</Text>
+        <Row
+          label="Wake word"
+          sub="Say “Hey Oracle” to wake your assistant, then just keep talking — follow-ups need no wake word"
+          right={<Text style={[typography.caption, { color: colors.accentMemory }]}>“Hey Oracle”</Text>}
+        />
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
+          Also wake it by
+        </Text>
+        {(
+          [
+            ["voice", "Voice — “Hey Oracle”"],
+            ["tap", "Tap the temple"],
+            ["gaze", "Look & hold (gaze)"],
+            ["raise", "Raise to speak"],
+          ] as const
+        ).map(([src, label]) => (
+          <Row
+            key={src}
+            label={label}
+            right={
+              <Switch
+                value={wakeSources[src]}
+                onValueChange={(v) => setWakeSource(src, v)}
+                trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+                thumbColor={colors.textPrimary}
+              />
+            }
+          />
+        ))}
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
+          Show it’s listening with
+        </Text>
+        {(
+          [
+            ["visual", "A ring in the glasses"],
+            ["audio", "A soft chime"],
+            ["haptic", "A haptic tick"],
+          ] as const
+        ).map(([kind, label]) => (
+          <Row
+            key={kind}
+            label={label}
+            right={
+              <Switch
+                value={wakeFeedback[kind]}
+                onValueChange={(v) => setWakeFeedback(kind, v)}
+                trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+                thumbColor={colors.textPrimary}
+              />
+            }
+          />
+        ))}
       </View>
 
       <View style={s.section}>

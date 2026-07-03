@@ -374,6 +374,7 @@ class CardRenderer:
             "SpokenCaptionCard":    self._layout_card,
             "PersonDossierCard":    self._layout_card,
             "MorningBriefCard":     self._layout_card,
+            "ListeningCard":        self._layout_card,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
