@@ -354,6 +354,32 @@ def spoken_caption(speaker: str = "", text: str = "") -> dict:
     }
 
 
+def morning_brief(text: str = "", bullets=None) -> dict:
+    """The day's brief, flashed on the glasses the moment you put the Halo on.
+    Short synthesis up top, the first couple of points beneath."""
+    body = (text or "").strip()
+    if len(body) > 120:
+        body = body[:119] + "…"
+    pts = [b for b in (bullets or []) if b][:3]
+    return {
+        "type":       "MorningBriefCard",
+        "dismiss_ms": 8000,
+        "primary":    body or "A clear morning.",
+        "eyebrow":    "YOUR DAY",
+        "bullets":    pts,
+        "detail":     pts[0] if pts else "",
+        "footer":     pts[1] if len(pts) > 1 else "",
+        "lines":      ["YOUR DAY", body, *pts],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 60,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 76},
+            "primary":   {"x": 128, "y": 112, "size": "md", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 150, "size": "sm", "color": T.TEXT_SECONDARY},
+            "footer":    {"x": 128, "y": 172, "size": "sm", "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def person_dossier(data) -> dict:
     """Who is this — surfaced the moment you greet someone the ledger knows.
     Takes a dossier dict (ConversationLedger.dossier): last seen, how many
@@ -708,6 +734,10 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
+    "morning_brief":       morning_brief(
+        text="Two meetings and the lease is due Friday. Marcus texted twice.",
+        bullets=["Standup at 9:00 AM", "1 new text (from Marcus)", "Reminder: file the taxes"],
+    ),
     "spoken_caption":      spoken_caption(
         speaker="Marcus", text="Let's lock the lease by Friday, deal?",
     ),

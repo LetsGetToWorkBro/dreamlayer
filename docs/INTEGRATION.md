@@ -107,6 +107,14 @@ device seams are the callables they accept.
   knows. Cards: `hud/cards.py: spoken_caption`, `person_dossier`. **Seam:** the
   same mic + ASR that feeds voice, plus optional speaker diarization for the
   `speaker` label.
+- **Brief at wake** — `orchestrator.wake(http_get)` fetches the brief the
+  Brain's scheduler last delivered (`GET /dreamlayer/brief/latest`) and flashes
+  it as a `MorningBriefCard` the moment the Halo goes on. Veil-gated; silent
+  with no brief or no paired Mac mini. **Seam:** the glasses' wear/wake signal.
+- **Scrubbable rewind** — `orchestrator.rewind_scrub()` loads today's moments
+  into the time-scrub engine and flashes the latest node on the glasses;
+  `scrub("back"|"forward")` walks the day and re-renders (the phone Rewind shows
+  the same day as a list). **Seam:** the twist/tap gesture that drives `scrub`.
 - **Focus mode** — `orchestrator.set_focus(minutes)` / `clear_focus()` /
   `focus_active()` turns the *interruptions* down (anticipation cards, live
   captions, message pop-ups) for a stretch while **capture keeps running** —

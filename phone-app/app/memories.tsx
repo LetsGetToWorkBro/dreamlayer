@@ -65,8 +65,14 @@ export default function Memories() {
     <Screen>
       <ScreenHeader
         title="Memories"
-        eyebrow="Your recall"
-        subtitle={memories.length ? `${memories.length} kept` : undefined}
+        eyebrow={macConnected ? "Search everything" : "Your recall"}
+        subtitle={
+          macConnected
+            ? "Kept moments + your files & mail"
+            : memories.length
+            ? `${memories.length} kept`
+            : undefined
+        }
       />
 
       <View style={s.searchRow}>
@@ -93,17 +99,21 @@ export default function Memories() {
       </View>
 
       {recall ? (
-        <Card>
-          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>
-            From your Brain{recall.tier ? ` · ${recall.tier}` : ""}
-          </Text>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>{recall.text}</Text>
-          {recall.sources.length ? (
-            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
-              {recall.sources.slice(0, 4).join(" · ")}
+        <>
+          <Section label="From your Brain · files & mail" first accent={colors.accentMemory} />
+          <Card>
+            <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>
+              {recall.tier ? recall.tier : "answer"}
             </Text>
-          ) : null}
-        </Card>
+            <Text style={[typography.body, { color: colors.textPrimary }]}>{recall.text}</Text>
+            {recall.sources.length ? (
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
+                {recall.sources.slice(0, 4).join(" · ")}
+              </Text>
+            ) : null}
+          </Card>
+          {groups.length ? <Section label="In your memories" accent={colors.textSecondary} /> : null}
+        </>
       ) : null}
 
       {groups.length === 0 ? (

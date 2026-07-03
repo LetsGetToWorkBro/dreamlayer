@@ -373,6 +373,7 @@ class CardRenderer:
             # Conversation ledger: live transcript + dossier on greet
             "SpokenCaptionCard":    self._layout_card,
             "PersonDossierCard":    self._layout_card,
+            "MorningBriefCard":     self._layout_card,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:

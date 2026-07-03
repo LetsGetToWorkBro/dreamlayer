@@ -752,6 +752,25 @@ class Orchestrator:
         day_start = now - (lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec)
         return self.conversation.timeline(day_start, day_start + 86400)
 
+    def wake(self, http_get=None) -> dict | None:
+        """Put the Halo on → the day's brief is waiting. Fetches the brief the
+        Brain's scheduler last delivered (GET /dreamlayer/brief/latest on the
+        paired Mac mini) and flashes it as a HUD card. Veil-gated; silent if
+        there's no brief or no Mac mini. `http_get` defaults to urllib."""
+        if not self.privacy.allow_capture() or not self.brain_url:
+            return None
+        get = http_get or _default_http_get
+        try:
+            latest = get(self.brain_url.rstrip("/") + "/dreamlayer/brief/latest",
+                         self.brain_token)
+        except Exception:
+            return None
+        if not latest or not latest.get("ts"):
+            return None
+        card = cards.morning_brief(latest.get("text", ""), latest.get("bullets"))
+        self.bridge.send_card(card, event="wake")
+        return card
+
     def greet(self, person: str, now: float | None = None):
         """Surface a dossier the moment you greet someone the ledger knows.
         Proactive, so Veil-gated. Returns the card sent, or None if unknown or
@@ -866,16 +885,32 @@ class Orchestrator:
     # Time-Scrub Halo
     # ------------------------------------------------------------------
 
-    def start_scrub(self, lookback_s: float = 3600.0, now: float | None = None) -> dict | None:
+    def start_scrub(self, lookback_s: float = 3600.0, now: float | None = None,
+                    show: bool = False) -> dict | None:
         self._scrub_session = TimeScrubSession(self.ring, lookback_s=lookback_s, now=now)
-        return self._scrub_session.current()
+        card = self._scrub_session.current()
+        if show and card is not None:
+            self.bridge.send_card(card, event="scrub")
+        return card
 
-    def scrub(self, direction: str) -> dict | None:
+    def rewind_scrub(self, now: float | None = None) -> dict | None:
+        """Rewind the whole day *on the glasses*: load today's moments into the
+        time-scrub engine and flash the most-recent node. Twist/tap forward and
+        back with scrub(); the phone Rewind shows the same day as a list."""
+        import time
+        now = now if now is not None else time.time()
+        lt = time.localtime(now)
+        elapsed = lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec
+        return self.start_scrub(lookback_s=max(elapsed, 60.0), now=now, show=True)
+
+    def scrub(self, direction: str, show: bool = True) -> dict | None:
         if self._scrub_session is None:
             return None
-        if direction == "forward":
-            return self._scrub_session.forward()
-        return self._scrub_session.back()
+        card = (self._scrub_session.forward() if direction == "forward"
+                else self._scrub_session.back())
+        if show and card is not None:
+            self.bridge.send_card(card, event="scrub")
+        return card
 
     def scrub_select(self, index: int) -> dict | None:
         if self._scrub_session is None:
