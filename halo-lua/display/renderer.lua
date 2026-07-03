@@ -1004,8 +1004,10 @@ local function composite(card, phase, elapsed_ms, idle_t)
     sc      = 1.0
     if sig.hold == "ring" and card.confidence then
       -- static focus ring: sweep = confidence; identical under
-      -- reduce_motion (the v2 standard)
-      F.hold_ring(card.confidence, card.conf_color or P.accent_memory)
+      -- reduce_motion (the v2 standard). idle_t lets the Lumen glint
+      -- run once along the arc as the hold settles.
+      F.hold_ring(card.confidence, card.conf_color or P.accent_memory,
+                  idle_t)
       if TR.reduce_motion() then
         F.origin_tick(origin_deg, card.conf_color or P.accent_memory)
       end

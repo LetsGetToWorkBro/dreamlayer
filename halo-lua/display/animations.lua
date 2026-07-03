@@ -113,7 +113,11 @@ M.SIG_FOCUS_TRAIL_MS    = 60    -- ghost-slot Y ramp trailing edge (from v1 iris
 M.SIG_FOCUS_LAND_R_FROM = 56
 M.SIG_FOCUS_LAND_R_TO   = 36
 M.SIG_FOCUS_RING_R      = 92    -- landed hold ring radius (sweep = confidence)
-M.SIG_RECEDE_MS         = 160   -- content contracts, head flies home
+M.SIG_RECEDE_MS         = 200   -- content contracts, head settles home
+                                -- (Lumen: 160 -> 200 with the soft-spring
+                                -- deceleration; CINEMA_V2_RISKS.md §4
+                                -- pre-cleared up to 240 — recession should
+                                -- read as "filed", not "escaped")
 M.SIG_RECEDE_TEXT_CUT   = 0.4   -- text cuts at this fraction (kill-list #2)
 M.SIG_FOCUS_XFADE_LAG_MS = 40   -- condense start lag during crossfade
 
