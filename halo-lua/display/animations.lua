@@ -152,4 +152,84 @@ M.TESTIMONY_SLOT_DEG = 40    -- 9 stages x 40 deg
 M.TESTIMONY_STAGE_MS = 80    -- accumulation per stage after the ripple
 M.TESTIMONY_TEAR_PX  = 3     -- radial jitter on torn (deceptive) stages
 
+-- ---------------------------------------------------------------------------
+-- Meridian Lumen (docs/cinema_v2/lumen.md): material physics + living light.
+-- Geometry stays information-bearing; springs, palette light, trails, and
+-- IMU world-lock carry the material quality. Host mirror of this bank:
+-- host-python/src/dreamlayer/hud/motion_math.py — keep the two in sync.
+-- ---------------------------------------------------------------------------
+
+-- Springs (lib/easing.lua spring(t, zeta, omega)). Overshoot of the
+-- snappy zeta is exp(-zeta*pi/sqrt(1-zeta^2)) ~ 7.8%, under the cap.
+M.SPRING_OMEGA         = 7.4
+M.SPRING_ZETA_SOFT     = 0.85  -- no visible overshoot: text-adjacent geometry
+M.SPRING_ZETA_SNAPPY   = 0.63  -- rings, notches, dots: the "click" of focus
+M.SPRING_OVERSHOOT_MAX = 0.08  -- hard cap, asserted in tests
+M.ANTICIPATE_FRAC      = 0.12  -- fraction of travel spent pulling back
+M.ANTICIPATE_PX        = 2     -- head sinks this far toward the rim first
+M.SQUASH_MAX           = 0.25  -- head elongation along velocity, ratio
+
+-- Palette animator (display/palette_animator.lua)
+M.PAL_WRITES_MAX       = 8     -- assign_color_ycbcr budget per tick
+
+-- Horizon aurora: the rim track banded across three leased slots whose
+-- luma cycles slowly — light flows along the day-ring, zero new geometry.
+-- Base hexes sit one LSB apart around border_subtle so each band maps to
+-- its own slot on the indexed panel without colliding with the static
+-- border_subtle token (the base-hex conflation documented in
+-- docs/CINEMA_V2_RISKS.md).
+M.AURORA_PERIOD_MS     = 12000
+M.AURORA_Y_AMP         = 120   -- luma swing (0-1023) around the track base
+M.AURORA_BASE_A        = 0x2A3C46
+M.AURORA_BASE_B        = 0x2B3D45
+M.AURORA_BASE_C        = 0x293B43
+
+-- Premonition shimmer: luma breath on the ghost slot replaces the v1
+-- 70%-duty visibility blink (the one true temporal-dither; killed).
+M.SHIMMER_PERIOD_MS    = 1400
+M.SHIMMER_Y_LO         = 180
+M.SHIMMER_Y_HI         = 420
+
+-- Notch heartbeat: two-phase beat replacing sine breathe (rise fraction
+-- of BREATHE_CYCLE_MS spent on the spring rise, remainder on soft decay)
+M.HEARTBEAT_RISE_FRAC  = 0.22
+
+-- Focus law, Lumen pass
+M.TRAIL_SAMPLES        = 5     -- phosphor tail length (was 3)
+M.TRAIL_STEP_T         = 0.06  -- t-spacing between tail samples
+M.SPEC_SWEEP_MS        = 420   -- one-shot specular run along the hold ring
+M.SPEC_BASE_A          = 0x2CC79B -- ring band bases: one LSB off
+M.SPEC_BASE_B          = 0x2DC79A -- accent_memory, one slot each
+
+-- IMU parallax (display/parallax.lua): layers shift against head motion.
+-- LOCK (text, verdicts, privacy) never moves; worst case rim mark at
+-- r=110 + 1px stays inside SAFE_RADIUS=112.
+M.PAR_MAX_PX           = { rim = 1, ring = 2, air = 3 }
+M.PAR_RATE_GAIN        = 0.9   -- deg/s of head rate -> px (pre-clamp)
+M.PAR_EMA_ALPHA        = 0.35  -- rate smoothing per 50ms tick
+M.PAR_SPRING_ZETA      = 0.75  -- return-to-zero spring when the head stops
+M.PAR_RETURN_MS        = 260   -- duration of the inertial return
+
+-- Particle pool (display/particles.lua): one global budget shared with
+-- dream weather; hero bursts steal from weather, never exceed it.
+M.PARTICLE_BUDGET      = 24
+M.BURST_N              = 12    -- save-moment burst count
+M.BURST_MS             = 480
+M.BURST_SPEED          = 46    -- px/s outward
+M.SHARD_N              = 6     -- promise-shatter shards
+M.SHARD_MS             = 700
+M.SHARD_SPEED          = 30    -- px/s, falling inward off the rim
+M.TEAR_SPIT_N          = 3     -- testimony tear reveal
+M.TEAR_SPIT_MS         = 320
+
+-- Hero moments
+M.SHATTER_FLASH_MS     = 150   -- one-shot fx luma flash (single ramp down)
+M.WAKE_REVEAL_MS       = 600   -- horizon draws on radially at wake
+M.WARP_STREAKS         = 18    -- dream-door starfield streak count
+M.WARP_STREAK_LEN      = 14    -- max streak length px
+
+-- Loading palette-chase: 12 static segments banded across three slots;
+-- the light chases at the old spinner's RPM (geometry no longer rotates)
+M.CHASE_SEGMENTS       = 12
+
 return M

@@ -139,6 +139,45 @@ function M.restore_all()
   for name in pairs(_reserved) do M.restore(name) end
 end
 
+-- ---------------------------------------------------------------------------
+-- Slot leases (Meridian Lumen). A slot has at most one live writer: a
+-- palette program must lease the names it animates and release them when
+-- it yields. Releasing restores base colors, so a lapsed program can
+-- never leave a slot stranded off-base. This closes the v1 slot-contention
+-- class structurally — same fix Meridian made for slot *ownership*,
+-- extended to slot *animation*.
+-- ---------------------------------------------------------------------------
+local _leases = {}   -- slot -> { owner = string, name = string }
+
+--- Lease `name`'s slot for `owner`. Fails (returns false) if another
+--- owner holds it. Re-leasing your own slot is a no-op success.
+function M.lease(name, owner)
+  local r = _reserved[name]
+  if not r or not owner then return false end
+  local l = _leases[r.slot]
+  if l and l.owner ~= owner then return false end
+  _leases[r.slot] = { owner = owner, name = name }
+  return true
+end
+
+--- Release every slot held by `owner`, restoring each to its base color.
+function M.release(owner)
+  for slot, l in pairs(_leases) do
+    if l.owner == owner then
+      _leases[slot] = nil
+      M.restore(l.name)
+    end
+  end
+end
+
+--- The owner currently holding `name`'s slot, or nil.
+function M.owner(name)
+  local r = _reserved[name]
+  if not r then return nil end
+  local l = _leases[r.slot]
+  return l and l.owner or nil
+end
+
 --- Test/emulator hook: reserved names, sorted for determinism.
 function M.reserved_names()
   local names = {}
