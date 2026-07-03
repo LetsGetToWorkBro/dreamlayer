@@ -468,10 +468,12 @@ class CardRenderer:
             "PersonDossierCard":    self._layout_card,
             "MorningBriefCard":     self._layout_card,
             "ListeningCard":        self._layout_card,
-            "HarkCard":             self._layout_card,
-            "OracleReplyCard":      self._layout_card,
-            "FactCheckCard":        self._layout_card,
-            "AnswerAheadCard":      self._layout_card,
+            # Meridian Solid: the O3 conversation cards get the full material
+            # treatment (glass pane, gradient strokes, bloom, hero type).
+            "HarkCard":             self._hark,
+            "OracleReplyCard":      self._oracle_reply,
+            "FactCheckCard":        self._fact_check,
+            "AnswerAheadCard":      self._answer_ahead,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
@@ -1055,6 +1057,134 @@ class CardRenderer:
         self._multiline_text(draw, CX, 142, new, "sm", T.TEXT_PRIMARY,
                              max_width=160)
         self._dot(draw, CX, 170, max(2, int(2 + score * 3)), score_col)
+
+    # ------------------------------------------------------------------
+    # Meridian Solid — the O3 conversation cards (Veritas / answer-ahead /
+    # Oracle reply / Listen!). Same material language as the hero cards:
+    # a surface-luma glass pane, gradient separators, bloom on the status
+    # cue, hero-class type via the fit ladder, secondary text cooled to a
+    # dim twin. Panes are additive (richer, not brighter); text is never in
+    # the pane color (solid.md).
+    # ------------------------------------------------------------------
+
+    _FIT_ADV = {"hero": 12, "xl": 11, "lg": 10, "md": 8, "sm": 6, "xs": 5}
+
+    def _fit(self, text, max_px=196, ladder=("hero", "xl", "lg", "md")):
+        """Largest size in `ladder` whose advance fits `text` in `max_px`
+        (mirrors typography.fit_size — drop, never clip the circular panel)."""
+        t = str(text or "")
+        for s in ladder:
+            if len(t) * self._FIT_ADV[s] <= max_px:
+                return s
+        return ladder[-1]
+
+    def _pane(self, draw, cy=128, r=76, rim=T.BORDER_SUBTLE):
+        """The shared soft glass pane + a faint rim — the material bed every
+        message card sits on."""
+        glass_disc(draw, CX, cy, r, PANE, 4)
+        self._circle(draw, CX, cy, r + 4, 1, rim, alpha=90)
+
+    def _oracle_reply(self, draw, card):
+        """OracleReplyCard — Oracle's answer/confirmation. Memory-toned pane,
+        ORACLE eyebrow with a bloom cue, the reply in hero type (or wrapped)."""
+        action = card.get("kind") == "action"
+        accent = T.ACCENT_SUCCESS if action else T.ACCENT_MEMORY
+        body = str(card.get("primary") or "")
+        self._pane(draw, 132, 78)
+        # eyebrow with a bloomed status dot
+        bloom_ring(draw, CX - 40, 64, 3, accent)
+        self._dot(draw, CX - 40, 64, 3, accent)
+        self._text_rgba(draw, CX + 6, 64, "ORACLE",
+                        "xs", accent, alpha=235)
+        grad_line(draw, 60, 82, 196, 82, RAMP_SUCCESS if action else RAMP_MEMORY)
+        if len(body) <= 20:
+            self._text(draw, CX, 132, body, self._fit(body, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 132, body, "md", T.TEXT_PRIMARY,
+                                 max_width=182)
+
+    def _answer_ahead(self, draw, card):
+        """AnswerAheadCard — the pre-fetched answer. Quiet memory tone: the
+        answer in hero type over a pane, the question cooled beneath it."""
+        answer = str(card.get("primary") or "")
+        question = str(card.get("detail") or "")
+        footer = str(card.get("footer") or "")
+        self._pane(draw, 128, 78)
+        bloom_ring(draw, CX - 78, 70, 3, T.ACCENT_MEMORY)
+        self._dot(draw, CX - 78, 70, 3, T.ACCENT_MEMORY)
+        self._text_rgba(draw, CX + 4, 70, "ON THE TIP OF YOUR TONGUE",
+                        "xs", T.ACCENT_MEMORY, alpha=225)
+        grad_line(draw, 52, 88, 204, 88, RAMP_MEMORY)
+        self._text(draw, CX, 126, answer, self._fit(answer, 196), T.TEXT_PRIMARY)
+        if question:
+            self._text_rgba(draw, CX, 166, question, "sm",
+                            T.ACCENT_MEMORY_DIM, alpha=235)
+        if footer:
+            self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=170)
+
+    def _fact_check(self, draw, card):
+        """FactCheckCard — Veritas verdict, in the Truth-Lens material family.
+        A bloomed status ring in the verdict hue, the claim in hero type over a
+        pane, the basis cooled to the verdict's dim twin, the fused footer in
+        ghost."""
+        verdict = card.get("verdict") or ""
+        _dim = {
+            "supported":          T.ACCENT_SUCCESS_DIM,
+            "disputed":           T.WARNING_AMBER_DIM,
+            "self_contradiction": T.ACCENT_ATTENTION_DIM,
+            "unverified":         T.BORDER_SUBTLE,
+        }
+        color = {
+            "supported":          T.ACCENT_SUCCESS,
+            "disputed":           T.WARNING_AMBER,
+            "self_contradiction": T.ACCENT_ATTENTION,
+            "unverified":         T.TEXT_GHOST,
+        }.get(verdict, T.TEXT_GHOST)
+        dim = _dim.get(verdict, T.BORDER_SUBTLE)
+        eyebrow = str(card.get("eyebrow") or "")
+        claim = str(card.get("primary") or "")
+        basis = str(card.get("detail") or "")
+        footer = str(card.get("footer") or "")
+
+        self._pane(draw, 134, 74)
+        # the status cue: a bloomed ring in the verdict hue
+        bloom_ring(draw, CX, 54, 9, color)
+        self._circle(draw, CX, 54, 9, 2, color, alpha=255)
+        self._text_rgba(draw, CX, 82, eyebrow, "xs", color, alpha=240)
+        grad_line(draw, 44, 96, 212, 96,
+                  (color, dim, T.BORDER_SUBTLE))
+        if len(claim) <= 22:
+            self._text(draw, CX, 130, claim, self._fit(claim, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 128, claim, "md", T.TEXT_PRIMARY,
+                                 max_width=188)
+        if basis:
+            self._text_rgba(draw, CX, 170, basis, "sm", dim, alpha=235)
+        if footer:
+            self._text_rgba(draw, CX, 200, footer, "xs", T.TEXT_GHOST, alpha=170)
+
+    def _hark(self, draw, card):
+        """HarkCard — Oracle's "Listen!" A bloomed ring pierces the eye, the one
+        thing worth hearing in hero type, the trailing detail cooled. Urgent
+        (watch-out) burns amber, a plain listen stays memory-teal."""
+        urgent = card.get("importance") == "urgent"
+        color = T.WARNING_AMBER if urgent else T.ACCENT_MEMORY
+        dim = T.WARNING_AMBER_DIM if urgent else T.ACCENT_MEMORY_DIM
+        clue = str(card.get("primary") or "")
+        detail = str(card.get("detail") or "")
+        self._pane(draw, 134, 74)
+        bloom_ring(draw, CX, 58, 12, color)
+        self._circle(draw, CX, 58, 12, 2, color, alpha=255)
+        self._dot(draw, CX, 58, 3, color)
+        self._text_rgba(draw, CX, 84, "LISTEN", "xs", color, alpha=245)
+        grad_line(draw, 48, 98, 208, 98, (color, dim, T.BORDER_SUBTLE))
+        if len(clue) <= 22:
+            self._text(draw, CX, 132, clue, self._fit(clue, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 130, clue, "md", T.TEXT_PRIMARY,
+                                 max_width=188)
+        if detail:
+            self._text_rgba(draw, CX, 172, detail, "sm", dim, alpha=230)
 
     def _layout_card(self, draw, card):
         """Generic renderer for the layout-driven cards (ForgetLast /
