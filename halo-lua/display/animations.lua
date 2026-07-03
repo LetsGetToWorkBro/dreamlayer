@@ -251,4 +251,14 @@ M.WARP_STREAK_LEN      = 14    -- max streak length px
 -- the light chases at the old spinner's RPM (geometry no longer rotates)
 M.CHASE_SEGMENTS       = 12
 
+-- Prism Lens (Lumen rebuild): the kaleidoscope blooms open on a spring,
+-- its rotation breathes (speeds and slows on a slow sine), and two thin
+-- halo rings counter-rotate against the arms. All rates stay far below
+-- photosensitivity thresholds — wonder, not strobe.
+M.PRISM_BLOOM_MS       = 600   -- spring unfold on activation
+M.PRISM_SPIN_RATE      = 0.00004 -- rad/ms base rotation (v1 rate, kept)
+M.PRISM_BREATH_MS      = 5200  -- rotation-rate breathing period
+M.PRISM_RING_R_A       = 60    -- inner counter-rotating halo ring
+M.PRISM_RING_R_B       = 86    -- outer counter-rotating halo ring
+
 return M

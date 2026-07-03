@@ -71,6 +71,12 @@ WARP_STREAK_LEN = 14
 
 CHASE_SEGMENTS = 12
 
+PRISM_BLOOM_MS = 600
+PRISM_SPIN_RATE = 0.00004
+PRISM_BREATH_MS = 5200
+PRISM_RING_R_A = 60
+PRISM_RING_R_B = 86
+
 
 def spring(t: float, zeta: float = SPRING_ZETA_SOFT,
            omega: float = SPRING_OMEGA) -> float:

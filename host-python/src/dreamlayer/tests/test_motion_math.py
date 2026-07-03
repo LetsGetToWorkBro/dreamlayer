@@ -143,6 +143,10 @@ def test_lua_constants_match_python_mirror(lua):
         "WAKE_REVEAL_MS": mm.WAKE_REVEAL_MS,
         "WARP_STREAKS": mm.WARP_STREAKS,
         "CHASE_SEGMENTS": mm.CHASE_SEGMENTS,
+        "PRISM_BLOOM_MS": mm.PRISM_BLOOM_MS,
+        "PRISM_BREATH_MS": mm.PRISM_BREATH_MS,
+        "PRISM_RING_R_A": mm.PRISM_RING_R_A,
+        "PRISM_RING_R_B": mm.PRISM_RING_R_B,
     }
     for name, expect in pairs.items():
         got = lua.eval(f"A.{name}")

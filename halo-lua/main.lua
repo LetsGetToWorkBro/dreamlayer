@@ -17,6 +17,7 @@ local Horizon    = require("display.horizon")   -- Meridian day-ring
 local Renderer   = require("display.renderer")
 local Particles  = require("display.particles") -- Lumen hero pool
 local PalAnim    = require("display.palette_animator")
+local Parallax   = require("display.parallax")
 local Anim       = require("display.animations")
 
 -- figment_put/swap/revoke/text arrive as BLE envelopes → stage handlers
@@ -177,9 +178,11 @@ local function tick()
     -- display API and yields the stage the moment it ends or is revoked
     Figment.tick(0.05)
   elseif Prism.is_active() then
-    -- Prism Lens: the psychedelic kaleidoscope owns the display while on
+    -- Prism Lens: the psychedelic kaleidoscope owns the display while on.
+    -- Parallax ticks here so the field floats with the wearer's head.
     local has_frame = (type(_G.frame) == "table")
     if has_frame then frame.display.clear(0x000000) end
+    Parallax.tick(_tick_ms)
     Prism.draw(_tick_ms)
     if has_frame then frame.display.show() end
   elseif HostComm.dream_active() then

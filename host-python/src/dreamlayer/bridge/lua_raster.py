@@ -242,10 +242,22 @@ class LuaRasterHarness:
         Call after the Lua side has reserved its slots (e.g. after
         requiring display modules) so draws in a base color follow the
         slot's live YCbCr, as they would on the indexed hardware.
+
+        Both module instances are synced: Lua keys package.loaded by the
+        literal require string, so ``display.palette`` (renderer/focus/
+        horizon side) and ``display/palette`` (dream/prism side) hold
+        separate reservation registries over the same hardware slots
+        (see palette_cycle.lua's header). Dream weather and the Prism
+        kaleidoscope reserve the sky bank on the slash instance — without
+        it their palette-cycled color never shows in the raster.
         """
-        pal = self.require("display.palette")
-        for name in pal.reserved_names().values():
-            slot = pal.dynamic_slot(name)
-            base = pal.dynamic_color(name)
-            if slot is not None and base is not None:
-                self.display.bind_slot(int(base), int(slot))
+        for module in ("display.palette", "display/palette"):
+            try:
+                pal = self.require(module)
+            except Exception:
+                continue
+            for name in pal.reserved_names().values():
+                slot = pal.dynamic_slot(name)
+                base = pal.dynamic_color(name)
+                if slot is not None and base is not None:
+                    self.display.bind_slot(int(base), int(slot))
