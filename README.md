@@ -133,7 +133,7 @@ polished control panel. Keyword search works with zero setup; add
 [Ollama](docs/OLLAMA_SETUP.md) for written answers and vision.
 
 ```bash
-cd host-python && pip install -e .
+pip install -e ./host-python
 python -m dreamlayer.ai_brain.server --token rune-birch     # open the printed URL
 ```
 

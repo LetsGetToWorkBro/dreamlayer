@@ -82,3 +82,24 @@ def test_email_card_carries_subject():
     card = cards.message_notification("a@b.co", "Renewal — sign by Friday", "email")
     assert card["channel"] == "email" and card["headline"] == "Mail"
     assert "reply" in card["actions"]
+
+
+def test_auto_poll_fetches_and_flashes():
+    orc = _orc()
+    # no Mac mini paired → nothing to poll (the Mac is the message bridge)
+    assert orc.poll_messages_once(lambda url, tok: {"items": FEED}) == []
+    # pair a Mac mini, then a poll flashes the new incoming messages
+    orc.connect_mac_mini(True)
+    orc.brain_url, orc.brain_token = "http://mac.local:7777", "tok"
+    seen = {}
+
+    def http_get(url, token):
+        seen["url"], seen["token"] = url, token
+        return {"items": FEED}
+
+    sent = orc.poll_messages_once(http_get)
+    assert [c["primary"] for c in sent] == ["Marcus", "landlord@birch.co"]
+    assert seen["url"].endswith("/dreamlayer/messages/recent") and seen["token"] == "tok"
+    # the background loop starts + stops cleanly
+    orc.start_message_polling(interval=0.05, http_get=http_get)
+    orc.stop_message_polling()

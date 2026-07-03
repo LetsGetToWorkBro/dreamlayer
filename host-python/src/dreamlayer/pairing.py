@@ -66,6 +66,10 @@ def connect_all(orchestrator, bundle: PairingBundle,
         # a paired Brain is the Mac mini tier — actually use it (leave phone-only)
         if hasattr(orchestrator, "connect_mac_mini"):
             orchestrator.connect_mac_mini(True)
+        # remember where to poll for live message pop-ups
+        if hasattr(orchestrator, "brain_url"):
+            orchestrator.brain_url = bundle.brain_url
+            orchestrator.brain_token = bundle.token
     if bundle.glasses_id:
         orchestrator.glasses_id = bundle.glasses_id
     return {"brain": connected_brain, "glasses": bool(bundle.glasses_id),

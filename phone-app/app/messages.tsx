@@ -28,8 +28,8 @@ export default function Messages() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
-  const refresh = async () => {
-    setLoading(true);
+  const refresh = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const r = await fetchMessages();
     setItems(r.items);
     setEnabled(r.enabled);
@@ -37,6 +37,9 @@ export default function Messages() {
   };
   useEffect(() => {
     refresh();
+    // live: pull the Brain's feed on a timer so new messages appear on their own
+    const id = setInterval(() => refresh(false), 12000);
+    return () => clearInterval(id);
   }, [macConnected]);
 
   const send = async () => {

@@ -21,14 +21,18 @@ turns on written answers and vision.
 
 ### 1a. Quickest path (any Mac, ~2 min)
 
-Requires Python 3.10+ (`python3 --version`).
+Requires Python 3.11+ (`python3 --version`). A venv is recommended.
 
 ```bash
 git clone <this repo> dreamlayer
-cd dreamlayer/host-python
-pip install -e .                       # installs the `dreamlayer` package
+cd dreamlayer
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ./host-python           # installs the `dreamlayer` package
 python -m dreamlayer.ai_brain.server --token rune-birch
 ```
+
+(You can run that last line from anywhere once installed — the old `cd
+host-python` requirement is gone.)
 
 You'll see:
 

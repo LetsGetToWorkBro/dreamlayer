@@ -36,6 +36,17 @@ from . import intents, answer_builder
 from ..hud import cards
 
 
+def _default_http_get(url: str, token: str = "") -> dict:
+    """Minimal GET the message poller uses to reach the paired Mac mini Brain."""
+    import json
+    import urllib.request
+    headers = {"X-DreamLayer-Token": token} if token else {}
+    req = urllib.request.Request(url, headers=headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=6) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
 class Orchestrator:
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
@@ -92,6 +103,9 @@ class Orchestrator:
         self.notify_texts = True
         self.notify_emails = True
         self._msg_seen_ts = 0.0
+        self.brain_url = ""                    # set at pairing (the Mac mini)
+        self.brain_token = ""
+        self._msg_poll_stop = None
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -563,6 +577,42 @@ class Orchestrator:
             cards_sent.append(card)
         self._msg_seen_ts = newest
         return cards_sent
+
+    def poll_messages_once(self, http_get=None) -> list:
+        """Fetch the Brain's message feed once and flash anything new. A no-op
+        with no Mac mini paired (there's no message source without it — iOS
+        can't read your texts, so the Mac is the bridge)."""
+        if not self.mac_mini_connected or not self.brain_url:
+            return []
+        getter = http_get or _default_http_get
+        try:
+            data = getter(self.brain_url.rstrip("/") + "/dreamlayer/messages/recent",
+                          self.brain_token)
+        except Exception:
+            return []
+        items = data.get("items", []) if isinstance(data, dict) else []
+        return self.poll_messages(items)
+
+    def start_message_polling(self, interval: float = 8.0, http_get=None) -> None:
+        """Run poll_messages_once() on a background timer so pop-ups fire on
+        their own. Idempotent; stop with stop_message_polling()."""
+        if self._msg_poll_stop is not None:
+            return
+        import threading
+        self._msg_poll_stop = threading.Event()
+
+        def loop():
+            while not self._msg_poll_stop.wait(interval):
+                try:
+                    self.poll_messages_once(http_get)
+                except Exception:
+                    pass
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_message_polling(self) -> None:
+        if self._msg_poll_stop is not None:
+            self._msg_poll_stop.set()
+            self._msg_poll_stop = None
 
     # -- back-compat aliases (the model is the three switches above) -----
 
