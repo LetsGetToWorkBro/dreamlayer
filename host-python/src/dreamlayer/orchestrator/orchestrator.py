@@ -141,6 +141,14 @@ class Orchestrator:
         self.attention = AttentionPolicy()
         self.attention_on = True                # proactive spoken alerts
         self._tick_stop = None                  # the proactive heartbeat loop
+        # Veritas — the live fact-checker. As people talk, it flags when a
+        # speaker contradicts their *own* earlier words (offline, from the
+        # ledger) and hands checkable claims to the Brain/cloud to verify. Off by
+        # default; opt-in per the wearer. World checks go through _verify_claim,
+        # a seam that only reaches out when a Brain/cloud tier is available.
+        from .veritas import Veritas
+        self.veritas = Veritas(verify_fn=self._verify_claim)
+        self.factcheck_on = False
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -864,7 +872,43 @@ class Orchestrator:
         # dossier, anticipation, and the quest/drift engine.
         if u is not None and u.is_mine():
             self._capture_commitment(u)
+        # Veritas: fact-check the line as it lands — self-contradiction (from the
+        # ledger) and a world check (Brain/cloud seam). Opt-in; held during Focus.
+        if u is not None and self.factcheck_on and not self.focus_active():
+            self._fact_check(u)
         return u
+
+    def set_factcheck(self, on: bool = True) -> None:
+        """Turn the live fact-checker (Veritas) on or off."""
+        self.factcheck_on = on
+
+    def _fact_check(self, utterance) -> None:
+        prior = [x.text for x in self.conversation.by_speaker(utterance.speaker)
+                 if x is not utterance]
+        res = self.veritas.check(utterance.text, utterance.speaker,
+                                 prior=prior, now=utterance.ts)
+        if res.fired and res.card is not None:
+            self.bridge.send_card(res.card, event="fact_check")
+
+    def _verify_claim(self, claim: str):
+        """World-check seam: hand a checkable claim to your knowledge tier and
+        read back a verdict. Reaches the Brain (and cloud, if you've opted in)
+        only when one is paired and capture is allowed — otherwise it stays
+        silent (returns None), so Veritas falls back to the offline
+        self-contradiction pass alone. A stronger verifier (retrieval + a
+        judged yes/no) can drop in behind this same shape."""
+        if not self.privacy.allow_capture() or not getattr(self, "brain", None):
+            return None
+        try:
+            ans = self.brain.verify(claim) if hasattr(self.brain, "verify") else None
+        except Exception:
+            ans = None
+        if not ans:
+            return None
+        verdict = ans.get("verdict") if isinstance(ans, dict) else None
+        if verdict not in ("supported", "disputed", "unverified"):
+            return None
+        return ans
 
     def _capture_commitment(self, utterance) -> None:
         from .conversation import parse_commitment
