@@ -40,6 +40,8 @@ def main(argv=None) -> int:
         brain.config.token = args.token
         brain.save()
 
+    brain.start_watching()            # auto-reindex when watched folders change
+    brain.start_brief_scheduler()     # deliver the morning brief at brief_hour
     server = make_brain_server(brain, host=args.host, port=args.port)
     ip = _lan_ip()
     print(f"DreamLayer Brain — control panel at http://{ip}:{args.port}/")

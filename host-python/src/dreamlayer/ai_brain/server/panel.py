@@ -311,6 +311,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="conn" style="margin-top:6px"><div><div class="conn-t">Quiet hours</div>
       <div class="conn-s">Auto-incognito during this window — cloud off, capture paused. Blank to disable.</div></div>
       <input type="text" id="quiet" placeholder="22:00-07:00" style="max-width:140px"></div>
+    <div class="conn"><div><div class="conn-t">Morning brief</div>
+      <div class="conn-s">Auto-generate the brief at this hour (0–23) for delivery to your phone/glasses. Blank = off.</div></div>
+      <div class="row"><input type="text" id="briefhour" placeholder="off" style="max-width:70px"> <span class="conn-s" style="margin:0">:00</span></div></div>
     <div class="conn" style="border-bottom:0"><div><div class="conn-t">Keep memories for</div>
       <div class="conn-s">Auto-expire questions &amp; activity older than this. 0 = keep forever.</div></div>
       <div class="row"><input type="text" id="retain" placeholder="0" style="max-width:80px"> <span class="conn-s" style="margin:0">days</span>
@@ -367,6 +370,7 @@ async function load(){
   $("excl").value=(c.config.exclude_globs||[]).join(",");
   // ops
   $("quiet").value=c.config.quiet_hours||"";$("retain").value=c.config.retention_days||0;
+  $("briefhour").value=(c.config.brief_hour>=0)?c.config.brief_hour:"";
   $("msgCard").style.display=c.config.email_enabled?"":"none";
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
@@ -589,8 +593,10 @@ async function saveSummarize(){
 }
 
 /* ops */
-async function saveOps(){await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
-    quiet_hours:$("quiet").value.trim(),retention_days:parseInt($("retain").value)||0})});
+async function saveOps(){const bh=$("briefhour").value.trim();
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
+    quiet_hours:$("quiet").value.trim(),retention_days:parseInt($("retain").value)||0,
+    brief_hour:bh===""?-1:(parseInt(bh)||0)})});
   toast("Schedule saved");load();}
 async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e){return;}
   const up=h.uptime_s<3600?Math.floor(h.uptime_s/60)+"m":Math.floor(h.uptime_s/3600)+"h";

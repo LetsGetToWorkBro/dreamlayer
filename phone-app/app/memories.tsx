@@ -1,9 +1,11 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, TextInput, StyleSheet } from "react-native";
 import { useMemoryStore, Memory } from "../src/state/useMemoryStore";
+import { useBrainStore } from "../src/state/useBrainStore";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
+import { Tappable } from "../src/ui/components/Tappable";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
@@ -36,7 +38,28 @@ function group(memories: Memory[]): { label: string; items: Memory[] }[] {
 
 export default function Memories() {
   const memories = useMemoryStore((s) => s.memories);
-  const groups = group([...memories].sort((a, b) => b.ts - a.ts));
+  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const ask = useBrainStore((s) => s.ask);
+
+  const [q, setQ] = React.useState("");
+  const [recall, setRecall] = React.useState<{ text: string; sources: string[]; tier: string } | null>(null);
+  const [asking, setAsking] = React.useState(false);
+
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? memories.filter(
+        (m) => m.summary.toLowerCase().includes(query) || m.kind.toLowerCase().includes(query),
+      )
+    : memories;
+  const groups = group([...filtered].sort((a, b) => b.ts - a.ts));
+
+  const doRecall = async () => {
+    if (!q.trim() || !macConnected) return;
+    setAsking(true);
+    const r = await ask(q.trim());
+    setRecall(r ? { text: r.text, sources: r.sources ?? [], tier: r.tier } : null);
+    setAsking(false);
+  };
 
   return (
     <Screen>
@@ -46,8 +69,52 @@ export default function Memories() {
         subtitle={memories.length ? `${memories.length} kept` : undefined}
       />
 
+      <View style={s.searchRow}>
+        <TextInput
+          value={q}
+          onChangeText={(t) => {
+            setQ(t);
+            if (!t.trim()) setRecall(null);
+          }}
+          placeholder={macConnected ? "Search memories · ask your Brain…" : "Search your memories…"}
+          placeholderTextColor={colors.textSecondary}
+          style={s.searchInput}
+          returnKeyType="search"
+          onSubmitEditing={doRecall}
+          autoCorrect={false}
+        />
+        {macConnected ? (
+          <Tappable onPress={doRecall} style={s.searchBtn}>
+            <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>
+              {asking ? "…" : "↳"}
+            </Text>
+          </Tappable>
+        ) : null}
+      </View>
+
+      {recall ? (
+        <Card>
+          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>
+            From your Brain{recall.tier ? ` · ${recall.tier}` : ""}
+          </Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>{recall.text}</Text>
+          {recall.sources.length ? (
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
+              {recall.sources.slice(0, 4).join(" · ")}
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+
       {groups.length === 0 ? (
-        <EmptyState title="No memories yet" hint="Put on your Halo and live — the moments that matter get kept here, never raw recordings." />
+        query ? (
+          <EmptyState
+            title={`Nothing kept matches “${q.trim()}”`}
+            hint={macConnected ? "Tap ↳ to ask your Brain to search your files and mail." : "Connect your Mac mini to search your files and mail too."}
+          />
+        ) : (
+          <EmptyState title="No memories yet" hint="Put on your Halo and live — the moments that matter get kept here, never raw recordings." />
+        )
       ) : (
         groups.map((g, gi) => (
           <View key={g.label}>
@@ -80,4 +147,23 @@ const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "stretch", gap: space.md },
   tag: { width: 3, borderRadius: radius.sm, alignSelf: "stretch" },
   metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  searchRow: { flexDirection: "row", gap: space.sm, marginBottom: space.md },
+  searchInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.pill,
+    color: colors.textPrimary,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    fontSize: 15,
+  },
+  searchBtn: {
+    backgroundColor: colors.accentMemory,
+    borderRadius: radius.pill,
+    width: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

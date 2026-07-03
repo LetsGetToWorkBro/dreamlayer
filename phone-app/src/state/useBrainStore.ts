@@ -63,6 +63,8 @@ type BrainState = {
 
   // one-glance morning brief synthesized by the Brain
   getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
+  // the brief the Brain's scheduler delivered on its own at brief_hour (no compute)
+  getLatestBrief: () => Promise<{ text: string; bullets: string[]; ts: number } | null>;
 
   // engines surfaced in the app
   proactiveCards: boolean;
@@ -304,6 +306,19 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       });
       const j = await r.json();
       return { text: j.text ?? "", missed: j.missed };
+    } catch {
+      return null;
+    }
+  },
+
+  getLatestBrief: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/brief/latest");
+      const j = await r.json();
+      if (!j || !j.ts) return null;
+      return { text: j.text ?? "", bullets: j.bullets ?? [], ts: j.ts };
     } catch {
       return null;
     }

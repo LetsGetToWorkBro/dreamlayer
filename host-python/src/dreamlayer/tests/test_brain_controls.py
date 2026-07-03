@@ -257,6 +257,26 @@ class TestControls:
         assert [e["title"] for e in cal] == ["Standup"]               # only upcoming
         assert any("Standup" in b for b in brain.brief()["bullets"])   # leads the brief
 
+    def test_scheduler_delivers_brief_once_at_the_hour(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        now = time.time()
+        this_hour = time.localtime(now).tm_hour
+        # off by default: nothing delivered
+        assert brain.maybe_run_brief(now) is False and brain.last_brief is None
+        # arm it for the current hour → fires once and caches the result
+        brain.config.brief_hour = this_hour
+        assert brain.maybe_run_brief(now) is True
+        assert brain.last_brief and "text" in brain.last_brief
+        assert any(i["kind"] == "brief" for i in brain.activity.recent())
+        # same day, same hour → does not nag again
+        assert brain.maybe_run_brief(now) is False
+        # a different hour never fires
+        brain.config.brief_hour = (this_hour + 1) % 24
+        brain._brief_ran_day = None
+        assert brain.maybe_run_brief(now) is False
+
     def test_message_draft_previews_without_sending(self, tmp_path):
         lb = Live(tmp_path)
         try:
