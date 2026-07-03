@@ -140,6 +140,35 @@ def person_context(person: str, headline: str = "", detail: str = "") -> dict:
     }
 
 
+def upcoming_event(title: str, minutes: int, place: str = "") -> dict:
+    """An event about to start — 'leave now' / 'in N min', on the horizon."""
+    when = "now" if minutes <= 0 else f"in {minutes} min"
+    lines = [title, "leave " + when if place else when]
+    if place:
+        lines.append(place)
+    return {
+        "type":       "UpcomingCard",
+        "dismiss_ms": 6000,
+        "primary":    title,
+        "headline":   when,
+        "detail":     place,
+        "minutes":    minutes,
+        "lines":      lines,
+    }
+
+
+def here_reminder(subject: str, place: str = "") -> dict:
+    """Something you left is right here — surfaced as you arrive."""
+    return {
+        "type":       "HereCard",
+        "dismiss_ms": 5000,
+        "primary":    subject,
+        "headline":   "you left this here",
+        "detail":     place,
+        "lines":      [subject, place or "right here"],
+    }
+
+
 def message_notification(who: str, text: str, channel: str = "imessage") -> dict:
     """A text/email arriving — pops up on the glasses, glanceable and brief.
     A tap opens the reply flow on the phone/glasses; it fades on its own."""
