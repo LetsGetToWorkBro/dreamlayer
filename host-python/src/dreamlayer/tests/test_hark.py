@@ -55,13 +55,25 @@ def test_focus_holds_normal_hark_but_urgent_pierces():
     assert orc.hark("this matters", importance="urgent", now=100.0) is not None
 
 
-# -- the custom earcon slot ---------------------------------------------------
+# -- earcon families + rotation + custom clips -------------------------------
 
-def test_resolve_clip_finds_your_dropped_sound(tmp_path):
-    assert audio.resolve_clip(tmp_path, "hark") is None       # nothing dropped yet
+def test_hark_card_uses_the_right_family():
+    assert cards.hark("x")["earcon"] == "hark"                 # → listen family
+    assert cards.hark("x", importance="urgent")["earcon"] == "hark_urgent"  # → watch-out
+
+
+def test_pick_variant_avoids_immediate_repeat():
+    # a two-variant family should alternate, never the same twice in a row
+    seen = [audio.pick_variant("chime") for _ in range(6)]
+    assert set(seen) <= set(audio.FAMILIES["chime"])
+    assert all(seen[i] != seen[i + 1] for i in range(len(seen) - 1))
+    assert audio.pick_variant("not-an-earcon") is None
+
+
+def test_resolve_and_present_variants(tmp_path):
+    assert audio.present_variants(tmp_path, "hark") == []      # nothing dropped yet
     d = tmp_path / "sounds"; d.mkdir()
-    (d / "hark.mp3").write_bytes(b"ID3fake")
-    got = audio.resolve_clip(tmp_path, "hark")
-    assert got is not None and got.name == "hark.mp3"
-    assert audio.resolve_clip(tmp_path, "not-an-earcon") is None
-    assert "hark" in audio.earcon_ids()
+    (d / "listen1.mp3").write_bytes(b"ID3fake")                # one of the two variants
+    assert audio.resolve_clip(tmp_path, "listen1") is not None
+    assert audio.present_variants(tmp_path, "hark") == ["listen1"]
+    assert "hark" in audio.earcon_ids() and "listen1" in audio.variants("hark")

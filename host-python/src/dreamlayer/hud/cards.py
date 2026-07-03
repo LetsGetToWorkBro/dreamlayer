@@ -370,7 +370,7 @@ def hark(clue: str = "", detail: str = "", importance: str = "normal") -> dict:
         "primary":    body,
         "detail":     (detail or "").strip(),
         "importance": importance,
-        "earcon":     "hark",                 # the custom "Listen!" clip
+        "earcon":     "hark_urgent" if urgent else "hark",   # watch-out vs listen
         "haptic":     "double" if urgent else "tick",
         "flash":      True,                    # renderer flashes the ring to catch the eye
         "color":      T.WARNING_AMBER if urgent else T.ACCENT_MEMORY,
@@ -456,6 +456,7 @@ def person_dossier(data) -> dict:
         "person":     person,
         "primary":    person,
         "eyebrow":    "YOU KNOW",
+        "earcon":     "look",                 # "look — you know them" (Look 1/2)
         "headline":   headline,
         "detail":     topic_line,
         "footer":     last_line,

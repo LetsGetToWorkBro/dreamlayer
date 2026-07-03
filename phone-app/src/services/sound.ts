@@ -1,14 +1,14 @@
 /**
- * sound.ts — play Oracle's short earcons on the phone (expo-audio).
+ * sound.ts — Oracle's voice: short earcons, with variety.
  *
- * The "Listen!" chime is *your* sound: drop an audio file at
- * `assets/sounds/hark.(mp3|wav|m4a)` and it plays whenever Oracle taps you on
- * the shoulder. Everything is loaded lazily and fully guarded, so a missing
- * module or a missing file is a silent no-op (web, tests, or before you've
- * added a clip) — the sound is polish, never a dependency.
+ * Each cue is a *family* of clips (Hey 1/2, Listen 1/2, …). When Oracle wants
+ * your attention we pick a variant at random, never repeating the last one, so
+ * you don't hear the exact same thing every time. Card `earcon` ids map onto a
+ * family; the runtime just says "play the listen cue" and we vary it.
  *
- * Bundlers need static require() for assets, so the clip map is explicit. Add a
- * file and uncomment its line; until then playing an earcon simply does nothing.
+ * expo-audio is loaded lazily and everything is guarded, so a missing module
+ * (web/tests) is a silent no-op. Metro needs static require()s, so variants are
+ * listed explicitly — add a file, drop its require() in the right family.
  */
 let Audio: any = null;
 let tried = false;
@@ -25,27 +25,53 @@ function mod(): any {
   return Audio;
 }
 
-// Earcon id → bundled asset. Drop the file, then uncomment its require().
-const CLIPS: Record<string, number | null> = {
-  // hark: require("../../assets/sounds/hark.mp3"),
-  hark: null,
-  wake: null,
-  success: null,
+// A cue family → its variant clips. Add more as you record them.
+const FAMILIES: Record<string, number[]> = {
+  hey: [require("../../assets/sounds/hey2.mp3")], // Oracle wakes ("Hey Oracle")
+  listen: [require("../../assets/sounds/listen1.mp3")], // the "Listen!" tap
+  look: [require("../../assets/sounds/look1.mp3")], // "look at this"
+  watchout: [], // urgent — fill with watchout1/2 when recorded (falls back to listen)
+  sfx: [
+    require("../../assets/sounds/sfx10.mp3"),
+    require("../../assets/sounds/sfx13.mp3"),
+  ],
 };
 
-/**
- * Play a named earcon. No-ops if expo-audio is unavailable or no clip is
- * registered for the id. Fire-and-forget; never throws.
- */
+// Card `earcon` ids → cue family.
+const EARCON_FAMILY: Record<string, string> = {
+  wake: "hey",
+  hark: "listen",
+  hark_urgent: "watchout",
+  look: "look",
+  chime: "sfx",
+  hey: "hey",
+  listen: "listen",
+  watchout: "watchout",
+};
+
+const lastIdx: Record<string, number> = {};
+
+function pick(family: string): number | null {
+  let clips = FAMILIES[family] ?? [];
+  if (clips.length === 0 && family === "watchout") clips = FAMILIES.listen ?? []; // fallback
+  if (clips.length === 0) return null;
+  if (clips.length === 1) return clips[0] ?? null;
+  let i = Math.floor(Math.random() * clips.length);
+  if (i === lastIdx[family]) i = (i + 1) % clips.length; // never repeat back-to-back
+  lastIdx[family] = i;
+  return clips[i] ?? null;
+}
+
+/** Play a cue by earcon id or family name. Varies the variant; never throws. */
 export async function playEarcon(name: string): Promise<void> {
-  const clip = CLIPS[name];
-  if (clip == null) return; // no sound registered yet — silent
+  const family = EARCON_FAMILY[name] ?? name;
+  const clip = pick(family);
+  if (clip == null) return;
   const A = mod();
   if (!A?.createAudioPlayer) return;
   try {
     const player = A.createAudioPlayer(clip);
     player.play();
-    // release shortly after it finishes so we don't leak players
     setTimeout(() => {
       try {
         player.remove();
@@ -58,7 +84,7 @@ export async function playEarcon(name: string): Promise<void> {
   }
 }
 
-/** Oracle's "Listen!" — the shoulder tap. */
+/** Oracle's "Listen!" — the shoulder tap (Listen 1/2, rotated). */
 export function playListen(): void {
-  playEarcon("hark");
+  playEarcon("listen");
 }
