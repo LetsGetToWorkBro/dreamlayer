@@ -189,7 +189,17 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
   <section>
     <div class="eyebrow">Your day</div><h2>Agenda</h2>
-    <p class="lead">Events the glasses surface and the brief leads with. Add them here instead of hand-editing <code>agenda.json</code>; a native calendar reader can feed it too.</p>
+    <p class="lead">Events the glasses surface and the brief leads with. Sync your macOS Calendar, or add one-off events by hand.</p>
+    <div class="conn"><div><div class="conn-t">Sync macOS Calendar</div>
+      <div class="conn-s">Pull upcoming events from Calendar.app automatically. Synced events refresh on their own; your hand-added ones stay put. Reads locally — nothing leaves this Mac.</div></div>
+      <label class="sw"><input type="checkbox" id="calSync" onchange="saveCalSync()"><span class="track"></span></label></div>
+    <div id="calPick" style="display:none;margin:2px 0 10px">
+      <div class="conn-s" style="margin:0 0 6px">Which calendars <span id="calAllHint"></span></div>
+      <div id="calList" class="row" style="flex-wrap:wrap;gap:10px"></div>
+    </div>
+    <div class="row" style="margin:0 0 10px;justify-content:space-between">
+      <span id="calStatus" class="conn-s" style="margin:0"></span>
+      <button class="sm ghost" onclick="syncCalNow()">Sync now</button></div>
     <ul id="agenda"></ul>
     <div class="row" style="margin-top:14px">
       <input type="text" id="evTitle" placeholder="Event — e.g. Sign the lease" style="flex:1"
@@ -402,23 +412,55 @@ async function load(){
   $("msgCard").style.display=c.config.email_enabled?"":"none";
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
-  refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople();
+  refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
   return d.toLocaleString([], {weekday:"short",hour:"numeric",minute:"2-digit"});}
 async function loadAgenda(){let r;try{r=await api("/dreamlayer/calendar");}catch(e){return;}
   const items=r.items||[];
-  $("agenda").innerHTML=items.length?items.map(e=>
-    `<li><div><div class="q">${esc(e.title)}</div><div class="a">${esc(fmtWhen(e.ts))}${e.place?" · "+esc(e.place):""}</div></div>`+
-    `<button class="sm ghost" onclick='rmEvent(${JSON.stringify(e.title)},${e.ts})'>Remove</button></li>`).join("")
-    :'<li class="empty">Nothing scheduled — add what you’re tracking.</li>';}
+  $("agenda").innerHTML=items.length?items.map(e=>{
+    const synced=e.source==="calendar";
+    const badge=synced?`<span class="tag">${esc(e.calendar||"Calendar")}</span>`:"";
+    const rm=synced?"":`<button class="sm ghost" onclick='rmEvent(${JSON.stringify(e.title)},${e.ts})'>Remove</button>`;
+    return `<li><div><div class="q">${esc(e.title)} ${badge}</div>`+
+      `<div class="a">${esc(fmtWhen(e.ts))}${e.place?" · "+esc(e.place):""}</div></div>${rm}</li>`;}).join("")
+    :'<li class="empty">Nothing scheduled — sync your calendar or add what you’re tracking.</li>';}
 async function addEvent(){const t=$("evTitle").value.trim();if(!t)return;
   const w=$("evWhen").value; const ts=w?Math.floor(new Date(w).getTime()/1000):0;
   await api("/dreamlayer/calendar",{method:"POST",body:JSON.stringify({title:t,ts:ts,place:$("evPlace").value.trim()})});
   $("evTitle").value="";$("evWhen").value="";$("evPlace").value="";toast("Event added");loadAgenda();loadHistory();}
 async function rmEvent(title,ts){await api("/dreamlayer/calendar",{method:"POST",body:JSON.stringify({remove:true,title:title,ts:ts})});
   toast("Event removed");loadAgenda();loadHistory();}
+
+let _calSel=[];
+async function loadCalendars(){let r;try{r=await api("/dreamlayer/calendars");}catch(e){return;}
+  $("calSync").checked=!!r.sync;
+  _calSel=r.selected||[];
+  const cals=r.items||[];
+  const showPicker=r.sync && cals.length>1;
+  $("calPick").style.display=showPicker?"":"none";
+  $("calAllHint").textContent=_calSel.length?"":"(all)";
+  $("calList").innerHTML=cals.map(c=>{
+    const on=_calSel.length===0||_calSel.includes(c);
+    return `<label class="tog" style="display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer">`+
+      `<input type="checkbox" ${on?"checked":""} onchange="toggleCal(${JSON.stringify(c)},this.checked)" style="accent-color:var(--memory)"> ${esc(c)}</label>`;}).join("");
+  const ls=r.last_sync?("Last synced "+fmtWhen(r.last_sync)):(r.sync?"Syncing…":"Sync is off");
+  $("calStatus").textContent=ls;}
+async function toggleCal(name,on){
+  // build the explicit selected-list from the current checkboxes
+  const boxes=[...$("calList").querySelectorAll("input")];
+  const cals=boxes.map(b=>b.parentElement.textContent.trim());
+  let sel=[];boxes.forEach((b,i)=>{if(b.checked)sel.push(cals[i]);});
+  if(sel.length===cals.length)sel=[];              // all ticked = "all" = empty
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_names:sel})});
+  toast("Calendars updated");loadAgenda();loadCalendars();}
+async function saveCalSync(){const on=$("calSync").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_sync:on})});
+  toast(on?"Calendar sync on":"Calendar sync off");loadCalendars();loadAgenda();}
+async function syncCalNow(){$("calStatus").textContent="Syncing…";
+  const r=await api("/dreamlayer/calendar/sync",{method:"POST",body:"{}"});
+  toast(`Synced ${r.synced||0} event(s)`);loadAgenda();loadCalendars();loadHistory();}
 
 async function loadPeople(){let r;try{r=await api("/dreamlayer/people");}catch(e){return;}
   const items=r.items||[];

@@ -29,7 +29,8 @@ export default function Brain() {
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<{ text: string; tier: string } | null>(null);
 
-  const [events, setEvents] = useState<{ title: string; ts: number; place?: string }[]>([]);
+  const [events, setEvents] = useState<{ title: string; ts: number; place?: string; source?: string; calendar?: string }[]>([]);
+  const [syncing, setSyncing] = useState(false);
   const [activity, setActivity] = useState<{ ts: number; kind: string; text?: string; query?: string }[]>([]);
   const [evTitle, setEvTitle] = useState("");
   useEffect(() => {
@@ -45,6 +46,13 @@ export default function Brain() {
     const items = await b.addEvent({ title: evTitle.trim(), ts: Date.now() / 1000 + 3600 });
     setEvents(items);
     setEvTitle("");
+  };
+
+  const syncCalendar = async () => {
+    setSyncing(true);
+    const items = await b.syncCalendar();
+    setEvents(items);
+    setSyncing(false);
   };
 
   const brainKind = b.brainKind();
@@ -254,14 +262,22 @@ export default function Brain() {
         {/* agenda + activity — surfaced from the engines */}
         {b.macMini.connected ? (
           <>
-            <Text style={[typography.eyebrow, s.eyebrow]}>Upcoming</Text>
+            <View style={s.evHead}>
+              <Text style={[typography.eyebrow, s.eyebrow]}>Upcoming</Text>
+              <PillButton label={syncing ? "Syncing…" : "Sync calendar"} ghost onPress={syncCalendar} />
+            </View>
             <View style={s.card}>
               {events.length === 0 ? (
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>No events yet.</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>No events yet — add one or sync your Mac Calendar.</Text>
               ) : (
                 events.map((e, i) => (
                   <View key={i} style={s.evRow}>
-                    <Text style={[typography.body, { color: colors.textPrimary }]}>{e.title}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[typography.body, { color: colors.textPrimary }]}>
+                        {e.title}
+                        {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || "Calendar")}</Text> : null}
+                      </Text>
+                    </View>
                     <Text style={[typography.caption, { color: colors.textSecondary }]}>
                       {new Date(e.ts * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
                     </Text>
@@ -371,7 +387,8 @@ const s = StyleSheet.create({
     borderColor: colors.borderSubtle,
     padding: 16,
   },
-  evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 },
+  evHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, gap: 8 },
   evAdd: { flexDirection: "row", gap: 8, alignItems: "center", marginTop: 8 },
   actRow: { flexDirection: "row", gap: 10, paddingVertical: 6 },
   lensGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },

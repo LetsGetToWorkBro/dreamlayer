@@ -34,6 +34,7 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/calendar` | token | upcoming events **(seam: agenda.json / EventKit)** |
 | `/dreamlayer/model/status` | token | Ollama reachability + which configured models are pulled |
 | `/dreamlayer/people` | token | the dossier registry — everyone you've introduced `{name, note, tags, ts}` |
+| `/dreamlayer/calendars` | token | macOS calendars available to sync + current settings `{items[], sync, selected[], last_sync}` **(seam: AppleScript)** |
 | `/dreamlayer/rewind` | token | today merged into hour blocks — activity + messages + events `{blocks[], count}` |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token (for the panel) |
@@ -51,6 +52,7 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → reindex |
 | `/dreamlayer/calendar` | token | `{title, ts, place}` adds an event; `{remove:true, title, ts}` removes → `{items}` |
 | `/dreamlayer/people` | token | `{name, note?, tags?}` upserts a person; `{remove:true, name}` removes → `{items}` |
+| `/dreamlayer/calendar/sync` | token | `{}` → pull macOS Calendar.app into the agenda now `{items, synced}` |
 | `/dreamlayer/upload?folder=&name=` | token | raw file body → dropped into a watched folder |
 | `/dreamlayer/config` | token | partial config patch (model, cloud, filters, quiet hours, …) |
 | `/dreamlayer/reindex` | token | `{}` → rebuild the index now |
@@ -115,7 +117,7 @@ Everything above is code; here is the short list of what a real build supplies.
 | **Microphone + ASR** | feeds `orchestrator.handle_voice(text)` | On-device speech-to-text → text; wake-word ("Hey DreamLayer") spotting. |
 | **macOS Messages/Mail reader** | `ai_brain/server/macos_sources.py: recent_messages()` (`messages_fn` seam on `Brain`) | Real read of `chat.db` / Mail (returns structured items; `[]` off macOS today). |
 | **macOS send** | `macos_sources.send_message(draft, approved=True)` | `osascript` dispatch — only ever on explicit approval. |
-| **Calendar/Reminders** | `Brain.calendar()` reads `<cfg>/agenda.json` | Native EventKit reader that writes `agenda.json` (or replace the method). |
+| **Calendar sync** | `macos_sources.read_calendar_events` / `list_calendars` (`calendar_reader_fn` / `calendar_list_fn` seams on `Brain`) | Reads Calendar.app via AppleScript and merges into `agenda.json` (keeps hand-added events; synced ones carry `source:"calendar"`). Toggle + calendar picker in the panel; `[]` off macOS. Swap the reader for EventKit if preferred. |
 | **iOS/Android notifications** | `phone-app/src/services/notify.ts` | `npm install` picks up `expo-notifications`; grant permission on the device. |
 | **Reach-anywhere relay** | pairing `relay_url` + `brainFetch` fallback | Host a secure relay/tunnel to the Mac mini; put its URL in the pairing bundle. The phone client already prefers LAN and falls back to it. |
 | **Local model (optional)** | `ai_brain/server/backends.py` (Ollama) | Ollama on the Mac mini powers written answers, vision, summaries, brief, and smart replies. Keyword works with none. See `OLLAMA_SETUP.md`. |

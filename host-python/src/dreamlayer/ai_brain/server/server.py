@@ -63,7 +63,8 @@ def _hour_label(ts: float) -> str:
 class Brain:
     """The Brain's live state: config + index + history, rebuilt on change."""
 
-    def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None):
+    def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None,
+                 calendar_reader_fn=None, calendar_list_fn=None):
         self.cfg_dir = Path(cfg_dir)
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
@@ -72,8 +73,11 @@ class Brain:
         # macOS message/mail documents (folded in when email is enabled)
         self._sources_fn = sources_fn or collect_documents
         # the live feed the glasses read hands-free (the Mac is the bridge)
-        from .macos_sources import recent_messages
+        from .macos_sources import recent_messages, read_calendar_events, list_calendars
         self._messages_fn = messages_fn or recent_messages
+        # macOS Calendar.app → agenda sync (both are injectable seams for tests)
+        self._calendar_reader = calendar_reader_fn or read_calendar_events
+        self._calendar_lister = calendar_list_fn or list_calendars
         self._sig = None
         self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
         self._started_ts = time.time()
@@ -82,6 +86,8 @@ class Brain:
         self.last_brief = None
         self._brief_ran_day = None
         self._brief_stop = None
+        self._cal_stop = None
+        self.last_calendar_sync = 0.0
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -165,11 +171,18 @@ class Brain:
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_base_url", "cloud_api_key", "cloud_model",
                   "semantic_search", "index_extensions", "max_file_kb",
-                  "exclude_globs", "quiet_hours", "retention_days", "brief_hour"):
+                  "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
+                  "calendar_sync", "calendar_names", "calendar_days"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()
         self.save()
+        # turning sync on (or changing which calendars) → pull immediately
+        if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
+            try:
+                self.sync_calendar()
+            except Exception:
+                pass
 
     def incognito_now(self) -> bool:
         """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
@@ -284,8 +297,8 @@ class Brain:
 
     def calendar(self, limit: int = 10) -> list:
         """Upcoming events for the glasses + the brief. Reads
-        <cfg>/agenda.json (a list of {title, ts, place}); a native EventKit
-        reader is the device seam that can also populate it. [] when empty."""
+        <cfg>/agenda.json (a list of {title, ts, place}); events pulled from
+        macOS Calendar carry source:"calendar". [] when empty."""
         events = []
         p = self.cfg_dir / "agenda.json"
         try:
@@ -295,7 +308,9 @@ class Brain:
                     if e.get("title"):
                         events.append({"title": e["title"],
                                        "ts": float(e.get("ts", 0) or 0),
-                                       "place": e.get("place", "")})
+                                       "place": e.get("place", ""),
+                                       "source": e.get("source", "manual"),
+                                       "calendar": e.get("calendar", "")})
         except Exception:
             pass
         now = time.time()
@@ -339,6 +354,69 @@ class Brain:
             p.write_text(json.dumps(kept))
             self.activity.add("calendar", f"Removed event {title}")
         return self.calendar(200)
+
+    # -- macOS Calendar.app sync (read-only) -----------------------------
+
+    def list_calendars(self) -> list[str]:
+        """The calendars available to sync from (for the panel's picker)."""
+        try:
+            return self._calendar_lister()
+        except Exception:
+            return []
+
+    def sync_calendar(self) -> dict:
+        """Pull upcoming Calendar.app events into agenda.json, replacing any
+        previously-synced events while keeping the ones you added by hand.
+        Synced events carry `source: "calendar"`; manual ones don't."""
+        try:
+            events = self._calendar_reader(self.config)
+        except Exception:
+            events = []
+        p = self.cfg_dir / "agenda.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        if not isinstance(cur, list):
+            cur = []
+        # keep everything you added by hand; drop the last sync's events
+        manual = [e for e in cur if e.get("source") != "calendar"]
+        synced = [{"title": e["title"], "ts": float(e.get("ts", 0) or 0),
+                   "place": e.get("place", ""), "calendar": e.get("calendar", ""),
+                   "source": "calendar"} for e in events if e.get("title")]
+        p.write_text(json.dumps(manual + synced))
+        self.last_calendar_sync = time.time()
+        self.activity.add("calendar", f"Synced {len(synced)} event(s) from Calendar")
+        return {"items": self.calendar(200), "synced": len(synced)}
+
+    def maybe_sync_calendar(self) -> bool:
+        """Run a sync if the toggle is on. Called by the scheduler."""
+        if not self.config.calendar_sync:
+            return False
+        self.sync_calendar()
+        return True
+
+    def start_calendar_sync(self, interval: int = 900):
+        """Background loop: re-pull the calendar every `interval` seconds while
+        the toggle is on. Idempotent; safe to call once at startup."""
+        import threading
+        if self._cal_stop is not None:
+            return
+        stop = threading.Event()
+        self._cal_stop = stop
+
+        def loop():
+            first = True
+            while True:
+                if stop.wait(2 if first else interval):   # a quick first pull
+                    break
+                first = False
+                try:
+                    self.maybe_sync_calendar()
+                except Exception:
+                    pass
+
+        threading.Thread(target=loop, daemon=True).start()
 
     # -- people you've been introduced to (the dossier registry) ---------
 
@@ -597,6 +675,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"items": brain.calendar()})
             elif path == "/dreamlayer/people":
                 self._json(200, {"items": brain.people()})
+            elif path == "/dreamlayer/calendars":
+                # available macOS calendars + current sync settings (for the picker)
+                self._json(200, {"items": brain.list_calendars(),
+                                 "sync": brain.config.calendar_sync,
+                                 "selected": brain.config.calendar_names,
+                                 "last_sync": brain.last_calendar_sync})
             elif path == "/dreamlayer/rewind":
                 self._json(200, brain.rewind())
             elif path == "/dreamlayer/brief/latest":
@@ -717,6 +801,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     items = brain.add_event(b.get("title", ""),
                                             b.get("ts", 0) or 0, b.get("place", ""))
                 self._json(200, {"items": items})
+            elif path == "/dreamlayer/calendar/sync":
+                # pull macOS Calendar.app into the agenda now
+                self._json(200, brain.sync_calendar())
             elif path == "/dreamlayer/people":
                 # introduce/update or remove a person ({name, note, tags[, remove]})
                 b = self._body()

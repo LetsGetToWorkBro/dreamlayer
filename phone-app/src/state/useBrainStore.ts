@@ -20,7 +20,7 @@ export type BrainKind = "phone" | "mac_mini";
 export type MacMini = { connected: boolean; url: string; token: string; relayUrl?: string };
 export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
-export type CalendarEvent = { title: string; ts: number; place?: string };
+export type CalendarEvent = { title: string; ts: number; place?: string; source?: string; calendar?: string };
 export type ActivityItem = { ts: number; kind: string; text?: string; query?: string; tier?: string };
 export type RewindItem = { ts: number; kind: string; text: string };
 export type RewindBlock = { hour: number; label: string; count: number; items: RewindItem[] };
@@ -80,6 +80,7 @@ type BrainState = {
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
   removeEvent: (e: { title: string; ts: number }) => Promise<CalendarEvent[]>;
+  syncCalendar: () => Promise<CalendarEvent[]>;
   getActivity: () => Promise<ActivityItem[]>;
   getRewind: () => Promise<RewindBlock[]>;
 
@@ -315,6 +316,17 @@ export const useBrainStore = create<BrainState>((set, get) => ({
         method: "POST",
         body: JSON.stringify({ remove: true, title: e.title, ts: e.ts }),
       });
+      return (await r.json()).items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  syncCalendar: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/calendar/sync", { method: "POST", body: "{}" });
       return (await r.json()).items ?? [];
     } catch {
       return [];

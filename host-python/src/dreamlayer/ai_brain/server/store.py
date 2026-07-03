@@ -47,6 +47,10 @@ class BrainConfig:
     quiet_hours: str = ""           # "22:00-07:00" → auto-incognito window
     retention_days: int = 0         # 0 = keep forever
     brief_hour: int = -1            # deliver the morning brief at this hour; -1 = off
+    # -- calendar sync (macOS Calendar.app → agenda) --------------------
+    calendar_sync: bool = False     # pull events from Calendar.app on a poll
+    calendar_names: list[str] = field(default_factory=list)  # [] = all calendars
+    calendar_days: int = 14         # how far ahead to pull
 
     @property
     def lan_only(self) -> bool:

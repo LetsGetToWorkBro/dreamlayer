@@ -17,6 +17,7 @@ import email
 import platform
 import re
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -173,6 +174,100 @@ def _recent_mail(limit: int) -> list[dict]:
                     "subject": m["subject"], "text": m["body"][:280],
                     "ts": f.stat().st_mtime})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Calendar — sync macOS Calendar.app into the Brain's agenda (read-only).
+#
+# Same posture as Messages/Mail: local read via AppleScript, [] off macOS, and
+# a `reader` seam so the parsing is unit-tested against fixture output without a
+# real calendar. The reader returns tab-separated lines; we avoid AppleScript
+# date math entirely by asking for *seconds from now*, then adding that to the
+# Python clock — no locale-dependent date parsing.
+# ---------------------------------------------------------------------------
+
+def _calendar_script(days_ahead: int) -> str:
+    """AppleScript that prints upcoming events as
+    `title<TAB>seconds_from_now<TAB>location<TAB>calendar` lines."""
+    return (
+        'set out to ""\n'
+        'set nowD to (current date)\n'
+        f'set horizon to nowD + ({int(days_ahead)} * days)\n'
+        'tell application "Calendar"\n'
+        '  repeat with c in calendars\n'
+        '    set cname to name of c\n'
+        '    set evs to (every event of c whose start date is greater than or '
+        'equal to nowD and start date is less than or equal to horizon)\n'
+        '    repeat with e in evs\n'
+        '      set t to summary of e\n'
+        '      set secs to ((start date of e) - nowD)\n'
+        '      set loc to ""\n'
+        '      try\n'
+        '        if location of e is not missing value then set loc to location of e\n'
+        '      end try\n'
+        '      set out to out & t & tab & (secs as integer) & tab & loc & tab '
+        '& cname & linefeed\n'
+        '    end repeat\n'
+        '  end repeat\n'
+        'end tell\n'
+        'return out'
+    )
+
+
+def list_calendars(reader: Optional[Callable[[str], str]] = None) -> list[str]:
+    """The names of every calendar in Calendar.app. [] off macOS."""
+    if reader is None and platform.system() != "Darwin":
+        return []
+    run = reader or _osascript_out
+    try:
+        raw = run('tell application "Calendar" to get name of every calendar')
+    except Exception:
+        return []
+    return [n.strip() for n in (raw or "").split(",") if n.strip()]
+
+
+def read_calendar_events(config=None, days_ahead: int = 14,
+                         reader: Optional[Callable[[str], str]] = None
+                         ) -> list[dict]:
+    """Upcoming Calendar.app events as {title, ts, place, calendar}.
+
+    Restricted to `config.calendar_names` when that list is non-empty (empty =
+    all calendars). [] off macOS unless a `reader` is injected (tests).
+    """
+    if reader is None and platform.system() != "Darwin":
+        return []
+    run = reader or _osascript_out
+    days = int(getattr(config, "calendar_days", days_ahead) or days_ahead)
+    try:
+        raw = run(_calendar_script(days))
+    except Exception:
+        return []
+    selected = {n for n in (getattr(config, "calendar_names", []) or [])}
+    now = time.time()
+    out: list[dict] = []
+    for line in (raw or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        title, secs, loc, cal = parts[0].strip(), parts[1], parts[2].strip(), parts[3].strip()
+        if not title:
+            continue
+        if selected and cal not in selected:
+            continue
+        try:
+            ts = now + float(secs)
+        except ValueError:
+            continue
+        out.append({"title": title, "ts": ts, "place": loc, "calendar": cal})
+    out.sort(key=lambda e: e["ts"])
+    return out
+
+
+def _osascript_out(script: str) -> str:
+    import subprocess
+    r = subprocess.run(["osascript", "-e", script],
+                       capture_output=True, text=True, timeout=30)
+    return r.stdout
 
 
 # ---------------------------------------------------------------------------

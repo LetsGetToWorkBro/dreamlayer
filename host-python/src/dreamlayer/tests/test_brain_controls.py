@@ -269,6 +269,59 @@ class TestControls:
         assert [e["title"] for e in items] == ["Lunch"]          # only Standup gone
         assert any(i["text"] == "Removed event Standup" for i in brain.activity.recent())
 
+    def test_calendar_sync_merges_and_preserves_manual(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        # a fake macOS reader: two upcoming events across two calendars
+        soon = time.time() + 3600
+        reader = lambda config: [
+            {"title": "Standup", "ts": soon, "place": "Zoom", "calendar": "Work"},
+            {"title": "Dinner", "ts": soon + 7200, "place": "Home", "calendar": "Family"},
+        ]
+        brain = Brain(cfg, calendar_reader_fn=reader)
+        brain.add_event("Sign the lease", soon + 600, "Notary")     # a manual event
+        out = brain.sync_calendar()
+        assert out["synced"] == 2
+        titles = [e["title"] for e in brain.calendar(50)]
+        assert "Sign the lease" in titles and "Standup" in titles and "Dinner" in titles
+        # a second sync replaces the calendar events but keeps the manual one
+        reader2 = lambda config: [
+            {"title": "Standup", "ts": soon, "place": "Zoom", "calendar": "Work"}]
+        brain._calendar_reader = reader2
+        brain.sync_calendar()
+        titles = [e["title"] for e in brain.calendar(50)]
+        assert titles.count("Dinner") == 0                          # gone after re-sync
+        assert "Sign the lease" in titles                           # manual survives
+        assert "Standup" in titles
+
+    def test_calendar_sync_respects_selected_calendars(self, tmp_path):
+        from dreamlayer.ai_brain.server.macos_sources import read_calendar_events
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", calendar_names=["Work"]).save(cfg)
+        # the raw AppleScript-style output the reader parses (tab-separated)
+        raw = "Standup\t3600\tZoom\tWork\nDinner\t7200\tHome\tFamily\n"
+        events = read_calendar_events(BrainConfig(calendar_names=["Work"]),
+                                      reader=lambda script: raw)
+        assert [e["title"] for e in events] == ["Standup"]          # Family filtered out
+        assert events[0]["place"] == "Zoom" and events[0]["calendar"] == "Work"
+        assert events[0]["ts"] > time.time()                        # now + 3600s
+
+    def test_list_calendars_parses_names(self, tmp_path):
+        from dreamlayer.ai_brain.server.macos_sources import list_calendars
+        names = list_calendars(reader=lambda script: "Work, Family, Birthdays")
+        assert names == ["Work", "Family", "Birthdays"]
+
+    def test_toggle_on_pulls_immediately(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        soon = time.time() + 1800
+        reader = lambda config: [{"title": "Sync test", "ts": soon, "place": "",
+                                  "calendar": "Work"}]
+        brain = Brain(cfg, calendar_reader_fn=reader)
+        assert brain.calendar() == []
+        brain.apply_config({"calendar_sync": True})                 # flip the switch
+        assert any(e["title"] == "Sync test" for e in brain.calendar())
+
     def test_people_registry_add_update_remove(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)
