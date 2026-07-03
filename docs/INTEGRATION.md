@@ -39,6 +39,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/reminders` | token | open reminders + lists + sync state `{items[], lists[], sync, selected[]}` **(seam: AppleScript)** |
 | `/dreamlayer/rewind` | token | today merged into hour blocks — activity + messages + events `{blocks[], count}` |
 | `/dreamlayer/saga` | token | the progression profile — rank, level, XP, and every achievement's what/how/status |
+| `/dreamlayer/profile` | token | the mirrored Oracle user-model profile (the hub authors it; the Brain only stores) |
+| `/dreamlayer/brief/latest` | token | the scheduler's most recent morning brief (or `{}`) |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token (for the panel) |
 | `/dreamlayer/pair` | **local** | a `dreamlayer:` pairing code carrying the **LAN** brain_url + token |
@@ -50,6 +52,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 |---|---|---|
 | `/dreamlayer/brain/ask` | token | `{query}` → `Answer` (device → Mac mini → cloud, egress logged) |
 | `/dreamlayer/brain/explain` | token | `{label, image?, want?}` → object `Answer` |
+| `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall answered inline, brief inlined, others `{intent, …args}` |
+| `/dreamlayer/profile` | token | the hub pushes `user_snapshot()`; the Brain mirrors it (`profile.json`), never authors |
 | `/dreamlayer/brief` | token | `{agenda?, since?}` → morning brief `{text, bullets, missed}` |
 | `/dreamlayer/replies` | token | `{text}` → `{replies: [3 short replies]}` |
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → reindex |

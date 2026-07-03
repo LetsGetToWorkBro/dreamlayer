@@ -152,6 +152,7 @@ dreamlayer/                one repo, four surfaces
 ├── phone-app/             the mobile app (Expo / React Native)
 ├── laptop-companion/      the Mac mini installer (Ollama + launch-at-login)
 ├── docs/                  design, architecture, testing, per-lens specs
+│   └── gitbook/           the knowledge base — full reference with real renders
 └── scripts/               end-to-end demos (run_demo_*.py)
 ```
 
@@ -198,8 +199,11 @@ if offer: social_lens.confirm_introduction()           # only on a deliberate ta
 ```
 
 ```bash
-cd host-python && python -m pytest -q        # the full host suite (1000+ tests)
+cd host-python && python -m pytest -q        # the full host suite (1,368 tests)
 ```
+
+**Knowledge base — the complete reference with real renders of every card,
+screen, and panel: [`docs/gitbook/`](docs/gitbook/README.md).**
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 AI Brain: [`docs/AI_BRAIN.md`](docs/AI_BRAIN.md) ·

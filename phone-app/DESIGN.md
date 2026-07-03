@@ -121,6 +121,10 @@ All in [`src/ui/components/`](src/ui/components/). Compose screens from these.
 | **`StatusPill`** | Live / paused indicator for a header's right slot. |
 | **`HaloMirror`** | A phone-side mirror of the card currently on the glasses. |
 | **`Connector` set** | `ConnectorCard`, `SwitchRow`, `Bullet`, `PillButton` — the Brain screen's connect-a-thing vocabulary. |
+| **`QrScanner`** | The pairing scanner (lazy-loads `expo-camera`; degrades to "paste instead" where no camera). |
+| **`PrimaryButton` / `EyebrowLabel`** | The onboarding CTA and the tracked-caps label. |
+| **`OnboardingDots` / `HaloPairingRing`** | Onboarding progress and the pairing ring. |
+| **HUD previews** | `CardPreview`, `DreamCanvas`, `HorizonPreview` — SVG mirrors of the glasses' renderer, drawn in `haloPalette` as QA truth. |
 
 ### A screen, canonically
 

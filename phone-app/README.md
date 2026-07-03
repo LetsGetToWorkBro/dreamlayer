@@ -28,7 +28,8 @@ simulator/emulator.
 One `dreamlayer:…` code carries the Brain URL, token, and glasses id. The phone
 decodes it with the same codec the Brain encodes with
 ([`src/services/pairing.ts`](src/services/pairing.ts) ↔
-`host-python/.../pairing.py`), verified byte-for-byte in the test suite.
+`host-python/.../pairing.py`, kept byte-for-byte compatible; the Python side
+is covered by the host test suite).
 
 ## The three brain switches
 
@@ -41,17 +42,21 @@ decodes it with the same codec the Brain encodes with
 ## Layout
 
 ```
-app/                 expo-router screens
-  brain.tsx          the hub (default tab): connections, cloud, incognito, ask
-  now.tsx            live Halo mirror + quick actions
-  memories.tsx       your recall, grouped by day
-  rehearsal.tsx      Reality Compiler v2 surface
-  confluence.tsx     two wearers, one entangled sky
-  settings.tsx       privacy + danger zone
+app/                 expo-router screens — five tabs + Labs
+  brain.tsx          the hub (default tab): pairing, connections, cloud, incognito, ask
+  now.tsx            live Halo mirror, morning brief, voice box, quick actions
+  messages.tsx       Messages/Mail relay: suggested replies, approve-and-send
+  memories.tsx       your recall, grouped by day (+ ask-your-files when paired)
+  settings.tsx       every toggle: privacy, Oracle, wake, Labs, danger zone
+  rewind.tsx         (Labs) today's hour blocks from the Brain
+  saga.tsx           (Labs) rank, XP, achievements
+  profile.tsx        (Labs) what Oracle knows about you
+  rehearsal.tsx      (Labs) Reality Compiler v2 surface
+  confluence.tsx     (Labs) two wearers, one entangled sky
   onboarding.tsx     first-run flow
 src/
   state/             zustand stores (useBrainStore is the source of truth)
-  services/          pairing codec
+  services/          pairing codec, notifications, earcons, haptics
   ui/                the design system — see DESIGN.md
 ```
 

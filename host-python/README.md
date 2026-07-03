@@ -10,11 +10,11 @@ control panel) live here as one installable package, `dreamlayer`.
 ## Install
 
 ```bash
-pip install -e .            # editable install of the `dreamlayer` package
-python -m pytest -q         # the full suite (1000+ tests)
+pip install -e .[dev]       # editable install + pytest, pytest-asyncio, lupa
+python -m pytest -q         # the full suite (1,368 tests)
 ```
 
-Requires Python 3.10+. The runtime is largely standard-library; heavier
+Requires Python 3.11+. The runtime is largely standard-library; heavier
 providers (vision models, Ollama) are optional and plug in behind seams.
 
 ## Run the Mac Brain
@@ -45,10 +45,11 @@ dream_mode/         the ambient loop, Ghost Layer, world-anchored cards
 rem/                the sleep cycle: dream, consolidate, morning reel
 reality_compiler/   v2 Rehearsal → signed Figment → fixed on-glass stage
 confluence/         bonds, the entangled sky, TinCan, weather gifts
-hud/                card definitions, renderer, framebuffer pipeline
+hud/                card definitions, mirror renderer, goldens, earcon map
+demo/               the emissive-overlay demo/film pipeline (python -m dreamlayer.demo)
 memory/             anchors, storage, retrieval, ranking
 pipelines/          audio · vision · IMU · place-context ingestion
-bridge/             BLE protocol, hardware translation
+bridge/             BLE protocol, hardware translation, the Lua raster harness
 simulator/          a host-side stand-in for the glasses
 rosetta.py          visual translation (Rosetta = eye; Puente = ear/voice)
 lenses.py           the six-lens registry (the mental model, in code)
