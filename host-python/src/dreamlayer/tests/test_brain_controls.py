@@ -173,6 +173,31 @@ class TestControls:
         finally:
             srv.shutdown(); srv.server_close()
 
+    def test_summarize_emails_adds_a_glance(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", email_enabled=True, summarize_emails=True).save(cfg)
+        long_body = "This is a very long email. " * 20
+        fake = [{"channel": "email", "who": "a@b.co", "from_me": False,
+                 "subject": "Renewal", "text": long_body, "ts": 3.0},
+                {"channel": "imessage", "who": "Priya", "from_me": False,
+                 "text": "tea?", "ts": 4.0}]
+        brain = Brain(cfg, messages_fn=lambda config, n=20: fake)
+        srv = make_brain_server(brain, "127.0.0.1", 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        try:
+            data = json.loads(_op().open(urllib.request.Request(
+                url + "/dreamlayer/messages/recent",
+                headers={"X-DreamLayer-Token": "t"}), timeout=5).read())
+            items = {i["who"]: i for i in data["items"]}
+            # the long email gets a short summary; the text is untouched
+            assert "summary" in items["a@b.co"]
+            assert len(items["a@b.co"]["summary"]) < len(long_body)
+            assert "summary" not in items["Priya"]
+            assert data["summarize_emails"] is True
+        finally:
+            srv.shutdown(); srv.server_close()
+
     def test_message_draft_previews_without_sending(self, tmp_path):
         lb = Live(tmp_path)
         try:

@@ -57,6 +57,27 @@ def test_toggle_and_veil_silence_popups():
     assert orc.poll_messages(FEED) == []
 
 
+def test_texts_and_emails_toggle_independently():
+    orc = _orc()
+    orc.set_email_notifications(False)          # emails off, texts still on
+    sent = orc.poll_messages(FEED)
+    assert [c["primary"] for c in sent] == ["Marcus"]   # only the text popped
+    # now the reverse on a fresh feed
+    orc2 = _orc()
+    orc2.set_text_notifications(False)
+    sent2 = orc2.poll_messages(FEED)
+    assert [c["primary"] for c in sent2] == ["landlord@birch.co"]  # only email
+
+
+def test_email_popup_uses_brain_summary_when_present():
+    orc = _orc()
+    feed = [{"channel": "email", "who": "a@b.co", "from_me": False,
+             "subject": "Renewal", "text": "a very long body " * 40,
+             "summary": "Sign the renewal by Friday.", "ts": 30.0}]
+    sent = orc.poll_messages(feed)
+    assert sent[0]["detail"] == "Sign the renewal by Friday."
+
+
 def test_email_card_carries_subject():
     card = cards.message_notification("a@b.co", "Renewal — sign by Friday", "email")
     assert card["channel"] == "email" and card["headline"] == "Mail"

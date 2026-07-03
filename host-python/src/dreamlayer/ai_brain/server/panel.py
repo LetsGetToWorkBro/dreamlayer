@@ -280,7 +280,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Messages</div><h2>On your glasses</h2>
     <p class="lead">This Mac is the <b>bridge</b> to your Messages &amp; Mail — it lives here, so
       the Brain relays it out. You read hands-free on the <b>glasses</b> and reply by voice with a
-      tap to approve; you never touch the Mac. Here's a preview of what the glasses would surface now.</p>
+      tap to approve; you never touch the Mac. Texts and emails pop up separately (set on the phone).</p>
+    <div class="conn" style="border-top:0;padding-top:0"><div><div class="conn-t">Summarize long emails</div>
+      <div class="conn-s">Shorten emails to a one-line glance before they reach your glasses (uses the Brain's model; long ones only).</div></div>
+      <label class="sw"><input type="checkbox" id="summarize" onchange="saveSummarize()"><span class="track"></span></label></div>
     <ul id="msgfeed" class="feed"></ul>
   </section>
 
@@ -352,6 +355,7 @@ async function load(){
   // ops
   $("quiet").value=c.config.quiet_hours||"";$("retain").value=c.config.retention_days||0;
   $("msgCard").style.display=c.config.email_enabled?"":"none";
+  $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
   refreshStatus(); loadHistory(); loadHealth();
 }
@@ -544,9 +548,15 @@ async function loadMessages(){let r;try{r=await api("/dreamlayer/messages/recent
     (r.enabled?' — nothing to relay right now.':'. Turn on “Read email &amp; iMessage” to relay them to your glasses.')+'</li>';return;}
   ul.innerHTML=r.items.map(m=>{
     const who=m.from_me?"You":esc(m.who||"unknown");
-    const body=esc(m.subject?m.subject+" — "+(m.text||""):(m.text||"")).slice(0,160);
+    const raw=m.summary?m.summary:(m.subject?m.subject+" — "+(m.text||""):(m.text||""));
+    const body=esc(raw).slice(0,160)+(m.summary?' ':'');
+    const tag=m.summary?'summary':m.channel;
     return `<li><div><div class="q">${who}</div><div class="a">${body}</div></div>`+
-      `<span class="tag ${m.channel==='email'?'config':'pair'}">${esc(m.channel)}</span></li>`;}).join("");
+      `<span class="tag ${m.channel==='email'?'config':'pair'}">${esc(tag)}</span></li>`;}).join("");
+}
+async function saveSummarize(){
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({summarize_emails:$("summarize").checked})});
+  toast($("summarize").checked?"Emails will be summarized":"Full emails");load();
 }
 
 /* ops */

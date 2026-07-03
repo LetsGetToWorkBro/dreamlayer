@@ -152,8 +152,8 @@ class Brain:
     def apply_config(self, updates: dict) -> None:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
-                  "email_enabled", "cloud_enabled", "network_mode",
-                  "cloud_base_url", "cloud_api_key", "cloud_model",
+                  "email_enabled", "summarize_emails", "cloud_enabled",
+                  "network_mode", "cloud_base_url", "cloud_api_key", "cloud_model",
                   "semantic_search", "index_extensions", "max_file_kb",
                   "exclude_globs", "quiet_hours", "retention_days"):
             if k in updates:
@@ -194,6 +194,24 @@ class Brain:
 
     def explain(self, label: str, image_b64, want: str) -> Optional[Answer]:
         return vision_answer(self._backend, label, image_b64, want)
+
+    def summarize(self, text: str, max_chars: int = 220) -> str:
+        """One-glance summary of a long email. Uses the local model when there
+        is one; otherwise clips to the first sentence — never blocks the feed."""
+        text = (text or "").strip()
+        if len(text) <= max_chars:
+            return text
+        if self._backend is not None:
+            try:
+                s = self._backend.chat(
+                    "Summarize this email in one short sentence a person can "
+                    "read at a glance. Just the sentence:\n\n" + text[:2000])
+                if s and s.strip():
+                    return s.strip()
+            except Exception:
+                pass
+        head = text.split(". ")[0].strip()
+        return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
@@ -303,7 +321,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     items = brain._messages_fn(brain.config, 20)
                 except Exception:
                     items = []
-                self._json(200, {"items": items, "enabled": True})
+                if brain.config.summarize_emails:
+                    for it in items:
+                        if it.get("channel") == "email":
+                            it["summary"] = brain.summarize(it.get("text", ""))
+                self._json(200, {"items": items, "enabled": True,
+                                 "summarize_emails": brain.config.summarize_emails})
             elif path == "/dreamlayer/model/status":
                 self._json(200, probe_ollama(brain.config))
             elif path == "/dreamlayer/browse":

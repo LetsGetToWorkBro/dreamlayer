@@ -27,6 +27,7 @@ class BrainConfig:
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
+    summarize_emails: bool = False  # shorten emails to a glance before relaying
     # network posture (product default = connected): "connected" reaches the
     # internet + cloud; "lan_only" is the advanced home-only mode.
     network_mode: str = "connected"

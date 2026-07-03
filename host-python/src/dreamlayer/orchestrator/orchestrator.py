@@ -86,9 +86,11 @@ class Orchestrator:
         self.glasses_id = None                # set at pairing
         # Live message pop-ups: a text/email arriving flashes on the glasses.
         # The Mac mini Brain is the bridge (that's where Messages/Mail live);
-        # poll_messages() turns new *incoming* ones into HUD cards. Silenced by
-        # the Privacy Veil like everything else, and toggleable.
-        self.notify_messages = True
+        # poll_messages() turns new *incoming* ones into HUD cards. Texts and
+        # emails are separate toggles (texts are the useful default; emails run
+        # long, so the Brain can pre-summarize them). Silenced by the Veil.
+        self.notify_texts = True
+        self.notify_emails = True
         self._msg_seen_ts = 0.0
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
@@ -518,15 +520,23 @@ class Orchestrator:
     # -- live message pop-ups (texts/emails flash on the glasses) --------
 
     def set_message_notifications(self, on: bool = True) -> None:
-        self.notify_messages = on
+        """Both channels at once (convenience)."""
+        self.notify_texts = self.notify_emails = on
+
+    def set_text_notifications(self, on: bool = True) -> None:
+        self.notify_texts = on
+
+    def set_email_notifications(self, on: bool = True) -> None:
+        self.notify_emails = on
 
     def poll_messages(self, items: list, now: float | None = None) -> list:
         """Turn newly-arrived *incoming* messages into glasses pop-ups.
 
         `items` is the Brain's recent-messages feed (fetched by the hub from
         /dreamlayer/messages/recent). Only messages newer than the last seen,
-        and not sent by you, pop up — silenced by the Privacy Veil, and only
-        when notifications are on. Returns the cards it flashed. Idempotent:
+        and not sent by you, pop up — texts and emails gated separately, each
+        silenced by the Privacy Veil. Emails use the Brain's `summary` when it
+        provided one (they run long). Returns the cards it flashed. Idempotent:
         re-polling the same feed shows nothing new.
         """
         cards_sent = []
@@ -537,12 +547,18 @@ class Orchestrator:
                 newest = max(newest, ts)
                 continue
             newest = max(newest, ts)
-            if not self.notify_messages or not self.privacy.allow_capture():
+            is_email = m.get("channel") == "email"
+            if not (self.notify_emails if is_email else self.notify_texts):
                 continue
-            card = cards.message_notification(
-                m.get("who", ""), m.get("subject") and
-                f"{m['subject']} — {m.get('text','')}" or m.get("text", ""),
-                m.get("channel", "imessage"))
+            if not self.privacy.allow_capture():
+                continue
+            if is_email:
+                body = m.get("summary") or (f"{m['subject']} — {m.get('text','')}"
+                                            if m.get("subject") else m.get("text", ""))
+            else:
+                body = m.get("text", "")
+            card = cards.message_notification(m.get("who", ""), body,
+                                              m.get("channel", "imessage"))
             self.bridge.send_card(card, event="message")
             cards_sent.append(card)
         self._msg_seen_ts = newest

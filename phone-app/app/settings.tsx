@@ -25,8 +25,12 @@ export default function Settings() {
   const { service } = useMemoryStore();
   const incognito = useBrainStore((s) => s.incognito);
   const setIncognito = useBrainStore((s) => s.setIncognito);
-  const notifyGlasses = useBrainStore((s) => s.notifyGlasses);
-  const setNotifyGlasses = useBrainStore((s) => s.setNotifyGlasses);
+  const notifyTexts = useBrainStore((s) => s.notifyTexts);
+  const setNotifyTexts = useBrainStore((s) => s.setNotifyTexts);
+  const notifyEmails = useBrainStore((s) => s.notifyEmails);
+  const setNotifyEmails = useBrainStore((s) => s.setNotifyEmails);
+  const summarizeEmails = useBrainStore((s) => s.summarizeEmails);
+  const setSummarizeEmails = useBrainStore((s) => s.setSummarizeEmails);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -54,11 +58,35 @@ export default function Settings() {
         />
         <Row
           label="Text pop-ups on glasses"
-          sub="New texts & emails flash on the Halo (silenced by the Privacy Veil)"
+          sub="New texts flash on the Halo (silenced by the Privacy Veil)"
           right={
             <Switch
-              value={notifyGlasses}
-              onValueChange={setNotifyGlasses}
+              value={notifyTexts}
+              onValueChange={setNotifyTexts}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Email pop-ups on glasses"
+          sub="New emails flash too — separate from texts"
+          right={
+            <Switch
+              value={notifyEmails}
+              onValueChange={setNotifyEmails}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Summarize long emails"
+          sub="The Brain shortens long emails to a one-line glance"
+          right={
+            <Switch
+              value={summarizeEmails}
+              onValueChange={setSummarizeEmails}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
               thumbColor={colors.textPrimary}
             />

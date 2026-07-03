@@ -35,7 +35,9 @@ type BrainState = {
   cloud: boolean; // the remembered preference (independent switch)
   incognito: boolean;
   capturePaused: boolean;
-  notifyGlasses: boolean; // texts/emails pop up on the glasses
+  notifyTexts: boolean; // texts pop up on the glasses
+  notifyEmails: boolean; // emails pop up on the glasses (separate)
+  summarizeEmails: boolean; // Brain shortens long emails before relaying
   hydrated: boolean;
 
   // derived
@@ -47,7 +49,9 @@ type BrainState = {
   setCloud: (on: boolean) => void;
   setIncognito: (on: boolean) => void;
   setCapturePaused: (on: boolean) => void;
-  setNotifyGlasses: (on: boolean) => void;
+  setNotifyTexts: (on: boolean) => void;
+  setNotifyEmails: (on: boolean) => void;
+  setSummarizeEmails: (on: boolean) => void;
   connectGlasses: (id: string) => void;
   disconnectGlasses: () => void;
 
@@ -71,7 +75,9 @@ function persist(s: BrainState) {
     cloud: s.cloud,
     incognito: s.incognito,
     capturePaused: s.capturePaused,
-    notifyGlasses: s.notifyGlasses,
+    notifyTexts: s.notifyTexts,
+    notifyEmails: s.notifyEmails,
+    summarizeEmails: s.summarizeEmails,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -102,7 +108,9 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   cloud: true,
   incognito: false,
   capturePaused: false,
-  notifyGlasses: true,
+  notifyTexts: true,
+  notifyEmails: true,
+  summarizeEmails: false,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -134,9 +142,29 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     persist(get());
   },
 
-  setNotifyGlasses: (on) => {
-    set({ notifyGlasses: on });
+  setNotifyTexts: (on) => {
+    set({ notifyTexts: on });
     persist(get());
+  },
+
+  setNotifyEmails: (on) => {
+    set({ notifyEmails: on });
+    persist(get());
+  },
+
+  setSummarizeEmails: (on) => {
+    set({ summarizeEmails: on });
+    const s = get();
+    persist(s);
+    // this one lives on the Brain (it has the model) — push it there
+    const m = s.macMini;
+    if (m.connected && m.url) {
+      fetch(m.url + "/dreamlayer/config", {
+        method: "POST",
+        headers: headers(m),
+        body: JSON.stringify({ summarize_emails: on }),
+      }).catch(() => {});
+    }
   },
 
   connectGlasses: (id) => {
