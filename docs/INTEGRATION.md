@@ -60,6 +60,7 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/upload?folder=&name=` | token | raw file body → dropped into a watched folder |
 | `/dreamlayer/config` | token | partial config patch (model, cloud, filters, quiet hours, …) |
 | `/dreamlayer/reindex` | token | `{}` → rebuild the index now |
+| `/dreamlayer/model/pull` | **local** | `{model}` → one-click `ollama pull` via Ollama's HTTP API `{ok, status, model}` |
 | `/dreamlayer/message/draft` | token | `{channel,to,subject?,text}` → the exact send script (preview) |
 | `/dreamlayer/message/send` | **local** | `{…, approved:true}` → sends **(seam: osascript)**; unapproved is refused |
 | `/dreamlayer/cloud/test` | **local** | `{}` → `{ok, reply\|error}` round-trip to the cloud provider |
@@ -135,6 +136,18 @@ Everything above is code; here is the short list of what a real build supplies.
 | **Reach-anywhere relay** | pairing `relay_url` + `brainFetch` fallback | Host a secure relay/tunnel to the Mac mini; put its URL in the pairing bundle. The phone client already prefers LAN and falls back to it. |
 | **Local model (optional)** | `ai_brain/server/backends.py` (Ollama) | Ollama on the Mac mini powers written answers, vision, summaries, brief, and smart replies. Keyword works with none. See `OLLAMA_SETUP.md`. |
 | **Cloud model (optional)** | Brain config `cloud_*` | An OpenAI-compatible key/model, set in the panel; only ever a fallback, logged on every call. |
+
+## 3b. Mac appliance
+
+- **Menu-bar app** — `python -m dreamlayer.ai_brain.menubar` (`rumps`, macOS):
+  a status dot (green / yellow-unconfigured / sunglasses-incognito / offline),
+  "Open panel", one-click "Sync now" (calendar+contacts+reminders) and
+  "Incognito". Pure core (`status_summary`, `launch_agent_plist`) is tested.
+- **Launch at login** — `python -m dreamlayer.ai_brain.menubar --install-login`
+  writes a `~/Library/LaunchAgents/vision.dreamlayer.brain.plist` that starts
+  the Brain server at login (`RunAtLoad` + `KeepAlive`).
+- **One-click model pull** — the panel's model card shows a **⬇ Pull** button
+  per missing Ollama model, calling `POST /dreamlayer/model/pull` (local-only).
 
 ## 4. Privacy invariants (hold at every seam)
 
