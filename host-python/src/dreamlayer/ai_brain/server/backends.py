@@ -25,6 +25,39 @@ def _urllib_post(url: str, payload: dict, timeout: float = 30.0) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _urllib_get(url: str, timeout: float = 4.0) -> dict:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(urllib.request.Request(url), timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def probe_ollama(config, timeout: float = 4.0) -> dict:
+    """Is Ollama up, and which of the configured models are pulled?
+
+    Returns {reachable, url, models, want, have} so the panel can show a live
+    setup status per model instead of failing silently.
+    """
+    url = (getattr(config, "ollama_url", "") or "http://127.0.0.1:11434").rstrip("/")
+    want = {"chat":   getattr(config, "ollama_chat_model", "") or "",
+            "vision": getattr(config, "ollama_vision_model", "") or "",
+            "embed":  getattr(config, "ollama_embed_model", "") or ""}
+    try:
+        data = _urllib_get(url + "/api/tags", timeout)
+        names = [m.get("name", "") for m in (data.get("models") or [])]
+    except Exception:
+        return {"reachable": False, "url": url, "models": [], "want": want,
+                "have": {k: False for k in want}}
+
+    def present(name: str) -> bool:
+        if not name:
+            return False
+        base = name.split(":")[0]
+        return any(n == name or n.split(":")[0] == base for n in names)
+
+    return {"reachable": True, "url": url, "models": names, "want": want,
+            "have": {k: present(v) for k, v in want.items()}}
+
+
 class OllamaBackend:
     """Chat + vision + embeddings via a local Ollama server."""
 
