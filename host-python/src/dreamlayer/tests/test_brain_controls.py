@@ -214,6 +214,23 @@ class TestControls:
         # 'since' powers what-did-I-miss: nothing after ts 7 → clear
         assert brain.brief(since=99)["missed"] == {"texts": 0, "emails": 0}
 
+    def test_backup_restore_round_trips(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", cloud_model="gpt-4o-mini", quiet_hours="22:00-07:00").save(cfg)
+        brain = Brain(cfg)
+        brain.activity.add("folder", "Added folder /x")
+        brain.history.add("q", "a", "laptop", ["f"], ts=1)
+        snap = brain.export_backup()
+        assert snap["config"]["quiet_hours"] == "22:00-07:00"
+        # mutate, then restore from the snapshot
+        brain.config.quiet_hours = ""; brain.config.cloud_model = "other"; brain.save()
+        brain.activity.clear(); brain.history.clear()
+        brain.import_backup(snap)
+        assert brain.config.quiet_hours == "22:00-07:00"      # settings back
+        assert brain.config.cloud_model == "gpt-4o-mini"
+        assert any(i["kind"] == "folder" for i in brain.activity.recent())  # logs back
+        assert brain.history.recent()[0]["query"] == "q"
+
     def test_calendar_feeds_brief(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)

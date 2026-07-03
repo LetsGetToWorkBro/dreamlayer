@@ -6,6 +6,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
 import { EmptyState } from "../src/ui/components/EmptyState";
+import { pushLocal } from "../src/services/notify";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
@@ -41,14 +42,31 @@ export default function Messages() {
     }
   };
 
+  const notifyTexts = useBrainStore((s) => s.notifyTexts);
+  const notifyEmails = useBrainStore((s) => s.notifyEmails);
+  const lastSeen = React.useRef(0);
+  const firstLoad = React.useRef(true);
+
   const refresh = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     const r = await fetchMessages();
+    const incoming = r.items.filter((m) => !m.from_me);
+    const newest = incoming.reduce((mx, m) => Math.max(mx, m.ts || 0), 0);
+    // mirror genuinely-new messages to a local notification (not the backlog)
+    if (!firstLoad.current) {
+      for (const m of incoming.filter((m) => (m.ts || 0) > lastSeen.current)) {
+        const on = m.channel === "email" ? notifyEmails : notifyTexts;
+        if (on) pushLocal(m.who, m.subject ? `${m.subject} — ${m.text}` : m.text);
+      }
+    }
+    lastSeen.current = Math.max(lastSeen.current, newest);
+    firstLoad.current = false;
     setItems(r.items);
     setEnabled(r.enabled);
     setLoading(false);
   };
   useEffect(() => {
+    firstLoad.current = true;
     refresh();
     // live: pull the Brain's feed on a timer so new messages appear on their own
     const id = setInterval(() => refresh(false), 12000);

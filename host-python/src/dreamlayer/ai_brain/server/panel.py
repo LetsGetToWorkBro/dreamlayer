@@ -274,6 +274,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <button class="sm" onclick="rotateToken()">Rotate</button></div></div>
     <div class="conn"><div><div class="conn-t">Cloud egress</div>
       <div class="conn-s" id="egress">Every time anything leaves for the cloud, it's counted and logged below.</div></div></div>
+    <div class="conn"><div><div class="conn-t">Backup</div>
+      <div class="conn-s">Download everything — settings, history, agenda — to restore later. Contains your keys, so keep it safe.</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="sm ghost" onclick="backup()">Download</button>
+        <button class="sm ghost" onclick="document.getElementById('restoreFile').click()">Restore</button>
+        <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="restore(event)"></div></div>
     <div class="conn" style="border-bottom:0"><div><div class="conn-t">Erase</div>
       <div class="conn-s">Clear what the Brain has kept. This can't be undone.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -540,6 +546,17 @@ async function clearData(what){const names={history:"all questions",activity:"th
   await api("/dreamlayer/clear",{method:"POST",body:JSON.stringify({what})});toast("Erased "+what);load();}
 async function reindex(){toast("Re-indexing…");const r=await api("/dreamlayer/reindex",{method:"POST",body:"{}"});
   toast("Indexed "+(r.stats?r.stats.files:0)+" files");load();}
+async function backup(){const r=await api("/dreamlayer/backup");
+  if(r.error){toast("Backup is local-only — open localhost");return;}
+  const blob=new Blob([JSON.stringify(r,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="dreamlayer-backup.json";a.click();URL.revokeObjectURL(a.href);toast("Backup downloaded");}
+async function restore(ev){const f=ev.target.files&&ev.target.files[0];ev.target.value="";if(!f)return;
+  if(!confirm("Restore from this backup? It replaces your current settings, history and agenda."))return;
+  try{const data=JSON.parse(await f.text());
+    const r=await api("/dreamlayer/restore",{method:"POST",body:JSON.stringify(data)});
+    if(r.error){toast(r.error);}else{toast("Restored");load();}}
+  catch(e){toast("That's not a valid backup file");}}
 
 /* knowledge filters */
 function toggleAdv(){const a=$("adv"),open=a.style.maxHeight!=="0px"&&a.style.maxHeight!=="";
