@@ -72,6 +72,9 @@ class Brain:
         self._started_ts = time.time()
         self.last_index_ts = 0.0
         self.email_docs = 0
+        self.last_brief = None
+        self._brief_ran_day = None
+        self._brief_stop = None
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -155,7 +158,7 @@ class Brain:
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_base_url", "cloud_api_key", "cloud_model",
                   "semantic_search", "index_extensions", "max_file_kb",
-                  "exclude_globs", "quiet_hours", "retention_days"):
+                  "exclude_globs", "quiet_hours", "retention_days", "brief_hour"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()
@@ -212,6 +215,36 @@ class Brain:
                 pass
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
+
+    def maybe_run_brief(self, now: float | None = None) -> bool:
+        """If it's the configured brief hour and today's brief hasn't run yet,
+        generate it and stash it for delivery. Returns True when it ran."""
+        hour = self.config.brief_hour
+        if hour is None or hour < 0:
+            return False
+        lt = time.localtime(now if now is not None else time.time())
+        day = (lt.tm_year, lt.tm_yday)
+        if lt.tm_hour != hour or getattr(self, "_brief_ran_day", None) == day:
+            return False
+        self._brief_ran_day = day
+        b = self.brief()
+        self.last_brief = {"text": b["text"], "bullets": b["bullets"],
+                           "ts": time.time()}
+        self.activity.add("brief", "Morning brief ready")
+        return True
+
+    def start_brief_scheduler(self, interval: float = 60.0) -> None:
+        if getattr(self, "_brief_stop", None) is not None:
+            return
+        self._brief_stop = threading.Event()
+
+        def loop():
+            while not self._brief_stop.wait(interval):
+                try:
+                    self.maybe_run_brief()
+                except Exception:
+                    pass
+        threading.Thread(target=loop, daemon=True).start()
 
     def export_backup(self) -> dict:
         """A full, restorable snapshot of the Brain — config (incl. secrets),
@@ -428,6 +461,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/calendar":
                 self._json(200, {"items": brain.calendar()})
+            elif path == "/dreamlayer/brief/latest":
+                self._json(200, brain.last_brief or {})
             elif path == "/dreamlayer/messages/recent":
                 # the live Messages/Mail feed the glasses read hands-free
                 if not brain.config.email_enabled:

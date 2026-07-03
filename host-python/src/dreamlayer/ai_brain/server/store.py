@@ -46,6 +46,7 @@ class BrainConfig:
     # -- ops (batch 4) ---------------------------------------------------
     quiet_hours: str = ""           # "22:00-07:00" → auto-incognito window
     retention_days: int = 0         # 0 = keep forever
+    brief_hour: int = -1            # deliver the morning brief at this hour; -1 = off
 
     @property
     def lan_only(self) -> bool:

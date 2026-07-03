@@ -12,6 +12,7 @@ import { useEntrance } from "../src/ui/anim";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
+import { pushLocal } from "../src/services/notify";
 
 export default function Now() {
   const router = useRouter();
@@ -19,12 +20,35 @@ export default function Now() {
   const macConnected = useBrainStore((s) => s.macMini.connected);
   const brainKind = macConnected ? "Mac mini" : "phone";
   const getBrief = useBrainStore((s) => s.getBrief);
+  const getLatestBrief = useBrainStore((s) => s.getLatestBrief);
   const sendVoice = useBrainStore((s) => s.sendVoice);
   const mirror = useEntrance(60);
   const [brief, setBrief] = React.useState<string | null>(null);
   const [briefing, setBriefing] = React.useState(false);
   const [cmd, setCmd] = React.useState("");
   const [voiceOut, setVoiceOut] = React.useState<string | null>(null);
+  const briefSeen = React.useRef(0);
+
+  // Surface the brief the Brain's scheduler delivered on its own at brief_hour,
+  // and mirror a fresh one to a local notification so it reaches you off-Halo.
+  React.useEffect(() => {
+    if (!macConnected) return;
+    let alive = true;
+    const pull = async () => {
+      const b = await getLatestBrief();
+      if (!alive || !b || b.ts <= briefSeen.current) return;
+      const first = briefSeen.current === 0;
+      briefSeen.current = b.ts;
+      setBrief(b.text);
+      if (!first) pushLocal("Morning brief", b.text);
+    };
+    pull();
+    const id = setInterval(pull, 90_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [macConnected, getLatestBrief]);
 
   const doBrief = async () => {
     setBriefing(true);
