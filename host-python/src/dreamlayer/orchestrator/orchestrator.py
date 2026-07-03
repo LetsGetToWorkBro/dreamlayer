@@ -167,6 +167,13 @@ class Orchestrator:
         # note_credibility) and the pattern of prior flags into one graded read.
         self._credibility: dict = {}           # speaker -> latest CredibilityVector
         self._speaker_flags: dict = {}         # speaker -> how often they've flagged
+        # Truth Lens (delivery read): the linguistic channel is computed for real
+        # from each caption; face (AU) + voice (prosody) are device seams fed via
+        # observe_face / observe_voice. Its per-speaker CredibilityVector flows
+        # into Discernment through note_credibility. Off by default.
+        from ..truth_lens.analyzer import TruthLens
+        self.truth = TruthLens(cooldown_s=0.0, privacy=self.privacy)
+        self.truthlens_on = False
         # Answer-ahead — overhears a question aimed at you and surfaces the
         # answer from your own knowledge in time to say it yourself. No wake
         # word. Off by default; answers route through _answer_question (the same
@@ -966,6 +973,11 @@ class Orchestrator:
             else:
                 self.user.note_person(u.speaker)
             self._maybe_publish_profile()
+        # Truth Lens: read *how* it was said (delivery) for whoever's speaking,
+        # and feed it to Discernment before the fact-check runs. Opt-in.
+        if (u is not None and self.truthlens_on and not u.is_mine()
+                and not self.focus_active()):
+            self._read_delivery(u)
         # Veritas: fact-check the line as it lands — self-contradiction (from the
         # ledger) and a world check (Brain/cloud seam). Opt-in; held during Focus.
         if u is not None and self.factcheck_on and not self.focus_active():
@@ -1008,10 +1020,38 @@ class Orchestrator:
         self.factcheck_on = on
 
     def note_credibility(self, speaker: str, vector) -> None:
-        """Truth Lens seam: hand in the current delivery read (a CredibilityVector)
-        for whoever's speaking, so Discernment can fuse *how* they said it with
-        *what* they said. The live face/voice pipeline is the device seam."""
+        """Hand in the current delivery read (a CredibilityVector) for whoever's
+        speaking, so Discernment can fuse *how* they said it with *what* they
+        said. Called by the live Truth Lens wiring, or directly by a device."""
         self._credibility[(speaker or "").strip().lower()] = vector
+
+    def set_truthlens(self, on: bool = True) -> None:
+        """Turn the live delivery read (Truth Lens → Discernment) on or off."""
+        self.truthlens_on = on
+
+    def observe_face(self, frame) -> None:
+        """Device seam: hand the Truth Lens a camera frame of the person you're
+        with (drives the micro-expression / AU channel + face-match). No-op
+        unless the delivery read is on and capture is allowed."""
+        if self.truthlens_on and self.privacy.allow_capture():
+            self.truth.feed_frame(frame)
+
+    def observe_voice(self, mic_fft, amplitude) -> None:
+        """Device seam: hand the Truth Lens a mic FFT window + amplitude (drives
+        the voice-stress / prosody channel)."""
+        if self.truthlens_on and self.privacy.allow_capture():
+            self.truth.feed_audio(mic_fft, amplitude)
+
+    def _read_delivery(self, utterance) -> None:
+        """Run the Truth Lens for the current speaker: the linguistic channel
+        from this line (real) plus whatever face/voice the device has fed, fused
+        against the speaker's baseline → a CredibilityVector into Discernment."""
+        who = (utterance.speaker or "").strip()
+        self.truth.set_contact(who.lower() or None, who or None)
+        self.truth.feed_transcript(utterance.text)
+        vector = self.truth.assess()          # ungated: we want reassuring reads too
+        if vector is not None:
+            self.note_credibility(who, vector)
 
     def _fact_check(self, utterance) -> None:
         prior = [x.text for x in self.conversation.by_speaker(utterance.speaker)

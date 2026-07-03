@@ -134,6 +134,15 @@ device seams are the callables they accept.
   strongest flag, while a false claim delivered *sincerely* reads as an honest
   mistake, not a lie. `_fact_check` runs it and folds the tag ("elevated · seen
   before") into the `fact_check` card footer + a `stance`/`headline` on the card.
+  The delivery read is **live**: with `set_truthlens(True)`, `_read_delivery`
+  runs the Truth Lens for the current speaker on every other-speaker line — the
+  **linguistic** channel is computed for real from the caption, while **face**
+  (AU) and **voice** (prosody) are device seams fed by `observe_face(frame)` /
+  `observe_voice(mic_fft, amplitude)`. `TruthLens.assess()` fuses them *without*
+  the HUD display gate (Discernment wants the reassuring reads too) against the
+  speaker's baseline (`set_contact`) and the result flows in via
+  `note_credibility`. Delivery only sways the verdict once a per-contact baseline
+  calibrates (≥10 encounters) — a stranger's micro-expressions stay noise.
 - **Answer-ahead copilot** — with `set_copilot(True)`, when *someone else* asks a
   question in `ingest_caption`, `orchestrator/answer_ahead.py` decides if it's a
   real, answerable question (a wh-question, or one aimed at you — never a

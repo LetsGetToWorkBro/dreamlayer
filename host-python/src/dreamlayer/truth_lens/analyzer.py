@@ -191,6 +191,37 @@ class TruthLens:
         self._last_emit = now
         return result
 
+    def assess(self):
+        """Fuse the current channels into a CredibilityVector *without* the HUD's
+        display gating — for callers (Discernment) that want the read even when
+        it's reassuring, since "credible delivery" is exactly what turns a wrong
+        claim into an honest mistake rather than a lie. Also advances the
+        per-contact baseline, like `tick`. Returns None only with no signal."""
+        if not self._privacy.allow_capture():
+            return None
+        if (self._current_au is None and self._current_prosody is None
+                and self._current_linguistic is None):
+            return None
+        baseline = None
+        if self._current_contact_id:
+            baseline = self._store.get_baseline(self._current_contact_id)
+        credibility = self._fusion.fuse(
+            self._current_au, self._current_prosody,
+            self._current_linguistic, baseline)
+        if self._current_contact_id:
+            self._store.update_baseline(
+                self._current_contact_id, self._current_au,
+                self._current_prosody, self._current_linguistic)
+        return credibility
+
+    def set_contact(self, contact_id: Optional[str],
+                    name: Optional[str] = None) -> None:
+        """Set the current speaker directly, when identity comes from speaker
+        diarization or the Social Lens rather than a face match — so per-contact
+        baselines still apply. Passing None clears it (stranger mode)."""
+        self._current_contact_id = contact_id or None
+        self._current_contact_name = name
+
     def reset(self) -> None:
         """Clear session state (call when conversation ends)."""
         self._current_au = None
