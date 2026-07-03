@@ -35,6 +35,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/model/status` | token | Ollama reachability + which configured models are pulled |
 | `/dreamlayer/people` | token | the dossier registry — everyone you've introduced `{name, note, tags, ts}` |
 | `/dreamlayer/calendars` | token | macOS calendars available to sync + current settings `{items[], sync, selected[], last_sync}` **(seam: AppleScript)** |
+| `/dreamlayer/contacts` | token | Contacts sync state `{sync, last_sync, count}` |
+| `/dreamlayer/reminders` | token | open reminders + lists + sync state `{items[], lists[], sync, selected[]}` **(seam: AppleScript)** |
 | `/dreamlayer/rewind` | token | today merged into hour blocks — activity + messages + events `{blocks[], count}` |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token (for the panel) |
@@ -53,6 +55,8 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/calendar` | token | `{title, ts, place}` adds an event; `{remove:true, title, ts}` removes → `{items}` |
 | `/dreamlayer/people` | token | `{name, note?, tags?}` upserts a person; `{remove:true, name}` removes → `{items}` |
 | `/dreamlayer/calendar/sync` | token | `{}` → pull macOS Calendar.app into the agenda now `{items, synced}` |
+| `/dreamlayer/contacts/sync` | token | `{}` → pull Contacts.app into the People registry `{items, synced}` |
+| `/dreamlayer/reminders/sync` | token | `{}` → pull open Reminders.app to-dos `{items, synced}` |
 | `/dreamlayer/upload?folder=&name=` | token | raw file body → dropped into a watched folder |
 | `/dreamlayer/config` | token | partial config patch (model, cloud, filters, quiet hours, …) |
 | `/dreamlayer/reindex` | token | `{}` → rebuild the index now |

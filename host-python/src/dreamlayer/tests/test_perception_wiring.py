@@ -95,3 +95,21 @@ def test_veil_blocks_commitment_capture():
     orc.privacy.pause()
     orc.ingest_caption("I'll send the report tonight", speaker="")
     assert orc.db.commitments() == []
+
+
+# -- Contacts sync fans out to the face database -----------------------------
+
+def test_load_contact_faces_enrolls_and_is_recallable():
+    orc = Orchestrator(FakeBridge())
+    # a contact whose photo the (seam) embedder turns into a 512-d vector
+    embed = lambda photo: [0.2] * 512
+    n = orc.load_contact_faces(
+        [{"name": "Maya", "photo": b"jpeg", "company": "Studio"}], face_embed_fn=embed)
+    assert n == 1 and orc.social.contact_count == 1
+
+
+def test_load_contact_faces_skips_without_a_usable_face():
+    orc = Orchestrator(FakeBridge())
+    # no photo and no embedding → stays in the People registry only, not the face DB
+    assert orc.load_contact_faces([{"name": "No Photo"}]) == 0
+    assert orc.social.contact_count == 0

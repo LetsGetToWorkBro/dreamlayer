@@ -322,6 +322,46 @@ class TestControls:
         brain.apply_config({"calendar_sync": True})                 # flip the switch
         assert any(e["title"] == "Sync test" for e in brain.calendar())
 
+    def test_contacts_sync_fills_people_and_preserves_manual(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        brain._contacts_reader = lambda config: [
+            {"name": "Marcus Reyes", "company": "Atlas", "role": "Landlord", "email": "m@x.co"},
+            {"name": "Priya Anand", "company": "", "role": "Designer", "email": ""},
+        ]
+        brain.add_person("Marcus Reyes", "my landlord — lease Friday")   # a manual note
+        out = brain.sync_contacts()
+        assert out["synced"] == 1                       # Priya added; Marcus not shadowed
+        people = {p["name"]: p for p in brain.people()}
+        assert people["Marcus Reyes"]["note"] == "my landlord — lease Friday"   # manual wins
+        assert people["Marcus Reyes"]["source"] == "manual"
+        assert people["Priya Anand"]["source"] == "contacts" and "Designer" in people["Priya Anand"]["note"]
+
+    def test_reminders_sync_and_feed_brief(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", reminder_lists=["Work"]).save(cfg)
+        brain = Brain(cfg)
+        soon = time.time() + 3600
+        brain._reminders_reader = lambda config: [
+            {"title": "File the taxes", "ts": soon, "list": "Work"},
+            {"title": "Buy milk", "ts": 0.0, "list": "Home"},        # undated
+        ]
+        out = brain.sync_reminders()
+        assert out["synced"] == 2
+        titles = [r["title"] for r in brain.reminders()]
+        assert titles[0] == "File the taxes"            # dated sorts first
+        assert any("File the taxes" in b for b in brain.brief()["bullets"])   # due → brief
+
+    def test_contacts_toggle_pulls_immediately(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        brain._contacts_reader = lambda config: [{"name": "Sync Person", "company": "Co", "role": "", "email": ""}]
+        assert brain.people() == []
+        brain.apply_config({"contacts_sync": True})
+        assert any(p["name"] == "Sync Person" for p in brain.people())
+
     def test_people_registry_add_update_remove(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)

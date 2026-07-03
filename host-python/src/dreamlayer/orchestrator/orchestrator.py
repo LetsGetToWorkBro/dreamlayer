@@ -765,6 +765,33 @@ class Orchestrator:
         self.bridge.send_card(card, event="greet")
         return card
 
+    def load_contact_faces(self, contacts, face_embed_fn=None) -> int:
+        """Fan Contacts sync into the on-device face database. Each contact needs
+        a 512-d embedding: either supplied on the record, or produced from its
+        photo by `face_embed_fn(photo) -> list[float]` (the device seam). Returns
+        how many faces were enrolled. Contacts without a usable face are skipped
+        (they still live in the Brain's People registry)."""
+        from ..social_lens.schema import ContactRecord
+        n = 0
+        for c in contacts or []:
+            name = c.get("name")
+            emb = c.get("embedding")
+            if emb is None and face_embed_fn is not None and c.get("photo") is not None:
+                try:
+                    emb = face_embed_fn(c["photo"])
+                except Exception:
+                    emb = None
+            if not name or not emb or len(emb) != 512:
+                continue
+            try:
+                self.social.add_contact(ContactRecord(
+                    contact_id=c.get("contact_id", name), name=name, embedding=emb,
+                    company=c.get("company"), role=c.get("role"), email=c.get("email")))
+                n += 1
+            except Exception:
+                continue
+        return n
+
     def look_at_person(self, frame, now: float | None = None) -> dict | None:
         """Look at someone → know them. Matches the face against your own
         contacts (on-device, never a stranger lookup) and, when it's someone

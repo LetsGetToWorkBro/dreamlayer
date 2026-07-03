@@ -213,6 +213,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <section>
     <div class="eyebrow">People</div><h2>Who you've met</h2>
     <p class="lead">The dossier registry — names you've introduced, with a note and tags. The glasses greet them with what you know.</p>
+    <div class="conn"><div><div class="conn-t">Sync macOS Contacts</div>
+      <div class="conn-s">Pull your address book in so dossiers populate themselves. Your hand-added notes always win. Reads locally — nothing leaves this Mac.</div></div>
+      <label class="sw"><input type="checkbox" id="conSync" onchange="saveConSync()"><span class="track"></span></label></div>
+    <div class="row" style="margin:0 0 10px;justify-content:space-between">
+      <span id="conStatus" class="conn-s" style="margin:0"></span>
+      <button class="sm ghost" onclick="syncConNow()">Sync now</button></div>
     <ul id="people"></ul>
     <div class="row" style="margin-top:14px">
       <input type="text" id="pName" placeholder="Name" style="max-width:180px"
@@ -221,6 +227,22 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <input type="text" id="pTags" placeholder="tags: work,lease" style="max-width:180px">
       <button class="ghost" onclick="addPerson()">Add</button>
     </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">To-dos</div><h2>Reminders</h2>
+    <p class="lead">Open reminders from macOS Reminders.app — due ones lead the morning brief. Read-only.</p>
+    <div class="conn"><div><div class="conn-t">Sync macOS Reminders</div>
+      <div class="conn-s">Pull open to-dos in. Pick specific lists once you have more than one.</div></div>
+      <label class="sw"><input type="checkbox" id="remSync" onchange="saveRemSync()"><span class="track"></span></label></div>
+    <div id="remPick" style="display:none;margin:2px 0 10px">
+      <div class="conn-s" style="margin:0 0 6px">Which lists <span id="remAllHint"></span></div>
+      <div id="remList" class="row" style="flex-wrap:wrap;gap:10px"></div>
+    </div>
+    <div class="row" style="margin:0 0 10px;justify-content:space-between">
+      <span id="remStatus" class="conn-s" style="margin:0"></span>
+      <button class="sm ghost" onclick="syncRemNow()">Sync now</button></div>
+    <ul id="reminders"></ul>
   </section>
 
   <section>
@@ -413,6 +435,7 @@ async function load(){
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
+  loadContactsSync(); loadReminders();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
@@ -466,16 +489,53 @@ async function loadPeople(){let r;try{r=await api("/dreamlayer/people");}catch(e
   const items=r.items||[];
   $("people").innerHTML=items.length?items.map(p=>{
     const tags=(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(" ");
-    return `<li><div><div class="q">${esc(p.name)}</div>`+
-      `<div class="a">${esc(p.note||"")} ${tags}</div></div>`+
-      `<button class="sm ghost" onclick='rmPerson(${JSON.stringify(p.name)})'>Remove</button></li>`;}).join("")
-    :'<li class="empty">No one yet — introduce the people you meet.</li>';}
+    const synced=p.source==="contacts";
+    const badge=synced?`<span class="tag">contact</span>`:"";
+    const rm=synced?"":`<button class="sm ghost" onclick='rmPerson(${JSON.stringify(p.name)})'>Remove</button>`;
+    return `<li><div><div class="q">${esc(p.name)} ${badge}</div>`+
+      `<div class="a">${esc(p.note||"")} ${tags}</div></div>${rm}</li>`;}).join("")
+    :'<li class="empty">No one yet — introduce people or sync your Contacts.</li>';}
 async function addPerson(){const n=$("pName").value.trim();if(!n)return;
   const tags=$("pTags").value.split(",").map(s=>s.trim()).filter(Boolean);
   await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({name:n,note:$("pNote").value.trim(),tags:tags})});
   $("pName").value="";$("pNote").value="";$("pTags").value="";toast("Person added");loadPeople();loadHistory();}
 async function rmPerson(name){await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({remove:true,name:name})});
   toast("Removed");loadPeople();loadHistory();}
+async function loadContactsSync(){let r;try{r=await api("/dreamlayer/contacts");}catch(e){return;}
+  $("conSync").checked=!!r.sync;
+  $("conStatus").textContent=r.last_sync?`${r.count||0} contact(s) · synced ${fmtWhen(r.last_sync)}`:(r.sync?"Syncing…":"Contacts sync is off");}
+async function saveConSync(){const on=$("conSync").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({contacts_sync:on})});
+  toast(on?"Contacts sync on":"Contacts sync off");loadContactsSync();loadPeople();}
+async function syncConNow(){$("conStatus").textContent="Syncing…";
+  const r=await api("/dreamlayer/contacts/sync",{method:"POST",body:"{}"});
+  toast(`Synced ${r.synced||0} contact(s)`);loadPeople();loadContactsSync();loadHistory();}
+
+async function loadReminders(){let r;try{r=await api("/dreamlayer/reminders");}catch(e){return;}
+  $("remSync").checked=!!r.sync;
+  const lists=r.lists||[]; const sel=r.selected||[];
+  $("remPick").style.display=(r.sync&&lists.length>1)?"":"none";
+  $("remAllHint").textContent=sel.length?"":"(all)";
+  $("remList").innerHTML=lists.map(c=>{const on=sel.length===0||sel.includes(c);
+    return `<label class="tog" style="display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer">`+
+      `<input type="checkbox" ${on?"checked":""} onchange="toggleRemList()" style="accent-color:var(--memory)"> ${esc(c)}</label>`;}).join("");
+  $("remStatus").textContent=r.last_sync?`${(r.items||[]).length} open · synced ${fmtWhen(r.last_sync)}`:(r.sync?"Syncing…":"Reminders sync is off");
+  const items=r.items||[];
+  $("reminders").innerHTML=items.length?items.map(t=>
+    `<li><div><div class="q">${esc(t.title)}</div><div class="a">${t.ts?esc(fmtWhen(t.ts)):"no due date"}${t.list?" · "+esc(t.list):""}</div></div></li>`).join("")
+    :'<li class="empty">No open reminders.</li>';}
+async function toggleRemList(){const boxes=[...$("remList").querySelectorAll("input")];
+  const names=boxes.map(b=>b.parentElement.textContent.trim());
+  let sel=[];boxes.forEach((b,i)=>{if(b.checked)sel.push(names[i]);});
+  if(sel.length===names.length)sel=[];
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminder_lists:sel})});
+  toast("Lists updated");loadReminders();}
+async function saveRemSync(){const on=$("remSync").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminders_sync:on})});
+  toast(on?"Reminders sync on":"Reminders sync off");loadReminders();}
+async function syncRemNow(){$("remStatus").textContent="Syncing…";
+  const r=await api("/dreamlayer/reminders/sync",{method:"POST",body:"{}"});
+  toast(`Synced ${r.synced||0} reminder(s)`);loadReminders();loadHistory();}
 
 function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
   `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}

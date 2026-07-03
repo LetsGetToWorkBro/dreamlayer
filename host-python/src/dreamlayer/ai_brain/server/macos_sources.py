@@ -271,6 +271,122 @@ def _osascript_out(script: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Contacts — sync macOS Contacts.app into the People registry (read-only).
+# One reader, two homes: the Brain's People registry and (via the hub, when a
+# face-embedding fn is present) the on-device face database.
+# ---------------------------------------------------------------------------
+
+def _contacts_script() -> str:
+    return (
+        'set out to ""\n'
+        'tell application "Contacts"\n'
+        '  repeat with p in people\n'
+        '    set nm to name of p\n'
+        '    set org to ""\n'
+        '    try\n'
+        '      if organization of p is not missing value then set org to organization of p\n'
+        '    end try\n'
+        '    set jt to ""\n'
+        '    try\n'
+        '      if job title of p is not missing value then set jt to job title of p\n'
+        '    end try\n'
+        '    set em to ""\n'
+        '    try\n'
+        '      if (count of emails of p) > 0 then set em to value of email 1 of p\n'
+        '    end try\n'
+        '    set out to out & nm & tab & org & tab & jt & tab & em & linefeed\n'
+        '  end repeat\n'
+        'end tell\n'
+        'return out'
+    )
+
+
+def read_contacts(config=None, reader: Optional[Callable[[str], str]] = None) -> list[dict]:
+    """macOS Contacts as {name, company, role, email}. [] off macOS."""
+    if reader is None and platform.system() != "Darwin":
+        return []
+    run = reader or _osascript_out
+    try:
+        raw = run(_contacts_script())
+    except Exception:
+        return []
+    out: list[dict] = []
+    for line in (raw or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 4 or not parts[0].strip():
+            continue
+        out.append({"name": parts[0].strip(), "company": parts[1].strip(),
+                    "role": parts[2].strip(), "email": parts[3].strip()})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Reminders — sync macOS Reminders.app open to-dos (read-only).
+# ---------------------------------------------------------------------------
+
+def _reminders_script() -> str:
+    return (
+        'set out to ""\n'
+        'set nowD to (current date)\n'
+        'tell application "Reminders"\n'
+        '  repeat with lst in lists\n'
+        '    set lname to name of lst\n'
+        '    repeat with r in (reminders of lst whose completed is false)\n'
+        '      set t to name of r\n'
+        '      set secs to ""\n'
+        '      try\n'
+        '        if due date of r is not missing value then set secs to '
+        '((due date of r) - nowD) as integer\n'
+        '      end try\n'
+        '      set out to out & t & tab & secs & tab & lname & linefeed\n'
+        '    end repeat\n'
+        '  end repeat\n'
+        'end tell\n'
+        'return out'
+    )
+
+
+def read_reminders(config=None, reader: Optional[Callable[[str], str]] = None) -> list[dict]:
+    """Open macOS reminders as {title, ts, list}. ts is 0 when undated.
+    Filtered to `config.reminder_lists` ([] = all). [] off macOS."""
+    if reader is None and platform.system() != "Darwin":
+        return []
+    run = reader or _osascript_out
+    try:
+        raw = run(_reminders_script())
+    except Exception:
+        return []
+    selected = {n for n in (getattr(config, "reminder_lists", []) or [])}
+    now = time.time()
+    out: list[dict] = []
+    for line in (raw or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or not parts[0].strip():
+            continue
+        title, secs, lst = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        if selected and lst not in selected:
+            continue
+        try:
+            ts = now + float(secs) if secs else 0.0
+        except ValueError:
+            ts = 0.0
+        out.append({"title": title, "ts": ts, "list": lst})
+    out.sort(key=lambda e: (e["ts"] == 0, e["ts"]))       # dated first, by time
+    return out
+
+
+def list_reminder_lists(reader: Optional[Callable[[str], str]] = None) -> list[str]:
+    if reader is None and platform.system() != "Darwin":
+        return []
+    run = reader or _osascript_out
+    try:
+        raw = run('tell application "Reminders" to get name of every list')
+    except Exception:
+        return []
+    return [n.strip() for n in (raw or "").split(",") if n.strip()]
+
+
+# ---------------------------------------------------------------------------
 # Sending — draft → approve → send (never silent)
 # ---------------------------------------------------------------------------
 

@@ -73,11 +73,17 @@ class Brain:
         # macOS message/mail documents (folded in when email is enabled)
         self._sources_fn = sources_fn or collect_documents
         # the live feed the glasses read hands-free (the Mac is the bridge)
-        from .macos_sources import recent_messages, read_calendar_events, list_calendars
+        from .macos_sources import (recent_messages, read_calendar_events,
+                                     list_calendars, read_contacts, read_reminders,
+                                     list_reminder_lists)
         self._messages_fn = messages_fn or recent_messages
         # macOS Calendar.app → agenda sync (both are injectable seams for tests)
         self._calendar_reader = calendar_reader_fn or read_calendar_events
         self._calendar_lister = calendar_list_fn or list_calendars
+        # macOS Contacts + Reminders readers (injectable seams for tests)
+        self._contacts_reader = read_contacts
+        self._reminders_reader = read_reminders
+        self._reminder_lister = list_reminder_lists
         self._sig = None
         self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
         self._started_ts = time.time()
@@ -88,6 +94,8 @@ class Brain:
         self._brief_stop = None
         self._cal_stop = None
         self.last_calendar_sync = 0.0
+        self.last_contacts_sync = 0.0
+        self.last_reminders_sync = 0.0
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -172,17 +180,22 @@ class Brain:
                   "network_mode", "cloud_base_url", "cloud_api_key", "cloud_model",
                   "semantic_search", "index_extensions", "max_file_kb",
                   "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
-                  "calendar_sync", "calendar_names", "calendar_days"):
+                  "calendar_sync", "calendar_names", "calendar_days",
+                  "contacts_sync", "reminders_sync", "reminder_lists"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()
         self.save()
-        # turning sync on (or changing which calendars) → pull immediately
-        if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
-            try:
+        # turning a sync on (or changing its filter) → pull immediately
+        try:
+            if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
                 self.sync_calendar()
-            except Exception:
-                pass
+            if updates.get("contacts_sync"):
+                self.sync_contacts()
+            if updates.get("reminders_sync") or ("reminder_lists" in updates and self.config.reminders_sync):
+                self.sync_reminders()
+        except Exception:
+            pass
 
     def incognito_now(self) -> bool:
         """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
@@ -390,15 +403,19 @@ class Brain:
         return {"items": self.calendar(200), "synced": len(synced)}
 
     def maybe_sync_calendar(self) -> bool:
-        """Run a sync if the toggle is on. Called by the scheduler."""
-        if not self.config.calendar_sync:
-            return False
-        self.sync_calendar()
-        return True
+        """Run the macOS syncs whose toggles are on. Called by the scheduler."""
+        ran = False
+        if self.config.calendar_sync:
+            self.sync_calendar(); ran = True
+        if self.config.contacts_sync:
+            self.sync_contacts(); ran = True
+        if self.config.reminders_sync:
+            self.sync_reminders(); ran = True
+        return ran
 
     def start_calendar_sync(self, interval: int = 900):
-        """Background loop: re-pull the calendar every `interval` seconds while
-        the toggle is on. Idempotent; safe to call once at startup."""
+        """Background loop: re-pull calendar / contacts / reminders every
+        `interval` seconds while their toggles are on. Idempotent."""
         import threading
         if self._cal_stop is not None:
             return
@@ -432,7 +449,8 @@ class Brain:
         for e in (data if isinstance(data, list) else []):
             if e.get("name"):
                 out.append({"name": e["name"], "note": e.get("note", ""),
-                            "tags": e.get("tags", []), "ts": float(e.get("ts", 0) or 0)})
+                            "tags": e.get("tags", []), "ts": float(e.get("ts", 0) or 0),
+                            "source": e.get("source", "manual")})
         out.sort(key=lambda e: -e["ts"])
         return out
 
@@ -450,7 +468,8 @@ class Brain:
             cur = []
         tags = [t for t in (tags or []) if t]
         cur = [e for e in cur if e.get("name") != name]     # replace existing
-        cur.append({"name": name, "note": note or "", "tags": tags, "ts": time.time()})
+        cur.append({"name": name, "note": note or "", "tags": tags,
+                    "ts": time.time(), "source": "manual"})
         p.write_text(json.dumps(cur))
         self.activity.add("people", f"Introduced {name}")
         return self.people()
@@ -467,6 +486,68 @@ class Brain:
             p.write_text(json.dumps(kept))
             self.activity.add("people", f"Removed {name}")
         return self.people()
+
+    def sync_contacts(self) -> dict:
+        """Pull macOS Contacts into the People registry. Keeps the people you
+        added by hand; replaces the previous contacts pull. Synced entries carry
+        source:"contacts"."""
+        try:
+            contacts = self._contacts_reader(self.config)
+        except Exception:
+            contacts = []
+        p = self.cfg_dir / "people.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        if not isinstance(cur, list):
+            cur = []
+        manual = [e for e in cur if e.get("source") != "contacts"]
+        manual_names = {e.get("name") for e in manual}
+        synced = []
+        for c in contacts:
+            if not c.get("name") or c["name"] in manual_names:
+                continue                                   # never shadow a manual entry
+            note = "  •  ".join([x for x in (c.get("company"), c.get("role")) if x])
+            synced.append({"name": c["name"], "note": note, "tags": [],
+                           "ts": time.time(), "source": "contacts",
+                           "email": c.get("email", "")})
+        p.write_text(json.dumps(manual + synced))
+        self.last_contacts_sync = time.time()
+        self.activity.add("people", f"Synced {len(synced)} contact(s)")
+        return {"items": self.people(), "synced": len(synced)}
+
+    # -- reminders: open to-dos from macOS Reminders --------------------
+
+    def reminders(self) -> list:
+        """Open reminders, dated first. Backed by <cfg>/reminders.json."""
+        p = self.cfg_dir / "reminders.json"
+        try:
+            data = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            data = []
+        out = [e for e in (data if isinstance(data, list) else []) if e.get("title")]
+        out.sort(key=lambda e: (float(e.get("ts", 0) or 0) == 0, float(e.get("ts", 0) or 0)))
+        return out
+
+    def sync_reminders(self) -> dict:
+        """Pull open macOS reminders into <cfg>/reminders.json (full replace)."""
+        try:
+            items = self._reminders_reader(self.config)
+        except Exception:
+            items = []
+        clean = [{"title": r["title"], "ts": float(r.get("ts", 0) or 0),
+                  "list": r.get("list", "")} for r in items if r.get("title")]
+        (self.cfg_dir / "reminders.json").write_text(json.dumps(clean))
+        self.last_reminders_sync = time.time()
+        self.activity.add("reminders", f"Synced {len(clean)} reminder(s)")
+        return {"items": self.reminders(), "synced": len(clean)}
+
+    def list_reminder_lists(self) -> list:
+        try:
+            return self._reminder_lister()
+        except Exception:
+            return []
 
     # -- rewind my day: one merged timeline of what happened -------------
 
@@ -533,6 +614,10 @@ class Brain:
         for e in self.calendar(5):                    # today's events lead the brief
             when = time.strftime("%I:%M %p", time.localtime(e["ts"])).lstrip("0") if e["ts"] else ""
             agenda.append(e["title"] + (f" at {when}" if when else ""))
+        day_end = time.time() + 86400
+        due = [r for r in self.reminders() if 0 < r.get("ts", 0) <= day_end]
+        for r in due[:3]:                             # to-dos due within a day
+            agenda.append("Reminder: " + r["title"])
         try:
             msgs = self._messages_fn(self.config, 20) if self.config.email_enabled else []
         except Exception:
@@ -681,6 +766,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "sync": brain.config.calendar_sync,
                                  "selected": brain.config.calendar_names,
                                  "last_sync": brain.last_calendar_sync})
+            elif path == "/dreamlayer/contacts":
+                self._json(200, {"sync": brain.config.contacts_sync,
+                                 "last_sync": brain.last_contacts_sync,
+                                 "count": len([p for p in brain.people()
+                                               if p.get("source") == "contacts"])})
+            elif path == "/dreamlayer/reminders":
+                self._json(200, {"items": brain.reminders(),
+                                 "lists": brain.list_reminder_lists(),
+                                 "sync": brain.config.reminders_sync,
+                                 "selected": brain.config.reminder_lists,
+                                 "last_sync": brain.last_reminders_sync})
             elif path == "/dreamlayer/rewind":
                 self._json(200, brain.rewind())
             elif path == "/dreamlayer/brief/latest":
@@ -804,6 +900,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif path == "/dreamlayer/calendar/sync":
                 # pull macOS Calendar.app into the agenda now
                 self._json(200, brain.sync_calendar())
+            elif path == "/dreamlayer/contacts/sync":
+                self._json(200, brain.sync_contacts())
+            elif path == "/dreamlayer/reminders/sync":
+                self._json(200, brain.sync_reminders())
             elif path == "/dreamlayer/people":
                 # introduce/update or remove a person ({name, note, tags[, remove]})
                 b = self._body()

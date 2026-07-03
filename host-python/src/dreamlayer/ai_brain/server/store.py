@@ -51,6 +51,10 @@ class BrainConfig:
     calendar_sync: bool = False     # pull events from Calendar.app on a poll
     calendar_names: list[str] = field(default_factory=list)  # [] = all calendars
     calendar_days: int = 14         # how far ahead to pull
+    # -- contacts + reminders sync (macOS) ------------------------------
+    contacts_sync: bool = False     # pull Contacts.app into the People registry
+    reminders_sync: bool = False    # pull open Reminders.app to-dos
+    reminder_lists: list[str] = field(default_factory=list)  # [] = all lists
 
     @property
     def lan_only(self) -> bool:
