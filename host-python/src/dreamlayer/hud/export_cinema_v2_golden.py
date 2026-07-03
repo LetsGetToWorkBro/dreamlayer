@@ -301,6 +301,27 @@ def export_all(out_root: Path | None = None) -> list[Path]:
           confidence = 0.72,
         }""",
     }
+    SOLID_CARDS["fact_check_hold"] = """{
+      type = "FactCheckCard", verdict = "self_contradiction",
+      eyebrow = "THEY SAID DIFFERENT BEFORE",
+      primary = "The deal closed at three million.",
+      detail = "earlier: we settled at two million",
+      footer = "Marcus - elevated - seen before",
+    }"""
+    SOLID_CARDS["answer_ahead_hold"] = """{
+      type = "AnswerAheadCard", primary = "March 14th - two pallets.",
+      detail = "When did we last ship to Denver?",
+      footer = "Priya - your files",
+    }"""
+    SOLID_CARDS["oracle_reply_hold"] = """{
+      type = "OracleReplyCard", kind = "action",
+      primary = "Focus on - the world is turned down.",
+    }"""
+    SOLID_CARDS["hark_hold"] = """{
+      type = "HarkCard", importance = "urgent",
+      primary = "Marcus is 2 min away - you owe him the lease.",
+      detail = "from your last chat",
+    }"""
     for name, card in SOLID_CARDS.items():
         s = GoldenSession()
         s.now(1000)

@@ -119,6 +119,7 @@ _BLOOM_DIM = {
     T.CONFIDENCE_HIGH: T.ACCENT_MEMORY_DIM,
     T.CONFIDENCE_MED: T.ACCENT_MEMORY_DIM,
     T.CONFIDENCE_LOW: T.WARNING_AMBER_DIM,
+    T.TEXT_GHOST_STATIC: T.BORDER_SUBTLE,
 }
 
 
@@ -1138,8 +1139,8 @@ class CardRenderer:
             "supported":          T.ACCENT_SUCCESS,
             "disputed":           T.WARNING_AMBER,
             "self_contradiction": T.ACCENT_ATTENTION,
-            "unverified":         T.TEXT_GHOST,
-        }.get(verdict, T.TEXT_GHOST)
+            "unverified":         T.TEXT_GHOST_STATIC,
+        }.get(verdict, T.TEXT_GHOST_STATIC)
         dim = _dim.get(verdict, T.BORDER_SUBTLE)
         eyebrow = str(card.get("eyebrow") or "")
         claim = str(card.get("primary") or "")

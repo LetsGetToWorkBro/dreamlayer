@@ -31,6 +31,7 @@ WARNING_AMBER     = 0xFF6600
 # ACCENT_MEMORY / TEXT_GHOST are dynamic-slot bases (fx / ghost_text):
 # static ramps and fills use the one-LSB static twin + dim twins instead.
 ACCENT_MEMORY_STATIC = 0x2CC79B
+TEXT_GHOST_STATIC    = 0x58686D
 ACCENT_SUCCESS_DIM   = 0x2E7A3C
 ACCENT_ATTENTION_DIM = 0x7A3A2C
 WARNING_AMBER_DIM    = 0x8A3A00

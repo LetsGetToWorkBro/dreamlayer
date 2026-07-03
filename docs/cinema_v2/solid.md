@@ -134,3 +134,14 @@ the reduce frame keeps ≥80% of the full frame's light).
   harness (budget, richness, reduce-motion stillness, the breathe). These
   four were Python-only before; new HUD cards are device-Lua-first from
   here.
+- 2026-07-03 — O3 cards standards pass (review of #86): verdict/tone
+  mapping moved into renderer.lua `card_tone`/`FACT_COLOR` — the BLE
+  path never runs the cards.lua constructors, so constructor-set colors
+  were lost and every wire-delivered FactCheck cue rendered ghost-gray
+  (now pinned by BLE-path tone tests that build payloads with the HOST
+  constructors); `text_ghost_static 0x58686D` for drawn ghost accents
+  (the unverified cue was on the ghost_text slot base and ramped with
+  landing luma); breathe/pulse timings and block line pitch moved to
+  their owners (animations.lua / typography.BLOCK_H); mirror parity for
+  the unverified hue; the four settled holds joined the deterministic
+  golden contract; AnswerAhead's cue dot nudged clear of its eyebrow.

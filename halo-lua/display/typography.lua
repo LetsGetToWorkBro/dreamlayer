@@ -35,6 +35,14 @@ local BASE_H = { hero = 30, xl = 26, lg = 22, md = 17, sm = 13 }
 
 M.LINE_SPACING = 1.55
 
+-- Tight line pitch for wrapped text blocks (renderer text_block); the
+-- reading-flow variant of line_height for multi-line spoken sentences.
+M.BLOCK_H = { hero = 26, xl = 23, lg = 20, md = 17, sm = 14 }
+
+function M.block_line_height(size)
+  return M.BLOCK_H[size] or 17
+end
+
 function M.line_height(size)
   local base = BASE_H[size] or 17
   return math.floor(base * M.LINE_SPACING / 2 + 0.5) * 2

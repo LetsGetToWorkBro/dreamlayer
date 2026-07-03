@@ -58,6 +58,9 @@ M.warning_amber     = 0xFF6600
 -- accent_memory_static is the one-LSB twin for static use. The *_dim
 -- twins carry gradient tails and bloom halos.
 M.accent_memory_static = 0x2CC79B
+M.text_ghost_static    = 0x58686D  -- ghost hue for drawn accents; the
+                                   -- ghost_text slot base (0x58686F) and
+                                   -- PREMO_BASE (0x58686E) stay unaliased
 M.accent_success_dim   = 0x2E7A3C
 M.accent_attention_dim = 0x7A3A2C
 M.warning_amber_dim    = 0x8A3A00

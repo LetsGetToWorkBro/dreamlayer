@@ -263,6 +263,12 @@ M.WARP_STREAK_LEN      = 14    -- max streak length px
 -- the light chases at the old spinner's RPM (geometry no longer rotates)
 M.CHASE_SEGMENTS       = 12
 
+-- O3 conversation cards (Lumen): every duration lives here, never
+-- inline in a draw fn (the standing rule).
+M.HARK_BREATHE_MS        = 1100  -- Listen! ring breathe period
+M.HARK_BREATHE_URGENT_MS = 700   -- ...urgent breathes harder
+M.FACT_PULSE_MS          = 420   -- disputed/contradiction one-shot pulse
+
 -- Prism Lens (Lumen rebuild): the kaleidoscope blooms open on a spring,
 -- its rotation breathes (speeds and slows on a slow sine), and two thin
 -- halo rings counter-rotate against the arms. All rates stay far below

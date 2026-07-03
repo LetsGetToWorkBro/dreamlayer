@@ -246,12 +246,11 @@ end
 -- Wrapped, vertically-centered text block — for the O3 cards whose primary is a
 -- spoken sentence rather than a short label. Caps at `max_lines` so it never
 -- spills the circular panel; single-line callers still use text()+fit_size.
-local BLOCK_LINE_H = { hero = 26, xl = 23, lg = 20, md = 17, sm = 14 }
 local function text_block(str, x, y, color, size, width, max_lines)
   local lines = T.wrap(str, size, width) or { str }
   max_lines = max_lines or 3
   local n = math.min(#lines, max_lines)
-  local lh = BLOCK_LINE_H[size] or 17
+  local lh = T.block_line_height(size)
   local start = y - (n - 1) * lh / 2
   for i = 1, n do
     text(lines[i], x, floor(start + (i - 1) * lh), color, size)
@@ -1045,12 +1044,40 @@ end
 -- the idle breathe is skipped; the materials stay (static richness, not motion).
 -- ---------------------------------------------------------------------------
 
+-- Verdict/tone mapping lives HERE, not in the cards.lua constructors:
+-- the real BLE pipeline (main.lua -> queue -> renderer) delivers host
+-- payloads that never pass through a constructor, so a draw fn may only
+-- rely on semantic fields (verdict / importance / kind). Found by the
+-- standards review of #86 — every BLE-delivered FactCheck rendered its
+-- verdict cue ghost-gray.
+local FACT_COLOR = {
+  supported          = P.accent_success,
+  disputed           = P.warning_amber,
+  self_contradiction = P.accent_attention,
+  unverified         = P.text_ghost_static,
+}
 local FACT_DIM = {
   supported          = P.accent_success_dim,
   disputed           = P.warning_amber_dim,
   self_contradiction = P.accent_attention_dim,
   unverified         = P.border_subtle,
 }
+
+--- The card's semantic accent, derived from its own fields — used for
+--- the focus travel/landing color so BLE-delivered cards match their
+--- verdict/tone even without a constructor-set conf_color.
+local function card_tone(card)
+  if not card then return nil end
+  if card.type == "FactCheckCard" then
+    return FACT_COLOR[card.verdict]
+  elseif card.type == "HarkCard" then
+    return card.importance == "urgent" and P.warning_amber
+                                        or P.accent_memory
+  elseif card.type == "OracleReplyCard" then
+    return card.kind == "action" and P.accent_success or P.accent_memory
+  end
+  return nil
+end
 
 local function draw_oracle_reply(card, sc, enter_t, exit_t)
   local action = card.kind == "action"
@@ -1085,8 +1112,10 @@ local function draw_answer_ahead(card, sc, enter_t, exit_t)
   end
   frame.display.circle(CX, 128, floor(82*sc), P.border_subtle, false)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.circle(CX-78, 70, 3, P.accent_memory, true)
-    MAT.bloom_ring(CX-78, 70, 3, P.accent_memory)
+    -- dot sits clear of the 25-char eyebrow (its bloom was grazing the
+    -- first glyph — found in the golden eyeball pass)
+    frame.display.circle(CX-88, 70, 3, P.accent_memory, true)
+    MAT.bloom_ring(CX-88, 70, 3, P.accent_memory)
     text(card.eyebrow or "ON THE TIP OF YOUR TONGUE", CX+4, 70, P.accent_memory, "sm")
     MAT.grad_line(52, 88, 204, 88, MAT.RAMP_MEMORY)
   end
@@ -1106,7 +1135,8 @@ local function draw_answer_ahead(card, sc, enter_t, exit_t)
 end
 
 local function draw_fact_check(card, sc, enter_t, exit_t, idle_t)
-  local color = card.conf_color or P.text_ghost
+  local color = FACT_COLOR[card.verdict] or card.conf_color
+                or P.text_ghost_static
   local dim   = FACT_DIM[card.verdict] or P.border_subtle
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
     MAT.glass_disc(CX, 134, floor(74*sc), MAT.PANE, 4)
@@ -1116,9 +1146,9 @@ local function draw_fact_check(card, sc, enter_t, exit_t, idle_t)
     local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
     frame.display.circle(CX, 54, math.max(2, floor(9*rp)), color, false)
     MAT.bloom_ring(CX, 54, 9, color)
-    if idle_t and idle_t < 420 and not TR.reduce_motion()
+    if idle_t and idle_t < A.FACT_PULSE_MS and not TR.reduce_motion()
        and (card.verdict == "self_contradiction" or card.verdict == "disputed") then
-      local ph = idle_t / 420
+      local ph = idle_t / A.FACT_PULSE_MS
       frame.display.circle(CX, 54, floor(9 + 11*math.sin(ph*math.pi)), dim, false)
     end
     text(card.eyebrow or "", CX, 82, color, "sm")
@@ -1154,7 +1184,8 @@ local function draw_hark(card, sc, enter_t, exit_t, idle_t)
     MAT.bloom_ring(CX, 58, 12, color)
     -- "Listen!": the ring breathes on hold to catch the eye (urgent breathes harder)
     if idle_t and not TR.reduce_motion() then
-      local period = urgent and 700 or 1100
+      local period = urgent and A.HARK_BREATHE_URGENT_MS
+                             or  A.HARK_BREATHE_MS
       local ph = (idle_t % period) / period
       frame.display.circle(CX, 58, floor(12 + 8*math.sin(ph*math.pi)), dim, false)
     end
@@ -1312,7 +1343,7 @@ local function composite(card, phase, elapsed_ms, idle_t)
         -- travel: the head flies in from the card's horizon angle;
         -- content is not yet on stage
         F.travel(elapsed_ms / A.SIG_FOCUS_TRAVEL_MS, origin_deg,
-                 card.conf_color or P.accent_memory)
+                 card.conf_color or card_tone(card) or P.accent_memory)
         return
       end
       -- landing: ring collapse gates the staggered content layers
@@ -1320,7 +1351,8 @@ local function composite(card, phase, elapsed_ms, idle_t)
                            / A.SIG_FOCUS_LAND_MS, 0, 1)
       enter_t = land_t
       fn(card, sc, enter_t, exit_t, idle_t or 0)
-      F.landing_ring(land_t, card.conf_color or P.accent_memory)
+      F.landing_ring(land_t,
+                     card.conf_color or card_tone(card) or P.accent_memory)
       return
     end
 

@@ -112,8 +112,9 @@ def test_no_solid_token_aliases_a_dynamic_slot_base():
              A.VOICE_BASE, A.PREMO_BASE,
              P.accent_memory,   -- fx base
              P.text_ghost }     -- ghost_text base
-    _new = { P.accent_memory_static, P.accent_success_dim,
-             P.accent_attention_dim, P.warning_amber_dim, P.surface }
+    _new = { P.accent_memory_static, P.text_ghost_static,
+             P.accent_success_dim, P.accent_attention_dim,
+             P.warning_amber_dim, P.surface }
     """)
     dyn = {int(v) for v in rt.eval("_dyn").values()}
     new = [int(v) for v in rt.eval("_new").values()]

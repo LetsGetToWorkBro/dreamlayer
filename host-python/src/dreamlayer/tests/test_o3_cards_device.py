@@ -126,3 +126,78 @@ def test_hark_breathes_under_motion():
     _tick(h, 2350)                      # a different phase of the breathe
     b = _ring_band(h)
     assert a != b, "Hark ring did not breathe on hold"
+
+
+# ---------------------------------------------------------------------------
+# The REAL pipeline: BLE cards never pass through display/cards.lua — the
+# host payload lands on renderer.show_card as-is (main.lua process_inbound).
+# The standards review of #86 found every BLE-delivered FactCheck rendered
+# its verdict cue ghost-gray because the tone mapping lived only in the Lua
+# constructors. These tests build the payloads with the HOST constructors
+# (hud/cards.py) and assert the verdict/tone color actually reaches pixels.
+# ---------------------------------------------------------------------------
+
+def _lua_literal(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(v, dict):
+        parts = []
+        for k, val in v.items():
+            parts.append(f'["{k}"] = {_lua_literal(val)}')
+        return "{ " + ", ".join(parts) + " }"
+    if isinstance(v, (list, tuple)):
+        return "{ " + ", ".join(_lua_literal(x) for x in v) + " }"
+    return "nil"
+
+
+def _rgb(hexval):
+    return ((hexval >> 16) & 0xFF, (hexval >> 8) & 0xFF, hexval & 0xFF)
+
+
+def _has_color(h, hexval, box):
+    img = h.display.last_frame().convert("RGB").crop(box)
+    return _rgb(hexval) in set(img.getdata())
+
+
+@pytest.mark.parametrize("verdict,tone", [
+    ("supported", 0x56D364),            # accent_success
+    ("disputed", 0xFF6600),             # warning_amber
+    ("self_contradiction", 0xE06B52),   # accent_attention
+])
+def test_ble_fact_check_verdict_tone_reaches_pixels(verdict, tone):
+    from dreamlayer.hud import cards as host_cards
+    payload = host_cards.fact_check(
+        verdict=verdict, speaker="Marcus",
+        claim="The deal closed at three million.",
+        basis="earlier: we settled at two million")
+    h = _session(reduce=False)
+    h.execute(f"__now = 1000; _r.show_card({_lua_literal(payload)})")
+    _tick(h, 2000)                       # settled hold
+    # the verdict cue band (top of the card)
+    assert _has_color(h, tone, (64, 36, 192, 100)), (
+        f"BLE-delivered FactCheck '{verdict}' lost its tone — the cue "
+        f"band has no {tone:#08x} pixels")
+
+
+def test_ble_hark_urgent_tone_reaches_pixels():
+    from dreamlayer.hud import cards as host_cards
+    payload = host_cards.hark(clue="Marcus is 2 min away", detail="lease",
+                              importance="urgent")
+    h = _session(reduce=False)
+    h.execute(f"__now = 1000; _r.show_card({_lua_literal(payload)})")
+    _tick(h, 2000)
+    assert _has_color(h, 0xFF6600, (64, 36, 192, 110))
+
+
+def test_ble_oracle_action_tone_reaches_pixels():
+    from dreamlayer.hud import cards as host_cards
+    payload = host_cards.oracle_reply(text="Focus on.", kind="action")
+    h = _session(reduce=False)
+    h.execute(f"__now = 1000; _r.show_card({_lua_literal(payload)})")
+    _tick(h, 2000)
+    assert _has_color(h, 0x56D364, (32, 40, 224, 110))

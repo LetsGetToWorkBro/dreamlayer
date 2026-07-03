@@ -136,6 +136,7 @@ local BLOOM_DIM = {
   [P.confidence_high]      = P.accent_memory_dim,
   [P.confidence_med]       = P.accent_memory_dim,
   [P.confidence_low]       = P.warning_amber_dim,
+  [P.text_ghost_static]    = P.border_subtle,
 }
 
 local function fl(n) return math.floor(n + 0.5) end
