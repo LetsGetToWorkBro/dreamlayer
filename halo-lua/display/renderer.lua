@@ -1237,6 +1237,9 @@ function renderer.tick()
 
   -- Lumen engines advance once per frame, before any drawing: parallax
   -- samples the IMU, the palette animator runs its light programs.
+  -- While a privacy-class card holds, the world grips: offsets freeze
+  -- to zero instantly (nothing about the veil may feel ambient).
+  PX.freeze(_card ~= nil and PRIVACY_CLASS[_card.type] or false)
   PX.tick(now)
   PA.tick(now, TR.reduce_motion())
   local rim_ox, rim_oy = PX.offset("rim")
@@ -1341,5 +1344,10 @@ end
 function renderer.push(layer, fn)  if fn then fn() end end
 function renderer.flush()          end
 function renderer.clear()          end
+
+--- The renderer's monotonic clock (bound at boot, os.clock fallback).
+--- Exposed so main.lua can stamp memory-mode particle spawns (the dream
+--- branch runs on the tick clock; each consumer stays self-consistent).
+function renderer.now_ms()         return _now_ms() end
 
 return renderer

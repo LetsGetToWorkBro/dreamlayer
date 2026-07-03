@@ -17,9 +17,10 @@
 ---   horizon.marks() / horizon.is_paused()  state hooks for tests
 ---   horizon.reset()                        test hook
 
-local A = require("display.animations")
-local P = require("display.palette")
-local E = require("lib.easing")
+local A  = require("display.animations")
+local P  = require("display.palette")
+local E  = require("lib.easing")
+local PT = require("display.particles")
 
 local HAS_FRAME = (type(_G.frame) == "table")
 
@@ -35,6 +36,8 @@ local _last_frame_ms = nil
 local _highlight     = nil   -- { deg=, until_ms= }
 local _scrub         = nil   -- { deg= } (Yesterlight detached notch)
 local _pulse         = nil   -- { deg=, until_ms= }
+local _shatter       = nil   -- { deg=, until_ms= } (impact ring, Lumen)
+local _reveal_t0     = nil   -- wake reveal start (Lumen)
 
 local KIND_MEMORY, KIND_PROMISE, KIND_PERSON, KIND_ELDER, KIND_FUTURE_CAP =
   1, 2, 3, 4, 5
@@ -116,11 +119,60 @@ function M.on_frame(msg, now_ms)
     marks[#marks + 1] = { deg = dd / 10, kind = kind, state = state, luma = luma }
   end
 
+  -- Lumen: the moment a promise crosses INTO shattered (state 5), it
+  -- physically breaks — six shards fall inward off the rim and a short
+  -- impact ring marks the break. Detected as a state transition between
+  -- consecutive frames, so a promise that arrives already shattered (or
+  -- a reconnect replay) never re-breaks. reduce_motion: the shards
+  -- module no-ops and the ring is skipped at draw; the drifting-halves
+  -- idle pose is unchanged either way.
+  local now = now_ms or M._now_ms()
+  local old_state = {}
+  for _, mk in ipairs(_marks) do
+    if mk.kind == KIND_PROMISE then
+      old_state[fl(mk.deg * 10)] = mk.state
+    end
+  end
+  for _, mk in ipairs(marks) do
+    if mk.kind == KIND_PROMISE and mk.state == 5 then
+      local prev = old_state[fl(mk.deg * 10)]
+      if prev and prev ~= 5 then
+        PT.shards(mk.deg, A.SHARD_N, { t0 = now, seed = 11 })
+        _shatter = { deg = mk.deg, until_ms = now + A.SHATTER_FLASH_MS }
+      end
+    end
+  end
+
   _marks         = marks
   _seq           = seq
   _paused        = (msg.paused == 1 or msg.paused == true)
-  _last_frame_ms = now_ms or M._now_ms()
+  _last_frame_ms = now
   return true
+end
+
+--- Wake (Lumen): the horizon draws on radially from the now-notch over
+--- WAKE_REVEAL_MS — the instrument assembles instead of appearing.
+--- Pure draw-order gating; no new geometry.
+function M.wake(now_ms)
+  _reveal_t0 = now_ms or M._now_ms()
+end
+
+--- Angular reach of the wake reveal at `now` (nil = fully revealed).
+--- Both dial arms sweep out from the notch to the ±150-degree caps.
+local function reveal_reach(now, reduce_motion)
+  if not _reveal_t0 or reduce_motion then return nil end
+  local t = (now - _reveal_t0) / A.WAKE_REVEAL_MS
+  if t >= 1 then
+    _reveal_t0 = nil
+    return nil
+  end
+  if t < 0 then return 0 end
+  return E.out_cubic(t) * (A.MER_WINDOW_HOURS * A.MER_DEG_PER_HOUR)
+end
+
+--- Angular distance from the now-notch, measured around the dial.
+local function notch_dist(deg)
+  return math.abs(((deg - A.MER_NOW_DEG + 180) % 360) - 180)
 end
 
 function M._now_ms()
@@ -139,10 +191,10 @@ end
 --- reduce_motion frames draw the static ghost track, unchanged.
 local AURORA_BANDS = { A.AURORA_BASE_A, A.AURORA_BASE_B, A.AURORA_BASE_C }
 
-local function draw_track(aurora)
+local function draw_track(aurora, reach)
   local a0 = A.MER_SEAM_TO_DEG
   local a1 = 360 + A.MER_SEAM_FROM_DEG
-  if not aurora then
+  if not aurora and not reach then
     arc(A.MER_TRACK_R, a0, a1, P.border_subtle, 72)
     return
   end
@@ -150,10 +202,12 @@ local function draw_track(aurora)
   local sweep = a1 - a0
   local x0, y0 = polar(A.MER_TRACK_R, a0)
   for i = 1, steps do
+    local mid = a0 + sweep * (i - 0.5) / steps
     local x1, y1 = polar(A.MER_TRACK_R, a0 + sweep * i / steps)
-    if HAS_FRAME then
+    if HAS_FRAME and (not reach or notch_dist(mid) <= reach) then
       frame.display.line(fl(x0), fl(y0), fl(x1), fl(y1),
-                         AURORA_BANDS[(i - 1) % 3 + 1])
+                         aurora and AURORA_BANDS[(i - 1) % 3 + 1]
+                                or  P.border_subtle)
     end
     x0, y0 = x1, y1
   end
@@ -298,12 +352,16 @@ function M.draw(opts)
   local now = opts.now_ms or M._now_ms()
   _ox, _oy = opts.ox or 0, opts.oy or 0
 
+  -- wake reveal (Lumen): while active, only geometry inside the swept
+  -- span draws — the day assembles outward from the notch
+  local reach = reveal_reach(now, opts.reduce_motion)
+
   -- aurora light only in pure idle: focused/dim frames keep the static
   -- ghost track, and reduce_motion is pixel-identical to the pre-Lumen
   -- horizon (base hexes differ from border_subtle by one invisible LSB,
   -- so even the banded track only moves when the animator runs)
   draw_track(opts.aurora and not opts.reduce_motion
-             and not opts.dim and not opts.focus)
+             and not opts.dim and not opts.focus, reach)
 
   -- staleness: no frame for MER_STALE_MS -> marks drop one luma tier
   -- (device liveness stays on the notch, memory-link health on the marks)
@@ -335,7 +393,9 @@ function M.draw(opts)
   end
 
   for _, mk in ipairs(paused and {} or _marks) do
-    if mk.kind == KIND_MEMORY then
+    if reach and notch_dist(mk.deg) > reach then
+      -- outside the wake sweep: this mark hasn't been revealed yet
+    elseif mk.kind == KIND_MEMORY then
       local extra = drawn_deg[mk.deg]
       if extra ~= nil then   -- cluster representative
         local dim_mk = mk
@@ -400,6 +460,19 @@ function M.draw(opts)
     _pulse = nil
   end
 
+  -- shatter impact (Lumen): a short ring blooms off the break while the
+  -- shards (particles, ticked by the renderer) fall inward
+  if _shatter and now <= _shatter.until_ms then
+    if HAS_FRAME and not opts.reduce_motion then
+      local st = 1 - (_shatter.until_ms - now) / A.SHATTER_FLASH_MS
+      local sx, sy = polar(A.MER_PROMISE_SLIP_R, _shatter.deg)
+      frame.display.circle(fl(sx), fl(sy), fl(3 + 9 * st),
+                           P.warning_amber, false)
+    end
+  elseif _shatter then
+    _shatter = nil
+  end
+
   draw_notch(now, opts.reduce_motion)
 
   -- Yesterlight: the visited hour gets its own still notch, in the
@@ -446,6 +519,7 @@ function M.last_frame_ms() return _last_frame_ms end
 function M.reset()
   _marks, _seq, _paused, _last_frame_ms = {}, -1, false, nil
   _highlight, _pulse, _scrub = nil, nil, nil
+  _shatter, _reveal_t0 = nil, nil
 end
 
 return M

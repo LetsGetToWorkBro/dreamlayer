@@ -15,6 +15,9 @@ local Figment    = require("app.figment_stage") -- Reality Compiler v2 stage
 local MT         = require("ble.message_types")
 local Horizon    = require("display.horizon")   -- Meridian day-ring
 local Renderer   = require("display.renderer")
+local Particles  = require("display.particles") -- Lumen hero pool
+local PalAnim    = require("display.palette_animator")
+local Anim       = require("display.animations")
 
 -- figment_put/swap/revoke/text arrive as BLE envelopes → stage handlers
 Figment.register(HostComm)
@@ -92,7 +95,13 @@ local function process_inbound(msg)
       Cards:push({ type = "QueryListeningCard" }, CardQueue.URGENT)
     elseif cmd == "resume" then
       Cards:push({ type = "ReadyCard" }, CardQueue.AMBIENT)
+    elseif cmd == "wake" then
+      -- Lumen wake ring: the day assembles outward from the notch
+      Horizon.wake()
     end
+
+  elseif t == "connect" then
+    Horizon.wake()
 
   elseif t == "button" and Figment.is_running() then
     -- while a figment holds the stage, physical buttons drive it
@@ -133,9 +142,26 @@ end
 -- ---------------------------------------------------------------------------
 local _tick_ms   = 0     -- monotonic tick clock (50ms per tick)
 local _shown     = nil   -- card instance currently owned by the renderer
+local _dreaming  = false -- last seen dream state (Lumen warp trigger)
 
 local function tick()
   _tick_ms = _tick_ms + 50
+
+  -- Lumen dream door: entering/leaving Dream Mode is a starfield breath
+  -- over the SAME terrain — streaks rush outward into the dream and
+  -- inward on the way back — instead of the old hard clear
+  -- (docs/CINEMA_V2_DELTAS.md §8's stated risk, answered).
+  local dreaming = HostComm.dream_active()
+  if dreaming ~= _dreaming then
+    _dreaming = dreaming
+    Particles.clear()
+    Particles.streaks(Anim.WARP_STREAKS, {
+      t0 = dreaming and _tick_ms or Renderer.now_ms(),
+      seed = 7, reverse = not dreaming,
+      ttl_ms = dreaming and Anim.MER_DREAM_ENTER_MS
+                        or  Anim.MER_DREAM_EXIT_MS,
+    })
+  end
 
   -- Receive BLE
   local raw = (_G.halo and _G.halo.bluetooth and _G.halo.bluetooth.receive
@@ -168,6 +194,9 @@ local function tick()
       -- Auto-dismiss dream cards after their dismiss_ms
       -- (CardQueue handles dismiss timer internally)
     end
+    -- Lumen: door streaks + any light programs ride over the weather
+    Particles.tick(_tick_ms)
+    PalAnim.tick(_tick_ms)
     if has_frame then frame.display.show() end
   else
     -- Memory Mode: the queue decides WHAT holds focus; the renderer
