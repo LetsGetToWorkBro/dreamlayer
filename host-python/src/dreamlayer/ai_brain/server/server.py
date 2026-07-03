@@ -213,6 +213,22 @@ class Brain:
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
+    def suggest_replies(self, text: str, n: int = 3) -> list:
+        """A few short, natural replies to an incoming message — pick one by
+        tap now, by voice later. Model-generated with a canned fallback."""
+        text = (text or "").strip()
+        if self._backend is not None and text:
+            try:
+                raw = self._backend.chat(
+                    f"Suggest {n} short, natural one-line replies to this "
+                    f"message. One per line, no numbering, no quotes:\n\n" + text)
+                lines = [ln.strip("-•\" ").strip() for ln in raw.splitlines() if ln.strip()]
+                if lines:
+                    return lines[:n]
+            except Exception:
+                pass
+        return ["On my way", "Give me a few", "Thanks!"][:n]
+
     def brief(self, agenda=None, since: float = 0.0) -> dict:
         """A one-glance morning brief: what's new (messages/mail) + what's on
         you (agenda the phone passes: commitments, calendar). The model turns
@@ -442,6 +458,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 b = self._body()
                 self._json(200, brain.brief(agenda=b.get("agenda"),
                                             since=b.get("since", 0) or 0))
+            elif path == "/dreamlayer/replies":
+                b = self._body()
+                self._json(200, {"replies": brain.suggest_replies(b.get("text", ""))})
             elif path == "/dreamlayer/brain/explain":
                 b = self._body()
                 ans = brain.explain(b.get("label", ""), b.get("image"),

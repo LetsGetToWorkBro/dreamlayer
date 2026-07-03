@@ -20,6 +20,7 @@ export default function Messages() {
   const macConnected = useBrainStore((s) => s.macMini.connected);
   const fetchMessages = useBrainStore((s) => s.fetchMessages);
   const sendReply = useBrainStore((s) => s.sendReply);
+  const getReplies = useBrainStore((s) => s.getReplies);
 
   const [items, setItems] = useState<BrainMessage[]>([]);
   const [enabled, setEnabled] = useState(true);
@@ -27,6 +28,18 @@ export default function Messages() {
   const [replyTo, setReplyTo] = useState<BrainMessage | null>(null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  const openReply = async (m: BrainMessage) => {
+    const open = replyTo === m;
+    setReplyTo(open ? null : m);
+    setText("");
+    setSuggestions([]);
+    if (!open && !m.from_me) {
+      const s = await getReplies(m.subject ? `${m.subject}: ${m.text}` : m.text);
+      setSuggestions(s);
+    }
+  };
 
   const refresh = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -86,7 +99,7 @@ export default function Messages() {
             const tint = m.channel === "email" ? "#8FB8FF" : colors.accentMemory;
             const open = replyTo === m;
             return (
-              <Card key={i} delay={i * 40} accent={tint} active={open} onPress={() => { setReplyTo(open ? null : m); setText(""); }}>
+              <Card key={i} delay={i * 40} accent={tint} active={open} onPress={() => openReply(m)}>
                 <View style={s.row}>
                   <View style={[s.tag, { backgroundColor: tint }]} />
                   <View style={{ flex: 1 }}>
@@ -103,6 +116,15 @@ export default function Messages() {
                 </View>
                 {open && !m.from_me && (
                   <View style={s.reply}>
+                    {suggestions.length > 0 && (
+                      <View style={s.chips}>
+                        {suggestions.map((sug, k) => (
+                          <Tappable key={k} onPress={() => setText(sug)} style={s.chip}>
+                            <Text style={[typography.caption, { color: colors.accentMemory }]}>{sug}</Text>
+                          </Tappable>
+                        ))}
+                      </View>
+                    )}
                     <TextInput
                       value={text}
                       onChangeText={setText}
@@ -136,6 +158,14 @@ const s = StyleSheet.create({
   tag: { width: 3, borderRadius: radius.sm, alignSelf: "stretch" },
   metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   reply: { marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: space.md },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.md },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.accentMemory,
+    borderRadius: radius.pill,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+  },
   input: {
     backgroundColor: colors.background,
     borderWidth: 1,

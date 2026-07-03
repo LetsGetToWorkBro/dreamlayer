@@ -65,6 +65,7 @@ type BrainState = {
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
   sendReply: (m: { channel: string; to: string; subject?: string; text: string }) => Promise<{ ok: boolean; error?: string }>;
+  getReplies: (text: string) => Promise<string[]>;
 
   hydrate: () => Promise<void>;
 };
@@ -257,6 +258,22 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return j.error ? { ok: false, error: j.error } : { ok: true };
     } catch {
       return { ok: false, error: "Couldn't reach your Brain" };
+    }
+  },
+
+  getReplies: async (text) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await fetch(m.url + "/dreamlayer/replies", {
+        method: "POST",
+        headers: headers(m),
+        body: JSON.stringify({ text }),
+      });
+      const j = await r.json();
+      return j.replies ?? [];
+    } catch {
+      return [];
     }
   },
 

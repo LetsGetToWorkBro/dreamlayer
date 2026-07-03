@@ -630,6 +630,23 @@ class Orchestrator:
             self.bridge.send_card(c.card, event="anticipate")
         return cues
 
+    def handle_voice(self, text: str) -> dict:
+        """Route a spoken (already-transcribed) line to an intent. 'Ask/recall'
+        run straight through to the brain and return the answer; the rest come
+        back as a structured intent for the hub to execute (reply, locate,
+        brief, missed). The mic + speech-to-text is a device seam."""
+        from .voice import parse_intent
+        it = parse_intent(text)
+        if it.kind in ("ask", "recall"):
+            ans = None
+            try:
+                ans = self.ask_brain(it.args.get("query", ""))
+            except Exception:
+                ans = None
+            return {"intent": it.kind, "query": it.args.get("query", ""),
+                    "answer": ans.text if ans is not None else ""}
+        return {"intent": it.kind, **it.args}
+
     # -- back-compat aliases (the model is the three switches above) -----
 
     @property
