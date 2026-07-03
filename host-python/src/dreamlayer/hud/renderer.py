@@ -377,6 +377,7 @@ class CardRenderer:
             "ListeningCard":        self._layout_card,
             "HarkCard":             self._layout_card,
             "OracleReplyCard":      self._layout_card,
+            "FactCheckCard":        self._layout_card,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:

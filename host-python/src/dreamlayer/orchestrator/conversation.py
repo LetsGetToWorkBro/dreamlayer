@@ -76,6 +76,13 @@ class ConversationLedger:
             return []
         return list(self._log)[-n:]
 
+    def by_speaker(self, speaker: str, limit: int = 40) -> list[Utterance]:
+        """This speaker's utterances, oldest→newest (up to `limit`). Powers the
+        self-contradiction pass in Veritas — "did they say different before?"."""
+        who = (speaker or "").strip().lower()
+        out = [u for u in self._log if u.speaker.lower() == who]
+        return out[-limit:] if limit and limit > 0 else out
+
     def last_other_speaker(self) -> str:
         """The most recent person (not the wearer) who spoke — i.e. who you're
         talking to right now. '' if only you have spoken."""

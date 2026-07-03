@@ -107,6 +107,18 @@ device seams are the callables they accept.
   **watch-out** hark. Ranked (urgent first), per-key cooldown so it never nags,
   and gated by hark's Veil/Focus rules (`attention.py: AttentionPolicy`;
   `set_attention(False)` mutes it). Feed it the same `Context` as anticipation.
+- **Veritas (live fact-checker)** — with `set_factcheck(True)`, every line that
+  lands in `ingest_caption` is checked two ways (`orchestrator/veritas.py`):
+  a **self-contradiction** pass (offline — reuses Candor's `contradicts` over the
+  speaker's own earlier lines via `conversation.by_speaker`, "earlier they said
+  different") and a **world check** that hands a *checkable* claim (a number, a
+  date, a factual predicate — never a question or a hedge) to `_verify_claim`.
+  Fires sparingly: one verdict per speaker per cooldown, only above a confidence
+  floor, held during Focus, gated by the Veil. Card: `hud/cards.py: fact_check`
+  (green verified · amber check-this · red contradiction). **Seam:**
+  `_verify_claim` routes through the Brain (`brain.verify(claim)` →
+  `{verdict, basis, confidence}`) and the cloud tier when opted in; returns
+  `None` offline, so the self-contradiction pass still runs alone.
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that

@@ -432,6 +432,53 @@ def oracle_reply(text: str = "", kind: str = "answer") -> dict:
     }
 
 
+_FACT_STYLE = {
+    "supported":          ("VERIFIED",   T.ACCENT_SUCCESS,   "chime"),
+    "disputed":           ("CHECK THIS", T.WARNING_AMBER,    "hark_urgent"),
+    "self_contradiction": ("THEY SAID DIFFERENT BEFORE", T.ACCENT_ATTENTION, "hark"),
+    "unverified":         ("UNVERIFIED", T.TEXT_GHOST,       "hark"),
+}
+
+
+def fact_check(verdict: str = "unverified", speaker: str = "them",
+               claim: str = "", basis: str = "", detail: str = "") -> dict:
+    """Veritas — a quiet fact-check on what's being said, sized to be read at a
+    glance while the conversation continues. Green when a claim checks out, amber
+    when it doesn't, attention-red when the speaker contradicts their own earlier
+    words. `basis` is the one-line why (the correction, or what they said before)."""
+    eyebrow, color, earcon = _FACT_STYLE.get(verdict, _FACT_STYLE["unverified"])
+    body = (claim or "").strip()
+    if len(body) > 90:
+        body = body[:89] + "…"
+    why = (basis or "").strip()
+    if len(why) > 96:
+        why = why[:95] + "…"
+    return {
+        "type":       "FactCheckCard",
+        "dismiss_ms": 7000,
+        "verdict":    verdict,
+        "speaker":    speaker,
+        "eyebrow":    eyebrow,
+        "primary":    body or "—",
+        "detail":     why,
+        "footer":     speaker,
+        "earcon":     earcon,
+        "haptic":     "double" if verdict in ("disputed", "self_contradiction") else "tick",
+        "flash":      verdict in ("disputed", "self_contradiction"),
+        "color":      color,
+        "lines":      [eyebrow, body, why, speaker],
+        "layout": {
+            "ring":      {"x": 128, "y": 56, "r": 10, "color": color,
+                          "flash": verdict in ("disputed", "self_contradiction")},
+            "eyebrow":   {"x": 128, "y": 80,  "size": "sm", "color": color, "tracking": 3},
+            "separator": {"x1": 44, "x2": 212, "y": 96},
+            "primary":   {"x": 128, "y": 128, "size": "md", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 162, "size": "sm", "color": T.TEXT_GHOST},
+            "footer":    {"x": 128, "y": 196, "size": "sm", "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def morning_brief(text: str = "", bullets=None) -> dict:
     """The day's brief, flashed on the glasses the moment you put the Halo on.
     Short synthesis up top, the first couple of points beneath."""
@@ -817,6 +864,10 @@ ALL_SAMPLES: dict[str, dict] = {
     "hark":                hark(clue="Marcus is 2 min away — you owe him the lease.",
                                 detail="from your last chat"),
     "listening":           listening(source="voice"),
+    "fact_check":          fact_check(
+        verdict="self_contradiction", speaker="Marcus",
+        claim="The deal closed at three million.",
+        basis="earlier: “we settled at two million”"),
     "morning_brief":       morning_brief(
         text="Two meetings and the lease is due Friday. Marcus texted twice.",
         bullets=["Standup at 9:00 AM", "1 new text (from Marcus)", "Reminder: file the taxes"],
