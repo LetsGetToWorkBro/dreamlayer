@@ -121,6 +121,37 @@ def test_low_confidence_payload():
 
 
 # ---------------------------------------------------------------------------
+# Conversation ledger cards
+# ---------------------------------------------------------------------------
+
+def test_spoken_caption_payload():
+    c = cards.spoken_caption("Marcus Reyes", "let's sign the lease")
+    assert c["type"] == "SpokenCaptionCard"
+    assert c["primary"] == "let's sign the lease"
+    assert c["eyebrow"] == "MARCUS"           # first name, uppercased
+    assert c["dismiss_ms"] == 0               # stays until replaced
+
+
+def test_spoken_caption_truncates_long_lines():
+    c = cards.spoken_caption("", "x" * 200)
+    assert len(c["primary"]) <= 96 and c["primary"].endswith("…")
+    assert c["eyebrow"] == "HEARD"            # no speaker → generic label
+
+
+def test_person_dossier_payload():
+    c = cards.person_dossier({
+        "person": "Priya", "known": True, "exchanges": 4,
+        "last_seen_ago": "20 min ago", "last_line": "ping me after lunch",
+        "topics": ["budget", "q3", "hiring"],
+    })
+    assert c["type"] == "PersonDossierCard"
+    assert c["primary"] == "Priya"
+    assert "20 min ago" in c["headline"]
+    assert "budget" in c["detail"]
+    assert c["footer"] == "ping me after lunch"
+
+
+# ---------------------------------------------------------------------------
 # ALL_SAMPLES smoke test
 # ---------------------------------------------------------------------------
 

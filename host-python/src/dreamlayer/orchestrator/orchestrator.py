@@ -112,6 +112,12 @@ class Orchestrator:
         from .anticipation import AnticipationEngine
         self.anticipation = AnticipationEngine()
         self.anticipation_on = True             # proactive cards toggle
+        # Conversation ledger: transcribed speech (a device seam) becomes live
+        # captions, day-recall ("what did they say about X"), a rewind-my-day
+        # timeline, and a person dossier on greeting. Never raw audio; Veil-gated.
+        from .conversation import ConversationLedger
+        self.conversation = ConversationLedger()
+        self.captions_on = True                 # show live captions on the glasses
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -650,6 +656,54 @@ class Orchestrator:
             return {"intent": it.kind, "query": it.args.get("query", ""),
                     "answer": ans.text if ans is not None else ""}
         return {"intent": it.kind, **it.args}
+
+    # -- conversation ledger: captions, recall, rewind, dossier ----------
+
+    def set_captions(self, on: bool = True) -> None:
+        self.captions_on = on
+
+    def ingest_caption(self, text: str, speaker: str = "",
+                       ts: float | None = None, show: bool = True):
+        """Record one transcribed line (device seam) and, unless captions are
+        off, flash it on the glasses. Veil-gated: nothing is kept or shown while
+        capture is paused / incognito. Returns the stored Utterance or None."""
+        if not self.privacy.allow_capture():
+            return None
+        u = self.conversation.add(text, speaker, ts)
+        if u is not None and show and self.captions_on:
+            self.bridge.send_card(
+                cards.spoken_caption(u.speaker, u.text), event="caption")
+        return u
+
+    def live_captions(self, n: int = 6) -> list:
+        """The last few utterances, oldest→newest, for the caption strip."""
+        return self.conversation.captions(n)
+
+    def recall_conversation(self, topic: str, person: str | None = None,
+                            limit: int = 8) -> list:
+        """'What did they say about X?' — user-initiated, so not Veil-gated."""
+        return self.conversation.recall(topic, person, limit)
+
+    def rewind_day(self, now: float | None = None) -> list:
+        """A digest of today's conversation, grouped into hour blocks."""
+        import time
+        now = now if now is not None else time.time()
+        lt = time.localtime(now)
+        day_start = now - (lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec)
+        return self.conversation.timeline(day_start, day_start + 86400)
+
+    def greet(self, person: str, now: float | None = None):
+        """Surface a dossier the moment you greet someone the ledger knows.
+        Proactive, so Veil-gated. Returns the card sent, or None if unknown or
+        silenced."""
+        if not self.privacy.allow_capture():
+            return None
+        d = self.conversation.dossier(person, now)
+        if not d.get("known"):
+            return None
+        card = cards.person_dossier(d)
+        self.bridge.send_card(card, event="greet")
+        return card
 
     # -- back-compat aliases (the model is the three switches above) -----
 

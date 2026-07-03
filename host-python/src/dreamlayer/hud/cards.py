@@ -331,6 +331,62 @@ def live_caption_card(
     }
 
 
+def spoken_caption(speaker: str = "", text: str = "") -> dict:
+    """A live transcript line — who just spoke and what they said. Distinct from
+    live_caption_card, which is for translated speech. Stays until replaced."""
+    who = (speaker or "").strip()
+    body = (text or "").strip()
+    if len(body) > 96:
+        body = body[:95] + "…"
+    eyebrow = who.split()[0].upper() if who else "HEARD"
+    return {
+        "type":       "SpokenCaptionCard",
+        "dismiss_ms": 0,
+        "speaker":    who,
+        "primary":    body,
+        "eyebrow":    eyebrow,
+        "lines":      [eyebrow, body],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 66,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 2},
+            "separator": {"x1": 48, "x2": 208, "y": 82},
+            "primary":   {"x": 128, "y": 120, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
+def person_dossier(data) -> dict:
+    """Who is this — surfaced the moment you greet someone the ledger knows.
+    Takes a dossier dict (ConversationLedger.dossier): last seen, how many
+    exchanges, the topics that recur, and their most recent line."""
+    person = _d(data, "person", default="Someone")
+    last_seen = _d(data, "last_seen_ago", ("last_seen",))
+    last_line = _d(data, "last_line")
+    topics = data.get("topics", []) if isinstance(data, dict) else []
+    exchanges = data.get("exchanges", 0) if isinstance(data, dict) else 0
+    headline = f"last spoke {last_seen}" if last_seen else "in your ledger"
+    topic_line = ("about " + ", ".join(topics[:3])) if topics else ""
+    return {
+        "type":       "PersonDossierCard",
+        "dismiss_ms": 5000,
+        "person":     person,
+        "primary":    person,
+        "eyebrow":    "YOU KNOW",
+        "headline":   headline,
+        "detail":     topic_line,
+        "footer":     last_line,
+        "exchanges":  exchanges,
+        "topics":     topics,
+        "lines":      [person, headline, topic_line, last_line],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 62,  "size": "sm",   "color": T.ACCENT_MEMORY, "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 78},
+            "primary":   {"x": 128, "y": 110, "size": "hero", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 142, "size": "sm",   "color": T.TEXT_SECONDARY},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+        },
+    }
+
+
 # ------------------------------------------------------------------ lens cards
 
 def truth_gauge_card(
@@ -652,6 +708,14 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
+    "spoken_caption":      spoken_caption(
+        speaker="Marcus", text="Let's lock the lease by Friday, deal?",
+    ),
+    "person_dossier":      person_dossier({
+        "person": "Marcus", "known": True, "exchanges": 6,
+        "last_seen_ago": "2 hr ago", "last_line": "Send me the signed lease",
+        "topics": ["lease", "friday", "signed"],
+    }),
     "privacy_veil":      privacy_veil(),
     "error":               error_card("BLE timeout"),
     "low_confidence":      low_confidence(),

@@ -76,6 +76,17 @@ device seams are the callables they accept.
   `start_message_polling()` fetch the Brain feed and flash new incoming
   messages (idempotent, veil-gated, per-channel toggles). **Seam:** `http_get`
   defaults to `urllib`; swap for your platform's client if needed.
+- **Conversation ledger** — `orchestrator/conversation.py: ConversationLedger`
+  turns transcribed speech into four things:
+  `ingest_caption(text, speaker)` records a line and flashes it as a live
+  caption (veil-gated; `set_captions(False)` keeps the ledger but hides the
+  HUD); `recall_conversation(topic, person=None)` answers "what did they say
+  about X" (user-initiated, not veil-gated); `rewind_day()` returns an
+  hour-grouped digest of today; `greet(person)` surfaces a **person dossier**
+  card (last seen, recurring topics, most recent line) for anyone the ledger
+  knows. Cards: `hud/cards.py: spoken_caption`, `person_dossier`. **Seam:** the
+  same mic + ASR that feeds voice, plus optional speaker diarization for the
+  `speaker` label.
 - **Brain routing** — `BrainRouter` (device → Mac mini → cloud) with the three
   switches (`connect_mac_mini` / `use_cloud` / `set_incognito`).
 

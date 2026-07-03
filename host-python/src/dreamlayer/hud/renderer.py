@@ -370,6 +370,9 @@ class CardRenderer:
             "PrivateZoneCard":      self._layout_card,
             "ConsentRequiredCard":  self._layout_card,
             "LiveCaptionCard":      self._layout_card,
+            # Conversation ledger: live transcript + dossier on greet
+            "SpokenCaptionCard":    self._layout_card,
+            "PersonDossierCard":    self._layout_card,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
