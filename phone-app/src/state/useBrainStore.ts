@@ -20,6 +20,14 @@ export type BrainKind = "phone" | "mac_mini";
 export type MacMini = { connected: boolean; url: string; token: string };
 export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
+export type BrainMessage = {
+  channel: string; // "imessage" | "email"
+  who: string;
+  from_me: boolean;
+  text: string;
+  subject?: string;
+  ts: number;
+};
 
 type BrainState = {
   macMini: MacMini;
@@ -27,6 +35,7 @@ type BrainState = {
   cloud: boolean; // the remembered preference (independent switch)
   incognito: boolean;
   capturePaused: boolean;
+  notifyGlasses: boolean; // texts/emails pop up on the glasses
   hydrated: boolean;
 
   // derived
@@ -38,12 +47,17 @@ type BrainState = {
   setCloud: (on: boolean) => void;
   setIncognito: (on: boolean) => void;
   setCapturePaused: (on: boolean) => void;
+  setNotifyGlasses: (on: boolean) => void;
   connectGlasses: (id: string) => void;
   disconnectGlasses: () => void;
 
   // pairing + recall
   pairFromCode: (code: string) => { brain: boolean; glasses: boolean };
   ask: (query: string) => Promise<AskResult>;
+
+  // messages relayed by the Brain — read on the glasses, reply hands-free
+  fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
+  sendReply: (m: { channel: string; to: string; subject?: string; text: string }) => Promise<{ ok: boolean; error?: string }>;
 
   hydrate: () => Promise<void>;
 };
@@ -57,6 +71,7 @@ function persist(s: BrainState) {
     cloud: s.cloud,
     incognito: s.incognito,
     capturePaused: s.capturePaused,
+    notifyGlasses: s.notifyGlasses,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -87,6 +102,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   cloud: true,
   incognito: false,
   capturePaused: false,
+  notifyGlasses: true,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -115,6 +131,11 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   setCapturePaused: (on) => {
     set({ capturePaused: on });
+    persist(get());
+  },
+
+  setNotifyGlasses: (on) => {
+    set({ notifyGlasses: on });
     persist(get());
   },
 
@@ -161,6 +182,34 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
     } catch {
       return { text: "Couldn't reach your Brain. Is the Mac mini awake and on the same network?", tier: "", sources: [] };
+    }
+  },
+
+  fetchMessages: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return { items: [], enabled: false };
+    try {
+      const r = await fetch(m.url + "/dreamlayer/messages/recent", { headers: headers(m) });
+      const j = await r.json();
+      return { items: j.items ?? [], enabled: !!j.enabled };
+    } catch {
+      return { items: [], enabled: false };
+    }
+  },
+
+  sendReply: async (draft) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return { ok: false, error: "No Brain paired" };
+    try {
+      const r = await fetch(m.url + "/dreamlayer/message/send", {
+        method: "POST",
+        headers: headers(m),
+        body: JSON.stringify({ ...draft, approved: true }),
+      });
+      const j = await r.json();
+      return j.error ? { ok: false, error: j.error } : { ok: true };
+    } catch {
+      return { ok: false, error: "Couldn't reach your Brain" };
     }
   },
 

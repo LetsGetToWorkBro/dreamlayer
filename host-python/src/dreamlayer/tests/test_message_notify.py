@@ -1,0 +1,63 @@
+"""test_message_notify.py — texts/emails pop up on the glasses.
+
+The Mac mini Brain is the bridge; the hub polls its message feed and the
+orchestrator turns new *incoming* messages into HUD cards — silenced by the
+Privacy Veil, toggleable, and idempotent."""
+from __future__ import annotations
+
+from dreamlayer.hud import cards
+from dreamlayer.tests.test_integration_dream_suite import FakeBridge
+from dreamlayer.orchestrator.orchestrator import Orchestrator
+
+
+def _orc():
+    return Orchestrator(FakeBridge())
+
+
+def _cards(orc):
+    return [f for f in orc.bridge.raw if f.get("t") == "card"]
+
+
+FEED = [
+    {"channel": "imessage", "who": "Marcus", "from_me": False, "text": "you around?", "ts": 10.0},
+    {"channel": "imessage", "who": "Me", "from_me": True, "text": "one sec", "ts": 11.0},
+    {"channel": "email", "who": "landlord@birch.co", "from_me": False,
+     "subject": "Renewal", "text": "sign by Friday", "ts": 12.0},
+]
+
+
+def test_new_incoming_messages_pop_up():
+    orc = _orc()
+    sent = orc.poll_messages(FEED)
+    # the two incoming ones pop; the one I sent does not
+    assert [c["primary"] for c in sent] == ["Marcus", "landlord@birch.co"]
+    assert all(c["type"] == "MessageCard" for c in sent)
+    assert _cards(orc)                          # they reached the glasses
+
+
+def test_polling_is_idempotent():
+    orc = _orc()
+    orc.poll_messages(FEED)
+    again = orc.poll_messages(FEED)             # same feed, nothing newer
+    assert again == []
+    # a genuinely newer message does pop
+    newer = FEED + [{"channel": "imessage", "who": "Priya", "from_me": False,
+                     "text": "here!", "ts": 20.0}]
+    popped = orc.poll_messages(newer)
+    assert [c["primary"] for c in popped] == ["Priya"]
+
+
+def test_toggle_and_veil_silence_popups():
+    orc = _orc()
+    orc.set_message_notifications(False)
+    assert orc.poll_messages(FEED) == []        # off → nothing flashes
+    # but the seen-watermark still advances, so turning it back on doesn't
+    # dump the backlog
+    orc.set_message_notifications(True)
+    assert orc.poll_messages(FEED) == []
+
+
+def test_email_card_carries_subject():
+    card = cards.message_notification("a@b.co", "Renewal — sign by Friday", "email")
+    assert card["channel"] == "email" and card["headline"] == "Mail"
+    assert "reply" in card["actions"]

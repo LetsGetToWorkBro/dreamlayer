@@ -140,6 +140,25 @@ def person_context(person: str, headline: str = "", detail: str = "") -> dict:
     }
 
 
+def message_notification(who: str, text: str, channel: str = "imessage") -> dict:
+    """A text/email arriving — pops up on the glasses, glanceable and brief.
+    A tap opens the reply flow on the phone/glasses; it fades on its own."""
+    kind = "Mail" if channel == "email" else "Text"
+    body = (text or "").strip()
+    if len(body) > 90:
+        body = body[:87].rstrip() + "…"
+    return {
+        "type":       "MessageCard",
+        "channel":    channel,
+        "dismiss_ms": 6000,
+        "primary":    who or "Message",
+        "headline":   kind,
+        "detail":     body,
+        "lines":      [f"{kind} · {who}", body],
+        "actions":    ["reply", "dismiss"],
+    }
+
+
 def privacy_veil() -> dict:
     return {
         "type":     "PrivacyVeilCard",

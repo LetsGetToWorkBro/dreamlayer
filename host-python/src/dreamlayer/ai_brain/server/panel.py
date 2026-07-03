@@ -276,17 +276,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div id="tokenout"></div>
   </section>
 
-  <section id="composeCard" style="display:none">
-    <div class="eyebrow">Messages</div><h2>Compose &amp; send</h2>
-    <p class="lead">Nothing is ever sent silently. Write it, preview the exact action, then approve.</p>
-    <div class="row"><select id="mchan" style="max-width:130px"><option value="imessage">iMessage</option><option value="email">Email</option></select>
-      <input type="text" id="mto" placeholder="to (name / number / email)"></div>
-    <input type="text" id="msubj" placeholder="subject (email only)" style="width:100%;margin-top:10px">
-    <input type="text" id="mtext" placeholder="message…" style="width:100%;margin-top:10px">
-    <div class="row" style="margin-top:12px;justify-content:space-between">
-      <button class="sm ghost" onclick="draftMsg()">Preview</button>
-      <button class="sm" onclick="sendMsg()">Approve &amp; send</button></div>
-    <div id="msgout"></div>
+  <section id="msgCard" style="display:none">
+    <div class="eyebrow">Messages</div><h2>On your glasses</h2>
+    <p class="lead">This Mac is the <b>bridge</b> to your Messages &amp; Mail — it lives here, so
+      the Brain relays it out. You read hands-free on the <b>glasses</b> and reply by voice with a
+      tap to approve; you never touch the Mac. Here's a preview of what the glasses would surface now.</p>
+    <ul id="msgfeed" class="feed"></ul>
   </section>
 
   <section>
@@ -356,7 +351,8 @@ async function load(){
   $("excl").value=(c.config.exclude_globs||[]).join(",");
   // ops
   $("quiet").value=c.config.quiet_hours||"";$("retain").value=c.config.retention_days||0;
-  $("composeCard").style.display=c.config.email_enabled?"":"none";
+  $("msgCard").style.display=c.config.email_enabled?"":"none";
+  if(c.config.email_enabled) loadMessages();
   refreshStatus(); loadHistory(); loadHealth();
 }
 
@@ -541,14 +537,17 @@ async function saveFilters(){
     exclude_globs:$("excl").value.split(",").map(x=>x.trim()).filter(Boolean)})});
   toast("Filters saved — re-indexing");load();}
 
-/* messages — draft → approve → send */
-function draft(){return {channel:$("mchan").value,to:$("mto").value,subject:$("msubj").value,text:$("mtext").value};}
-async function draftMsg(){const r=await api("/dreamlayer/message/draft",{method:"POST",body:JSON.stringify(draft())});
-  $("msgout").innerHTML=`<div class="mstat"><div class="lead" style="margin:0 0 6px">This exact action will run — nothing else:</div>`+
-    `<pre style="white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace;color:var(--memory);margin:0">${esc(r.script||'')}</pre></div>`;}
-async function sendMsg(){if(!confirm("Send this message now?"))return;
-  const r=await api("/dreamlayer/message/send",{method:"POST",body:JSON.stringify(Object.assign(draft(),{approved:true}))});
-  if(r.error){toast("Not sent: "+r.error);} else {toast("Sent");$("msgout").innerHTML="";$("mtext").value="";}load();}
+/* messages — the read feed the glasses surface (reply happens on the glasses) */
+async function loadMessages(){let r;try{r=await api("/dreamlayer/messages/recent");}catch(e){return;}
+  const ul=$("msgfeed");
+  if(!r.items||!r.items.length){ul.innerHTML='<li class="empty">No recent messages'+
+    (r.enabled?' — nothing to relay right now.':'. Turn on “Read email &amp; iMessage” to relay them to your glasses.')+'</li>';return;}
+  ul.innerHTML=r.items.map(m=>{
+    const who=m.from_me?"You":esc(m.who||"unknown");
+    const body=esc(m.subject?m.subject+" — "+(m.text||""):(m.text||"")).slice(0,160);
+    return `<li><div><div class="q">${who}</div><div class="a">${body}</div></div>`+
+      `<span class="tag ${m.channel==='email'?'config':'pair'}">${esc(m.channel)}</span></li>`;}).join("");
+}
 
 /* ops */
 async function saveOps(){await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({

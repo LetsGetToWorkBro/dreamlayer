@@ -84,6 +84,12 @@ class Orchestrator:
         self.mac_mini_connected = False       # phone is the brain until paired
         self.incognito = False
         self.glasses_id = None                # set at pairing
+        # Live message pop-ups: a text/email arriving flashes on the glasses.
+        # The Mac mini Brain is the bridge (that's where Messages/Mail live);
+        # poll_messages() turns new *incoming* ones into HUD cards. Silenced by
+        # the Privacy Veil like everything else, and toggleable.
+        self.notify_messages = True
+        self._msg_seen_ts = 0.0
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -508,6 +514,39 @@ class Orchestrator:
             "incognito": self.incognito,
             "glasses":   bool(self.glasses_id),
         }
+
+    # -- live message pop-ups (texts/emails flash on the glasses) --------
+
+    def set_message_notifications(self, on: bool = True) -> None:
+        self.notify_messages = on
+
+    def poll_messages(self, items: list, now: float | None = None) -> list:
+        """Turn newly-arrived *incoming* messages into glasses pop-ups.
+
+        `items` is the Brain's recent-messages feed (fetched by the hub from
+        /dreamlayer/messages/recent). Only messages newer than the last seen,
+        and not sent by you, pop up — silenced by the Privacy Veil, and only
+        when notifications are on. Returns the cards it flashed. Idempotent:
+        re-polling the same feed shows nothing new.
+        """
+        cards_sent = []
+        newest = self._msg_seen_ts
+        for m in sorted(items, key=lambda x: x.get("ts", 0)):
+            ts = m.get("ts", 0)
+            if ts <= self._msg_seen_ts or m.get("from_me"):
+                newest = max(newest, ts)
+                continue
+            newest = max(newest, ts)
+            if not self.notify_messages or not self.privacy.allow_capture():
+                continue
+            card = cards.message_notification(
+                m.get("who", ""), m.get("subject") and
+                f"{m['subject']} — {m.get('text','')}" or m.get("text", ""),
+                m.get("channel", "imessage"))
+            self.bridge.send_card(card, event="message")
+            cards_sent.append(card)
+        self._msg_seen_ts = newest
+        return cards_sent
 
     # -- back-compat aliases (the model is the three switches above) -----
 

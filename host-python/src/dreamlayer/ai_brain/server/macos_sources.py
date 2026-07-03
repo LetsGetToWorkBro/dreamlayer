@@ -117,6 +117,65 @@ def collect_documents(config) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Live feed — the recent messages your glasses read hands-free (the Mac is the
+# bridge; the reading + reply happen on the glasses, not here).
+# ---------------------------------------------------------------------------
+
+def recent_messages(config=None, limit: int = 20) -> list[dict]:
+    """Newest Messages + Mail as structured items for the glasses/phone to
+    surface: {channel, who, from_me, text, subject?, ts}. [] off macOS."""
+    if platform.system() != "Darwin":
+        return []
+    out = _recent_imessages(limit) + _recent_mail(limit)
+    out.sort(key=lambda m: m.get("ts", 0), reverse=True)
+    return out[:limit]
+
+
+# Apple stores message dates as nanoseconds since 2001-01-01.
+_APPLE_EPOCH = 978307200
+
+
+def _recent_imessages(limit: int) -> list[dict]:
+    p = Path(IMESSAGE_DB).expanduser()
+    if not p.exists():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        rows = conn.execute(
+            "SELECT h.id, m.is_from_me, m.text, m.date "
+            "FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID "
+            "WHERE m.text IS NOT NULL ORDER BY m.date DESC LIMIT ?",
+            (limit,)).fetchall()
+        conn.close()
+    except sqlite3.Error:
+        return []
+    out = []
+    for who, is_me, text, date in rows:
+        out.append({"channel": "imessage", "who": who or "unknown",
+                    "from_me": bool(is_me), "text": (text or "").strip(),
+                    "ts": _APPLE_EPOCH + (date or 0) / 1e9})
+    return out
+
+
+def _recent_mail(limit: int) -> list[dict]:
+    root = Path(MAIL_ROOT).expanduser()
+    if not root.is_dir():
+        return []
+    files = sorted(root.rglob("*.emlx"),
+                   key=lambda f: f.stat().st_mtime, reverse=True)[:limit]
+    out = []
+    for f in files:
+        try:
+            m = parse_emlx(f.read_bytes())
+        except OSError:
+            continue
+        out.append({"channel": "email", "who": m["from"], "from_me": False,
+                    "subject": m["subject"], "text": m["body"][:280],
+                    "ts": f.stat().st_mtime})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Sending — draft → approve → send (never silent)
 # ---------------------------------------------------------------------------
 
