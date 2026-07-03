@@ -96,6 +96,10 @@ class Brain:
         self.last_calendar_sync = 0.0
         self.last_contacts_sync = 0.0
         self.last_reminders_sync = 0.0
+        # Saga: the ecosystem progression the phone shows — ranks, level, and
+        # achievements. Brain-hosted so the phone (and hub) can read/record it.
+        from ...saga import SagaProfile
+        self.saga = SagaProfile(self.cfg_dir)
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -196,6 +200,10 @@ class Brain:
                 self.sync_reminders()
         except Exception:
             pass
+        if updates.get("cloud_enabled"):
+            self.saga_record("cloud")
+        if updates.get("network_mode") == "lan_only":
+            self.saga_record("incognito")
 
     def incognito_now(self) -> bool:
         """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
@@ -212,6 +220,7 @@ class Brain:
             ans = self._ask_cloud(query)
         if ans is not None:
             self.history.add(query, ans.text, ans.tier, ans.sources)
+            self.saga_record("recall")
         return ans
 
     def _ask_cloud(self, query: str) -> Optional[Answer]:
@@ -283,6 +292,7 @@ class Brain:
         """A full, restorable snapshot of the Brain — config (incl. secrets),
         query history, activity, and agenda. Handed out only to the local
         panel, so it never crosses the network."""
+        self.saga_record("backup")
         return {
             "version": _version(),
             "config": asdict(self.config),
@@ -400,6 +410,7 @@ class Brain:
         p.write_text(json.dumps(manual + synced))
         self.last_calendar_sync = time.time()
         self.activity.add("calendar", f"Synced {len(synced)} event(s) from Calendar")
+        self.saga_record("calendar")
         return {"items": self.calendar(200), "synced": len(synced)}
 
     def maybe_sync_calendar(self) -> bool:
@@ -515,6 +526,7 @@ class Brain:
         p.write_text(json.dumps(manual + synced))
         self.last_contacts_sync = time.time()
         self.activity.add("people", f"Synced {len(synced)} contact(s)")
+        self.saga_record("contacts")
         return {"items": self.people(), "synced": len(synced)}
 
     # -- reminders: open to-dos from macOS Reminders --------------------
@@ -541,6 +553,7 @@ class Brain:
         (self.cfg_dir / "reminders.json").write_text(json.dumps(clean))
         self.last_reminders_sync = time.time()
         self.activity.add("reminders", f"Synced {len(clean)} reminder(s)")
+        self.saga_record("reminders")
         return {"items": self.reminders(), "synced": len(clean)}
 
     def list_reminder_lists(self) -> list:
@@ -549,6 +562,15 @@ class Brain:
         except Exception:
             return []
 
+    def saga_record(self, event: str, count: int | None = None) -> list:
+        """Advance the Saga profile for an ecosystem event and unlock any badges
+        (feature use + the level milestones it crosses). Returns newly-unlocked
+        names; logs them to the activity feed."""
+        fresh = (self.saga.record(event, count=count) if count is not None
+                 else self.saga.record(event))
+        fresh += self.saga.note_level(self.saga.snapshot()["level"])
+        return fresh
+
     def pull_model(self, name: str) -> dict:
         """One-click Ollama model pull. Re-probes after so status updates."""
         from .backends import pull_model as _pull
@@ -556,6 +578,7 @@ class Brain:
         if res.get("ok"):
             self.activity.add("model", f"Pulled model {res.get('model', name)}")
             self._wire_model()
+            self.saga_record("model")
         return res
 
     # -- rewind my day: one merged timeline of what happened -------------
@@ -658,6 +681,7 @@ class Brain:
                     text = s.strip()
             except Exception:
                 pass
+        self.saga_record("brief")
         return {"text": text, "bullets": bullets,
                 "missed": {"texts": len(texts), "emails": len(emails)}}
 
@@ -788,6 +812,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "last_sync": brain.last_reminders_sync})
             elif path == "/dreamlayer/rewind":
                 self._json(200, brain.rewind())
+            elif path == "/dreamlayer/saga":
+                self._json(200, brain.saga.snapshot())
             elif path == "/dreamlayer/brief/latest":
                 self._json(200, brain.last_brief or {})
             elif path == "/dreamlayer/messages/recent":
@@ -827,6 +853,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     url = "http://" + (self.headers.get("Host") or f"127.0.0.1:{port}")
                 bundle = PairingBundle(brain_url=url, token=brain.config.token)
                 brain.activity.add("pair", "Generated a pairing code for the phone")
+                brain.saga_record("pair")
                 code = encode_pairing(bundle)
                 from .qr import to_svg
                 self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
@@ -844,6 +871,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 if b.get("action") == "add":
                     if brain.config.add_folder(p):
                         brain.activity.add("folder", f"Added folder {p}")
+                        brain.saga_record("folder")
                 elif b.get("action") == "remove":
                     brain.config.remove_folder(p)
                     brain.activity.add("folder", f"Removed folder {p}")
@@ -913,6 +941,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.sync_contacts())
             elif path == "/dreamlayer/reminders/sync":
                 self._json(200, brain.sync_reminders())
+            elif path == "/dreamlayer/saga/record":
+                # the hub / phone reports an ecosystem event it drove (e.g. a
+                # voice wake, a dossier, focus, rewind) so its badge can unlock
+                ev = self._body().get("event", "")
+                self._json(200, {"unlocked": brain.saga_record(ev) if ev else [],
+                                 "saga": brain.saga.snapshot()})
             elif path == "/dreamlayer/model/pull":
                 # one-click Ollama pull — local-only (it runs a long job on the box)
                 if not self._from_localhost():

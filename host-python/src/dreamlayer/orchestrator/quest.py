@@ -44,63 +44,24 @@ STREAK_XP = 12          # per prior link in the streak
 TALLY_FILE = "quest_log.json"
 
 
-def level_for_xp(xp: int) -> int:
-    """Levels widen as they climb: L needs 100*L*(L-1)/2 cumulative XP, so
-    L1@0, L2@100, L3@300, L4@600, … — early wins come fast, mastery slow."""
-    lvl = 1
-    while xp >= 100 * lvl * (lvl + 1) // 2:
-        lvl += 1
-    return lvl
+# leveling + ranks are shared with the Brain-hosted Saga profile (saga.py),
+# so the glasses reward cards and the phone profile speak the same language.
+from ..saga import (level_for_xp, xp_floor as _xp_floor, rank_for_level,
+                    MAX_LEVEL, _BY_ID as _SAGA_BY_ID)
 
-
-def _xp_floor(level: int) -> int:
-    return 100 * (level - 1) * level // 2
-
-
-# a named identity for each level band — you're not just "level 7", you're a Ranger
-RANKS = [(1, "Novice"), (3, "Apprentice"), (5, "Adept"), (8, "Ranger"),
-         (12, "Champion"), (18, "Sage"), (25, "Legend")]
-
-
-def rank_for_level(level: int) -> str:
-    title = RANKS[0][1]
-    for lvl, name in RANKS:
-        if level >= lvl:
-            title = name
-    return title
-
-
-@dataclass(frozen=True)
-class Achievement:
-    id: str
-    name: str
-    detail: str
-
-
-# unlockable badges — pure milestones over the lifetime tally
-ACHIEVEMENTS = [
-    Achievement("first_step",  "First Step",   "Complete your first quest"),
-    Achievement("rescuer",     "Rescuer",      "Save a quest from the brink"),
-    Achievement("on_a_roll",   "On a Roll",    "Reach a 5× streak"),
-    Achievement("unstoppable", "Unstoppable",  "Reach a 10× streak"),
-    Achievement("devoted",     "Devoted",      "Complete 25 quests"),
-    Achievement("adept",       "Adept",        "Reach level 5"),
-    Achievement("veteran",     "Veteran",      "Reach level 10"),
-]
-_ACH_BY_ID = {a.id: a for a in ACHIEVEMENTS}
-ACHIEVEMENTS_ORDER = [a.id for a in ACHIEVEMENTS]
+# quest-category achievements the completion RPG can award (themed in saga.py)
+ACHIEVEMENTS_ORDER = ["keeper", "from_the_brink", "unbroken", "relentless", "devoted"]
+_ACH_BY_ID = _SAGA_BY_ID
 
 
 def _earned(tally: dict) -> set[str]:
-    """Which achievement ids the lifetime tally qualifies for."""
+    """Which quest achievement ids the lifetime tally qualifies for."""
     got: set[str] = set()
-    if tally.get("completed", 0) >= 1:   got.add("first_step")
-    if tally.get("rescues", 0) >= 1:     got.add("rescuer")
-    if tally.get("best_streak", 0) >= 5: got.add("on_a_roll")
-    if tally.get("best_streak", 0) >= 10:got.add("unstoppable")
-    if tally.get("completed", 0) >= 25:  got.add("devoted")
-    if tally.get("level", 1) >= 5:       got.add("adept")
-    if tally.get("level", 1) >= 10:      got.add("veteran")
+    if tally.get("completed", 0) >= 1:    got.add("keeper")
+    if tally.get("rescues", 0) >= 1:      got.add("from_the_brink")
+    if tally.get("best_streak", 0) >= 5:  got.add("unbroken")
+    if tally.get("best_streak", 0) >= 10: got.add("relentless")
+    if tally.get("completed", 0) >= 25:   got.add("devoted")
     return got
 
 

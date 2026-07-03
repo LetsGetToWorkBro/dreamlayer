@@ -362,6 +362,31 @@ class TestControls:
         brain.apply_config({"contacts_sync": True})
         assert any(p["name"] == "Sync Person" for p in brain.people())
 
+    def test_saga_records_feature_use_and_persists(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        assert brain.saga.snapshot()["unlocked_count"] == 0
+        brain._contacts_reader = lambda config: [{"name": "A", "company": "", "role": "", "email": ""}]
+        brain.sync_contacts()                        # → "Inner Circle" badge
+        brain.saga_record("cloud")                   # → "Reach Beyond"
+        snap = brain.saga.snapshot()
+        unlocked = {a["name"] for a in snap["achievements"] if a["unlocked"]}
+        assert "Inner Circle" in unlocked and "Reach Beyond" in unlocked
+        assert snap["xp"] == 300 and snap["level"] == 3 and snap["rank"] == "Dreamer"
+        assert "First Light" in unlocked                # crossing L2 unlocked a milestone
+        # persists across a fresh Brain on the same dir
+        assert Brain(cfg).saga.snapshot()["unlocked_count"] == snap["unlocked_count"]
+
+    def test_saga_record_endpoint(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            r = lb.post("/dreamlayer/saga/record", {"event": "focus"})
+            assert any(a["id"] == "deep_focus" and a["unlocked"]
+                       for a in r["saga"]["achievements"])
+        finally:
+            lb.stop()
+
     def test_people_registry_add_update_remove(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)

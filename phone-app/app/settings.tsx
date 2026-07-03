@@ -238,6 +238,9 @@ export default function Settings() {
 
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Labs</Text>
+        <TouchableOpacity onPress={() => router.push("/saga")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Saga — your rank, level & badges →</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>
         </TouchableOpacity>

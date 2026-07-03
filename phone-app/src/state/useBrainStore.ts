@@ -25,6 +25,18 @@ export type ActivityItem = { ts: number; kind: string; text?: string; query?: st
 export type RewindItem = { ts: number; kind: string; text: string };
 export type RewindBlock = { hour: number; label: string; count: number; items: RewindItem[] };
 export type CueKind = "event" | "person" | "place";
+export type SagaAchievement = {
+  id: string; name: string; what: string; how: string;
+  category: "milestone" | "quest" | "explore";
+  unlocked: boolean; progress: number; target: number; xp: number;
+};
+export type SagaSnapshot = {
+  xp: number; level: number; max_level: number; rank: string;
+  next_rank: { level: number; title: string } | null;
+  xp_to_next: number; level_floor: number; level_ceil: number;
+  unlocked_count: number; total_count: number;
+  achievements: SagaAchievement[];
+};
 export type WakeSource = "voice" | "tap" | "gaze" | "raise";
 export type WakeFeedback = "visual" | "audio" | "haptic";
 export type BrainMessage = {
@@ -89,6 +101,8 @@ type BrainState = {
   syncCalendar: () => Promise<CalendarEvent[]>;
   getActivity: () => Promise<ActivityItem[]>;
   getRewind: () => Promise<RewindBlock[]>;
+  getSaga: () => Promise<SagaSnapshot | null>;
+  recordSaga: (event: string) => Promise<void>;
 
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
@@ -278,6 +292,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   setFocus: (on) => {
     set({ focus: on });
     persist(get());
+    if (on) get().recordSaga("focus"); // unlock the Deep Focus badge
   },
 
   setCue: (kind, on) => {
@@ -361,6 +376,30 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return (await r.json()).blocks ?? [];
     } catch {
       return [];
+    }
+  },
+
+  getSaga: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/saga");
+      return (await r.json()) as SagaSnapshot;
+    } catch {
+      return null;
+    }
+  },
+
+  recordSaga: async (event) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return;
+    try {
+      await brainFetch(m, "/dreamlayer/saga/record", {
+        method: "POST",
+        body: JSON.stringify({ event }),
+      });
+    } catch {
+      /* best-effort — a badge is not worth an error */
     }
   },
 

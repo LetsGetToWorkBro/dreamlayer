@@ -161,26 +161,26 @@ class TestOrchestratorWiring:
 class TestRobustQuestSystem:
     def test_ranks_climb_with_level(self):
         from dreamlayer.orchestrator.quest import rank_for_level
-        assert rank_for_level(1) == "Novice"
-        assert rank_for_level(5) == "Adept"
-        assert rank_for_level(25) == "Legend"
-        assert rank_for_level(100) == "Legend"          # caps at the top band
+        assert rank_for_level(1) == "Sleeper"
+        assert rank_for_level(6) == "Lucid"
+        assert rank_for_level(28) == "Architect of Memory"
+        assert rank_for_level(100) == "Architect of Memory"   # caps at the top band
 
     def test_completion_tallies_and_first_achievement(self):
         log = log_for(("send the invoice", "1h"))
         reward = log.complete("send the invoice", now=BASE)
-        assert reward.rank == "Novice"
-        assert "First Step" in reward.new_achievements   # unlocked on first completion
+        assert reward.rank == "Sleeper"
+        assert "Keeper" in reward.new_achievements       # unlocked on first completion
         s = log.stats()
         assert s.completed == 1 and s.best_streak == 1
-        assert "First Step" in s.achievements
+        assert "Keeper" in s.achievements
         assert s.xp_to_next > 0
 
     def test_rescue_unlocks_rescuer_and_counts(self):
         log = log_for(("sign the lease", "2h"))
         # complete it while it's cracking (~90% decayed) — a last-moment rescue
         reward = log.complete("sign the lease", now=BASE + 1.8 * H)
-        assert reward.rescued and "Rescuer" in reward.new_achievements
+        assert reward.rescued and "From the Brink" in reward.new_achievements
         assert log.stats().rescues == 1
 
     def test_best_streak_survives_a_reset(self):
@@ -197,13 +197,13 @@ class TestRobustQuestSystem:
         reborn = QuestLog(CommitmentDriftEngine(ring_with(("x", "1h"))),
                           vault_dir=tmp_path, now_fn=lambda: BASE)
         assert reborn.completed == 1 and reborn.best_streak == 1
-        assert "first_step" in reborn.achievements
+        assert "keeper" in reborn.achievements
         # a re-earned achievement doesn't re-announce
         r2 = reborn.complete("x", now=BASE)
-        assert "First Step" not in r2.new_achievements
+        assert "Keeper" not in r2.new_achievements
 
     def test_reward_card_shows_rank_and_achievement(self):
         log = log_for(("send the invoice", "1h"))
         card = log.complete("send the invoice", now=BASE).to_hud_card()
-        assert "Novice" in card["detail"]
-        assert any("First Step" in ln for ln in card["lines"])
+        assert "Sleeper" in card["detail"]
+        assert any("Keeper" in ln for ln in card["lines"])
