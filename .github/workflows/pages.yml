@@ -1,5 +1,13 @@
 name: knowledge-base
 
+# Builds docs/gitbook/ into the styled static site and publishes it to the
+# PUBLIC repo LetsGetToWorkBro/dreamlayer-docs (gh-pages branch), so the book
+# is public while this source repo stays private.
+#
+# Needs a repo secret DOCS_DEPLOY_TOKEN: a fine-grained PAT with
+# Contents: read/write on LetsGetToWorkBro/dreamlayer-docs. Without it the
+# build still runs but the deploy step is skipped with a notice.
+
 on:
   push:
     branches: [main]
@@ -10,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pages
@@ -34,14 +42,18 @@ jobs:
           python scripts/build_gitbook_site.py _site
           touch _site/.nojekyll
 
-      - name: Deploy to the gh-pages branch
+      - name: Deploy to the public docs repo
+        env:
+          DOCS_DEPLOY_TOKEN: ${{ secrets.DOCS_DEPLOY_TOKEN }}
         run: |
+          if [ -z "$DOCS_DEPLOY_TOKEN" ]; then
+            echo "::notice::DOCS_DEPLOY_TOKEN secret is not set; built the site but skipped the deploy."
+            exit 0
+          fi
           cd _site
           git init -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Deploy knowledge base site (${GITHUB_SHA::7})"
-          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git push --force "https://x-access-token:${DOCS_DEPLOY_TOKEN}@github.com/LetsGetToWorkBro/dreamlayer-docs.git" gh-pages
