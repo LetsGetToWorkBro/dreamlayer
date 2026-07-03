@@ -119,6 +119,15 @@ device seams are the callables they accept.
   `_verify_claim` routes through the Brain (`brain.verify(claim)` →
   `{verdict, basis, confidence}`) and the cloud tier when opted in; returns
   `None` offline, so the self-contradiction pass still runs alone.
+- **Answer-ahead copilot** — with `set_copilot(True)`, when *someone else* asks a
+  question in `ingest_caption`, `orchestrator/answer_ahead.py` decides if it's a
+  real, answerable question (a wh-question, or one aimed at you — never a
+  rhetorical "…right?" or "you know?"), pre-fetches the answer from your own
+  knowledge, and flashes an `AnswerAheadCard` you can read and say yourself. No
+  wake word; silent by design (no earcon), paced by a cooldown, above a
+  confidence floor, held during Focus, Veil-gated. **Seam:** `_answer_question`
+  routes through `brain.ask` (cloud when opted in) → `{text, confidence, source}`;
+  returns `None` offline / on a low-confidence miss, so nothing is surfaced.
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that

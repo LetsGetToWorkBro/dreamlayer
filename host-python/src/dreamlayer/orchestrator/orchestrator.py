@@ -149,6 +149,13 @@ class Orchestrator:
         from .veritas import Veritas
         self.veritas = Veritas(verify_fn=self._verify_claim)
         self.factcheck_on = False
+        # Answer-ahead — overhears a question aimed at you and surfaces the
+        # answer from your own knowledge in time to say it yourself. No wake
+        # word. Off by default; answers route through _answer_question (the same
+        # knowledge tier the Oracle asks).
+        from .answer_ahead import AnswerAhead
+        self.answer_ahead = AnswerAhead(answer_fn=self._answer_question)
+        self.copilot_on = False
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -876,7 +883,38 @@ class Orchestrator:
         # ledger) and a world check (Brain/cloud seam). Opt-in; held during Focus.
         if u is not None and self.factcheck_on and not self.focus_active():
             self._fact_check(u)
+        # Answer-ahead: if someone *else* just asked a question, pre-fetch the
+        # answer so you can say it yourself. Opt-in; held during Focus.
+        if (u is not None and self.copilot_on and not u.is_mine()
+                and not self.focus_active()):
+            self._answer_ahead(u)
         return u
+
+    def set_copilot(self, on: bool = True) -> None:
+        """Turn the answer-ahead copilot on or off."""
+        self.copilot_on = on
+
+    def _answer_ahead(self, utterance) -> None:
+        prompt = self.answer_ahead.consider(utterance.text, utterance.speaker,
+                                             now=utterance.ts)
+        if prompt.fired and prompt.card is not None:
+            self.bridge.send_card(prompt.card, event="answer_ahead")
+
+    def _answer_question(self, question: str):
+        """Answer-ahead seam: ask your knowledge tier for the answer to an
+        overheard question. Same path as the Oracle's own asks (Brain, cloud when
+        opted in); returns None offline / on a miss, so nothing is surfaced. A
+        retrieval-ranked answerer can drop in behind this shape."""
+        if not self.privacy.allow_capture() or not getattr(self, "brain", None):
+            return None
+        try:
+            ans = self.brain.ask(question)
+        except Exception:
+            ans = None
+        if ans is None or ans.is_empty():
+            return None
+        return {"text": ans.text, "confidence": float(getattr(ans, "confidence", 0.0) or 0.0),
+                "source": getattr(ans, "tier", "") or (ans.sources[0] if ans.sources else "")}
 
     def set_factcheck(self, on: bool = True) -> None:
         """Turn the live fact-checker (Veritas) on or off."""
