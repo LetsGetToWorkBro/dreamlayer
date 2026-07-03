@@ -98,6 +98,99 @@ def draw_polyline(
         draw.line([points[i], points[i + 1]], fill=(r, g, b, alpha), width=stroke)
 
 
+# ---------------------------------------------------------------------------
+# Meridian Solid material twins (mirror halo-lua/display/materials.lua).
+# Same scanline rows, NO alpha — if 4bpp can't do it, the mirror can't
+# either (docs/cinema_v2/solid.md).
+# ---------------------------------------------------------------------------
+
+RAMP_MEMORY = (T.MEMORY_TRACE, T.ACCENT_MEMORY_STATIC,
+               T.ACCENT_MEMORY_DIM, T.BORDER_SUBTLE)
+RAMP_SUCCESS = (T.ACCENT_SUCCESS, T.ACCENT_SUCCESS_DIM, T.BORDER_SUBTLE)
+PANE = T.SURFACE
+
+_BLOOM_DIM = {
+    T.MEMORY_TRACE: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_MEMORY_STATIC: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_MEMORY: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_SUCCESS: T.ACCENT_SUCCESS_DIM,
+    T.ACCENT_ATTENTION: T.ACCENT_ATTENTION_DIM,
+    T.WARNING_AMBER: T.WARNING_AMBER_DIM,
+    T.CONFIDENCE_HIGH: T.ACCENT_MEMORY_DIM,
+    T.CONFIDENCE_MED: T.ACCENT_MEMORY_DIM,
+    T.CONFIDENCE_LOW: T.WARNING_AMBER_DIM,
+}
+
+
+def glass_disc(draw, cx, cy, r, color=PANE, row_gap=3):
+    row_gap = max(2, row_gap)
+    rgb = _hex_to_rgb(color)
+    for y in range(cy - r + row_gap, cy + r, row_gap):
+        dy = y - cy
+        half = math.sqrt(max(0, r * r - dy * dy)) - 2
+        if half >= 1:
+            draw.line([(cx - half, y), (cx + half, y)], fill=rgb, width=1)
+
+
+def glass_capsule(draw, x, y, w, h, color=PANE, row_gap=3):
+    row_gap = max(2, row_gap)
+    rgb = _hex_to_rgb(color)
+    hr = h / 2
+    for ry in range(y + row_gap, y + h, row_gap):
+        dy = ry - y
+        cap = min(dy, h - dy)
+        inset = 0.0
+        if cap < hr:
+            inset = hr - math.sqrt(max(0.0, hr * hr - (hr - cap) ** 2))
+        x0, x1 = x + inset + 1, x + w - inset - 1
+        if x1 > x0:
+            draw.line([(x0, ry), (x1, ry)], fill=rgb, width=1)
+
+
+def grad_line(draw, x0, y0, x1, y1, ramp=RAMP_MEMORY, stroke=1):
+    n = len(ramp)
+    px, py = x0, y0
+    for i, color in enumerate(ramp, start=1):
+        t = i / n
+        nx, ny = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+        draw.line([(px, py), (nx, ny)], fill=_hex_to_rgb(color), width=stroke)
+        px, py = nx, ny
+
+
+def grad_arc(draw, cx, cy, r, a0, a1, ramp=RAMP_MEMORY, steps=32, stroke=1):
+    sweep = a1 - a0
+    def pt(deg):
+        rd = math.radians(deg)
+        return cx + r * math.cos(rd), cy + r * math.sin(rd)
+    x0, y0 = pt(a0)
+    for i in range(1, steps + 1):
+        x1, y1 = pt(a0 + sweep * i / steps)
+        ci = min(len(ramp) - 1, math.ceil(i / steps * len(ramp)) - 1)
+        draw.line([(x0, y0), (x1, y1)], fill=_hex_to_rgb(ramp[ci]),
+                  width=stroke)
+        x0, y0 = x1, y1
+
+
+def grad_bezier(draw, p0, p1, p2, ramp=RAMP_MEMORY, steps=24, stroke=1):
+    px, py = p0
+    for i in range(1, steps + 1):
+        t = i / steps
+        mt = 1 - t
+        x = mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0]
+        y = mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]
+        ci = min(len(ramp) - 1, math.ceil(i / steps * len(ramp)) - 1)
+        draw.line([(px, py), (x, y)], fill=_hex_to_rgb(ramp[ci]), width=stroke)
+        px, py = x, y
+
+
+def bloom_ring(draw, cx, cy, r, color):
+    dim = _BLOOM_DIM.get(color, T.BORDER_SUBTLE)
+    draw.ellipse([cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2],
+                 outline=_hex_to_rgb(dim), width=1)
+    draw.ellipse([cx - r - 5, cy - r - 5, cx + r + 5, cy + r + 5],
+                 outline=_hex_to_rgb(T.BORDER_SUBTLE), width=1)
+
+
 def draw_elliptical_arc(
     draw: ImageDraw.ImageDraw,
     cx: float, cy: float,

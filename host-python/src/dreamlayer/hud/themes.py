@@ -26,6 +26,14 @@ CONFIDENCE_HIGH   = 0xB8FFE9  # Meridian: retired the off-family violet
 PRIVACY_DANGER    = 0xFF4444
 PRIVACY_CAUTION   = 0xFF8800
 WARNING_AMBER     = 0xFF6600
+
+# --- Meridian Solid (docs/cinema_v2/solid.md) ---
+# ACCENT_MEMORY / TEXT_GHOST are dynamic-slot bases (fx / ghost_text):
+# static ramps and fills use the one-LSB static twin + dim twins instead.
+ACCENT_MEMORY_STATIC = 0x2CC79B
+ACCENT_SUCCESS_DIM   = 0x2E7A3C
+ACCENT_ATTENTION_DIM = 0x7A3A2C
+WARNING_AMBER_DIM    = 0x8A3A00
 # GHOST_WHITE: if your renderer takes color+alpha separately, use 0xFFFFFF and pass alpha=0.03 (8/255)
 # If it packs ARGB into one int with alpha in top byte: 0x08FFFFFF
 GHOST_WHITE       = 0xFFFFFF

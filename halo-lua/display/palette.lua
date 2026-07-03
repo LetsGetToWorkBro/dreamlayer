@@ -52,6 +52,16 @@ M.privacy_danger    = 0xFF4444
 M.privacy_caution   = 0xFF8800
 M.warning_amber     = 0xFF6600
 
+-- Meridian Solid additions (docs/cinema_v2/solid.md). accent_memory and
+-- text_ghost are dynamic-slot BASES (fx / ghost_text): static gradient
+-- ramps and fills must never use them or they'd follow live slot luma —
+-- accent_memory_static is the one-LSB twin for static use. The *_dim
+-- twins carry gradient tails and bloom halos.
+M.accent_memory_static = 0x2CC79B
+M.accent_success_dim   = 0x2E7A3C
+M.accent_attention_dim = 0x7A3A2C
+M.warning_amber_dim    = 0x8A3A00
+
 -- ---------------------------------------------------------------------------
 -- Dynamic slot bank
 -- ---------------------------------------------------------------------------
