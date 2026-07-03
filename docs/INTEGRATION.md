@@ -140,7 +140,13 @@ device seams are the callables they accept.
   (`oracle_greeting()` → `persona.greeting(name)`) and exposes `user_snapshot()`
   for the phone. Persisted as `usermodel.json` beside the vault (in-memory for an
   `:memory:` db); only keywords/preferences, never raw audio or others' words.
-  Veil-gated (learning rides on `ingest_caption`/`ask_oracle`).
+  Veil-gated (learning rides on `ingest_caption`/`ask_oracle`). **Hub→Brain
+  bridge:** `publish_profile(http_post)` pushes `user_snapshot()` to the paired
+  Mac mini (`POST /dreamlayer/profile`) so the phone can read it — debounced on
+  observation, immediate on an explicit teach. The Brain *mirrors* it
+  (`server.set_profile` → `profile.json`, `GET /dreamlayer/profile`) and never
+  authors it. Phone: `useBrainStore.getProfile()` + `app/profile.tsx` ("What
+  Oracle knows about you").
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that

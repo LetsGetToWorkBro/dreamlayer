@@ -283,6 +283,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/saga")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Saga — your rank, level & badges →</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/profile")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>What Oracle knows about you →</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>
         </TouchableOpacity>

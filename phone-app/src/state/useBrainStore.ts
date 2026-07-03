@@ -37,6 +37,13 @@ export type SagaSnapshot = {
   unlocked_count: number; total_count: number;
   achievements: SagaAchievement[];
 };
+export type OracleProfile = {
+  name: string;
+  interests: string[];
+  people: string[];
+  preferences: string[];
+  observations: number;
+};
 export type WakeSource = "voice" | "tap" | "gaze" | "raise";
 export type WakeFeedback = "visual" | "audio" | "haptic";
 export type BrainMessage = {
@@ -109,6 +116,7 @@ type BrainState = {
   getRewind: () => Promise<RewindBlock[]>;
   getSaga: () => Promise<SagaSnapshot | null>;
   recordSaga: (event: string) => Promise<void>;
+  getProfile: () => Promise<OracleProfile | null>;
 
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
@@ -427,6 +435,17 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       });
     } catch {
       /* best-effort — a badge is not worth an error */
+    }
+  },
+
+  getProfile: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/profile");
+      return (await r.json()) as OracleProfile;
+    } catch {
+      return null;
     }
   },
 

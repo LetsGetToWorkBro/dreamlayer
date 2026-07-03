@@ -100,6 +100,11 @@ class Brain:
         # achievements. Brain-hosted so the phone (and hub) can read/record it.
         from ...saga import SagaProfile
         self.saga = SagaProfile(self.cfg_dir)
+        # Oracle's profile of you (name, interests, people, remembered prefs).
+        # Built on the glasses hub from the conversation stream, then *pushed*
+        # here so the phone can read it — the hub->Brain bridge. Just a mirror;
+        # the Brain never writes it, only stores what the hub sends.
+        self.profile: dict = self._load_profile()
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -571,6 +576,37 @@ class Brain:
         fresh += self.saga.note_level(self.saga.snapshot()["level"])
         return fresh
 
+    def _load_profile(self) -> dict:
+        p = self.cfg_dir / "profile.json"
+        if p.exists():
+            try:
+                return json.loads(p.read_text())
+            except Exception:
+                return {}
+        return {}
+
+    def set_profile(self, data: dict) -> dict:
+        """Store the Oracle profile the glasses hub just pushed (a mirror, so the
+        phone can read it). Keeps only the known shape; persists to profile.json."""
+        d = data if isinstance(data, dict) else {}
+
+        def _list(key, limit):
+            v = d.get(key)
+            return [str(x) for x in v][:limit] if isinstance(v, list) else []
+
+        self.profile = {
+            "name": str(d.get("name", "") or ""),
+            "interests": _list("interests", 12),
+            "people": _list("people", 12),
+            "preferences": _list("preferences", 40),
+            "observations": int(d.get("observations", 0) or 0),
+        }
+        try:
+            (self.cfg_dir / "profile.json").write_text(json.dumps(self.profile))
+        except Exception:
+            pass
+        return self.profile
+
     def pull_model(self, name: str) -> dict:
         """One-click Ollama model pull. Re-probes after so status updates."""
         from .backends import pull_model as _pull
@@ -814,6 +850,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rewind())
             elif path == "/dreamlayer/saga":
                 self._json(200, brain.saga.snapshot())
+            elif path == "/dreamlayer/profile":
+                # what the Oracle has learned about you (mirrored from the hub)
+                self._json(200, brain.profile)
             elif path == "/dreamlayer/brief/latest":
                 self._json(200, brain.last_brief or {})
             elif path == "/dreamlayer/messages/recent":
@@ -947,6 +986,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 ev = self._body().get("event", "")
                 self._json(200, {"unlocked": brain.saga_record(ev) if ev else [],
                                  "saga": brain.saga.snapshot()})
+            elif path == "/dreamlayer/profile":
+                # the glasses hub pushes its Oracle profile snapshot so the phone
+                # can read it (the hub->Brain bridge). Mirror-only.
+                self._json(200, brain.set_profile(self._body()))
             elif path == "/dreamlayer/model/pull":
                 # one-click Ollama pull — local-only (it runs a long job on the box)
                 if not self._from_localhost():

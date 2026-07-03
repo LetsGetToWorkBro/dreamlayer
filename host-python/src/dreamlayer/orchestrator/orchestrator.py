@@ -47,6 +47,20 @@ def _default_http_get(url: str, token: str = "") -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _default_http_post(url: str, body: dict, token: str = "") -> dict:
+    """Minimal POST used to push the Oracle profile to the paired Mac mini Brain."""
+    import json
+    import urllib.request
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["X-DreamLayer-Token"] = token
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=6) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
 class Orchestrator:
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
@@ -167,6 +181,7 @@ class Orchestrator:
             um_path = os.path.join(os.path.dirname(os.path.abspath(db_path)) or ".",
                                    "usermodel.json")
         self.user = UserModel(um_path)
+        self._profile_dirty = 0                # debounce profile pushes to the Brain
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -738,6 +753,29 @@ class Orchestrator:
         phone's profile screen; a read, never a write."""
         return self.user.snapshot(n).to_dict()
 
+    def publish_profile(self, http_post=None) -> dict | None:
+        """Push the Oracle profile to the paired Mac mini Brain (POST
+        /dreamlayer/profile) so the phone can read it — the hub->Brain bridge.
+        Best-effort and Veil-gated; silent with no Mac mini. `http_post` defaults
+        to urllib."""
+        if not self.privacy.allow_capture() or not self.brain_url:
+            return None
+        post = http_post or _default_http_post
+        try:
+            out = post(self.brain_url.rstrip("/") + "/dreamlayer/profile",
+                       self.user_snapshot(), self.brain_token)
+            self._profile_dirty = 0
+            return out
+        except Exception:
+            return None
+
+    def _maybe_publish_profile(self) -> None:
+        """Debounced push: sync the profile once enough has changed, so a chatty
+        day doesn't hammer the Brain. Explicit teaches push immediately."""
+        self._profile_dirty += 1
+        if self._profile_dirty >= 10:
+            self.publish_profile()
+
     def activate(self, source: str, now: float | None = None):
         """Wake Oracle without a phrase — a tap, a gaze/dwell, or a raise-to-
         speak gesture (the device seam decides which). Enters listening if that
@@ -788,6 +826,7 @@ class Orchestrator:
             else:
                 line = persona.confirm("learned_pref")
             self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
+            self.publish_profile()          # a teach is worth pushing right away
             return {"intent": "learn", "text": line, "executed": True,
                     "learned": learned}
         cmd = parse_command(text)
@@ -922,6 +961,7 @@ class Orchestrator:
                 self.user.observe(u.text)
             else:
                 self.user.note_person(u.speaker)
+            self._maybe_publish_profile()
         # Veritas: fact-check the line as it lands — self-contradiction (from the
         # ledger) and a world check (Brain/cloud seam). Opt-in; held during Focus.
         if u is not None and self.factcheck_on and not self.focus_active():
