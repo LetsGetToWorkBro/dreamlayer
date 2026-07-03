@@ -39,7 +39,10 @@ const FAMILIES: Record<string, number[]> = {
     require("../../assets/sounds/look1.mp3"),
     require("../../assets/sounds/look2.mp3"),
   ], // "look at this"
-  watchout: [], // urgent — no clips yet; falls back to the listen family
+  watchout: [
+    require("../../assets/sounds/watchout1.mp3"),
+    require("../../assets/sounds/watchout2.mp3"),
+  ], // urgent heads-up
   sfx: [
     require("../../assets/sounds/sfx10.mp3"),
     require("../../assets/sounds/sfx13.mp3"),
