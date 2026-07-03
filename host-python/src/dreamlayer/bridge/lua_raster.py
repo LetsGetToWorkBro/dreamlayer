@@ -166,7 +166,9 @@ class RasterDisplay:
 
 
 _FRAME_TABLE_LUA = """
+__imu = nil
 frame = {
+  imu_data = function() return __imu end,
   display = {
     clear   = function(c)            __raster.clear(c or 0x000000) end,
     show    = function()             __raster.show() end,
@@ -219,6 +221,20 @@ class LuaRasterHarness:
 
     def eval(self, lua_expr: str):
         return self.rt.eval(lua_expr)
+
+    def set_imu(self, pitch: Optional[float], roll: float = 0.0) -> None:
+        """Script the ``frame.imu_data()`` stub (None = sensor absent).
+
+        Parallax and any IMU-reactive display code become testable and
+        goldenable headless: set a pose per tick, the Lua reads it as
+        the device would.
+        """
+        if pitch is None:
+            self.rt.execute("__imu = nil")
+        else:
+            self.rt.execute(
+                f"__imu = {{ pitch = {float(pitch)}, roll = {float(roll)} }}"
+            )
 
     def sync_dynamic_slots(self) -> None:
         """Mirror palette.lua's reserved dynamic bank into the raster model.
