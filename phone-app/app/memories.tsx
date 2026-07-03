@@ -33,7 +33,7 @@ function group(memories: Memory[]): { label: string; items: Memory[] }[] {
   const order = ["Today", "Yesterday", "Earlier"];
   const by: Record<string, Memory[]> = {};
   for (const m of memories) (by[bucketOf(m.ts)] ??= []).push(m);
-  return order.filter((l) => by[l]?.length).map((label) => ({ label, items: by[label] }));
+  return order.filter((l) => by[l]?.length).map((label) => ({ label, items: by[label] ?? [] }));
 }
 
 export default function Memories() {

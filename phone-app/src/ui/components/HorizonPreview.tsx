@@ -101,7 +101,7 @@ function Mark({ mk, dim }: { mk: HorizonMark; dim?: boolean }) {
       </G>
     );
   }
-  return <Path d={tickPath(mk.deg, M.markBaseR, M.markBaseR + M.markLen[luma])}
+  return <Path d={tickPath(mk.deg, M.markBaseR, M.markBaseR + (M.markLen[luma] ?? 0))}
                stroke={MEM_COLOR[luma]} strokeWidth={1} />;
 }
 

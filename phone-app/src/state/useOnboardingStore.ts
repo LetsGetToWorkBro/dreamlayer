@@ -12,13 +12,13 @@ type OnboardingState = {
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   stepIndex: 0,
   completed: false,
-  step: ONBOARDING_STEPS[0],
+  step: ONBOARDING_STEPS[0]!,
   advance: () => {
     const next = get().stepIndex + 1;
     if (next >= ONBOARDING_STEPS.length) {
       set({ completed: true });
     } else {
-      set({ stepIndex: next, step: ONBOARDING_STEPS[next] });
+      set({ stepIndex: next, step: ONBOARDING_STEPS[next]! });
     }
   },
   complete: () => set({ completed: true }),
