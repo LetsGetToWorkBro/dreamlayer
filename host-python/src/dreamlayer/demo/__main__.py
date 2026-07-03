@@ -43,6 +43,15 @@ def main(argv: list[str]) -> int:
                   f"({len(m['beats'])} beats, {m['duration']}s)")
         return 0
 
+    if name == "catalog":
+        from .catalog import build_catalog
+        root = args[1] if len(args) > 1 else "demo_out/catalog"
+        manifests = build_catalog(root)
+        master = manifests["master"]
+        print(f"rendered {len(manifests) - 1} feature clips + master "
+              f"({len(master['beats'])} features, {master['duration']}s) → {root}")
+        return 0
+
     scene = None
     if name != "sampler":
         try:
