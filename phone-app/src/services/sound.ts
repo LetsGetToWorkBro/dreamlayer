@@ -27,10 +27,19 @@ function mod(): any {
 
 // A cue family → its variant clips. Add more as you record them.
 const FAMILIES: Record<string, number[]> = {
-  hey: [require("../../assets/sounds/hey2.mp3")], // Oracle wakes ("Hey Oracle")
-  listen: [require("../../assets/sounds/listen1.mp3")], // the "Listen!" tap
-  look: [require("../../assets/sounds/look1.mp3")], // "look at this"
-  watchout: [], // urgent — fill with watchout1/2 when recorded (falls back to listen)
+  hey: [
+    require("../../assets/sounds/hey1.mp3"),
+    require("../../assets/sounds/hey2.mp3"),
+  ], // Oracle wakes ("Hey Oracle")
+  listen: [
+    require("../../assets/sounds/listen1.mp3"),
+    require("../../assets/sounds/listen2.mp3"),
+  ], // the "Listen!" tap
+  look: [
+    require("../../assets/sounds/look1.mp3"),
+    require("../../assets/sounds/look2.mp3"),
+  ], // "look at this"
+  watchout: [], // urgent — no clips yet; falls back to the listen family
   sfx: [
     require("../../assets/sounds/sfx10.mp3"),
     require("../../assets/sounds/sfx13.mp3"),

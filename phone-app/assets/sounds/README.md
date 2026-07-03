@@ -6,9 +6,9 @@ each time (never the same one twice in a row) so it never feels repetitive.
 
 | family      | plays when…                          | variants (add more anytime) |
 |-------------|--------------------------------------|-----------------------------|
-| `hey`       | Oracle wakes ("Hey Oracle")          | `hey1.mp3`, **`hey2.mp3`** ✓ |
-| `listen`    | the "Listen!" shoulder tap (hark)    | **`listen1.mp3`** ✓, `listen2.mp3` |
-| `look`      | "look at this" / a face you know     | **`look1.mp3`** ✓, `look2.mp3` |
+| `hey`       | Oracle wakes ("Hey Oracle")          | **`hey1.mp3`** ✓, **`hey2.mp3`** ✓ |
+| `listen`    | the "Listen!" shoulder tap (hark)    | **`listen1.mp3`** ✓, **`listen2.mp3`** ✓ |
+| `look`      | "look at this" / a face you know     | **`look1.mp3`** ✓, **`look2.mp3`** ✓ |
 | `watchout`  | an **urgent** heads-up               | `watchout1.mp3`, `watchout2.mp3` (falls back to `listen`) |
 | `sfx`       | neutral confirmations                | **`sfx10.mp3`** ✓, **`sfx13.mp3`** ✓ |
 
