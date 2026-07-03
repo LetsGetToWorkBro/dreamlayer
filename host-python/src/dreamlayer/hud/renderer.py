@@ -1111,8 +1111,10 @@ class CardRenderer:
         question = str(card.get("detail") or "")
         footer = str(card.get("footer") or "")
         self._pane(draw, 128, 78)
-        bloom_ring(draw, CX - 78, 70, 3, T.ACCENT_MEMORY)
-        self._dot(draw, CX - 78, 70, 3, T.ACCENT_MEMORY)
+        # dot sits clear of the 25-char eyebrow (its bloom was grazing the first
+        # glyph — the golden eyeball pass in #87; mirrors the Lua CX-88 nudge)
+        bloom_ring(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
+        self._dot(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
         self._text_rgba(draw, CX + 4, 70, "ON THE TIP OF YOUR TONGUE",
                         "xs", T.ACCENT_MEMORY, alpha=225)
         grad_line(draw, 52, 88, 204, 88, RAMP_MEMORY)
