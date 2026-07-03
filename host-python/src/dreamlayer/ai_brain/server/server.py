@@ -66,18 +66,29 @@ class Brain:
         self._sources_fn = sources_fn or collect_documents
         self._sig = None
         self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
+        self._started_ts = time.time()
+        self.last_index_ts = 0.0
+        self.email_docs = 0
         self._watch_stop: threading.Event | None = None
+        # retention: drop logs older than the configured window on boot
+        if self.config.retention_days:
+            self.history.prune(self.config.retention_days)
+            self.activity.prune(self.config.retention_days)
         self._wire_model()
         self.reindex()
 
     def reindex(self) -> dict:
         self.index.reindex()
+        self.email_docs = 0
         if self.config.email_enabled:
             try:
-                self.index.add_documents(self._sources_fn(self.config))
+                docs = self._sources_fn(self.config)
+                self.email_docs = len(docs)
+                self.index.add_documents(docs)
             except Exception:
                 pass
         self._sig = self._signature()
+        self.last_index_ts = time.time()
         return self.index.stats()
 
     # -- auto-reindex when watched folders change ------------------------
@@ -125,9 +136,12 @@ class Brain:
         if self.config.model == "ollama":
             self._backend = OllamaBackend(self.config)
             self.index.synthesizer = make_synthesizer(self._backend)
+            self.index.embedder = (self._backend.embed
+                                   if self.config.semantic_search else None)
         else:
             self._backend = None
             self.index.synthesizer = None
+            self.index.embedder = None
 
     def save(self) -> None:
         self.config.save(self.cfg_dir)
@@ -135,17 +149,45 @@ class Brain:
     def apply_config(self, updates: dict) -> None:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
-                  "email_enabled", "cloud_enabled", "network_mode"):
+                  "email_enabled", "cloud_enabled", "network_mode",
+                  "cloud_base_url", "cloud_api_key", "cloud_model",
+                  "semantic_search", "index_extensions", "max_file_kb",
+                  "exclude_globs", "quiet_hours", "retention_days"):
             if k in updates:
                 setattr(self.config, k, updates[k])
         self._wire_model()
         self.save()
 
+    def incognito_now(self) -> bool:
+        """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
+        from .store import in_quiet_hours
+        return self.config.lan_only or in_quiet_hours(self.config.quiet_hours)
+
+    def missing_folders(self) -> list:
+        return [f for f in self.config.folders
+                if not Path(f).expanduser().is_dir()]
+
     def ask(self, query: str) -> Optional[Answer]:
         ans = self.index.ask(query)
+        if ans is None and self.config.cloud_ready() and not self.incognito_now():
+            ans = self._ask_cloud(query)
         if ans is not None:
             self.history.add(query, ans.text, ans.tier, ans.sources)
         return ans
+
+    def _ask_cloud(self, query: str) -> Optional[Answer]:
+        """The one place data leaves the device — logged every single time."""
+        from .backends import cloud_chat
+        try:
+            text = cloud_chat(self.config, query)
+        except Exception:
+            text = ""
+        if not text:
+            return None
+        self.config.cloud_calls += 1
+        self.save()
+        self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
+        return Answer(text=text, tier="cloud", sources=["cloud"], confidence=0.6)
 
     def explain(self, label: str, image_b64, want: str) -> Optional[Answer]:
         return vision_answer(self._backend, label, image_b64, want)
@@ -169,9 +211,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self.wfile.write(body)
 
         def _authed(self) -> bool:
-            ok = not token or self.headers.get(TOKEN_HEADER) == token
+            tok = brain.config.token        # read live so token rotation applies
+            ok = not tok or self.headers.get(TOKEN_HEADER) == tok
             # a successful token-carrying request from off-box is the phone
-            if ok and token and not self._from_localhost():
+            if ok and tok and not self._from_localhost():
                 brain._last_phone_ts = time.time()
             return ok
 
@@ -196,7 +239,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             path = parsed.path
             qs = urllib.parse.parse_qs(parsed.query)
             if path == "/":
-                html = render_panel(token if self._from_localhost() else "")
+                html = render_panel(brain.config.token if self._from_localhost() else "")
                 body = html.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -213,14 +256,40 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 ago = None
                 if brain._last_phone_ts:
                     ago = max(0, int(time.time() - brain._last_phone_ts))
+                idx_ago = (int(time.time() - brain.last_index_ts)
+                           if brain.last_index_ts else None)
                 self._json(200, {
                     "brain": True,
                     "model": brain.config.model,
                     "cloud": bool(brain.config.cloud_enabled) and not brain.config.lan_only,
-                    "incognito": brain.config.lan_only,
+                    "cloud_ready": brain.config.cloud_ready(),
+                    "cloud_calls": brain.config.cloud_calls,
+                    "incognito": brain.incognito_now(),
+                    "quiet": brain.incognito_now() and not brain.config.lan_only,
                     "phone_ago": ago,
+                    "index_ago": idx_ago,
+                    "missing": brain.missing_folders(),
+                    "email_docs": brain.email_docs,
                     "stats": brain.index.stats(),
                 })
+            elif path == "/dreamlayer/token":
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                self._json(200, {"token": brain.config.token})
+            elif path == "/dreamlayer/health":
+                import shutil
+                try:
+                    du = sum(f.stat().st_size for f in brain.cfg_dir.rglob("*") if f.is_file())
+                except OSError:
+                    du = 0
+                oms = None
+                if brain.config.model == "ollama":
+                    t0 = time.time()
+                    if probe_ollama(brain.config, timeout=3).get("reachable"):
+                        oms = int((time.time() - t0) * 1000)
+                self._json(200, {"version": _version(), "disk_kb": du // 1000,
+                                 "ollama_ms": oms,
+                                 "uptime_s": int(time.time() - brain._started_ts)})
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/model/status":
@@ -299,6 +368,56 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 ans = brain.explain(b.get("label", ""), b.get("image"),
                                     b.get("want", "quick"))
                 self._json(200, _answer_json(ans))
+            elif path == "/dreamlayer/reindex":
+                stats = brain.reindex()
+                brain.activity.add("index", "Re-indexed your folders")
+                self._json(200, {"stats": stats, "missing": brain.missing_folders()})
+            elif path == "/dreamlayer/token/rotate":
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                import secrets
+                brain.config.token = secrets.token_hex(8)
+                brain.save()
+                brain.activity.add("privacy", "Rotated the pairing token — devices must re-pair")
+                self._json(200, {"token": brain.config.token})
+            elif path == "/dreamlayer/clear":
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                what = self._body().get("what", "")
+                if what in ("history", "all"): brain.history.clear()
+                if what in ("activity", "all"): brain.activity.clear()
+                if what in ("folders", "all"):
+                    brain.config.folders = []; brain.save(); brain.reindex()
+                # don't re-seed the activity log we just cleared
+                if what in ("history", "folders"):
+                    brain.activity.add("config", f"Cleared {what}")
+                self._json(200, {"ok": True, "stats": brain.index.stats()})
+            elif path == "/dreamlayer/cloud/test":
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                from .backends import cloud_test
+                self._json(200, cloud_test(brain.config))
+            elif path == "/dreamlayer/message/draft":
+                from .macos_sources import MessageDraft, build_send_script
+                b = self._body()
+                d = MessageDraft(channel=b.get("channel", "imessage"),
+                                 to=b.get("to", ""), subject=b.get("subject", ""),
+                                 text=b.get("text", ""))
+                self._json(200, {"script": build_send_script(d)})
+            elif path == "/dreamlayer/message/send":
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                from .macos_sources import MessageDraft, send_message
+                b = self._body()
+                d = MessageDraft(channel=b.get("channel", "imessage"),
+                                 to=b.get("to", ""), subject=b.get("subject", ""),
+                                 text=b.get("text", ""))
+                try:
+                    res = send_message(d, approved=bool(b.get("approved")))
+                    brain.activity.add("message", f"Sent a {d.channel} to {d.to}")
+                    self._json(200, res)
+                except Exception as e:  # noqa: BLE001
+                    self._json(400, {"error": str(e)[:200]})
             else:
                 self._json(404, {"error": "not found"})
 
@@ -316,6 +435,14 @@ def _write_upload(brain: Brain, folder: str, name: str, data: bytes) -> bool:
         return True
     except OSError:
         return False
+
+
+def _version() -> str:
+    try:
+        import dreamlayer
+        return getattr(dreamlayer, "__version__", "0.0.0")
+    except Exception:
+        return "0.0.0"
 
 
 def _answer_json(ans: Optional[Answer]) -> dict:

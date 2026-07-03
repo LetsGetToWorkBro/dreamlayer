@@ -85,6 +85,42 @@ class OllamaBackend:
         imgs = [image_b64] if image_b64 else None
         return self._gen(self.config.ollama_vision_model, prompt, images=imgs)
 
+    def embed(self, text: str) -> list:
+        out = self._post(self.config.ollama_url.rstrip("/") + "/api/embeddings",
+                         {"model": self.config.ollama_embed_model, "prompt": text})
+        return (out or {}).get("embedding", []) or []
+
+
+def cloud_chat(config, prompt: str, http_post: Optional[Callable] = None,
+               timeout: float = 30.0) -> str:
+    """Ask an OpenAI-compatible cloud model. Provider-agnostic: point
+    cloud_base_url at any compatible API. The call is injectable for tests."""
+    if http_post is not None:
+        out = http_post(config.cloud_base_url, {"model": config.cloud_model,
+                                                "prompt": prompt})
+        return (out or {}).get("text", "").strip()
+    url = config.cloud_base_url.rstrip("/") + "/v1/chat/completions"
+    data = json.dumps({"model": config.cloud_model,
+                       "messages": [{"role": "user", "content": prompt}]}).encode()
+    req = urllib.request.Request(url, data=data, headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + config.cloud_api_key})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=timeout) as resp:
+        d = json.loads(resp.read().decode("utf-8"))
+    choices = d.get("choices") or [{}]
+    return ((choices[0].get("message") or {}).get("content") or "").strip()
+
+
+def cloud_test(config, http_post: Optional[Callable] = None) -> dict:
+    """A tiny round-trip so the panel can say 'connected' or show the error."""
+    try:
+        txt = cloud_chat(config, "Reply with the single word: OK",
+                         http_post=http_post, timeout=15.0)
+        return {"ok": bool(txt), "reply": txt[:80]}
+    except Exception as e:  # noqa: BLE001 — surface any provider error verbatim
+        return {"ok": False, "error": str(e)[:200]}
+
 
 def make_synthesizer(backend: OllamaBackend) -> Callable:
     """Turn retrieved passages into a written answer via the chat model."""

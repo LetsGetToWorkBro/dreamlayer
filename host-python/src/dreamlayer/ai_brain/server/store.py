@@ -32,10 +32,28 @@ class BrainConfig:
     network_mode: str = "connected"
     cloud_enabled: bool = True      # cloud tier allowed by default
     token: str = ""                 # pairing secret the phone must send
+    # -- cloud provider (batch 2) — the tier that leaves the device ------
+    cloud_base_url: str = "https://api.openai.com"
+    cloud_api_key: str = ""
+    cloud_model: str = "gpt-4o-mini"
+    cloud_calls: int = 0            # lifetime count of cloud egress
+    # -- knowledge depth (batch 3) --------------------------------------
+    semantic_search: bool = False   # embed + rank (needs an embed model)
+    index_extensions: list[str] = field(default_factory=list)   # [] = defaults
+    max_file_kb: int = 2000
+    exclude_globs: list[str] = field(default_factory=list)
+    # -- ops (batch 4) ---------------------------------------------------
+    quiet_hours: str = ""           # "22:00-07:00" → auto-incognito window
+    retention_days: int = 0         # 0 = keep forever
 
     @property
     def lan_only(self) -> bool:
         return self.network_mode == "lan_only"
+
+    def cloud_ready(self) -> bool:
+        """Cloud can actually answer: allowed by posture AND configured."""
+        return (self.network_mode != "lan_only" and self.cloud_enabled
+                and bool(self.cloud_api_key) and bool(self.cloud_model))
 
     def add_folder(self, path: str) -> bool:
         p = str(Path(path).expanduser())
@@ -71,9 +89,11 @@ class BrainConfig:
         (d / CONFIG_FILE).write_text(json.dumps(asdict(self), indent=2))
 
     def public(self) -> dict:
-        """Config for the panel — never leaks the token."""
+        """Config for the panel — never leaks the token or the cloud key."""
         d = asdict(self)
         d["token"] = "set" if self.token else ""
+        d["cloud_api_key"] = "set" if self.cloud_api_key else ""
+        d["cloud_ready"] = self.cloud_ready()
         return d
 
 
@@ -109,6 +129,13 @@ class QueryHistory:
                 continue
         return list(reversed(out))
 
+    def clear(self) -> None:
+        if self.path.exists():
+            self.path.unlink()
+
+    def prune(self, days: int) -> int:
+        return _prune_jsonl(self.path, days)
+
 
 class ActivityLog:
     """Everything the Brain did — folders, files, searches, cloud/incognito
@@ -134,3 +161,47 @@ class ActivityLog:
             except json.JSONDecodeError:
                 continue
         return list(reversed(out))
+
+    def clear(self) -> None:
+        if self.path.exists():
+            self.path.unlink()
+
+    def prune(self, days: int) -> int:
+        return _prune_jsonl(self.path, days)
+
+
+def _prune_jsonl(path: Path, days: int) -> int:
+    """Drop records older than `days` from a jsonl log. Returns rows removed."""
+    if days <= 0 or not path.exists():
+        return 0
+    cutoff = time.time() - days * 86400
+    kept, removed = [], 0
+    for line in path.read_text().splitlines():
+        try:
+            if json.loads(line).get("ts", 0) >= cutoff:
+                kept.append(line)
+            else:
+                removed += 1
+        except json.JSONDecodeError:
+            continue
+    if removed:
+        path.write_text("\n".join(kept) + ("\n" if kept else ""))
+    return removed
+
+
+def in_quiet_hours(spec: str, now: Optional[float] = None) -> bool:
+    """True if `now` falls in a "HH:MM-HH:MM" window (wraps past midnight)."""
+    if not spec or "-" not in spec:
+        return False
+    try:
+        a, b = spec.split("-", 1)
+        ah, am = (int(x) for x in a.split(":"))
+        bh, bm = (int(x) for x in b.split(":"))
+    except (ValueError, TypeError):
+        return False
+    lt = time.localtime(now if now is not None else time.time())
+    cur = lt.tm_hour * 60 + lt.tm_min
+    start, end = ah * 60 + am, bh * 60 + bm
+    if start == end:
+        return False
+    return start <= cur < end if start < end else (cur >= start or cur < end)

@@ -45,33 +45,74 @@ def _passages(text: str) -> list[str]:
 
 
 class FileIndex:
-    def __init__(self, config, synthesizer: Optional[Callable] = None):
+    def __init__(self, config, synthesizer: Optional[Callable] = None,
+                 embedder: Optional[Callable] = None):
         self.config = config
         self.synthesizer = synthesizer          # (query, [(path,passage)]) -> str
+        self.embedder = embedder                # text -> vector (semantic search)
         self._passages: list[tuple[str, str]] = []   # (path, passage)
+        self._vecs: list = []                   # aligned passage embeddings
+
+    # -- filters (configurable from the panel) --------------------------
+
+    def _exts(self) -> set:
+        custom = getattr(self.config, "index_extensions", None) or []
+        if not custom:
+            return TEXT_EXTS
+        return {e if e.startswith(".") else "." + e for e in
+                (x.strip().lower() for x in custom) if e}
+
+    def _max_bytes(self) -> int:
+        kb = getattr(self.config, "max_file_kb", 0) or 0
+        return kb * 1000 if kb > 0 else MAX_FILE_BYTES
+
+    def _excluded(self, path: Path) -> bool:
+        for g in (getattr(self.config, "exclude_globs", None) or []):
+            g = g.strip()
+            if g and (path.match(g) or any(part == g for part in path.parts)):
+                return True
+        return False
+
+    def _semantic_on(self) -> bool:
+        return bool(getattr(self.config, "semantic_search", False)) and self.embedder is not None
 
     # -- building --------------------------------------------------------
 
     def reindex(self) -> dict:
         self._passages = []
-        files = 0
+        self._vecs = []
+        exts, cap = self._exts(), self._max_bytes()
         for folder in self.config.folders:
             base = Path(folder).expanduser()
             if not base.is_dir():
                 continue
             for path in base.rglob("*"):
-                if not path.is_file() or path.suffix.lower() not in TEXT_EXTS:
+                if not path.is_file() or path.suffix.lower() not in exts:
+                    continue
+                if self._excluded(path):
                     continue
                 try:
-                    if path.stat().st_size > MAX_FILE_BYTES:
+                    if path.stat().st_size > cap:
                         continue
                     text = path.read_text(errors="ignore")
                 except OSError:
                     continue
-                files += 1
                 for p in _passages(text):
                     self._passages.append((path.name, p))
+        self._embed_passages()
         return self.stats()
+
+    def _embed_passages(self) -> None:
+        if not self._semantic_on():
+            self._vecs = []
+            return
+        vecs = []
+        for _, passage in self._passages:
+            try:
+                vecs.append(self.embedder(passage))
+            except Exception:
+                vecs.append(None)
+        self._vecs = vecs
 
     def add_documents(self, docs: list[tuple[str, str]]) -> dict:
         """Fold in extra (name, text) documents — e.g. iMessage/Mail — that
@@ -89,6 +130,10 @@ class FileIndex:
     # -- answering -------------------------------------------------------
 
     def search(self, query: str, k: int = 4) -> list[tuple[str, str, int]]:
+        if self._semantic_on() and any(v is not None for v in self._vecs):
+            sem = self._search_semantic(query, k)
+            if sem:
+                return sem
         q = _keywords(query)
         scored = []
         for path, passage in self._passages:
@@ -97,6 +142,28 @@ class FileIndex:
                 scored.append((hits, path, passage))
         scored.sort(key=lambda s: -s[0])
         return [(path, passage, hits) for hits, path, passage in scored[:k]]
+
+    def _search_semantic(self, query: str, k: int) -> list[tuple[str, str, int]]:
+        import math
+        try:
+            qv = self.embedder(query)
+        except Exception:
+            return []
+        if not qv:
+            return []
+        qn = math.sqrt(sum(x * x for x in qv)) or 1.0
+        scored = []
+        for (path, passage), v in zip(self._passages, self._vecs):
+            if not v:
+                continue
+            dot = sum(a * b for a, b in zip(qv, v))
+            vn = math.sqrt(sum(x * x for x in v)) or 1.0
+            cos = dot / (qn * vn)
+            if cos > 0.15:
+                scored.append((cos, path, passage))
+        scored.sort(key=lambda s: -s[0])
+        # map cosine → the small int "hits" the caller uses for confidence
+        return [(path, passage, max(1, int(cos * 6))) for cos, path, passage in scored[:k]]
 
     def ask(self, query: str) -> Optional[Answer]:
         hits = self.search(query)

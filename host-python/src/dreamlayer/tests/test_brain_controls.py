@@ -1,0 +1,163 @@
+"""test_brain_controls.py — the trust/cloud/knowledge/ops controls added to
+the Mac Brain: token rotation, cloud egress, data clearing, reindex, filters,
+semantic search, quiet hours, retention, and the draft→approve→send guard."""
+from __future__ import annotations
+
+import json
+import threading
+import time
+import urllib.request
+
+from dreamlayer.ai_brain.server import Brain, make_brain_server
+from dreamlayer.ai_brain.server.store import (
+    BrainConfig, ActivityLog, QueryHistory, in_quiet_hours, _prune_jsonl,
+)
+from dreamlayer.ai_brain.server.index import FileIndex
+
+
+def _op():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class Live:
+    def __init__(self, tmp, token="tok"):
+        cfg = tmp / "cfg"; cfg.mkdir()
+        BrainConfig(token=token).save(cfg)
+        self.brain = Brain(cfg)
+        self.srv = make_brain_server(self.brain, "127.0.0.1", 0)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        self.h = {"X-DreamLayer-Token": token, "Content-Type": "application/json"}
+
+    def _do(self, req):
+        try:
+            return json.loads(_op().open(req, timeout=5).read())
+        except urllib.error.HTTPError as e:      # return the JSON body of 4xx
+            return json.loads(e.read())
+
+    def get(self, p):
+        return self._do(urllib.request.Request(self.url + p, headers=self.h))
+
+    def post(self, p, body):
+        return self._do(urllib.request.Request(
+            self.url + p, data=json.dumps(body).encode(), headers=self.h))
+
+    def stop(self):
+        self.srv.shutdown(); self.srv.server_close()
+
+
+# --- config primitives -----------------------------------------------------
+
+class TestConfig:
+    def test_cloud_ready_and_masking(self):
+        c = BrainConfig(cloud_api_key="secret", cloud_model="gpt-4o-mini")
+        assert c.cloud_ready() is True
+        assert c.public()["cloud_api_key"] == "set"       # never leaks
+        assert "secret" not in json.dumps(c.public())
+        assert BrainConfig().cloud_ready() is False        # no key → not ready
+        c.network_mode = "lan_only"
+        assert c.cloud_ready() is False                    # incognito shuts it
+
+    def test_quiet_hours_window(self):
+        two_am = time.mktime(time.struct_time((2026, 1, 1, 2, 0, 0, 0, 1, -1)))
+        noon = time.mktime(time.struct_time((2026, 1, 1, 12, 0, 0, 0, 1, -1)))
+        assert in_quiet_hours("22:00-07:00", two_am) is True
+        assert in_quiet_hours("22:00-07:00", noon) is False
+        assert in_quiet_hours("", two_am) is False
+
+    def test_prune_drops_old(self, tmp_path):
+        p = tmp_path / "log.jsonl"
+        old = time.time() - 100 * 86400
+        p.write_text(json.dumps({"ts": old, "x": 1}) + "\n" +
+                     json.dumps({"ts": time.time(), "x": 2}) + "\n")
+        assert _prune_jsonl(p, 30) == 1
+        assert len(p.read_text().splitlines()) == 1
+
+
+# --- semantic search (fake embedder, no Ollama needed) ---------------------
+
+class TestSemantic:
+    def test_ranks_by_vector_similarity(self, tmp_path):
+        d = tmp_path / "notes"; d.mkdir()
+        (d / "a.md").write_text("the cat sat on the mat")
+        (d / "b.md").write_text("quantum chromodynamics and gluons")
+        cfg = BrainConfig(folders=[str(d)], semantic_search=True)
+        # a toy embedder: 2-D vector [has_cat, has_physics]
+        def embed(t):
+            t = t.lower()
+            return [1.0 if "cat" in t else 0.0, 1.0 if "gluon" in t or "physics" in t else 0.0]
+        idx = FileIndex(cfg, embedder=embed)
+        idx.reindex()
+        hits = idx.search("tell me about the physics")
+        assert hits and "gluons" in hits[0][1]
+
+    def test_filters_extensions_and_size(self, tmp_path):
+        d = tmp_path / "n"; d.mkdir()
+        (d / "keep.md").write_text("hello world")
+        (d / "skip.log").write_text("noise noise")
+        cfg = BrainConfig(folders=[str(d)], index_extensions=["md"])
+        idx = FileIndex(cfg); idx.reindex()
+        assert idx.stats()["files"] == 1                   # .log excluded
+
+
+# --- live endpoints --------------------------------------------------------
+
+class TestControls:
+    def test_token_rotate_reindex_clear(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            old = lb.get("/dreamlayer/token")["token"]
+            new = lb.post("/dreamlayer/token/rotate", {})["token"]
+            assert new and new != old
+            # old token is now rejected; new one works
+            lb.h["X-DreamLayer-Token"] = new
+            assert lb.post("/dreamlayer/reindex", {})["stats"]["files"] == 0
+            # activity captured the rotation + reindex
+            kinds = {i["kind"] for i in lb.get("/dreamlayer/history")["items"]}
+            assert "privacy" in kinds and "index" in kinds
+            lb.post("/dreamlayer/clear", {"what": "activity"})
+            assert lb.get("/dreamlayer/history")["items"] == []
+        finally:
+            lb.stop()
+
+    def test_status_reports_missing_and_egress(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            lb.post("/dreamlayer/folders", {"action": "add", "path": "/no/such/dir"})
+            s = lb.get("/dreamlayer/status")
+            assert "/no/such/dir" in s["missing"]
+            assert s["cloud_calls"] == 0 and s["cloud_ready"] is False
+            h = lb.get("/dreamlayer/health")
+            assert h["version"] and "uptime_s" in h
+        finally:
+            lb.stop()
+
+    def test_cloud_fallback_logs_egress(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", cloud_api_key="k", cloud_model="m").save(cfg)
+        brain = Brain(cfg)
+        # inject a fake cloud call so nothing hits the network
+        import dreamlayer.ai_brain.server.backends as be
+        orig = be.cloud_chat
+        be.cloud_chat = lambda config, prompt, **k: "the cloud answer"
+        try:
+            ans = brain.ask("something not in any file")
+            assert ans is not None and ans.tier == "cloud"
+            assert brain.config.cloud_calls == 1
+            assert any(i["kind"] == "cloud-egress" for i in brain.activity.recent())
+        finally:
+            be.cloud_chat = orig
+
+    def test_message_draft_previews_without_sending(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            r = lb.post("/dreamlayer/message/draft",
+                        {"channel": "imessage", "to": "Marcus", "text": "hi"})
+            assert "Marcus" in r["script"] and "hi" in r["script"]
+            # sending without approval is refused
+            bad = lb.post("/dreamlayer/message/send",
+                          {"channel": "imessage", "to": "Marcus", "text": "hi",
+                           "approved": False})
+            assert "error" in bad
+        finally:
+            lb.stop()

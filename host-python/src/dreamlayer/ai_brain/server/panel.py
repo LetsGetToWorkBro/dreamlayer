@@ -69,6 +69,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:500}
   button.ghost:hover{color:var(--text);border-color:var(--muted);filter:none}
   button.sm{padding:8px 12px;font-size:.85rem}
+  button.danger{color:var(--error);border-color:rgba(255,92,92,.4)}
+  pre{overflow-x:auto}
 
   /* system status */
   .sys{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
@@ -192,6 +194,20 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Cloud provider</div><h2>Wire the cloud tier</h2>
+    <p class="lead">The Cloud switch decides whether the cloud is <i>allowed</i>. To make it actually
+      answer, point it at an OpenAI-compatible provider. The key is stored only on this Mac mini and never shown again.</p>
+    <div class="row">
+      <input type="text" id="cbase" placeholder="https://api.openai.com" style="max-width:230px">
+      <input type="password" id="ckey" placeholder="API key" style="max-width:200px">
+      <input type="text" id="cmodel" placeholder="gpt-4o-mini" style="max-width:150px"></div>
+    <div class="row" style="margin-top:12px;justify-content:space-between">
+      <button class="sm ghost" onclick="testCloud()">Test connection</button>
+      <button class="sm" onclick="saveCloud()">Save cloud</button></div>
+    <div id="cloudStatus"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Knowledge</div><h2>Folders it reads</h2>
     <p class="lead">Everything in these folders is searchable — notes, PDFs, mail exports. Files never leave your Mac mini.</p>
     <ul id="folders"></ul>
@@ -202,6 +218,19 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     </div>
     <div class="drop" id="drop">Drag &amp; drop <b>files</b> here → add them to
       <select id="dropTarget" style="margin:0 4px"></select></div>
+    <div class="row" style="margin-top:14px;justify-content:space-between">
+      <span id="idxinfo" class="conn-s" style="margin:0"></span>
+      <button class="sm ghost" onclick="reindex()">Re-index now</button></div>
+    <div style="margin-top:12px"><a id="advtog" onclick="toggleAdv()" style="cursor:pointer;font-size:.85rem">Advanced filters ▸</a></div>
+    <div class="fold" id="adv" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s">
+      <label class="tog" style="display:flex;gap:10px;align-items:center;color:var(--muted);cursor:pointer;margin-top:12px">
+        <input type="checkbox" id="semantic" style="accent-color:var(--memory)"> Semantic search — rank by meaning (needs the Ollama embed model)</label>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="exts" placeholder="types: md,txt,pdf" style="max-width:200px">
+        <input type="text" id="maxkb" placeholder="max KB" style="max-width:110px">
+        <input type="text" id="excl" placeholder="exclude: node_modules,.git" style="max-width:220px"></div>
+      <div class="row" style="margin-top:10px;justify-content:flex-end"><button class="sm" onclick="saveFilters()">Save filters</button></div>
+    </div>
   </section>
 
   <section>
@@ -231,8 +260,50 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Trust &amp; data</div><h2>Privacy controls</h2>
+    <div class="conn"><div><div class="conn-t">Pairing token</div>
+      <div class="conn-s">The secret your phone sends. Rotate it to <b>forget every paired device</b> — they'll each re-pair with the new code.</div></div>
+      <div style="display:flex;gap:8px"><button class="sm ghost" onclick="showToken()">Show</button>
+        <button class="sm" onclick="rotateToken()">Rotate</button></div></div>
+    <div class="conn"><div><div class="conn-t">Cloud egress</div>
+      <div class="conn-s" id="egress">Every time anything leaves for the cloud, it's counted and logged below.</div></div></div>
+    <div class="conn" style="border-bottom:0"><div><div class="conn-t">Erase</div>
+      <div class="conn-s">Clear what the Brain has kept. This can't be undone.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="sm ghost" onclick="clearData('history')">Questions</button>
+        <button class="sm ghost" onclick="clearData('activity')">Activity</button>
+        <button class="sm ghost danger" onclick="clearData('folders')">Folders</button></div></div>
+    <div id="tokenout"></div>
+  </section>
+
+  <section id="composeCard" style="display:none">
+    <div class="eyebrow">Messages</div><h2>Compose &amp; send</h2>
+    <p class="lead">Nothing is ever sent silently. Write it, preview the exact action, then approve.</p>
+    <div class="row"><select id="mchan" style="max-width:130px"><option value="imessage">iMessage</option><option value="email">Email</option></select>
+      <input type="text" id="mto" placeholder="to (name / number / email)"></div>
+    <input type="text" id="msubj" placeholder="subject (email only)" style="width:100%;margin-top:10px">
+    <input type="text" id="mtext" placeholder="message…" style="width:100%;margin-top:10px">
+    <div class="row" style="margin-top:12px;justify-content:space-between">
+      <button class="sm ghost" onclick="draftMsg()">Preview</button>
+      <button class="sm" onclick="sendMsg()">Approve &amp; send</button></div>
+    <div id="msgout"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Log</div><h2>Activity</h2>
     <ul id="history" class="feed"></ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">Ops</div><h2>Health &amp; schedule</h2>
+    <div id="health" class="mstat" style="margin-top:0"></div>
+    <div class="conn" style="margin-top:6px"><div><div class="conn-t">Quiet hours</div>
+      <div class="conn-s">Auto-incognito during this window — cloud off, capture paused. Blank to disable.</div></div>
+      <input type="text" id="quiet" placeholder="22:00-07:00" style="max-width:140px"></div>
+    <div class="conn" style="border-bottom:0"><div><div class="conn-t">Keep memories for</div>
+      <div class="conn-s">Auto-expire questions &amp; activity older than this. 0 = keep forever.</div></div>
+      <div class="row"><input type="text" id="retain" placeholder="0" style="max-width:80px"> <span class="conn-s" style="margin:0">days</span>
+        <button class="sm" onclick="saveOps()">Save</button></div></div>
   </section>
   </main>
 </div>
@@ -275,7 +346,18 @@ async function load(){
   $("ovis").value=c.config.ollama_vision_model||"";$("email").checked=!!c.config.email_enabled;
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
-  refreshStatus(); loadHistory();
+  // cloud provider
+  $("cbase").value=c.config.cloud_base_url||"";$("cmodel").value=c.config.cloud_model||"";
+  $("ckey").placeholder=c.config.cloud_api_key==="set"?"key saved — leave blank to keep":"API key";
+  // knowledge filters
+  $("semantic").checked=!!c.config.semantic_search;
+  $("exts").value=(c.config.index_extensions||[]).join(",");
+  $("maxkb").value=c.config.max_file_kb||"";
+  $("excl").value=(c.config.exclude_globs||[]).join(",");
+  // ops
+  $("quiet").value=c.config.quiet_hours||"";$("retain").value=c.config.retention_days||0;
+  $("composeCard").style.display=c.config.email_enabled?"":"none";
+  refreshStatus(); loadHistory(); loadHealth();
 }
 
 function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
@@ -289,13 +371,22 @@ async function refreshStatus(){
   const model = s.model==="ollama"
     ? (ollamaOK===true?["Ollama · reachable","ok"]:ollamaOK===false?["Ollama · needs setup","warn"]:["Ollama · checking…","warn"])
     : ["Keyword · active","ok"];
+  const cloudTxt = s.cloud ? (s.cloud_ready?"<b>On · ready</b>":"<b>On · not configured</b>") : "Off";
+  const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
   $("sysrows").innerHTML=
     sysRow("Brain","<b>Online</b>","ok")+
     sysRow("Model",`<b>${model[0]}</b>`,model[1])+
-    sysRow("Cloud",s.cloud?"<b>On</b>":"Off",s.cloud?"ok":"off")+
-    sysRow("Incognito",s.incognito?"<b>On</b>":"Off",s.incognito?"warn":"off")+
-    sysRow("Phone",`<b>${phone[0].split(' · ')[0]}</b>${phone[0].includes(' · ')?' · '+phone[0].split(' · ')[1]:''}`,phone[1])+
-    sysRow("Index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off");
+    sysRow("Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off")+
+    sysRow("Incognito",incogTxt,s.incognito?"warn":"off")+
+    sysRow("Phone",phone[0].replace(/^([^·]+)/,'<b>$1</b>'),phone[1])+
+    sysRow("Index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off")+
+    ((s.missing&&s.missing.length)?sysRow("⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn"):"");
+  $("egress").innerHTML=`The cloud has been used <b>${s.cloud_calls||0}</b> time${s.cloud_calls===1?'':'s'} since setup — every one is logged below.`;
+  const idxa=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
+  let info=`Indexed ${idxa}`;
+  if(s.email_docs) info+=` · ${s.email_docs} mail/chat docs`;
+  if(s.missing&&s.missing.length) info+=` · <span style="color:var(--amber)">${s.missing.length} folder(s) missing</span>`;
+  $("idxinfo").innerHTML=info;
 }
 
 async function saveConn(){
@@ -409,6 +500,67 @@ async function loadHistory(){const h=await api("/dreamlayer/history");
     return `<li><div><div class="q">${esc(title)}</div>`+(sub?`<div class="a">${esc(sub)}</div>`:"")+
       `</div><span class="tag ${esc(x.kind)}">${esc(tag)}</span></li>`;}).join("")
     ||'<li class="empty">Nothing yet — add a folder, ask a question, pair your phone.</li>';
+}
+
+/* cloud provider */
+async function saveCloud(){const body={cloud_base_url:$("cbase").value,cloud_model:$("cmodel").value};
+  const k=$("ckey").value.trim(); if(k) body.cloud_api_key=k;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});$("ckey").value="";
+  toast("Cloud provider saved");load();}
+async function testCloud(){const el=$("cloudStatus");el.innerHTML='<div class="mstat"><div class="shimmer"></div></div>';
+  await saveCloud();
+  const r=await api("/dreamlayer/cloud/test",{method:"POST",body:"{}"});
+  el.innerHTML=`<div class="mstat"><div class="head"><span class="sdot ${r.ok?'ok':'warn'}"></span>`+
+    `<b>${r.ok?'Connected':'Not working'}</b></div><div class="lead" style="margin:0">`+
+    (r.ok?`Provider replied: <code>${esc(r.reply||'ok')}</code>`:`${esc(r.error||'no reply — check the key, URL and model')}`)+`</div></div>`;
+}
+
+/* trust & data */
+async function showToken(){const r=await api("/dreamlayer/token");const o=$("tokenout");
+  if(!r||r.error){o.innerHTML='<div class="paircode"><div class="conn-s">Open http://localhost:7777/ on the Mac mini to see the token.</div></div>';return;}
+  o.innerHTML=`<div class="paircode"><div class="code">${esc(r.token||'(none set)')}</div></div>`;}
+async function rotateToken(){if(!confirm("Rotate the token? Every paired phone will need to pair again."))return;
+  const r=await api("/dreamlayer/token/rotate",{method:"POST",body:"{}"});
+  $("tokenout").innerHTML=`<div class="paircode"><div class="code">${esc(r.token)}</div>`+
+    `<div class="foot"><span class="url">new token — re-pair your phone</span></div></div>`;toast("Token rotated");load();}
+async function clearData(what){const names={history:"all questions",activity:"the activity log",folders:"all watched folders"};
+  if(!confirm("Erase "+names[what]+"? This can't be undone."))return;
+  await api("/dreamlayer/clear",{method:"POST",body:JSON.stringify({what})});toast("Erased "+what);load();}
+async function reindex(){toast("Re-indexing…");const r=await api("/dreamlayer/reindex",{method:"POST",body:"{}"});
+  toast("Indexed "+(r.stats?r.stats.files:0)+" files");load();}
+
+/* knowledge filters */
+function toggleAdv(){const a=$("adv"),open=a.style.maxHeight!=="0px"&&a.style.maxHeight!=="";
+  a.style.maxHeight=open?"0":"260px";a.style.opacity=open?"0":"1";
+  $("advtog").textContent=open?"Advanced filters ▸":"Advanced filters ▾";}
+async function saveFilters(){
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
+    semantic_search:$("semantic").checked,
+    index_extensions:$("exts").value.split(",").map(x=>x.trim()).filter(Boolean),
+    max_file_kb:parseInt($("maxkb").value)||2000,
+    exclude_globs:$("excl").value.split(",").map(x=>x.trim()).filter(Boolean)})});
+  toast("Filters saved — re-indexing");load();}
+
+/* messages — draft → approve → send */
+function draft(){return {channel:$("mchan").value,to:$("mto").value,subject:$("msubj").value,text:$("mtext").value};}
+async function draftMsg(){const r=await api("/dreamlayer/message/draft",{method:"POST",body:JSON.stringify(draft())});
+  $("msgout").innerHTML=`<div class="mstat"><div class="lead" style="margin:0 0 6px">This exact action will run — nothing else:</div>`+
+    `<pre style="white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace;color:var(--memory);margin:0">${esc(r.script||'')}</pre></div>`;}
+async function sendMsg(){if(!confirm("Send this message now?"))return;
+  const r=await api("/dreamlayer/message/send",{method:"POST",body:JSON.stringify(Object.assign(draft(),{approved:true}))});
+  if(r.error){toast("Not sent: "+r.error);} else {toast("Sent");$("msgout").innerHTML="";$("mtext").value="";}load();}
+
+/* ops */
+async function saveOps(){await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
+    quiet_hours:$("quiet").value.trim(),retention_days:parseInt($("retain").value)||0})});
+  toast("Schedule saved");load();}
+async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e){return;}
+  const up=h.uptime_s<3600?Math.floor(h.uptime_s/60)+"m":Math.floor(h.uptime_s/3600)+"h";
+  $("health").innerHTML=
+    `<div class="mrow"><span class="lbl">Version</span><span class="nm">v${esc(h.version)}</span><span class="st off-t">running</span></div>`+
+    `<div class="mrow"><span class="lbl">Index</span><span class="nm">${h.disk_kb} KB</span><span class="st off-t">on disk</span></div>`+
+    `<div class="mrow"><span class="lbl">Model</span><span class="nm">${h.ollama_ms==null?'—':h.ollama_ms+' ms'}</span><span class="st ${h.ollama_ms==null?'off-t':'ok-t'}">${h.ollama_ms==null?'keyword / offline':'ollama latency'}</span></div>`+
+    `<div class="mrow"><span class="lbl">Uptime</span><span class="nm">${up}</span><span class="st off-t">since boot</span></div>`;
 }
 
 /* drag & drop — files only */
