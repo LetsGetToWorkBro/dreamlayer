@@ -354,6 +354,38 @@ def spoken_caption(speaker: str = "", text: str = "") -> dict:
     }
 
 
+def hark(clue: str = "", detail: str = "", importance: str = "normal") -> dict:
+    """Oracle taps you on the shoulder — Navi's "Listen!" A short, distinct
+    attention cue (its own earcon, a flashing ring) followed by the one thing
+    it wants you to hear. `importance="urgent"` pierces Focus mode. Fades on its
+    own so it never blocks the view."""
+    urgent = importance == "urgent"
+    body = (clue or "").strip() or "There's something here."
+    if len(body) > 90:
+        body = body[:89] + "…"
+    return {
+        "type":       "HarkCard",
+        "dismiss_ms": 9000 if urgent else 6000,
+        "eyebrow":    "LISTEN",
+        "primary":    body,
+        "detail":     (detail or "").strip(),
+        "importance": importance,
+        "earcon":     "hark",                 # the custom "Listen!" clip
+        "haptic":     "double" if urgent else "tick",
+        "flash":      True,                    # renderer flashes the ring to catch the eye
+        "color":      T.WARNING_AMBER if urgent else T.ACCENT_MEMORY,
+        "lines":      ["LISTEN", body, (detail or "").strip()],
+        "layout": {
+            "ring":      {"x": 128, "y": 58, "r": 12,
+                          "color": T.WARNING_AMBER if urgent else T.ACCENT_MEMORY, "flash": True},
+            "eyebrow":   {"x": 128, "y": 82,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 4},
+            "separator": {"x1": 48, "x2": 208, "y": 98},
+            "primary":   {"x": 128, "y": 128, "size": "md", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 162, "size": "sm", "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def listening(source: str = "voice", earcon: bool = True, haptic: bool = True) -> dict:
     """Oracle is listening — the reassurance cue the moment it wakes. A soft
     ring/glow in the display, plus (device seams) a short earcon and a haptic
@@ -761,6 +793,8 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
+    "hark":                hark(clue="Marcus is 2 min away — you owe him the lease.",
+                                detail="from your last chat"),
     "listening":           listening(source="voice"),
     "morning_brief":       morning_brief(
         text="Two meetings and the lease is due Friday. Marcus texted twice.",

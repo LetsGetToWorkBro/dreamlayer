@@ -13,6 +13,7 @@ import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { pushLocal } from "../src/services/notify";
+import { playListen } from "../src/services/sound";
 
 export default function Now() {
   const router = useRouter();
@@ -40,7 +41,10 @@ export default function Now() {
       const first = briefSeen.current === 0;
       briefSeen.current = b.ts;
       setBrief(b.text);
-      if (!first) pushLocal("Morning brief", b.text);
+      if (!first) {
+        playListen(); // Oracle: "Listen!" — a fresh brief just landed
+        pushLocal("Morning brief", b.text);
+      }
     };
     pull();
     const id = setInterval(pull, 90_000);
