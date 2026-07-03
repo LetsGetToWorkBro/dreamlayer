@@ -62,6 +62,8 @@ type BrainState = {
   wakeSources: Record<WakeSource, boolean>; // how Oracle can be woken
   wakeFeedback: Record<WakeFeedback, boolean>; // how it shows it's listening
   proactiveAlerts: boolean; // let Oracle speak up: Listen! / Watch out!
+  factCheck: boolean; // Veritas: fact-check the conversation as it happens
+  answerAhead: boolean; // pre-answer questions the room asks you
   hydrated: boolean;
 
   // derived
@@ -96,6 +98,8 @@ type BrainState = {
   setWakeSource: (source: WakeSource, on: boolean) => void;
   setWakeFeedback: (kind: WakeFeedback, on: boolean) => void;
   setProactiveAlerts: (on: boolean) => void;
+  setFactCheck: (on: boolean) => void;
+  setAnswerAhead: (on: boolean) => void;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
@@ -132,6 +136,8 @@ function persist(s: BrainState) {
     wakeSources: s.wakeSources,
     wakeFeedback: s.wakeFeedback,
     proactiveAlerts: s.proactiveAlerts,
+    factCheck: s.factCheck,
+    answerAhead: s.answerAhead,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -187,6 +193,8 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   wakeSources: { voice: true, tap: true, gaze: true, raise: true },
   wakeFeedback: { visual: true, audio: true, haptic: true },
   proactiveAlerts: true,
+  factCheck: false,
+  answerAhead: false,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -316,6 +324,16 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   setProactiveAlerts: (on) => {
     set({ proactiveAlerts: on });
+    persist(get());
+  },
+
+  setFactCheck: (on) => {
+    set({ factCheck: on });
+    persist(get());
+  },
+
+  setAnswerAhead: (on) => {
+    set({ answerAhead: on });
     persist(get());
   },
 

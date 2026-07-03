@@ -43,6 +43,10 @@ export default function Settings() {
   const setWakeFeedback = useBrainStore((s) => s.setWakeFeedback);
   const proactiveAlerts = useBrainStore((s) => s.proactiveAlerts);
   const setProactiveAlerts = useBrainStore((s) => s.setProactiveAlerts);
+  const factCheck = useBrainStore((s) => s.factCheck);
+  const setFactCheck = useBrainStore((s) => s.setFactCheck);
+  const answerAhead = useBrainStore((s) => s.answerAhead);
+  const setAnswerAhead = useBrainStore((s) => s.setAnswerAhead);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -180,6 +184,30 @@ export default function Settings() {
             <Switch
               value={proactiveAlerts}
               onValueChange={setProactiveAlerts}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Live fact-checker"
+          sub="As people talk, Oracle quietly checks what’s said — flagging when someone contradicts what they told you before, or when a claim doesn’t hold up. On-device first; reaches the cloud only if you’ve allowed it"
+          right={
+            <Switch
+              value={factCheck}
+              onValueChange={setFactCheck}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Answer-ahead"
+          sub="When someone asks you something, Oracle pulls the answer from what you know and shows it in time to say it yourself — no wake word"
+          right={
+            <Switch
+              value={answerAhead}
+              onValueChange={setAnswerAhead}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
               thumbColor={colors.textPrimary}
             />
