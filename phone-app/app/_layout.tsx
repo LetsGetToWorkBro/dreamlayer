@@ -24,10 +24,12 @@ export default function Layout() {
     >
       <Tabs.Screen name="brain" options={{ title: "Brain" }} />
       <Tabs.Screen name="now" options={{ title: "Now" }} />
-      <Tabs.Screen name="rehearsal" options={{ title: "Rehearsal" }} />
-      <Tabs.Screen name="confluence" options={{ title: "Confluence" }} />
+      <Tabs.Screen name="messages" options={{ title: "Messages" }} />
       <Tabs.Screen name="memories" options={{ title: "Memories" }} />
       <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+      {/* reachable from Settings → Labs, kept out of the bar for a clean 5 */}
+      <Tabs.Screen name="rehearsal" options={{ href: null }} />
+      <Tabs.Screen name="confluence" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null }} />
       <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>

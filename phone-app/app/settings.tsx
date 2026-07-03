@@ -25,6 +25,8 @@ export default function Settings() {
   const { service } = useMemoryStore();
   const incognito = useBrainStore((s) => s.incognito);
   const setIncognito = useBrainStore((s) => s.setIncognito);
+  const notifyGlasses = useBrainStore((s) => s.notifyGlasses);
+  const setNotifyGlasses = useBrainStore((s) => s.setNotifyGlasses);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -46,6 +48,18 @@ export default function Settings() {
               value={incognito}
               onValueChange={setIncognito}
               trackColor={{ true: colors.accentAttention, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <Row
+          label="Text pop-ups on glasses"
+          sub="New texts & emails flash on the Halo (silenced by the Privacy Veil)"
+          right={
+            <Switch
+              value={notifyGlasses}
+              onValueChange={setNotifyGlasses}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
               thumbColor={colors.textPrimary}
             />
           }
@@ -77,6 +91,16 @@ export default function Settings() {
         />
         <TouchableOpacity onPress={() => router.push("/brain")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Pair devices, connect your Mac mini, cloud →</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.section}>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Labs</Text>
+        <TouchableOpacity onPress={() => router.push("/rehearsal")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Rehearsal — the Reality Compiler →</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/confluence")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Confluence — two wearers, one sky →</Text>
         </TouchableOpacity>
       </View>
 

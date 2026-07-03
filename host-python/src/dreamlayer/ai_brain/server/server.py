@@ -56,7 +56,7 @@ def lan_ip() -> str:
 class Brain:
     """The Brain's live state: config + index + history, rebuilt on change."""
 
-    def __init__(self, cfg_dir: Path | str, sources_fn=None):
+    def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None):
         self.cfg_dir = Path(cfg_dir)
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
@@ -64,6 +64,9 @@ class Brain:
         self.index = FileIndex(self.config)
         # macOS message/mail documents (folded in when email is enabled)
         self._sources_fn = sources_fn or collect_documents
+        # the live feed the glasses read hands-free (the Mac is the bridge)
+        from .macos_sources import recent_messages
+        self._messages_fn = messages_fn or recent_messages
         self._sig = None
         self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
         self._started_ts = time.time()
@@ -292,6 +295,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "uptime_s": int(time.time() - brain._started_ts)})
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
+            elif path == "/dreamlayer/messages/recent":
+                # the live Messages/Mail feed the glasses read hands-free
+                if not brain.config.email_enabled:
+                    self._json(200, {"items": [], "enabled": False}); return
+                try:
+                    items = brain._messages_fn(brain.config, 20)
+                except Exception:
+                    items = []
+                self._json(200, {"items": items, "enabled": True})
             elif path == "/dreamlayer/model/status":
                 self._json(200, probe_ollama(brain.config))
             elif path == "/dreamlayer/browse":

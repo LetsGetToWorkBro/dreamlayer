@@ -148,6 +148,31 @@ class TestControls:
         finally:
             be.cloud_chat = orig
 
+    def test_messages_feed_gated_and_relayed(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        fake = [{"channel": "imessage", "who": "Marcus", "from_me": False,
+                 "text": "you around?", "ts": 2.0}]
+        brain = Brain(cfg, messages_fn=lambda config, n=20: fake)
+        srv = make_brain_server(brain, "127.0.0.1", 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        h = {"X-DreamLayer-Token": "t"}
+        op = _op()
+        try:
+            # email off → relay is closed
+            r1 = json.loads(op.open(urllib.request.Request(
+                url + "/dreamlayer/messages/recent", headers=h), timeout=5).read())
+            assert r1["enabled"] is False and r1["items"] == []
+            # turn it on → the glasses would see Marcus's message
+            brain.config.email_enabled = True; brain.save()
+            r2 = json.loads(op.open(urllib.request.Request(
+                url + "/dreamlayer/messages/recent", headers=h), timeout=5).read())
+            assert r2["enabled"] is True
+            assert r2["items"][0]["who"] == "Marcus"
+        finally:
+            srv.shutdown(); srv.server_close()
+
     def test_message_draft_previews_without_sending(self, tmp_path):
         lb = Live(tmp_path)
         try:
