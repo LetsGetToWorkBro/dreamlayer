@@ -41,6 +41,8 @@ export default function Settings() {
   const setWakeSource = useBrainStore((s) => s.setWakeSource);
   const wakeFeedback = useBrainStore((s) => s.wakeFeedback);
   const setWakeFeedback = useBrainStore((s) => s.setWakeFeedback);
+  const proactiveAlerts = useBrainStore((s) => s.proactiveAlerts);
+  const setProactiveAlerts = useBrainStore((s) => s.setProactiveAlerts);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -170,6 +172,18 @@ export default function Settings() {
           label="Wake word"
           sub="Say “Hey Oracle” to wake your assistant, then just keep talking — follow-ups need no wake word"
           right={<Text style={[typography.caption, { color: colors.accentMemory }]}>“Hey Oracle”</Text>}
+        />
+        <Row
+          label="Proactive alerts"
+          sub="Let Oracle speak up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now"
+          right={
+            <Switch
+              value={proactiveAlerts}
+              onValueChange={setProactiveAlerts}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
         />
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
           Also wake it by

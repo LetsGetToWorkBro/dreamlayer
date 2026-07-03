@@ -100,6 +100,13 @@ device seams are the callables they accept.
   stranger lookup) and follows the identity card with the conversation dossier
   when the ledger knows them. Contacts sync fills `self.social`. **Seam:** the
   camera frame + the face-embedding model (MobileFaceNet/NPU).
+- **Attention policy ("Listen!")** — `orchestrator.attention_tick(Context,
+  commitments=None)` decides *when a moment is worth interrupting you out loud*:
+  a commitment about to slip, someone you owe now in view, or something you're
+  walking away from → a **listen** hark; an event you must leave for now → a
+  **watch-out** hark. Ranked (urgent first), per-key cooldown so it never nags,
+  and gated by hark's Veil/Focus rules (`attention.py: AttentionPolicy`;
+  `set_attention(False)` mutes it). Feed it the same `Context` as anticipation.
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that

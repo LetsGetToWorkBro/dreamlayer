@@ -133,6 +133,13 @@ class Orchestrator:
         self.wake_sources = {"voice", "tap", "gaze", "raise"}
         self.wake_feedback = {"visual": True, "audio": True, "haptic": True}
         self._last_hark = -1e9                  # rate-limit Oracle's "Listen!"
+        # Attention policy: decides *when* a moment is worth an audible "Listen!"
+        # (a commitment slipping, someone you owe, something you left) or an
+        # urgent "Watch out!" (leave now). Feeds hark(); never nags (per-key
+        # cooldown + hark's pacing). Veil/Focus rules ride on hark.
+        from .attention import AttentionPolicy
+        self.attention = AttentionPolicy()
+        self.attention_on = True                # proactive spoken alerts
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -866,6 +873,28 @@ class Orchestrator:
         card = cards.hark(clue, detail, importance)
         self.bridge.send_card(card, event="hark")
         return card
+
+    def set_attention(self, on: bool = True) -> None:
+        self.attention_on = on
+
+    def attention_tick(self, context, commitments=None):
+        """Decide whether this moment deserves a spoken "Listen!" / "Watch out!"
+        Runs the attention policy over live context and harks the single most
+        important fresh alert (watch-outs first). Returns the card it spoke, or
+        None. Never nags: each alert is remembered so it won't repeat, and
+        hark() paces + Veil/Focus-gates the rest."""
+        if not self.attention_on:
+            return None
+        import time
+        now = getattr(context, "now", None)
+        now = now if now is not None else time.time()
+        for a in self.attention.evaluate(context, commitments):
+            importance = "urgent" if a.level == "watchout" else "normal"
+            card = self.hark(a.clue, a.detail, importance, now=now)
+            if card is not None:                 # hark actually spoke (passed gates)
+                self.attention.mark(a.key, now)
+                return card
+        return None
 
     def greet(self, person: str, now: float | None = None):
         """Surface a dossier the moment you greet someone the ledger knows.
