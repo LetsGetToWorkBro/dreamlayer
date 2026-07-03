@@ -413,6 +413,25 @@ def listening(source: str = "voice", earcon: bool = True, haptic: bool = True) -
     }
 
 
+def oracle_reply(text: str = "", kind: str = "answer") -> dict:
+    """Oracle's response, as text on the glasses (a real voice is a later seam).
+    Used for both answers and the little confirmations when it does something."""
+    body = (text or "").strip()
+    return {
+        "type":       "OracleReplyCard",
+        "dismiss_ms": 6000,
+        "kind":       kind,               # "answer" | "action"
+        "primary":    body,
+        "eyebrow":    "ORACLE",
+        "lines":      ["ORACLE", body],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 66,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 82},
+            "primary":   {"x": 128, "y": 120, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
 def morning_brief(text: str = "", bullets=None) -> dict:
     """The day's brief, flashed on the glasses the moment you put the Halo on.
     Short synthesis up top, the first couple of points beneath."""
@@ -794,6 +813,7 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
+    "oracle_reply":        oracle_reply("The lease is in your Documents — due Friday.", "answer"),
     "hark":                hark(clue="Marcus is 2 min away — you owe him the lease.",
                                 detail="from your last chat"),
     "listening":           listening(source="voice"),

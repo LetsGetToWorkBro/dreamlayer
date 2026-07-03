@@ -726,12 +726,76 @@ class Orchestrator:
             self.begin_listening("voice", now)
             if remainder:
                 self.oracle_until = now + self.oracle_session_s
-                return self.handle_voice(remainder)
+                return self.ask_oracle(remainder)
             return {"intent": "listening"}
         if self.oracle_listening(now):
             self.oracle_until = now + self.oracle_session_s     # follow-up extends
-            return self.handle_voice(text)
+            return self.ask_oracle(text)
         return {"intent": "idle"}
+
+    def ask_oracle(self, text: str) -> dict:
+        """The full "Hey Oracle" surface: run a device command if it is one
+        ("turn on focus", "go incognito", "rewind my day"), otherwise answer
+        from your brain — device → Mac mini → cloud, so it can pull up anything
+        about you or the wider world. Replies as text on the glasses in Oracle's
+        own voice. Returns {intent, text, executed, ...}."""
+        from .commands import parse_command
+        from . import persona
+        cmd = parse_command(text)
+        if cmd is not None:
+            line, executed, intent = self._run_command(cmd)
+            self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
+            return {"intent": intent, "text": line, "executed": executed}
+        # not a command → knowledge / conversation
+        res = self.handle_voice(text)
+        kind = res.get("intent")
+        if kind in ("ask", "recall"):
+            line = persona.frame(res.get("answer", ""))
+        elif kind == "reply":
+            line = (f"Reply to {res.get('to', '')}: “{res.get('text', '')}” "
+                    f"— open Messages to send.")
+        elif kind == "brief":
+            line = "Pulling up your brief."
+        elif kind == "missed":
+            line = "Here's what you missed."
+        else:
+            line = persona.dunno()
+        self.bridge.send_card(cards.oracle_reply(line, "answer"), event="oracle")
+        out = {"intent": kind, "text": line, "executed": False}
+        out.update({k: v for k, v in res.items() if k not in ("intent", "answer")})
+        return out
+
+    def _run_command(self, cmd) -> tuple:
+        """Execute a device Command; returns (in-voice line, executed?, intent).
+        Local switches run here and now; cross-device ones (sync, remind, saga)
+        come back as an intent the app completes on the Brain."""
+        from . import persona
+        k, on = cmd.kind, cmd.args.get("on", True)
+        if k == "focus":
+            (self.set_focus(25) if on else self.clear_focus())
+            return persona.confirm("focus_on" if on else "focus_off"), True, "focus"
+        if k == "incognito":
+            self.set_incognito(on)
+            return persona.confirm("incognito_on" if on else "incognito_off"), True, "incognito"
+        if k == "captions":
+            self.set_captions(on)
+            return persona.confirm("captions_on" if on else "captions_off"), True, "captions"
+        if k == "proactive":
+            self.set_attention(on); self.set_anticipation(on)
+            return persona.confirm("proactive_on" if on else "proactive_off"), True, "proactive"
+        if k == "cloud":
+            self.use_cloud(on)
+            return persona.confirm("cloud_on" if on else "cloud_off"), True, "cloud"
+        if k == "rewind":
+            self.rewind_scrub()
+            return persona.confirm("rewind"), True, "rewind"
+        if k == "saga":
+            return persona.confirm("saga"), False, "saga"
+        if k == "sync":
+            return persona.confirm("sync", what=cmd.args.get("what")), False, "sync"
+        if k == "remind":
+            return persona.confirm("remind", title=cmd.args.get("title")), False, "remind"
+        return persona.dunno(), False, "unknown"
 
     # -- focus mode: a stretch with the interruptions turned down --------
     # Distinct from Incognito (which pauses *capture*): focus keeps capturing
