@@ -156,6 +156,17 @@ class Orchestrator:
         from .answer_ahead import AnswerAhead
         self.answer_ahead = AnswerAhead(answer_fn=self._answer_question)
         self.copilot_on = False
+        # User model — the Oracle learns you: the topics you return to, who you
+        # talk with, what you tell it to remember, what to call you. Built
+        # on-device from your own lines + explicit teaches; persisted beside the
+        # vault (in-memory for an :memory: db). Feeds the persona's greeting and
+        # can bias recall toward what you care about.
+        from .user_model import UserModel
+        um_path = None
+        if db_path and db_path != ":memory:":
+            um_path = os.path.join(os.path.dirname(os.path.abspath(db_path)) or ".",
+                                   "usermodel.json")
+        self.user = UserModel(um_path)
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -715,6 +726,18 @@ class Orchestrator:
     def end_listening(self) -> None:
         self.oracle_until = 0.0
 
+    def oracle_greeting(self) -> str:
+        """Oracle's greeting, adapted to what it's learned — by name once it
+        knows it. Warms on wake / first line of a session."""
+        from . import persona
+        return persona.greeting(self.user.address())
+
+    def user_snapshot(self, n: int = 5) -> dict:
+        """What the Oracle has learned about you — name, the topics you return
+        to, who you talk with most, and what you've told it to remember. For the
+        phone's profile screen; a read, never a write."""
+        return self.user.snapshot(n).to_dict()
+
     def activate(self, source: str, now: float | None = None):
         """Wake Oracle without a phrase — a tap, a gaze/dwell, or a raise-to-
         speak gesture (the device seam decides which). Enters listening if that
@@ -756,12 +779,25 @@ class Orchestrator:
         own voice. Returns {intent, text, executed, ...}."""
         from .commands import parse_command
         from . import persona
+        # first: is this you teaching Oracle about yourself? ("call me Sam",
+        # "remember that I prefer aisle seats") — it learns and confirms.
+        learned = self.user.learn(text)
+        if learned is not None:
+            if learned["kind"] == "name":
+                line = persona.confirm("learned_name", name=learned["value"])
+            else:
+                line = persona.confirm("learned_pref")
+            self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
+            return {"intent": "learn", "text": line, "executed": True,
+                    "learned": learned}
         cmd = parse_command(text)
         if cmd is not None:
             line, executed, intent = self._run_command(cmd)
             self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
             return {"intent": intent, "text": line, "executed": executed}
-        # not a command → knowledge / conversation
+        # not a command → knowledge / conversation. Your questions also reveal
+        # what you care about, so the Oracle keeps learning as you ask.
+        self.user.observe(text)
         res = self.handle_voice(text)
         kind = res.get("intent")
         if kind in ("ask", "recall"):
@@ -879,6 +915,13 @@ class Orchestrator:
         # dossier, anticipation, and the quest/drift engine.
         if u is not None and u.is_mine():
             self._capture_commitment(u)
+        # the Oracle quietly learns you: your own words shape your interests;
+        # whoever you're talking to is someone you talk with.
+        if u is not None:
+            if u.is_mine():
+                self.user.observe(u.text)
+            else:
+                self.user.note_person(u.speaker)
         # Veritas: fact-check the line as it lands — self-contradiction (from the
         # ledger) and a world check (Brain/cloud seam). Opt-in; held during Focus.
         if u is not None and self.factcheck_on and not self.focus_active():

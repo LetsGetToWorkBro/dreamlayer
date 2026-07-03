@@ -128,6 +128,16 @@ device seams are the callables they accept.
   confidence floor, held during Focus, Veil-gated. **Seam:** `_answer_question`
   routes through `brain.ask` (cloud when opted in) → `{text, confidence, source}`;
   returns `None` offline / on a low-confidence miss, so nothing is surfaced.
+- **The Oracle learns you** — `orchestrator/user_model.py: UserModel` is a light,
+  private profile built on-device: the topics you return to (from your *own*
+  lines in `ingest_caption` + your Oracle asks), who you talk with most, what
+  you've told it to remember, and what to call you. `ask_oracle` catches explicit
+  teaches first ("call me Sam", "remember that I prefer aisle seats") →
+  `user.learn` → an in-voice confirmation. It adapts the persona
+  (`oracle_greeting()` → `persona.greeting(name)`) and exposes `user_snapshot()`
+  for the phone. Persisted as `usermodel.json` beside the vault (in-memory for an
+  `:memory:` db); only keywords/preferences, never raw audio or others' words.
+  Veil-gated (learning rides on `ingest_caption`/`ask_oracle`).
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that
