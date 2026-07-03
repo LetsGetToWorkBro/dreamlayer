@@ -77,11 +77,29 @@ class RasterDisplay:
         self.canvas = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         self._draw = ImageDraw.Draw(self.canvas)
         self._font = _load_font()
+        self._fonts: dict[int, object] = {_FONT_PX: self._font}
         self.frames: list[Image.Image] = []
         # slot -> live RGB; base hex -> slot (learned via sync)
         self._slot_rgb: dict[int, tuple[int, int, int]] = {}
         self._slot_by_hex: dict[int, int] = {}
         self.draw_calls = 0
+        self.font_calls = 0
+
+    def set_font(self, fid, sz, sc) -> None:
+        """Model of frame.display.set_font (Meridian Solid).
+
+        Maps sz*sc to a PIL face of the same pixel size — goldens carry
+        the hierarchy the panel will. A state write like
+        assign_color_ycbcr: counted in font_calls, not draw_calls.
+        """
+        del fid  # single reference face; fid is a device-side concern
+        px = max(6, int(round(float(sz) * float(sc))))
+        font = self._fonts.get(px)
+        if font is None:
+            font = _load_font(px)
+            self._fonts[px] = font
+        self._font = font
+        self.font_calls += 1
 
     # -- palette model ------------------------------------------------
     def bind_slot(self, base_hex: int, slot: int) -> None:
@@ -178,6 +196,7 @@ frame = {
     circle  = function(x, y, r, col, f)      __raster.circle(x, y, r, col, f or false) end,
     set_pixel = function(x, y, col)          __raster.set_pixel(x, y, col) end,
     bitmap  = function(...)          __raster.bitmap(...) end,
+    set_font = function(fid, sz, sc) __raster.set_font(fid, sz, sc or 1.0) end,
     assign_color_ycbcr = function(i, y, cb, cr) __raster.assign_color_ycbcr(i, y, cb, cr) end,
   },
 }

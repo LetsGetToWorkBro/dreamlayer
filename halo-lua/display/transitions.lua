@@ -114,6 +114,9 @@ function transitions.ghost_wake_text(x, y, text, size, t, seed_ms)
   P.set_dynamic_y("ghost_text",
                   lerp(A.SIG_GHOSTWAKE_Y_FROM, A.SIG_GHOSTWAKE_Y_TO, t))
   if not HAS_FRAME then return end
+  -- Solid: ghost glyphs render at their token size explicitly (no
+  -- sticky-font bleed from whatever card drew last)
+  require("display.primitives").set_font_size(size or "sm")
   local amp   = A.SIG_GHOSTWAKE_JITTER_PX * (1 - E.in_out_cubic(t))
   local seed  = (seed_ms or 0) * 0.004
   local color = P.dynamic_color("ghost_text")

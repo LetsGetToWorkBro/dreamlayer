@@ -229,6 +229,14 @@ end
 
 local CX,CY = 128,128
 
+-- Solid: every renderer string goes through the sized-text seam. The
+-- size tokens are typography.DEVICE_FONT keys; primitives caches the
+-- set_font call and latches the feature off if firmware lacks it.
+local PR = require("display.primitives")
+local function text(str, x, y, color, size)
+  PR.text_center(x, y, str, size, color)
+end
+
 -- stagger helpers: returns true when global enter_t has passed layer threshold
 local function layer_ok(enter_t, stagger_ms)
   return enter_t >= (stagger_ms / A.ENTER_DURATION_MS)
@@ -284,10 +292,10 @@ local function draw_saved_memory(card, sc, enter_t, exit_t, idle_t)
     TR.chime(idle_t / A.SIG_CHIME_MS, CX, CY - 8)
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("SAVED",CX,CY-42,P.accent_success)
+    text("SAVED",CX,CY-42,P.accent_success, "lg")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text((card and card.primary) or "Memory saved",CX,CY+22,P.text_primary)
+    text((card and card.primary) or "Memory saved",CX,CY+22,P.text_primary, "md")
   end
 end
 
@@ -380,7 +388,7 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
   frame.display.circle(44,rail_bot,3,jcol,true)
   -- eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text(obj,54,80,P.memory_trace)
+    text(obj,54,80,P.memory_trace, "sm")
   end
   -- bezier arc
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
@@ -399,11 +407,11 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     arc(jx,jy,floor(10*sc),240,330,jcol,8)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(place,155,150,P.text_primary)
-    if detail~="" then frame.display.text("[ "..detail.." ]",CX,178,P.text_secondary) end
+    text(place,155,150,P.text_primary, "lg")
+    if detail~="" then text("[ "..detail.." ]",CX,178,P.text_secondary, "md") end
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(footer,CX,198,P.text_ghost)
+    text(footer,CX,198,P.text_ghost, "sm")
   end
 end
 
@@ -413,7 +421,7 @@ local function draw_commitment_recall(card, sc, enter_t, exit_t)
   local due    = card.due     or ""
   local conf   = card.confidence
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("YOU PROMISED "..person:upper(),CX,68,P.memory_trace)
+    text("YOU PROMISED "..person:upper(),CX,68,P.memory_trace, "sm")
   end
   -- Lumen: the chain forges link by link — each spring-widens open on
   -- its own stagger, so the promise visibly locks together (geometry
@@ -438,10 +446,10 @@ local function draw_commitment_recall(card, sc, enter_t, exit_t)
   frame.display.line(CX,84+link_h, CX,108,P.border_subtle)
   frame.display.line(CX,108+link_h,CX,132,P.border_subtle)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(task,CX,108+floor(link_h/2),P.text_primary)
+    text(task,CX,108+floor(link_h/2),P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(due,CX,132+floor(link_h/2),P.memory_trace)
+    text(due,CX,132+floor(link_h/2),P.memory_trace, "md")
   end
   local jcol=conf and (conf>=0.75 and P.confidence_high or conf>=0.40 and P.confidence_med or P.confidence_low) or P.text_ghost
   frame.display.circle(CX,168,2,jcol,true)
@@ -451,17 +459,17 @@ local function draw_proactive_memory(card, sc, enter_t, exit_t)
   local summary = card.primary or card.summary or ""
   local person  = card.person
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("LAST TIME HERE",CX,62,P.text_ghost)
+    text("LAST TIME HERE",CX,62,P.text_ghost, "sm")
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     radial_rays(CX,CY-10, floor(5*sc),floor(52*sc), 5,P.memory_trace,2)
     frame.display.circle(CX,CY-10,3,P.memory_trace,true)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(summary,CX,CY+50,P.text_secondary)
+    text(summary,CX,CY+50,P.text_secondary, "lg")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and person then
-    frame.display.text("With "..person,CX,CY+78,P.memory_trace)
+    text("With "..person,CX,CY+78,P.memory_trace, "sm")
   end
 end
 
@@ -478,7 +486,7 @@ local function draw_person_context(card, sc, enter_t, exit_t)
   local detail   = card.detail   or ""
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
-    frame.display.text(name,CX,100,P.memory_trace)
+    text(name,CX,100,P.memory_trace, "lg")
     if card.has_avatar then
       -- chord arpeggio around the avatar sprite (drawn at top center by
       -- the sprite handler); confidence shapes the arc sweep
@@ -492,13 +500,13 @@ local function draw_person_context(card, sc, enter_t, exit_t)
     -- spec: exactly ONE line of "why this person matters right now"
     local line = why ~= "" and why or headline
     if #line > 34 then line = line:sub(1, 33) .. "\xE2\x80\xA6" end
-    frame.display.text(line,CX,138,P.text_primary)
+    text(line,CX,138,P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     if why ~= "" and headline ~= "" then
-      frame.display.text(headline,CX,158,P.text_secondary)
+      text(headline,CX,158,P.text_secondary, "sm")
     end
-    frame.display.text(detail,CX,176,P.text_ghost)
+    text(detail,CX,176,P.text_ghost, "sm")
   end
 end
 
@@ -515,8 +523,8 @@ local function draw_privacy_veil(sc, enter_t, exit_t)
     shield_glyph(CX,CY-14,floor(52*ease_out_expo(glyph_t)*sc),P.privacy_danger,true)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text("PAUSED",CX,CY+32,P.privacy_caution)
-    frame.display.text("Nothing is captured",CX,CY+48,P.text_ghost)
+    text("PAUSED",CX,CY+32,P.privacy_caution, "lg")
+    text("Nothing is captured",CX,CY+48,P.text_ghost, "sm")
   end
 end
 
@@ -538,16 +546,16 @@ local function draw_error(card, sc, enter_t, exit_t)
   frame.display.circle(CX,tri_cy-6,2,P.warning_amber,true)
   frame.display.line(CX,tri_cy+2,CX,tri_cy+14,P.warning_amber)
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text((card and card.primary) or "Try again",CX,CY+52,P.text_ghost)
+    text((card and card.primary) or "Try again",CX,CY+52,P.text_ghost, "md")
   end
 end
 
 local function draw_low_confidence(sc, enter_t, exit_t)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text("Not sure",CX,CY-14,P.text_secondary)
+    text("Not sure",CX,CY-14,P.text_secondary, "lg")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text("Try rephrasing",CX,CY+16,P.text_ghost)
+    text("Try rephrasing",CX,CY+16,P.text_ghost, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     local dot_r=floor(2*sc)
@@ -599,12 +607,12 @@ local function draw_commitment_drift(card, sc, enter_t, exit_t, idle_t)
 
   -- Eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("DRIFT DETECTED", CX, 72, P.memory_trace)
+    text("DRIFT DETECTED", CX, 72, P.memory_trace, "sm")
   end
 
   -- Primary task text
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(task, CX, CY - 12, P.text_primary)
+    text(task, CX, CY - 12, P.text_primary, "lg")
   end
 
   -- Person chain: three dots then arrow then name
@@ -614,13 +622,13 @@ local function draw_commitment_drift(card, sc, enter_t, exit_t, idle_t)
       for i = 0, 2 do
         frame.display.circle(CX - 20 + i * 8, CY + 16, 2, P.border_subtle, true)
       end
-      frame.display.text("\xe2\x86\x92 " .. person, CX, CY + 32, P.memory_trace)
+      text("\xe2\x86\x92 " .. person, CX, CY + 32, P.memory_trace, "md")
     end
   end
 
   -- Footer detail
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(detail, CX, 184, P.text_ghost)
+    text(detail, CX, 184, P.text_ghost, "sm")
   end
 
   -- Hold-phase confidence dot pulse (size oscillates)
@@ -684,26 +692,26 @@ local function draw_time_scrub_node(card, sc, enter_t, exit_t, idle_t)
   -- Eyebrow: timestamp / position
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     local crumb = timestamp ~= "" and timestamp or (idx .. " / " .. total)
-    frame.display.text(crumb, CX, 66, P.text_ghost)
+    text(crumb, CX, 66, P.text_ghost, "sm")
   end
 
   -- Primary summary
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(summary, CX, CY - 4, P.text_primary)
+    text(summary, CX, CY - 4, P.text_primary, "lg")
   end
 
   -- Place name
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and place ~= "" then
-    frame.display.text(place, CX, CY + 22, P.memory_trace)
+    text(place, CX, CY + 22, P.memory_trace, "md")
   end
 
   -- Prev / next neighbour ghost labels
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     if prev_lbl ~= "" then
-      frame.display.text("\xe2\x97\x80 " .. prev_lbl, 56, 182, P.text_ghost)
+      text("\xe2\x97\x80 " .. prev_lbl, 56, 182, P.text_ghost, "sm")
     end
     if next_lbl ~= "" then
-      frame.display.text(next_lbl .. " \xe2\x96\xb6", 200, 182, P.text_ghost)
+      text(next_lbl .. " \xe2\x96\xb6", 200, 182, P.text_ghost, "sm")
     end
   end
 end
@@ -739,7 +747,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- Eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("SOUNDS DIFFERENT", CX, 66, P.warning_amber)
+    text("SOUNDS DIFFERENT", CX, 66, P.warning_amber, "sm")
   end
 
   -- Separator
@@ -751,7 +759,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- Prior summary (above central divider)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(prior_text, CX, 100, P.text_ghost)
+    text(prior_text, CX, 100, P.text_ghost, "md")
   end
 
   -- Central dashed divider
@@ -768,7 +776,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- New summary (below central divider)
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(new_text, CX, 142, P.text_primary)
+    text(new_text, CX, 142, P.text_primary, "lg")
   end
 
   -- Score dot
@@ -887,7 +895,7 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     local half_w = floor(#verdict * T.avg_w_with_tracking("md", 0) / 2) + 5
     frame.display.rect(CX - half_w, CY - 15, half_w * 2, 19, P.background, true)
-    frame.display.text(verdict, CX, CY - 6, P.text_primary)
+    text(verdict, CX, CY - 6, P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and conf then
     local jcol = (conf >= 0.75 and P.confidence_high)
@@ -907,12 +915,12 @@ end
 -- ---------------------------------------------------------------------------
 local function draw_layout_card(card, sc, enter_t, exit_t)
   local layout = card.layout or {}
-  local function row(name, text, fallback_y, fallback_color, stagger_ms)
-    if not text or text == "" then return end
+  local function row(name, str, fallback_y, fallback_color, stagger_ms, size)
+    if not str or str == "" then return end
     if not layer_ok(enter_t, stagger_ms) then return end
     local spec = layout[name] or {}
-    frame.display.text(text, floor(spec.x or CX), floor(spec.y or fallback_y),
-                       spec.color or fallback_color)
+    text(str, floor(spec.x or CX), floor(spec.y or fallback_y),
+         spec.color or fallback_color, spec.size or size)
   end
   local sep = layout.separator
   if sep and layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
@@ -926,10 +934,10 @@ local function draw_layout_card(card, sc, enter_t, exit_t)
                  floor((glyph.r or 10) * 2 * sc), glyph.color or P.privacy_caution,
                  layout.shield ~= nil)
   end
-  row("eyebrow", card.eyebrow, 64, P.text_secondary, A.STAGGER_EYEBROW_MS)
-  row("primary", card.primary, 112, P.text_primary,  A.STAGGER_PRIMARY_MS)
-  row("detail",  card.detail,  144, P.text_secondary, A.STAGGER_DETAIL_MS)
-  row("footer",  card.footer,  168, P.text_ghost,     A.STAGGER_FOOTER_MS)
+  row("eyebrow", card.eyebrow, 64, P.text_secondary, A.STAGGER_EYEBROW_MS, "sm")
+  row("primary", card.primary, 112, P.text_primary,  A.STAGGER_PRIMARY_MS, "lg")
+  row("detail",  card.detail,  144, P.text_secondary, A.STAGGER_DETAIL_MS, "md")
+  row("footer",  card.footer,  168, P.text_ghost,     A.STAGGER_FOOTER_MS, "sm")
   if card.confidence and layout.conf_dot then
     local d = layout.conf_dot
     local jcol = (card.confidence >= 0.75 and P.confidence_high)

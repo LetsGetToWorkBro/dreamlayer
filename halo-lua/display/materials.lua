@@ -67,8 +67,10 @@ function M.draw_ghost_text(x, y, text, size, intensity)
   intensity = math.max(0, math.min(1, intensity or 1))
   P.set_dynamic_y("ghost_text", intensity * 560)
   if not HAS_FRAME then return end
-  frame.display.text(tostring(text), math.floor(x), math.floor(y),
-                     P.dynamic_color("ghost_text"))
+  -- Solid: the long-ignored size arg is live (primitives set_font seam)
+  local PR = require("display.primitives")
+  PR.text_center(x, y, tostring(text), size or "sm",
+                 P.dynamic_color("ghost_text"))
 end
 
 --- Ordered-dither area fill for Air/Ghost tier fills.
