@@ -61,6 +61,7 @@ type BrainState = {
   cues: Record<CueKind, boolean>; // which proactive cue kinds are on
   wakeSources: Record<WakeSource, boolean>; // how Oracle can be woken
   wakeFeedback: Record<WakeFeedback, boolean>; // how it shows it's listening
+  proactiveAlerts: boolean; // let Oracle speak up: Listen! / Watch out!
   hydrated: boolean;
 
   // derived
@@ -94,6 +95,7 @@ type BrainState = {
   setCue: (kind: CueKind, on: boolean) => void;
   setWakeSource: (source: WakeSource, on: boolean) => void;
   setWakeFeedback: (kind: WakeFeedback, on: boolean) => void;
+  setProactiveAlerts: (on: boolean) => void;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
@@ -129,6 +131,7 @@ function persist(s: BrainState) {
     cues: s.cues,
     wakeSources: s.wakeSources,
     wakeFeedback: s.wakeFeedback,
+    proactiveAlerts: s.proactiveAlerts,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -183,6 +186,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   cues: { event: true, person: true, place: true },
   wakeSources: { voice: true, tap: true, gaze: true, raise: true },
   wakeFeedback: { visual: true, audio: true, haptic: true },
+  proactiveAlerts: true,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -307,6 +311,11 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   setWakeFeedback: (kind, on) => {
     set({ wakeFeedback: { ...get().wakeFeedback, [kind]: on } });
+    persist(get());
+  },
+
+  setProactiveAlerts: (on) => {
+    set({ proactiveAlerts: on });
     persist(get());
   },
 
