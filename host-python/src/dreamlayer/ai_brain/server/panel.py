@@ -637,12 +637,20 @@ async function checkModel(){
     if(!have)miss.push(nm);
     return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm">${esc(nm)}</span>`+
       `<span class="st ${have?'ok-t':'warn-t'}">${have?'✓ ready':'not pulled'}</span></div>`;}).join("");
-  let pull = miss.length?`<div class="lead" style="margin:12px 0 0">Pull the missing model${miss.length>1?'s':''}: `+
-      `<code>ollama pull ${esc(miss.join(' '))}</code></div>`:'';
+  let pull = miss.length?`<div class="lead" style="margin:12px 0 0">One-click pull the missing model${miss.length>1?'s':''}:</div>`+
+      `<div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">`+
+      miss.map(nm=>`<button class="sm" onclick='pullModel(${JSON.stringify(nm)})'>⬇ Pull ${esc(nm)}</button>`).join("")+
+      `</div><div id="pullOut" class="conn-s" style="margin-top:8px"></div>`:'';
   el.innerHTML='<div class="mstat"><div class="head"><span class="sdot ok"></span>'+
     `<b>Ollama reachable</b></div><div class="lead" style="margin:0 0 8px">at <code>${esc(r.url)}</code></div>`+
     body+pull+'<div style="margin-top:12px"><button class="sm ghost" onclick="checkModel()">Check again</button></div></div>';
 }
+async function pullModel(name){const o=$("pullOut");
+  if(o)o.textContent=`Pulling ${name}… this can take a few minutes.`;
+  toast(`Pulling ${name}…`);
+  let r;try{r=await api("/dreamlayer/model/pull",{method:"POST",body:JSON.stringify({model:name})});}catch(e){r={ok:false,status:"request failed"};}
+  if(o)o.textContent=r.ok?`✓ ${name} pulled.`:`Couldn't pull ${name}: ${r.status||"error"}`;
+  toast(r.ok?`${name} ready`:`Pull failed`);checkModel();}
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
     ollama_url:$("ourl").value,ollama_chat_model:$("ochat").value,

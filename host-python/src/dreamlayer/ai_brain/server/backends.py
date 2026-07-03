@@ -58,6 +58,28 @@ def probe_ollama(config, timeout: float = 4.0) -> dict:
             "have": {k: present(v) for k, v in want.items()}}
 
 
+def pull_model(config, name: str, poster: Optional[Callable[[str, dict, float], dict]] = None
+               ) -> dict:
+    """Pull an Ollama model by name via the local HTTP API (no CLI needed).
+
+    Blocking; Ollama streams progress but we wait for completion. `poster` is
+    injectable for tests. Returns {ok, status, model}.
+    """
+    name = (name or "").strip()
+    if not name:
+        return {"ok": False, "status": "no model name", "model": ""}
+    url = (getattr(config, "ollama_url", "") or "http://127.0.0.1:11434").rstrip("/")
+    post = poster or (lambda u, p, t: _urllib_post(u, p, t))
+    try:
+        # stream:false makes Ollama return once the pull finishes
+        res = post(url + "/api/pull", {"name": name, "stream": False}, 1800.0)
+    except Exception as e:
+        return {"ok": False, "status": f"could not reach Ollama: {e}", "model": name}
+    status = (res or {}).get("status", "")
+    ok = status == "success" or "success" in str(status).lower()
+    return {"ok": ok, "status": status or "unknown", "model": name}
+
+
 class OllamaBackend:
     """Chat + vision + embeddings via a local Ollama server."""
 

@@ -549,6 +549,15 @@ class Brain:
         except Exception:
             return []
 
+    def pull_model(self, name: str) -> dict:
+        """One-click Ollama model pull. Re-probes after so status updates."""
+        from .backends import pull_model as _pull
+        res = _pull(self.config, name)
+        if res.get("ok"):
+            self.activity.add("model", f"Pulled model {res.get('model', name)}")
+            self._wire_model()
+        return res
+
     # -- rewind my day: one merged timeline of what happened -------------
 
     def rewind(self, now: float | None = None) -> dict:
@@ -904,6 +913,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.sync_contacts())
             elif path == "/dreamlayer/reminders/sync":
                 self._json(200, brain.sync_reminders())
+            elif path == "/dreamlayer/model/pull":
+                # one-click Ollama pull — local-only (it runs a long job on the box)
+                if not self._from_localhost():
+                    self._json(403, {"error": "local-only"}); return
+                self._json(200, brain.pull_model(self._body().get("model", "")))
             elif path == "/dreamlayer/people":
                 # introduce/update or remove a person ({name, note, tags[, remove]})
                 b = self._body()
