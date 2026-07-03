@@ -132,6 +132,7 @@ class Orchestrator:
         self.oracle_session_s = 20.0
         self.wake_sources = {"voice", "tap", "gaze", "raise"}
         self.wake_feedback = {"visual": True, "audio": True, "haptic": True}
+        self._last_hark = -1e9                  # rate-limit Oracle's "Listen!"
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -844,6 +845,26 @@ class Orchestrator:
             return None
         card = cards.morning_brief(latest.get("text", ""), latest.get("bullets"))
         self.bridge.send_card(card, event="wake")
+        return card
+
+    def hark(self, clue: str, detail: str = "", importance: str = "normal",
+             now: float | None = None, cooldown_s: float = 120.0):
+        """Oracle's "Listen!" — a proactive tap on the shoulder with one thing
+        worth hearing (a clue, a heads-up). Rate-limited so it never nags:
+        nothing fires within `cooldown_s` of the last hark. Silenced by the
+        Privacy Veil; a *normal* hark also holds during Focus, but an *urgent*
+        one pierces it. Returns the card sent, or None if hushed."""
+        import time
+        now = now if now is not None else time.time()
+        if not self.privacy.allow_capture():
+            return None
+        if importance != "urgent" and self.focus_active():
+            return None
+        if now - getattr(self, "_last_hark", -1e9) < cooldown_s:
+            return None
+        self._last_hark = now
+        card = cards.hark(clue, detail, importance)
+        self.bridge.send_card(card, event="hark")
         return card
 
     def greet(self, person: str, now: float | None = None):
