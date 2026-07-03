@@ -140,6 +140,7 @@ class Orchestrator:
         from .attention import AttentionPolicy
         self.attention = AttentionPolicy()
         self.attention_on = True                # proactive spoken alerts
+        self._tick_stop = None                  # the proactive heartbeat loop
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -876,6 +877,44 @@ class Orchestrator:
 
     def set_attention(self, on: bool = True) -> None:
         self.attention_on = on
+
+    # -- the proactive heartbeat -----------------------------------------
+
+    def pulse(self, context, commitments=None) -> dict:
+        """One proactive heartbeat over the current moment: surface anticipation
+        cards *and* decide whether Oracle should speak up ("Listen!"/"Watch
+        out!"). The device seam assembles the `Context` from live signals (where
+        you are, who's in view, calendar, anchors, commitments); start_pulse()
+        drives this on an interval. Returns what fired."""
+        cues = self.anticipate_tick(context)
+        alert = self.attention_tick(context, commitments)
+        return {"cues": cues, "alert": alert}
+
+    def start_pulse(self, context_fn, interval: float = 15.0):
+        """Run the proactive heartbeat every `interval` seconds. `context_fn()`
+        is the device seam — it returns a fresh Context from live sensors each
+        tick (or None to skip). Idempotent; safe to call once at startup."""
+        import threading
+        if self._tick_stop is not None:
+            return
+        stop = threading.Event()
+        self._tick_stop = stop
+
+        def loop():
+            while not stop.wait(interval):
+                try:
+                    ctx = context_fn()
+                    if ctx is not None:
+                        self.pulse(ctx)
+                except Exception:
+                    pass
+
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_pulse(self) -> None:
+        if self._tick_stop is not None:
+            self._tick_stop.set()
+            self._tick_stop = None
 
     def attention_tick(self, context, commitments=None):
         """Decide whether this moment deserves a spoken "Listen!" / "Watch out!"
