@@ -479,6 +479,40 @@ def fact_check(verdict: str = "unverified", speaker: str = "them",
     }
 
 
+def answer_ahead(question: str = "", answer: str = "", speaker: str = "",
+                 source: str = "") -> dict:
+    """The answer-ahead prompt — a question the room just asked you, with the
+    answer already pulled from your knowledge, sized to read and say in a breath.
+    Deliberately quiet (memory teal, no flash): it's a nudge, not an alarm."""
+    ans = (answer or "").strip()
+    if len(ans) > 38:
+        ans = ans[:37] + "…"
+    q = (question or "").strip().rstrip("?") + "?"
+    if len(q) > 40:
+        q = q[:39] + "…"
+    foot = " · ".join(x for x in [speaker.strip(), source.strip()] if x)
+    return {
+        "type":       "AnswerAheadCard",
+        "dismiss_ms": 8000,
+        "eyebrow":    "ON THE TIP OF YOUR TONGUE",
+        "primary":    ans or "—",
+        "detail":     q,
+        "footer":     foot,
+        "source":     source,
+        "earcon":     "",                 # silent by design — it must not interrupt
+        "haptic":     "tick",
+        "color":      T.ACCENT_MEMORY,
+        "lines":      ["ON THE TIP OF YOUR TONGUE", ans, q, foot],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 70,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 2},
+            "separator": {"x1": 44, "x2": 212, "y": 88},
+            "primary":   {"x": 128, "y": 128, "size": "md", "color": T.TEXT_PRIMARY},
+            "detail":    {"x": 128, "y": 168, "size": "sm", "color": T.TEXT_GHOST},
+            "footer":    {"x": 128, "y": 198, "size": "sm", "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def morning_brief(text: str = "", bullets=None) -> dict:
     """The day's brief, flashed on the glasses the moment you put the Halo on.
     Short synthesis up top, the first couple of points beneath."""
@@ -868,6 +902,10 @@ ALL_SAMPLES: dict[str, dict] = {
         verdict="self_contradiction", speaker="Marcus",
         claim="The deal closed at three million.",
         basis="earlier: “we settled at two million”"),
+    "answer_ahead":        answer_ahead(
+        question="When did we last ship to Denver?",
+        answer="March 14th — two pallets.",
+        speaker="Priya", source="your files"),
     "morning_brief":       morning_brief(
         text="Two meetings and the lease is due Friday. Marcus texted twice.",
         bullets=["Standup at 9:00 AM", "1 new text (from Marcus)", "Reminder: file the taxes"],
