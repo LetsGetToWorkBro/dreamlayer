@@ -188,6 +188,32 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Your day</div><h2>Agenda</h2>
+    <p class="lead">Events the glasses surface and the brief leads with. Add them here instead of hand-editing <code>agenda.json</code>; a native calendar reader can feed it too.</p>
+    <ul id="agenda"></ul>
+    <div class="row" style="margin-top:14px">
+      <input type="text" id="evTitle" placeholder="Event — e.g. Sign the lease" style="flex:1"
+        onkeydown="if(event.key==='Enter')addEvent()">
+      <input type="datetime-local" id="evWhen" style="max-width:220px">
+      <input type="text" id="evPlace" placeholder="place (optional)" style="max-width:180px">
+      <button class="ghost" onclick="addEvent()">Add</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">People</div><h2>Who you've met</h2>
+    <p class="lead">The dossier registry — names you've introduced, with a note and tags. The glasses greet them with what you know.</p>
+    <ul id="people"></ul>
+    <div class="row" style="margin-top:14px">
+      <input type="text" id="pName" placeholder="Name" style="max-width:180px"
+        onkeydown="if(event.key==='Enter')addPerson()">
+      <input type="text" id="pNote" placeholder="note — e.g. landlord, signing Friday" style="flex:1">
+      <input type="text" id="pTags" placeholder="tags: work,lease" style="max-width:180px">
+      <button class="ghost" onclick="addPerson()">Add</button>
+    </div>
+  </section>
+
+  <section>
     <div class="eyebrow">Connections</div><h2>Reach &amp; devices</h2>
     <p class="lead">Pair your phone (it brings the glasses), choose how far the brain reaches, or shut the doors with Incognito.</p>
     <div class="conn"><div><div class="conn-t">Cloud</div>
@@ -376,8 +402,38 @@ async function load(){
   $("msgCard").style.display=c.config.email_enabled?"":"none";
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
-  refreshStatus(); loadHistory(); loadHealth();
+  refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople();
 }
+
+function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
+  return d.toLocaleString([], {weekday:"short",hour:"numeric",minute:"2-digit"});}
+async function loadAgenda(){let r;try{r=await api("/dreamlayer/calendar");}catch(e){return;}
+  const items=r.items||[];
+  $("agenda").innerHTML=items.length?items.map(e=>
+    `<li><div><div class="q">${esc(e.title)}</div><div class="a">${esc(fmtWhen(e.ts))}${e.place?" · "+esc(e.place):""}</div></div>`+
+    `<button class="sm ghost" onclick='rmEvent(${JSON.stringify(e.title)},${e.ts})'>Remove</button></li>`).join("")
+    :'<li class="empty">Nothing scheduled — add what you’re tracking.</li>';}
+async function addEvent(){const t=$("evTitle").value.trim();if(!t)return;
+  const w=$("evWhen").value; const ts=w?Math.floor(new Date(w).getTime()/1000):0;
+  await api("/dreamlayer/calendar",{method:"POST",body:JSON.stringify({title:t,ts:ts,place:$("evPlace").value.trim()})});
+  $("evTitle").value="";$("evWhen").value="";$("evPlace").value="";toast("Event added");loadAgenda();loadHistory();}
+async function rmEvent(title,ts){await api("/dreamlayer/calendar",{method:"POST",body:JSON.stringify({remove:true,title:title,ts:ts})});
+  toast("Event removed");loadAgenda();loadHistory();}
+
+async function loadPeople(){let r;try{r=await api("/dreamlayer/people");}catch(e){return;}
+  const items=r.items||[];
+  $("people").innerHTML=items.length?items.map(p=>{
+    const tags=(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(" ");
+    return `<li><div><div class="q">${esc(p.name)}</div>`+
+      `<div class="a">${esc(p.note||"")} ${tags}</div></div>`+
+      `<button class="sm ghost" onclick='rmPerson(${JSON.stringify(p.name)})'>Remove</button></li>`;}).join("")
+    :'<li class="empty">No one yet — introduce the people you meet.</li>';}
+async function addPerson(){const n=$("pName").value.trim();if(!n)return;
+  const tags=$("pTags").value.split(",").map(s=>s.trim()).filter(Boolean);
+  await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({name:n,note:$("pNote").value.trim(),tags:tags})});
+  $("pName").value="";$("pNote").value="";$("pTags").value="";toast("Person added");loadPeople();loadHistory();}
+async function rmPerson(name){await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({remove:true,name:name})});
+  toast("Removed");loadPeople();loadHistory();}
 
 function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
   `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}

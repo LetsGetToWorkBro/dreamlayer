@@ -53,6 +53,13 @@ def lan_ip() -> str:
         s.close()
 
 
+def _hour_label(ts: float) -> str:
+    """'2 PM' for an hour block in the rewind timeline."""
+    lt = time.localtime(ts)
+    h = lt.tm_hour
+    return f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
+
+
 class Brain:
     """The Brain's live state: config + index + history, rebuilt on change."""
 
@@ -296,6 +303,133 @@ class Brain:
         upcoming.sort(key=lambda e: e["ts"])
         return upcoming[:limit]
 
+    def add_event(self, title: str, ts: float = 0.0, place: str = "") -> list:
+        """Append one event to <cfg>/agenda.json and return the upcoming list."""
+        title = (title or "").strip()
+        p = self.cfg_dir / "agenda.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        if not isinstance(cur, list):
+            cur = []
+        if title:
+            cur.append({"title": title, "ts": float(ts or 0), "place": place or ""})
+            p.write_text(json.dumps(cur))
+            self.activity.add("calendar", f"Added event {title}")
+        return self.calendar(200)
+
+    def remove_event(self, title: str, ts: float | None = None) -> list:
+        """Drop the first agenda event matching title (and ts, if given)."""
+        title = (title or "").strip()
+        p = self.cfg_dir / "agenda.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        kept, removed = [], False
+        for e in (cur if isinstance(cur, list) else []):
+            same = (e.get("title") == title and
+                    (ts is None or abs(float(e.get("ts", 0) or 0) - float(ts)) < 1))
+            if same and not removed:
+                removed = True
+                continue
+            kept.append(e)
+        if removed:
+            p.write_text(json.dumps(kept))
+            self.activity.add("calendar", f"Removed event {title}")
+        return self.calendar(200)
+
+    # -- people you've been introduced to (the dossier registry) ---------
+
+    def people(self) -> list:
+        """Everyone you've introduced to the Brain, newest first. Backed by
+        <cfg>/people.json: a list of {name, note, tags, ts}. [] when empty."""
+        p = self.cfg_dir / "people.json"
+        try:
+            data = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            data = []
+        out = []
+        for e in (data if isinstance(data, list) else []):
+            if e.get("name"):
+                out.append({"name": e["name"], "note": e.get("note", ""),
+                            "tags": e.get("tags", []), "ts": float(e.get("ts", 0) or 0)})
+        out.sort(key=lambda e: -e["ts"])
+        return out
+
+    def add_person(self, name: str, note: str = "", tags=None) -> list:
+        """Introduce (or update) a person. Re-adding a name updates the note."""
+        name = (name or "").strip()
+        if not name:
+            return self.people()
+        p = self.cfg_dir / "people.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        if not isinstance(cur, list):
+            cur = []
+        tags = [t for t in (tags or []) if t]
+        cur = [e for e in cur if e.get("name") != name]     # replace existing
+        cur.append({"name": name, "note": note or "", "tags": tags, "ts": time.time()})
+        p.write_text(json.dumps(cur))
+        self.activity.add("people", f"Introduced {name}")
+        return self.people()
+
+    def remove_person(self, name: str) -> list:
+        name = (name or "").strip()
+        p = self.cfg_dir / "people.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else []
+        except Exception:
+            cur = []
+        kept = [e for e in (cur if isinstance(cur, list) else []) if e.get("name") != name]
+        if len(kept) != len(cur if isinstance(cur, list) else []):
+            p.write_text(json.dumps(kept))
+            self.activity.add("people", f"Removed {name}")
+        return self.people()
+
+    # -- rewind my day: one merged timeline of what happened -------------
+
+    def rewind(self, now: float | None = None) -> dict:
+        """Today, grouped into hour blocks: what the Brain did (activity), the
+        messages it relayed, and the events on the agenda — one scrubable
+        timeline for the phone. Reads only what the Brain already has."""
+        now = now if now is not None else time.time()
+        lt = time.localtime(now)
+        day_start = now - (lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec)
+        items = []
+        for a in self.activity.recent(200):
+            ts = float(a.get("ts", 0) or 0)
+            if ts >= day_start:
+                items.append({"ts": ts, "kind": a.get("kind", "activity"),
+                              "text": a.get("text", "")})
+        try:
+            msgs = self._messages_fn(self.config, 50) if self.config.email_enabled else []
+            for m in msgs:
+                ts = float(m.get("ts", 0) or 0)
+                if ts >= day_start and not m.get("from_me"):
+                    who = m.get("who", "")
+                    body = m.get("subject") or m.get("text", "")
+                    items.append({"ts": ts, "kind": "message",
+                                  "text": f"{who}: {body}".strip(": ")})
+        except Exception:
+            pass
+        for e in self.calendar(50):
+            if day_start <= e["ts"] < day_start + 86400:
+                items.append({"ts": e["ts"], "kind": "event", "text": e["title"]})
+        blocks: dict[int, list] = {}
+        for it in items:
+            hr = int((it["ts"] - day_start) // 3600)
+            blocks.setdefault(hr, []).append(it)
+        out = []
+        for hr in sorted(blocks):
+            evs = sorted(blocks[hr], key=lambda x: x["ts"])
+            out.append({"hour": hr, "label": _hour_label(day_start + hr * 3600),
+                        "count": len(evs), "items": evs})
+        return {"blocks": out, "count": len(items)}
+
     def suggest_replies(self, text: str, n: int = 3) -> list:
         """A few short, natural replies to an incoming message — pick one by
         tap now, by voice later. Model-generated with a canned fallback."""
@@ -461,6 +595,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/calendar":
                 self._json(200, {"items": brain.calendar()})
+            elif path == "/dreamlayer/people":
+                self._json(200, {"items": brain.people()})
+            elif path == "/dreamlayer/rewind":
+                self._json(200, brain.rewind())
             elif path == "/dreamlayer/brief/latest":
                 self._json(200, brain.last_brief or {})
             elif path == "/dreamlayer/messages/recent":
@@ -571,19 +709,23 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 else:
                     self._json(200, {"intent": it.kind, **it.args})
             elif path == "/dreamlayer/calendar":
-                # add an event to the agenda (title, ts, place)
+                # add or remove an agenda event ({title, ts, place[, remove]})
                 b = self._body()
-                p = brain.cfg_dir / "agenda.json"
-                try:
-                    cur = json.loads(p.read_text()) if p.exists() else []
-                except Exception:
-                    cur = []
-                if b.get("title"):
-                    cur.append({"title": b["title"], "ts": float(b.get("ts", 0) or 0),
-                                "place": b.get("place", "")})
-                    p.write_text(json.dumps(cur))
-                    brain.activity.add("calendar", f"Added event {b['title']}")
-                self._json(200, {"items": brain.calendar()})
+                if b.get("remove"):
+                    items = brain.remove_event(b.get("title", ""), b.get("ts"))
+                else:
+                    items = brain.add_event(b.get("title", ""),
+                                            b.get("ts", 0) or 0, b.get("place", ""))
+                self._json(200, {"items": items})
+            elif path == "/dreamlayer/people":
+                # introduce/update or remove a person ({name, note, tags[, remove]})
+                b = self._body()
+                if b.get("remove"):
+                    items = brain.remove_person(b.get("name", ""))
+                else:
+                    items = brain.add_person(b.get("name", ""), b.get("note", ""),
+                                             b.get("tags"))
+                self._json(200, {"items": items})
             elif path == "/dreamlayer/brain/explain":
                 b = self._body()
                 ans = brain.explain(b.get("label", ""), b.get("image"),

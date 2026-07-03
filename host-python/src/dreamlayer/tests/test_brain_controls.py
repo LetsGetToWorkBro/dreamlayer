@@ -257,6 +257,51 @@ class TestControls:
         assert [e["title"] for e in cal] == ["Standup"]               # only upcoming
         assert any("Standup" in b for b in brain.brief()["bullets"])   # leads the brief
 
+    def test_agenda_add_and_remove_events(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        soon = time.time() + 600
+        brain.add_event("Standup", soon, "Zoom")
+        brain.add_event("Lunch", soon + 3600, "Cafe")
+        assert [e["title"] for e in brain.calendar()] == ["Standup", "Lunch"]
+        items = brain.remove_event("Standup", soon)
+        assert [e["title"] for e in items] == ["Lunch"]          # only Standup gone
+        assert any(i["text"] == "Removed event Standup" for i in brain.activity.recent())
+
+    def test_people_registry_add_update_remove(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        brain.add_person("Marcus", "landlord", ["work"])
+        brain.add_person("Priya", "designer")
+        names = [p["name"] for p in brain.people()]
+        assert "Marcus" in names and "Priya" in names
+        # re-adding updates rather than duplicating
+        brain.add_person("Marcus", "landlord — signing Friday", ["work", "lease"])
+        marcus = [p for p in brain.people() if p["name"] == "Marcus"]
+        assert len(marcus) == 1 and "Friday" in marcus[0]["note"]
+        # removal
+        brain.remove_person("Priya")
+        assert [p["name"] for p in brain.people()] == ["Marcus"]
+
+    def test_rewind_groups_todays_activity_by_hour(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        now = time.time()
+        day_start = now - (now % 86400)
+        brain.activity.add("folder", "Added folder /docs", ts=day_start + 9 * 3600 + 5)
+        brain.activity.add("ask", "asked about the lease", ts=day_start + 9 * 3600 + 200)
+        brain.activity.add("cloud-egress", "cloud call", ts=day_start + 14 * 3600)
+        brain.add_event("Standup", now + 600)          # upcoming event lands today too
+        r = brain.rewind(now)
+        hours = [b["hour"] for b in r["blocks"]]
+        assert 9 in hours                               # two 9am items grouped
+        nine = next(b for b in r["blocks"] if b["hour"] == 9)
+        assert nine["count"] == 2 and nine["label"].endswith("AM")
+        assert r["count"] >= 3
+
     def test_scheduler_delivers_brief_once_at_the_hour(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)
