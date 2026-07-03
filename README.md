@@ -203,7 +203,8 @@ cd host-python && python -m pytest -q        # the full host suite (1,368 tests)
 ```
 
 **Knowledge base — the complete reference with real renders of every card,
-screen, and panel: [`docs/gitbook/`](docs/gitbook/README.md).**
+screen, and panel: [letsgettoworkbro.github.io/dreamlayer](https://letsgettoworkbro.github.io/dreamlayer/)
+(source: [`docs/gitbook/`](docs/gitbook/README.md)).**
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 AI Brain: [`docs/AI_BRAIN.md`](docs/AI_BRAIN.md) ·
