@@ -198,6 +198,22 @@ class TestControls:
         finally:
             srv.shutdown(); srv.server_close()
 
+    def test_morning_brief_synthesizes_agenda_and_new(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", email_enabled=True).save(cfg)
+        feed = [{"channel": "imessage", "who": "Marcus", "from_me": False, "text": "hi", "ts": 5.0},
+                {"channel": "imessage", "who": "Me", "from_me": True, "text": "yo", "ts": 6.0},
+                {"channel": "email", "who": "x@y.co", "from_me": False, "subject": "Renewal", "text": "…", "ts": 7.0}]
+        brain = Brain(cfg, messages_fn=lambda config, n=20: feed)
+        b = brain.brief(agenda=["Send Marcus the lease by Friday"], since=0)
+        joined = " ".join(b["bullets"])
+        assert "Send Marcus the lease by Friday" in joined      # my agenda
+        assert "1 new text" in joined and "Marcus" in joined     # incoming, not mine
+        assert any("Renewal" in x for x in b["bullets"])         # email subject
+        assert b["missed"] == {"texts": 1, "emails": 1}
+        # 'since' powers what-did-I-miss: nothing after ts 7 → clear
+        assert brain.brief(since=99)["missed"] == {"texts": 0, "emails": 0}
+
     def test_message_draft_previews_without_sending(self, tmp_path):
         lb = Live(tmp_path)
         try:

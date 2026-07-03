@@ -213,6 +213,46 @@ class Brain:
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
+    def brief(self, agenda=None, since: float = 0.0) -> dict:
+        """A one-glance morning brief: what's new (messages/mail) + what's on
+        you (agenda the phone passes: commitments, calendar). The model turns
+        the points into a warm couple of sentences; with no model it returns
+        the structured points. `since` powers 'what did I miss'."""
+        agenda = [a for a in (agenda or []) if a]
+        try:
+            msgs = self._messages_fn(self.config, 20) if self.config.email_enabled else []
+        except Exception:
+            msgs = []
+        incoming = [m for m in msgs if not m.get("from_me") and m.get("ts", 0) > since]
+        texts = [m for m in incoming if m.get("channel") != "email"]
+        emails = [m for m in incoming if m.get("channel") == "email"]
+
+        bullets = list(agenda)
+        if texts:
+            who = ", ".join(dict.fromkeys(m.get("who", "") for m in texts if m.get("who")))
+            bullets.append(f"{len(texts)} new text{'s' if len(texts) != 1 else ''}"
+                           + (f" (from {who[:60]})" if who else ""))
+        for m in emails[:3]:
+            subj = (m.get("subject") or m.get("text", "")[:40]).strip()
+            if subj:
+                bullets.append(f"Email: {subj}")
+        if not bullets:
+            bullets = ["Nothing pressing — a clear morning."]
+
+        text = "  ·  ".join(bullets)
+        if self._backend is not None:
+            try:
+                s = self._backend.chat(
+                    "Write a warm, two-sentence morning brief from these points. "
+                    "Be concrete, natural, and brief — no preamble:\n\n"
+                    + "\n".join("- " + b for b in bullets))
+                if s and s.strip():
+                    text = s.strip()
+            except Exception:
+                pass
+        return {"text": text, "bullets": bullets,
+                "missed": {"texts": len(texts), "emails": len(emails)}}
+
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                       port: int = 7777) -> ThreadingHTTPServer:
@@ -398,6 +438,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif path == "/dreamlayer/brain/ask":
                 ans = brain.ask(self._body().get("query", ""))
                 self._json(200, _answer_json(ans))
+            elif path == "/dreamlayer/brief":
+                b = self._body()
+                self._json(200, brain.brief(agenda=b.get("agenda"),
+                                            since=b.get("since", 0) or 0))
             elif path == "/dreamlayer/brain/explain":
                 b = self._body()
                 ans = brain.explain(b.get("label", ""), b.get("image"),

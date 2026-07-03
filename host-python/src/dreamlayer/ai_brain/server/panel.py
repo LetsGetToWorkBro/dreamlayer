@@ -179,6 +179,13 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Your day</div><h2>Morning brief</h2>
+    <p class="lead">A quick synthesis of what's new and what's on you — messages, mail, and anything you're tracking.</p>
+    <button onclick="brief()">Brief me</button>
+    <div id="briefout"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Connections</div><h2>Reach &amp; devices</h2>
     <p class="lead">Pair your phone (it brings the glasses), choose how far the brain reaches, or shut the doors with Incognito.</p>
     <div class="conn"><div><div class="conn-t">Cloud</div>
@@ -480,6 +487,11 @@ async function ask(){const q=$("q").value.trim();if(!q)return;
     :'<div class="ans" style="border-left-color:var(--ghost);color:var(--muted)">Nothing in your files matches that yet.</div>';
   loadHistory();
 }
+async function brief(){const o=$("briefout");
+  o.innerHTML='<div class="ans"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
+  const r=await api("/dreamlayer/brief",{method:"POST",body:"{}"});
+  const miss=r.missed?`${r.missed.texts} text(s) · ${r.missed.emails} email(s)`:"";
+  o.innerHTML=`<div class="ans">${esc(r.text)}<div class="src">${esc(miss)}</div></div>`;}
 async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
   let r;try{r=await api("/dreamlayer/pair");}catch(e){r=null;}
   if(!r||!r.code){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+

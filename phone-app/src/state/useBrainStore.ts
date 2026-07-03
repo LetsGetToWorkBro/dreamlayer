@@ -59,6 +59,9 @@ type BrainState = {
   pairFromCode: (code: string) => { brain: boolean; glasses: boolean };
   ask: (query: string) => Promise<AskResult>;
 
+  // one-glance morning brief synthesized by the Brain
+  getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
+
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
   sendReply: (m: { channel: string; to: string; subject?: string; text: string }) => Promise<{ ok: boolean; error?: string }>;
@@ -210,6 +213,22 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
     } catch {
       return { text: "Couldn't reach your Brain. Is the Mac mini awake and on the same network?", tier: "", sources: [] };
+    }
+  },
+
+  getBrief: async (agenda = []) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await fetch(m.url + "/dreamlayer/brief", {
+        method: "POST",
+        headers: headers(m),
+        body: JSON.stringify({ agenda }),
+      });
+      const j = await r.json();
+      return { text: j.text ?? "", missed: j.missed };
+    } catch {
+      return null;
     }
   },
 

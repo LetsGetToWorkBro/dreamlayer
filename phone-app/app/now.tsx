@@ -16,8 +16,19 @@ import { radius, space } from "../src/ui/theme/spacing";
 export default function Now() {
   const router = useRouter();
   const { paused, connected, togglePause, connect, service } = useHaloStore();
-  const brainKind = useBrainStore((s) => (s.macMini.connected ? "Mac mini" : "phone"));
+  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const brainKind = macConnected ? "Mac mini" : "phone";
+  const getBrief = useBrainStore((s) => s.getBrief);
   const mirror = useEntrance(60);
+  const [brief, setBrief] = React.useState<string | null>(null);
+  const [briefing, setBriefing] = React.useState(false);
+
+  const doBrief = async () => {
+    setBriefing(true);
+    const r = await getBrief();
+    setBrief(r?.text ?? "Connect your Mac mini for a brief from your messages & mail.");
+    setBriefing(false);
+  };
 
   return (
     <Screen scroll={false}>
@@ -36,18 +47,32 @@ export default function Now() {
         )}
       </Animated.View>
 
+      {brief ? (
+        <View style={s.briefCard}>
+          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>Morning brief</Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>{brief}</Text>
+        </View>
+      ) : null}
+
       <View style={s.actions}>
-        <Tappable onPress={() => router.push("/brain")} style={[s.action, { backgroundColor: colors.accentMemory }]}>
-          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>Ask your brain</Text>
-        </Tappable>
-        <Tappable
-          onPress={togglePause}
-          style={[s.action, s.actionGhost, { borderColor: paused ? colors.statusPaused : colors.borderSubtle }]}
-        >
-          <Text style={[typography.body, { color: paused ? colors.statusPaused : colors.textSecondary, fontWeight: "600" }]}>
-            {paused ? "Resume memory" : "Pause capture"}
+        <Tappable onPress={doBrief} style={[s.wide, s.actionGhost, { borderColor: colors.borderSubtle }]}>
+          <Text style={[typography.body, { color: colors.accentMemory, fontWeight: "600" }]}>
+            {briefing ? "Thinking…" : brief ? "Refresh brief" : "Morning brief"}
           </Text>
         </Tappable>
+        <View style={s.actionRow}>
+          <Tappable onPress={() => router.push("/brain")} style={[s.action, { backgroundColor: colors.accentMemory }]}>
+            <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>Ask your brain</Text>
+          </Tappable>
+          <Tappable
+            onPress={togglePause}
+            style={[s.action, s.actionGhost, { borderColor: paused ? colors.statusPaused : colors.borderSubtle }]}
+          >
+            <Text style={[typography.body, { color: paused ? colors.statusPaused : colors.textSecondary, fontWeight: "600" }]}>
+              {paused ? "Resume memory" : "Pause capture"}
+            </Text>
+          </Tappable>
+        </View>
       </View>
     </Screen>
   );
@@ -63,7 +88,17 @@ const s = StyleSheet.create({
     paddingVertical: space.sm,
     paddingHorizontal: space.lg,
   },
-  actions: { flexDirection: "row", gap: space.md, paddingBottom: space.xl },
+  actions: { gap: space.md, paddingBottom: space.xl },
+  actionRow: { flexDirection: "row", gap: space.md },
   action: { flex: 1, borderRadius: radius.pill, paddingVertical: space.lg, alignItems: "center" },
+  wide: { borderRadius: radius.pill, paddingVertical: space.lg, alignItems: "center" },
   actionGhost: { backgroundColor: "transparent", borderWidth: 1 },
+  briefCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: space.lg,
+    marginBottom: space.md,
+  },
 });
