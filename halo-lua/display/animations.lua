@@ -69,6 +69,11 @@ M.DISMISS_MS = {
   ErrorCard            = 4000,
   LowConfidenceCard    = 3000,
   TruthLensCard        = 5000,
+  -- O3 conversation cards (Veritas / answer-ahead / Oracle / Listen!)
+  FactCheckCard        = 7000,
+  AnswerAheadCard      = 8000,
+  OracleReplyCard      = 6000,
+  HarkCard             = 6500,
 }
 
 M.LOADING_TO_OBJECT_SPINNER_FADE_MS = 160

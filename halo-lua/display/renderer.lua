@@ -243,6 +243,21 @@ local function text(str, x, y, color, size)
   PR.text_center(x, y, str, size, color)
 end
 
+-- Wrapped, vertically-centered text block — for the O3 cards whose primary is a
+-- spoken sentence rather than a short label. Caps at `max_lines` so it never
+-- spills the circular panel; single-line callers still use text()+fit_size.
+local BLOCK_LINE_H = { hero = 26, xl = 23, lg = 20, md = 17, sm = 14 }
+local function text_block(str, x, y, color, size, width, max_lines)
+  local lines = T.wrap(str, size, width) or { str }
+  max_lines = max_lines or 3
+  local n = math.min(#lines, max_lines)
+  local lh = BLOCK_LINE_H[size] or 17
+  local start = y - (n - 1) * lh / 2
+  for i = 1, n do
+    text(lines[i], x, floor(start + (i - 1) * lh), color, size)
+  end
+end
+
 -- stagger helpers: returns true when global enter_t has passed layer threshold
 local function layer_ok(enter_t, stagger_ms)
   return enter_t >= (stagger_ms / A.ENTER_DURATION_MS)
@@ -1022,6 +1037,144 @@ local function draw_layout_card(card, sc, enter_t, exit_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- O3 conversation cards (Meridian Solid + Lumen). Same material language as the
+-- hero cards: a surface-luma glass pane (panes never draw during exit), gradient
+-- separators, a bloomed status cue that spring-settles in, hero-class type via
+-- the fit ladder (wrapped for spoken sentences), secondary text cooled to the
+-- verdict/tone dim twin. reduce_motion: springs collapse to their still pose and
+-- the idle breathe is skipped; the materials stay (static richness, not motion).
+-- ---------------------------------------------------------------------------
+
+local FACT_DIM = {
+  supported          = P.accent_success_dim,
+  disputed           = P.warning_amber_dim,
+  self_contradiction = P.accent_attention_dim,
+  unverified         = P.border_subtle,
+}
+
+local function draw_oracle_reply(card, sc, enter_t, exit_t)
+  local action = card.kind == "action"
+  local accent = action and P.accent_success or P.accent_memory
+  local ramp   = action and MAT.RAMP_SUCCESS or MAT.RAMP_MEMORY
+  local body   = card.primary or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 132, floor(78*sc), MAT.PANE, 4)
+  end
+  frame.display.circle(CX, 132, floor(82*sc), P.border_subtle, false)
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    frame.display.circle(CX-40, 64, 3, accent, true)
+    MAT.bloom_ring(CX-40, 64, 3, accent)
+    text("ORACLE", CX+6, 64, accent, "sm")
+    MAT.grad_line(60, 82, 196, 82, ramp)
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #body <= 20 then
+      text(body, CX, 132, P.text_primary, T.fit_size(body, 200))
+    else
+      text_block(body, CX, 128, P.text_primary, "md", 182, 3)
+    end
+  end
+end
+
+local function draw_answer_ahead(card, sc, enter_t, exit_t)
+  local answer   = card.primary or ""
+  local question = card.detail  or ""
+  local footer   = card.footer  or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(78*sc), MAT.PANE, 4)
+  end
+  frame.display.circle(CX, 128, floor(82*sc), P.border_subtle, false)
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    frame.display.circle(CX-78, 70, 3, P.accent_memory, true)
+    MAT.bloom_ring(CX-78, 70, 3, P.accent_memory)
+    text(card.eyebrow or "ON THE TIP OF YOUR TONGUE", CX+4, 70, P.accent_memory, "sm")
+    MAT.grad_line(52, 88, 204, 88, MAT.RAMP_MEMORY)
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #answer <= 22 then
+      text(answer, CX, 126, P.text_primary, T.fit_size(answer, 196))
+    else
+      text_block(answer, CX, 122, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and question ~= "" then
+    text(T.truncate(question, "sm", 200), CX, 166, P.accent_memory_dim, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and footer ~= "" then
+    text(footer, CX, 198, P.text_ghost, "sm")
+  end
+end
+
+local function draw_fact_check(card, sc, enter_t, exit_t, idle_t)
+  local color = card.conf_color or P.text_ghost
+  local dim   = FACT_DIM[card.verdict] or P.border_subtle
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 134, floor(74*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    -- the status cue springs in, then blooms; disputed/contradiction pulse once
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    frame.display.circle(CX, 54, math.max(2, floor(9*rp)), color, false)
+    MAT.bloom_ring(CX, 54, 9, color)
+    if idle_t and idle_t < 420 and not TR.reduce_motion()
+       and (card.verdict == "self_contradiction" or card.verdict == "disputed") then
+      local ph = idle_t / 420
+      frame.display.circle(CX, 54, floor(9 + 11*math.sin(ph*math.pi)), dim, false)
+    end
+    text(card.eyebrow or "", CX, 82, color, "sm")
+    MAT.grad_line(44, 96, 212, 96, { color, dim, P.border_subtle })
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local claim = card.primary or ""
+    if #claim <= 22 then
+      text(claim, CX, 130, P.text_primary, T.fit_size(claim, 200))
+    else
+      text_block(claim, CX, 126, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 210), CX, 170, dim, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and (card.footer or "") ~= "" then
+    text(card.footer, CX, 200, P.text_ghost, "sm")
+  end
+end
+
+local function draw_hark(card, sc, enter_t, exit_t, idle_t)
+  local urgent = card.importance == "urgent"
+  local color  = urgent and P.warning_amber or P.accent_memory
+  local dim    = urgent and P.warning_amber_dim or P.accent_memory_dim
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 134, floor(74*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    frame.display.circle(CX, 58, math.max(3, floor(12*rp)), color, false)
+    frame.display.circle(CX, 58, 3, color, true)
+    MAT.bloom_ring(CX, 58, 12, color)
+    -- "Listen!": the ring breathes on hold to catch the eye (urgent breathes harder)
+    if idle_t and not TR.reduce_motion() then
+      local period = urgent and 700 or 1100
+      local ph = (idle_t % period) / period
+      frame.display.circle(CX, 58, floor(12 + 8*math.sin(ph*math.pi)), dim, false)
+    end
+    text("LISTEN", CX, 84, color, "sm")
+    MAT.grad_line(48, 98, 208, 98, { color, dim, P.border_subtle })
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local clue = card.primary or ""
+    if #clue <= 22 then
+      text(clue, CX, 132, P.text_primary, T.fit_size(clue, 200))
+    else
+      text_block(clue, CX, 128, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 200), CX, 172, dim, "sm")
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -1047,6 +1200,11 @@ local DRAW = {
   DeviationAlertCard    = function(c,sc,et,xt,it) draw_deviation_alert(c,sc,et,xt,it)     end,
   -- Meridian lens presentation
   TruthLensCard         = function(c,sc,et,xt,it,tt) draw_testimony(c,sc,et,xt,it,tt)     end,
+  -- O3 conversation cards (Meridian Solid + Lumen)
+  FactCheckCard         = function(c,sc,et,xt,it) draw_fact_check(c,sc,et,xt,it)          end,
+  AnswerAheadCard       = function(c,sc,et,xt,it) draw_answer_ahead(c,sc,et,xt)           end,
+  OracleReplyCard       = function(c,sc,et,xt,it) draw_oracle_reply(c,sc,et,xt)           end,
+  HarkCard              = function(c,sc,et,xt,it) draw_hark(c,sc,et,xt,it)                end,
   -- layout-driven cards (v1 queued these and drew nothing — see
   -- draw_layout_card)
   ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,

@@ -68,6 +68,11 @@ local CARD_PRIORITY = {
   SynesthesiaCard      = CardQueue.URGENT,    -- VLM scene description overlay
   PaletteShiftCard     = CardQueue.AMBIENT,   -- mic-reactive color shift
   WorldAnchorCard      = CardQueue.CONTEXT,   -- ghost memory echo at place
+  -- O3 conversation cards
+  FactCheckCard        = CardQueue.URGENT,    -- Veritas: a claim needs your eye now
+  AnswerAheadCard      = CardQueue.URGENT,    -- the answer, in time to say it
+  HarkCard             = CardQueue.URGENT,    -- Oracle's "Listen!"
+  OracleReplyCard      = CardQueue.CONTEXT,   -- Oracle's answer / confirmation
 }
 
 -- ---------------------------------------------------------------------------

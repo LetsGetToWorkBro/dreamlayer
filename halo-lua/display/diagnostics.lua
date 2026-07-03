@@ -89,6 +89,10 @@ local CARD_ABBREV = {
   CommitmentDriftCard   = "DRFT",
   TimeScrubNodeCard     = "SCRB",
   DeviationAlertCard    = "DEVN",
+  FactCheckCard         = "FACT",
+  AnswerAheadCard       = "ANSW",
+  OracleReplyCard       = "ORCL",
+  HarkCard              = "HARK",
 }
 
 -- ---------------------------------------------------------------------------

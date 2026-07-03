@@ -148,4 +148,72 @@ function M.low_confidence()
   }
 end
 
+-- ---------------------------------------------------------------------------
+-- O3 conversation cards (Veritas / answer-ahead / Oracle / Listen!). Payloads
+-- arrive from the host; the constructors pass the fields through and set the
+-- travel-ring color (conf_color) so the focus intro matches the verdict/tone.
+-- The Meridian Solid materials + Lumen animation live in renderer.lua.
+-- ---------------------------------------------------------------------------
+
+local FACT_COLOR = {
+  supported          = P.accent_success,
+  disputed           = P.warning_amber,
+  self_contradiction = P.accent_attention,
+  unverified         = P.text_ghost,
+}
+
+function M.fact_check(c)
+  local verdict = c.verdict or "unverified"
+  return {
+    type          = "FactCheckCard",
+    dismiss_ms    = A.DISMISS_MS and A.DISMISS_MS.FactCheckCard or 7000,
+    verdict       = verdict,
+    eyebrow       = c.eyebrow or "",
+    primary       = c.primary or c.claim or "",
+    detail        = c.detail or c.basis or "",
+    footer        = c.footer or "",
+    corroboration = c.corroboration or "",
+    conf_color    = FACT_COLOR[verdict] or P.text_ghost,
+    -- Visual: bloomed verdict ring, glass pane, hero claim, dim-twin basis
+  }
+end
+
+function M.answer_ahead(c)
+  return {
+    type       = "AnswerAheadCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.AnswerAheadCard or 8000,
+    eyebrow    = c.eyebrow or "ON THE TIP OF YOUR TONGUE",
+    primary    = c.primary or c.answer or "",
+    detail     = c.detail or c.question or "",
+    footer     = c.footer or "",
+    conf_color = P.accent_memory,
+    -- Visual: quiet memory pane, hero answer, cooled question beneath
+  }
+end
+
+function M.oracle_reply(c)
+  local action = c.kind == "action"
+  return {
+    type       = "OracleReplyCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.OracleReplyCard or 6000,
+    kind       = c.kind or "answer",
+    primary    = c.primary or c.text or "",
+    conf_color = action and P.accent_success or P.accent_memory,
+    -- Visual: memory/success pane, ORACLE eyebrow with a bloom cue, hero reply
+  }
+end
+
+function M.hark(c)
+  local urgent = c.importance == "urgent"
+  return {
+    type       = "HarkCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.HarkCard or 6500,
+    importance = c.importance or "normal",
+    primary    = c.primary or c.clue or "",
+    detail     = c.detail or "",
+    conf_color = urgent and P.warning_amber or P.accent_memory,
+    -- Visual: bloomed Listen! ring that breathes on hold, hero clue, cooled detail
+  }
+end
+
 return M

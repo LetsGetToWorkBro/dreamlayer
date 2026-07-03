@@ -124,3 +124,13 @@ the reduce frame keeps ≥80% of the full frame's light).
 
 - 2026-07-03 — Initial Solid pass (typography, materials, five
   recompositions, material pass, richness/stillness contracts).
+- 2026-07-03 — O3 conversation cards (FactCheck / AnswerAhead /
+  OracleReply / Hark) brought onto the device: renderer.lua draw fns with
+  the material bed (glass pane, gradient separators, bloomed status cue),
+  hero-class wrapped type, dim-twin secondary; Lumen spring-in + a
+  reduce-gated idle breathe on the Listen!/verdict ring. Routed through
+  cards.lua constructors, state_machine, the URGENT/CONTEXT queue, and
+  diagnostics. test_o3_cards_device.py drives them through the raster
+  harness (budget, richness, reduce-motion stillness, the breathe). These
+  four were Python-only before; new HUD cards are device-Lua-first from
+  here.
