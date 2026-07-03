@@ -67,6 +67,10 @@ DETERMINISTIC = [
     "focus/hold_conf090.png",
     "testimony/elevated_mixed.png",
     "testimony/clean_truthful.png",
+    # Meridian Solid recomposed settled holds
+    "solid/saved_memory_hold.png",
+    "solid/person_context_hold.png",
+    "solid/commitment_recall_hold.png",
 ]
 
 

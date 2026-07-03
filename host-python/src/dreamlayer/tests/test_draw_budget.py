@@ -108,6 +108,56 @@ def test_prism_max_intensity_within_budget():
     assert 0 < worst <= _budget(h)
 
 
+SAVED_CARD = '{ type = "SavedMemoryCard", primary = "House keys" }'
+
+PERSON_CARD = """{
+  type = "PersonContextCard", primary = "Jordan",
+  why = "Owes you the contract draft", headline = "Sent invoice Wed",
+  detail = "Last seen today", confidence = 0.8,
+}"""
+
+
+def test_saved_memory_composite_within_budget():
+    h = _session()
+    _tick_calls(h, 1000)
+    h.execute(f"__now = 1050; _r.show_card({SAVED_CARD})")
+    worst = max(_tick_calls(h, 1050 + i * 50) for i in range(1, 24))
+    assert 0 < worst <= _budget(h)
+
+
+def test_person_context_composite_within_budget():
+    h = _session()
+    _tick_calls(h, 1000)
+    h.execute(f"__now = 1050; _r.show_card({PERSON_CARD})")
+    worst = max(_tick_calls(h, 1050 + i * 50) for i in range(1, 24))
+    assert 0 < worst <= _budget(h)
+
+
+def test_crossfade_composite_within_budget():
+    # the true worst frame: outgoing ObjectRecall receding under an
+    # incoming SavedMemory condensing, over the focused horizon
+    h = _session()
+    _tick_calls(h, 1000)
+    h.execute(f"__now = 1050; _r.show_card({OBJECT_CARD})")
+    for i in range(1, 20):
+        _tick_calls(h, 1050 + i * 50)             # settle into HOLD
+    h.execute(f"__now = 2100; _r.show_card({SAVED_CARD})")
+    worst = max(_tick_calls(h, 2100 + i * 50) for i in range(1, 12))
+    assert 0 < worst <= _budget(h)
+
+
+def test_font_switches_bounded_per_tick():
+    h = _session()
+    _tick_calls(h, 1000)
+    h.execute(f"__now = 1050; _r.show_card({PERSON_CARD})")
+    worst = 0
+    for i in range(1, 24):
+        h.display.font_calls = 0
+        _tick_calls(h, 1050 + i * 50)
+        worst = max(worst, h.display.font_calls)
+    assert 0 < worst <= 32
+
+
 def test_palette_writes_within_budget_at_idle():
     h = _session()
     _tick_calls(h, 1000)

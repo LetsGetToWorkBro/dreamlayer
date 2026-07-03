@@ -285,6 +285,33 @@ def export_all(out_root: Path | None = None) -> list[Path]:
     """)
     s.save(out_root, "weather/anchor_echo.png", written)
 
+    # ---------------- Meridian Solid: recomposed settled holds -----------
+    SOLID_CARDS = {
+        "saved_memory_hold": '{ type = "SavedMemoryCard", '
+                             'primary = "House keys" }',
+        "person_context_hold": """{
+          type = "PersonContextCard", primary = "Jordan",
+          why = "Owes you the contract draft",
+          headline = "Sent invoice Wed", detail = "Last seen today",
+          confidence = 0.8,
+        }""",
+        "commitment_recall_hold": """{
+          type = "CommitmentRecallCard", person = "Jordan",
+          primary = "Send the invoice", due = "Tomorrow before noon",
+          confidence = 0.72,
+        }""",
+    }
+    for name, card in SOLID_CARDS.items():
+        s = GoldenSession()
+        s.now(1000)
+        s.frame(DAY_FRAME)
+        s.h.execute(f"_r.show_card({card})")
+        # settle far past enter + chime + specular windows: the frame is
+        # the card's steady state (deterministic by construction)
+        s.now(1000 + 2000)
+        s.tick()
+        s.save(out_root, f"solid/{name}.png", written)
+
     return written
 
 
