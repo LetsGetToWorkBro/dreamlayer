@@ -19,7 +19,15 @@
       },
       "package": "com.letsgettoworkbro.dreamlayer"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "DreamLayer uses the camera to scan the pairing QR from your Mac mini."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

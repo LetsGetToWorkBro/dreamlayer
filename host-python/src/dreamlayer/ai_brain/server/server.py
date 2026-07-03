@@ -500,7 +500,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     url = "http://" + (self.headers.get("Host") or f"127.0.0.1:{port}")
                 bundle = PairingBundle(brain_url=url, token=brain.config.token)
                 brain.activity.add("pair", "Generated a pairing code for the phone")
-                self._json(200, {"code": encode_pairing(bundle), "url": url})
+                code = encode_pairing(bundle)
+                from .qr import to_svg
+                self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
             else:
                 self._json(404, {"error": "not found"})
 

@@ -135,6 +135,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .paircode .code{font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--memory);word-break:break-all;user-select:all}
   .paircode .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
+  .qrbox{background:#fff;border-radius:8px;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
+  .qrbox svg{display:block;width:200px;height:200px;max-width:100%}
 
   /* activity feed */
   .feed li{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
@@ -508,7 +510,8 @@ async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode
     'Pairing is offered only from the Brain itself. On the Mac mini open <b>http://localhost:7777/</b> '+
     '(not the network address) and try again — the code still points your phone at this Mac\'s LAN address.</div></div>';return;}
   window._pc=r.code;
-  out.innerHTML=`<div class="paircode"><div class="code" id="thecode">${esc(r.code)}</div>`+
+  const qr=r.qr?`<div class="qrbox">${r.qr}</div><div class="conn-s" style="margin:6px 0 10px">Scan this in the phone app → Brain → Pair a device</div>`:"";
+  out.innerHTML=`<div class="paircode">${qr}<div class="code" id="thecode">${esc(r.code)}</div>`+
     `<div class="foot"><span class="url">${esc(r.url)}</span><button class="sm" onclick="copyPair()">Copy code</button></div></div>`;
   toast("Pairing code ready");
 }

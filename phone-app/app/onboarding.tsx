@@ -6,13 +6,16 @@ import {
 import { useRouter } from "expo-router";
 import { useOnboardingStore } from "../src/state/useOnboardingStore";
 import { useHaloStore }        from "../src/state/useHaloStore";
+import { useBrainStore }       from "../src/state/useBrainStore";
 import { ONBOARDING_STEPS }    from "../src/services/OnboardingService";
+import { tapMedium, tapSuccess, tapWarn } from "../src/services/haptics";
 import { colors }      from "../src/ui/theme/colors";
 import { typography }  from "../src/ui/theme/typography";
 import { OnboardingDots }   from "../src/ui/components/OnboardingDots";
 import { PrimaryButton }    from "../src/ui/components/PrimaryButton";
 import { EyebrowLabel }     from "../src/ui/components/EyebrowLabel";
 import { HaloPairingRing }  from "../src/ui/components/HaloPairingRing";
+import { QrScanner }        from "../src/ui/components/QrScanner";
 
 const { width: SW } = Dimensions.get("window");
 const ACCENT_MAP = {
@@ -25,6 +28,8 @@ export default function Onboarding() {
   const router = useRouter();
   const { stepIndex, step, advance, complete } = useOnboardingStore();
   const { connect, connected } = useHaloStore();
+  const pairFromCode = useBrainStore((s) => s.pairFromCode);
+  const [scanOpen, setScanOpen] = React.useState(false);
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(18)).current;
 
@@ -39,11 +44,23 @@ export default function Onboarding() {
   const isPairStep = step.id === "pair";
   const accent = ACCENT_MAP[step.accent] ?? colors.accentMemory;
 
+  const finish = () => { tapSuccess(); complete(); router.replace("/brain"); };
+
   const handleCta = async () => {
     if (isPairStep) {
+      tapMedium();
       try { await connect(); } catch (_) {}
-      complete(); router.replace("/brain");
-    } else { advance(); }
+      finish();
+    } else { tapMedium(); advance(); }
+  };
+
+  const onScanned = (code: string) => {
+    setScanOpen(false);
+    try {
+      const r = pairFromCode(code.trim());
+      if (r.brain || r.glasses) { finish(); return; }
+      tapWarn();
+    } catch { tapWarn(); }
   };
 
   return (
@@ -68,7 +85,13 @@ export default function Onboarding() {
       <View style={styles.bottom}>
         <OnboardingDots total={ONBOARDING_STEPS.length} current={stepIndex} />
         <PrimaryButton label={step.cta} onPress={handleCta} accent={step.accent} style={{ marginTop: 28, width: SW - 64 }} />
+        {isPairStep && (
+          <TouchableOpacity style={styles.scanLink} onPress={() => { tapMedium(); setScanOpen(true); }}>
+            <Text style={[typography.caption, { color: accent }]}>Have a Mac mini? Scan its pairing QR</Text>
+          </TouchableOpacity>
+        )}
       </View>
+      <QrScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={onScanned} />
     </SafeAreaView>
   );
 }
@@ -89,6 +112,7 @@ const styles = StyleSheet.create({
   hero:    { alignItems: "center", justifyContent: "center", height: 200 },
   copy:    { alignItems: "center", gap: 4 },
   bottom:  { paddingBottom: 48, alignItems: "center", paddingHorizontal: 32 },
+  scanLink: { marginTop: 18, paddingVertical: 6 },
 });
 const glyphStyles = StyleSheet.create({
   shell:  { width: 120, height: 120, borderRadius: 60, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },

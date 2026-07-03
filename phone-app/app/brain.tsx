@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/components/Connector";
+import { QrScanner } from "../src/ui/components/QrScanner";
+import { tapSuccess, tapWarn } from "../src/services/haptics";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 
@@ -20,6 +22,7 @@ export default function Brain() {
   }, [b.hydrated]);
 
   const [pairOpen, setPairOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [code, setCode] = useState("");
   const [pairMsg, setPairMsg] = useState("");
   const [q, setQ] = useState("");
@@ -47,16 +50,29 @@ export default function Brain() {
   const brainKind = b.brainKind();
   const cloudOn = b.effectiveCloud();
 
-  const doPair = () => {
+  const applyCode = (raw: string) => {
     try {
-      const r = b.pairFromCode(code.trim());
+      const r = b.pairFromCode(raw.trim());
       const bits = [r.brain ? "Mac mini" : "", r.glasses ? "glasses" : ""].filter(Boolean);
-      setPairMsg(bits.length ? `Paired ${bits.join(" + ")}.` : "That code carried nothing to pair.");
+      if (bits.length) {
+        tapSuccess();
+        setPairMsg(`Paired ${bits.join(" + ")}.`);
+      } else {
+        tapWarn();
+        setPairMsg("That code carried nothing to pair.");
+      }
       setCode("");
       setPairOpen(false);
     } catch {
+      tapWarn();
       setPairMsg("That doesn't look like a DreamLayer pairing code.");
     }
+  };
+
+  const doPair = () => applyCode(code);
+  const onScanned = (scanned: string) => {
+    setScanOpen(false);
+    applyCode(scanned);
   };
 
   const doAsk = async () => {
@@ -92,6 +108,10 @@ export default function Brain() {
               Open the Brain panel on your Mac mini → “Pair a phone”, then scan or paste the code. One code brings the Mac
               mini and your glasses together.
             </Text>
+            <PillButton label="⃞ Scan QR" onPress={() => setScanOpen(true)} />
+            <Text style={[typography.caption, { color: colors.textSecondary, textAlign: "center", marginVertical: 6 }]}>
+              — or paste the code —
+            </Text>
             <TextInput
               value={code}
               onChangeText={setCode}
@@ -104,6 +124,7 @@ export default function Brain() {
             <PillButton label="Connect" onPress={doPair} />
           </View>
         ) : null}
+        <QrScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={onScanned} />
 
         {/* glasses */}
         <Text style={[typography.eyebrow, s.eyebrow]}>Devices</Text>

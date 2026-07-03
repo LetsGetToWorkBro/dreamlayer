@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "expo":             "~54.0.0",
+    "expo-camera":      "~17.0.0",
+    "expo-haptics":     "~15.0.0",
     "expo-notifications": "~0.32.0",
     "expo-router":      "~4.0.0",
     "react":            "18.3.2",
