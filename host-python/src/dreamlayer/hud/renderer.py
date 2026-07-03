@@ -508,12 +508,19 @@ class CardRenderer:
             )
 
     def _loading(self, draw, card):
-        for ghost_r in [16, 28, 40, 52]:
+        # Lumen mirror: the rotating arc is gone on device — 12 static
+        # segments around r=40 that the palette chase lights in turn
+        # (halo-lua draw_loading). The mirror shows the chase mid-cycle.
+        for ghost_r in [16, 28, 52]:
             self._circle(draw, CX, CY, ghost_r, 1, T.GHOST_WHITE, alpha=8)
-        self._arc(draw, CX, CY, 40, -70, 50, 3, T.MEMORY_TRACE, alpha=255)
-        self._arc(draw, CX, CY, 40, -100, -70, 2, T.MEMORY_TRACE, alpha=140)
-        self._arc(draw, CX, CY, 40, -130, -100, 1, T.MEMORY_TRACE, alpha=70)
-        self._arc(draw, CX, CY, 40, -160, -130, 1, T.MEMORY_TRACE, alpha=30)
+        n, gap = 12, 6
+        span = 360 / n
+        for i in range(n):
+            a0 = -90 + i * span + gap / 2
+            # brightness chases: the lead segment glows, trail dims behind
+            alpha = 255 - ((i * 3) % n) * 18
+            self._arc(draw, CX, CY, 40, a0, a0 + span - gap, 2,
+                      T.MEMORY_TRACE, alpha=max(40, alpha))
         self._dot(draw, CX, CY, 3, T.MEMORY_TRACE, alpha=255)
         self._dot(draw, CX, CY, 6, T.MEMORY_TRACE, alpha=40)
 

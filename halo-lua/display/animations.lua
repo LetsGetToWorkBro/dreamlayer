@@ -202,9 +202,23 @@ M.HEARTBEAT_RISE_FRAC  = 0.22
 -- Focus law, Lumen pass
 M.TRAIL_SAMPLES        = 5     -- phosphor tail length (was 3)
 M.TRAIL_STEP_T         = 0.06  -- t-spacing between tail samples
-M.SPEC_SWEEP_MS        = 420   -- one-shot specular run along the hold ring
-M.SPEC_BASE_A          = 0x2CC79B -- ring band bases: one LSB off
-M.SPEC_BASE_B          = 0x2DC79A -- accent_memory, one slot each
+M.SPEC_SWEEP_MS        = 420   -- one-shot glint run along the hold ring
+
+-- Card light bands: geometry drawn in these hexes maps to the card slots
+-- (aliasing the dream/aurora slots — mode-exclusive) so a wave program
+-- can flow luma along it. One LSB off memory_trace so the static look is
+-- identical when no program runs (reduce_motion / settled states).
+M.SPEC_BASE_A          = 0x00FFA9
+M.SPEC_BASE_B          = 0x01FFAA
+M.SPEC_BASE_C          = 0x00FEAA
+M.VOICE_BASE           = 0xE06B53 -- listening bars: accent_attention,
+                                  -- one LSB off, on the fx slot (mode-
+                                  -- exclusive with ripple/deviation)
+M.CONDUCT_PERIOD_MS    = 2400  -- object-recall rail: place -> object flow
+M.CONDUCT_Y_AMP        = 220
+M.CHASE_Y_AMP          = 300   -- loading ring luma swing
+M.VOICE_Y_GAIN         = 200   -- listening warmth: luma per full amp
+M.VOICE_CR_GAIN        = 60    -- ...and warm chroma shift
 
 -- IMU parallax (display/parallax.lua): layers shift against head motion.
 -- LOCK (text, verdicts, privacy) never moves; worst case rim mark at

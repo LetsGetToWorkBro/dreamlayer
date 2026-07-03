@@ -51,6 +51,20 @@ local ease_out_expo    = E.out_expo
 local ease_in_out_sine = E.in_out_sine
 local ease_linear      = E.linear
 
+-- Card light bands (Lumen): geometry drawn in these bases follows the
+-- card slots, so a leased wave program can flow light along it. The
+-- slots alias the aurora/dream bank — mode-exclusive by construction.
+P.reserve_dynamic("card_a", A.SPEC_BASE_A, 3)
+P.reserve_dynamic("card_b", A.SPEC_BASE_B, 4)
+P.reserve_dynamic("card_c", A.SPEC_BASE_C, 1)
+P.reserve_dynamic("voice",  A.VOICE_BASE,  6)
+
+-- Live voice level for QueryListeningCard ({t="amp"} messages, 0-99).
+-- nil until the host ever sends one: the waveform then keeps its v1
+-- self-running look, so nothing regresses without the host feature.
+local _amp_target = nil
+local _amp        = 0
+
 -- ---------------------------------------------------------------------------
 -- Animation state
 -- ---------------------------------------------------------------------------
@@ -86,9 +100,13 @@ local function lerp(a, b, t)    return a + (b - a) * t end
 -- Primitive drawing (all frame.display.* line/circle/rect/text)
 -- ---------------------------------------------------------------------------
 
+-- color may be a single hex or a band table {hexA, hexB, ...}: banded
+-- segments follow the card slots, so a wave program flows light along
+-- the pre-drawn curve (Lumen — the memory-trace "conducts")
 local function bezier(p0x,p0y,p1x,p1y,p2x,p2y, color, steps)
   if not HAS_FRAME then return end
   steps = steps or 24
+  local banded = (type(color) == "table")
   local px,py = p0x,p0y
   for i = 1,steps do
     local t  = i/steps
@@ -96,7 +114,8 @@ local function bezier(p0x,p0y,p1x,p1y,p2x,p2y, color, steps)
     local x  = mt*mt*p0x + 2*mt*t*p1x + t*t*p2x
     local y  = mt*mt*p0y + 2*mt*t*p1y + t*t*p2y
     if math.floor(i*12/steps)%12 < 7 then
-      frame.display.line(floor(px),floor(py),floor(x),floor(y),color)
+      local c = banded and color[(i % #color) + 1] or color
+      frame.display.line(floor(px),floor(py),floor(x),floor(y),c)
     end
     px,py = x,y
   end
@@ -242,13 +261,24 @@ local function draw_ready(sc, enter_t, exit_t)
   end
 end
 
-local function draw_saved_memory(card, sc, enter_t, exit_t)
+local function draw_saved_memory(card, sc, enter_t, exit_t, idle_t)
   local r = floor(48 * sc)
   if r<1 then return end
   arc(CX,CY,r,0,360,P.accent_success,48)
   arc(CX,CY,r,-90,0,P.accent_success,12)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    check_glyph(CX,CY-8,floor(56*sc),P.accent_success, math.min(1, enter_t*2))
+    -- Lumen: the check draws on with a soft spring — the stroke arrives,
+    -- settles, and means it (was a linear wipe)
+    check_glyph(CX,CY-8,floor(56*sc),P.accent_success,
+                E.spring(math.min(1, enter_t*2),
+                         A.SPRING_ZETA_SOFT, A.SPRING_OMEGA))
+  end
+  -- Lumen: the chime ring breathes outward once as the card settles —
+  -- the visual analog of the save sound (transitions.chime, kept), now
+  -- fired from the hold clock so it follows the burst
+  if enter_t >= 1.0 and exit_t == 0 and idle_t and not TR.reduce_motion()
+     and idle_t < A.SIG_CHIME_MS then
+    TR.chime(idle_t / A.SIG_CHIME_MS, CX, CY - 8)
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     frame.display.text("SAVED",CX,CY-42,P.accent_success)
@@ -266,8 +296,20 @@ local function draw_query_listening(sc, enter_t, idle_t)
     frame.display.line(80,CY,  94,CY,P.memory_trace)
     frame.display.circle(94,CY,2,P.memory_trace,true)
   end
-  -- waveform: phase advances with idle_t
+  -- waveform: phase advances with idle_t. Lumen: when the host streams
+  -- {t="amp"} the bars track the real voice level (spring-smoothed) and
+  -- the whole waveform warms with it through the voice slot — your words
+  -- visibly land in the glasses. Without amp data: the v1 look, exactly.
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    local scale = 1.0
+    local bar_color = P.accent_attention
+    if _amp_target and not TR.reduce_motion() then
+      _amp = _amp + 0.35 * (_amp_target - _amp)
+      scale = 0.35 + 0.65 * _amp
+      bar_color = P.dynamic_color("voice")
+      P.shift_dynamic("voice", _amp * A.VOICE_Y_GAIN, 0,
+                      _amp * A.VOICE_CR_GAIN)
+    end
     local phase_off = idle_t * 0.006  -- slow drift
     local bar_count=32; local bar_w=2; local gap=1
     local total_w=bar_count*(bar_w+gap)-gap
@@ -275,29 +317,37 @@ local function draw_query_listening(sc, enter_t, idle_t)
     for i=0,bar_count-1 do
       local envelope=math.sin(math.pi*i/(bar_count-1))
       local phase=math.abs(math.sin(math.pi*2*i/bar_count*3+1.2+phase_off))
-      local bh=math.max(2,floor(22*envelope*phase*sc))
+      local bh=math.max(2,floor(22*envelope*phase*scale*sc))
       local bx=start_x+i*(bar_w+gap)
-      frame.display.line(bx,CY-floor(bh/2),bx,CY+floor(bh/2),P.accent_attention)
+      frame.display.line(bx,CY-floor(bh/2),bx,CY+floor(bh/2),bar_color)
     end
   end
 end
 
+-- Lumen: the rotating-arc spinner is killed. Twelve STATIC segments band
+-- across the three card slots and a palette wave chases light around the
+-- stationary ring at the old spinner's RPM — motion by recolouring, not
+-- redrawing (docs/PALETTE_CYCLE.md, generalized). Fewer draw calls than
+-- the v1 spinner, and reduce_motion degrades to a static gradient ring
+-- (strictly better than a frozen spinner arc).
+local CHASE_BANDS = { A.SPEC_BASE_A, A.SPEC_BASE_B, A.SPEC_BASE_C }
+
 local function draw_loading(sc, enter_t, idle_t)
-  -- ghost rings scale in
+  -- ghost rings scale in (r=40 yielded to the chase ring)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    for _,gr in ipairs({16,28,40,52}) do
+    for _,gr in ipairs({16,28,52}) do
       arc(CX,CY,floor(gr*sc),0,360,P.border_subtle,24)
     end
   end
-  -- spinner: angle advances with idle_t
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    local spin_deg = (idle_t / A.SPINNER_RPM_MS) * 360
-    local arc_sweep = lerp(A.SPINNER_ARC_MIN_DEG, A.SPINNER_ARC_MAX_DEG,
-                           ease_in_out_sine((math.sin(idle_t/A.SPINNER_ARC_BREATH_MS * math.pi)+1)/2))
     local r = floor(40*sc)
-    arc(CX,CY,r, spin_deg,      spin_deg+arc_sweep*0.6, P.memory_trace,16)
-    arc(CX,CY,r, spin_deg-30,   spin_deg,               P.accent_memory,4)
-    arc(CX,CY,r, spin_deg-60,   spin_deg-30,            P.accent_memory_dim,2)
+    local n = A.CHASE_SEGMENTS
+    local span = 360 / n
+    local gap = 6
+    for i = 0, n-1 do
+      local a0 = -90 + i * span + gap / 2
+      arc(CX,CY,r, a0, a0 + span - gap, CHASE_BANDS[i % 3 + 1], 3)
+    end
     frame.display.circle(CX,CY,3,P.memory_trace,true)
     frame.display.circle(CX,CY,floor(6*sc),P.accent_memory_dim,false)
   end
@@ -314,10 +364,15 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     if conf>=0.75 then jcol=P.confidence_high
     elseif conf<0.40 then jcol=P.confidence_low end
   end
-  -- memory rail: scales from center outward
+  -- memory rail: scales from center outward. Lumen: rail + trace band
+  -- across the card slots — during HOLD the conduct wave flows light from
+  -- the place node toward the object label (the memory conducts). With no
+  -- program running the bases read as memory_trace, pixel-for-pixel.
   local rail_top = floor(lerp(CY, 72,  sc))
   local rail_bot = floor(lerp(CY, 188, sc))
-  frame.display.line(44,rail_top,44,rail_bot,P.memory_trace)
+  local rail_mid = floor((rail_top + rail_bot) / 2)
+  frame.display.line(44,rail_top,44,rail_mid,A.SPEC_BASE_A)
+  frame.display.line(44,rail_mid,44,rail_bot,A.SPEC_BASE_B)
   frame.display.circle(44,rail_top,3,P.memory_trace,true)
   frame.display.circle(44,rail_bot,3,jcol,true)
   -- eyebrow
@@ -326,7 +381,7 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
   end
   -- bezier arc
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    bezier(46,90,200,62,155,150,P.memory_trace,32)
+    bezier(46,90,200,62,155,150,{A.SPEC_BASE_A, A.SPEC_BASE_B},32)
     local jx=floor(46*0.3025+2*0.55*0.45*200+0.2025*155)
     local jy=floor(90*0.3025+2*0.55*0.45*62 +0.2025*150)
     local jd=floor(4*sc)
@@ -755,6 +810,10 @@ local function draw_testimony_stage(i, stage, fraction)
   end
 end
 
+-- one deterministic 3-shard spit as each torn stage reveals (Lumen);
+-- keyed per stage, reset on every show_card
+local _tear_fired = {}
+
 local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
   local stages  = card.stages or {}
   local verdict = card.verdict or card.primary or ""
@@ -778,7 +837,28 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
     if stage then
       local fraction = clamp(thread_t * 9 - (i - 1), 0, 1)
       draw_testimony_stage(i, stage, fraction)
+      -- a torn stage spits three fragments the moment it reveals — the
+      -- thread visibly fails to hold there (deterministic per stage)
+      if stage.direction == "deceptive" and fraction > 0
+         and not _tear_fired[i] and not TR.reduce_motion() then
+        _tear_fired[i] = true
+        local mid = math.rad(-90 + (i - 0.5) * A.TESTIMONY_SLOT_DEG)
+        PT.burst(CX + A.TESTIMONY_R * math.cos(mid),
+                 CY + A.TESTIMONY_R * math.sin(mid),
+                 A.TEAR_SPIT_N,
+                 { t0 = _now_ms(), seed = i * 31, speed = 22,
+                   ttl_ms = A.TEAR_SPIT_MS, color = P.accent_attention })
+      end
     end
+  end
+
+  -- Lumen: once the thread settles, light runs its path once — a glint
+  -- travels the full nine slots and is gone (enter-adjacent, one-shot)
+  if thread_t >= 1 and idle_t and idle_t > 0 and idle_t < A.SPEC_SWEEP_MS
+     and not TR.reduce_motion() then
+    local st = idle_t / A.SPEC_SWEEP_MS
+    local g0 = -90 + (360 - 12) * ease_in_out_sine(st)
+    arc(CX, CY, A.TESTIMONY_R + 1, g0, g0 + 12, P.confidence_high, 3)
   end
 
   -- verdict first, evidence second: word appears with the ripple landing
@@ -847,7 +927,7 @@ end
 -- ---------------------------------------------------------------------------
 local DRAW = {
   ReadyCard             = function(c,sc,et,xt,it) draw_ready(sc,et,xt)                    end,
-  SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt)           end,
+  SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt,it)        end,
   QueryListeningCard    = function(c,sc,et,xt,it) draw_query_listening(sc,et,it)           end,
   LoadingCard           = function(c,sc,et,xt,it) draw_loading(sc,et,it)                  end,
   ObjectRecallCard      = function(c,sc,et,xt,it) draw_object_recall(c,sc,et,xt)          end,
@@ -880,11 +960,18 @@ local DRAW = {
 --        card-specific idles stay in the DRAW fns
 -- release: recede (shared) — privacy-class cards hard-cut instead
 -- ---------------------------------------------------------------------------
+-- flair (Lumen): a one-shot hero accent fired when the card reaches HOLD
+-- — a particle burst, or a leased light program over the card's banded
+-- geometry. Flairs are additive: they never carry information the
+-- geometry underneath doesn't, and reduce_motion skips them entirely.
 local SIGNATURES = {
-  ObjectRecallCard     = { enter = "focus", hold = "ring" },
+  ObjectRecallCard     = { enter = "focus", hold = "ring",
+                           flair = "conduct" },
   CommitmentRecallCard = { enter = "focus", hold = "ring" },
   ProactiveMemoryCard  = { enter = "focus", hold = "ring" },
   PersonContextCard    = { enter = "focus", hold = "ring" },
+  SavedMemoryCard      = { enter = "focus", flair = "burst" },
+  LoadingCard          = { enter = "focus", flair = "chase" },
   TruthLensCard        = { enter = "ripple" },   -- thread is its own gauge
   PrivacyVeilCard    = { enter = "slam" },
   ConsentRequiredCard  = { enter = "slam" },
@@ -902,6 +989,27 @@ local DEFAULT_SIGNATURE = { enter = "focus" }
 
 local function signature_for(card)
   return (card and SIGNATURES[card.type]) or DEFAULT_SIGNATURE
+end
+
+--- Fire a card's flair as it reaches HOLD. "card_light" is the single id
+--- for any card-owned light program: show_card/dismiss stop it, so a
+--- crossfade can never leave two programs fighting over the card slots.
+local function fire_flair(card, now)
+  local sig = signature_for(card)
+  if not sig.flair or TR.reduce_motion() then return end
+  if sig.flair == "burst" then
+    PT.burst(CX, CY, A.BURST_N,
+             { t0 = now, seed = floor(F.origin_or_now(card) * 7),
+               color = P.accent_success })
+  elseif sig.flair == "chase" then
+    PA.run("card_light",
+           { kind = "wave", names = { "card_a", "card_b", "card_c" },
+             period_ms = A.SPINNER_RPM_MS, y_amp = A.CHASE_Y_AMP })
+  elseif sig.flair == "conduct" then
+    PA.run("card_light",
+           { kind = "wave", names = { "card_a", "card_b" },
+             period_ms = A.CONDUCT_PERIOD_MS, y_amp = A.CONDUCT_Y_AMP })
+  end
 end
 
 local function enter_ms_for(card)
@@ -1053,9 +1161,14 @@ function renderer.show_card(card)
   end
   local now = _now_ms()
   -- A focused card owns its light: the idle programs yield their slots
-  -- (release restores base colors, so nothing arrives mid-shimmer)
+  -- (release restores base colors, so nothing arrives mid-shimmer), and
+  -- any previous card's light program / voice warmth yields with them
   PA.stop("horizon_aurora")
   PA.stop("premonition_shimmer")
+  PA.stop("card_light")
+  P.restore("voice")
+  _tear_fired = {}
+  _amp = 0
   -- If something is showing, capture it as the outgoing card
   if _card and _phase ~= "exit" then
     -- never two simultaneous recessions: a third card mid-crossfade
@@ -1076,8 +1189,19 @@ end
 function renderer.dismiss()
   if not _card then return end
   if _phase == "exit" then return end  -- already receding
+  -- light settles before the recession: no flow on a departing card
+  PA.stop("card_light")
+  P.restore("voice")
   _phase       = "exit"
   _phase_start = _now_ms()
+end
+
+--- Live voice level from the host ({t="amp"}, v = 0..99). nil-safe;
+--- the listening waveform springs toward it (see draw_query_listening).
+function renderer.on_amp(msg)
+  local v = tonumber(msg and (msg.v or msg.amp))
+  if not v then return end
+  _amp_target = clamp(v / 99, 0, 1)
 end
 
 --- Release a finished recession: the content goes home — its mark pulses
@@ -1139,6 +1263,7 @@ function renderer.tick()
     elapsed      = 0
     idle_t       = 0
     _idle_t      = 0
+    fire_flair(_card, now)   -- Lumen: the card's hero accent, once
   elseif _phase == "hold" then
     _idle_t = _idle_t + 50  -- ~50 ms per tick at frame.sleep(0.05)
     idle_t  = _idle_t

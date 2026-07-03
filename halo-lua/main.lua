@@ -34,6 +34,8 @@ HostComm.register(MT.TINCAN,
                   function(msg) DreamRend.on_tincan(msg) end)
 -- Prism Lens: the psychedelic kaleidoscope overlay
 HostComm.register(MT.PRISM, function(msg) Prism.on_prism(msg) end)
+-- Lumen: live voice level drives the listening waveform
+HostComm.register(MT.AMP, function(msg) Renderer.on_amp(msg) end)
 
 -- ---------------------------------------------------------------------------
 -- Card priority table (existing + dream card types)
