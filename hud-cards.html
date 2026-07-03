@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HUD cards — the full gallery - DreamLayer</title>
+<meta name="description" content="Every card DreamLayer can put on the glass, rendered by the product's own renderer. Card payloads are plain dicts built by host-python/src/dreamlayer/hud/cards.py; the device draws them with halo-lua/display/renderer.lua, and a pixel-mirrored Python renderer (hud/renderer.py) dri">
+<meta property="og:title" content="HUD cards — the full gallery - DreamLayer">
+<meta property="og:description" content="Every card DreamLayer can put on the glass, rendered by the product's own renderer. Card payloads are plain dicts built by host-python/src/dreamlayer/hud/cards.py; the device draws them with halo-lua/display/renderer.lua, and a pixel-mirrored Python renderer (hud/renderer.py) dri">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="index.html">DreamLayer</a>
+  <a class="page" href="architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="glasses-experience.html">The glasses experience</a>
+  <a class="page active" href="hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="oracle.html">The Oracle</a>
+  <a class="page" href="perception-memory.html">Perception and memory</a>
+  <a class="page" href="truth.html">Truth and discernment</a>
+  <a class="page" href="attention-focus.html">Attention and focus</a>
+  <a class="page" href="lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="progression.html">Progression — the Saga</a>
+  <a class="page" href="privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="phone-app.html">The phone app</a>
+  <a class="page" href="brain-app.html">The desktop Brain app</a>
+  <a class="page" href="ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="reference/settings.html">Settings and modes</a>
+  <a class="page" href="reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="reference/cards.html">Card catalog</a>
+  <a class="page" href="reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="builders.html">For builders</a>
+  <a class="page" href="glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">The glasses</p>
+    <article>
+<h1 id="hud-cards--the-full-gallery">HUD cards — the full gallery</h1>
+<p>Every card DreamLayer can put on the glass, rendered by the product's own
+renderer. Card payloads are plain dicts built by
+<code>host-python/src/dreamlayer/hud/cards.py</code>; the device draws them with
+<code>halo-lua/display/renderer.lua</code>, and a pixel-mirrored Python renderer
+(<code>hud/renderer.py</code>) drives these stills and the demo pipeline. Twenty-three
+card types are rendered on-device today; four (marked <strong>host-mirror</strong>) exist
+in the Python mirror and the phone and are queued for the device renderer —
+new cards are device-Lua-first as of the O3 pass.</p>
+<p>Each entry lists: when the card appears, what it shows, its materials
+(<a href="meridian.html#solid--the-material-system">Solid</a>) and motion
+(<a href="meridian.html#lumen--motion-and-living-light">Lumen</a>), and how it leaves.
+"Dismiss" is the auto-dismiss time in milliseconds (0 = stays until acted on).</p>
+<h2 id="resting-and-system">Resting and system</h2>
+<h3 id="readycard">ReadyCard</h3>
+<p><img alt="ReadyCard" src="assets/cards/ready.png" /></p>
+<ul>
+<li><strong>Appears:</strong> on boot, on <code>show_ready</code>, on resume from the veil, on connect.</li>
+<li><strong>Shows:</strong> the calm mark — a memory-trace core inside gradient rings with
+  satellite dots. No text; it means "I am here and not listening."</li>
+<li><strong>Materials/motion:</strong> gradient arc rings (<code>RAMP_MEMORY</code>), staggered layer
+  condense.</li>
+</ul>
+<h3 id="querylisteningcard">QueryListeningCard</h3>
+<p><img alt="QueryListeningCard" src="assets/cards/query_listening.png" /></p>
+<ul>
+<li><strong>Appears:</strong> single click, or "Hey Oracle" — the ask posture.</li>
+<li><strong>Shows:</strong> a cardioid microphone glyph over a 32-bar waveform. With live
+  <code>amp</code> frames from the host (~15 bytes, capture-time only) the bars track
+  your actual voice through the palette's voice slot; without them the
+  waveform self-runs exactly as before.</li>
+<li><strong>Dismiss:</strong> on result.</li>
+</ul>
+<h3 id="listeningcard--host-mirror">ListeningCard — host-mirror</h3>
+<p><img alt="ListeningCard" src="assets/cards/listening.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the moment the Oracle wakes, from any enabled source — voice
+  ("Hey Oracle"), tap, gaze, raise, or gesture. Shown only if visual wake
+  feedback is on.</li>
+<li><strong>Shows:</strong> a pulsing ring plus the wake source; carries earcon <code>wake</code> and
+  haptic <code>tick</code> on the payload (each independently toggleable).</li>
+</ul>
+<h3 id="loadingcard">LoadingCard</h3>
+<p><img alt="LoadingCard" src="assets/cards/loading.png" /></p>
+<ul>
+<li><strong>Appears:</strong> while a tier is thinking.</li>
+<li><strong>Shows:</strong> three ghost rings and 12 static segments. Nothing rotates — a
+  palette chase walks light around the segments at the old spinner's RPM
+  (900 ms), so reduced-motion users get a clean static ring instead of a
+  frozen spinner.</li>
+</ul>
+<p><img alt="The palette chase, stepped from the device code" src="assets/motion/loading_chase.gif" /></p>
+<h3 id="errorcard">ErrorCard</h3>
+<p><img alt="ErrorCard" src="assets/cards/error.png" /></p>
+<ul>
+<li><strong>Appears:</strong> on a failure worth telling you about ("BLE timeout").</li>
+<li><strong>Shows:</strong> an amber triangle and one plain sentence. The attention ring
+  draws as a single calm sweep — no flashing.</li>
+<li><strong>Dismiss:</strong> 4000.</li>
+</ul>
+<h3 id="lowconfidencecard">LowConfidenceCard</h3>
+<p><img alt="LowConfidenceCard" src="assets/cards/low_confidence.png" /></p>
+<ul>
+<li><strong>Appears:</strong> when recall has nothing above threshold.</li>
+<li><strong>Shows:</strong> "Not sure" in ghost ink. DreamLayer says <em>I don't know</em> rather
+  than guessing.</li>
+<li><strong>Dismiss:</strong> 3000.</li>
+</ul>
+<h2 id="memory">Memory</h2>
+<h3 id="savedmemorycard">SavedMemoryCard</h3>
+<p><img alt="SavedMemoryCard" src="assets/cards/saved_memory.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the instant a moment is kept — a scene ingested, a
+  conversation captured, a nod-to-save.</li>
+<li><strong>Shows:</strong> a giant double-struck check inside concentric gradient rings over
+  a soft glass pane; SAVED in hero type.</li>
+<li><strong>Motion:</strong> the check draws on with a soft spring, a chime ring expands
+  (220 ms), and a 12-particle burst fires at hold — the one small celebration
+  in the system.</li>
+<li><strong>Dismiss:</strong> 1200.</li>
+</ul>
+<p><img alt="The save moment" src="assets/motion/save_moment.gif" /></p>
+<h3 id="objectrecallcard">ObjectRecallCard</h3>
+<p><img alt="ObjectRecallCard" src="assets/cards/object_recall.png" /></p>
+<ul>
+<li><strong>Appears:</strong> "where did I leave my keys?" — object recall.</li>
+<li><strong>Shows:</strong> a spatial scene, not a list: the place as a translucent field,
+  the object as a layered diamond jewel with orbit arcs and bloom, you as a
+  dot at the bottom, and a continuous gradient trace connecting the two (dim
+  at you, bright at the thing). Jewel hue encodes confidence; footer carries
+  last-seen time.</li>
+<li><strong>Motion:</strong> the <code>conduct</code> flair — a light wave flows along the trace from
+  place to object every 2.4 s.</li>
+<li><strong>Dismiss:</strong> 3500.</li>
+</ul>
+<h3 id="commitmentrecallcard">CommitmentRecallCard</h3>
+<p><img alt="CommitmentRecallCard" src="assets/cards/commitment_recall.png" /></p>
+<ul>
+<li><strong>Appears:</strong> when a promise is recalled — or the moment one is captured
+  from your own speech ("I'll send you the lease by Friday").</li>
+<li><strong>Shows:</strong> who, what, when as three chain links; the live link is a glowing
+  glass capsule with gradient connectors.</li>
+<li><strong>Motion:</strong> the chain forges link by link on snappy springs.</li>
+<li><strong>Dismiss:</strong> 4000.</li>
+</ul>
+<h3 id="commitmentdriftcard">CommitmentDriftCard</h3>
+<p><img alt="CommitmentDriftCard" src="assets/cards/commitment_drift.png" /></p>
+<ul>
+<li><strong>Appears:</strong> when a tracked promise starts to slip
+  (<code>orchestrator.tick_drift</code>).</li>
+<li><strong>Shows:</strong> the task with a decay rail on the left — the live bar is
+  confidence times (1 - decay); urgency shifts amber to danger at decay 0.6.</li>
+<li><strong>Motion:</strong> a slow idle pulse on the confidence dot (600 ms sine).</li>
+<li><strong>Dismiss:</strong> 4500.</li>
+</ul>
+<h3 id="proactivememorycard">ProactiveMemoryCard</h3>
+<p><img alt="ProactiveMemoryCard" src="assets/cards/proactive_memory.png" /></p>
+<ul>
+<li><strong>Appears:</strong> you arrive somewhere that holds a memory (<code>on_place</code>).</li>
+<li><strong>Shows:</strong> the remembered context under a five-ray radial field with a
+  bloomed tip.</li>
+<li><strong>Dismiss:</strong> 3500.</li>
+</ul>
+<h3 id="worldanchorcard">WorldAnchorCard</h3>
+<p><img alt="WorldAnchorCard" src="assets/cards/world_anchor.png" /></p>
+<ul>
+<li><strong>Appears:</strong> in Dream Mode, when the Ghost Layer finds a memory pinned to
+  where you are standing.</li>
+<li><strong>Shows:</strong> a pale MEMORY ECHO — deliberately at 20 percent opacity, the
+  faintest thing the system draws.</li>
+<li><strong>Motion:</strong> Ghost-Wake — each character wakes with per-character Perlin
+  jitter over 320 ms. Renders through the dream path
+  (<code>dream_renderer.lua</code>).</li>
+<li><strong>Dismiss:</strong> 8000.</li>
+</ul>
+<h3 id="timescrubnodecard">TimeScrubNodeCard</h3>
+<p><img alt="TimeScrubNodeCard" src="assets/cards/time_scrub_node.png" /></p>
+<ul>
+<li><strong>Appears:</strong> rewind — "Hey Oracle, rewind my day," or the phone's Rewind
+  screen's on-glass twin. One card per moment as you scrub.</li>
+<li><strong>Shows:</strong> a horizontal timeline of the day; the current node enlarged with
+  bloom and a tick, neighbours as ghost labels, position ("3 of 11") in the
+  eyebrow.</li>
+<li><strong>Motion:</strong> the node dot springs between positions (<code>ease_out_expo</code>).
+  <strong>Seam:</strong> the twist/tap gesture that drives <code>scrub("back"|"forward")</code>.</li>
+<li><strong>Dismiss:</strong> 0 — you are driving.</li>
+</ul>
+<h3 id="morningbriefcard--host-mirror">MorningBriefCard — host-mirror</h3>
+<p><img alt="MorningBriefCard" src="assets/cards/morning_brief.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the moment the Halo goes on in the morning
+  (<code>orchestrator.wake</code> fetches the Brain scheduler's latest brief).</li>
+<li><strong>Shows:</strong> two warm sentences and up to a few bullets: what is coming, what
+  you missed, what you owe.</li>
+<li><strong>Dismiss:</strong> 8000.</li>
+</ul>
+<h2 id="people">People</h2>
+<h3 id="personcontextcard">PersonContextCard</h3>
+<p><img alt="PersonContextCard" src="assets/cards/person_context.png" /></p>
+<ul>
+<li><strong>Appears:</strong> someone you know is in view (anticipation person cue).</li>
+<li><strong>Shows:</strong> name in hero type, one why-line ("owes you the lease"),
+  a headline, an avatar ring with bloom under an enlarged crown, and a
+  12-segment familiarity ring.</li>
+<li><strong>Motion:</strong> a three-arc chord arpeggio (40 ms steps) when an avatar is
+  present.</li>
+<li><strong>Dismiss:</strong> 3500.</li>
+</ul>
+<p>The Solid recomposition sample (<code>person_context_v2</code>) shows the same card as a
+centerpiece:</p>
+<p><img alt="PersonContextCard v2" src="assets/cards/person_context_v2.png" /></p>
+<h3 id="persondossiercard--host-mirror">PersonDossierCard — host-mirror</h3>
+<p><img alt="PersonDossierCard" src="assets/cards/person_dossier.png" /></p>
+<ul>
+<li><strong>Appears:</strong> you greet — or look at — someone the conversation ledger
+  knows (<code>greet</code>, <code>look_at_person</code>). Carries earcon <code>look</code>.</li>
+<li><strong>Shows:</strong> the conversation dossier: last seen, recurring topics between
+  you, and their most recent line.</li>
+<li><strong>Dismiss:</strong> 5000.</li>
+</ul>
+<h2 id="conversation-and-truth">Conversation and truth</h2>
+<h3 id="spokencaptioncard--host-mirror">SpokenCaptionCard — host-mirror</h3>
+<p><img alt="SpokenCaptionCard" src="assets/cards/spoken_caption.png" /></p>
+<ul>
+<li><strong>Appears:</strong> every line of speech while live captions are on
+  (<code>ingest_caption</code>); the ledger keeps recording even when the display is
+  toggled off.</li>
+<li><strong>Shows:</strong> speaker and line, quietly, at the rim.</li>
+<li><strong>Dismiss:</strong> replaced by the next line.</li>
+</ul>
+<h3 id="livecaptioncard">LiveCaptionCard</h3>
+<p><img alt="LiveCaptionCard" src="assets/cards/live_caption.png" /></p>
+<ul>
+<li><strong>Appears:</strong> translated speech — Puente (the ear) or Rosetta reading text
+  aloud in your language.</li>
+<li><strong>Shows:</strong> original and translation, a language pill, a confidence dot.</li>
+</ul>
+<h3 id="factcheckcard--veritas">FactCheckCard — Veritas</h3>
+<p><img alt="FactCheckCard" src="assets/cards/fact_check.png" /></p>
+<ul>
+<li><strong>Appears:</strong> a claim someone made failed (or passed) the live fact-check.
+  See <a href="truth.html">Truth and discernment</a> for exactly when Veritas speaks.</li>
+<li><strong>Shows:</strong> the claim in hero type under a verdict eyebrow, the basis line
+  ("earlier: 'we settled at two million'"), and a Discernment footer
+  ("Marcus - elevated - seen before"). Verdict tone is resolved on-device
+  (<code>card_tone</code> / <code>FACT_COLOR</code>), so a wire-delivered card always carries its
+  color: green VERIFIED, amber CHECK THIS, red THEY SAID DIFFERENT BEFORE,
+  ghost UNVERIFIED.</li>
+<li><strong>Motion:</strong> the status ring springs in snappily; disputed and
+  self-contradiction verdicts fire one 420 ms pulse. Earcons: chime /
+  hark_urgent / hark by verdict; double haptic on the two flagging verdicts.</li>
+<li><strong>Dismiss:</strong> 7000.</li>
+</ul>
+<p>The device-Lua render of the same card:</p>
+<p><img alt="FactCheck on the device path" src="assets/device/fact_check_device.png" /></p>
+<h3 id="answeraheadcard">AnswerAheadCard</h3>
+<p><img alt="AnswerAheadCard" src="assets/cards/answer_ahead.png" /></p>
+<ul>
+<li><strong>Appears:</strong> someone else asked a real, answerable question and the copilot
+  pre-fetched the answer ("ON THE TIP OF YOUR TONGUE").</li>
+<li><strong>Shows:</strong> the answer in hero type, the question cooled beneath it, source
+  in the footer.</li>
+<li><strong>Sound:</strong> none — silent by design; a tick haptic only.</li>
+<li><strong>Dismiss:</strong> 8000.</li>
+</ul>
+<h3 id="oraclereplycard">OracleReplyCard</h3>
+<p><img alt="OracleReplyCard" src="assets/cards/oracle_reply.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the Oracle answered you (kind <code>answer</code>) or did something for
+  you (kind <code>action</code> — "Focus on — the world's turned down.").</li>
+<li><strong>Shows:</strong> the reply in the Oracle's voice under an ORACLE eyebrow with a
+  bloomed cue dot; success ramp for actions, memory ramp for answers.</li>
+<li><strong>Dismiss:</strong> 6000.</li>
+</ul>
+<h3 id="harkcard">HarkCard</h3>
+<p><img alt="HarkCard" src="assets/cards/hark.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the attention policy decided <em>this moment</em> is worth
+  interrupting you: "Listen!" (a commitment about to slip, someone you owe in
+  view, something you are walking away from) or an urgent "Watch out!" (you
+  must leave now).</li>
+<li><strong>Shows:</strong> the one-line clue in hero type inside a LISTEN ring — amber for
+  urgent, memory-teal otherwise.</li>
+<li><strong>Motion:</strong> the ring breathes on hold (1100 ms; 700 ms when urgent).
+  Earcon <code>hark</code> / <code>hark_urgent</code>, tick / double haptic, flash on urgent.</li>
+<li><strong>Dismiss:</strong> 6500.</li>
+</ul>
+<h3 id="truthlenscard--the-testimony-thread">TruthLensCard — the testimony thread</h3>
+<p><img alt="TruthLensCard" src="assets/cards/truth_gauge.png" /></p>
+<ul>
+<li><strong>Appears:</strong> a Truth Lens delivery read completed on a calibrated speaker.</li>
+<li><strong>Shows:</strong> the nine analysis stages as a 360-degree testimony thread — each
+  stage a 40-degree slot at radius 64: truthful reads draw as a continuous
+  success arc, deceptive ones as a torn three-dash break. Only the newest
+  stage is bright; older testimony cools to its dim twin, so temporal order is
+  visible. The verdict sits in a glass capsule; the stranger case renders
+  "insufficient baseline" rather than a verdict.</li>
+<li><strong>Motion:</strong> a ripple entry, stages accumulate at 80 ms per stage, torn
+  stages spit three deterministic shards, and one glint runs the settled
+  thread.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Clean truthful read (device Lua)</th>
+<th>Elevated, mixed read (device Lua)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="Truthful" src="assets/device/testimony_truthful.png" /></td>
+<td><img alt="Elevated" src="assets/device/testimony_elevated.png" /></td>
+</tr>
+</tbody>
+</table>
+<h3 id="deviationalertcard">DeviationAlertCard</h3>
+<p><img alt="DeviationAlertCard" src="assets/cards/deviation_alert.png" /></p>
+<ul>
+<li><strong>Appears:</strong> the Tell engine noticed new speech contradicting a prior
+  commitment (<code>tell_check</code>).</li>
+<li><strong>Shows:</strong> what was said before versus now across a dashed divider, with a
+  severity dot.</li>
+<li><strong>Motion:</strong> an idle ripple ring every 2.4 s, dimmed honestly through the fx
+  palette slot.</li>
+<li><strong>Dismiss:</strong> 5000.</li>
+</ul>
+<h2 id="privacy">Privacy</h2>
+<p>Privacy-class cards share hard rules: no translucent pane, a slam entry with
+a 100 ms full-field rumble dim, and a hard-cut exit — no graceful recede, no
+origin mark left on the Horizon. Nothing about privacy is allowed to feel
+ambient. They stay up until you act (dismiss 0).</p>
+<h3 id="privacyveilcard">PrivacyVeilCard</h3>
+<p><img alt="PrivacyVeilCard" src="assets/cards/privacy_veil.png" /></p>
+<ul>
+<li><strong>Appears:</strong> long press — the veil lands. Capture, pop-ups, anticipation:
+  everything stops.</li>
+<li><strong>Shows:</strong> shield and pause bars. Parallax freezes to zero this exact frame.</li>
+</ul>
+<h3 id="forgetlastcard">ForgetLastCard</h3>
+<p><img alt="ForgetLastCard" src="assets/cards/forget_last.png" /></p>
+<ul>
+<li><strong>Appears:</strong> "forget that" — confirming the last capture was erased.</li>
+</ul>
+<h3 id="privatezonecard">PrivateZoneCard</h3>
+<p><img alt="PrivateZoneCard" src="assets/cards/private_zone.png" /></p>
+<ul>
+<li><strong>Appears:</strong> you entered a place you marked as never-record.</li>
+</ul>
+<h3 id="consentrequiredcard">ConsentRequiredCard</h3>
+<p><img alt="ConsentRequiredCard" src="assets/cards/consent_required.png" /></p>
+<ul>
+<li><strong>Appears:</strong> a new data source wants in; nothing proceeds without a
+  deliberate confirm.</li>
+</ul>
+<h2 id="dream-mode">Dream Mode</h2>
+<h3 id="synesthesiacard">SynesthesiaCard</h3>
+<p><img alt="SynesthesiaCard" src="assets/cards/synesthesia.png" /></p>
+<ul>
+<li><strong>Appears:</strong> in Dream Mode — the VLM's six-word poetic read of what the
+  senses feel like right now.</li>
+<li><strong>Dismiss:</strong> 4000.</li>
+</ul>
+<p>The v2 form adds a dominant color and a gestural three-shape sprite:</p>
+<p><img alt="SynesthesiaCard v2" src="assets/cards/synesthesia_v2.png" /></p>
+<h2 id="cards-without-a-renderer-payload-only">Cards without a renderer (payload-only)</h2>
+<p>Three constructors exist for the phone/hub surface and have no glass renderer
+yet: <strong>UpcomingCard</strong> ("leave in 8 min", dismiss 6000), <strong>HereCard</strong> ("your
+bike is here", 5000), and <strong>MessageCard</strong> (an incoming text or email with
+reply/dismiss actions, 6000) — the anticipation and message-pop-up engines
+emit them today and the phone presents their content. <strong>PaletteShiftCard</strong> is
+not a card at all on the wire: the device consumes it as a palette command
+(mood tint), which is why it is deliberately absent from the sample gallery.
+Other modules carry their own cards (QuestCard and QuestRewardCard from the
+Saga, SocialLensCard, IntroOfferCard, ConsistencyCard from Candor, provenance
+and waypath panels) — see the <a href="reference/cards.html">card catalog reference</a>
+for the complete constructor table.</p>
+    </article>
+    <div class="pagenav"><a class="prev" href="glasses-experience.html"><span class="dir">Previous</span><span class="ttl">The glasses experience</span></a><a class="next" href="meridian.html"><span class="dir">Next</span><span class="ttl">Meridian — the design language</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

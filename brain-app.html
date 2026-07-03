@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The desktop Brain app - DreamLayer</title>
+<meta name="description" content="The Brain (host-python/src/dreamlayer/aibrain/server/) turns an always-on Mac — a Mac mini is the reference — into your private knowledge node. It is a single Python server: the index, the API, the scheduler, and a complete control panel served as one self-contained HTML page (no">
+<meta property="og:title" content="The desktop Brain app - DreamLayer">
+<meta property="og:description" content="The Brain (host-python/src/dreamlayer/aibrain/server/) turns an always-on Mac — a Mac mini is the reference — into your private knowledge node. It is a single Python server: the index, the API, the scheduler, and a complete control panel served as one self-contained HTML page (no">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="index.html">DreamLayer</a>
+  <a class="page" href="architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="glasses-experience.html">The glasses experience</a>
+  <a class="page" href="hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="oracle.html">The Oracle</a>
+  <a class="page" href="perception-memory.html">Perception and memory</a>
+  <a class="page" href="truth.html">Truth and discernment</a>
+  <a class="page" href="attention-focus.html">Attention and focus</a>
+  <a class="page" href="lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="progression.html">Progression — the Saga</a>
+  <a class="page" href="privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="phone-app.html">The phone app</a>
+  <a class="page active" href="brain-app.html">The desktop Brain app</a>
+  <a class="page" href="ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="reference/settings.html">Settings and modes</a>
+  <a class="page" href="reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="reference/cards.html">Card catalog</a>
+  <a class="page" href="reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="builders.html">For builders</a>
+  <a class="page" href="glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">The apps</p>
+    <article>
+<h1 id="the-desktop-brain-app">The desktop Brain app</h1>
+<p>The Brain (<code>host-python/src/dreamlayer/ai_brain/server/</code>) turns an always-on
+Mac — a Mac mini is the reference — into your private knowledge node. It is
+a single Python server: the index, the API, the scheduler, and a complete
+control panel served as one self-contained HTML page (no build step, no
+external requests). It runs anywhere Python runs; the macOS-specific readers
+degrade to empty lists elsewhere.</p>
+<pre><code class="language-bash">pip install -e ./host-python
+python -m dreamlayer.ai_brain.server --token &lt;your-token&gt;
+# panel at http://&lt;mac&gt;:7777/  (token auto-injected when opened on the Mac itself)
+</code></pre>
+<p><em>Every screenshot below is the actual panel, booted from this repository and
+captured headlessly with a seeded index (three notes, two people, two
+events).</em></p>
+<h2 id="whats-connected--the-system-card">What's connected — the system card</h2>
+<p><img alt="Status" src="assets/panel/status.png" /></p>
+<p>Live status, polled every four seconds: Brain online, active model, cloud
+state ("On - not configured" until you wire a key), incognito, whether a
+phone has checked in, and the index size. Missing watched folders surface
+here too.</p>
+<h2 id="morning-brief-and-agenda">Morning brief and agenda</h2>
+<p><img alt="Agenda" src="assets/panel/agenda.png" /></p>
+<p>The agenda merges hand-added events with macOS Calendar when sync is on
+(<strong>Seam:</strong> the AppleScript reader; per-calendar picker, 14-day horizon,
+15-minute background sync). "Brief me" composes the morning brief on demand;
+the Ops card schedules it daily. Add and remove events inline.</p>
+<h2 id="people-and-reminders">People and reminders</h2>
+<p><img alt="People" src="assets/panel/people.png" /></p>
+<p>The dossier registry — everyone you have introduced, with notes and tags —
+fed by hand, by Contacts sync (<strong>seam</strong>), or by the glasses' consented name
+capture via the API. Reminders mirrors open Reminders.app to-dos with a
+per-list picker (<strong>seam</strong>).</p>
+<h2 id="reach-and-devices--pairing-and-the-switches">Reach and devices — pairing and the switches</h2>
+<p><img alt="Pairing" src="assets/panel/reach_pairing.png" /></p>
+<p>The Cloud and Incognito switches (identical semantics to the phone — see
+<a href="privacy.html#the-three-brain-switches">Privacy</a>), and <strong>Pair a phone</strong>: one
+QR / one <code>dreamlayer:</code> code carrying the LAN URL and token. Local-only — the
+pairing code is never served off-box.</p>
+<h2 id="the-cloud-tier">The cloud tier</h2>
+<p><img alt="Cloud config" src="assets/panel/cloud.png" /></p>
+<p>Any OpenAI-compatible provider: base URL, key (stored, never re-displayed —
+<code>GET /config</code> masks it to "set"), model name, and <strong>Test connection</strong> for a
+one-word round trip. The cloud is only ever a fallback tier; every use is
+counted and logged.</p>
+<h2 id="folders-it-reads">Folders it reads</h2>
+<p><img alt="Folders" src="assets/panel/folders.png" /></p>
+<p>The knowledge base is folders you choose: add by server-side browser (modal,
+local-only) or pasted path, drop files straight onto the page into a chosen
+folder, re-index on demand — plus auto-reindex whenever a watched folder's
+modification signature changes (3-second poll). Advanced filters: semantic
+search on/off, an extension whitelist (defaults cover text, markdown, csv,
+json, code and more), a per-file size cap (2 MB default), and exclude globs.</p>
+<p><img alt="Folder browser" src="assets/panel/folder_browser.png" /></p>
+<h2 id="ask-your-stuff">Ask your stuff</h2>
+<p><img alt="Ask" src="assets/panel/ask.png" /></p>
+<p>The same <code>POST /dreamlayer/brain/ask</code> the glasses and phone use. Here it has
+found the answer in a seeded note — tier <code>laptop</code>, source shown. With the
+keyword model the answer is the best passage; with Ollama it is synthesized
+prose.</p>
+<h2 id="model--keyword-or-ollama">Model — keyword or Ollama</h2>
+<p><img alt="Model" src="assets/panel/model.png" /></p>
+<p>Two modes, honestly framed:</p>
+<ul>
+<li><strong>Keyword</strong> — zero setup, token-overlap retrieval. Works today, offline.</li>
+<li><strong>Ollama</strong> — a local LLM upgrade: chat model (default <code>llama3.2</code>), vision
+  model (<code>llama3.2-vision</code>), embedding model (<code>nomic-embed-text</code>) for
+  semantic search. The status card probes Ollama live, lists which
+  configured models are pulled, and offers a one-click <strong>Pull</strong> per missing
+  model (local-only, drives Ollama's own API). "Read email and iMessage"
+  folds Messages and Mail into the index (<strong>seam:</strong> the chat.db / .emlx
+  readers).</li>
+</ul>
+<h2 id="privacy-controls">Privacy controls</h2>
+<p><img alt="Privacy" src="assets/panel/privacy.png" /></p>
+<p>The pairing token (show / rotate — rotating de-pairs every device), the
+lifetime <strong>cloud egress counter</strong>, backup (full restorable snapshot,
+local-only) and restore, and selective erase: questions, activity, or
+folders.</p>
+<h2 id="messages-activity-health">Messages, activity, health</h2>
+<p><img alt="Activity" src="assets/panel/activity.png" /></p>
+<p>The unified activity feed: asks with their tier, folder changes, uploads,
+sync runs, pairing, cloud egress — the audit trail of the whole node. The
+Messages card (hidden until email is enabled) shows the recent feed with the
+"summarize long emails" toggle.</p>
+<p><img alt="Ops" src="assets/panel/ops.png" /></p>
+<p>Health and schedule: version, index disk size, Ollama latency, uptime;
+<strong>quiet hours</strong> (scheduled incognito), the <strong>morning brief hour</strong>, and
+<strong>retention days</strong> for history pruning.</p>
+<h2 id="the-mac-appliance-pieces">The Mac appliance pieces</h2>
+<ul>
+<li><strong>Menu-bar app</strong> — <code>python -m dreamlayer.ai_brain.menubar</code> (rumps, macOS):
+  a status dot (online / cloud-unconfigured / incognito / offline), Open
+  panel, one-click Sync now (calendar + contacts + reminders), and an
+  Incognito toggle. Its pure core (status mapping, plist generation) is
+  tested cross-platform.</li>
+<li><strong>Launch at login</strong> — <code>python -m dreamlayer.ai_brain.menubar
+  --install-login</code> writes <code>~/Library/LaunchAgents/vision.dreamlayer.brain.plist</code>
+  (RunAtLoad + KeepAlive).</li>
+<li><strong>Installer</strong> — <code>laptop-companion/install-macos.sh</code> installs Ollama, pulls
+  the three default models, seeds the config with <code>model: "ollama"</code>, and
+  installs the launch agent in one run.</li>
+<li><strong>The companion agent</strong> — <code>laptop-companion/dreamlayer_companion.py</code> is a
+  separate, minimal, stdlib-only agent for <em>any</em> laptop: one endpoint
+  (<code>GET /dreamlayer/context</code> — recent file names, hostname, battery), the
+  same token header, and a refusal to serve on the LAN without a token. It
+  feeds the Object Lens's "your laptop" panel; it is not the Brain.</li>
+</ul>
+<h2 id="the-full-panel">The full panel</h2>
+<p><img alt="The whole panel" src="assets/panel/panel_full.png" /></p>
+    </article>
+    <div class="pagenav"><a class="prev" href="phone-app.html"><span class="dir">Previous</span><span class="ttl">The phone app</span></a><a class="next" href="ai-brain.html"><span class="dir">Next</span><span class="ttl">The AI Brain deep dive</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

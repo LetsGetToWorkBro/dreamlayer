@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridian — the design language - DreamLayer</title>
+<meta name="description" content="Meridian is DreamLayer's HUD design system, built for a small additive waveguide where every lit pixel costs battery and attention. Its one-line thesis: the display is a place, not a stage. Two named passes implement it: Lumen (motion and living light — docs/cinemav2/lumen.md) an">
+<meta property="og:title" content="Meridian — the design language - DreamLayer">
+<meta property="og:description" content="Meridian is DreamLayer's HUD design system, built for a small additive waveguide where every lit pixel costs battery and attention. Its one-line thesis: the display is a place, not a stage. Two named passes implement it: Lumen (motion and living light — docs/cinemav2/lumen.md) an">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="index.html">DreamLayer</a>
+  <a class="page" href="architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="glasses-experience.html">The glasses experience</a>
+  <a class="page" href="hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page active" href="meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="oracle.html">The Oracle</a>
+  <a class="page" href="perception-memory.html">Perception and memory</a>
+  <a class="page" href="truth.html">Truth and discernment</a>
+  <a class="page" href="attention-focus.html">Attention and focus</a>
+  <a class="page" href="lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="progression.html">Progression — the Saga</a>
+  <a class="page" href="privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="phone-app.html">The phone app</a>
+  <a class="page" href="brain-app.html">The desktop Brain app</a>
+  <a class="page" href="ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="reference/settings.html">Settings and modes</a>
+  <a class="page" href="reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="reference/cards.html">Card catalog</a>
+  <a class="page" href="reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="builders.html">For builders</a>
+  <a class="page" href="glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">The glasses</p>
+    <article>
+<h1 id="meridian--the-design-language">Meridian — the design language</h1>
+<p>Meridian is DreamLayer's HUD design system, built for a small additive
+waveguide where every lit pixel costs battery and attention. Its one-line
+thesis: <strong>the display is a place, not a stage</strong>. Two named passes implement
+it: <strong>Lumen</strong> (motion and living light — <code>docs/cinema_v2/lumen.md</code>) and
+<strong>Solid</strong> (the material richness of every settled frame —
+<code>docs/cinema_v2/solid.md</code>). The device Lua under <code>halo-lua/display/</code> is the
+source of truth; <code>host-python/src/dreamlayer/hud/</code> mirrors it constant for
+constant, and a parity test bank asserts the two never drift.</p>
+<h2 id="the-discipline">The discipline</h2>
+<p>Meridian carries a kill-list: no zero-bit decoration. Spectacle must come
+from <em>how information moves and glows</em>, never from added theater. Standing
+rules, all enforced by tests or review:</p>
+<ul>
+<li>Text never moves, curves, or distorts.</li>
+<li>Nothing draws that does not carry information (idle constellations and
+  Lissajous ornaments were killed by name).</li>
+<li>Temporal luma dithering is banned (at 20 fps it is a 10 Hz strobe); a
+  strobe-guard test asserts no palette slot's luma reverses direction more
+  than four times a second.</li>
+<li>Privacy is never ambient: privacy cards get no pane, enter with a slam, and
+  freeze parallax.</li>
+</ul>
+<h2 id="lumen--motion-and-living-light">Lumen — motion and living light</h2>
+<p>The Halo's one graphical superpower is a runtime-writable 16-slot palette with
+1,024 luma tiers per slot. Lumen makes light itself the animation medium.</p>
+<h3 id="the-engines">The engines</h3>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Where</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Springs</td>
+<td><code>halo-lua/lib/easing.lua</code>, presets in <code>display/animations.lua</code></td>
+<td>Closed-form damped springs — pure functions of t, so every frame is deterministic and golden-testable. Two personalities: <strong>soft</strong> (zeta 0.85, omega 7.4 — text-adjacent, no visible overshoot) and <strong>snappy</strong> (zeta 0.63 — rings and dots, rebound capped at 8 percent and asserted in tests). Python twin: <code>hud/motion_math.py</code>.</td>
+</tr>
+<tr>
+<td>Palette animator</td>
+<td><code>display/palette_animator.lua</code></td>
+<td>Budgeted luma programs — wave, shimmer, flash, sweep, fade — over leased slots. At most 8 palette writes per tick; one-shots auto-stop and restore base.</td>
+</tr>
+<tr>
+<td>Slot leases</td>
+<td><code>display/palette.lua</code></td>
+<td>One live writer per slot, structurally. A lapsed program can never strand a slot off its base color.</td>
+</tr>
+<tr>
+<td>Particles</td>
+<td><code>display/particles.lua</code></td>
+<td>One pooled budget of 24, oldest-first eviction. Closed-form physics seeded by 1-D Perlin — same seed, same pixels. Honest 4bpp fades: dots shrink and streaks shorten; there is no alpha to cheat with.</td>
+</tr>
+<tr>
+<td>Parallax</td>
+<td><code>display/parallax.lua</code></td>
+<td>On-device IMU at 20 fps. Layers shift against head rate by depth class — LOCK 0 px (all text, verdicts, privacy), RIM +-1 px, RING +-2 px, AIR +-3 px — and spring home with a small inertial overshoot when the head stops. No sensor, reduced motion, or the veil: hard zero.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="where-the-light-lives">Where the light lives</h3>
+<ul>
+<li><strong>Horizon aurora</strong> — a 12 s luma wave flows along the day-ring through
+  three leased slots. Zero new geometry; idle only.</li>
+<li><strong>Focus physics</strong> — anticipation pull-back, squash-stretch on the flight
+  head, a 5-sample phosphor tail, a spring click on landing, one glint along
+  the confidence arc, and a recede that files the card back into the day
+  (160 to 200 ms).</li>
+<li><strong>Card flairs</strong> — one optional <code>flair</code> field consumed at the enter-to-hold
+  transition: <code>burst</code> (SavedMemory), <code>chase</code> (Loading), <code>conduct</code>
+  (ObjectRecall). All card light programs share one id, so a crossfade can
+  never leave two programs fighting over the same slots.</li>
+<li><strong>Hero moments</strong> — the promise shatter (transition only; replays never
+  re-break), the 600 ms wake reveal, the dream door's starfield, and the
+  privacy grip (parallax zeroed the frame the veil lands).</li>
+<li><strong>Prism Lens</strong> — a kaleidoscope built from spring bloom-in, breathing
+  rotation, two counter-rotating halo rings, and Perlin tip shimmer, inside
+  v1's photosensitivity caps.</li>
+</ul>
+<p><img alt="Prism bloom, stepped from the device code on a 50 ms clock" src="assets/motion/prism_bloom.gif" /></p>
+<h3 id="budgets--asserted-not-aspirational">Budgets — asserted, not aspirational</h3>
+<p><code>test_draw_budget.py</code> measures worst-case composited frames (idle aurora, the
+ObjectRecall composite, testimony with shard spits, prism at maximum, and the
+recede-under-condense crossfade): <strong>at most 420 draw calls per frame</strong>, at
+most 8 palette writes per tick, at most 32 font switches per tick, particle
+pool capped at 24, and zero new ambient BLE streams.</p>
+<h3 id="the-reduce-motion-contract">The reduce-motion contract</h3>
+<p>Total, and tested per card: under reduced motion nothing moves — settled
+frames at different times are pixel-identical; every palette program holds its
+still pose; particles do not spawn; parallax is zero; the wake reveal shows
+the whole day at once. And the Solid materials survive it: the reduce frame
+keeps at least 80 percent of the full frame's light, because panes, gradients,
+and blooms are static richness, not motion.</p>
+<h2 id="solid--the-material-system">Solid — the material system</h2>
+<p>Lumen's quality was temporal; Solid makes the still frame worth a screenshot,
+inside the same budgets. Its three levers were all verified against the
+hardware adapter before design:</p>
+<ol>
+<li><strong>Real font sizes.</strong> <code>frame.display.set_font</code> was in the adapter all
+   along, wired nowhere. <code>typography.DEVICE_FONT</code> is now the one hardware
+   seam table — hero 22 px, xl 19, lg 17, md 13, sm 10 — with cached,
+   pcall-latched switching: firmware without <code>set_font</code> degrades the entire
+   system to single-size text by one boolean. <code>fit_size</code> drops long hero
+   strings down the ladder instead of clipping the circular panel, and the
+   glyph-advance table is pinned to the reference face within +-2 px by test.</li>
+<li><strong>Cheap translucency.</strong> Row-gap scanline fills: a radius-62 glass disc at
+   a 3 px row gap costs 41 line calls. Per-pixel dithering for areas stays
+   banned.</li>
+<li><strong>Free static gradients.</strong> Strokes whose segment color walks a token
+   ramp — identical call count to a plain stroke.</li>
+</ol>
+<h3 id="the-materials-api">The materials API</h3>
+<p><code>display/materials.lua</code>, twinned in <code>hud/renderer.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Cost</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>glass_disc(cx, cy, r, color, gap)</code></td>
+<td>about 2r/gap lines</td>
+<td>the card pane</td>
+</tr>
+<tr>
+<td><code>glass_capsule(x, y, w, h, color, gap)</code></td>
+<td>about h/gap lines</td>
+<td>verdicts, live chain links</td>
+</tr>
+<tr>
+<td><code>grad_line / grad_arc / grad_bezier(..., ramp)</code></td>
+<td>same as plain</td>
+<td>traces, separators, connectors</td>
+</tr>
+<tr>
+<td><code>bloom_ring(cx, cy, r, color)</code></td>
+<td>2 circles</td>
+<td>halos on dots and rings</td>
+</tr>
+</tbody>
+</table>
+<p>Ramps: <code>RAMP_MEMORY</code>, <code>RAMP_MEMORY_LIVE</code>, <code>RAMP_SUCCESS</code>. Static ramps must
+never contain a dynamic slot's base hex — otherwise the "static" geometry
+would follow live slot luma — and an alias-guard test asserts no new color
+equals any reserved dynamic base. Panes draw only in surface-luma colors
+(this is an additive display: richer, not brighter), only at <code>exit_t == 0</code>,
+and never under text; privacy-class cards get no pane at all.</p>
+<h3 id="richness-floors">Richness floors</h3>
+<p>"The screenshots don't look different" is a CI failure: regenerated goldens
+must exceed the pre-Solid lit-pixel baselines by at least 1.25x on the five
+recomposed heroes (focus hold, testimony, object recall, saved memory, person
+context).</p>
+<h2 id="the-palette">The palette</h2>
+<p>Kept in lockstep between <code>display/palette.lua</code> and <code>hud/themes.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>background</code></td>
+<td><code>0x000000</code></td>
+<td>the void</td>
+</tr>
+<tr>
+<td><code>surface</code></td>
+<td><code>0x0E1416</code></td>
+<td>the glass pane luma</td>
+</tr>
+<tr>
+<td><code>text_primary</code></td>
+<td><code>0xECF0F1</code></td>
+<td>ink</td>
+</tr>
+<tr>
+<td><code>text_secondary</code></td>
+<td><code>0xA8B8C0</code></td>
+<td>supporting ink</td>
+</tr>
+<tr>
+<td><code>text_ghost</code></td>
+<td><code>0x58686F</code></td>
+<td>ghosts, hints (static twin <code>0x58686D</code>)</td>
+</tr>
+<tr>
+<td><code>accent_memory</code></td>
+<td><code>0x2CC79A</code></td>
+<td>the brand teal (dim <code>0x1A7A60</code>, static <code>0x2CC79B</code>)</td>
+</tr>
+<tr>
+<td><code>accent_attention</code></td>
+<td><code>0xE06B52</code></td>
+<td>attention (dim twin <code>0x7A3A2C</code>)</td>
+</tr>
+<tr>
+<td><code>accent_success</code></td>
+<td><code>0x56D364</code></td>
+<td>verified, kept (dim <code>0x2E7A3C</code>)</td>
+</tr>
+<tr>
+<td><code>accent_error</code></td>
+<td><code>0xE05252</code></td>
+<td>errors</td>
+</tr>
+<tr>
+<td><code>warning_amber</code></td>
+<td><code>0xFF6600</code></td>
+<td>urgency (dim <code>0x8A3A00</code>)</td>
+</tr>
+<tr>
+<td><code>privacy_danger / privacy_caution</code></td>
+<td><code>0xFF4444</code> / <code>0xFF8800</code></td>
+<td>the veil family</td>
+</tr>
+<tr>
+<td><code>memory_trace</code></td>
+<td><code>0x00FFAA</code></td>
+<td>the living trace</td>
+</tr>
+<tr>
+<td>confidence low / med / high</td>
+<td><code>0xFFAA00</code> / <code>0x00FFAA</code> / <code>0xB8FFE9</code></td>
+<td>ring hues</td>
+</tr>
+</tbody>
+</table>
+<p>Six dynamic palette slots are reserved by name (sky, energy, drift a/b,
+ghost_text, fx) and administered by the lease system; card light bands and the
+voice slot carry their own single-LSB-adjacent bases so firmware that matches
+static palette entries first can be tuned by one constant.</p>
+<h2 id="motion-constants-at-a-glance">Motion constants at a glance</h2>
+<p>From <code>display/animations.lua</code> (mirrored in <code>hud/motion_math.py</code>; the parity
+test covers the whole bank): enter 180 ms with 0/40/60/80 ms stagger by text
+role, exit 120 ms; focus travel 140 ms + landing 100 ms, recede 200 ms; chime
+220 ms, chord step 40 ms, rumble 100 ms, ripple 400 ms; aurora period 12 s;
+testimony stage reveal 80 ms; burst 12 particles over 480 ms; wake reveal
+600 ms; parallax return 260 ms.</p>
+<h2 id="the-phone-mirrors-it">The phone mirrors it</h2>
+<p>The phone app's design tokens (<code>phone-app/src/ui/theme/</code>) are the same
+family — background black, surface <code>#0E1416</code>, accent <code>#2FD4C4</code>, one accent
+per surface, an 8 pt grid, entrance motion and press-spring on everything —
+plus a separate <code>haloPalette</code> used only by the HUD preview components as QA
+truth. See <a href="phone-app.html#design-system">The phone app</a>.</p>
+    </article>
+    <div class="pagenav"><a class="prev" href="hud-cards.html"><span class="dir">Previous</span><span class="ttl">HUD cards — the full gallery</span></a><a class="next" href="oracle.html"><span class="dir">Next</span><span class="ttl">The Oracle</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

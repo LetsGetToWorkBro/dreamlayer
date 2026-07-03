@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings and modes - DreamLayer</title>
+<meta name="description" content="Every user-facing setting in the ecosystem, its default, what it does, and what it drives. Three surfaces expose them: the phone app, the Brain panel, and the Oracle's voice commands; underneath they converge on orchestrator setters and Brain config keys.">
+<meta property="og:title" content="Settings and modes - DreamLayer">
+<meta property="og:description" content="Every user-facing setting in the ecosystem, its default, what it does, and what it drives. Three surfaces expose them: the phone app, the Brain panel, and the Oracle's voice commands; underneath they converge on orchestrator setters and Brain config keys.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="../index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="../index.html">DreamLayer</a>
+  <a class="page" href="../architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="../glasses-experience.html">The glasses experience</a>
+  <a class="page" href="../hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="../meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="../oracle.html">The Oracle</a>
+  <a class="page" href="../perception-memory.html">Perception and memory</a>
+  <a class="page" href="../truth.html">Truth and discernment</a>
+  <a class="page" href="../attention-focus.html">Attention and focus</a>
+  <a class="page" href="../lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="../progression.html">Progression — the Saga</a>
+  <a class="page" href="../privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="../phone-app.html">The phone app</a>
+  <a class="page" href="../brain-app.html">The desktop Brain app</a>
+  <a class="page" href="../ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page active" href="../reference/settings.html">Settings and modes</a>
+  <a class="page" href="../reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="../reference/cards.html">Card catalog</a>
+  <a class="page" href="../reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="../hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="../builders.html">For builders</a>
+  <a class="page" href="../glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">Reference</p>
+    <article>
+<h1 id="reference--settings-and-modes">Reference — settings and modes</h1>
+<p>Every user-facing setting in the ecosystem, its default, what it does, and
+what it drives. Three surfaces expose them: the phone app, the Brain panel,
+and the Oracle's voice commands; underneath they converge on orchestrator
+setters and Brain config keys.</p>
+<h2 id="phone-app-toggles">Phone app toggles</h2>
+<p>From <code>phone-app/src/state/useBrainStore.ts</code> (defaults) and the Brain and
+Settings screens (placement). Persisted to AsyncStorage unless noted.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Screen</th>
+<th>Default</th>
+<th>Effect / endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac mini connected</td>
+<td>Brain</td>
+<td>off</td>
+<td>phone-vs-Mac brain; gates all Brain-backed screens; <code>connectMacMini</code></td>
+</tr>
+<tr>
+<td>Glasses connected</td>
+<td>Brain / onboarding</td>
+<td>off</td>
+<td>pairing state for the Halo</td>
+</tr>
+<tr>
+<td>Use cloud for hard cases</td>
+<td>Brain</td>
+<td><strong>on</strong></td>
+<td><code>POST /dreamlayer/config {cloud_enabled}</code>; disabled while incognito</td>
+</tr>
+<tr>
+<td>Incognito</td>
+<td>Brain, Settings</td>
+<td>off</td>
+<td>forces cloud off and pauses capture; <code>POST /dreamlayer/config {network_mode}</code></td>
+</tr>
+<tr>
+<td>Pause memory capture</td>
+<td>Brain, Now, Settings</td>
+<td>off</td>
+<td>the capture pause; drives the Now tab's Live/Paused pill</td>
+</tr>
+<tr>
+<td>Proactive cards</td>
+<td>Settings</td>
+<td>on</td>
+<td>master switch for anticipatory cards</td>
+</tr>
+<tr>
+<td>Events cue</td>
+<td>Settings (nested)</td>
+<td>on</td>
+<td>"leave in 8 min" cards</td>
+</tr>
+<tr>
+<td>People cue</td>
+<td>Settings (nested)</td>
+<td>on</td>
+<td>who-is-in-front-of-you cards</td>
+</tr>
+<tr>
+<td>Places cue</td>
+<td>Settings (nested)</td>
+<td>on</td>
+<td>what-you-left-here cards</td>
+</tr>
+<tr>
+<td>Focus mode</td>
+<td>Settings</td>
+<td>off</td>
+<td>hush interruptions, capture keeps running; unlocks the Deep Focus badge via <code>POST /dreamlayer/saga/record</code></td>
+</tr>
+<tr>
+<td>Text pop-ups on glasses</td>
+<td>Settings</td>
+<td>on</td>
+<td>iMessage pop-up notifications</td>
+</tr>
+<tr>
+<td>Email pop-ups on glasses</td>
+<td>Settings</td>
+<td>on</td>
+<td>email pop-up notifications</td>
+</tr>
+<tr>
+<td>Summarize long emails</td>
+<td>Settings</td>
+<td>off</td>
+<td><code>POST /dreamlayer/config {summarize_emails}</code></td>
+</tr>
+<tr>
+<td>Proactive alerts</td>
+<td>Settings</td>
+<td>on</td>
+<td>the hark policy ("Listen!" / "Watch out!")</td>
+</tr>
+<tr>
+<td>Live fact-checker</td>
+<td>Settings</td>
+<td><strong>off</strong></td>
+<td>Veritas</td>
+</tr>
+<tr>
+<td>Answer-ahead</td>
+<td>Settings</td>
+<td><strong>off</strong></td>
+<td>the conversational copilot</td>
+</tr>
+<tr>
+<td>Wake by voice / tap / gaze / raise</td>
+<td>Settings</td>
+<td>all on</td>
+<td>Oracle wake sources</td>
+</tr>
+<tr>
+<td>Listening feedback: visual / audio / haptic</td>
+<td>Settings</td>
+<td>all on</td>
+<td>wake ring, earcon, haptic tick</td>
+</tr>
+<tr>
+<td>Wake word</td>
+<td>Settings</td>
+<td>"Hey Oracle"</td>
+<td>fixed label today (not editable)</td>
+</tr>
+<tr>
+<td>Erase all memories</td>
+<td>Settings (danger)</td>
+<td>—</td>
+<td>clears the local memory store, confirmed</td>
+</tr>
+</tbody>
+</table>
+<h2 id="orchestrator-setters">Orchestrator setters</h2>
+<p>The hub's programmatic surface (<code>orchestrator/orchestrator.py</code>), for
+completeness — the phone toggles above map onto these:</p>
+<table>
+<thead>
+<tr>
+<th>Setter</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>connect_mac_mini(on)</code></td>
+<td>off</td>
+<td>also <code>brain.set_local_only(not on)</code></td>
+</tr>
+<tr>
+<td><code>use_cloud(on)</code></td>
+<td>on</td>
+<td>preference restored when incognito lifts</td>
+</tr>
+<tr>
+<td><code>set_incognito(on)</code></td>
+<td>off</td>
+<td>forces cloud off for the session</td>
+</tr>
+<tr>
+<td><code>set_focus(minutes)</code> / <code>clear_focus()</code></td>
+<td>off; 25 min via voice</td>
+<td>do-not-disturb window</td>
+</tr>
+<tr>
+<td><code>set_captions(on)</code></td>
+<td>on</td>
+<td>display only; ledger keeps recording</td>
+</tr>
+<tr>
+<td><code>set_factcheck(on)</code></td>
+<td><strong>off</strong></td>
+<td>Veritas</td>
+</tr>
+<tr>
+<td><code>set_truthlens(on)</code></td>
+<td><strong>off</strong></td>
+<td>delivery reads</td>
+</tr>
+<tr>
+<td><code>set_copilot(on)</code></td>
+<td><strong>off</strong></td>
+<td>answer-ahead</td>
+</tr>
+<tr>
+<td><code>set_attention(on)</code></td>
+<td>on</td>
+<td>the hark policy</td>
+</tr>
+<tr>
+<td><code>set_anticipation(on)</code></td>
+<td>on</td>
+<td>proactive cards</td>
+</tr>
+<tr>
+<td><code>set_cue(kind, on)</code></td>
+<td>all on</td>
+<td>event / person / place</td>
+</tr>
+<tr>
+<td><code>set_wake_source(source, on)</code></td>
+<td>all on</td>
+<td>voice / tap / gaze / raise</td>
+</tr>
+<tr>
+<td><code>set_wake_feedback(kind, on)</code></td>
+<td>all on</td>
+<td>visual / audio / haptic</td>
+</tr>
+<tr>
+<td><code>set_text_notifications(on)</code> / <code>set_email_notifications(on)</code></td>
+<td>on / on</td>
+<td>message pop-ups per channel</td>
+</tr>
+<tr>
+<td><code>pause()</code> / <code>resume()</code></td>
+<td>—</td>
+<td>the Privacy Veil</td>
+</tr>
+<tr>
+<td><code>enter_dream()</code> / <code>exit_dream()</code></td>
+<td>—</td>
+<td>Dream Mode</td>
+</tr>
+<tr>
+<td><code>start_message_polling(interval=8.0)</code> / <code>stop_message_polling()</code></td>
+<td>—</td>
+<td>background feed</td>
+</tr>
+<tr>
+<td><code>start_pulse(context_fn, interval=15.0)</code> / <code>stop_pulse()</code></td>
+<td>—</td>
+<td>the proactive heartbeat</td>
+</tr>
+</tbody>
+</table>
+<h2 id="brain-config-keys">Brain config keys</h2>
+<p><code>server/store.py: BrainConfig</code> — patched via <code>POST /dreamlayer/config</code>,
+persisted as <code>brain_config.json</code>, secrets masked on read:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>folders</code></td>
+<td><code>[]</code></td>
+<td>watched directories</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td><code>"keyword"</code></td>
+<td><code>keyword</code> or <code>ollama</code></td>
+</tr>
+<tr>
+<td><code>ollama_url</code></td>
+<td><code>http://127.0.0.1:11434</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ollama_chat_model</code></td>
+<td><code>llama3.2</code></td>
+<td>answers, brief, replies, summaries</td>
+</tr>
+<tr>
+<td><code>ollama_vision_model</code></td>
+<td><code>llama3.2-vision</code></td>
+<td>object explain</td>
+</tr>
+<tr>
+<td><code>ollama_embed_model</code></td>
+<td><code>nomic-embed-text</code></td>
+<td>semantic search</td>
+</tr>
+<tr>
+<td><code>email_enabled</code></td>
+<td>false</td>
+<td>fold Messages/Mail into the index</td>
+</tr>
+<tr>
+<td><code>summarize_emails</code></td>
+<td>false</td>
+<td>one-line email glances</td>
+</tr>
+<tr>
+<td><code>network_mode</code></td>
+<td><code>"connected"</code></td>
+<td><code>lan_only</code> = incognito</td>
+</tr>
+<tr>
+<td><code>cloud_enabled</code></td>
+<td><strong>true</strong></td>
+<td>the cloud switch</td>
+</tr>
+<tr>
+<td><code>cloud_base_url</code></td>
+<td><code>https://api.openai.com</code></td>
+<td>any OpenAI-compatible provider</td>
+</tr>
+<tr>
+<td><code>cloud_api_key</code></td>
+<td>empty</td>
+<td>masked to "set" on read</td>
+</tr>
+<tr>
+<td><code>cloud_model</code></td>
+<td><code>gpt-4o-mini</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>cloud_calls</code></td>
+<td>0</td>
+<td>lifetime egress counter (read-only in practice)</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>empty</td>
+<td>pairing secret; masked on read</td>
+</tr>
+<tr>
+<td><code>semantic_search</code></td>
+<td>false</td>
+<td>embeddings on/off</td>
+</tr>
+<tr>
+<td><code>index_extensions</code></td>
+<td><code>[]</code></td>
+<td>empty = the default text set</td>
+</tr>
+<tr>
+<td><code>max_file_kb</code></td>
+<td>2000</td>
+<td>per-file indexing cap</td>
+</tr>
+<tr>
+<td><code>exclude_globs</code></td>
+<td><code>[]</code></td>
+<td>skip patterns</td>
+</tr>
+<tr>
+<td><code>quiet_hours</code></td>
+<td>empty</td>
+<td>e.g. <code>"22:00-07:00"</code> — scheduled incognito</td>
+</tr>
+<tr>
+<td><code>retention_days</code></td>
+<td>0</td>
+<td>prune history/activity on boot (0 = keep)</td>
+</tr>
+<tr>
+<td><code>brief_hour</code></td>
+<td>-1</td>
+<td>daily brief hour (-1 = off)</td>
+</tr>
+<tr>
+<td><code>calendar_sync</code> / <code>calendar_names</code> / <code>calendar_days</code></td>
+<td>off / all / 14</td>
+<td>macOS Calendar seam</td>
+</tr>
+<tr>
+<td><code>contacts_sync</code></td>
+<td>off</td>
+<td>macOS Contacts seam</td>
+</tr>
+<tr>
+<td><code>reminders_sync</code> / <code>reminder_lists</code></td>
+<td>off / all</td>
+<td>macOS Reminders seam</td>
+</tr>
+</tbody>
+</table>
+<h2 id="modes-disambiguated">Modes, disambiguated</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Capture</th>
+<th>Cloud</th>
+<th>Interruptions</th>
+<th>Set by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Normal</td>
+<td>on</td>
+<td>per switch</td>
+<td>per toggles</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Focus</strong></td>
+<td>on</td>
+<td>per switch</td>
+<td>held (urgent watch-outs pierce)</td>
+<td>phone, voice</td>
+</tr>
+<tr>
+<td><strong>Incognito</strong></td>
+<td>paused</td>
+<td>forced off</td>
+<td>moot</td>
+<td>phone, panel, voice</td>
+</tr>
+<tr>
+<td><strong>Privacy Veil</strong></td>
+<td>off — deaf and blind</td>
+<td>no asks at all</td>
+<td>none</td>
+<td>long press on the glasses</td>
+</tr>
+<tr>
+<td><strong>Quiet hours</strong></td>
+<td>on</td>
+<td>forced off</td>
+<td>per toggles</td>
+<td>panel schedule</td>
+</tr>
+<tr>
+<td><strong>Dream Mode</strong></td>
+<td>dream sensors only</td>
+<td>—</td>
+<td>ambient only</td>
+<td>double tap</td>
+</tr>
+</tbody>
+</table>
+    </article>
+    <div class="pagenav"><a class="prev" href="../ai-brain.html"><span class="dir">Previous</span><span class="ttl">The AI Brain deep dive</span></a><a class="next" href="../reference/endpoints.html"><span class="dir">Next</span><span class="ttl">Brain HTTP API</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The glasses experience - DreamLayer</title>
+<meta name="description" content="The Halo display is a small round waveguide. DreamLayer's founding rendering decision — the Meridian thesis — is that this display is a place, not a stage: it is never blank, cards do not 'pop up,' and every pixel that moves carries information. This chapter walks the experience ">
+<meta property="og:title" content="The glasses experience - DreamLayer">
+<meta property="og:description" content="The Halo display is a small round waveguide. DreamLayer's founding rendering decision — the Meridian thesis — is that this display is a place, not a stage: it is never blank, cards do not 'pop up,' and every pixel that moves carries information. This chapter walks the experience ">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="index.html">DreamLayer</a>
+  <a class="page" href="architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page active" href="glasses-experience.html">The glasses experience</a>
+  <a class="page" href="hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="oracle.html">The Oracle</a>
+  <a class="page" href="perception-memory.html">Perception and memory</a>
+  <a class="page" href="truth.html">Truth and discernment</a>
+  <a class="page" href="attention-focus.html">Attention and focus</a>
+  <a class="page" href="lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="progression.html">Progression — the Saga</a>
+  <a class="page" href="privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="phone-app.html">The phone app</a>
+  <a class="page" href="brain-app.html">The desktop Brain app</a>
+  <a class="page" href="ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="reference/settings.html">Settings and modes</a>
+  <a class="page" href="reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="reference/cards.html">Card catalog</a>
+  <a class="page" href="reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="builders.html">For builders</a>
+  <a class="page" href="glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">The glasses</p>
+    <article>
+<h1 id="the-glasses-experience">The glasses experience</h1>
+<p>The Halo display is a small round waveguide. DreamLayer's founding rendering
+decision — the Meridian thesis — is that this display is <strong>a place, not a
+stage</strong>: it is never blank, cards do not "pop up," and every pixel that moves
+carries information. This chapter walks the experience end to end; the
+<a href="hud-cards.html">card gallery</a> and <a href="meridian.html">design language</a> chapters go
+deeper on each piece.</p>
+<h2 id="the-horizon--the-resting-state">The Horizon — the resting state</h2>
+<p>When nothing needs you, the glasses show the <strong>Horizon</strong>: a 72-segment ring
+that is your day, drawn as a track of light. Events, commitments, and echoes
+of the past sit at their angle of the day; a notch heartbeat breathes at now.
+The rim is not decoration — reading the ring <em>is</em> reading your calendar.</p>
+<table>
+<thead>
+<tr>
+<th>The day, idle</th>
+<th>The Veil down</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="Horizon idle" src="assets/device/horizon_idle_day.png" /></td>
+<td><img alt="Horizon paused" src="assets/device/horizon_idle_paused.png" /></td>
+</tr>
+</tbody>
+</table>
+<p><em>Both frames are rendered by the actual device Lua through the raster
+harness — these are the pixels the firmware produces.</em></p>
+<p>When you put the glasses on (or the host sends <code>wake</code>), the day assembles
+radially from the notch over 600 ms, and the idle <strong>aurora</strong> begins: a 12
+second luma wave that flows light along the day's track using the palette
+hardware, at zero additional draw cost.</p>
+<p><img alt="Wake reveal and the horizon aurora, stepped from the real device code" src="assets/motion/wake_and_aurora.gif" /></p>
+<p>Promises you have made live on the Horizon too, as an arc ladder; a broken one
+shatters — once, at the transition, never again on replay.</p>
+<table>
+<thead>
+<tr>
+<th>The promise ladder</th>
+<th>A shattered promise</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="Promise ladder" src="assets/device/promise_ladder.png" /></td>
+<td><img alt="Shattered" src="assets/device/promise_shattered.png" /></td>
+</tr>
+</tbody>
+</table>
+<p><img alt="The shatter moment" src="assets/motion/promise_shatter.gif" /></p>
+<h2 id="how-a-card-arrives--focus-physics">How a card arrives — focus physics</h2>
+<p>Cards do not appear; they <strong>condense</strong>. Each card type has a home angle on the
+Horizon (recall cards are stamped with an <code>origin_deg</code> derived from the
+memory's timestamp), and the card flies inward from that point on the rim: an
+anticipation pull-back past the rim, squash-and-stretch on the flight head
+(never on text), a phosphor tail cooling behind it, and a spring "click" on
+the landing ring. When dismissed, the card <strong>recedes</strong> home — the light files
+itself back into the day.</p>
+<p><img alt="Focus physics: condense, hold, recede — from the device code on a 50 ms clock" src="assets/motion/focus_physics.gif" /></p>
+<table>
+<thead>
+<tr>
+<th>Condensing</th>
+<th>Holding (confidence ring)</th>
+<th>Receding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="Condense" src="assets/device/focus_condense.png" /></td>
+<td><img alt="Hold" src="assets/device/focus_hold.png" /></td>
+<td><img alt="Recede" src="assets/device/focus_recede.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>The hold ring's color <em>is</em> the answer's confidence; a one-shot glint runs the
+confidence arc as it settles, and the settled frame is a static gauge — no
+idle spectacle.</p>
+<h2 id="priorities-and-the-queue">Priorities and the queue</h2>
+<p>The device state machine (<code>halo-lua/app/state_machine.lua</code>, queue in
+<code>main.lua</code>) classes every card:</p>
+<ul>
+<li><strong>URGENT</strong> — hark, privacy, errors: preempts what is showing.</li>
+<li><strong>CONTEXT</strong> — recalls, dossiers, fact-checks, captions: queued politely.</li>
+<li><strong>AMBIENT</strong> — palette shifts, dream weather: never interrupts.</li>
+</ul>
+<p>A crossfade between an outgoing and incoming card is bounded by the material
+rules (panes draw only at <code>exit_t == 0</code>), so the worst composited frame stays
+inside the measured draw budget of 420 calls.</p>
+<h2 id="input--buttons-and-head-gestures">Input — buttons and head gestures</h2>
+<p>The Halo has a button and an IMU. The state machine maps the button by
+context: from ready, <strong>single click</strong> opens listening (ask), <strong>long press</strong>
+slams the Privacy Veil; on a showing card, <strong>single or double click</strong>
+dismisses; from the veil, <strong>long press</strong> resumes. <strong>Double tap</strong> enters and
+leaves Dream Mode.</p>
+<p>The IMU gesture classifier (<code>halo-lua/app/imu_gesture.lua</code>) recognizes five
+head gestures from accelerometer peaks, each with a confidence and a shared
+900 ms cooldown:</p>
+<table>
+<thead>
+<tr>
+<th>Gesture</th>
+<th>Motion</th>
+<th>Confidence</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NOD_SAVE</code></td>
+<td>one down-up nod</td>
+<td>0.90</td>
+<td>save this moment</td>
+</tr>
+<tr>
+<td><code>DOUBLE_NOD</code></td>
+<td>two nods</td>
+<td>0.92</td>
+<td>strong confirm</td>
+</tr>
+<tr>
+<td><code>SHAKE_DISMISS</code></td>
+<td>three alternating shakes</td>
+<td>0.88</td>
+<td>dismiss / no</td>
+</tr>
+<tr>
+<td><code>GLANCE_PEEK</code></td>
+<td>quick upward glance (under 350 ms)</td>
+<td>0.82</td>
+<td>peek</td>
+</tr>
+<tr>
+<td><code>TILT_REVEAL</code></td>
+<td>held tilt (over 400 ms)</td>
+<td>0.85</td>
+<td>reveal more</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Seam:</strong> on real hardware these classify live <code>frame.imu_data()</code>; in the
+repo they are exercised by tests feeding synthetic accelerometer traces.</p>
+<h2 id="sound-and-touch">Sound and touch</h2>
+<p>Every significant moment has a matched earcon and haptic, chosen host-side and
+carried on the card payload: the wake chirp when Oracle starts listening, the
+"Listen!" and "Watch out!" hark tones, the look cue when a dossier surfaces,
+the neutral chime on a verified claim. Answer-ahead is deliberately silent —
+its whole point is not to interrupt. The full map, including the audio files
+that ship in the phone app, is in <a href="reference/earcons.html">Earcons and haptics</a>.
+<strong>Seam:</strong> the speaker/actuator that plays them; the device Lua draws matching
+visual "acoustics" (chime ring, chord arpeggio, pre-slam rumble) today.</p>
+<h2 id="dream-mode">Dream Mode</h2>
+<p>Double-tap and the display steps through a door: a starfield streaks outward,
+and the glasses stop being an assistant and become an instrument. Dream Mode
+renders through its own path (<code>halo-lua/display/dream_renderer.lua</code>): the
+Ghost Layer surfaces <strong>WorldAnchorCards</strong> — pale "MEMORY ECHO" text pinned to
+places, drawn at 20 percent opacity with a per-character Perlin ghost-wake —
+and <strong>Synesthesia</strong> turns what the camera and microphone sense into a
+six-word poetic phrase with a gestural three-shape sprite. Inner Weather tints
+the whole sky with your own climate. Double-tap again and the starfield pulls
+you home. See <a href="lenses.html#dream-mode-and-the-night">the wider lens set</a> for the
+full Dream, REM, and Yesterlight story.</p>
+<h2 id="what-the-glasses-never-do">What the glasses never do</h2>
+<p>The firmware contains no audio recording path, no face database, and no
+network stack of its own — it can only reach the world through the paired
+phone. Text never moves or distorts (a standing Meridian rule), privacy-class
+cards render with no translucent pane and enter with a hard slam rather than a
+pretty fade, and when the Privacy Veil lands, parallax freezes to zero on that
+exact frame: nothing about the veil is allowed to feel ambient.</p>
+    </article>
+    <div class="pagenav"><a class="prev" href="architecture.html"><span class="dir">Previous</span><span class="ttl">Ecosystem architecture</span></a><a class="next" href="hud-cards.html"><span class="dir">Next</span><span class="ttl">HUD cards — the full gallery</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

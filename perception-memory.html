@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perception and memory - DreamLayer</title>
+<meta name="description" content="This chapter covers the ambient loop: what DreamLayer hears and sees, what it keeps, and every path by which a memory comes back — asked for or unasked. All of it runs behind the Privacy Veil gate, and everything here works without the cloud.">
+<meta property="og:title" content="Perception and memory - DreamLayer">
+<meta property="og:description" content="This chapter covers the ambient loop: what DreamLayer hears and sees, what it keeps, and every path by which a memory comes back — asked for or unasked. All of it runs behind the Privacy Veil gate, and everything here works without the cloud.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="index.html">DreamLayer</a>
+  <a class="page" href="architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="glasses-experience.html">The glasses experience</a>
+  <a class="page" href="hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="oracle.html">The Oracle</a>
+  <a class="page active" href="perception-memory.html">Perception and memory</a>
+  <a class="page" href="truth.html">Truth and discernment</a>
+  <a class="page" href="attention-focus.html">Attention and focus</a>
+  <a class="page" href="lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="progression.html">Progression — the Saga</a>
+  <a class="page" href="privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="phone-app.html">The phone app</a>
+  <a class="page" href="brain-app.html">The desktop Brain app</a>
+  <a class="page" href="ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="reference/settings.html">Settings and modes</a>
+  <a class="page" href="reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="reference/cards.html">Card catalog</a>
+  <a class="page" href="reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="builders.html">For builders</a>
+  <a class="page" href="glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">The mind</p>
+    <article>
+<h1 id="perception-and-memory">Perception and memory</h1>
+<p>This chapter covers the ambient loop: what DreamLayer hears and sees, what it
+keeps, and every path by which a memory comes back — asked for or unasked.
+All of it runs behind the Privacy Veil gate, and everything here works
+without the cloud.</p>
+<h2 id="live-captions-and-the-conversation-ledger">Live captions and the conversation ledger</h2>
+<p>Every transcribed line flows through <code>ingest_caption(text, speaker)</code> into the
+<strong>ConversationLedger</strong> (<code>orchestrator/conversation.py</code>) — a bounded ledger of
+2,000 utterances with speaker and timestamp. While captions are on, each line
+also flashes at the rim as a <strong>SpokenCaptionCard</strong>; <code>set_captions(False)</code>
+hides the display but keeps the ledger. Focus mode hides captions the same
+way. The Veil stops both.</p>
+<p><img alt="Live captions" src="assets/demo/catalog/features/captions/preview.gif" /></p>
+<p><strong>Seam:</strong> the microphone and on-device ASR that produce the text, plus
+optional speaker diarization for the <code>speaker</code> label.</p>
+<p>One ledger, four products:</p>
+<ul>
+<li><strong>Recall</strong> — <code>recall_conversation(topic, person=None)</code> answers "what did
+  they say about X". User-initiated, so it is <em>not</em> veil-gated: you can
+  always ask about what was already lawfully kept.</li>
+<li><strong>Rewind</strong> — <code>rewind_day()</code> groups today into hour blocks with people and
+  sample lines.</li>
+<li><strong>Dossier</strong> — <code>greet(person)</code> surfaces a <strong>PersonDossierCard</strong>: last seen,
+  recurring topics between you, their most recent line. Veil-gated
+  (proactive), earcon <code>look</code>.</li>
+<li><strong>Learning</strong> — your own lines feed the <a href="oracle.html#how-it-learns-you--the-user-model">user model</a>
+  and the commitment parser; other speakers only increment "who you talk
+  with".</li>
+</ul>
+<h2 id="spoken-commitments">Spoken commitments</h2>
+<p>Your own lines run through <code>parse_commitment</code>: a first-person promise cue
+("I'll...", "I will...", "I promise to...", "let me...") plus an optional due
+phrase (by Friday, tomorrow, tonight, end of day...). "I'll send you the
+lease by Friday" becomes a tracked commitment attributed to whoever you are
+talking to, confirmed with a <strong>CommitmentRecallCard</strong>, and from there feeds
+the dossier, anticipation, attention ("you owe Marcus..."), commitment
+drift, and the quest engine.</p>
+<p><img alt="A promise, captured and returned" src="assets/demo/catalog/features/commitment/preview.gif" /></p>
+<h2 id="look-at-someone--the-social-lens">Look at someone — the Social Lens</h2>
+<p><code>look_at_person(frame)</code> matches a face against <strong>your own contacts only</strong> —
+an on-device index of people you were introduced to and chose to keep. On a
+match it shows the identity card, and if the ledger knows them, follows with
+the conversation dossier.</p>
+<p><img alt="Look — who is this" src="assets/demo/catalog/features/dossier/preview.gif" /></p>
+<p>The invariants are architectural, not policy:</p>
+<ul>
+<li><strong>No stranger lookup.</strong> There is no public database and no cloud face
+  search anywhere in the codebase. The index contains only contacts you
+  enrolled.</li>
+<li><strong>Consent-first name capture.</strong> A name is offered only from a closed,
+  offline grammar of self-introductions — explicit forms ("my name is...",
+  "call me...") taken as given, soft forms ("I'm Maya") only when the next
+  token is capitalized. The offer expires after 12 seconds; <strong>nothing is
+  saved until a deliberate confirm</strong>; the Veil closes the ear entirely.</li>
+<li>Contacts sync from the Brain can enroll faces via
+  <code>load_contact_faces(contacts, face_embed_fn)</code>.</li>
+</ul>
+<p><strong>Seam:</strong> the camera frame and the 512-dimension face-embedding model
+(MobileFaceNet-class, on the NPU).</p>
+<h2 id="ask-and-receive--object-and-commitment-recall">Ask and receive — object and commitment recall</h2>
+<p><code>ask(query)</code> classifies the question and answers from memory: object recall
+("where did I leave my keys?") renders the spatial <strong>ObjectRecallCard</strong>;
+commitment recall ("what does Marcus owe me?") renders the chain. Every
+recall card is stamped with an <code>origin_deg</code> — the angle of the day the
+memory came from — so it condenses from the <em>time it happened</em> on the
+Horizon. Below threshold, DreamLayer says "Not sure" rather than guessing.</p>
+<p><img alt="Where you left it" src="assets/demo/catalog/features/object/preview.gif" /></p>
+<p>Scenes are kept through <code>ingest_scene</code> (object, place, time; embedded and
+stored in the vault), conversations through <code>ingest_conversation</code>; both
+confirm with the SavedMemoryCard. A passive ring buffer (<code>SilentCapture</code> +
+<code>PassiveEventInjector</code>) holds the ambient stream so that a <em>later</em> question
+can still reach a moment you never explicitly saved. <strong>Seam:</strong> the camera and
+microphone frames that feed it.</p>
+<h2 id="anticipation--the-proactive-cards">Anticipation — the proactive cards</h2>
+<p><code>anticipate_tick(Context)</code> ties place, time, and person into ranked, deduped,
+veil-gated cues (<code>orchestrator/anticipation.py</code>). Three cue kinds, each
+individually mutable from the phone (<code>set_cue</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Trigger</th>
+<th>Card</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>event</code></td>
+<td>an agenda event within 15 minutes</td>
+<td>UpcomingCard "leave in 8 min"</td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>person</code></td>
+<td>someone you know in view</td>
+<td>PersonContextCard (with the owed task as the why-line)</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>place</code></td>
+<td>arriving where an anchor lives</td>
+<td>HereCard "your bike is here"</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p>A 300-second per-key cooldown stops repeats; Focus holds all of it; the Veil
+stops it entirely. Arriving somewhere that holds a memory also fires
+<code>on_place</code> and the <strong>ProactiveMemoryCard</strong>:</p>
+<p><img alt="It remembers for you" src="assets/demo/catalog/features/proactive/preview.gif" /></p>
+<h2 id="message-pop-ups">Message pop-ups</h2>
+<p><code>poll_messages_once(http_get)</code> / <code>start_message_polling(interval=8.0)</code> fetch
+the Brain's Messages and Mail feed and flash genuinely new incoming items —
+idempotent by timestamp, per-channel toggles for texts and emails, long
+emails pre-summarized by the Brain when that switch is on. Veil- and
+focus-gated. <strong>Seams:</strong> the macOS readers behind the feed, and <code>http_get</code>
+itself (default urllib; swap per platform).</p>
+<h2 id="rewind--scrubbing-the-day">Rewind — scrubbing the day</h2>
+<p>Two synchronized views of the same day:</p>
+<ul>
+<li><strong>On glass:</strong> <code>rewind_scrub()</code> loads today into the time-scrub engine and
+  shows the newest node; <code>scrub("back"|"forward")</code> walks moment by moment,
+  each rendered as a <strong>TimeScrubNodeCard</strong>. <strong>Seam:</strong> the twist or tap
+  gesture driving the scrub.</li>
+<li><strong>On the phone:</strong> the Rewind screen lists the same hour blocks from
+  <code>GET /dreamlayer/rewind</code> — activity, messages, and events merged.</li>
+</ul>
+<p><img alt="Rewind your day" src="assets/demo/catalog/features/rewind/preview.gif" /></p>
+<h2 id="the-morning-brief">The morning brief</h2>
+<p>The Brain composes the brief — upcoming events, missed messages, open
+commitments, rewritten into two warm sentences when a model is available —
+on a schedule you set (the panel's "Morning brief" hour). The moment the Halo
+goes on, <code>orchestrator.wake()</code> fetches the latest brief
+(<code>GET /dreamlayer/brief/latest</code>) and shows it as a <strong>MorningBriefCard</strong>.
+Silent when there is no brief or no paired Brain; veil-gated. The phone's Now
+tab polls the same endpoint and pushes a local notification when a new brief
+lands. <strong>Seam:</strong> the glasses' wear/wake signal.</p>
+<p><img alt="Wake to your day" src="assets/demo/catalog/features/wake/preview.gif" /></p>
+<h2 id="keeping-and-forgetting">Keeping and forgetting</h2>
+<p>Saving is celebrated once (SavedMemoryCard, the system's only particle
+burst); forgetting is instant and confirmed (<strong>ForgetLastCard</strong>). Deeper
+retention — what consolidates overnight, what fades — belongs to REM and the
+memory vault, covered in <a href="lenses.html">the wider lens set</a>.</p>
+<p><img alt="Keep a moment" src="assets/demo/catalog/features/saved/preview.gif" /></p>
+    </article>
+    <div class="pagenav"><a class="prev" href="oracle.html"><span class="dir">Previous</span><span class="ttl">The Oracle</span></a><a class="next" href="truth.html"><span class="dir">Next</span><span class="ttl">Truth and discernment</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>

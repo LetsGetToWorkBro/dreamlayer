@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain HTTP API - DreamLayer</title>
+<meta name="description" content="Base URL: http://<mac>:7777. Every /dreamlayer/ call requires the pairing token header X-DreamLayer-Token (the panel injects it automatically when opened on the machine itself). Endpoints marked local additionally refuse any off-box client (403) because they expose secrets, the f">
+<meta property="og:title" content="Brain HTTP API - DreamLayer">
+<meta property="og:description" content="Base URL: http://<mac>:7777. Every /dreamlayer/ call requires the pairing token header X-DreamLayer-Token (the panel injects it automatically when opened on the machine itself). Endpoints marked local additionally refuse any off-box client (403) because they expose secrets, the f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232cc79a' stroke-width='2.6' stroke-dasharray='56 20' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='4' r='3' fill='%232cc79a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #04080a;
+  --surface: #0b1214;
+  --surface-2: #0e1618;
+  --border: #1c2a2e;
+  --border-soft: #141f22;
+  --ink: #ecf0f1;
+  --ink-2: #a8b8c0;
+  --ink-3: #6d7f87;
+  --teal: #2cc79a;
+  --teal-bright: #43e6b8;
+  --teal-dim: #1a7a60;
+  --attention: #e06b52;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --sidebar-w: 288px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink-2);
+  font: 16px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 18% -8%, rgba(44,199,154,.10), transparent 60%),
+    radial-gradient(720px 380px at 92% 0%, rgba(224,107,82,.05), transparent 60%);
+}
+
+/* ------------------------------------------------------------- sidebar */
+#nav-toggle { display: none; }
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8,13,15,.92); backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 18px 40px;
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 4px 8px 16px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+}
+.brand svg { flex: none; }
+.brand .name {
+  color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: .2px;
+}
+.brand .tag {
+  display: block; color: var(--ink-3); font-size: 11px; font-weight: 400;
+  letter-spacing: .3px; margin-top: 1px;
+}
+.nav-section {
+  margin: 20px 8px 6px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--teal);
+  opacity: .85;
+}
+.sidebar a.page {
+  display: block; padding: 6px 10px; margin: 1px 0;
+  color: var(--ink-2); text-decoration: none; font-size: 13.5px;
+  border-radius: 8px; border-left: 2px solid transparent;
+}
+.sidebar a.page:hover { color: var(--ink); background: rgba(44,199,154,.06); }
+.sidebar a.page.active {
+  color: var(--teal-bright); background: rgba(44,199,154,.09);
+  border-left-color: var(--teal);
+}
+.sidebar .repo {
+  margin: 26px 8px 0; font-size: 12.5px;
+}
+.sidebar .repo a { color: var(--ink-3); text-decoration: none; }
+.sidebar .repo a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- topbar */
+.topbar {
+  display: none; position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  background: rgba(4,8,10,.9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft); padding: 12px 16px;
+}
+.topbar label {
+  display: inline-flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 6px;
+}
+.topbar label span {
+  display: block; width: 20px; height: 2px; background: var(--ink-2);
+  border-radius: 2px;
+}
+.topbar .t-name { color: var(--ink); font-weight: 700; font-size: 15px; }
+
+/* ------------------------------------------------------------- content */
+.main { position: relative; z-index: 1; margin-left: var(--sidebar-w); }
+.page-wrap { max-width: 828px; margin: 0 auto; padding: 52px 40px 40px; }
+.crumb {
+  font-size: 11px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+}
+article h1 {
+  color: var(--ink); font-size: 37px; line-height: 1.15; letter-spacing: -.5px;
+  margin: 0 0 18px; font-weight: 750;
+}
+article h2 {
+  color: var(--ink); font-size: 23px; letter-spacing: -.2px;
+  margin: 44px 0 12px; padding-top: 18px;
+  border-top: 1px solid var(--border-soft); font-weight: 700;
+}
+article h3 { color: var(--ink); font-size: 17.5px; margin: 30px 0 8px; font-weight: 650; }
+article h4 { color: var(--ink); font-size: 15px; margin: 24px 0 6px; }
+article p { margin: 0 0 14px; }
+article a { color: var(--teal); text-decoration: none; border-bottom: 1px solid rgba(44,199,154,.3); }
+article a:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+article strong { color: var(--ink); font-weight: 650; }
+article ul, article ol { padding-left: 26px; margin: 0 0 14px; }
+article li { margin: 5px 0; }
+article li::marker { color: var(--teal-dim); }
+article hr { border: none; border-top: 1px solid var(--border-soft); margin: 32px 0; }
+article blockquote {
+  margin: 20px 0; padding: 14px 20px;
+  border-left: 3px solid var(--teal);
+  background: linear-gradient(90deg, rgba(44,199,154,.07), transparent 70%);
+  border-radius: 0 10px 10px 0; color: var(--ink);
+}
+article blockquote p { margin: 6px 0; }
+article code {
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1.5px 6px; color: #9fe8cf;
+}
+article pre {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+  margin: 18px 0; line-height: 1.55;
+}
+article pre code { background: none; border: none; padding: 0; color: #c9dbd4; font-size: 13px; }
+
+article img {
+  max-width: 100%; height: auto; border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #000; display: block; margin: 6px auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(44,199,154,.04);
+}
+article p > img:only-child { margin: 20px auto; }
+article p:has(> img:only-child) + p > em:only-child,
+article img + em { color: var(--ink-3); font-size: 13px; }
+
+article table {
+  width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;
+  display: block; overflow-x: auto;
+}
+article th {
+  text-align: left; color: var(--teal); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border); padding: 8px 14px 8px 0;
+  white-space: nowrap;
+}
+article td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 9px 14px 9px 0; vertical-align: top;
+}
+article td img { margin: 4px 0; min-width: 130px; }
+article tr:last-child td { border-bottom: none; }
+
+/* ------------------------------------------------------------- footer nav */
+.pagenav {
+  display: flex; gap: 14px; margin-top: 56px;
+  border-top: 1px solid var(--border-soft); padding-top: 22px;
+}
+.pagenav a {
+  flex: 1; display: block; padding: 14px 18px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; transition: border-color .15s ease;
+}
+.pagenav a:hover { border-color: var(--teal-dim); }
+.pagenav .dir { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pagenav .ttl { color: var(--ink); font-weight: 600; font-size: 14.5px; margin-top: 3px; }
+.pagenav a.next { text-align: right; }
+.foot {
+  margin: 44px 0 0; color: var(--ink-3); font-size: 12.5px;
+  border-top: 1px solid transparent; padding-top: 8px;
+}
+.foot a { color: var(--ink-3); }
+.foot a:hover { color: var(--teal); }
+
+/* ------------------------------------------------------------- mobile */
+@media (max-width: 980px) {
+  .topbar { display: flex; }
+  .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+  #nav-toggle:checked ~ .sidebar { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .page-wrap { padding: 30px 20px 28px; }
+  article h1 { font-size: 29px; }
+  .pagenav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle">
+<nav class="sidebar">
+  <a class="brand" href="../index.html"><svg width='30' height='30' viewBox='0 0 32 32' aria-hidden='true'><circle cx='16' cy='16' r='12' fill='none' stroke='#2cc79a' stroke-width='2.4' stroke-dasharray='56 20' stroke-linecap='round'/><circle cx='16' cy='4' r='3' fill='#43e6b8'/></svg>
+    <span><span class="name">DreamLayer</span>
+    <span class="tag">A memory layer for the real world</span></span></a>
+  <a class="page" href="../index.html">DreamLayer</a>
+  <a class="page" href="../architecture.html">Ecosystem architecture</a>
+  <div class="nav-section">The glasses</div>
+  <a class="page" href="../glasses-experience.html">The glasses experience</a>
+  <a class="page" href="../hud-cards.html">HUD cards — the full gallery</a>
+  <a class="page" href="../meridian.html">Meridian — the design language</a>
+  <div class="nav-section">The mind</div>
+  <a class="page" href="../oracle.html">The Oracle</a>
+  <a class="page" href="../perception-memory.html">Perception and memory</a>
+  <a class="page" href="../truth.html">Truth and discernment</a>
+  <a class="page" href="../attention-focus.html">Attention and focus</a>
+  <a class="page" href="../lenses.html">The six lenses and the wider set</a>
+  <a class="page" href="../progression.html">Progression — the Saga</a>
+  <a class="page" href="../privacy.html">Privacy and control</a>
+  <div class="nav-section">The apps</div>
+  <a class="page" href="../phone-app.html">The phone app</a>
+  <a class="page" href="../brain-app.html">The desktop Brain app</a>
+  <a class="page" href="../ai-brain.html">The AI Brain deep dive</a>
+  <div class="nav-section">Reference</div>
+  <a class="page" href="../reference/settings.html">Settings and modes</a>
+  <a class="page active" href="../reference/endpoints.html">Brain HTTP API</a>
+  <a class="page" href="../reference/cards.html">Card catalog</a>
+  <a class="page" href="../reference/earcons.html">Earcons and haptics</a>
+  <div class="nav-section">Appendix</div>
+  <a class="page" href="../hardware-seams.html">Hardware and seams</a>
+  <a class="page" href="../builders.html">For builders</a>
+  <a class="page" href="../glossary.html">Glossary</a>
+  <div class="repo"><a href="https://github.com/LetsGetToWorkBro/dreamlayer">Source on GitHub</a></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <label for="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></label>
+    <span class="t-name">DreamLayer</span>
+  </div>
+  <div class="page-wrap">
+    <p class="crumb">Reference</p>
+    <article>
+<h1 id="reference--the-brain-http-api">Reference — the Brain HTTP API</h1>
+<p>Base URL: <code>http://&lt;mac&gt;:7777</code>. Every <code>/dreamlayer/*</code> call requires the
+pairing token header <strong><code>X-DreamLayer-Token</code></strong> (the panel injects it
+automatically when opened on the machine itself). Endpoints marked
+<strong>local</strong> additionally refuse any off-box client (403) because they expose
+secrets, the filesystem, or outbound action. Any token-bearing off-box
+request also stamps the "phone last seen" heartbeat.</p>
+<p>Source: <code>host-python/src/dreamlayer/ai_brain/server/server.py</code>. This table
+is the complete surface — including three endpoints
+(<code>/dreamlayer/voice</code>, the profile pair, <code>/dreamlayer/brief/latest</code>) that
+exist in code beyond the summary tables in <code>docs/INTEGRATION.md</code>.</p>
+<h2 id="read-get">Read (GET)</h2>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>none</td>
+<td>the control panel (HTML; token injected only on localhost)</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/status</code></td>
+<td>token</td>
+<td>live state: model, cloud, cloud_ready, cloud_calls, incognito, quiet, phone_ago, index_ago, missing folders, index stats</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/config</code></td>
+<td>token</td>
+<td>full config (token and cloud key masked) plus index stats</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/health</code></td>
+<td>token</td>
+<td>version, index disk size, Ollama latency, uptime</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/history</code></td>
+<td>token</td>
+<td>unified activity feed (asks plus folder / upload / cloud / pair events)</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/messages/recent</code></td>
+<td>token</td>
+<td>recent Messages + Mail <code>{items, enabled, summarize_emails}</code> — <strong>seam:</strong> macOS readers</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/calendar</code></td>
+<td>token</td>
+<td>upcoming agenda <code>{items}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/calendars</code></td>
+<td>token</td>
+<td>macOS calendars + sync settings <code>{items, sync, selected, last_sync}</code> — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/contacts</code></td>
+<td>token</td>
+<td>Contacts sync state <code>{sync, last_sync, count}</code> — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/reminders</code></td>
+<td>token</td>
+<td>open reminders + lists + sync state — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/people</code></td>
+<td>token</td>
+<td>the dossier registry <code>{items: [{name, note, tags, ts}]}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/rewind</code></td>
+<td>token</td>
+<td>today in hour blocks <code>{blocks, count}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/saga</code></td>
+<td>token</td>
+<td>the progression profile: rank, level, XP, every achievement</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/profile</code></td>
+<td>token</td>
+<td>the mirrored Oracle user-model profile</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/brief/latest</code></td>
+<td>token</td>
+<td>the scheduler's most recent morning brief (or <code>{}</code>)</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/model/status</code></td>
+<td>token</td>
+<td>Ollama reachability + which configured models are pulled</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/browse?path=</code></td>
+<td><strong>local</strong></td>
+<td>subfolders of a directory (the panel's folder picker)</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/token</code></td>
+<td><strong>local</strong></td>
+<td>the current pairing token</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/pair</code></td>
+<td><strong>local</strong></td>
+<td>a <code>dreamlayer:</code> pairing code (LAN URL + token) with QR SVG</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/backup</code></td>
+<td><strong>local</strong></td>
+<td>full restorable snapshot (config incl. secrets, history, activity, agenda)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="write-post-json">Write (POST, JSON)</h2>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Body → effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/dreamlayer/brain/ask</code></td>
+<td>token</td>
+<td><code>{query}</code> → <code>Answer {text, tier, sources, confidence}</code>; logged; may cross to cloud under the gate</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/brain/explain</code></td>
+<td>token</td>
+<td><code>{label, image?, want?}</code> → object <code>Answer</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/voice</code></td>
+<td>token</td>
+<td><code>{text}</code> → intent routing: ask/recall answered inline, brief inlined, others returned as <code>{intent, ...args}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/brief</code></td>
+<td>token</td>
+<td><code>{agenda?, since?}</code> → <code>{text, bullets, missed}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/replies</code></td>
+<td>token</td>
+<td><code>{text}</code> → <code>{replies: [three short replies]}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/folders</code></td>
+<td>token</td>
+<td><code>{action: add\|remove, path}</code> → save + reindex</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/config</code></td>
+<td>token</td>
+<td>partial config patch (whitelisted keys) → apply + reindex</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/upload?folder=&amp;name=</code></td>
+<td>token</td>
+<td>raw body → written into a <em>watched</em> folder only, then reindex</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/calendar</code></td>
+<td>token</td>
+<td><code>{title, ts, place}</code> adds; <code>{remove: true, title, ts}</code> removes → <code>{items}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/calendar/sync</code></td>
+<td>token</td>
+<td><code>{}</code> → pull Calendar.app now <code>{items, synced}</code> — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/contacts/sync</code></td>
+<td>token</td>
+<td><code>{}</code> → pull Contacts.app <code>{items, synced}</code> — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/reminders/sync</code></td>
+<td>token</td>
+<td><code>{}</code> → pull Reminders.app <code>{items, synced}</code> — <strong>seam</strong></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/people</code></td>
+<td>token</td>
+<td><code>{name, note?, tags?}</code> upsert; <code>{remove: true, name}</code> → <code>{items}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/saga/record</code></td>
+<td>token</td>
+<td><code>{event}</code> → <code>{unlocked, saga}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/profile</code></td>
+<td>token</td>
+<td>hub pushes the user-model snapshot; Brain mirrors, never authors</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/reindex</code></td>
+<td>token</td>
+<td><code>{}</code> → rebuild now <code>{stats, missing}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/message/draft</code></td>
+<td>token</td>
+<td><code>{channel, to, subject?, text}</code> → <code>{script}</code> — preview only, nothing sent</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/message/send</code></td>
+<td><strong>local</strong></td>
+<td>same + <code>approved: true</code> → osascript send — <strong>seam</strong>; refused without approval</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/model/pull</code></td>
+<td><strong>local</strong></td>
+<td><code>{model}</code> → blocking <code>ollama pull</code> <code>{ok, status, model}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/cloud/test</code></td>
+<td><strong>local</strong></td>
+<td><code>{}</code> → <code>{ok, reply\|error}</code> provider round trip</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/token/rotate</code></td>
+<td><strong>local</strong></td>
+<td><code>{}</code> → new token; every paired device must re-pair</td>
+</tr>
+<tr>
+<td><code>/dreamlayer/clear</code></td>
+<td><strong>local</strong></td>
+<td><code>{what: history\|activity\|folders\|all}</code></td>
+</tr>
+<tr>
+<td><code>/dreamlayer/restore</code></td>
+<td><strong>local</strong></td>
+<td>a backup snapshot → config, logs, agenda written back</td>
+</tr>
+</tbody>
+</table>
+<h2 id="conventions">Conventions</h2>
+<ul>
+<li><strong>Answers:</strong> <code>{text, tier, sources, confidence}</code>; an empty answer is
+  <code>{"", "", [], 0.0}</code>.</li>
+<li><strong>Egress:</strong> any cloud-tier answer increments <code>cloud_calls</code> and logs a
+  <code>cloud-egress</code> activity entry — there is no other egress point.</li>
+<li><strong>Pairing code:</strong> <code>dreamlayer:</code> + base64url JSON
+  <code>{brain_url, token, glasses_id?, label?, relay_url?}</code>; <code>brain_url</code> is the
+  LAN address, never loopback.</li>
+<li>The <strong>laptop companion</strong> (a different, minimal agent) serves exactly one
+  route on its own port: <code>GET /dreamlayer/context</code> → recent file names,
+  hostname, battery; token required to serve beyond localhost.</li>
+</ul>
+    </article>
+    <div class="pagenav"><a class="prev" href="../reference/settings.html"><span class="dir">Previous</span><span class="ttl">Settings and modes</span></a><a class="next" href="../reference/cards.html"><span class="dir">Next</span><span class="ttl">Card catalog</span></a></div>
+    <p class="foot">DreamLayer knowledge base. Every image is rendered by the
+    product's own pipeline. <a href="https://github.com/LetsGetToWorkBro/dreamlayer">Repository</a> ·
+    <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/docs/gitbook">Markdown source</a></p>
+  </div>
+</div>
+</body>
+</html>
