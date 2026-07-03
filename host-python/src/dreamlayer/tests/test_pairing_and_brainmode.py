@@ -43,6 +43,12 @@ class TestPairingCode:
         assert back.brain_url == b.brain_url and back.token == b.token
         assert back.glasses_id == "HALO-9F2A"
 
+    def test_relay_url_round_trips(self):
+        b = PairingBundle(brain_url="http://mbp.local:7777", token="t",
+                          relay_url="https://relay.dreamlayer.vision/abc")
+        back = decode_pairing(encode_pairing(b))
+        assert back.relay_url == "https://relay.dreamlayer.vision/abc"
+
     def test_decode_tolerates_bare_base64(self):
         code = encode_pairing(PairingBundle(brain_url="http://x", token="t"))
         bare = code.split(":", 1)[1]

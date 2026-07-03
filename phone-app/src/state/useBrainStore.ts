@@ -17,7 +17,7 @@ import { decodePairing } from "../services/pairing";
 
 export type BrainKind = "phone" | "mac_mini";
 
-export type MacMini = { connected: boolean; url: string; token: string };
+export type MacMini = { connected: boolean; url: string; token: string; relayUrl?: string };
 export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
 export type BrainMessage = {
@@ -92,6 +92,22 @@ function headers(m: MacMini): Record<string, string> {
   return h;
 }
 
+/**
+ * Reach the Brain, preferring your home LAN and falling back to the relay
+ * (reach-anywhere) when the LAN address can't be reached — so recall and
+ * messages keep working when you're out. The relay *server* is infra you host;
+ * this is the client that uses it.
+ */
+async function brainFetch(m: MacMini, path: string, opts: RequestInit = {}): Promise<Response> {
+  const o: RequestInit = { ...opts, headers: { ...headers(m), ...(opts.headers as object) } };
+  try {
+    return await fetch(m.url + path, o);
+  } catch (e) {
+    if (m.relayUrl) return await fetch(m.relayUrl + path, o);
+    throw e;
+  }
+}
+
 // best-effort push of the current switches to the paired Brain
 function syncToBrain(s: BrainState) {
   const m = s.macMini;
@@ -107,7 +123,7 @@ function syncToBrain(s: BrainState) {
 }
 
 export const useBrainStore = create<BrainState>((set, get) => ({
-  macMini: { connected: false, url: "", token: "" },
+  macMini: { connected: false, url: "", token: "", relayUrl: "" },
   glasses: { connected: false, id: "" },
   cloud: true,
   incognito: false,
@@ -184,7 +200,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   pairFromCode: (code) => {
     const b = decodePairing(code);
     if (b.brainUrl) {
-      set({ macMini: { connected: true, url: b.brainUrl, token: b.token } });
+      set({ macMini: { connected: true, url: b.brainUrl, token: b.token, relayUrl: b.relayUrl } });
     }
     if (b.glassesId) {
       set({ glasses: { connected: true, id: b.glassesId } });
@@ -205,15 +221,14 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       };
     }
     try {
-      const r = await fetch(m.url + "/dreamlayer/brain/ask", {
+      const r = await brainFetch(m, "/dreamlayer/brain/ask", {
         method: "POST",
-        headers: headers(m),
         body: JSON.stringify({ query }),
       });
       const j = await r.json();
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
     } catch {
-      return { text: "Couldn't reach your Brain. Is the Mac mini awake and on the same network?", tier: "", sources: [] };
+      return { text: "Couldn't reach your Brain. Is the Mac mini awake and reachable (LAN or relay)?", tier: "", sources: [] };
     }
   },
 
@@ -237,7 +252,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     const m = get().macMini;
     if (!m.connected || !m.url) return { items: [], enabled: false };
     try {
-      const r = await fetch(m.url + "/dreamlayer/messages/recent", { headers: headers(m) });
+      const r = await brainFetch(m, "/dreamlayer/messages/recent");
       const j = await r.json();
       return { items: j.items ?? [], enabled: !!j.enabled };
     } catch {

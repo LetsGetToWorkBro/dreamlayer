@@ -31,6 +31,7 @@ class PairingBundle:
     token: str = ""
     glasses_id: str = ""       # BLE identifier of the glasses (optional)
     label: str = "DreamLayer"
+    relay_url: str = ""        # reach the Brain off your LAN (optional)
 
 
 def encode_pairing(bundle: PairingBundle) -> str:
@@ -48,7 +49,8 @@ def decode_pairing(code: str) -> PairingBundle:
     return PairingBundle(
         brain_url=data.get("brain_url", ""), token=data.get("token", ""),
         glasses_id=data.get("glasses_id", ""),
-        label=data.get("label", "DreamLayer"))
+        label=data.get("label", "DreamLayer"),
+        relay_url=data.get("relay_url", ""))
 
 
 def connect_all(orchestrator, bundle: PairingBundle,

@@ -214,6 +214,18 @@ class TestControls:
         # 'since' powers what-did-I-miss: nothing after ts 7 → clear
         assert brain.brief(since=99)["missed"] == {"texts": 0, "emails": 0}
 
+    def test_calendar_feeds_brief(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        (cfg / "agenda.json").write_text(json.dumps([
+            {"title": "Standup", "ts": time.time() + 600, "place": "Zoom"},
+            {"title": "Dentist", "ts": time.time() - 99999},          # past → dropped
+        ]))
+        brain = Brain(cfg)
+        cal = brain.calendar()
+        assert [e["title"] for e in cal] == ["Standup"]               # only upcoming
+        assert any("Standup" in b for b in brain.brief()["bullets"])   # leads the brief
+
     def test_message_draft_previews_without_sending(self, tmp_path):
         lb = Live(tmp_path)
         try:

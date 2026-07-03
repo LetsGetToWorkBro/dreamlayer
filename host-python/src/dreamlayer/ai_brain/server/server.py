@@ -213,6 +213,27 @@ class Brain:
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
+    def calendar(self, limit: int = 10) -> list:
+        """Upcoming events for the glasses + the brief. Reads
+        <cfg>/agenda.json (a list of {title, ts, place}); a native EventKit
+        reader is the device seam that can also populate it. [] when empty."""
+        events = []
+        p = self.cfg_dir / "agenda.json"
+        try:
+            if p.exists():
+                data = json.loads(p.read_text())
+                for e in (data if isinstance(data, list) else []):
+                    if e.get("title"):
+                        events.append({"title": e["title"],
+                                       "ts": float(e.get("ts", 0) or 0),
+                                       "place": e.get("place", "")})
+        except Exception:
+            pass
+        now = time.time()
+        upcoming = [e for e in events if e["ts"] >= now - 3600]   # today onward
+        upcoming.sort(key=lambda e: e["ts"])
+        return upcoming[:limit]
+
     def suggest_replies(self, text: str, n: int = 3) -> list:
         """A few short, natural replies to an incoming message — pick one by
         tap now, by voice later. Model-generated with a canned fallback."""
@@ -235,6 +256,9 @@ class Brain:
         the points into a warm couple of sentences; with no model it returns
         the structured points. `since` powers 'what did I miss'."""
         agenda = [a for a in (agenda or []) if a]
+        for e in self.calendar(5):                    # today's events lead the brief
+            when = time.strftime("%I:%M %p", time.localtime(e["ts"])).lstrip("0") if e["ts"] else ""
+            agenda.append(e["title"] + (f" at {when}" if when else ""))
         try:
             msgs = self._messages_fn(self.config, 20) if self.config.email_enabled else []
         except Exception:
@@ -369,6 +393,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "uptime_s": int(time.time() - brain._started_ts)})
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
+            elif path == "/dreamlayer/calendar":
+                self._json(200, {"items": brain.calendar()})
             elif path == "/dreamlayer/messages/recent":
                 # the live Messages/Mail feed the glasses read hands-free
                 if not brain.config.email_enabled:

@@ -16,6 +16,7 @@ export type PairingBundle = {
   token: string;
   glassesId: string;
   label: string;
+  relayUrl: string; // reach the Brain off your LAN (optional)
 };
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -86,6 +87,7 @@ export function encodePairing(b: PairingBundle): string {
   if (b.token) payload.token = b.token;
   if (b.glassesId) payload.glasses_id = b.glassesId;
   if (b.label && b.label !== "DreamLayer") payload.label = b.label;
+  if (b.relayUrl) payload.relay_url = b.relayUrl;
   return SCHEME + ":" + b64urlEncode(utf8ToBytes(JSON.stringify(payload)));
 }
 
@@ -98,6 +100,7 @@ export function decodePairing(code: string): PairingBundle {
     token: data.token ?? "",
     glassesId: data.glasses_id ?? "",
     label: data.label ?? "DreamLayer",
+    relayUrl: data.relay_url ?? "",
   };
 }
 
