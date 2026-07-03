@@ -45,6 +45,11 @@ def confirm(kind: str, **kw) -> str:
     if kind == "remind":
         title = (kw.get("title") or "").strip()
         return f"Noted — {title}." if title else "Noted."
+    if kind == "learned_name":
+        name = (kw.get("name") or "").strip()
+        return f"Good to know you, {name}." if name else "Got it."
+    if kind == "learned_pref":
+        return "Got it — I'll remember that."
     return _CONFIRM.get(kind, "Done.")
 
 
@@ -60,5 +65,7 @@ def dunno() -> str:
     return "I don't have that one — want me to look further?"
 
 
-def greeting() -> str:
-    return "I'm here."
+def greeting(name: str = "") -> str:
+    """Oracle's greeting, warmed by your name once it knows it."""
+    n = (name or "").strip()
+    return f"I'm here, {n}." if n else "I'm here."
