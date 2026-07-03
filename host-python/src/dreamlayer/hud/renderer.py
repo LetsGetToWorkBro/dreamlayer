@@ -559,7 +559,7 @@ class CardRenderer:
         hex_pts.append(hex_pts[0])
         r_, g_, b_ = _hex_to_rgb(T.MEMORY_TRACE)
         draw.polygon(hex_pts[:6], fill=(r_, g_, b_, 255))
-        draw_elliptical_arc(draw, CX, CY, 24, 24, 180, 180, 1, T.MEMORY_TRACE, alpha=68)
+        grad_arc(draw, CX, CY, 24, 180, 360, RAMP_MEMORY, 32)
         draw_elliptical_arc(draw, CX, CY, 36, 36, 0, 270, 1, T.MEMORY_TRACE, alpha=34)
         draw_elliptical_arc(draw, CX, CY, 48, 48, 270, 90, 1, T.MEMORY_TRACE, alpha=17)
         for angle_deg in [0, 90, 180, 270]:
@@ -702,13 +702,14 @@ class CardRenderer:
             draw.rounded_rectangle([lx, ly, lx + chain_w, ly + link_h],
                                    radius=4, outline=(r_, g_, b_, stroke_alpha), width=lw)
             if is_last:
-                draw.rounded_rectangle([lx, ly, lx + chain_w, ly + link_h],
-                                       radius=4, fill=(r_, g_, b_, 18))
-        for lx, ly in link_positions[:2]:
-            draw.line(
-                [(CX, ly + link_h), (CX, ly + link_h + (link_positions[1][1] - link_positions[0][1] - link_h))],
-                fill=(r_, g_, b_, 60), width=1
-            )
+                # Solid: the live link glows from within (scanline pane)
+                glass_capsule(draw, lx + 4, ly + 1, chain_w - 8, link_h - 2,
+                              PANE, 3)
+        # Solid: gradient connectors falling toward the live link
+        grad_line(draw, CX, 84 + link_h, CX, 108,
+                  (T.BORDER_SUBTLE, T.ACCENT_MEMORY_DIM))
+        grad_line(draw, CX, 108 + link_h, CX, 132,
+                  (T.ACCENT_MEMORY_DIM, T.ACCENT_MEMORY_STATIC))
         self._text_rgba(draw, CX, 108 + link_h // 2, task, "sm", T.TEXT_PRIMARY, alpha=230)
         self._text_rgba(draw, CX, 132 + link_h // 2, due, "sm", T.MEMORY_TRACE, alpha=255)
         self._dot(draw, CX, 168, 2, T.conf_color(conf))
@@ -721,6 +722,7 @@ class CardRenderer:
         draw_radial_rays(draw, CX, CY - 10, 5, lengths,
                          T.MEMORY_TRACE, alpha=160, tip_bloom=True, stroke=1)
         self._dot(draw, CX, CY - 10, 3, T.MEMORY_TRACE, alpha=200)
+        bloom_ring(draw, CX, CY - 10, 3, T.MEMORY_TRACE)
         self._multiline_text(draw, CX, CY + 50, summary, "md", T.TEXT_SECONDARY, max_width=180)
         if person:
             self._text_rgba(draw, CX, CY + 78, f"With {person}",
@@ -974,6 +976,7 @@ class CardRenderer:
             self._vbar(draw, rail_x, rail_y1 - live_h, rail_y1, 1, urgency)
         self._dot(draw, rail_x, rail_y0, 2, T.BORDER_SUBTLE, alpha=160)
         self._dot(draw, rail_x, rail_y1, 3, urgency)
+        bloom_ring(draw, rail_x, rail_y1, 3, urgency)
 
         self._text_rgba(draw, CX, 72, "DRIFT DETECTED", "xs", T.MEMORY_TRACE,
                         alpha=200)

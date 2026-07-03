@@ -263,9 +263,9 @@ local function draw_ready(sc, enter_t, exit_t)
     end
     closed_poly(pts, P.memory_trace)
   end
-  -- rings
+  -- rings (Solid: gradient strokes — same call count, living light)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    arc(CX,CY,r2, 180,360, P.accent_memory)
+    MAT.grad_arc(CX,CY,r2, 180,360, MAT.RAMP_MEMORY, 32)
     arc(CX,CY,r3,   0,270, P.accent_memory_dim)
     arc(CX,CY,r4, 270,360, P.border_subtle)
   end
@@ -376,6 +376,7 @@ local function draw_loading(sc, enter_t, idle_t)
     end
     frame.display.circle(CX,CY,3,P.memory_trace,true)
     frame.display.circle(CX,CY,floor(6*sc),P.accent_memory_dim,false)
+    MAT.bloom_ring(CX,CY,6,P.memory_trace)
   end
 end
 
@@ -476,8 +477,13 @@ local function draw_commitment_recall(card, sc, enter_t, exit_t)
       end
     end
   end
-  frame.display.line(CX,84+link_h, CX,108,P.border_subtle)
-  frame.display.line(CX,108+link_h,CX,132,P.border_subtle)
+  -- Solid: the live (final) link glows from within; the connectors are
+  -- gradient strokes falling toward it
+  if enter_t >= 1.0 and exit_t == 0 then
+    MAT.glass_capsule(CX-60, 133, 120, 16, MAT.PANE, 3)
+  end
+  MAT.grad_line(CX,84+link_h, CX,108, { P.border_subtle, P.accent_memory_dim })
+  MAT.grad_line(CX,108+link_h,CX,132, { P.accent_memory_dim, P.accent_memory_static })
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     text(task,CX,108+floor(link_h/2),P.text_primary, "md")
   end
@@ -497,6 +503,7 @@ local function draw_proactive_memory(card, sc, enter_t, exit_t)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     radial_rays(CX,CY-10, floor(5*sc),floor(52*sc), 5,P.memory_trace,2)
     frame.display.circle(CX,CY-10,3,P.memory_trace,true)
+    MAT.bloom_ring(CX,CY-10,3,P.memory_trace)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     text(summary,CX,CY+50,P.text_secondary, "lg")
@@ -644,6 +651,7 @@ local function draw_commitment_drift(card, sc, enter_t, exit_t, idle_t)
   end
   frame.display.circle(rail_x, rail_y0, 2, P.border_subtle, true)
   frame.display.circle(rail_x, rail_y1, 3, urgency_col,     true)
+  MAT.bloom_ring(rail_x, rail_y1, 3, urgency_col)
 
   -- Eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
@@ -719,6 +727,7 @@ local function draw_time_scrub_node(card, sc, enter_t, exit_t, idle_t)
         -- current node: larger dot in memory_trace
         local cur_r = floor(lerp(3, 5, ease_out_expo(clamp((enter_t - A.STAGGER_PRIMARY_MS / A.ENTER_DURATION_MS) * 3, 0, 1))))
         frame.display.circle(nx, bar_y, cur_r, P.memory_trace, true)
+        MAT.bloom_ring(nx, bar_y, cur_r, P.memory_trace)
         -- tick below current dot
         frame.display.line(nx, bar_y + cur_r + 1, nx, bar_y + cur_r + 6, P.memory_trace)
       else
@@ -824,6 +833,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
     local dot_r = floor(lerp(2, 5, score) * sc)
     if dot_r >= 1 then
       frame.display.circle(CX, 170, dot_r, score_col, true)
+      MAT.bloom_ring(CX, 170, dot_r, score_col)
     end
   end
 
