@@ -203,13 +203,13 @@ cd host-python && python -m pytest -q        # the full host suite (1000+ tests)
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 AI Brain: [`docs/AI_BRAIN.md`](docs/AI_BRAIN.md) ·
+API & device seams: [`docs/INTEGRATION.md`](docs/INTEGRATION.md) ·
 Product spec: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) ·
 Lenses: [`docs/LENSES.md`](docs/LENSES.md)
 
 ## Roadmap
 
-Future lenses under exploration: **Health** · **Focus** · **Skill**, and a
-one-tap **Morning Brief** synthesized from your own knowledge.
+Future lenses under exploration: **Health** · **Focus** · **Skill**.
 
 ---
 
