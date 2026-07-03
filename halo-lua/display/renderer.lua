@@ -41,6 +41,9 @@ local E     = require("lib.easing")
 local TR    = require("display.transitions")
 local F     = require("display.focus")
 local HZ    = require("display.horizon")
+local PA    = require("display.palette_animator")
+local PX    = require("display.parallax")
+local PT    = require("display.particles")
 
 local HAS_FRAME = (type(_G.frame) == "table")
 
@@ -1047,6 +1050,10 @@ function renderer.show_card(card)
     TR.set_reduce_motion(settings.get("reduce_motion"))
   end
   local now = _now_ms()
+  -- A focused card owns its light: the idle programs yield their slots
+  -- (release restores base colors, so nothing arrives mid-shimmer)
+  PA.stop("horizon_aurora")
+  PA.stop("premonition_shimmer")
   -- If something is showing, capture it as the outgoing card
   if _card and _phase ~= "exit" then
     -- never two simultaneous recessions: a third card mid-crossfade
@@ -1084,15 +1091,38 @@ end
 --- With no focused card this draws the Horizon — the display's resting
 --- state is the wearer's day, never a black screen
 --- (docs/cinema_v2/horizon.md; CINEMA_V2_DELTAS.md §6).
+-- Idle light programs (Lumen): the aurora flows along the day-ring and
+-- the premonition layer breathes — only while the Horizon IS the display.
+-- show_card() stops both, so a focused card always owns its light.
+local function ensure_idle_light()
+  if not PA.active("horizon_aurora") then
+    PA.run("horizon_aurora",
+           { kind = "wave", names = { "aurora_a", "aurora_b", "aurora_c" } })
+  end
+  if not PA.active("premonition_shimmer") then
+    PA.run("premonition_shimmer", { kind = "shimmer", name = "premo" })
+  end
+end
+
 function renderer.tick()
   if not HAS_FRAME then return end
 
   local now = _now_ms()
 
+  -- Lumen engines advance once per frame, before any drawing: parallax
+  -- samples the IMU, the palette animator runs its light programs.
+  PX.tick(now)
+  PA.tick(now, TR.reduce_motion())
+  local rim_ox, rim_oy = PX.offset("rim")
+
   if not _card and not _prev_card then
     -- idle: the Horizon is the display
+    ensure_idle_light()
     frame.display.clear(0x000000)
-    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion() })
+    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion(),
+              aurora = true, ox = floor(rim_ox), oy = floor(rim_oy) })
+    local air_ox, air_oy = PX.offset("air")
+    PT.tick(now, air_ox, air_oy)
     frame.display.show()
     return
   end
@@ -1116,7 +1146,8 @@ function renderer.tick()
     _card  = nil
     _phase = nil
     frame.display.clear(0x000000)
-    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion() })
+    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion(),
+              ox = floor(rim_ox), oy = floor(rim_oy) })
     frame.display.show()
     return
   end
@@ -1134,7 +1165,8 @@ function renderer.tick()
 
   -- Composite frame: the day stays under the card, one tier down
   frame.display.clear(0x000000)
-  HZ.draw({ now_ms = now, focus = true, reduce_motion = TR.reduce_motion() })
+  HZ.draw({ now_ms = now, focus = true, reduce_motion = TR.reduce_motion(),
+            ox = floor(rim_ox), oy = floor(rim_oy) })
 
   -- Outgoing card recedes underneath
   if _prev_card then
@@ -1145,6 +1177,10 @@ function renderer.tick()
   if elapsed >= 0 then
     composite(_card, _phase, elapsed, idle_t)
   end
+
+  -- hero particles ride above the card, below nothing (AIR tier)
+  local air_ox, air_oy = PX.offset("air")
+  PT.tick(now, air_ox, air_oy)
 
   frame.display.show()
 end

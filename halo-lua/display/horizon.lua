@@ -40,10 +40,27 @@ local KIND_MEMORY, KIND_PROMISE, KIND_PERSON, KIND_ELDER, KIND_FUTURE_CAP =
   1, 2, 3, 4, 5
 local KIND_PREMONITION = 6   -- future ghost (shimmers, never breathes loud)
 
+-- Meridian Lumen slot aliases (docs/cinema_v2/lumen.md). The aurora bands
+-- alias the dream-only slots (sky 1 / drift 3 / drift 4) — mode-exclusive,
+-- the same aliasing rule the v1 prism fringes used — and the premonition
+-- shimmer aliases energy (2). Base hexes sit one LSB off their visual
+-- twins (border_subtle / text_ghost) so each band maps to its own slot on
+-- the indexed panel without capturing the static tokens (the base-hex
+-- conflation documented in docs/CINEMA_V2_RISKS.md).
+P.reserve_dynamic("aurora_a", A.AURORA_BASE_A, 3)
+P.reserve_dynamic("aurora_b", A.AURORA_BASE_B, 4)
+P.reserve_dynamic("aurora_c", A.AURORA_BASE_C, 1)
+P.reserve_dynamic("premo",    A.PREMO_BASE,    2)
+
+-- Parallax (RIM depth): the whole instrument shifts rigidly by the offset
+-- the renderer passes into draw(opts.ox/oy) — the day ring reads as
+-- anchored in the world, one tier behind the focused content.
+local _ox, _oy = 0, 0
+
 local function fl(n) return math.floor(n + 0.5) end
 local function polar(r, deg)
   local rad = math.rad(deg)
-  return CX + r * math.cos(rad), CY + r * math.sin(rad)
+  return CX + _ox + r * math.cos(rad), CY + _oy + r * math.sin(rad)
 end
 
 local function radial_tick(deg, r0, r1, color, width)
@@ -116,9 +133,30 @@ end
 
 --- The rim track: 1px ghost arc across the active window; its absence at
 --- the bottom is the seam (past ends, future begins).
-local function draw_track()
-  arc(A.MER_TRACK_R, A.MER_SEAM_TO_DEG, 360 + A.MER_SEAM_FROM_DEG,
-      P.border_subtle, 72)
+--- Aurora (Lumen): in pure idle the 72 segments band across the three
+--- aurora slots whose lumas the palette animator cycles — light flows
+--- slowly along the day-ring with ZERO new geometry. Focused/dim/
+--- reduce_motion frames draw the static ghost track, unchanged.
+local AURORA_BANDS = { A.AURORA_BASE_A, A.AURORA_BASE_B, A.AURORA_BASE_C }
+
+local function draw_track(aurora)
+  local a0 = A.MER_SEAM_TO_DEG
+  local a1 = 360 + A.MER_SEAM_FROM_DEG
+  if not aurora then
+    arc(A.MER_TRACK_R, a0, a1, P.border_subtle, 72)
+    return
+  end
+  local steps = 72
+  local sweep = a1 - a0
+  local x0, y0 = polar(A.MER_TRACK_R, a0)
+  for i = 1, steps do
+    local x1, y1 = polar(A.MER_TRACK_R, a0 + sweep * i / steps)
+    if HAS_FRAME then
+      frame.display.line(fl(x0), fl(y0), fl(x1), fl(y1),
+                         AURORA_BANDS[(i - 1) % 3 + 1])
+    end
+    x0, y0 = x1, y1
+  end
 end
 
 local MEM_STYLE = {
@@ -216,20 +254,18 @@ local function draw_promise(mk, stack, now_ms, reduce_motion)
   end
 end
 
---- A future ghost: a dim dot ahead of now that shimmers on a slow
---- phase (reduce_motion: a static dim dot — probability stays visible,
---- the flicker goes). Never brighter than a real luma-1 mark.
-local function draw_premonition(mk, now_ms, reduce_motion)
-  local visible = true
-  if not reduce_motion then
-    local phase = ((now_ms or 0) + fl(mk.deg * 37)) % 1400
-    visible = phase < 980   -- ~70% duty shimmer, desynced per mark
-  end
-  if visible then
-    local x, y = polar(A.MER_MARK_BASE_R, mk.deg)
-    if HAS_FRAME then
-      frame.display.circle(fl(x), fl(y), 1, P.text_ghost, true)
-    end
+--- A future ghost: a dim dot ahead of now. Lumen: the v1 70%-duty
+--- visibility blink — the codebase's one true temporal dither — is
+--- killed; the dot is always drawn, in the `premo` slot whose luma the
+--- palette animator breathes (renderer's premonition_shimmer program).
+--- One shared phase: future ghosts are one ambient layer, like ghost
+--- text. reduce_motion: the program holds base — a static dim dot,
+--- probability visible, nothing flickers. Never brighter than the v1
+--- static dot (SHIMMER_Y_HI = the ghost base luma; the breath dims).
+local function draw_premonition(mk)
+  local x, y = polar(A.MER_MARK_BASE_R, mk.deg)
+  if HAS_FRAME then
+    frame.display.circle(fl(x), fl(y), 1, P.dynamic_color("premo"), true)
   end
 end
 
@@ -238,9 +274,18 @@ local function draw_notch(now_ms, reduce_motion)
   if reduce_motion then
     len = A.MER_NOW_LEN_MIN + 2  -- static mid-length tick, info preserved
   else
+    -- Lumen heartbeat: a fast spring rise (the beat) then a long soft
+    -- decay — alive, not metronomic. Same cycle, same length range.
     local phase = ((now_ms or 0) % A.BREATHE_CYCLE_MS) / A.BREATHE_CYCLE_MS
-    local breathe = E.in_out_sine((math.sin(phase * 2 * math.pi) + 1) / 2)
-    len = A.MER_NOW_LEN_MIN + (A.MER_NOW_LEN_MAX - A.MER_NOW_LEN_MIN) * breathe
+    local beat
+    if phase < A.HEARTBEAT_RISE_FRAC then
+      beat = E.spring(phase / A.HEARTBEAT_RISE_FRAC,
+                      A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    else
+      beat = 1 - E.in_out_sine((phase - A.HEARTBEAT_RISE_FRAC)
+                               / (1 - A.HEARTBEAT_RISE_FRAC))
+    end
+    len = A.MER_NOW_LEN_MIN + (A.MER_NOW_LEN_MAX - A.MER_NOW_LEN_MIN) * beat
   end
   local color = _paused and P.status_paused or P.accent_memory
   radial_tick(A.MER_NOW_DEG, 96, fl(96 + len), color, 2)
@@ -251,8 +296,14 @@ end
 function M.draw(opts)
   opts = opts or {}
   local now = opts.now_ms or M._now_ms()
+  _ox, _oy = opts.ox or 0, opts.oy or 0
 
-  draw_track()
+  -- aurora light only in pure idle: focused/dim frames keep the static
+  -- ghost track, and reduce_motion is pixel-identical to the pre-Lumen
+  -- horizon (base hexes differ from border_subtle by one invisible LSB,
+  -- so even the banded track only moves when the animator runs)
+  draw_track(opts.aurora and not opts.reduce_motion
+             and not opts.dim and not opts.focus)
 
   -- staleness: no frame for MER_STALE_MS -> marks drop one luma tier
   -- (device liveness stays on the notch, memory-link health on the marks)
@@ -310,7 +361,7 @@ function M.draw(opts)
       draw_promise(mk, math.min(stack, 2), now, opts.reduce_motion)
     elseif mk.kind == KIND_PREMONITION then
       -- future ghosts stay in dream light too: probability is weather
-      draw_premonition(mk, now, opts.reduce_motion)
+      draw_premonition(mk)
     elseif mk.kind == KIND_ELDER then
       radial_tick(A.MER_ELDER_DEG, A.MER_MARK_BASE_R, A.MER_MARK_BASE_R + 4,
                   P.text_ghost)
@@ -329,9 +380,22 @@ function M.draw(opts)
     _highlight = nil
   end
 
-  -- arrival pulse after a recession lands
+  -- arrival pulse after a recession lands. Lumen: the pulse throws two
+  -- ghost echoes that ripple outward and fade as the memory settles into
+  -- its place on the day (reduce_motion: the plain brightened mark).
   if _pulse and now <= _pulse.until_ms then
     draw_memory({ deg = _pulse.deg, kind = KIND_MEMORY, luma = 2 }, 0, 3)
+    if HAS_FRAME and not opts.reduce_motion then
+      -- the echoes trail inward, along the path the content flew home on,
+      -- and collapse into the mark as the pulse ends (never past r=112)
+      local age = 1 - (_pulse.until_ms - now) / A.MER_ARRIVAL_PULSE_MS
+      local e1x, e1y = polar(A.MER_MARK_BASE_R - 10 + 6 * age, _pulse.deg)
+      frame.display.circle(fl(e1x), fl(e1y), 1, P.text_ghost, true)
+      if age < 0.6 then
+        local e2x, e2y = polar(A.MER_MARK_BASE_R - 17 + 8 * age, _pulse.deg)
+        frame.display.circle(fl(e2x), fl(e2y), 1, P.border_subtle, true)
+      end
+    end
   elseif _pulse then
     _pulse = nil
   end

@@ -187,8 +187,9 @@ M.AURORA_BASE_C        = 0x293B43
 -- Premonition shimmer: luma breath on the ghost slot replaces the v1
 -- 70%-duty visibility blink (the one true temporal-dither; killed).
 M.SHIMMER_PERIOD_MS    = 1400
-M.SHIMMER_Y_LO         = 180
-M.SHIMMER_Y_HI         = 420
+M.SHIMMER_Y_LO         = 180  -- breathes DOWN from the ghost base luma
+M.SHIMMER_Y_HI         = 400  -- ...and back: never brighter than the v1 dot
+M.PREMO_BASE           = 0x58686E  -- premonition dots: text_ghost, one LSB off
 
 -- Notch heartbeat: two-phase beat replacing sine breathe (rise fraction
 -- of BREATHE_CYCLE_MS spent on the spring rise, remainder on soft decay)
