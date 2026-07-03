@@ -1,5 +1,5 @@
 import React from "react";
-import { Animated, View, Text, StyleSheet } from "react-native";
+import { Animated, View, Text, TextInput, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useBrainStore } from "../src/state/useBrainStore";
@@ -19,15 +19,28 @@ export default function Now() {
   const macConnected = useBrainStore((s) => s.macMini.connected);
   const brainKind = macConnected ? "Mac mini" : "phone";
   const getBrief = useBrainStore((s) => s.getBrief);
+  const sendVoice = useBrainStore((s) => s.sendVoice);
   const mirror = useEntrance(60);
   const [brief, setBrief] = React.useState<string | null>(null);
   const [briefing, setBriefing] = React.useState(false);
+  const [cmd, setCmd] = React.useState("");
+  const [voiceOut, setVoiceOut] = React.useState<string | null>(null);
 
   const doBrief = async () => {
     setBriefing(true);
     const r = await getBrief();
     setBrief(r?.text ?? "Connect your Mac mini for a brief from your messages & mail.");
     setBriefing(false);
+  };
+
+  const doVoice = async () => {
+    if (!cmd.trim()) return;
+    const r = await sendVoice(cmd.trim());
+    setCmd("");
+    if (r.intent === "brief") setBrief(r.text ?? "");
+    else if (r.answer) setVoiceOut(r.answer);
+    else if (r.intent === "reply") setVoiceOut(`Reply to ${r.to}: “${r.text}” — open Messages to send.`);
+    else setVoiceOut(`(${r.intent})`);
   };
 
   return (
@@ -52,6 +65,24 @@ export default function Now() {
           <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>Morning brief</Text>
           <Text style={[typography.body, { color: colors.textPrimary }]}>{brief}</Text>
         </View>
+      ) : null}
+
+      <View style={s.voiceRow}>
+        <TextInput
+          value={cmd}
+          onChangeText={setCmd}
+          placeholder="Say a command… “what did Marcus need?”"
+          placeholderTextColor={colors.textSecondary}
+          style={s.voiceInput}
+          onSubmitEditing={doVoice}
+          returnKeyType="send"
+        />
+        <Tappable onPress={doVoice} style={s.voiceBtn}>
+          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>↳</Text>
+        </Tappable>
+      </View>
+      {voiceOut ? (
+        <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: space.md }]}>{voiceOut}</Text>
       ) : null}
 
       <View style={s.actions}>
@@ -100,5 +131,24 @@ const s = StyleSheet.create({
     borderColor: colors.borderSubtle,
     padding: space.lg,
     marginBottom: space.md,
+  },
+  voiceRow: { flexDirection: "row", gap: space.sm, marginBottom: space.sm },
+  voiceInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.pill,
+    color: colors.textPrimary,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    fontSize: 15,
+  },
+  voiceBtn: {
+    backgroundColor: colors.accentMemory,
+    borderRadius: radius.pill,
+    width: 48,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -111,6 +111,7 @@ class Orchestrator:
         # (Distinct from self.proactive, which fires place-signature triggers.)
         from .anticipation import AnticipationEngine
         self.anticipation = AnticipationEngine()
+        self.anticipation_on = True             # proactive cards toggle
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -619,11 +620,14 @@ class Orchestrator:
             self._msg_poll_stop.set()
             self._msg_poll_stop = None
 
+    def set_anticipation(self, on: bool = True) -> None:
+        self.anticipation_on = on
+
     def anticipate_tick(self, context) -> list:
         """Surface the right anticipatory cards for this moment. Silenced by
         the Privacy Veil; the engine itself de-dupes so nothing nags. Returns
         the cues it flashed."""
-        if not self.privacy.allow_capture():
+        if not self.anticipation_on or not self.privacy.allow_capture():
             return []
         cues = self.anticipation.tick(context)
         for c in cues:

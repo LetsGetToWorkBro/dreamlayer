@@ -31,6 +31,8 @@ export default function Settings() {
   const setNotifyEmails = useBrainStore((s) => s.setNotifyEmails);
   const summarizeEmails = useBrainStore((s) => s.summarizeEmails);
   const setSummarizeEmails = useBrainStore((s) => s.setSummarizeEmails);
+  const proactiveCards = useBrainStore((s) => s.proactiveCards);
+  const setProactiveCards = useBrainStore((s) => s.setProactiveCards);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -44,6 +46,18 @@ export default function Settings() {
 
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy</Text>
+        <Row
+          label="Proactive cards"
+          sub="Let the glasses surface the right card unasked — events, arrivals, people"
+          right={
+            <Switch
+              value={proactiveCards}
+              onValueChange={setProactiveCards}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
         <Row
           label="Incognito mode"
           sub="Cloud off + capture paused for this session"

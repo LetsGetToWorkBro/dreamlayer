@@ -20,6 +20,8 @@ export type BrainKind = "phone" | "mac_mini";
 export type MacMini = { connected: boolean; url: string; token: string; relayUrl?: string };
 export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
+export type CalendarEvent = { title: string; ts: number; place?: string };
+export type ActivityItem = { ts: number; kind: string; text?: string; query?: string; tier?: string };
 export type BrainMessage = {
   channel: string; // "imessage" | "email"
   who: string;
@@ -62,6 +64,14 @@ type BrainState = {
   // one-glance morning brief synthesized by the Brain
   getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
 
+  // engines surfaced in the app
+  proactiveCards: boolean;
+  setProactiveCards: (on: boolean) => void;
+  sendVoice: (text: string) => Promise<{ intent: string; answer?: string; text?: string; to?: string; subject?: string }>;
+  getCalendar: () => Promise<CalendarEvent[]>;
+  addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
+  getActivity: () => Promise<ActivityItem[]>;
+
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
   sendReply: (m: { channel: string; to: string; subject?: string; text: string }) => Promise<{ ok: boolean; error?: string }>;
@@ -82,6 +92,7 @@ function persist(s: BrainState) {
     notifyTexts: s.notifyTexts,
     notifyEmails: s.notifyEmails,
     summarizeEmails: s.summarizeEmails,
+    proactiveCards: s.proactiveCards,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -131,6 +142,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   notifyTexts: true,
   notifyEmails: true,
   summarizeEmails: false,
+  proactiveCards: true,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -229,6 +241,55 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
     } catch {
       return { text: "Couldn't reach your Brain. Is the Mac mini awake and reachable (LAN or relay)?", tier: "", sources: [] };
+    }
+  },
+
+  setProactiveCards: (on) => {
+    set({ proactiveCards: on });
+    persist(get());
+  },
+
+  sendVoice: async (text) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return { intent: "ask", answer: "" };
+    try {
+      const r = await brainFetch(m, "/dreamlayer/voice", { method: "POST", body: JSON.stringify({ text }) });
+      return await r.json();
+    } catch {
+      return { intent: "ask", answer: "Couldn't reach your Brain." };
+    }
+  },
+
+  getCalendar: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/calendar");
+      return (await r.json()).items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  addEvent: async (e) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/calendar", { method: "POST", body: JSON.stringify(e) });
+      return (await r.json()).items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  getActivity: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return [];
+    try {
+      const r = await brainFetch(m, "/dreamlayer/history");
+      return (await r.json()).items ?? [];
+    } catch {
+      return [];
     }
   },
 

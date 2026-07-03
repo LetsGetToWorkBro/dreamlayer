@@ -231,6 +231,20 @@ class TestControls:
         assert any(i["kind"] == "folder" for i in brain.activity.recent())  # logs back
         assert brain.history.recent()[0]["query"] == "q"
 
+    def test_voice_and_calendar_endpoints(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            # voice: a command comes back as a structured intent
+            r = lb.post("/dreamlayer/voice", {"text": "reply to Priya saying on my way"})
+            assert r == {"intent": "reply", "to": "Priya", "text": "on my way"}
+            assert lb.post("/dreamlayer/voice", {"text": "brief me"})["intent"] == "brief"
+            # calendar: add an event, then it's returned
+            import time as _t
+            items = lb.post("/dreamlayer/calendar", {"title": "Standup", "ts": _t.time() + 600})["items"]
+            assert items and items[0]["title"] == "Standup"
+        finally:
+            lb.stop()
+
     def test_calendar_feeds_brief(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)

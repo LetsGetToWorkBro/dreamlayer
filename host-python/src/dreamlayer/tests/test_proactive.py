@@ -45,3 +45,11 @@ def test_veil_silences_anticipation():
     assert orc.anticipate_tick(Context(now=1000.0, person="Marcus"))  # fires normally
     orc.privacy.pause()                                             # raise the veil
     assert orc.anticipate_tick(Context(now=2000.0, person="Marcus")) == []
+
+
+def test_toggle_silences_anticipation():
+    orc = Orchestrator(FakeBridge())
+    orc.set_anticipation(False)
+    assert orc.anticipate_tick(Context(now=1000.0, person="Marcus")) == []
+    orc.set_anticipation(True)
+    assert orc.anticipate_tick(Context(now=2000.0, person="Marcus"))

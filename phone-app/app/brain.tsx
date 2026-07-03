@@ -26,6 +26,24 @@ export default function Brain() {
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<{ text: string; tier: string } | null>(null);
 
+  const [events, setEvents] = useState<{ title: string; ts: number; place?: string }[]>([]);
+  const [activity, setActivity] = useState<{ ts: number; kind: string; text?: string; query?: string }[]>([]);
+  const [evTitle, setEvTitle] = useState("");
+  useEffect(() => {
+    if (b.macMini.connected) {
+      b.getCalendar().then(setEvents);
+      b.getActivity().then(setActivity);
+    }
+  }, [b.macMini.connected]);
+
+  const addEvent = async () => {
+    if (!evTitle.trim()) return;
+    // default: one hour from now (a fuller time picker is a later polish)
+    const items = await b.addEvent({ title: evTitle.trim(), ts: Date.now() / 1000 + 3600 });
+    setEvents(items);
+    setEvTitle("");
+  };
+
   const brainKind = b.brainKind();
   const cloudOn = b.effectiveCloud();
 
@@ -212,6 +230,56 @@ export default function Brain() {
           ) : null}
         </View>
 
+        {/* agenda + activity — surfaced from the engines */}
+        {b.macMini.connected ? (
+          <>
+            <Text style={[typography.eyebrow, s.eyebrow]}>Upcoming</Text>
+            <View style={s.card}>
+              {events.length === 0 ? (
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>No events yet.</Text>
+              ) : (
+                events.map((e, i) => (
+                  <View key={i} style={s.evRow}>
+                    <Text style={[typography.body, { color: colors.textPrimary }]}>{e.title}</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                      {new Date(e.ts * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                  </View>
+                ))
+              )}
+              <View style={s.evAdd}>
+                <TextInput
+                  value={evTitle}
+                  onChangeText={setEvTitle}
+                  placeholder="add an event…"
+                  placeholderTextColor={colors.textSecondary}
+                  style={s.input}
+                  onSubmitEditing={addEvent}
+                />
+                <PillButton label="Add" onPress={addEvent} />
+              </View>
+            </View>
+
+            <Text style={[typography.eyebrow, s.eyebrow]}>Recent activity</Text>
+            <View style={s.card}>
+              {activity.length === 0 ? (
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>Nothing yet.</Text>
+              ) : (
+                activity.slice(0, 8).map((a, i) => (
+                  <View key={i} style={s.actRow}>
+                    <Text style={[typography.caption, { color: colors.accentMemory, width: 78 }]} numberOfLines={1}>
+                      {a.kind}
+                    </Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary, flex: 1 }]} numberOfLines={1}>
+                      {a.query || a.text}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+          </>
+        ) : null}
+
         {/* what your brain can do */}
         <Text style={[typography.eyebrow, s.eyebrow]}>What your brain can do</Text>
         <View style={s.lensGrid}>
@@ -275,6 +343,16 @@ const s = StyleSheet.create({
     borderLeftColor: colors.accentMemory,
     paddingLeft: 12,
   },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: 16,
+  },
+  evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 },
+  evAdd: { flexDirection: "row", gap: 8, alignItems: "center", marginTop: 8 },
+  actRow: { flexDirection: "row", gap: 10, paddingVertical: 6 },
   lensGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   lens: {
     width: "47%",

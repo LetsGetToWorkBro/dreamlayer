@@ -520,6 +520,33 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif path == "/dreamlayer/replies":
                 b = self._body()
                 self._json(200, {"replies": brain.suggest_replies(b.get("text", ""))})
+            elif path == "/dreamlayer/voice":
+                # route a spoken/typed line: ask/recall answered here, the rest
+                # returned as a structured intent for the app to act on
+                from ...orchestrator.voice import parse_intent
+                it = parse_intent(self._body().get("text", ""))
+                if it.kind in ("ask", "recall"):
+                    ans = brain.ask(it.args.get("query", ""))
+                    self._json(200, {"intent": it.kind, "query": it.args.get("query", ""),
+                                     "answer": ans.text if ans is not None else ""})
+                elif it.kind == "brief":
+                    self._json(200, {"intent": "brief", **brain.brief()})
+                else:
+                    self._json(200, {"intent": it.kind, **it.args})
+            elif path == "/dreamlayer/calendar":
+                # add an event to the agenda (title, ts, place)
+                b = self._body()
+                p = brain.cfg_dir / "agenda.json"
+                try:
+                    cur = json.loads(p.read_text()) if p.exists() else []
+                except Exception:
+                    cur = []
+                if b.get("title"):
+                    cur.append({"title": b["title"], "ts": float(b.get("ts", 0) or 0),
+                                "place": b.get("place", "")})
+                    p.write_text(json.dumps(cur))
+                    brain.activity.add("calendar", f"Added event {b['title']}")
+                self._json(200, {"items": brain.calendar()})
             elif path == "/dreamlayer/brain/explain":
                 b = self._body()
                 ans = brain.explain(b.get("label", ""), b.get("image"),
