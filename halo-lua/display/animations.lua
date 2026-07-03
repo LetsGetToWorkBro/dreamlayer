@@ -176,6 +176,10 @@ M.SQUASH_MAX           = 0.25  -- head elongation along velocity, ratio
 -- Palette animator (display/palette_animator.lua)
 M.PAL_WRITES_MAX       = 8     -- assign_color_ycbcr budget per tick
 
+-- Worst-case primitive calls per composited frame (asserted in
+-- test_draw_budget.py via the raster harness draw_calls counter)
+M.DRAW_CALLS_MAX       = 420
+
 -- Horizon aurora: the rim track banded across three leased slots whose
 -- luma cycles slowly — light flows along the day-ring, zero new geometry.
 -- Base hexes sit one LSB apart around border_subtle so each band maps to
@@ -212,8 +216,11 @@ M.SPEC_BASE_A          = 0x00FFA9
 M.SPEC_BASE_B          = 0x01FFAA
 M.SPEC_BASE_C          = 0x00FEAA
 M.VOICE_BASE           = 0xE06B53 -- listening bars: accent_attention,
-                                  -- one LSB off, on the fx slot (mode-
-                                  -- exclusive with ripple/deviation)
+                                  -- one LSB off, aliasing the card_a
+                                  -- slot (free while listening — no
+                                  -- conduct/chase runs on that card;
+                                  -- NEVER on fx: accent_memory draws
+                                  -- resolve through fx's slot)
 M.CONDUCT_PERIOD_MS    = 2400  -- object-recall rail: place -> object flow
 M.CONDUCT_Y_AMP        = 220
 M.CHASE_Y_AMP          = 300   -- loading ring luma swing

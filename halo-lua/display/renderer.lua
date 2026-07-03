@@ -57,7 +57,10 @@ local ease_linear      = E.linear
 P.reserve_dynamic("card_a", A.SPEC_BASE_A, 3)
 P.reserve_dynamic("card_b", A.SPEC_BASE_B, 4)
 P.reserve_dynamic("card_c", A.SPEC_BASE_C, 1)
-P.reserve_dynamic("voice",  A.VOICE_BASE,  6)
+-- voice aliases card_a's slot (free during listening), NOT fx: fx's base
+-- is accent_memory, so painting that slot another hue would recolor every
+-- accent_memory draw on the panel (found by the Lumen audit render)
+P.reserve_dynamic("voice",  A.VOICE_BASE,  3)
 
 -- Live voice level for QueryListeningCard ({t="amp"} messages, 0-99).
 -- nil until the host ever sends one: the waveform then keeps its v1
@@ -412,12 +415,25 @@ local function draw_commitment_recall(card, sc, enter_t, exit_t)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     frame.display.text("YOU PROMISED "..person:upper(),CX,68,P.memory_trace)
   end
-  local link_w,link_h=floor(128*sc),18
-  local lx=CX-floor(link_w/2)
+  -- Lumen: the chain forges link by link — each spring-widens open on
+  -- its own stagger, so the promise visibly locks together (geometry
+  -- only; the task text keeps its plain stagger). Settled/reduce frames
+  -- are the pre-Lumen chain exactly (spring(1) = 1).
+  local link_h=18
   local link_ys={84,108,132}
+  local staggers={A.STAGGER_PRIMARY_MS, A.STAGGER_DETAIL_MS, A.STAGGER_FOOTER_MS}
   for li,ly in ipairs(link_ys) do
-    local c=(li==3) and P.memory_trace or P.border_subtle
-    polyline({{lx,ly},{lx+link_w,ly},{lx+link_w,ly+link_h},{lx,ly+link_h},{lx,ly}},c)
+    if layer_ok(enter_t, staggers[li]) then
+      local lt = clamp((enter_t * A.ENTER_DURATION_MS - staggers[li])
+                       / (A.ENTER_DURATION_MS - staggers[li] + 1), 0, 1)
+      local w = floor(128 * sc * E.spring(lt, A.SPRING_ZETA_SNAPPY,
+                                          A.SPRING_OMEGA))
+      if w >= 2 then
+        local lx=CX-floor(w/2)
+        local c=(li==3) and P.memory_trace or P.border_subtle
+        polyline({{lx,ly},{lx+w,ly},{lx+w,ly+link_h},{lx,ly+link_h},{lx,ly}},c)
+      end
+    end
   end
   frame.display.line(CX,84+link_h, CX,108,P.border_subtle)
   frame.display.line(CX,108+link_h,CX,132,P.border_subtle)
@@ -505,7 +521,13 @@ local function draw_privacy_veil(sc, enter_t, exit_t)
 end
 
 local function draw_error(card, sc, enter_t, exit_t)
-  arc(CX,CY,floor(116*sc),0,360,P.warning_amber,48)
+  -- Lumen: the attention ring draws on as one sweep from 12 o'clock —
+  -- calm and legible (an error should never celebrate itself); settled
+  -- and reduce_motion frames are the full pre-Lumen ring
+  local ring_sweep = 360 * E.spring(clamp(enter_t, 0, 1),
+                                    A.SPRING_ZETA_SOFT, A.SPRING_OMEGA)
+  arc(CX,CY,floor(116*sc),-90,-90+ring_sweep,P.warning_amber,
+      math.max(6, floor(ring_sweep / 7.5)))
   local tri_cy=CY-8; local ts=floor(56*sc)
   polyline({
     {CX,               tri_cy-floor(ts/2)},
@@ -1166,7 +1188,13 @@ function renderer.show_card(card)
   PA.stop("horizon_aurora")
   PA.stop("premonition_shimmer")
   PA.stop("card_light")
-  P.restore("voice")
+  -- the shared slot behind card_a/voice takes the base the incoming
+  -- card draws in: voice orange while listening, band teal otherwise
+  if card.type == "QueryListeningCard" then
+    P.restore("voice")
+  else
+    P.restore("card_a")
+  end
   _tear_fired = {}
   _amp = 0
   -- If something is showing, capture it as the outgoing card
@@ -1191,7 +1219,7 @@ function renderer.dismiss()
   if _phase == "exit" then return end  -- already receding
   -- light settles before the recession: no flow on a departing card
   PA.stop("card_light")
-  P.restore("voice")
+  P.restore("card_a")
   _phase       = "exit"
   _phase_start = _now_ms()
 end
@@ -1239,14 +1267,16 @@ function renderer.tick()
   -- samples the IMU, the palette animator runs its light programs.
   -- While a privacy-class card holds, the world grips: offsets freeze
   -- to zero instantly (nothing about the veil may feel ambient).
+  local idle = (not _card and not _prev_card)
+  if idle then ensure_idle_light() end   -- register before PA.tick: light
+                                         -- flows from the first idle frame
   PX.freeze(_card ~= nil and PRIVACY_CLASS[_card.type] or false)
   PX.tick(now)
   PA.tick(now, TR.reduce_motion())
   local rim_ox, rim_oy = PX.offset("rim")
 
-  if not _card and not _prev_card then
+  if idle then
     -- idle: the Horizon is the display
-    ensure_idle_light()
     frame.display.clear(0x000000)
     HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion(),
               aurora = true, ox = floor(rim_ox), oy = floor(rim_oy) })
