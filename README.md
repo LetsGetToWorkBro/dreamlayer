@@ -203,7 +203,7 @@ cd host-python && python -m pytest -q        # the full host suite (1,368 tests)
 ```
 
 **Knowledge base — the complete reference with real renders of every card,
-screen, and panel: [letsgettoworkbro.github.io/dreamlayer](https://letsgettoworkbro.github.io/dreamlayer/)
+screen, and panel: [letsgettoworkbro.github.io/dreamlayer-docs](https://letsgettoworkbro.github.io/dreamlayer-docs/)
 (source: [`docs/gitbook/`](docs/gitbook/README.md)).**
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·

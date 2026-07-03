@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BOOK = ROOT / "docs" / "gitbook"
 SITE_NAME = "DreamLayer"
 TAGLINE = "A memory layer for the real world"
-REPO_URL = "https://github.com/LetsGetToWorkBro/dreamlayer"
+# The public site repo (the source repo is private, so links point here).
+REPO_URL = "https://github.com/LetsGetToWorkBro/dreamlayer-docs"
 
 
 # ---------------------------------------------------------------- nav model
@@ -306,8 +307,7 @@ PAGE = """<!DOCTYPE html>
     </article>
     <div class="pagenav">{prevlink}{nextlink}</div>
     <p class="foot">DreamLayer knowledge base. Every image is rendered by the
-    product's own pipeline. <a href="{repo}">Repository</a> ·
-    <a href="{repo}/tree/main/docs/gitbook">Markdown source</a></p>
+    product's own pipeline. <a href="{repo}">Site repository</a></p>
   </div>
 </div>
 </body>
