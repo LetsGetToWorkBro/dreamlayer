@@ -56,6 +56,8 @@ local _symmetry   = 6        -- mirror sectors
 local _hue_rate   = 1.0      -- palette-cycle speed multiplier
 local _cycle      = nil      -- built lazily (dream slots reserved by then)
 local _bloom_t0   = nil      -- set by the first draw after activation
+local _close_t0   = nil      -- set when the host turns the lens off:
+                             -- the field folds back in before yielding
 
 local function fl(n) return math.floor(n + 0.5) end
 
@@ -73,7 +75,16 @@ function M.on_prism(msg)
   if msg.active ~= nil then
     local was = _active
     _active = (tonumber(msg.active) or 0) ~= 0
-    if _active and not was then _bloom_t0 = nil end  -- re-bloom on entry
+    if _active and not was then
+      _bloom_t0, _close_t0 = nil, nil            -- re-bloom on entry
+    elseif was and not _active then
+      if HAS_FRAME then
+        _close_t0 = "pending"                    -- fold in, then yield
+        _active = true                           -- own the display while closing
+      else
+        PAL.restore_all()                        -- headless: yield instantly
+      end
+    end
   end
   if msg.intensity ~= nil then
     _intensity = math.max(0, math.min(1, (tonumber(msg.intensity) or 60) / 100))
@@ -84,7 +95,6 @@ function M.on_prism(msg)
   if msg.hue_rate ~= nil then
     _hue_rate = math.max(0.1, math.min(4, tonumber(msg.hue_rate) or 1))
   end
-  if not _active then PAL.restore_all() end   -- release the sky slots
 end
 
 function M.is_active() return _active end
@@ -131,9 +141,25 @@ function M.draw(now_ms, opts)
   local colors = {}
   for i, name in ipairs(SLOTS) do colors[i] = PAL.dynamic_color(name) end
 
-  -- bloom-in: the field unfolds on a snappy spring after activation
+  -- bloom-in: the field unfolds on a snappy spring after activation;
+  -- on deactivation it folds back in over the same window, then yields
+  -- the display (reduce_motion: closing is an immediate hand-off)
   local bloom = 1
-  if not reduce then
+  if _close_t0 then
+    if reduce then
+      _active, _close_t0 = false, nil
+      PAL.restore_all()
+      return
+    end
+    if _close_t0 == "pending" then _close_t0 = now_ms end
+    local ct = (now_ms - _close_t0) / A.PRISM_BLOOM_MS
+    if ct >= 1 then
+      _active, _close_t0 = false, nil
+      PAL.restore_all()
+      return
+    end
+    bloom = 1 - E.in_out_cubic(math.max(0, ct))
+  elseif not reduce then
     if not _bloom_t0 then _bloom_t0 = now_ms end
     bloom = E.spring(math.min(1, (now_ms - _bloom_t0) / A.PRISM_BLOOM_MS),
                      A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
@@ -187,7 +213,7 @@ end
 
 function M.reset()
   _active, _intensity, _symmetry, _hue_rate = false, 0.6, 6, 1.0
-  _cycle, _bloom_t0 = nil, nil
+  _cycle, _bloom_t0, _close_t0 = nil, nil, nil
 end
 
 return M

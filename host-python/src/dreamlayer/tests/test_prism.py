@@ -137,10 +137,24 @@ class TestPrismRenderer:
         b = rt.eval("#_calls")
         assert a == b and a > 0              # same field, frozen, still drawn
 
-    def test_deactivate_releases(self, rt):
+    def test_deactivate_folds_in_then_releases(self, rt):
         rt.execute('_pr.on_prism({ active = 1 })')
+        rt.execute("_pr.draw(1000)")               # bloom clock running
         assert rt.eval("_pr.is_active()") is True
         rt.execute('_pr.on_prism({ active = 0 })')
+        # the lens owns the display while it folds back in...
+        assert rt.eval("_pr.is_active()") is True
+        rt.execute("_pr.draw(2000)")               # close clock stamps here
+        assert rt.eval("_pr.is_active()") is True
+        # ...and yields once the close window has fully elapsed
+        rt.execute("_pr.draw(2000 + 700)")
+        assert rt.eval("_pr.is_active()") is False
+
+    def test_deactivate_reduce_motion_yields_immediately(self, rt):
+        rt.execute('_pr.on_prism({ active = 1 })')
+        rt.execute("_pr.draw(1000)")
+        rt.execute('_pr.on_prism({ active = 0 })')
+        rt.execute("_pr.draw(1050, { reduce_motion = true })")
         assert rt.eval("_pr.is_active()") is False
 
     def test_arms_draw_in_slot_base_hexes_not_indices(self, rt):
