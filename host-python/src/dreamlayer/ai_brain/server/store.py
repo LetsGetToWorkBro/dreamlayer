@@ -14,6 +14,7 @@ from typing import Optional
 
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
+ACTIVITY_FILE = "brain_activity.jsonl"
 
 
 @dataclass
@@ -102,6 +103,32 @@ class QueryHistory:
         lines = self.path.read_text().splitlines()
         out = []
         for line in lines[-n:]:
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return list(reversed(out))
+
+
+class ActivityLog:
+    """Everything the Brain did — folders, files, searches, cloud/incognito
+    toggles, pairing — as a single newest-first feed for the panel."""
+
+    def __init__(self, cfg_dir: Path | str):
+        self.path = Path(cfg_dir) / ACTIVITY_FILE
+
+    def add(self, kind: str, text: str, ts: Optional[float] = None) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": ts if ts is not None else time.time(),
+               "kind": kind, "text": text}
+        with self.path.open("a") as f:
+            f.write(json.dumps(rec) + "\n")
+
+    def recent(self, n: int = 40) -> list[dict]:
+        if not self.path.exists():
+            return []
+        out = []
+        for line in self.path.read_text().splitlines()[-n:]:
             try:
                 out.append(json.loads(line))
             except json.JSONDecodeError:

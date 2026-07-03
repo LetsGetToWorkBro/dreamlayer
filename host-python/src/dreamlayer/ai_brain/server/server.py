@@ -17,6 +17,7 @@ panel page is injected with the token only when opened from localhost.
 from __future__ import annotations
 
 import json
+import socket
 import urllib.parse
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,13 +28,29 @@ import threading
 import time
 
 from ..schema import Answer
-from .store import BrainConfig, QueryHistory
+from .store import BrainConfig, QueryHistory, ActivityLog
 from .index import FileIndex
-from .backends import OllamaBackend, make_synthesizer, vision_answer
+from .backends import OllamaBackend, make_synthesizer, vision_answer, probe_ollama
 from .macos_sources import collect_documents
 from .panel import render_panel
 
 TOKEN_HEADER = "X-DreamLayer-Token"
+
+
+def lan_ip() -> str:
+    """This machine's LAN address — the one the phone can actually reach.
+
+    Uses a UDP socket to discover the outbound interface without sending
+    anything. Falls back to loopback if there's no network.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 class Brain:
@@ -43,10 +60,12 @@ class Brain:
         self.cfg_dir = Path(cfg_dir)
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
+        self.activity = ActivityLog(self.cfg_dir)
         self.index = FileIndex(self.config)
         # macOS message/mail documents (folded in when email is enabled)
         self._sources_fn = sources_fn or collect_documents
         self._sig = None
+        self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
         self._watch_stop: threading.Event | None = None
         self._wire_model()
         self.reindex()
@@ -150,7 +169,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self.wfile.write(body)
 
         def _authed(self) -> bool:
-            return not token or self.headers.get(TOKEN_HEADER) == token
+            ok = not token or self.headers.get(TOKEN_HEADER) == token
+            # a successful token-carrying request from off-box is the phone
+            if ok and token and not self._from_localhost():
+                brain._last_phone_ts = time.time()
+            return ok
 
         def _from_localhost(self) -> bool:
             return self.client_address[0] in ("127.0.0.1", "::1")
@@ -169,7 +192,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         # -- routing ----------------------------------------------------
         def do_GET(self):
-            path = urllib.parse.urlparse(self.path).path
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            qs = urllib.parse.parse_qs(parsed.query)
             if path == "/":
                 html = render_panel(token if self._from_localhost() else "")
                 body = html.encode("utf-8")
@@ -184,15 +209,43 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if path == "/dreamlayer/config":
                 self._json(200, {"config": brain.config.public(),
                                  "stats": brain.index.stats()})
+            elif path == "/dreamlayer/status":
+                ago = None
+                if brain._last_phone_ts:
+                    ago = max(0, int(time.time() - brain._last_phone_ts))
+                self._json(200, {
+                    "brain": True,
+                    "model": brain.config.model,
+                    "cloud": bool(brain.config.cloud_enabled) and not brain.config.lan_only,
+                    "incognito": brain.config.lan_only,
+                    "phone_ago": ago,
+                    "stats": brain.index.stats(),
+                })
             elif path == "/dreamlayer/history":
-                self._json(200, {"items": brain.history.recent(30)})
+                self._json(200, {"items": _activity_feed(brain, 40)})
+            elif path == "/dreamlayer/model/status":
+                self._json(200, probe_ollama(brain.config))
+            elif path == "/dreamlayer/browse":
+                # a server-side folder picker (the panel navigates the Mac's
+                # own filesystem) — local-only, like pairing
+                if not self._from_localhost():
+                    self._json(403, {"error": "browse is local-only"}); return
+                self._json(200, _browse_dir(qs.get("path", [""])[0]))
             elif path == "/dreamlayer/pair":
                 # a pairing code for the phone — only handed to the local panel
                 if not self._from_localhost():
                     self._json(403, {"error": "pairing is local-only"}); return
                 from ...pairing import PairingBundle, encode_pairing
-                url = "http://" + (self.headers.get("Host") or "127.0.0.1")
+                # the code must point the phone at an address it can reach on the
+                # LAN — never the loopback/Host the local browser used.
+                port = self.server.server_address[1]
+                ip = lan_ip()
+                if ip and ip != "127.0.0.1":
+                    url = f"http://{ip}:{port}"
+                else:
+                    url = "http://" + (self.headers.get("Host") or f"127.0.0.1:{port}")
                 bundle = PairingBundle(brain_url=url, token=brain.config.token)
+                brain.activity.add("pair", "Generated a pairing code for the phone")
                 self._json(200, {"code": encode_pairing(bundle), "url": url})
             else:
                 self._json(404, {"error": "not found"})
@@ -204,21 +257,37 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(401, {"error": "unauthorised"}); return
             if path == "/dreamlayer/folders":
                 b = self._body()
+                p = b.get("path", "")
                 if b.get("action") == "add":
-                    brain.config.add_folder(b.get("path", ""))
+                    if brain.config.add_folder(p):
+                        brain.activity.add("folder", f"Added folder {p}")
                 elif b.get("action") == "remove":
-                    brain.config.remove_folder(b.get("path", ""))
+                    brain.config.remove_folder(p)
+                    brain.activity.add("folder", f"Removed folder {p}")
                 brain.save(); brain.reindex()
                 self._json(200, {"config": brain.config.public(),
                                  "stats": brain.index.stats()})
             elif path == "/dreamlayer/config":
-                brain.apply_config(self._body())
+                body = self._body()
+                before = (brain.config.model, brain.config.cloud_enabled,
+                          brain.config.network_mode, brain.config.email_enabled)
+                brain.apply_config(body)
                 brain.reindex()
+                if "model" in body and brain.config.model != before[0]:
+                    brain.activity.add("model", f"Model set to {brain.config.model}")
+                if "cloud_enabled" in body and brain.config.cloud_enabled != before[1]:
+                    brain.activity.add("cloud", "Cloud enabled" if brain.config.cloud_enabled else "Cloud disabled")
+                if "network_mode" in body and brain.config.network_mode != before[2]:
+                    brain.activity.add("privacy", "Incognito on" if brain.config.lan_only else "Incognito off")
+                if "email_enabled" in body and brain.config.email_enabled != before[3]:
+                    brain.activity.add("config", "Email & iMessage " + ("on" if brain.config.email_enabled else "off"))
                 self._json(200, {"config": brain.config.public()})
             elif path == "/dreamlayer/upload":
                 folder = (qs.get("folder", [""])[0])
                 name = Path(qs.get("name", ["dropped.txt"])[0]).name
                 ok = _write_upload(brain, folder, name, self._raw())
+                if ok:
+                    brain.activity.add("upload", f"Added {name}")
                 brain.reindex()
                 self._json(200 if ok else 400,
                            {"ok": ok, "stats": brain.index.stats()})
@@ -254,3 +323,39 @@ def _answer_json(ans: Optional[Answer]) -> dict:
         return {"text": "", "tier": "", "sources": [], "confidence": 0.0}
     return {"text": ans.text, "tier": ans.tier, "sources": ans.sources,
             "confidence": ans.confidence}
+
+
+def _activity_feed(brain: Brain, n: int = 40) -> list[dict]:
+    """One newest-first feed: questions + every action the Brain took."""
+    items = []
+    for h in brain.history.recent(n):
+        items.append({"ts": h.get("ts", 0), "kind": "ask",
+                      "query": h.get("query", ""), "text": h.get("answer", ""),
+                      "tier": h.get("tier", "")})
+    for a in brain.activity.recent(n):
+        items.append({"ts": a.get("ts", 0), "kind": a.get("kind", "event"),
+                      "text": a.get("text", "")})
+    items.sort(key=lambda x: x.get("ts", 0), reverse=True)
+    return items[:n]
+
+
+def _browse_dir(raw: str) -> dict:
+    """List the subfolders of a directory so the panel can walk the Mac's own
+    filesystem — folders only, hidden entries skipped."""
+    base = Path(raw).expanduser() if raw else Path.home()
+    try:
+        base = base.resolve()
+    except OSError:
+        base = Path.home()
+    if not base.is_dir():
+        base = Path.home()
+    dirs = []
+    try:
+        for e in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+            if e.is_dir() and not e.name.startswith("."):
+                dirs.append(e.name)
+    except OSError:
+        pass
+    parent = str(base.parent) if base.parent != base else ""
+    return {"path": str(base), "parent": parent, "dirs": dirs,
+            "home": str(Path.home())}
