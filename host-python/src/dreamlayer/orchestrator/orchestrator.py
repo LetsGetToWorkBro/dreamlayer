@@ -972,24 +972,20 @@ class Orchestrator:
             self.bridge.send_card(res.card, event="fact_check")
 
     def _verify_claim(self, claim: str):
-        """World-check seam: hand a checkable claim to your knowledge tier and
-        read back a verdict. Reaches the Brain (and cloud, if you've opted in)
-        only when one is paired and capture is allowed — otherwise it stays
-        silent (returns None), so Veritas falls back to the offline
-        self-contradiction pass alone. A stronger verifier (retrieval + a
-        judged yes/no) can drop in behind this same shape."""
+        """World-check: hand a checkable claim to your knowledge tiers and read
+        back a verdict. Routes through the brain router's `ask` — your local
+        model first, the cloud tier only if you've opted in (and never while
+        incognito, which forces cloud off) — so a world fact can often be checked
+        offline, and nothing leaves your devices unless you've allowed it.
+        Returns None when no tier can answer, so Veritas falls back to its
+        offline self-contradiction pass alone."""
         if not self.privacy.allow_capture() or not getattr(self, "brain", None):
             return None
+        from ..ai_brain.verify import verify_claim
         try:
-            ans = self.brain.verify(claim) if hasattr(self.brain, "verify") else None
+            return verify_claim(claim, self.brain.ask)
         except Exception:
-            ans = None
-        if not ans:
             return None
-        verdict = ans.get("verdict") if isinstance(ans, dict) else None
-        if verdict not in ("supported", "disputed", "unverified"):
-            return None
-        return ans
 
     def _capture_commitment(self, utterance) -> None:
         from .conversation import parse_commitment

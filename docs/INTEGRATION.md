@@ -115,10 +115,13 @@ device seams are the callables they accept.
   date, a factual predicate — never a question or a hedge) to `_verify_claim`.
   Fires sparingly: one verdict per speaker per cooldown, only above a confidence
   floor, held during Focus, gated by the Veil. Card: `hud/cards.py: fact_check`
-  (green verified · amber check-this · red contradiction). **Seam:**
-  `_verify_claim` routes through the Brain (`brain.verify(claim)` →
-  `{verdict, basis, confidence}`) and the cloud tier when opted in; returns
-  `None` offline, so the self-contradiction pass still runs alone.
+  (green verified · amber check-this · red contradiction). The world check is
+  **real**: `_verify_claim` runs `ai_brain/verify.py: verify_claim(claim,
+  brain.ask)`, which asks a tightly-shaped verification question through the
+  router — your *local model first*, the *cloud tier only if you've opted in*
+  (and never while incognito) — and parses the reply into
+  `{verdict, basis, confidence}`. Returns `None` when no tier can answer, so the
+  offline self-contradiction pass still runs alone.
 - **Answer-ahead copilot** — with `set_copilot(True)`, when *someone else* asks a
   question in `ingest_caption`, `orchestrator/answer_ahead.py` decides if it's a
   real, answerable question (a wh-question, or one aimed at you — never a
