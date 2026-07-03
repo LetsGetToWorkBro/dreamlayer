@@ -517,29 +517,36 @@ local function draw_person_context(card, sc, enter_t, exit_t)
   local headline = card.headline or ""
   local why      = card.why      or ""
   local detail   = card.detail   or ""
+  -- Solid: the person is a centerpiece — avatar ring with bloom under an
+  -- enlarged crown over a soft pane, name in hero-class type. The chord
+  -- arpeggio and the one-why-line spec are unchanged.
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
-    text(name,CX,100,P.memory_trace, "lg")
+    if exit_t == 0 then
+      MAT.glass_disc(CX, 96, floor(56*sc), MAT.PANE, 3)
+    end
+    frame.display.circle(CX, 84, floor(18*sc), P.border_subtle, false)
+    MAT.bloom_ring(CX, 84, floor(18*sc), P.accent_memory_static)
+    polar_segs(CX,84, floor(26*sc),floor(44*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
     if card.has_avatar then
-      -- chord arpeggio around the avatar sprite (drawn at top center by
-      -- the sprite handler); confidence shapes the arc sweep
-      TR.chord(enter_t, CX, 56, card.confidence or 1)
+      -- chord arpeggio around the avatar sprite; confidence shapes the sweep
+      TR.chord(enter_t, CX, 84, card.confidence or 1)
     end
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.line(floor(lerp(CX,72,sc)),116, floor(lerp(CX,184,sc)),116, P.border_subtle)
+    text(name,CX,148,P.memory_trace, T.fit_size(name, 170, {"hero","xl"}))
+    MAT.grad_line(76, 164, 180, 164, MAT.RAMP_MEMORY)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     -- spec: exactly ONE line of "why this person matters right now"
     local line = why ~= "" and why or headline
     if #line > 34 then line = line:sub(1, 33) .. "\xE2\x80\xA6" end
-    text(line,CX,138,P.text_primary, "md")
+    text(line,CX,180,P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     if why ~= "" and headline ~= "" then
-      text(headline,CX,158,P.text_secondary, "sm")
+      text(headline,CX,196,P.text_secondary, "sm")
     end
-    text(detail,CX,176,P.text_ghost, "sm")
+    text(detail,CX,210,P.text_ghost, "sm")
   end
 end
 
@@ -849,15 +856,22 @@ local TESTIMONY_DIR_COLOR = {
   truthful  = P.accent_success,
   deceptive = P.accent_attention,
 }
+-- Solid: older testimony cools to the dim twin — temporal order becomes
+-- a visible bit (bright = the newest evidence), direction hue preserved
+local TESTIMONY_DIR_DIM = {
+  truthful  = P.accent_success_dim,
+  deceptive = P.accent_attention_dim,
+}
 
-local function draw_testimony_stage(i, stage, fraction)
+local function draw_testimony_stage(i, stage, fraction, bright)
   local dir = stage.direction or "insufficient"
   if dir == "insufficient" then return end
   local conf = clamp(stage.confidence or 0, 0, 1)
   local a0 = -90 + (i - 1) * A.TESTIMONY_SLOT_DEG + 2
   local span = conf * (A.TESTIMONY_SLOT_DEG - 4) * clamp(fraction, 0, 1)
   if span <= 1 then return end
-  local color = TESTIMONY_DIR_COLOR[dir]
+  local color = bright and TESTIMONY_DIR_COLOR[dir]
+                       or  TESTIMONY_DIR_DIM[dir]
   if dir == "truthful" then
     arc(CX, CY, A.TESTIMONY_R, a0, a0 + span, color, 12)
   else
@@ -894,12 +908,14 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
   end
 
   -- the thread accumulates in stage order: stage i draws over
-  -- [(i-1)/9, i/9] of thread_t
+  -- [(i-1)/9, i/9] of thread_t. Solid: the newest revealed stage is the
+  -- bright one; everything older has cooled to its dim twin.
+  local newest = math.min(9, math.floor(thread_t * 9) + 1)
   for i = 1, 9 do
     local stage = stages[i]
     if stage then
       local fraction = clamp(thread_t * 9 - (i - 1), 0, 1)
-      draw_testimony_stage(i, stage, fraction)
+      draw_testimony_stage(i, stage, fraction, i >= newest)
       -- a torn stage spits three fragments the moment it reveals — the
       -- thread visibly fails to hold there (deterministic per stage)
       if stage.direction == "deceptive" and fraction > 0
@@ -924,17 +940,32 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
     arc(CX, CY, A.TESTIMONY_R + 1, g0, g0 + 12, P.confidence_high, 3)
   end
 
-  -- verdict first, evidence second: word appears with the ripple landing
+  -- verdict first, evidence second: word appears with the ripple landing.
+  -- Solid: the verdict sits in a glass capsule in hero-class type — the
+  -- reading of the card, weighted like one.
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    local half_w = floor(#verdict * T.avg_w_with_tracking("md", 0) / 2) + 5
-    frame.display.rect(CX - half_w, CY - 15, half_w * 2, 19, P.background, true)
-    text(verdict, CX, CY - 6, P.text_primary, "md")
+    local vsize  = T.fit_size(verdict, 130, { "hero", "xl", "lg" })
+    local half_w = floor(#verdict * T.avg_w_with_tracking(vsize, 0) / 2) + 10
+    half_w = math.max(half_w, 26)
+    frame.display.rect(CX - half_w, CY - 16, half_w * 2, 33, P.background, true)
+    if exit_t == 0 then
+      MAT.glass_capsule(CX - half_w, CY - 16, half_w * 2, 32, MAT.PANE, 3)
+    end
+    -- capsule outline: two rails + rounded ends
+    local cr = 16
+    frame.display.line(CX - half_w + cr, CY - 16,
+                       CX + half_w - cr, CY - 16, P.border_subtle)
+    frame.display.line(CX - half_w + cr, CY + 16,
+                       CX + half_w - cr, CY + 16, P.border_subtle)
+    arc(CX - half_w + cr, CY, cr,  90, 270, P.border_subtle, 6)
+    arc(CX + half_w - cr, CY, cr, -90,  90, P.border_subtle, 6)
+    text(verdict, CX, CY, P.text_primary, vsize)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and conf then
     local jcol = (conf >= 0.75 and P.confidence_high)
               or (conf >= 0.40 and P.confidence_med)
               or  P.confidence_low
-    frame.display.circle(CX, CY + 16, 3, jcol, true)
+    frame.display.circle(CX, CY + 26, 3, jcol, true)
   end
 end
 

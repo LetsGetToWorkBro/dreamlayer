@@ -727,47 +727,42 @@ class CardRenderer:
                             "sm", T.MEMORY_TRACE, alpha=200)
 
     def _person_context(self, draw, card):
-        """PersonContextCard. v2 (Halo Cinema v1): `why` replaces the
-        headline as the primary line, and a confidence halo (chord arcs)
-        rings the 32×32 avatar zone when has_avatar is set — avatars only
-        ever exist for registered contacts."""
+        """PersonContextCard — Meridian Solid centerpiece: avatar ring
+        with bloom under an enlarged crown over a soft pane, name in
+        hero-class type. `why` stays the one primary line; chord arcs
+        ring the avatar zone when has_avatar (registered contacts only).
+        Mirrors the device Lua draw_person_context."""
         name     = card.get("primary") or ""
         headline = card.get("headline") or ""
         why      = card.get("why") or ""
         detail   = card.get("detail") or ""
         conf     = card.get("confidence")
 
-        if card.get("has_avatar"):
-            # avatar zone at top center: chord arpeggio arcs, sweep = conf
-            sweep = (conf or 1.0) * 360
-            for i, r in enumerate((18, 23, 28)):
-                self._arc(draw, CX, 52, r, -90, -90 + sweep, 1,
-                          T.ACCENT_MEMORY, alpha=200 - i * 55)
-            # avatar placeholder ring (sprite streams separately on-device)
-            self._circle(draw, CX, 52, 15, 1, T.BORDER_SUBTLE, alpha=160)
-            self._text_rgba(draw, CX, 52, name[:1].upper(), "md",
-                            T.TEXT_PRIMARY, alpha=230)
-
-        # Crown segments only (skip the bottom three): the 90°-region
-        # segments used to strike through the why-line (pass-1 vision fix)
-        draw_polar_segments(draw, CX, 100, 38, 56, 12, [0, 1, 2],
+        glass_disc(draw, CX, 96, 56, PANE, 3)
+        self._circle(draw, CX, 84, 18, 1, T.BORDER_SUBTLE, alpha=255)
+        bloom_ring(draw, CX, 84, 18, T.ACCENT_MEMORY_STATIC)
+        draw_polar_segments(draw, CX, 84, 26, 44, 12, [0, 1, 2],
                             T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35,
                             skip_indices=[5, 6, 7])
-        self._text(draw, CX, 100, name, "lg", T.MEMORY_TRACE)
-        self._hline(draw, 72, 184, 116, T.BORDER_SUBTLE)
-        if why:
-            # spec: exactly ONE line of "why this person matters right now"
-            why_line = why if len(why) <= 34 else why[:33] + "…"
-            self._text(draw, CX, 138, why_line, "sm", T.TEXT_PRIMARY)
-            self._text_rgba(draw, CX, 158, headline, "xs",
-                            T.TEXT_SECONDARY, alpha=170)
-            self._text_rgba(draw, CX, 176, detail, "xs", T.TEXT_GHOST, alpha=150)
-        else:
-            self._multiline_text(draw, CX, 140, headline, "md",
-                                 T.TEXT_PRIMARY, max_width=176)
-            self._text_rgba(draw, CX, 168, detail, "sm", T.TEXT_SECONDARY, alpha=200)
-        if conf is not None:
-            self._dot(draw, CX, 186, 3, T.conf_color(conf))
+        if card.get("has_avatar"):
+            sweep = (conf or 1.0) * 360
+            for i, r in enumerate((32, 40, 48)):
+                self._arc(draw, CX, 84, r, -90, -90 + sweep, 1,
+                          T.ACCENT_MEMORY, alpha=200 - i * 55)
+            self._text_rgba(draw, CX, 84, name[:1].upper(), "md",
+                            T.TEXT_PRIMARY, alpha=230)
+
+        name_size = "hero" if len(name) * 12 <= 170 else "xl"
+        self._text(draw, CX, 148, name, name_size, T.MEMORY_TRACE)
+        grad_line(draw, 76, 164, 180, 164)
+        line = why if why else headline
+        if len(line) > 34:
+            line = line[:33] + "…"
+        self._text(draw, CX, 180, line, "md", T.TEXT_PRIMARY)
+        if why and headline:
+            self._text_rgba(draw, CX, 196, headline, "sm",
+                            T.TEXT_SECONDARY, alpha=255)
+        self._text_rgba(draw, CX, 210, detail, "sm", T.TEXT_GHOST, alpha=255)
 
     def _privacy_veil(self, draw, card):
         self._arc(draw, CX, CY, 108, 10, 350, 1, T.PRIVACY_DANGER, alpha=34)
@@ -845,10 +840,20 @@ class CardRenderer:
             span = sconf * (self._THREAD_SLOT_DEG - 4)
             if span <= 1:
                 continue
+            # Solid: only the newest revealed stage is bright; older
+            # testimony cools to its dim twin (recency is a visible bit)
+            newest = max(idx for idx in range(9)
+                         if idx < len(stages)
+                         and (stages[idx] or {}).get("direction",
+                                                     "insufficient")
+                         != "insufficient")
             if direction == "truthful":
+                color = T.ACCENT_SUCCESS if i >= newest else T.ACCENT_SUCCESS_DIM
                 self._arc(draw, CX, CY, self._THREAD_R, a0, a0 + span, 2,
-                          T.ACCENT_SUCCESS, alpha=235)
+                          color, alpha=235)
             else:
+                color = (T.ACCENT_ATTENTION if i >= newest
+                         else T.ACCENT_ATTENTION_DIM)
                 # torn: 3 dashes alternating -3/+3/-3 px radial offset
                 dash = span / 4
                 for d, off in enumerate((-self._THREAD_TEAR_PX,
@@ -858,20 +863,29 @@ class CardRenderer:
                     da1 = min(da0 + dash, a0 + span)
                     if da1 > da0:
                         self._arc(draw, CX, CY, self._THREAD_R + off, da0, da1,
-                                  2, T.ACCENT_ATTENTION, alpha=235)
+                                  2, color, alpha=235)
 
-        # Black backing capsule so thread strokes never cross the verdict
-        # glyphs (v1's armor was right; device mirrors with a filled rect)
-        font = _font("md")
-        try:
-            tw = font.getlength(verdict)
-        except AttributeError:
-            tw = len(verdict) * 8
-        draw.rectangle([CX - tw / 2 - 5, CY - 15, CX + tw / 2 + 5, CY + 4],
+        # Solid: the verdict sits in a glass capsule in hero-class type
+        vsize = ("hero" if len(verdict) * 12 <= 130
+                 else "xl" if len(verdict) * 11 <= 130 else "lg")
+        adv = {"hero": 12, "xl": 11, "lg": 10}[vsize]
+        hw = max(26, int(len(verdict) * adv / 2) + 10)
+        draw.rectangle([CX - hw, CY - 16, CX + hw, CY + 17],
                        fill=(0, 0, 0, 255))
-        self._text(draw, CX, CY - 6, verdict, "md", T.TEXT_PRIMARY)
+        glass_capsule(draw, CX - hw, CY - 16, hw * 2, 32, PANE, 3)
+        cr = 16
+        rgb_b = _hex_to_rgb(T.BORDER_SUBTLE)
+        draw.line([(CX - hw + cr, CY - 16), (CX + hw - cr, CY - 16)],
+                  fill=rgb_b, width=1)
+        draw.line([(CX - hw + cr, CY + 16), (CX + hw - cr, CY + 16)],
+                  fill=rgb_b, width=1)
+        self._arc(draw, CX - hw + cr, CY, cr, 90, 270, 1,
+                  T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX + hw - cr, CY, cr, -90, 90, 1,
+                  T.BORDER_SUBTLE, alpha=255)
+        self._text(draw, CX, CY, verdict, vsize, T.TEXT_PRIMARY)
         if conf is not None:
-            self._dot(draw, CX, CY + 16, 3, T.conf_color(conf))
+            self._dot(draw, CX, CY + 26, 3, T.conf_color(conf))
         footer = card.get("footer") or ""
         if footer:
             self._text_rgba(draw, CX, 208, footer, "xs", T.TEXT_GHOST, alpha=150)
