@@ -568,12 +568,21 @@ class CardRenderer:
             self._dot(draw, ax, ay, 2, T.MEMORY_TRACE, alpha=180)
 
     def _saved_memory(self, draw, card):
-        self._arc(draw, CX, CY, 48, 0, 360, 1, T.ACCENT_SUCCESS, alpha=51)
-        self._arc(draw, CX, CY, 48, -90, 0, 2, T.ACCENT_SUCCESS, alpha=255)
-        draw_check_glyph(draw, (CX, CY - 8), 56, 3, T.ACCENT_SUCCESS, alpha=255, progressive=0.6)
-        self._text_rgba(draw, CX, CY - 48 + 6, "SAVED", "xs", T.ACCENT_SUCCESS, alpha=255)
-        self._multiline_text(draw, CX, CY + 22, card.get("primary", ""),
-                             "lg", T.TEXT_PRIMARY, max_width=188)
+        # Meridian Solid v2: giant double-struck check jewel inside
+        # concentric gradient rings over a soft pane (mirrors the Lua).
+        glass_disc(draw, CX, 124, 66, PANE, 4)
+        self._circle(draw, CX, 124, 70, 1, T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX, 124, 62, 0, 360, 1, T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX, 124, 54, 0, 360, 1, T.ACCENT_SUCCESS_DIM, alpha=255)
+        self._arc(draw, CX, 124, 46, 0, 360, 1, T.ACCENT_SUCCESS, alpha=255)
+        draw_check_glyph(draw, (CX, 120), 72, 2, T.ACCENT_SUCCESS,
+                         alpha=255, progressive=1.0)
+        draw_check_glyph(draw, (CX, 121), 72, 2, T.ACCENT_SUCCESS,
+                         alpha=255, progressive=1.0)
+        self._text_rgba(draw, CX, 42, "SAVED", "hero", T.ACCENT_SUCCESS,
+                        alpha=255)
+        self._text_rgba(draw, CX, 206, card.get("primary", ""), "md",
+                        T.TEXT_PRIMARY, alpha=255)
 
     def _query_listening(self, draw, card):
         mic_cx, mic_cy = 84, CY
@@ -618,23 +627,14 @@ class CardRenderer:
         self._dot(draw, CX, CY, 6, T.MEMORY_TRACE, alpha=40)
 
     def _object_recall(self, draw, card):
-        """
-        AAA Hero card — unmistakably different from centered-text layout.
+        """Meridian Solid v3 — a spatial scene, not a text list.
 
-        Layout:
-          - Vertical memory RAIL on the left edge (x=44, y=72..188), 2px teal
-          - EYEBROW: object name, small caps, anchored to rail (x=56, y=80, left-align)
-          - BEZIER TRACE: wide arc from rail anchor (56,80) → hero place baseline (152,152)
-            via upper-right control point (196,72) — visually sweeps right then curves down
-          - CONFIDENCE JEWEL: 6px filled diamond at curve apex (~t=0.45)
-          - ORBIT ARCS: 3 partial arcs (radius 12) around the jewel, 120° each
-          - HERO PLACE: 22px, right-weighted anchor at (155,152) — clearly NOT centered
-          - DETAIL: bracketed, 2px below hero, ghost
-          - FOOTER: ghost, near bottom
-        """
+        The place is a translucent field; the object is a jewel in it;
+        you are a dot at the bottom; a gradient trace (dim at you,
+        bright at the jewel) connects the two. Mirrors the device Lua
+        draw_object_recall exactly (same geometry, no alpha tricks on
+        the load-bearing strokes)."""
         def _name(v) -> str:
-            # simulator scenarios send {"name": …, "near"/"signature": …}
-            # structures; halo_lab samples send flat strings — accept both
             if isinstance(v, dict):
                 return str(v.get("name") or v.get("near") or "")
             return str(v or "")
@@ -646,63 +646,43 @@ class CardRenderer:
         conf     = card.get("confidence")
         jewel_color = T.conf_color(conf)
 
-        # --- LEFT MEMORY RAIL ---
-        rail_x = 44
-        rail_y1, rail_y2 = 72, 188
-        self._vbar(draw, rail_x, rail_y1, rail_y2, 2, T.MEMORY_TRACE, alpha=220)
-        # Rail top dot
-        self._dot(draw, rail_x + 1, rail_y1, 3, T.MEMORY_TRACE, alpha=255)
+        # the place, as a translucent field
+        glass_disc(draw, CX, 112, 62, PANE, 3)
 
-        # --- EYEBROW: object label, left-anchored to rail ---
-        self._text_rgba(draw, rail_x + 10, 80, obj_name, "sm", T.MEMORY_TRACE,
-                        alpha=200, anchor="lm")
+        # gradient trace: you -> object, cooling away from the jewel
+        grad_bezier(draw, (128, 192), (168, 140), (132, 102),
+                    ramp=(T.BORDER_SUBTLE, T.ACCENT_MEMORY_DIM,
+                          T.ACCENT_MEMORY_STATIC, T.MEMORY_TRACE),
+                    steps=24)
 
-        # --- MEMORY TRACE BEZIER ---
-        # Starts at rail anchor, sweeps up-right then curves down to place text
-        p0 = (float(rail_x + 2), 90.0)   # rail anchor (just right of rail)
-        p1 = (200.0, 62.0)                # control — pulls trace up-right dramatically
-        p2 = (155.0, 150.0)               # endpoint — hero place text baseline
-        draw_quadratic_bezier(draw, p0, p1, p2,
-                              stroke=2, color=T.MEMORY_TRACE, alpha=255, dash_offset=2.0)
-
-        # --- CONFIDENCE JEWEL at curve apex (t≈0.45) ---
-        t_j = 0.45
-        apex_x = (1-t_j)**2 * p0[0] + 2*(1-t_j)*t_j * p1[0] + t_j**2 * p2[0]
-        apex_y = (1-t_j)**2 * p0[1] + 2*(1-t_j)*t_j * p1[1] + t_j**2 * p2[1]
-        jd = 4  # pass-1 vision fix: 6px diamond + wide bloom swallowed the trace
-        r_, g_, b_ = _hex_to_rgb(jewel_color)
-        draw.polygon([
-            (apex_x,      apex_y - jd),
-            (apex_x + jd, apex_y),
-            (apex_x,      apex_y + jd),
-            (apex_x - jd, apex_y),
-        ], fill=(r_, g_, b_, 255))
-        # Jewel bloom
-        self._dot(draw, apex_x, apex_y, jd + 3, jewel_color, alpha=25)
-
-        # --- ORBIT ARCS around jewel (radius=10, 3 × 90°) ---
+        # the object jewel: layered diamonds + orbit arcs + bloom
+        jx, jy = 128, 88
+        rj, gj, bj = _hex_to_rgb(jewel_color)
+        draw.polygon([(jx, jy - 9), (jx + 9, jy), (jx, jy + 9),
+                      (jx - 9, jy)], outline=(rj, gj, bj, 255))
+        rt_, gt_, bt_ = _hex_to_rgb(T.MEMORY_TRACE)
+        draw.polygon([(jx, jy - 4), (jx + 4, jy), (jx, jy + 4),
+                      (jx - 4, jy)], outline=(rt_, gt_, bt_, 255))
         for phase in [0, 120, 240]:
-            draw_elliptical_arc(draw, apex_x, apex_y, 10, 10,
-                                phase, 90, 1, jewel_color, alpha=160)
+            draw_elliptical_arc(draw, jx, jy, 14, 14, phase, 90, 1,
+                                jewel_color, alpha=255)
+        bloom_ring(draw, jx, jy, 14, jewel_color)
 
-        # --- HERO PLACE TEXT — right-weighted, large, NOT centered ---
-        # Teal ghost glow layer first
-        r_t, g_t, b_t = _hex_to_rgb(T.MEMORY_TRACE)
-        draw.text((157, 150), place, font=_font("hero"),
-                  fill=(r_t, g_t, b_t, 40), anchor="mm")
-        # Primary layer — bright, right of center
-        draw.text((155, 150), place, font=_font("hero"),
-                  fill=_hex_to_rgb(T.TEXT_PRIMARY), anchor="mm")
+        # you, at the bottom of the scene
+        self._dot(draw, 128, 198, 3, T.MEMORY_TRACE, alpha=255)
+        bloom_ring(draw, 128, 198, 3, T.MEMORY_TRACE)
 
-        # --- DETAIL line — dashed bracket style, below hero ---
-        self._text_rgba(draw, CX, 178, f"[ {detail} ]" if detail else "",
-                        "xs", T.TEXT_SECONDARY, alpha=160, anchor="mm")
-
-        # --- FOOTER (last seen) ---
-        self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=140, anchor="mm")
-
-        # --- Small confidence dot near rail bottom ---
-        self._dot(draw, rail_x + 1, rail_y2, 3, jewel_color, alpha=200)
+        # type: time eyebrow, object label, HERO place, bracketed detail
+        self._text_rgba(draw, CX, 50, footer, "xs", T.TEXT_GHOST, alpha=255)
+        self._text_rgba(draw, CX, 66, obj_name, "md", T.MEMORY_TRACE,
+                        alpha=255)
+        place_size = "hero" if len(place) * 12 <= 170 else (
+            "xl" if len(place) * 11 <= 170 else "lg")
+        self._text_rgba(draw, CX, 150, place, place_size, T.TEXT_PRIMARY,
+                        alpha=255)
+        if detail:
+            self._text_rgba(draw, CX, 176, f"[ {detail} ]", "md",
+                            T.TEXT_SECONDARY, alpha=255)
 
     def _commitment_recall(self, draw, card):
         person = card.get("person") or ""

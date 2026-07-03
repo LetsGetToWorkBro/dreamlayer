@@ -229,6 +229,12 @@ end
 
 local CX,CY = 128,128
 
+local MAT = require("display.materials")
+
+-- ObjectRecall trace: dim at the wearer, bright at the jewel; the bright
+-- half rides the card band bases so the conduct wave still flows there
+local RAMP_TRACE_UP = { 0x2A3C44, 0x1A7A60, 0x01FFAA, 0x00FFA9 }
+
 -- Solid: every renderer string goes through the sized-text seam. The
 -- size tokens are typography.DEVICE_FONT keys; primitives caches the
 -- set_font call and latches the feature off if firmware lacks it.
@@ -272,30 +278,39 @@ local function draw_ready(sc, enter_t, exit_t)
   end
 end
 
+-- SavedMemoryCard v2 (Meridian Solid): the confirmation is a jewel —
+-- a giant double-struck check inside concentric gradient rings over a
+-- soft pane, SAVED in hero type. Spring draw-on, chime, and the burst
+-- flair keep their Lumen contracts.
 local function draw_saved_memory(card, sc, enter_t, exit_t, idle_t)
-  local r = floor(48 * sc)
+  local r = floor(46 * sc)
   if r<1 then return end
-  arc(CX,CY,r,0,360,P.accent_success,48)
-  arc(CX,CY,r,-90,0,P.accent_success,12)
-  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    -- Lumen: the check draws on with a soft spring — the stroke arrives,
-    -- settles, and means it (was a linear wipe)
-    check_glyph(CX,CY-8,floor(56*sc),P.accent_success,
-                E.spring(math.min(1, enter_t*2),
-                         A.SPRING_ZETA_SOFT, A.SPRING_OMEGA))
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 124, floor(66*sc), MAT.PANE, 4)
   end
-  -- Lumen: the chime ring breathes outward once as the card settles —
-  -- the visual analog of the save sound (transitions.chime, kept), now
-  -- fired from the hold clock so it follows the burst
+  frame.display.circle(CX, 124, floor(70*sc), P.border_subtle, false)
+  arc(CX,124,floor(62*sc),0,360,P.border_subtle,32)
+  arc(CX,124,floor(54*sc),0,360,P.accent_success_dim,28)
+  arc(CX,124,r,0,360,P.accent_success,24)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    -- Lumen: the check draws on with a soft spring; Solid: it is giant
+    -- and double-struck (2px stroke reads as engraved, not sketched)
+    local prog = E.spring(math.min(1, enter_t*2),
+                          A.SPRING_ZETA_SOFT, A.SPRING_OMEGA)
+    check_glyph(CX,120,floor(72*sc),P.accent_success, prog)
+    check_glyph(CX,121,floor(72*sc),P.accent_success, prog)
+  end
+  -- Lumen: the chime ring breathes outward once as the card settles
   if enter_t >= 1.0 and exit_t == 0 and idle_t and not TR.reduce_motion()
      and idle_t < A.SIG_CHIME_MS then
-    TR.chime(idle_t / A.SIG_CHIME_MS, CX, CY - 8)
+    TR.chime(idle_t / A.SIG_CHIME_MS, CX, 120)
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    text("SAVED",CX,CY-42,P.accent_success, "lg")
+    text("SAVED",CX,42,P.accent_success, "hero")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    text((card and card.primary) or "Memory saved",CX,CY+22,P.text_primary, "md")
+    local primary = (card and card.primary) or "Memory saved"
+    text(T.truncate(primary, "md", 180),CX,206,P.text_primary, "md")
   end
 end
 
@@ -364,6 +379,15 @@ local function draw_loading(sc, enter_t, idle_t)
   end
 end
 
+-- ---------------------------------------------------------------------------
+-- ObjectRecallCard v3 (Meridian Solid): a spatial scene, not a text list.
+-- The place is a translucent field of light; the object is a jewel in it;
+-- you are a dot at the bottom; a gradient trace (dim at you, bright at the
+-- jewel) connects the two — the memory literally shows where the thing is
+-- relative to you. The conduct flair still flows on the trace's bright
+-- half (RAMP_MEMORY_LIVE leads with the card band bases). Confidence
+-- keeps its color semantics on the jewel.
+-- ---------------------------------------------------------------------------
 local function draw_object_recall(card, sc, enter_t, exit_t)
   local obj    = ((card.object or card.primary or ""):upper())
   local place  = card.place   or ""
@@ -375,43 +399,52 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     if conf>=0.75 then jcol=P.confidence_high
     elseif conf<0.40 then jcol=P.confidence_low end
   end
-  -- memory rail: scales from center outward. Lumen: rail + trace band
-  -- across the card slots — during HOLD the conduct wave flows light from
-  -- the place node toward the object label (the memory conducts). With no
-  -- program running the bases read as memory_trace, pixel-for-pixel.
-  local rail_top = floor(lerp(CY, 72,  sc))
-  local rail_bot = floor(lerp(CY, 188, sc))
-  local rail_mid = floor((rail_top + rail_bot) / 2)
-  frame.display.line(44,rail_top,44,rail_mid,A.SPEC_BASE_A)
-  frame.display.line(44,rail_mid,44,rail_bot,A.SPEC_BASE_B)
-  frame.display.circle(44,rail_top,3,P.memory_trace,true)
-  frame.display.circle(44,rail_bot,3,jcol,true)
-  -- eyebrow
-  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    text(obj,54,80,P.memory_trace, "sm")
+
+  -- the place, as a translucent field (panes never draw during exit)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 112, floor(62*sc), MAT.PANE, 3)
   end
-  -- bezier arc
+
+  -- gradient trace: you -> object, cooling away from the jewel
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    bezier(46,90,200,62,155,150,{A.SPEC_BASE_A, A.SPEC_BASE_B},32)
-    local jx=floor(46*0.3025+2*0.55*0.45*200+0.2025*155)
-    local jy=floor(90*0.3025+2*0.55*0.45*62 +0.2025*150)
-    local jd=floor(4*sc)
-    if jd>=1 then
+    MAT.grad_bezier(128,192, 168,140, 132,102, RAMP_TRACE_UP, 24)
+  end
+
+  -- the object jewel: layered diamonds + orbit arcs + bloom
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local jx, jy = 128, 88
+    local jd = floor(9*sc)
+    if jd >= 2 then
       frame.display.line(jx,jy-jd,jx+jd,jy,jcol)
       frame.display.line(jx+jd,jy,jx,jy+jd,jcol)
       frame.display.line(jx,jy+jd,jx-jd,jy,jcol)
       frame.display.line(jx-jd,jy,jx,jy-jd,jcol)
+      local di = math.max(1, floor(4*sc))
+      frame.display.line(jx,jy-di,jx+di,jy,P.memory_trace)
+      frame.display.line(jx+di,jy,jx,jy+di,P.memory_trace)
+      frame.display.line(jx,jy+di,jx-di,jy,P.memory_trace)
+      frame.display.line(jx-di,jy,jx,jy-di,P.memory_trace)
     end
-    arc(jx,jy,floor(10*sc),  0, 90,jcol,8)
-    arc(jx,jy,floor(10*sc),120,210,jcol,8)
-    arc(jx,jy,floor(10*sc),240,330,jcol,8)
+    arc(jx,jy,floor(14*sc),  0, 90,jcol,8)
+    arc(jx,jy,floor(14*sc),120,210,jcol,8)
+    arc(jx,jy,floor(14*sc),240,330,jcol,8)
+    MAT.bloom_ring(jx, jy, floor(14*sc), jcol)
+  end
+
+  -- you, at the bottom of the scene
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    frame.display.circle(128, 198, 3, P.memory_trace, true)
+    MAT.bloom_ring(128, 198, 3, P.memory_trace)
+  end
+
+  -- type: time eyebrow, object label, HERO place, bracketed detail
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(footer, CX, 50, P.text_ghost, "sm")
+    text(obj, CX, 66, P.memory_trace, "md")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    text(place,155,150,P.text_primary, "lg")
-    if detail~="" then text("[ "..detail.." ]",CX,178,P.text_secondary, "md") end
-  end
-  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    text(footer,CX,198,P.text_ghost, "sm")
+    text(place, CX, 150, P.text_primary, T.fit_size(place, 170))
+    if detail~="" then text("[ "..detail.." ]",CX,176,P.text_secondary, "md") end
   end
 end
 

@@ -79,13 +79,22 @@ def test_shatter_draws_impact_ring_then_stops():
 
 
 def test_shatter_reduce_motion_is_todays_still_pose():
+    # a shattered promise reached via the transition must render exactly
+    # like one that was already shattered — the transition adds nothing
+    # under reduce_motion (no shards, no impact ring)
     rt = _rt()
     rt.execute("TR.set_reduce_motion(true)")
     _frame(rt, 1, 4, 1000)
-    _frame(rt, 2, 5, 2000)
+    _frame(rt, 2, 5, 2000)                        # the transition
     assert int(rt.eval("PT.live_count()")) == 0   # shards no-op
     rt.execute("_circles = {}; HZ.draw({ now_ms = 2050, reduce_motion = true })")
-    assert len(_circles(rt)) == 0                  # no impact ring either
+    transitioned = len(_circles(rt))
+
+    rt2 = _rt()
+    rt2.execute("TR.set_reduce_motion(true)")
+    _frame(rt2, 1, 5, 2000)                       # born shattered
+    rt2.execute("_circles = {}; HZ.draw({ now_ms = 2050, reduce_motion = true })")
+    assert transitioned == len(_circles(rt2))     # no impact ring added
 
 
 def _circles(rt):

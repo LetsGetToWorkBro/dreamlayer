@@ -343,6 +343,13 @@ local function draw_notch(now_ms, reduce_motion)
   end
   local color = _paused and P.status_paused or P.accent_memory
   radial_tick(A.MER_NOW_DEG, 96, fl(96 + len), color, 2)
+  -- Solid: one bloom dot at the tip — the heartbeat catches the light
+  if HAS_FRAME then
+    local bx, by = polar(96 + len + 2, A.MER_NOW_DEG)
+    frame.display.circle(fl(bx), fl(by), 2,
+                         _paused and P.status_paused or P.accent_memory_dim,
+                         false)
+  end
 end
 
 --- One full horizon pass. Never clears, never shows — the caller owns
