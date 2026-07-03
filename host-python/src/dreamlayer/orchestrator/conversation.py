@@ -15,6 +15,7 @@ while capture is paused or you're incognito.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from collections import deque
@@ -74,6 +75,14 @@ class ConversationLedger:
         if n <= 0:
             return []
         return list(self._log)[-n:]
+
+    def last_other_speaker(self) -> str:
+        """The most recent person (not the wearer) who spoke — i.e. who you're
+        talking to right now. '' if only you have spoken."""
+        for u in reversed(self._log):
+            if not u.is_mine():
+                return u.speaker
+        return ""
 
     # -- recall ----------------------------------------------------------
 
@@ -153,6 +162,42 @@ class ConversationLedger:
             "topics": topics,
             "recent": [u.text for u in theirs[-recent:]],
         }
+
+
+# --- commitment capture: turn "I'll send you the lease by Friday" into a task -
+# A promise the *wearer* makes to whoever they're talking to. Deliberately
+# conservative: it only fires on a first-person promise cue, so passing remarks
+# don't become tasks. The mic + ASR that produce the text are the device seam.
+
+_PROMISE_RE = re.compile(
+    r"\b(?:i(?:'| a)?ll|i will|i can|i promise to|let me|i'll go)\b",
+    re.IGNORECASE)
+_DUE_RE = re.compile(
+    r"\b(?:by|before|on|this|next|tomorrow|tonight|today|end of)\b[^.,;]*", re.IGNORECASE)
+_DUE_WORDS = ("tomorrow", "tonight", "today", "monday", "tuesday", "wednesday",
+              "thursday", "friday", "saturday", "sunday", "week", "weekend",
+              "morning", "afternoon", "evening", "noon", "eod")
+
+
+def parse_commitment(text: str) -> Optional[dict]:
+    """If `text` is a first-person promise, pull out {task, due}. Else None.
+
+    'I'll send you the lease by Friday' → {task: 'send you the lease by
+    Friday', due: 'by Friday'}. Pure and synthetic-testable — no model needed;
+    a richer extractor can replace it behind the same shape.
+    """
+    t = (text or "").strip()
+    m = _PROMISE_RE.search(t)
+    if not m:
+        return None
+    task = t[m.end():].strip(" ,.;:—-")
+    if len(task) < 3:
+        return None
+    due = ""
+    dm = _DUE_RE.search(task)
+    if dm and any(w in dm.group(0).lower() for w in _DUE_WORDS):
+        due = dm.group(0).strip(" ,.;:")
+    return {"task": task, "due": due}
 
 
 def _hour_label(ts: float) -> str:

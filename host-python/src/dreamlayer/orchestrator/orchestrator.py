@@ -118,6 +118,12 @@ class Orchestrator:
         from .conversation import ConversationLedger
         self.conversation = ConversationLedger()
         self.captions_on = True                 # show live captions on the glasses
+        # Social Lens: look at someone you've met → their name + context, matched
+        # on-device against your own contacts (never a stranger lookup). Mounted
+        # here so look_at_person() can pair a face match with the conversation
+        # dossier. Starts empty; Contacts sync fills it.
+        from ..social_lens import SocialLens
+        self.social = SocialLens(privacy=self.privacy)
         # Focus mode: a stretch with the interruptions turned down (anticipation,
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
@@ -706,7 +712,28 @@ class Orchestrator:
                 and not self.focus_active()):
             self.bridge.send_card(
                 cards.spoken_caption(u.speaker, u.text), event="caption")
+        # a promise you just made becomes a tracked commitment — feeds the
+        # dossier, anticipation, and the quest/drift engine.
+        if u is not None and u.is_mine():
+            self._capture_commitment(u)
         return u
+
+    def _capture_commitment(self, utterance) -> None:
+        from .conversation import parse_commitment
+        parsed = parse_commitment(utterance.text)
+        if not parsed:
+            return
+        person = self.conversation.last_other_speaker() or "someone"
+        try:
+            self.db.add_commitment(person, parsed["task"], parsed.get("due") or None,
+                                   None, 0.7)
+        except Exception:
+            pass
+        if not self.focus_active():
+            self.bridge.send_card(
+                cards.commitment_recall({"person": person, "task": parsed["task"],
+                                         "due": parsed.get("due", ""), "confidence": 0.7}),
+                event="commitment_captured")
 
     def live_captions(self, n: int = 6) -> list:
         """The last few utterances, oldest→newest, for the caption strip."""
@@ -737,6 +764,27 @@ class Orchestrator:
         card = cards.person_dossier(d)
         self.bridge.send_card(card, event="greet")
         return card
+
+    def look_at_person(self, frame, now: float | None = None) -> dict | None:
+        """Look at someone → know them. Matches the face against your own
+        contacts (on-device, never a stranger lookup) and, when it's someone
+        the conversation ledger also knows, follows the identity card with the
+        dossier (last spoke, recurring topics, what's open). Veil-gated by
+        SocialLens itself. Returns what it surfaced, or None on no match."""
+        res = self.social.identify(frame)
+        if res is None or res.match is None:
+            return None
+        name = res.match.contact.name
+        identity = res.to_hud_card()
+        self.bridge.send_card(identity, event="social")
+        out = {"person": name, "confidence": res.match.confidence,
+               "identity": identity, "dossier": None}
+        d = self.conversation.dossier(name, now)
+        if d.get("known"):
+            dossier = cards.person_dossier(d)
+            self.bridge.send_card(dossier, event="greet")
+            out["dossier"] = dossier
+        return out
 
     # -- back-compat aliases (the model is the three switches above) -----
 

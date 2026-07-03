@@ -82,6 +82,15 @@ device seams are the callables they accept.
   `start_message_polling()` fetch the Brain feed and flash new incoming
   messages (idempotent, veil-gated, per-channel toggles). **Seam:** `http_get`
   defaults to `urllib`; swap for your platform's client if needed.
+- **Look at someone → dossier** — `orchestrator.look_at_person(frame)` matches
+  the face against *your own* contacts (`social_lens`, on-device, never a
+  stranger lookup) and follows the identity card with the conversation dossier
+  when the ledger knows them. Contacts sync fills `self.social`. **Seam:** the
+  camera frame + the face-embedding model (MobileFaceNet/NPU).
+- **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
+  on your own lines, so "I'll send you the lease by Friday" becomes a tracked
+  commitment (`db.add_commitment`, attributed to whoever you're talking to) that
+  feeds the dossier, anticipation, and quest/drift. Veil-gated.
 - **Conversation ledger** — `orchestrator/conversation.py: ConversationLedger`
   turns transcribed speech into four things:
   `ingest_caption(text, speaker)` records a line and flashes it as a live
