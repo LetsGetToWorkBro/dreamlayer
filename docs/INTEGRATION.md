@@ -122,6 +122,18 @@ device seams are the callables they accept.
   (and never while incognito) — and parses the reply into
   `{verdict, basis, confidence}`. Returns `None` when no tier can answer, so the
   offline self-contradiction pass still runs alone.
+- **Discernment (three lenses, one read)** — Veritas is *not* folded into Truth
+  Lens or Social Lens; they answer different questions on different inputs
+  (content vs delivery vs identity/history) and stay single-responsibility.
+  `orchestrator/discernment.py: discern(fact, credibility=None, history=0)`
+  *composes* them: a Veritas `FactCheck` (content) + an optional Truth Lens
+  `CredibilityVector` (delivery, handed in via `note_credibility(speaker,
+  vector)` — the live NPU pipeline is the device seam) + a count of the speaker's
+  prior flags → one graded `stance` (trust / note / caution / flag) with a human
+  `headline`. The point of the fusion: content + delivery that *agree* is the
+  strongest flag, while a false claim delivered *sincerely* reads as an honest
+  mistake, not a lie. `_fact_check` runs it and folds the tag ("elevated · seen
+  before") into the `fact_check` card footer + a `stance`/`headline` on the card.
 - **Answer-ahead copilot** — with `set_copilot(True)`, when *someone else* asks a
   question in `ingest_caption`, `orchestrator/answer_ahead.py` decides if it's a
   real, answerable question (a wh-question, or one aimed at you — never a
