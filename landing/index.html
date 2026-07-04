@@ -669,15 +669,15 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
     <div class="sec-head" style="text-align:center;margin:0 auto clamp(32px,5vh,56px)">
       <span class="eyebrow arrive">In thirty seconds</span>
       <h2 class="headline arrive" style="--d:80ms">Park it. Forget it. Ask.</h2>
-      <p class="body arrive" style="--d:160ms">The everyday loop — you glance, it keeps, you ask. Here it
-        is start to finish: where you left the car, handed back the moment you need it.</p>
+      <p class="body arrive" style="--d:160ms">The everyday loop — a glance, a nod, and it’s kept. Ask
+        when you need it back, or just return: it resurfaces on its own the moment you’re near.</p>
     </div>
     <div class="walk-stage arrive" style="--d:120ms">
       <div class="walk-orb"><canvas data-hud="walk"
            aria-label="A 30-second walkthrough: saving your parking spot, then recalling it"></canvas></div>
       <div class="walk-side">
         <ol class="walk-steps" id="walkSteps">
-          <li data-beat="save"><span class="wn">01</span><div><b>Save</b><em>You glance at your spot and tap once.</em></div></li>
+          <li data-beat="save"><span class="wn">01</span><div><b>Save</b><em>Glance at your spot, a quick nod — kept.</em></div></li>
           <li data-beat="ask"><span class="wn">02</span><div><b>Ask</b><em>Hours later — “Hey Oracle, where did I park?”</em></div></li>
           <li data-beat="recall"><span class="wn">03</span><div><b>Recall</b><em>The way back, on the rim of your sight.</em></div></li>
         </ol>
@@ -1323,7 +1323,7 @@ veilScroll();
       ctx.beginPath();ctx.arc(cx,cy,r,0,TWO);ctx.stroke();
       ctx.fillStyle=TEAL;ctx.beginPath();ctx.arc(cx,cy,3*k,0,TWO);ctx.fill();
     } else if(tt<5.0){                            // SAVE
-      beat="save";cap="One tap — “Parked · Level 3, blue pillar.”";
+      beat="save";cap="A quick nod — “Parked · Level 3, blue pillar.”";
       var st=tt-1.2,appear=eO(Math.min(1,st/0.6));
       for(var i=0;i<4;i++){var rr=(20+i*12)*k;
         ctx.strokeStyle="rgba(86,211,100,"+Math.max(0,appear*(0.5-i*0.09))+")";ctx.lineWidth=1.4*k;
