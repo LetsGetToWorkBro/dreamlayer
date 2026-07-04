@@ -250,6 +250,17 @@ class SocialLens:
     def contact_count(self) -> int:
         return self._index.size
 
+    def people(self) -> list:
+        """Everyone you've met — enriched with notes, relation, and debts. The
+        read side of the phone's People screen."""
+        return [self._enricher.enrich(c) for c in self._index.all()]
+
+    def set_notes_list(self, contact_id: str, notes: list) -> None:
+        """Replace a contact's notes with a list (a phone edit — e.g. deleting
+        one). Stored in the same ' • '-joined form the card reads."""
+        self._enricher.set_notes(contact_id, " • ".join(
+            n.strip() for n in notes if n and n.strip()))
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

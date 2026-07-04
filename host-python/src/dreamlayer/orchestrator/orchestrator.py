@@ -1104,6 +1104,41 @@ class Orchestrator:
         phone's profile screen; a read, never a write."""
         return self.user.snapshot(n).to_dict()
 
+    def social_people(self) -> list:
+        """Everyone you've met, as the phone's People screen reads them: how you
+        know them, when you last saw/spoke, your notes, and any open debts.
+        On-device; a read of your own social memory."""
+        out = []
+        for c in self.social.people():
+            d = self.conversation.dossier(c.name)
+            out.append({
+                "contact_id": c.contact_id,
+                "name": c.name,
+                "relation": c.relation or "",
+                "company": c.company or "",
+                "role": c.role or "",
+                "last_met": c.last_met or "",
+                "last_seen": d.get("last_seen_ago", "") if d.get("known") else "",
+                "notes": [s.strip() for s in (c.notes or "").split(" • ") if s.strip()],
+                "debts": c.debt_lines(),
+                "topics": d.get("topics", []) if d.get("known") else [],
+            })
+        out.sort(key=lambda p: p["name"].lower())
+        return out
+
+    def publish_people(self, http_post=None) -> dict | None:
+        """Push your social memory to the paired Brain (POST
+        /dreamlayer/social/people) so the phone's People screen can read it —
+        the same hub->Brain bridge the profile uses. Best-effort, Veil-gated."""
+        if not self.privacy.allow_capture() or not self.brain_url:
+            return None
+        post = http_post or _default_http_post
+        try:
+            return post(self.brain_url.rstrip("/") + "/dreamlayer/social/people",
+                        {"people": self.social_people()}, self.brain_token)
+        except Exception:
+            return None
+
     def publish_profile(self, http_post=None) -> dict | None:
         """Push the Oracle profile to the paired Mac mini Brain (POST
         /dreamlayer/profile) so the phone can read it — the hub->Brain bridge.
@@ -1339,6 +1374,7 @@ class Orchestrator:
             name = contact.name if contact is not None else lp["name"]
         say = (f"Noted — {name} owes you {what}." if direction == "they_owe"
                else f"Noted — you owe {name} {what}.")
+        self.publish_people()
         return {"intent": "debt", "ok": True, "who": name, "dir": direction,
                 "what": what, "say": say}
 
@@ -1358,6 +1394,7 @@ class Orchestrator:
                         "say": "Look at someone first, then tell me."}
             self.social.settle_by_id(lp["contact_id"])
             name = lp["name"]
+        self.publish_people()
         return {"intent": "debt_settle", "ok": True, "who": name,
                 "say": f"Squared up with {name}."}
 
@@ -1379,6 +1416,7 @@ class Orchestrator:
                              "ts": self._clock()}
         tail = (" — I'll know them next time" if frame is not None
                 else " (no face in view, so name only)")
+        self.publish_people()
         return {"intent": "meet_person", "ok": True, "who": name,
                 "relation": relation, "note": note,
                 "say": f"Good to meet {name}{tail}."}
@@ -1409,6 +1447,7 @@ class Orchestrator:
                         "say": "Look at someone first, then tell me to remember."}
             contact = self.social.add_note_by_id(lp["contact_id"], note)
             target_name = contact.name if contact is not None else lp["name"]
+        self.publish_people()
         return {"intent": "note_person", "ok": True, "who": target_name,
                 "note": note,
                 "say": f"Got it — I'll remember that about {target_name}."}

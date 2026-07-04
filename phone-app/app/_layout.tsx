@@ -33,6 +33,7 @@ export default function Layout() {
       <Tabs.Screen name="rewind" options={{ href: null }} />
       <Tabs.Screen name="saga" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="people" options={{ href: null }} />
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="confluence" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null }} />

@@ -55,6 +55,10 @@ class ContactIndex:
     def get(self, contact_id: str) -> Optional[ContactRecord]:
         return self._contacts.get(contact_id)
 
+    def all(self) -> list[ContactRecord]:
+        """Every contact in the index (for the People screen)."""
+        return list(self._contacts.values())
+
     def find_by_name(self, name: str) -> Optional[ContactRecord]:
         """Resolve a spoken name to a contact — exact (case-insensitive)
         first, then a unique first-name / prefix match. Ambiguous or absent

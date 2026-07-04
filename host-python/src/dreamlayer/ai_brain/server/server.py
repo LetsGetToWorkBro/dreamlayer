@@ -126,6 +126,11 @@ class Brain:
         # here so the phone can read it — the hub->Brain bridge. Just a mirror;
         # the Brain never writes it, only stores what the hub sends.
         self.profile: dict = self._load_profile()
+        # Social memory mirror (hub -> Brain, like the profile): everyone you've
+        # met with their relation, notes, and debts, so the phone's People
+        # screen can read and edit them. The hub owns the truth; this is a
+        # mirror the phone drives.
+        self.social_people: list = self._load_people()
         # Reality Compiler v2 (the Rehearsal paradigm, docs/RC_V2_*.md): the
         # phone performs a behavior as beats; the Brain infers → verifies →
         # signs → hot-swaps a Figment. The vault (signed, on-device storage)
@@ -823,6 +828,62 @@ class Brain:
                 return {}
         return {}
 
+    # -- social people mirror (hub -> Brain -> phone People screen) ----------
+
+    def _load_people(self) -> list:
+        p = self.cfg_dir / "social_people.json"
+        if p.exists():
+            try:
+                return json.loads(p.read_text()) or []
+            except Exception:
+                return []
+        return []
+
+    def _save_people(self) -> None:
+        try:
+            (self.cfg_dir / "social_people.json").write_text(
+                json.dumps(self.social_people))
+        except Exception:
+            pass
+
+    def social_people_state(self) -> dict:
+        return {"people": self.social_people}
+
+    def receive_people(self, payload: dict) -> dict:
+        """Store the snapshot the hub pushed (merging so phone-side edits made
+        while the hub was offline aren't clobbered by name that isn't present)."""
+        incoming = (payload or {}).get("people") or []
+        self.social_people = list(incoming)
+        self._save_people()
+        return {"ok": True, "count": len(self.social_people)}
+
+    def edit_person(self, body: dict) -> dict:
+        """Apply a phone edit to a person in the mirror: add a note, set the
+        relationship, remove a note, or settle debts. Returns the updated
+        person, or {ok:False} if the id isn't in the mirror."""
+        b = body or {}
+        cid = str(b.get("contact_id", ""))
+        action = str(b.get("action", ""))
+        person = next((p for p in self.social_people
+                       if p.get("contact_id") == cid), None)
+        if person is None:
+            return {"ok": False, "error": "no such person"}
+        if action == "note":
+            note = str(b.get("value", "")).strip()
+            if note:
+                person.setdefault("notes", []).append(note)
+        elif action == "remove_note":
+            note = str(b.get("value", ""))
+            person["notes"] = [n for n in person.get("notes", []) if n != note]
+        elif action == "relation":
+            person["relation"] = str(b.get("value", "")).strip()
+        elif action == "settle":
+            person["debts"] = []
+        else:
+            return {"ok": False, "error": "unknown action"}
+        self._save_people()
+        return {"ok": True, "person": person}
+
     def set_profile(self, data: dict) -> dict:
         """Store the Oracle profile the glasses hub just pushed (a mirror, so the
         phone can read it). Keeps only the known shape; persists to profile.json."""
@@ -1158,6 +1219,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif path == "/dreamlayer/rc/repertoire":
                 # the Reality Compiler Repertoire: kept figments the phone lists
                 self._json(200, brain.rc_repertoire())
+            elif path == "/dreamlayer/social/people":
+                # your social memory: everyone met, notes, relations, debts
+                self._json(200, brain.social_people_state())
             elif path == "/dreamlayer/profile":
                 # what the Oracle has learned about you (mirrored from the hub)
                 self._json(200, brain.profile)
@@ -1268,6 +1332,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rc_deploy(self._body().get("figment_id", "")))
             elif path == "/dreamlayer/rc/revoke":
                 self._json(200, brain.rc_revoke(self._body().get("figment_id", "")))
+            elif path == "/dreamlayer/social/people":
+                # the hub pushes its social-memory snapshot here
+                self._json(200, brain.receive_people(self._body()))
+            elif path == "/dreamlayer/social/people/edit":
+                # a phone edit: add/remove a note, set relation, settle debts
+                self._json(200, brain.edit_person(self._body()))
             elif path == "/dreamlayer/brief":
                 b = self._body()
                 out = brain.brief(agenda=b.get("agenda"),
