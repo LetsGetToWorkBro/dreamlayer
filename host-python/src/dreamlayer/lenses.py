@@ -76,6 +76,8 @@ LENSES: list[Lens] = [
                 "dreamlayer.rosetta"),
         Feature("puente", "Puente", "live voice translation (the ear)",
                 "dreamlayer.orchestrator.puente_bridge"),
+        Feature("scholar", "Scholar", "read a test → the answer; a form → what to write in each field; dense text → plain words",
+                "dreamlayer.orchestrator.scholar"),
     ]),
     Lens("life", "Life", "do, keep, and build", [
         Feature("commitment_drift", "Commitment Drift", "promises as physics objects",
