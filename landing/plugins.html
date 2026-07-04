@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DreamLayer · Plugin Store</title>
+<meta name="description" content="Browse, rate, and install plugins the community builds on DreamLayer. Every plugin passes the safety gate before it ships.">
+<style>
+  :root{
+    --bg:#000; --surface:#0a0f10; --surface-2:#0d1414; --border:#1b2a2c;
+    --text:#e7f3f1; --text-2:#88a09c; --text-3:#5b6f6b; --teal:#2CC79A; --coral:#E06B52;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace; --r:14px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  a{color:var(--teal);text-decoration:none}
+  header{position:sticky;top:0;z-index:10;background:rgba(0,0,0,.82);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
+  .wordmark{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;color:#fff}
+  .ring{width:16px;height:16px;border:2px solid var(--teal);border-radius:50%;position:relative}
+  .ring::after{content:"";position:absolute;inset:4px;background:var(--teal);border-radius:50%}
+  .nav a{color:var(--text-2);font-size:14px;margin-left:22px}
+  .nav a:hover{color:#fff}
+  .hero{padding:64px 0 34px;text-align:center}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--teal)}
+  h1{font-size:clamp(32px,6vw,52px);letter-spacing:-.02em;margin:14px 0 12px;line-height:1.05}
+  .hero p{color:var(--text-2);max-width:560px;margin:0 auto;font-size:17px}
+  .search{max-width:520px;margin:30px auto 0;display:flex;gap:10px}
+  .search input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:999px;
+    color:var(--text);padding:14px 20px;font-size:15px}
+  .search input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(47,212,196,.14)}
+  .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:22px 0 6px}
+  .tab{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--text-2);background:transparent;border:1px solid var(--border);border-radius:999px;
+    padding:9px 16px;cursor:pointer;transition:.15s var(--ease)}
+  .tab:hover{color:#fff}
+  .tab.on{color:#00201c;background:var(--teal);border-color:var(--teal)}
+  .count{text-align:center;color:var(--text-3);font-family:var(--mono);font-size:12px;margin:14px 0 4px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding:16px 0 40px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;
+    display:flex;flex-direction:column;transition:.2s var(--ease)}
+  .card:hover{border-color:#2a4a44;transform:translateY(-2px)}
+  .card .top{display:flex;gap:13px;align-items:flex-start}
+  .icon{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,rgba(47,212,196,.22),rgba(47,212,196,.06));
+    border:1px solid rgba(47,212,196,.3);font-weight:800;color:var(--teal);font-size:20px}
+  .card h3{margin:0;font-size:18px;letter-spacing:-.01em}
+  .card .by{color:var(--text-3);font-size:13px;font-family:var(--mono)}
+  .featured-dot{margin-left:6px;color:var(--teal);font-size:11px;vertical-align:middle}
+  .card .desc{color:var(--text-2);font-size:14.5px;margin:14px 0 16px;flex:1}
+  .meta{display:flex;gap:16px;align-items:center;color:var(--text-2);font-size:13px;font-family:var(--mono)}
+  .meta .stars{color:var(--teal)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+  .chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--text-2);border:1px solid var(--border);border-radius:6px;padding:3px 8px}
+  .chip.perm{color:var(--coral);border-color:rgba(224,107,82,.4)}
+  .card .actions{display:flex;gap:10px;margin-top:18px}
+  .btn{font:inherit;font-size:14px;font-weight:600;border-radius:999px;padding:10px 16px;cursor:pointer;
+    border:1px solid var(--border);background:transparent;color:var(--text);transition:.15s}
+  .btn:hover{border-color:var(--teal);color:#fff}
+  .btn.primary{background:var(--teal);color:#00201c;border-color:var(--teal)}
+  .perms-note{color:var(--text-3);font-size:12px;margin-top:10px}
+  .build{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r);
+    padding:30px;margin:20px 0 60px;text-align:center}
+  .build h2{margin:0 0 10px;font-size:24px}
+  .build p{color:var(--text-2);max-width:600px;margin:0 auto 18px}
+  .safety{display:inline-flex;align-items:center;gap:8px;color:var(--text-2);font-size:13px;
+    border:1px solid var(--border);border-radius:999px;padding:8px 16px;margin-top:8px}
+  .safety b{color:var(--teal)}
+  footer{border-top:1px solid var(--border);padding:26px 0;color:var(--text-3);font-size:13px;text-align:center}
+  .empty{text-align:center;color:var(--text-2);padding:50px 0}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="wordmark" href="./index.html"><span class="ring"></span>DREAMLAYER</a>
+    <nav class="nav">
+      <a href="./index.html">Home</a>
+      <a href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/MARKETPLACE.md" target="_blank" rel="noopener">Build a plugin</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <span class="eyebrow">Plugin Store</span>
+    <h1>Build on the layer.</h1>
+    <p>Plugins the community makes for DreamLayer — new lenses, controllers, connectors.
+      Every one passes the safety gate before it ships.</p>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search plugins…" aria-label="Search plugins">
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-sort="featured">Featured</button>
+      <button class="tab" data-sort="rating">Top rated</button>
+      <button class="tab" data-sort="downloads">Most downloaded</button>
+      <button class="tab" data-sort="all">All</button>
+    </div>
+  </section>
+
+  <div class="count" id="count"></div>
+  <section class="grid" id="grid"></section>
+
+  <section class="build">
+    <h2>Made something? Add it to the store.</h2>
+    <p>Write a <code>register(ctx)</code> plugin, package it with a manifest, and open a pull request.
+      CI runs the safety gate and a maintainer reviews the code before it lands.</p>
+    <a class="btn primary" href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/MARKETPLACE.md" target="_blank" rel="noopener">Read the guide →</a>
+    <div style="margin-top:16px"><span class="safety">🛡 <b>Every plugin is validated</b> — integrity check · capability scan · smoke test</span></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">Private by architecture. Yours to run, yours to keep. ·
+    <a href="./index.html">dreamlayer.app</a></div>
+</footer>
+
+<script>
+// The registry is git-backed (docs/MARKETPLACE.md). This page ships with a
+// snapshot and refreshes from the live index when reachable.
+const SNAPSHOT = {
+  "plugins": [
+    { "name":"face-synth","version":"0.1.0","author":"dreamlayer",
+      "description":"Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
+      "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
+      "requires":["midi"],"tags":["music","creative","mesh","featured"],
+      "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 }
+  ]
+};
+const INDEX_URL = "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
+
+let plugins = SNAPSHOT.plugins.slice();
+let sort = "featured", query = "";
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function stars(r){
+  const full = Math.round(r);
+  return "★★★★★".slice(0,full) + "☆☆☆☆☆".slice(0,5-full);
+}
+function num(n){ return n>=1000 ? (n/1000).toFixed(1).replace(/\.0$/,"")+"k" : String(n); }
+
+function render(){
+  const q = query.trim().toLowerCase();
+  let list = plugins.filter(p => !q ||
+    (p.name+" "+p.description+" "+p.author+" "+(p.tags||[]).join(" ")).toLowerCase().includes(q));
+  if(sort==="featured") list.sort((a,b)=>(b.tags||[]).includes("featured")-(a.tags||[]).includes("featured") || b.downloads-a.downloads);
+  else if(sort==="rating") list.sort((a,b)=> b.rating-a.rating || b.ratings_count-a.ratings_count);
+  else if(sort==="downloads") list.sort((a,b)=> b.downloads-a.downloads);
+  else list.sort((a,b)=> a.name.localeCompare(b.name));
+
+  $("#count").textContent = list.length + (list.length===1?" plugin":" plugins");
+  const grid = $("#grid");
+  if(!list.length){ grid.innerHTML = '<div class="empty">No plugins match — try another search.</div>'; return; }
+  grid.innerHTML = list.map(p => {
+    const initial = (p.name[0]||"?").toUpperCase();
+    const feat = (p.tags||[]).includes("featured") ? '<span class="featured-dot">● featured</span>' : "";
+    const rating = p.ratings_count ? `<span class="stars">${stars(p.rating)}</span> ${p.rating.toFixed(1)}`
+                                   : '<span style="color:var(--text-3)">unrated</span>';
+    const dl = p.downloads ? `↓ ${num(p.downloads)}` : "new";
+    const tags = (p.tags||[]).filter(t=>t!=="featured").map(t=>`<span class="chip">${esc(t)}</span>`).join("");
+    const perms = (p.requires||[]).length
+      ? (p.requires||[]).map(r=>`<span class="chip perm">needs ${esc(r)}</span>`).join("")
+      : '<span class="chip">no special access</span>';
+    return `<div class="card">
+      <div class="top">
+        <div class="icon">${esc(initial)}</div>
+        <div><h3>${esc(p.name)}${feat}</h3><div class="by">v${esc(p.version)} · ${esc(p.author||"community")}</div></div>
+      </div>
+      <div class="desc">${esc(p.description)}</div>
+      <div class="meta"><span>${dl}</span><span>${rating}</span></div>
+      <div class="chips">${tags}</div>
+      <div class="chips">${perms}</div>
+      <div class="actions">
+        <button class="btn primary" onclick="copyInstall('${esc(p.name)}')">Install</button>
+        ${p.homepage?`<a class="btn" href="${esc(p.homepage)}" target="_blank" rel="noopener">Source</a>`:""}
+      </div>
+      <div class="perms-note">Installs through the app / Mac panel — validated on your device before it runs.</div>
+    </div>`;
+  }).join("");
+}
+
+function copyInstall(name){
+  const cmd = "dreamlayer plugins install " + name;
+  navigator.clipboard && navigator.clipboard.writeText(cmd);
+  alert("Install from the DreamLayer app or Mac panel.\n\nCLI:  " + cmd + "\n\nEvery plugin is validated on your device (integrity + capability scan + smoke test) before it runs.");
+}
+window.copyInstall = copyInstall;
+
+// tabs + search
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  t.classList.add("on"); sort = t.dataset.sort; render();
+});
+$("#q").addEventListener("input", e => { query = e.target.value; render(); });
+
+render();
+// refresh from the live registry if reachable (never blocks the page)
+fetch(INDEX_URL, {cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
+  if(d && Array.isArray(d.plugins) && d.plugins.length){ plugins = d.plugins; render(); }
+}).catch(()=>{});
+</script>
+</body>
+</html>
