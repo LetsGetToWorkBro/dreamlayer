@@ -140,7 +140,7 @@ section{position:relative}
   transition:opacity 560ms var(--ease),transform 560ms var(--ease);pointer-events:none}
 .hud-card.active{opacity:1;transform:none}
 /* Meridian Solid: the glass pane — row-gap scanline disc in surface luma */
-.hud-card .h-pane{position:absolute;left:50%;top:50%;width:78%;aspect-ratio:1;
+.hud-card .h-pane{position:absolute;left:50%;top:50%;width:78%;height:78%;
   transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
   background:repeating-linear-gradient(180deg,rgba(20,31,35,.9) 0 2px,transparent 2px 6px);
   -webkit-mask-image:radial-gradient(closest-side,#000 62%,transparent 100%);
@@ -167,16 +167,16 @@ section{position:relative}
 .hud-card.coral .h-eyebrow{color:var(--h-coral)}
 .hud-card.coral .h-dot{background:var(--h-coral);box-shadow:0 0 10px 2px rgba(224,107,82,.55)}
 /* the object jewel — layered diamond with orbit ring and bloom */
-.hud-card .h-glyph{width:17%;aspect-ratio:1;border:2px solid var(--h-teal);border-radius:50%;
+.hud-card .h-glyph{width:17%;height:17%;border:2px solid var(--h-teal);border-radius:50%;
   display:grid;place-items:center;margin-bottom:5%;
   box-shadow:0 0 16px rgba(44,199,154,.4),inset 0 0 12px rgba(44,199,154,.18)}
-.hud-card .h-glyph::after{content:"";width:36%;aspect-ratio:1;background:var(--h-teal);
+.hud-card .h-glyph::after{content:"";width:36%;height:36%;background:var(--h-teal);
   transform:rotate(45deg);box-shadow:0 0 10px rgba(44,199,154,.7)}
 .hud-card.coral .h-glyph{border-color:var(--h-coral);
   box-shadow:0 0 16px rgba(224,107,82,.4),inset 0 0 12px rgba(224,107,82,.18)}
 .hud-card.coral .h-glyph::after{background:var(--h-coral);box-shadow:0 0 10px rgba(224,107,82,.7)}
 /* the avatar iris — PersonContext centerpiece: bloomed ring, initial inside */
-.hud-card .h-iris{width:19%;aspect-ratio:1;border-radius:50%;border:2px solid var(--h-teal);
+.hud-card .h-iris{width:19%;height:19%;border-radius:50%;border:2px solid var(--h-teal);
   display:grid;place-items:center;margin-bottom:5%;position:relative;
   font-weight:700;font-size:clamp(14px,2.2vh,20px);color:var(--h-text);
   box-shadow:0 0 18px rgba(44,199,154,.45),inset 0 0 12px rgba(44,199,154,.22)}
@@ -460,8 +460,9 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .scope-col{display:none}
   .story-steps{padding:0 0 6vh}
   .step{min-height:auto;max-width:none;display:block;padding:26px 0 40px}
-  .step-hud{display:flex;justify-content:center;margin-bottom:26px}
-  .step-hud .scope{width:min(66vw,280px)}
+  .step-hud{display:flex;justify-content:center;align-items:center;margin-bottom:26px}
+  /* explicit square (not aspect-ratio) so iOS Safari can't stretch it oval */
+  .step-hud .scope{width:min(66vw,280px);height:min(66vw,280px)}
   .hud-card{padding:12%}
   .hud-card .h-eyebrow{font-size:8.5px;letter-spacing:.22em;padding-bottom:5px;margin-bottom:3.5%}
   .hud-card .h-title{font-size:17px}
@@ -719,7 +720,8 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         run off-thread, so the verdict lands in time to answer, with the receipt.</span></div>
       <div class="can arrive" style="--d:80ms"><b>Answer on the glass</b><span>Look at a test question —
         any subject — and the answer appears. Look at a form and each field tells you exactly what to
-        write; look at dense legal text and it comes back in plain words.</span></div>
+        write; look at dense legal text and it comes back in plain words. You never pick a mode — the
+        look decides which, and it learns the one you reach for.</span></div>
       <div class="can arrive" style="--d:120ms"><b>Read the room</b><span>Ask, and the Truth Lens reads
         face, voice, and history together into one credibility gauge. Explicit — never running in the
         background.</span></div>
@@ -797,14 +799,15 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><ellipse cx="19" cy="19" rx="6.5" ry="14"/><line x1="5" y1="19" x2="33" y2="19"/></svg></div>
           <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>World</h4><div class="for">understand what you look at</div>
-        <div class="inc">Oracle (look → know) · Label Lens · AI Brain · Rosetta · Puente</div>
+        <div class="inc">Oracle (look → know) · Label Lens · AI Brain · Rosetta · Puente · Scholar</div>
         <div class="xdetail"><div>
           <div class="feat"><b>Oracle</b><span>Look at anything and know it — the plant, the wine, the part number. Objects, never people.</span></div>
           <div class="feat"><b>Label Lens</b><span>Your own rules on what you’re holding: “you’re avoiding dairy,” “you returned this brand last year.”</span></div>
           <div class="feat"><b>AI Brain</b><span>Name and explain anything; ask your own files and mail. On-device first, your Mac mini next, cloud only if you switched it on.</span></div>
           <div class="feat"><b>Rosetta</b><span>The eye: menus and signs you look at, read back in your language.</span></div>
           <div class="feat"><b>Puente</b><span>The ear: live voice translation as the other person speaks.</span></div>
-          <div class="feat"><b>Scholar</b><span>Look at a test question and the answer appears — any subject. Look at a form and each field says what to write; look at dense legal or technical text and it comes back in plain words.</span></div>
+          <div class="feat"><b>Scholar</b><span>Look at a test question and the answer appears — any subject. Look at a form and each field says what to write; look at dense legal or technical text and it comes back in plain words. Reads through the Brain’s vision — local first, cloud only if you opted in — and never while the Veil is down.</span></div>
+          <div class="feat"><b>The look decides</b><span>No mode to switch. On a glance the Arbiter reads the scene and routes it — answer, fill, translate, or identify — firing the clear winner, offering a one-tap choice when it’s close, and learning the lens you prefer for a kind of view. Say “what’s the answer” or “how do I fill this” first and the very next look obeys.</span></div>
         </div></div>
       </div>
       <div class="card xcard coral-card arrive" style="--d:240ms" role="button" tabindex="0" aria-expanded="false">
