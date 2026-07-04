@@ -299,9 +299,38 @@ function openDetail(name){
         ${p.homepage?`<a class="btn" href="${esc(p.homepage)}" target="_blank" rel="noopener">Source</a>`:""}
       </div>
     </div>`;
+  lockScroll();
   $("#detail").classList.add("on");
+  $("#detail").scrollTop = 0;
 }
-function closeDetail(){ $("#detail").classList.remove("on"); }
+// Freeze the page behind the modal so mobile can't scroll-bleed the body (and
+// so closing lands you exactly where you opened it — no jump). Pinning the body
+// with position:fixed is the iOS-safe way; we stash and restore scrollY.
+let _lockY = 0;
+function lockScroll(){
+  _lockY = window.scrollY || window.pageYOffset || 0;
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${_lockY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+}
+function unlockScroll(){
+  const html = document.documentElement, sb = html.style.scrollBehavior;
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  html.style.scrollBehavior = "auto";       // don't smooth-animate the restore
+  window.scrollTo(0, _lockY);
+  html.style.scrollBehavior = sb;
+}
+function closeDetail(){
+  if(!$("#detail").classList.contains("on")) return;
+  $("#detail").classList.remove("on");
+  unlockScroll();
+}
 window.openDetail = openDetail; window.closeDetail = closeDetail;
 $("#detail").addEventListener("click",e=>{ if(e.target.id==="detail") closeDetail(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeDetail(); });
