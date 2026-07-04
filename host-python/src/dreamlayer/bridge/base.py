@@ -13,6 +13,9 @@ RAW_FRAME_TYPES = frozenset({
     "dream_enter",
     "dream_exit",
     "horizon",        # Meridian day-ring: {seq, paused, v: [dd,code,…]}
+    # Reality Compiler figments (host → app/figment_stage.lua) — the hub
+    # deploys native timers/behaviors straight to the glasses, no Brain needed.
+    "figment_put", "figment_swap", "figment_revoke", "figment_text",
 })
 
 # Raw frames still allowed while privacy-paused (mode control only; no

@@ -199,6 +199,7 @@ class Orchestrator:
         from ..social_lens import SocialLens
         self.social = SocialLens(privacy=self.privacy)
         self._last_person: dict | None = None    # who you last looked at (for on-the-spot notes)
+        self._active_figment: str | None = None  # native timer/clock on the glasses stage
         # Oracle — the assistant. "Hey Oracle" wakes it; tap / gaze / raise are
         # multimodal alternatives. On wake it shows a Listening ring + (device
         # seams) an earcon and a haptic tick, then stays open a short session so
@@ -1347,7 +1348,59 @@ class Orchestrator:
                               it.args.get("what", ""))
         if it.kind == "debt_settle":
             return self._debt_settle(it.args.get("who"))
+        if it.kind in ("timer", "interval", "clock"):
+            return self._native_behavior(it.kind, it.args)
+        if it.kind == "timer_cancel":
+            return self._native_cancel()
         return {"intent": it.kind, **it.args}
+
+    def _native_behavior(self, intent: str, args: dict) -> dict:
+        """Build a timer / interval / clock and deploy it straight to the glasses
+        stage over the bridge — no Brain, no vault. This is why "set a timer"
+        works with just the hub and glasses. A clock time-query just answers."""
+        import time as _t
+        from ..reality_compiler.v2 import native, transport
+        a = args or {}
+        if intent == "clock" and a.get("mode") == "time":
+            return {"intent": "clock", "ok": True, "say": _t.strftime("It's %-I:%M %p.")}
+        if not self.privacy.allow_capture():
+            return {"intent": intent, "ok": False, "say": "Not while you're incognito."}
+        fig = None
+        say = ""
+        if intent == "timer":
+            secs = float(a.get("seconds") or 0)
+            if secs <= 0:
+                return {"intent": "timer", "ok": False, "say": "How long a timer?"}
+            fig = native.timer_figment(secs, label=a.get("label") or "Timer")
+            say = f"Timer set for {native.spoken_duration(secs)}."
+        elif intent == "interval":
+            work = float(a.get("work") or 0)
+            rest = float(a.get("rest") or 0)
+            rounds = a.get("rounds")
+            if work <= 0 or rest <= 0:
+                return {"intent": "interval", "ok": False, "say": "How long on and off?"}
+            fig = native.interval_figment(work, rest, rounds=rounds,
+                                          label=a.get("label") or "Intervals")
+            r = f" for {int(rounds)} rounds" if rounds else " until you hold to stop"
+            say = (f"Intervals: {native.spoken_duration(work)} on, "
+                   f"{native.spoken_duration(rest)} off{r}.")
+        else:  # clock
+            fig = native.clock_figment()
+            say = "Clock's up. Hold to dismiss it."
+        # put + hot-swap straight onto the glasses stage
+        self.bridge.send_raw(transport.put_envelope(fig))
+        self.bridge.send_raw(transport.swap_envelope(fig.id))
+        if intent == "clock":
+            self.bridge.send_raw(transport.text_envelope(fig.id, _t.strftime("%-I:%M %p")))
+        self._active_figment = fig.id
+        return {"intent": intent, "ok": True, "say": say, "figment_id": fig.id}
+
+    def _native_cancel(self) -> dict:
+        from ..reality_compiler.v2 import transport
+        if self._active_figment:
+            self.bridge.send_raw(transport.revoke_envelope(self._active_figment))
+            self._active_figment = None
+        return {"intent": "timer_cancel", "ok": True, "say": "Stopped."}
 
     def _debt(self, who: str | None, direction: str, what: str,
               within_sec: float = 90.0) -> dict:

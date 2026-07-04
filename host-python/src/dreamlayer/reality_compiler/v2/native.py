@@ -26,6 +26,20 @@ _PULSE_HZ = 2.0
 _STOP = "long"                       # a hold clears a running native behavior
 
 
+def spoken_duration(secs: float) -> str:
+    """'5 minutes', '1 minute 30 seconds' — how Oracle says a length back."""
+    secs = int(round(secs))
+    h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
+    parts = []
+    if h:
+        parts.append(f"{h} hour" + ("s" if h != 1 else ""))
+    if m:
+        parts.append(f"{m} minute" + ("s" if m != 1 else ""))
+    if s:
+        parts.append(f"{s} second" + ("s" if s != 1 else ""))
+    return " ".join(parts) or "0 seconds"
+
+
 def _clamp(secs: float) -> float:
     return max(MIN_SCENE_SEC, round(float(secs), 3))
 
