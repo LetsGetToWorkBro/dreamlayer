@@ -84,6 +84,11 @@ One family, three directions.
 
 - **Privacy Veil** *(the spine)* — one gesture and the glasses go fully deaf
   and blind. Nothing seen, heard, or kept. Always available, in every lens.
+- **Glance Arbiter** *(the router)* — no mode picker: on a look it decides
+  which lens applies (answer / fill / translate / identify / name), firing the
+  clear winner or offering a one-tap chooser when ambiguous. It learns which
+  lens you prefer per kind of scene. See
+  [Attention and focus](gitbook/attention-focus.md).
 - **Atmosphere** *(ambient light and feel)* — **Inner Weather** (your body
   churns the core, the room storms the rim), the **Prism Lens** (a reactive
   kaleidoscope), and **Palette Cycling** (zero-cost motion by recolouring,

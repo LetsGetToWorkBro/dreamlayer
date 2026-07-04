@@ -475,6 +475,8 @@ class CardRenderer:
             "OracleReplyCard":      self._oracle_reply,
             "FactCheckCard":        self._fact_check,
             "AnswerAheadCard":      self._answer_ahead,
+            "ScholarCard":          self._scholar,
+            "GlanceChoiceCard":     self._scholar,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
@@ -1124,6 +1126,33 @@ class CardRenderer:
                             T.ACCENT_MEMORY_DIM, alpha=235)
         if footer:
             self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=170)
+
+    def _scholar(self, draw, card):
+        """ScholarCard / GlanceChoiceCard — the World-lens material family:
+        a memory-toned pane, an eyebrow over a gradient separator, the primary
+        (answer / gist / summary / the chooser) in hero type, and up to a few
+        items stacked beneath (form fields, key points, or the chooser's
+        options). Honest 'connect a Brain' state when unavailable."""
+        eyebrow = str(card.get("eyebrow") or "")
+        primary = str(card.get("primary") or "")
+        detail = str(card.get("detail") or "")
+        items = card.get("items") or []
+        unavailable = bool(card.get("unavailable"))
+        accent = T.TEXT_GHOST if unavailable else T.ACCENT_MEMORY
+        self._pane(draw, 128, 78)
+        if eyebrow:
+            self._text_rgba(draw, CX, 60, eyebrow, "xs", accent, alpha=230)
+            grad_line(draw, 44, 76, 212, 76,
+                      RAMP_MEMORY if not unavailable else RAMP_MEMORY)
+        if primary:
+            self._text(draw, CX, 104, primary, self._fit(primary, 200), T.TEXT_PRIMARY)
+        # stacked items (form fields / key points / chooser options)
+        y = 138 if primary else 108
+        for it in items[:4]:
+            self._text_rgba(draw, CX, y, str(it), "sm", T.TEXT_SECONDARY, alpha=235)
+            y += 22
+        if detail and not primary:
+            self._text_rgba(draw, CX, 150, detail, "sm", T.TEXT_GHOST, alpha=200)
 
     def _fact_check(self, draw, card):
         """FactCheckCard — Veritas verdict, in the Truth-Lens material family.

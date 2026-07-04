@@ -432,6 +432,30 @@ def oracle_reply(text: str = "", kind: str = "answer") -> dict:
     }
 
 
+def glance_choice(options=None, scene: str = "") -> dict:
+    """The Glance Arbiter's chooser — shown only when a look is genuinely
+    ambiguous. Up to three one-tap options around the ring ('Answer it' ·
+    'Fill it in' · 'Translate'); a tap picks the lens, and the pick teaches the
+    arbiter for next time. Sticky until chosen or dismissed."""
+    opts = [o for o in (options or []) if o and o.get("label")][:3]
+    labels = [o["label"] for o in opts]
+    return {
+        "type":       "GlanceChoiceCard",
+        "dismiss_ms": 6000,
+        "scene":      scene,
+        "eyebrow":    "WHAT DO YOU WANT?",
+        "primary":    "  ·  ".join(labels),
+        "options":    opts,               # [{label, lens, action, args}]
+        "color":      T.ACCENT_MEMORY,
+        "lines":      ["WHAT DO YOU WANT?", *labels],
+        "layout": {
+            "eyebrow": {"x": 128, "y": 60, "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
+            "separator": {"x1": 44, "x2": 212, "y": 76},
+            "primary": {"x": 128, "y": 118, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
 _SCHOLAR_STYLE = {
     "answer":  ("ANSWER",         T.ACCENT_MEMORY),
     "form":    ("FORM HELP",      T.ACCENT_MEMORY),

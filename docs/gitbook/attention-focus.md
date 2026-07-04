@@ -74,6 +74,43 @@ dashed divider, with a severity dot.
 
 ![Off your usual path](assets/demo/catalog/features/deviation/preview.gif)
 
+## The Glance Arbiter — which lens owns a look
+
+The hark decides *when* to speak; the Glance Arbiter
+(`orchestrator/glance.py`) decides *which lens* a look belongs to — without a
+mode picker, because a menu is friction on glasses. On a look, `glance(frame)`
+classifies what's in view and every candidate lens **bids**; the arbiter fires
+the clear winner, offers a one-tap chooser when it's genuinely ambiguous, or
+does nothing.
+
+It reuses the Object Lens provider-registry shape, lifted up a level: there,
+providers declare `matches(sighting)` and the registry merges rows into a
+panel; here, candidates declare `bid(reading, ctx)` and the registry ranks them
+into one decision.
+
+- **Two-tier read.** A free coarse pass (`classify_coarse` over cheap
+  on-device cues — a face flag, a text-density estimate, a form grid, a
+  question mark, a language guess) runs first; only when it can't tell a form
+  from a question from prose (`is_ambiguous`) does the hub spend the Brain's
+  vision tier for a fine read. The big model is used *when it changes the
+  answer*, not on every glance.
+- **Fire vs offer.** The top bid fires outright when it beats the runner-up by
+  the gap (or a spoken intent forced it, or it's the only bidder); otherwise a
+  **GlanceChoiceCard** offers the close contenders ("Answer it · Fill it in ·
+  Translate"). A pick runs that lens *and* teaches the arbiter.
+- **It learns you.** Per-scene priors (`GlancePriors`) reinforce the lens you
+  keep choosing for a kind of scene, so tomorrow's ambiguous look leans your
+  way. Serialisable, so the Mac Brain can persist it.
+- **Spoken steer.** A recent "what's the answer / how do I fill this / explain
+  this" biases the very next look to that lens for a few seconds — say it, then
+  look.
+- **Calm.** Hysteresis holds a fresh decision through a debounce window, so a
+  glance wandering across a page doesn't flip lenses. Veiled ⇒ nothing.
+
+The candidate lenses today: Person (a face → Social Lens), Scholar (answer /
+form / plain-words), Rosetta (foreign text → translate), and Oracle (an object,
+or a weak fallback to name what's here).
+
 ## Who gets to interrupt — the summary
 
 | Signal | Veil down | Focus on | Normal |

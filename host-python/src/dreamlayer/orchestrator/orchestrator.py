@@ -61,6 +61,34 @@ def _default_http_post(url: str, body: dict, token: str = "") -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _parse_scene_reply(text: str):
+    """Parse a vision tier's one-line scene classification into a GlanceReading.
+    Tolerant: 'SCENE: form — density=0.7 fields=4' and looser shapes both work."""
+    import re
+    from .glance import GlanceReading, SCENES
+    t = (text or "").strip()
+    m = re.search(r"scene\s*[:\-]?\s*([a-z_]+)", t, re.IGNORECASE)
+    scene = (m.group(1).lower() if m else "")
+    if scene not in SCENES:
+        # fall back to the first known scene word anywhere in the reply
+        scene = next((w for w in re.findall(r"[a-z_]+", t.lower()) if w in SCENES), "unknown")
+    signals: dict = {}
+    d = re.search(r"density\s*=\s*([0-9.]+)", t, re.IGNORECASE)
+    if d:
+        try: signals["text_density"] = float(d.group(1))
+        except ValueError: pass
+    f = re.search(r"fields?\s*=\s*(\d+)", t, re.IGNORECASE)
+    if f:
+        signals["form_fields"] = int(f.group(1))
+    lg = re.search(r"lang\w*\s*=\s*([a-z\-]+)", t, re.IGNORECASE)
+    if lg:
+        signals["language"] = lg.group(1).lower()
+    if re.search(r"question\s*=\s*(yes|true|1)", t, re.IGNORECASE) or "?" in t:
+        signals["question"] = True
+    conf = 0.8 if scene != "unknown" else 0.3
+    return GlanceReading(scene, conf, signals)
+
+
 class Orchestrator:
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
@@ -221,6 +249,17 @@ class Orchestrator:
         # local model first, cloud only when opted in, never while incognito.
         from .scholar import Scholar
         self.scholar = Scholar(read_fn=self._scholar_read)
+        # Glance Arbiter: on a look, decide which lens owns it — fire the clear
+        # winner, offer a one-tap chooser when ambiguous, or do nothing. No mode
+        # picker; the look decides. Coarse on-device read first, escalating to
+        # the Brain's vision only when the cheap read can't tell (two-tier).
+        from .glance import GlanceArbiter
+        self.glance_arbiter = GlanceArbiter()
+        self._recent_glance_intent = ("", 0.0)   # (lens-hint, ts) from voice
+        # device seam: cheap on-device cues for the coarse glance read (a face
+        # flag, a text-density estimate, a detected form grid). None → the
+        # coarse read leans on whatever the fine vision tier returns.
+        self._glance_signals_fn = None
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -563,6 +602,98 @@ class Orchestrator:
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
+
+    def _clock(self) -> float:
+        import time
+        return time.monotonic()
+
+    def glance(self, frame, dwell_ms: float = 0.0, now: float | None = None):
+        """The smart look: classify what's in view, let the lenses bid, and act.
+
+        Fires the clear winner straight to the glasses; sends a one-tap chooser
+        card when it's genuinely ambiguous; does nothing when nothing fits or
+        the veil is down. This is the no-mode-picker entry point — the wearer
+        just looks. Returns the GlanceDecision."""
+        from .glance import GlanceContext, GlanceReading
+        if not self.privacy.allow_capture():
+            from .glance import GlanceDecision
+            return GlanceDecision("none", GlanceReading())
+        reading = self._classify_glance(frame)
+        hint, hts = self._recent_glance_intent
+        ctx = GlanceContext(
+            recent_intent=hint if (self._clock() - hts) < 6.0 else "",
+            user_language=getattr(self.config, "user_language", "en") or "en",
+            dwell_ms=dwell_ms, focus=self.focus_active(),
+            veiled=not self.privacy.allow_capture())
+        decision = self.glance_arbiter.arbitrate(reading, ctx)
+        if decision.kind == "fire" and decision.winner is not None:
+            self._run_glance_action(decision.winner.action, frame,
+                                    decision.winner.args)
+        elif decision.kind == "offer" and decision.card is not None:
+            self.bridge.send_card(decision.card, event="glance")
+        return decision
+
+    def choose_glance(self, action: str, frame, args: dict | None = None,
+                      scene: str = ""):
+        """Act on a chooser pick — and teach the arbiter that, for this kind of
+        scene, this is the lens you want."""
+        if scene and action:
+            lens = {"scholar_answer": "scholar_answer", "scholar_form": "scholar_form",
+                    "scholar_explain": "scholar_explain", "translate": "rosetta",
+                    "oracle": "oracle", "person": "person"}.get(action, action)
+            self.glance_arbiter.reinforce(scene, lens)
+        return self._run_glance_action(action, frame, args or {})
+
+    def _run_glance_action(self, action: str, frame, args: dict):
+        """Route an arbiter action key to the lens that owns it."""
+        if action == "scholar_answer":
+            return self.read_answer(frame)
+        if action == "scholar_form":
+            return self.read_form(frame, purpose=args.get("purpose", ""))
+        if action == "scholar_explain":
+            return self.explain_text(frame)
+        if action == "person":
+            return self.look_at_person(frame)
+        if action == "translate":
+            return self.look_at_object(frame, facet="ai")
+        return self.look_at_object(frame)     # oracle / default
+
+    def _classify_glance(self, frame):
+        """Two-tier scene read. A coarse on-device read runs first (free, from
+        cheap signals); when it can't tell a form from a question from prose,
+        escalate to the Brain's vision tier for a fine read — spending the big
+        model only when it changes the answer."""
+        from .glance import classify_coarse, GlanceReading
+        lang = getattr(self.config, "user_language", "en") or "en"
+        signals = {}
+        try:
+            if self._glance_signals_fn is not None:
+                signals = self._glance_signals_fn(frame) or {}
+        except Exception:
+            signals = {}
+        reading = classify_coarse(signals, user_language=lang)
+        if self.glance_arbiter.is_ambiguous(reading) and getattr(self, "brain", None):
+            fine = self._glance_fine_read(frame)
+            if fine is not None:
+                return fine
+        return reading
+
+    def _glance_fine_read(self, frame):
+        """Fine scene classification via the Brain's vision tier (Mac / cloud).
+        Returns a GlanceReading or None. The vision model is the seam Ollama
+        plugs into; offline this simply returns None and the coarse read stands."""
+        from .glance import GlanceReading, SCENES
+        prompt = ("Classify what is in this image for a glasses assistant. Reply "
+                  "on one line: SCENE: <object|text|form|question|foreign_text|"
+                  "person|screen> — then optional tags density=<0-1> "
+                  "lang=<iso> fields=<n> question=<yes|no>. Nothing else.")
+        try:
+            ans = self.brain.explain(frame, prompt, want="more")
+        except Exception:
+            ans = None
+        if ans is None or ans.is_empty():
+            return None
+        return _parse_scene_reply(ans.text)
 
     def read_answer(self, frame, question: str = "", now: float | None = None):
         """Scholar: read the question in view and put the answer on the glass.
@@ -999,6 +1130,11 @@ class Orchestrator:
                     "answer": ans.text if ans is not None else ""}
         if it.kind == "scholar":
             mode = it.args.get("mode", "answer")
+            # remember the intent briefly, so a look in the next few seconds
+            # (even without a frame now) biases the Glance Arbiter that way.
+            self._recent_glance_intent = (
+                {"answer": "answer", "form": "form", "explain": "explain"}.get(mode, ""),
+                self._clock())
             res = None
             if frame is not None:
                 if mode == "form":
