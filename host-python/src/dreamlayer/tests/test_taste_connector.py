@@ -107,6 +107,54 @@ def test_off_plugin_registers_and_is_network_gated():
     assert r.result.loaded == ["open-food-facts"] and len(reg) == 1
 
 
+def test_off_shop_fn_caches_by_label():
+    calls = {"n": 0}
+    def fetch(url):
+        calls["n"] += 1
+        return json.dumps({"products": [{"nutriscore_grade": "a"}]})
+    clock = {"t": 0.0}
+    shop = off_shop_fn(fetch, ttl=100.0, now_fn=lambda: clock["t"])
+    a, b = shop("apple", {}), shop("apple", {})    # same label → one fetch
+    assert calls["n"] == 1 and a == b
+    shop("banana", {})                             # new label → fetch
+    assert calls["n"] == 2
+    clock["t"] = 200.0                             # past the TTL → refetch
+    shop("apple", {})
+    assert calls["n"] == 3
+
+
+def test_default_fetch_retries_transient_then_succeeds(monkeypatch):
+    import urllib.request, urllib.error
+    from dreamlayer.plugins import openfoodfacts as off
+    calls = {"n": 0}
+    class FakeResp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"ok":1}'
+    def fake_urlopen(req, timeout=0):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise urllib.error.URLError("temporary")
+        return FakeResp()
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert off._default_fetch("http://x", retries=2, backoff=0) == '{"ok":1}'
+    assert calls["n"] == 3                          # failed twice, succeeded third
+
+
+def test_default_fetch_does_not_retry_4xx(monkeypatch):
+    import urllib.request, urllib.error
+    import pytest
+    from dreamlayer.plugins import openfoodfacts as off
+    calls = {"n": 0}
+    def fake_urlopen(req, timeout=0):
+        calls["n"] += 1
+        raise urllib.error.HTTPError("http://x", 404, "nf", {}, None)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        off._default_fetch("http://x", retries=3, backoff=0)
+    assert calls["n"] == 1                          # 4xx isn't retried
+
+
 def test_off_packaged_passes_the_validation_gate():
     # the shipped source imports urllib → must declare network, and does
     src = ("from dreamlayer.plugins.openfoodfacts import openfoodfacts_plugin\n"

@@ -67,18 +67,50 @@ def lookup(label: str, fetch_fn: Callable[[str], object]) -> dict:
         return {}
 
 
-def off_shop_fn(fetch_fn: Callable[[str], object]) -> Callable[[str, dict], dict]:
-    """A TasteLens shop provider bound to a fetch function."""
+def off_shop_fn(fetch_fn: Callable[[str], object], ttl: float = 300.0,
+                now_fn: Optional[Callable[[], float]] = None) -> Callable[[str, dict], dict]:
+    """A TasteLens shop provider bound to a fetch function, with a small
+    per-label TTL cache so a shelf of repeats — and repeated glances at the same
+    shelf — don't re-hit the API (Open Food Facts rate-limits; this is the
+    polite, fast path). Cache holds even an empty result, so a miss isn't
+    retried every glance within the window."""
+    import time
+    now = now_fn or time.time
+    cache: dict = {}
     def shop(label: str, attrs: dict) -> dict:
-        return lookup(label, fetch_fn)
+        key = (label or "").strip().lower()
+        hit = cache.get(key)
+        if hit is not None and (now() - hit[0]) < ttl:
+            return hit[1]
+        result = lookup(label, fetch_fn)
+        cache[key] = (now(), result)
+        return result
     return shop
 
 
-def _default_fetch(url: str) -> str:
+def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
+    """The shipped network fetch: urllib with a couple of retries on transient
+    failures (5xx / connection errors), since Open Food Facts 503s under load.
+    A descriptive User-Agent is what OFF asks of API clients."""
+    import time
+    import urllib.error
     import urllib.request
-    req = urllib.request.Request(url, headers={"User-Agent": "DreamLayer-TasteLens/0.1"})
-    with urllib.request.urlopen(req, timeout=4) as r:      # network capability
-        return r.read().decode("utf-8", "replace")
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "DreamLayer-TasteLens/0.1 (+https://dreamlayer.app)"})
+    last: Exception = RuntimeError("no attempt")
+    for attempt in range(max(1, retries + 1)):
+        try:
+            with urllib.request.urlopen(req, timeout=4) as r:   # network capability
+                return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code < 500:                      # 4xx won't get better on retry
+                raise
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last = e
+        if attempt < retries:
+            time.sleep(backoff * (2 ** attempt))  # 0.5s, 1.0s
+    raise last
 
 
 def openfoodfacts_plugin(fetch_fn: Optional[Callable[[str], object]] = None):
