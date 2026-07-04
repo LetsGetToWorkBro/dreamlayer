@@ -884,6 +884,75 @@ class Brain:
         self._save_people()
         return {"ok": True, "person": person}
 
+    def _find_person(self, name: str):
+        nl = (name or "").strip().lower()
+        if not nl:
+            return None
+        exact = next((p for p in self.social_people
+                      if p.get("name", "").lower() == nl), None)
+        if exact:
+            return exact
+        # unique first-name match
+        starts = [p for p in self.social_people
+                  if p.get("name", "").lower().split()[:1] == [nl]]
+        return starts[0] if len(starts) == 1 else None
+
+    def voice_social(self, intent: str, args: dict) -> dict:
+        """Full-parity social voice from the phone's typed box: note / meet /
+        debt / settle, applied to the people mirror the People screen reads.
+        The hub owns the truth on-glass; this keeps the phone consistent when
+        you type instead of speaking to the glasses."""
+        a = args or {}
+        who = str(a.get("who") or "").strip()
+
+        if intent == "meet_person":
+            if not who:
+                return {"intent": intent, "ok": False, "say": "Who is this?"}
+            person = self._find_person(who)
+            if person is None:
+                safe = "".join(c for c in who.lower() if c.isalnum()) or "person"
+                person = {"contact_id": f"phone_{safe}", "name": who,
+                          "relation": "", "company": "", "role": "",
+                          "last_met": "", "last_seen": "", "notes": [],
+                          "debts": [], "topics": []}
+                self.social_people.append(person)
+            if a.get("relation"):
+                person["relation"] = str(a["relation"]).strip()
+            if a.get("note"):
+                person.setdefault("notes", []).append(str(a["note"]).strip())
+            self._save_people()
+            return {"intent": intent, "ok": True, "who": who,
+                    "say": f"Good to meet {who}."}
+
+        if not who:
+            return {"intent": intent, "ok": False,
+                    "say": "Who do you mean? Say their name."}
+        person = self._find_person(who)
+        if person is None:
+            return {"intent": intent, "ok": False,
+                    "say": f"I don't know who {who} is yet."}
+        name = person["name"]
+        if intent == "note_person":
+            note = str(a.get("note") or "").strip()
+            if note:
+                person.setdefault("notes", []).append(note)
+            say = f"Got it — I'll remember that about {name}."
+        elif intent == "debt":
+            what = str(a.get("what") or "").strip()
+            if a.get("dir") == "they_owe":
+                person.setdefault("debts", []).append(f"owes you {what}")
+                say = f"Noted — {name} owes you {what}."
+            else:
+                person.setdefault("debts", []).append(f"you owe {what}")
+                say = f"Noted — you owe {name} {what}."
+        elif intent == "debt_settle":
+            person["debts"] = []
+            say = f"Squared up with {name}."
+        else:
+            return {"intent": intent, "ok": False, "say": ""}
+        self._save_people()
+        return {"intent": intent, "ok": True, "who": name, "say": say}
+
     def set_profile(self, data: dict) -> dict:
         """Store the Oracle profile the glasses hub just pushed (a mirror, so the
         phone can read it). Keeps only the known shape; persists to profile.json."""
@@ -1369,6 +1438,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     self._json(200, brain.rc_native(it.kind, it.args))
                 elif it.kind == "timer_cancel":
                     self._json(200, brain.rc_native_cancel())
+                elif it.kind in ("note_person", "meet_person", "debt", "debt_settle"):
+                    # full parity with the hub: apply to the people mirror the
+                    # People screen reads, so typed voice works like spoken
+                    self._json(200, brain.voice_social(it.kind, it.args))
                 else:
                     self._json(200, {"intent": it.kind, **it.args})
             elif path == "/dreamlayer/calendar":

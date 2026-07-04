@@ -67,6 +67,7 @@ export default function Now() {
     setCmd("");
     if (r.intent === "brief") setBrief(r.text ?? "");
     else if (r.answer) setVoiceOut(r.answer);
+    else if (r.say) setVoiceOut(r.say); // timers, notes, debts, meet — Oracle's confirmation
     else if (r.intent === "reply") setVoiceOut(`Reply to ${r.to}: “${r.text}” — open Messages to send.`);
     else setVoiceOut(`(${r.intent})`);
   };
