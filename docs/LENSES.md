@@ -58,6 +58,10 @@ One family, three directions.
 - **Rosetta Lens** — translate text you *look at* (a menu, a sign): the eye.
 - **Puente** — live voice translation: the ear. Together, Rosetta + Puente
   are "understand any language."
+- **Scholar** — look at a test question and the answer is on the glass; look at
+  a form and each field says what to write; look at dense legal or technical
+  text and it comes back in plain words. Reads through the Brain's vision tier
+  (local first, cloud only when opted in), veil-gated.
 
 ## 🎯 Life — *do, keep, and build*
 

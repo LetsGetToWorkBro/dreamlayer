@@ -215,6 +215,12 @@ class Orchestrator:
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
         # Waypath: point-me-to-my-things from anchors
         self.waypath = WaypathLens()
+        # Scholar: look at a test question and get the answer; look at a form and
+        # get each field spelled out; look at dense legal/technical text and get
+        # it in plain words. Reads through the Brain's vision tier (_scholar_read):
+        # local model first, cloud only when opted in, never while incognito.
+        from .scholar import Scholar
+        self.scholar = Scholar(read_fn=self._scholar_read)
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -557,6 +563,48 @@ class Orchestrator:
         if panel is not None:
             self.bridge.send_card(panel.to_hud_card(), event="object_panel")
         return panel
+
+    def read_answer(self, frame, question: str = "", now: float | None = None):
+        """Scholar: read the question in view and put the answer on the glass.
+        Works for any subject; `question` optionally carries a spoken ask about
+        what's in front of you. Veil-gated; sends a ScholarCard."""
+        return self._scholar_send(self.scholar.answer(frame, question=question))
+
+    def read_form(self, frame, purpose: str = "", now: float | None = None):
+        """Scholar: read a form and say what to write in each field. `purpose`
+        steers the guidance ("renew my passport", "claim the deduction")."""
+        return self._scholar_send(self.scholar.form(frame, purpose=purpose))
+
+    def explain_text(self, frame, now: float | None = None):
+        """Scholar: summarize dense legal/technical text in plain words, flagging
+        anything that commits you or carries risk."""
+        return self._scholar_send(self.scholar.explain(frame))
+
+    def _scholar_send(self, result):
+        if result is not None and result.card is not None:
+            self.bridge.send_card(result.card, event="scholar")
+        return result
+
+    def _scholar_read(self, frame, prompt: str):
+        """Scholar's vision seam: read the text in a frame and reason about it,
+        through the Brain's vision tier — local model first, cloud only when
+        opted in, never while incognito. Falls back to the knowledge tier for a
+        text-only reply, and returns None when nothing can read it (so Scholar
+        shows an honest 'connect a Brain' card instead of guessing)."""
+        if not self.privacy.allow_capture() or not getattr(self, "brain", None):
+            return None
+        try:
+            ans = self.brain.explain(frame, prompt, want="more")
+        except Exception:
+            ans = None
+        if ans is None or ans.is_empty():
+            try:                              # no vision tier — try text knowledge
+                ans = self.brain.ask(prompt)
+            except Exception:
+                ans = None
+        if ans is None or ans.is_empty():
+            return None
+        return ans.text
 
     def find_way(self, subject: str, heading_deg: float = 0.0):
         """Waypath Lens: where is my <thing> / where do I go, as a direction
@@ -933,11 +981,12 @@ class Orchestrator:
             self.bridge.send_card(c.card, event="anticipate")
         return cues
 
-    def handle_voice(self, text: str) -> dict:
+    def handle_voice(self, text: str, frame=None) -> dict:
         """Route a spoken (already-transcribed) line to an intent. 'Ask/recall'
-        run straight through to the brain and return the answer; the rest come
-        back as a structured intent for the hub to execute (reply, locate,
-        brief, missed). The mic + speech-to-text is a device seam."""
+        run straight through to the brain and return the answer; a 'scholar'
+        intent reads what you're looking at (needs the current `frame`); the
+        rest come back as a structured intent for the hub to execute (reply,
+        locate, brief, missed). The mic + speech-to-text is a device seam."""
         from .voice import parse_intent
         it = parse_intent(text)
         if it.kind in ("ask", "recall"):
@@ -948,6 +997,19 @@ class Orchestrator:
                 ans = None
             return {"intent": it.kind, "query": it.args.get("query", ""),
                     "answer": ans.text if ans is not None else ""}
+        if it.kind == "scholar":
+            mode = it.args.get("mode", "answer")
+            res = None
+            if frame is not None:
+                if mode == "form":
+                    res = self.read_form(frame, purpose=it.args.get("purpose", ""))
+                elif mode == "explain":
+                    res = self.explain_text(frame)
+                else:
+                    res = self.read_answer(frame)
+            return {"intent": "scholar", "mode": mode,
+                    "answer": res.primary if res is not None else "",
+                    "ok": bool(res.ok) if res is not None else False}
         return {"intent": it.kind, **it.args}
 
     # -- conversation ledger: captions, recall, rewind, dossier ----------

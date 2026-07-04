@@ -432,6 +432,47 @@ def oracle_reply(text: str = "", kind: str = "answer") -> dict:
     }
 
 
+_SCHOLAR_STYLE = {
+    "answer":  ("ANSWER",         T.ACCENT_MEMORY),
+    "form":    ("FORM HELP",      T.ACCENT_MEMORY),
+    "explain": ("IN PLAIN WORDS", T.ACCENT_MEMORY),
+}
+
+
+def scholar(mode: str = "answer", primary: str = "", detail: str = "",
+            items=None, unavailable: bool = False) -> dict:
+    """The Scholar card — an answer read off a test, a form's fields spelled
+    out, or dense text put in plain words. `items` are the form fields or the
+    key points, listed under the headline. `unavailable` renders the honest
+    'connect a Brain' state instead of a guess."""
+    label, accent = _SCHOLAR_STYLE.get(mode, _SCHOLAR_STYLE["answer"])
+    items = [i for i in (items or []) if i]
+    body = (primary or "").strip()
+    lines = [label]
+    if body:
+        lines.append(body)
+    lines += items[:6]
+    if detail and not body:
+        lines.append(detail)
+    return {
+        "type":        "ScholarCard",
+        "dismiss_ms":  9000,
+        "mode":        mode,
+        "eyebrow":     label,
+        "primary":     body,
+        "detail":      detail,
+        "items":       items[:6],
+        "unavailable": bool(unavailable),
+        "color":       T.TEXT_GHOST if unavailable else accent,
+        "lines":       lines,
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 60, "size": "sm", "color": accent, "tracking": 3},
+            "separator": {"x1": 44, "x2": 212, "y": 76},
+            "primary":   {"x": 128, "y": 106, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
 _FACT_STYLE = {
     "supported":          ("VERIFIED",   T.ACCENT_SUCCESS,   "chime"),
     "disputed":           ("CHECK THIS", T.WARNING_AMBER,    "hark_urgent"),

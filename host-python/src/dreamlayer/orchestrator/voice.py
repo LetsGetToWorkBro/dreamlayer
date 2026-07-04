@@ -10,6 +10,9 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
     "brief me" / "what's my day"              → brief
     "what did I miss?"                        → missed
+    "what's the answer?"                      → scholar(mode="answer")
+    "how do I fill this out to renew?"        → scholar(mode="form", purpose=...)
+    "explain this" / "what does this mean?"   → scholar(mode="explain")
     anything else                             → ask(query)
 
 Pure and deterministic, so the grammar is fully unit-tested; the actual
@@ -29,7 +32,7 @@ WAKE = ("hey oracle", "ok oracle", "okay oracle", "oracle",
 
 @dataclass
 class Intent:
-    kind: str                       # recall|locate|reply|brief|missed|ask
+    kind: str                       # recall|locate|reply|brief|missed|scholar|ask
     args: dict = field(default_factory=dict)
 
 
@@ -77,5 +80,24 @@ def parse_intent(text: str) -> Intent:
         return Intent("missed", {})
     if "brief" in t or t in ("my day", "what's my day", "whats my day"):
         return Intent("brief", {})
+
+    # Scholar — read what you're looking at. These are about the thing in view,
+    # so they carry no query; the orchestrator pairs them with the current frame.
+    # forms: "how do I fill this (out)[ to <purpose>]" / "help me fill this form"
+    m = re.match(r"(?:how do i |help me )?fill (?:this|it|out|in|this form|this out)"
+                 r"(?:\s+(?:out|in))?(?:\s+(?:to|for)\s+(.*))?$", t)
+    if m or "fill this out" in t or "fill out this form" in t:
+        purpose = (m.group(1).strip() if m and m.group(1) else "")
+        return Intent("scholar", {"mode": "form", "purpose": purpose})
+    # answers: "what's the answer", "answer this (question)", "solve this"
+    if re.match(r"(?:what'?s the answer|answer (?:this|the question|it)|solve (?:this|it))\b", t) \
+            or t in ("what is the answer", "the answer"):
+        return Intent("scholar", {"mode": "answer"})
+    # plain-words: "explain this", "what does this mean", "summarize this",
+    # "put this in plain english/words", "translate the legal(ese)"
+    if re.match(r"(?:explain (?:this|it)|what does (?:this|it) mean|summari[sz]e (?:this|it)|"
+                r"(?:put (?:this|it) in )?plain (?:english|words|language)|"
+                r"break (?:this|it) down)\b", t):
+        return Intent("scholar", {"mode": "explain"})
 
     return Intent("ask", {"query": raw.strip()})
