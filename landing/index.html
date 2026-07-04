@@ -297,6 +297,23 @@ section{position:relative}
 .coral-card .feat b i{color:var(--coral)}
 @media (prefers-reduced-motion:reduce){.xdetail{transition:none}}
 
+/* ---------- walkthrough ---------- */
+.walk-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:clamp(28px,5vw,72px);align-items:center;max-width:960px;margin:0 auto}
+.walk-orb{position:relative;border-radius:50%;overflow:hidden;border:1px solid var(--h-border);
+  aspect-ratio:1;background:#000;justify-self:center;width:min(100%,440px);
+  box-shadow:0 0 100px -30px rgba(44,199,154,.4),inset 0 0 60px rgba(0,0,0,.5)}
+.walk-orb canvas{width:100%;height:100%;display:block}
+.walk-steps{list-style:none;display:flex;flex-direction:column;gap:6px}
+.walk-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:var(--r-lg);
+  border:1px solid transparent;transition:border-color var(--base) var(--ease),
+  background var(--base) var(--ease),opacity var(--base) var(--ease);opacity:.5}
+.walk-steps li.on{opacity:1;border-color:rgba(47,212,196,.5);background:var(--surface)}
+.walk-steps .wn{font-family:var(--mono);font-size:12px;color:var(--teal);padding-top:3px}
+.walk-steps b{display:block;font-size:17px;font-weight:600;margin-bottom:2px}
+.walk-steps em{font-style:normal;color:var(--text-2);font-size:14px;line-height:1.5}
+.walk-cap{margin-top:20px;padding-left:18px;color:var(--teal);font-size:13px;min-height:1.4em}
+
 /* ---------- the software ---------- */
 .sw-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,5vw,72px);align-items:center}
 .sw-frame{display:flex;justify-content:center;margin-bottom:28px}
@@ -412,12 +429,10 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
      dimming scene is a desktop moment. No pin, no dead space. */
   .veil{height:auto;padding:72px 0 56px}
   .veil-sticky{position:static;height:auto;display:flex;flex-direction:column;
-    align-items:center;gap:36px}
-  .veil-world{position:static;opacity:.34!important;filter:blur(1.5px) saturate(.35)!important;
-    transform:none!important}
-  .veil-world .row{flex-wrap:nowrap;gap:14px;padding:0}
-  .veil-world img{width:clamp(88px,26vw,132px)}
-  .veil-world .row img:nth-child(n+4){display:none}
+    align-items:center;gap:0}
+  /* the dimmed world backdrop is a desktop scroll moment; statically it just
+     reads as stray faded circles, so drop it on phones */
+  .veil-world{display:none!important}
   .veil-core{opacity:1!important;transform:none!important;pointer-events:auto!important}
   .hex{width:64px;height:64px;margin-bottom:20px}
   .hex .pause i{width:5px;height:17px}
@@ -446,6 +461,10 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .sw-cell:first-child{margin-bottom:8px}
   .phone.back{display:none}
   .win .shot{max-height:360px}
+  .walk-stage{grid-template-columns:1fr;gap:30px}
+  .walk-orb{width:min(78vw,340px)}
+  .walk-cap{text-align:center;padding-left:0}
+  .walk-steps{max-width:420px;margin:0 auto;width:100%}
 }
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){
@@ -641,6 +660,30 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
       <div class="track" id="mqTrack"></div>
     </div>
     <p class="mono marquee-note arrive">every card above is real — the Meridian Solid pass, drawn by the shipping renderer, 256&nbsp;px, one eye</p>
+  </div>
+</section>
+
+<!-- ======================= walkthrough ======================= -->
+<section class="section-pad" id="walk">
+  <div class="wrap">
+    <div class="sec-head" style="text-align:center;margin:0 auto clamp(32px,5vh,56px)">
+      <span class="eyebrow arrive">In thirty seconds</span>
+      <h2 class="headline arrive" style="--d:80ms">Park it. Forget it. Ask.</h2>
+      <p class="body arrive" style="--d:160ms">The everyday loop — you glance, it keeps, you ask. Here it
+        is start to finish: where you left the car, handed back the moment you need it.</p>
+    </div>
+    <div class="walk-stage arrive" style="--d:120ms">
+      <div class="walk-orb"><canvas data-hud="walk"
+           aria-label="A 30-second walkthrough: saving your parking spot, then recalling it"></canvas></div>
+      <div class="walk-side">
+        <ol class="walk-steps" id="walkSteps">
+          <li data-beat="save"><span class="wn">01</span><div><b>Save</b><em>You glance at your spot and tap once.</em></div></li>
+          <li data-beat="ask"><span class="wn">02</span><div><b>Ask</b><em>Hours later — “Hey Oracle, where did I park?”</em></div></li>
+          <li data-beat="recall"><span class="wn">03</span><div><b>Recall</b><em>The way back, on the rim of your sight.</em></div></li>
+        </ol>
+        <p class="walk-cap mono" id="walkCap" aria-live="polite">Watch a full loop →</p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -908,7 +951,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
          style="color:var(--teal)">Brilliant&nbsp;Labs&nbsp;Halo</a> — currently the only glasses
       capable of running it. More devices as they catch up. Be there when the layer wakes.</p>
     <div class="cta-row arrive" style="--d:300ms">
-      <a class="btn primary" href="mailto:info@labyrinth.vision?subject=DreamLayer%20early%20access">
+      <a class="btn primary" href="mailto:hello@dreamlayer.app?subject=DreamLayer%20early%20access">
         Request early access</a>
       <a class="btn ghost" href="https://brilliant.xyz/" target="_blank" rel="noopener">The hardware ↗</a>
     </div>
@@ -918,7 +961,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <footer>
   <div class="wrap foot">
     <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
-    <span class="mono"><a href="mailto:info@labyrinth.vision">info@labyrinth.vision</a>
+    <span class="mono"><a href="mailto:hello@dreamlayer.app">hello@dreamlayer.app</a>
       &nbsp;·&nbsp; <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank"
       rel="noopener">knowledge base ↗</a></span>
     <small>Private by architecture. Yours to run, yours to keep.</small>
@@ -1258,7 +1301,114 @@ veilScroll();
     ctx.globalAlpha=1;
   }
 
-  var FN={horizon:drawHorizon,recall:drawRecall,saved:drawSaved};
+  // the 30-second walkthrough: park -> wait -> ask -> recall, on a loop
+  function drawWalk(ctx,S,t){
+    var cx=S/2,cy=S/2,k=S/256,T=16.0,tt=t%T,beat="",cap="";
+    ctx.clearRect(0,0,S,S);
+    ctx.strokeStyle="rgba(42,60,68,.8)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(cx,cy,S*0.47,0,TWO);ctx.stroke();
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    var breath=0.5+0.5*Math.sin(t*TWO/2.4);
+    function txt(s,y,sz,col,al,w){ctx.globalAlpha=al;ctx.fillStyle=col;
+      ctx.font=(w||"400")+" "+(sz*k)+"px "+FONT;ctx.fillText(s,cx,cy+y*k);ctx.globalAlpha=1;}
+    function sep(y,col,al){var g=ctx.createLinearGradient(cx-40*k,0,cx+40*k,0);
+      g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(0.5,col);g.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.strokeStyle=g;ctx.globalAlpha=al;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(cx-40*k,cy+y*k);ctx.lineTo(cx+40*k,cy+y*k);ctx.stroke();ctx.globalAlpha=1;}
+
+    if(tt<1.2){                                   // READY
+      beat="";cap="Watch a full loop →";
+      var pr=eO(tt/0.5),r=92*k;
+      ctx.strokeStyle="rgba(44,199,154,"+((0.25+0.18*breath)*pr)+")";ctx.lineWidth=2*k;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,TWO);ctx.stroke();
+      ctx.fillStyle=TEAL;ctx.beginPath();ctx.arc(cx,cy,3*k,0,TWO);ctx.fill();
+    } else if(tt<5.0){                            // SAVE
+      beat="save";cap="One tap — “Parked · Level 3, blue pillar.”";
+      var st=tt-1.2,appear=eO(Math.min(1,st/0.6));
+      for(var i=0;i<4;i++){var rr=(20+i*12)*k;
+        ctx.strokeStyle="rgba(86,211,100,"+Math.max(0,appear*(0.5-i*0.09))+")";ctx.lineWidth=1.4*k;
+        ctx.beginPath();ctx.arc(cx,cy-14*k,rr,0,TWO);ctx.stroke();}
+      var cd=eO(Math.min(1,(st-0.3)/0.5));
+      ctx.strokeStyle=GREEN;ctx.lineWidth=3*k;ctx.lineCap="round";ctx.lineJoin="round";
+      ctx.shadowColor=GREEN;ctx.shadowBlur=8*k;
+      var q0=[cx-14*k,cy-13*k],q1=[cx-4*k,cy-3*k],q2=[cx+16*k,cy-27*k];
+      ctx.beginPath();ctx.moveTo(q0[0],q0[1]);
+      if(cd<0.5){var f=cd/0.5;ctx.lineTo(lerp(q0[0],q1[0],f),lerp(q0[1],q1[1],f));}
+      else{ctx.lineTo(q1[0],q1[1]);var f2=(cd-0.5)/0.5;ctx.lineTo(lerp(q1[0],q2[0],f2),lerp(q1[1],q2[1],f2));}
+      ctx.stroke();ctx.shadowBlur=0;
+      if(st>0.7&&st<1.8){var bt=(st-0.7)/1.1;for(var p=0;p<12;p++){var pa=(p/12)*TWO+0.5,d=eO(bt)*S*0.2;
+        ctx.fillStyle=GREEN;ctx.globalAlpha=(1-bt)*0.85;
+        ctx.beginPath();ctx.arc(cx+Math.cos(pa)*d,cy-14*k+Math.sin(pa)*d,2*k*(1-bt),0,TWO);ctx.fill();}ctx.globalAlpha=1;}
+      var la=eO(Math.min(1,(st-0.5)/0.5)),fade=st>3.2?Math.max(0,1-(st-3.2)/0.6):1,a=la*fade;
+      txt("PARKED",22,9,GREEN,a*0.95,"700");sep(30,"rgba(86,211,100,"+(0.6*a)+")",1);
+      txt("Level 3",48,20,TEXT,a,"700");
+      txt("blue pillar · north ramp",70,10.5,TEXT2,a,"400");
+    } else if(tt<7.0){                            // WAIT (time passes)
+      beat="";cap="Hours later, arms full of groceries…";
+      var wt=(tt-5.0)/2.0,dim=Math.sin(Math.min(1,wt)*Math.PI);
+      ctx.strokeStyle="rgba(88,104,111,"+(0.5*dim)+")";ctx.lineWidth=1.6*k;
+      ctx.beginPath();ctx.arc(cx,cy,26*k,0,TWO);ctx.stroke();
+      var ha=-Math.PI/2+wt*TWO*3,ma=-Math.PI/2+wt*TWO*8;   // sweeping hands
+      ctx.strokeStyle="rgba(168,184,192,"+(0.7*dim)+")";ctx.lineWidth=2*k;ctx.lineCap="round";
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(ha)*13*k,cy+Math.sin(ha)*13*k);ctx.stroke();
+      ctx.lineWidth=1.5*k;
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(ma)*19*k,cy+Math.sin(ma)*19*k);ctx.stroke();
+      for(var d2=0;d2<3;d2++){ctx.fillStyle="rgba(168,184,192,"+(dim*(0.3+0.5*Math.abs(Math.sin(t*3-d2))))+")";
+        ctx.beginPath();ctx.arc(cx+(d2-1)*10*k,cy+50*k,2*k,0,TWO);ctx.fill();}
+    } else if(tt<9.5){                            // ASK
+      beat="ask";cap="“Hey Oracle — where did I park?”";
+      var at=eO(Math.min(1,(tt-7.0)/0.4)),amp=at;
+      var NB=13,bw=3.2*k;
+      for(var bI=0;bI<NB;bI++){var bx=cx+(bI-(NB-1)/2)*7*k;
+        var h=(4+Math.abs(Math.sin(bI*0.7+t*7))*22*amp)*k;
+        ctx.fillStyle=TEAL;ctx.globalAlpha=0.5+0.5*amp;
+        ctx.fillRect(bx-bw/2,cy-8*k-h/2,bw,h);}
+      ctx.globalAlpha=1;
+      txt("HEY ORACLE",30,9,TEAL,at*0.9,"700");sep(38,"rgba(44,199,154,"+(0.6*at)+")",1);
+      txt("where did I park?",56,15,TEXT,at,"600");
+    } else if(tt<14.5){                           // RECALL (Waypath)
+      beat="recall";cap="Level 3, by the blue pillar — 40 m north.";
+      var rt=tt-9.5,app=eO(Math.min(1,rt/0.5)),hold=Math.min(1,(rt-0.4)/0.4);
+      var ang=lerp(-Math.PI/2+0.9,-Math.PI/2,eO(Math.min(1,rt/0.9)));  // settle to north
+      // distance arc
+      ctx.strokeStyle="rgba(44,199,154,"+(0.25*app)+")";ctx.lineWidth=1.4*k;
+      ctx.beginPath();ctx.arc(cx,cy-30*k,40*k,-Math.PI*0.85,-Math.PI*0.15);ctx.stroke();
+      // direction arrow with bloom
+      ctx.save();ctx.translate(cx,cy-30*k);ctx.rotate(ang+Math.PI/2);
+      ctx.globalAlpha=app;ctx.strokeStyle=TEAL;ctx.fillStyle=TEAL;ctx.lineWidth=2.4*k;
+      ctx.shadowColor=TEAL;ctx.shadowBlur=12*k;ctx.lineCap="round";ctx.lineJoin="round";
+      ctx.beginPath();ctx.moveTo(0,16*k);ctx.lineTo(0,-16*k);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,-20*k);ctx.lineTo(-7*k,-8*k);ctx.lineTo(7*k,-8*k);ctx.closePath();ctx.fill();
+      ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.restore();
+      var a=hold;
+      txt("WAYPATH · 40 m",24,9,TEAL,a*0.9,"700");sep(32,"rgba(44,199,154,"+(0.6*a)+")",1);
+      txt("Level 3",50,20,TEXT,a,"700");
+      txt("blue pillar · north ramp",72,10.5,TEXT2,a,"400");
+      // wearer dot pulses at bottom
+      ctx.fillStyle=TEAL;ctx.globalAlpha=0.5+0.5*breath;
+      ctx.beginPath();ctx.arc(cx,cy+86*k,3*k,0,TWO);ctx.fill();ctx.globalAlpha=1;
+    } else {                                      // SETTLE
+      beat="recall";cap="Level 3, by the blue pillar — 40 m north.";
+      var kr=eO((tt-14.5)/1.5),r=lerp(30,92,kr)*k;
+      ctx.strokeStyle="rgba(44,199,154,"+(0.5*(1-kr)+0.1)+")";ctx.lineWidth=2*k;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,TWO);ctx.stroke();
+      ctx.fillStyle=TEAL;ctx.globalAlpha=1-0.7*kr;
+      ctx.beginPath();ctx.arc(cx,cy,3*k,0,TWO);ctx.fill();ctx.globalAlpha=1;
+    }
+    return {beat:beat,cap:cap};
+  }
+
+  // caption + step sync for the walkthrough
+  var walkCap=document.getElementById("walkCap"),
+      walkLis=[].slice.call(document.querySelectorAll("#walkSteps li")),
+      lastCap="",lastBeat="_";
+  function syncWalk(r){
+    if(walkCap && r.cap!==lastCap){lastCap=r.cap;walkCap.textContent=r.cap;}
+    if(r.beat!==lastBeat){lastBeat=r.beat;
+      walkLis.forEach(function(li){li.classList.toggle("on",li.dataset.beat===r.beat);});}
+  }
+
+  var FN={horizon:drawHorizon,recall:drawRecall,saved:drawSaved,walk:drawWalk};
   var orbs=[];
   document.querySelectorAll("[data-hud]").forEach(function(c){
     var ctx=c.getContext("2d");
@@ -1269,11 +1419,15 @@ veilScroll();
     orbs.push({c:c,ctx:ctx,fn:FN[c.dataset.hud],vis:false});
   });
   if(!orbs.length) return;
-  if(reduced){orbs.forEach(function(o){o.fn(o.ctx,o.c._s,o.c.dataset.hud==="recall"?3.2:2.0);});return;}
+  function stat(h){return h==="walk"?11.0:h==="recall"?3.2:2.0;}
+  if(reduced){orbs.forEach(function(o){var r=o.fn(o.ctx,o.c._s,stat(o.c.dataset.hud));
+    if(o.c.dataset.hud==="walk"&&r)syncWalk(r);});return;}
   var raf2=null,t0=performance.now();
   function loop(){
     raf2=null;var any=false,now=performance.now();
-    orbs.forEach(function(o){if(o.vis&&!document.hidden){any=true;o.fn(o.ctx,o.c._s,(now-t0)/1000);}});
+    orbs.forEach(function(o){if(o.vis&&!document.hidden){any=true;
+      var r=o.fn(o.ctx,o.c._s,(now-t0)/1000);
+      if(o.c.dataset.hud==="walk"&&r)syncWalk(r);}});
     if(any) raf2=requestAnimationFrame(loop);
   }
   function kick(){if(!raf2) loop();}
