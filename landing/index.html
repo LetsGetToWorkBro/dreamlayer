@@ -269,11 +269,11 @@ section{position:relative}
 .arch-note .mono{color:var(--teal);white-space:nowrap}
 
 /* ---------- veil ---------- */
-.veil{height:250svh}
+.veil{height:200svh}
 .veil-sticky{position:sticky;top:0;height:100svh;overflow:clip;display:grid;place-items:center}
 .veil-world{position:absolute;inset:0;display:grid;place-items:center;
   will-change:opacity,filter,transform}
-.veil-world .row{display:flex;gap:26px;opacity:.75}
+.veil-world .row{display:flex;gap:26px;justify-content:center;opacity:.75}
 .veil-world img{width:clamp(120px,16vw,208px);height:auto;border-radius:50%;border:1px solid var(--border)}
 .veil-core{position:relative;z-index:2;text-align:center;padding:0 var(--gutter);
   will-change:opacity,transform}
@@ -338,6 +338,21 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .tier .link-label{position:static;display:block;margin:8px 0 0}
 }
 @media (max-width:760px){
+  /* tighter rhythm: mobile scroll distances shrink with the viewport */
+  .section-pad{padding:clamp(64px,9vh,104px) 0}
+  .veil{height:165svh}
+  /* the veil's world: one calm row of three, never a wrapped scatter */
+  .veil-world .row{flex-wrap:nowrap;gap:14px;padding:0}
+  .veil-world img{width:clamp(88px,26vw,132px)}
+  .veil-world .row img:nth-child(n+4){display:none}
+  /* the veil core must fit one phone viewport under the fixed bar */
+  .veil-core{padding-top:44px}
+  .hex{width:64px;height:64px;margin-bottom:20px}
+  .hex .pause i{width:5px;height:17px}
+  .veil-core h2{font-size:24px}
+  .veil-core .body{font-size:15px}
+  .veil-contract{margin-top:24px;gap:8px}
+  .veil-contract span{font-size:10.5px;padding:6px 12px}
   /* sticky scope must live directly inside the block that also contains the
      steps, or it stops sticking once its own column ends */
   .story-grid{display:block}
@@ -349,10 +364,9 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .hud-card .h-title{font-size:19px}
   .hud-card .h-cap{font-size:12px}
   .hud-card .h-ghost{font-size:8.5px}
-  .story-steps{padding-top:2vh}
-  .step{min-height:72svh;max-width:none}
+  .story-steps{padding:2vh 0 10vh}
+  .step{min-height:64svh;max-width:none}
   .lens-grid{grid-template-columns:1fr}
-  .veil-world .row{flex-wrap:wrap;justify-content:center;padding:0 24px}
 }
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){
@@ -877,11 +891,11 @@ function veilScroll(){
   var total=r.height-vh;
   var p=Math.max(0,Math.min(1,-r.top/total));       // 0 → 1 through the section
   if(reduced){ veilWorld.style.opacity="0.12"; veilCore.style.opacity="1"; return; }
-  var dim=Math.min(1,p/0.5);                        // world dims over the first half
+  var dim=Math.min(1,p/0.42);                       // the hush lands early
   veilWorld.style.opacity=String(0.9*(1-dim)+0.06);
   veilWorld.style.filter="blur("+(dim*6)+"px) saturate("+(1-dim*0.9)+")";
   veilWorld.style.transform="scale("+(1-dim*0.05)+")";
-  var rise=Math.max(0,Math.min(1,(p-0.28)/0.3));    // veil arrives after the hush begins
+  var rise=Math.max(0,Math.min(1,(p-0.22)/0.26));   // veil arrives as the hush begins
   veilCore.style.opacity=String(rise);
   veilCore.style.transform="translateY("+((1-rise)*14)+"px)";
   veilCore.style.pointerEvents=rise>0.5?"auto":"none";
