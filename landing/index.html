@@ -329,6 +329,12 @@ section{position:relative}
 .sw-cap .eyebrow{display:block;margin-bottom:10px}
 .sw-cap h3{font-size:22px;font-weight:600;margin-bottom:10px}
 .sw-cap p{color:var(--text-2);font-size:15px;line-height:1.6}
+.sw-feats{list-style:none;text-align:left;margin:20px auto 0;max-width:400px;
+  display:flex;flex-direction:column;gap:12px}
+.sw-feats li{position:relative;padding-left:24px;font-size:14px;line-height:1.55;color:var(--text-2)}
+.sw-feats li::before{content:"";position:absolute;left:2px;top:7px;width:8px;height:8px;
+  border-radius:50%;border:1.5px solid var(--teal);box-shadow:0 0 8px rgba(47,212,196,.5)}
+.sw-feats b{color:var(--text);font-weight:600}
 
 /* ---------- veil ---------- */
 .veil{height:200svh}
@@ -817,8 +823,16 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <div class="sw-cap">
           <span class="eyebrow">iOS app</span>
           <h3>Your brain, in your pocket</h3>
-          <p>Pair the trio with one code, ask your brain from anywhere, and own your privacy from a
-            single screen. Opens on the Brain tab — phone-first, cloud a switch you hold.</p>
+          <p>Pair the trio with one code and own your privacy from a single screen — phone-first,
+            cloud a switch you hold.</p>
+          <ul class="sw-feats">
+            <li><b>Ask from anywhere.</b> “What does Marcus owe me?” answered from your own memory,
+              not a search box.</li>
+            <li><b>Three switches, one screen.</b> Phone-or-Mac brain, cloud on/off, and Incognito
+              — flip capture and the cloud off for a whole session with one tap.</li>
+            <li><b>Mirrors the glasses.</b> See the card that’s on the HUD right now, and manage the
+              memories and people you’ve kept.</li>
+          </ul>
         </div>
       </div>
 
@@ -834,9 +848,16 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <div class="sw-cap">
           <span class="eyebrow">macOS · the Brain</span>
           <h3>A private knowledge node</h3>
-          <p>A small local server indexes your chosen folders and mail and serves a polished control
-            panel. Keyword search works with zero setup; add a local model for written answers and
-            vision. Everything stays on your LAN — nothing leaves the Mac.</p>
+          <p>Point it at a spare Mac and it becomes the smart, private half of your brain — indexing
+            your world and serving it back, all on your own network.</p>
+          <ul class="sw-feats">
+            <li><b>Morning brief.</b> One tap synthesises what’s new and what’s on you — across your
+              messages, mail, and everything you’re tracking.</li>
+            <li><b>Knows your day &amp; your people.</b> Reads macOS Calendar, Contacts, and Reminders
+              so the glasses greet who you’ve met and surface what’s due — read-only, nothing leaves.</li>
+            <li><b>Answers from your files.</b> Index chosen folders and mail; keyword search needs
+              zero setup, and a local model adds written answers and vision — no cloud required.</li>
+          </ul>
         </div>
       </div>
     </div>
