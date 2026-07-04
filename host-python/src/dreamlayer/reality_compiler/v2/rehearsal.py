@@ -149,10 +149,8 @@ def parse_utterance(text: str) -> tuple:
         window = _find_duration(t) or 10.0
         return ("warn", window)
 
-    if re.search(r"\bcount\b|\btally\b", t):
-        label = re.sub(r".*\b(count|tally)\b( this| these| them)?", "", t).strip()
-        return ("count", label or "count")
-
+    # emit is checked before count: "send the count to my phone" is a send,
+    # even though the word "count" appears in it
     m = re.search(r"\b(send|tell my phone|log)\b\s*(?:a |an |the )?(\w+)?", t)
     if m and m.group(1):
         tag = (m.group(2) or "mark")[:16]
@@ -160,6 +158,10 @@ def parse_utterance(text: str) -> tuple:
         if per_second is None and "every second" in t:
             per_second = 1.0
         return ("emit", tag, per_second)
+
+    if re.search(r"\bcount\b|\btally\b", t):
+        label = re.sub(r".*\b(count|tally)\b( this| these| them)?", "", t).strip()
+        return ("count", label or "count")
 
     m = re.match(r"show\s+(.*)", t)
     if m:
@@ -252,8 +254,9 @@ class RehearsalSession:
     def finish(self) -> RehearsalResult:
         from . import budgets
         from .choreographer import Choreographer, InferenceError
+        from .figment import FigmentError
         from .playback import run_through
-        from .teach import teach_inference, teach_violations
+        from .teach import TeachCard, teach_inference, teach_violations
 
         beats = [b for b in self.beats
                  if not (b.parsed and b.parsed[0] == "done")]
@@ -262,6 +265,14 @@ class RehearsalSession:
         except InferenceError as exc:
             return RehearsalResult(ok=False, teach=teach_inference(exc),
                                    beats=self.beats)
+        except FigmentError:
+            # a beat combination the choreographer couldn't assemble into a
+            # legal machine — degrade to a teach card, never a crash
+            return RehearsalResult(
+                ok=False, beats=self.beats,
+                teach=TeachCard(title="CAN'T DO THAT",
+                                lines=["that mix of beats doesn't fit together"],
+                                suggestion="try it as fewer, simpler beats"))
         report = budgets.verify(fig)
         if not report.ok:
             return RehearsalResult(ok=False, report=report,

@@ -224,7 +224,17 @@ class Brain:
             elif kind == "say":
                 session.say(str(b.get("text") or ""))
             # unknown kinds are ignored — the grammar can't be smuggled past
-        result = session.finish()
+        try:
+            result = session.finish()
+        except Exception:
+            # last-resort net: a performance must never crash the Brain
+            from ...reality_compiler.v2 import present
+            return {"ok": False,
+                    "score": present.score_from_beats(session.beats),
+                    "teach": {"title": "CAN'T DO THAT",
+                              "lines": ["couldn't stage that performance"],
+                              "beat": None,
+                              "suggestion": "try fewer, simpler beats"}}
         resp: dict = {"ok": result.ok,
                       "score": present.score_from_beats(result.beats)}
         if result.report is not None:
