@@ -426,6 +426,12 @@ def draw_contact_sheet(
 class CardRenderer:
     def __init__(self):
         self._mask = _mask()
+        self._extra: dict = {}     # plugin-registered card renderers (type -> fn)
+
+    def register(self, card_type: str, fn) -> None:
+        """Register a renderer for a plugin's own card type. fn(draw, card)
+        draws onto the round canvas exactly like the built-in `_layout_card`."""
+        self._extra[card_type] = fn
 
     def render(self, card: dict) -> Image.Image:
         # RGB canvas: Pillow's "RGBA" draw mode only alpha-BLENDS on RGB
@@ -478,6 +484,8 @@ class CardRenderer:
             "ScholarCard":          self._scholar,
             "GlanceChoiceCard":     self._scholar,
         }
+        if self._extra:
+            dispatch.update(self._extra)   # plugin card renderers
         fn = dispatch.get(card.get("type", ""))
         if fn:
             fn(draw, card)

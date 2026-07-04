@@ -308,6 +308,10 @@ class Orchestrator:
         # when a circle is formed. Same pattern as the pairwise bond above.
         self.mesh = None
         self.beacon = None
+        # Plugins: the supported extension surface (docs/PLATFORM.md). None
+        # until load_plugins() wires extensions (third-party or first-party)
+        # into the object-lens / glance / brain / perception registries.
+        self.plugins = None
 
         # Wire vision pipeline into SceneDescriber if LLM available
         if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
@@ -676,6 +680,40 @@ class Orchestrator:
         if action == "translate":
             return self.look_at_object(frame, facet="ai")
         return self.look_at_object(frame)     # oracle / default
+
+    def _plugin_capabilities(self) -> frozenset:
+        """What this host offers plugins right now — checked against each
+        plugin's `requires` at load time (so a vision-needing plugin waits
+        until a vision tier is present)."""
+        caps = {"object_lens", "glance", "perception", "cards", "ring"}
+        if getattr(self, "mesh", None) is not None:
+            caps.add("mesh")
+        try:
+            if self.brain is not None and self.brain.has_vision():
+                caps.add("vision")
+        except Exception:
+            pass
+        return frozenset(caps)
+
+    def plugin_context(self, renderer=None, config=None):
+        """The narrow surface a plugin is handed, wired to this orchestrator's
+        real registries."""
+        from ..plugins import PluginContext
+        return PluginContext(
+            object_registry=self.object_lens.registry,
+            glance_arbiter=self.glance_arbiter,
+            brain=self.brain, perception=self.perception, renderer=renderer,
+            capabilities=self._plugin_capabilities(),
+            ring=self.ring, veil=self.privacy, mesh=self.mesh, config=config)
+
+    def load_plugins(self, plugins, renderer=None, config=None):
+        """Load a list of plugins into this orchestrator. Gated by capabilities,
+        failures isolated. Returns a LoadResult (loaded / skipped / failed)."""
+        from ..plugins import PluginRegistry
+        reg = self.plugins or PluginRegistry(self.plugin_context(renderer, config))
+        res = reg.load_all(plugins)
+        self.plugins = reg
+        return res
 
     def _classify_glance(self, frame):
         """Two-tier scene read. A coarse on-device read runs first (free, from
