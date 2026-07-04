@@ -93,6 +93,14 @@ def test_router_rate_download_comment_and_get_one():
     assert one["rating"] == 5.0 and one["downloads"] == 1 and len(one["comments"]) == 1
 
 
+def test_router_list_without_a_catalogue_uses_known_names():
+    s = SocialStore()
+    s.rate("gadget", 5, "u"); s.record_download("widget")
+    code, obj = route(s, "GET", "/api/plugins")     # no index_entries (private registry)
+    names = {p["name"] for p in obj["plugins"]}
+    assert code == 200 and names == {"gadget", "widget"}
+
+
 def test_router_rejects_bad_routes():
     s = SocialStore()
     assert route(s, "GET", "/nope")[0] == 404

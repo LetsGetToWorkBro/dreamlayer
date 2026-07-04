@@ -43,6 +43,18 @@ async function readJSON(kv, key, fallback) {
   try { return JSON.parse(raw); } catch { return fallback; }
 }
 
+// The registry can be private, so the *catalogue* lives with the clients — this
+// service owns only the numbers. We remember every plugin name we've seen
+// activity on, so GET /api/plugins can return their stats for the client to
+// merge onto its own catalogue.
+async function trackName(env, name) {
+  const names = await readJSON(env.SOCIAL, "index:names", []);
+  if (!names.includes(name)) {
+    names.push(name);
+    await env.SOCIAL.put("index:names", JSON.stringify(names));
+  }
+}
+
 async function stats(env, name) {
   const ratings = await readJSON(env.SOCIAL, `ratings:${name}`, {});
   const votes = Object.values(ratings);
@@ -65,16 +77,11 @@ export default {
     const name = parts[2] ? decodeURIComponent(parts[2]) : "";
     const action = parts[3] || "";
 
-    // GET /api/plugins — the index with live stats folded in
+    // GET /api/plugins — stats for every plugin we've seen. The client owns the
+    // catalogue (the registry may be private) and merges these by name.
     if (request.method === "GET" && !name) {
-      let index = { plugins: [] };
-      try {
-        const r = await fetch(env.INDEX_URL || INDEX_URL_DEFAULT, { cf: { cacheTtl: 60 } });
-        if (r.ok) index = await r.json();
-      } catch { /* serve stats-only if the index is unreachable */ }
-      const plugins = await Promise.all(
-        (index.plugins || []).map(async (p) => ({ ...p, ...(await stats(env, p.name)) })),
-      );
+      const names = await readJSON(env.SOCIAL, "index:names", []);
+      const plugins = await Promise.all(names.map((n) => stats(env, n)));
       return json({ plugins });
     }
 
@@ -96,12 +103,14 @@ export default {
           const ratings = await readJSON(env.SOCIAL, `ratings:${name}`, {});
           ratings[user] = s;                          // one vote per user, updatable
           await env.SOCIAL.put(`ratings:${name}`, JSON.stringify(ratings));
+          await trackName(env, name);
         }
         return json(await stats(env, name));
       }
       if (action === "download") {
         const n = (Number(await env.SOCIAL.get(`downloads:${name}`)) || 0) + 1;
         await env.SOCIAL.put(`downloads:${name}`, String(n));
+        await trackName(env, name);
         return json({ name, downloads: n });
       }
       if (action === "comment") {
@@ -112,6 +121,7 @@ export default {
                     text, ts: Date.now() / 1000 };
         comments.push(c);
         await env.SOCIAL.put(`comments:${name}`, JSON.stringify(comments));
+        await trackName(env, name);
         return json(c);
       }
     }

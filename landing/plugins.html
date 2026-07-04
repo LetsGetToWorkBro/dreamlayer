@@ -131,13 +131,19 @@ const SNAPSHOT = {
       "description":"Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "requires":["midi"],"tags":["music","creative","mesh","featured"],
+      "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
+    { "name":"open-food-facts","version":"0.1.0","author":"dreamlayer",
+      "description":"Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+      "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
+      "requires":["network"],"tags":["shopping","food","connector","tastelens","featured"],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 }
   ]
 };
 const INDEX_URL = "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
-// Set this to your deployed social-API Worker (registry-api/) to get live
-// download/rating numbers and one-tap rating. Empty ⇒ static, git-backed store.
-const SOCIAL_API = "";
+// The deployed social-API Worker (registry-api/): live downloads/ratings +
+// one-tap rating. The catalogue comes from the snapshot/index; the API only
+// supplies the numbers, merged by name. Empty ⇒ static, git-backed store.
+const SOCIAL_API = "https://dreamlayer-registry-api.nameless-forest-17dc.workers.dev";
 const USER = (()=>{ let u=localStorage.getItem("dl_uid"); if(!u){u="u"+Math.random().toString(36).slice(2);localStorage.setItem("dl_uid",u);} return u; })();
 
 let plugins = SNAPSHOT.plugins.slice();
@@ -225,13 +231,23 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 $("#q").addEventListener("input", e => { query = e.target.value; render(); });
 
 render();
-// live data: the social API when configured (folds in downloads/ratings),
-// else the git-backed index. Never blocks the page; falls back on failure.
-function refresh(){
-  const src = SOCIAL_API ? SOCIAL_API.replace(/\/$/,"")+"/api/plugins" : INDEX_URL;
-  fetch(src, {cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
-    if(d && Array.isArray(d.plugins) && d.plugins.length){ plugins = d.plugins; render(); }
-  }).catch(()=>{});
+// The client owns the catalogue (the registry may be private): base = the
+// snapshot, overlaid by the live git index if it's public, then by live social
+// stats (downloads/ratings) merged by name. Never blocks; degrades on failure.
+async function refresh(){
+  let base = SNAPSHOT.plugins.slice();
+  try {
+    const r = await fetch(INDEX_URL, {cache:"no-store"});
+    if(r.ok){ const d = await r.json(); if(d && d.plugins && d.plugins.length) base = d.plugins; }
+  } catch(e){}
+  if(SOCIAL_API){
+    try {
+      const r = await fetch(SOCIAL_API.replace(/\/$/,"")+"/api/plugins", {cache:"no-store"});
+      if(r.ok){ const d = await r.json(); const m = {}; (d.plugins||[]).forEach(s=>m[s.name]=s);
+        base = base.map(p => ({...p, ...(m[p.name]||{})})); }
+    } catch(e){}
+  }
+  plugins = base; render();
 }
 refresh();
 </script>

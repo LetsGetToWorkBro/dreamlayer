@@ -17,9 +17,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const INDEX_URL =
   "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
 
-// Set to your deployed social-API Worker (registry-api/) for live
-// downloads/ratings and one-tap rating. Empty ⇒ static, git-backed store.
-const SOCIAL_API = "";
+// The deployed social-API Worker (registry-api/): live downloads/ratings and
+// one-tap rating. The catalogue comes from the snapshot/index; the API only
+// supplies the numbers, merged by name. Empty ⇒ static, git-backed store.
+const SOCIAL_API = "https://dreamlayer-registry-api.nameless-forest-17dc.workers.dev";
 
 const STORAGE_KEY = "dreamlayer.plugins.installed.v1";
 const UID_KEY = "dreamlayer.plugins.uid.v1";
@@ -59,6 +60,21 @@ const SNAPSHOT: PluginEntry[] = [
       "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
     requires: ["midi"],
     tags: ["music", "creative", "mesh", "featured"],
+    downloads: 0,
+    rating: 0,
+    ratings_count: 0,
+    comments_count: 0,
+  },
+  {
+    name: "open-food-facts",
+    version: "0.1.0",
+    author: "dreamlayer",
+    description:
+      "Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+    homepage:
+      "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
+    requires: ["network"],
+    tags: ["shopping", "food", "connector", "tastelens", "featured"],
     downloads: 0,
     rating: 0,
     ratings_count: 0,
@@ -152,17 +168,30 @@ export const usePluginStore = create<PluginState>((set, get) => ({
 
   fetchIndex: async () => {
     set({ loading: true });
+    // The client owns the catalogue (the registry may be private): base = the
+    // snapshot, overlaid by the live git index if public, then by live social
+    // stats merged by name. Any step failing just leaves the prior data.
+    let base: PluginEntry[] = SNAPSHOT.slice();
     try {
-      // live stats from the social API when configured; else the git-backed index
-      const src = SOCIAL_API ? SOCIAL_API.replace(/\/$/, "") + "/api/plugins" : INDEX_URL;
-      const res = await fetch(src, { cache: "no-store" } as any);
+      const res = await fetch(INDEX_URL, { cache: "no-store" } as any);
       const data = await res.json();
       const list = Array.isArray(data?.plugins) ? data.plugins.map(normalize) : [];
-      if (list.length) set({ index: list });
+      if (list.length) base = list;
     } catch {
-      /* keep the snapshot */
+      /* private/unreachable → keep the snapshot */
     }
-    set({ loading: false, loaded: true });
+    if (SOCIAL_API) {
+      try {
+        const res = await fetch(SOCIAL_API.replace(/\/$/, "") + "/api/plugins", { cache: "no-store" } as any);
+        const data = await res.json();
+        const m: Record<string, any> = {};
+        (Array.isArray(data?.plugins) ? data.plugins : []).forEach((s: any) => (m[s.name] = s));
+        base = base.map((p) => ({ ...p, ...(m[p.name] || {}) }));
+      } catch {
+        /* keep base without live stats */
+      }
+    }
+    set({ index: base, loading: false, loaded: true });
   },
 
   search: (query, sort) => {

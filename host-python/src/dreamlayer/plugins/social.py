@@ -85,6 +85,13 @@ class SocialStore:
     def comments(self, name: str, limit: int = 50) -> list:
         return list(reversed(self._comments.get(name, [])))[:max(0, limit)]
 
+    def known(self) -> list:
+        """Every plugin we've seen any activity on — the registry (the
+        catalogue) may be private, so the client merges these stats onto its
+        own list. Mirrors the Worker's tracked-names set."""
+        names = set(self._ratings) | set(self._downloads) | set(self._comments)
+        return sorted(names)
+
     def apply_to_index(self, entries: list) -> list:
         """Fold live stats into registry index entries (non-mutating)."""
         out = []
@@ -138,7 +145,11 @@ def route(store: SocialStore, method: str, path: str, body: Optional[dict] = Non
         return 404, {"error": "not found"}
     rest = parts[2:]
     if method == "GET" and not rest:
-        return 200, {"plugins": store.apply_to_index(index_entries or [])}
+        # with a catalogue → fold stats into it; without → stats for known
+        # plugins, for the client to merge onto its own (possibly private) list
+        if index_entries:
+            return 200, {"plugins": store.apply_to_index(index_entries)}
+        return 200, {"plugins": [store.stats(n) for n in store.known()]}
     if not rest:
         return 405, {"error": "method not allowed"}
     name = rest[0]
