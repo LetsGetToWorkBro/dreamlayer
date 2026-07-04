@@ -1,0 +1,25 @@
+{
+  "manifest": {
+    "name": "filler-word-counter",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "dreamlayer",
+    "description": "A quiet coach that tallies your “um / like / you know” as you speak.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
+    "requires": [
+      "perception",
+      "cards"
+    ],
+    "api": "1",
+    "checksum": "sha256:72b6f0b4ad695be0b49f4390c115e237fa9442c3bf7fd1b1a0e4d5055d7b633d",
+    "signature": "",
+    "forwho": "For anyone who presents, pitches, or records.",
+    "screenshot": "https://dreamlayer.app/plugin-shots/filler-word-counter.png",
+    "long": [
+      "Public speaking, on your side. It listens to your own words and keeps a running count of filler words in the corner of your eye — so you hear yourself, and drop them.",
+      "It knows the usual suspects — um, uh, like, you know, basically — and tracks a rough per-sentence rate as you go.",
+      "Nothing is recorded or sent anywhere; the tally lives on your glasses and resets when you’re done."
+    ]
+  },
+  "source": "from dreamlayer.plugins.filler import filler_plugin\n\ndef plugin():\n    return filler_plugin()\n"
+}

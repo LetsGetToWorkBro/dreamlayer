@@ -1,0 +1,25 @@
+{
+  "manifest": {
+    "name": "hud-reactions",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "dreamlayer",
+    "description": "Throw 🎉 👏 ❤️ 🔥 onto your HUD — and everyone in your GhostMode circle sees it too.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
+    "requires": [
+      "cards",
+      "mesh"
+    ],
+    "api": "1",
+    "checksum": "sha256:46358ee481b67a1bd9433b34275fb7094ea97928f789b1f781e04b57c51f6edf",
+    "signature": "",
+    "forwho": "For friends, gigs, and anyone sharing a moment on the mesh.",
+    "screenshot": "https://dreamlayer.app/plugin-shots/hud-reactions.png",
+    "long": [
+      "Tap to react. A burst lands on your HUD, and if you’re in a GhostMode circle, it lands on theirs — a silent “yes!” across a room.",
+      "Only the tiny symbol crosses the mesh, signed and small — never who you are or where you’re standing. It rides the same “only feeling travels” rule as the rest of GhostMode.",
+      "Great for concerts, watch parties, and inside jokes with the people next to you."
+    ]
+  },
+  "source": "from dreamlayer.plugins.reactions import reactions_plugin\n\ndef plugin():\n    return reactions_plugin()\n"
+}
