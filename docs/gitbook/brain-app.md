@@ -35,6 +35,19 @@ The agenda merges hand-added events with macOS Calendar when sync is on
 15-minute background sync). "Brief me" composes the morning brief on demand;
 the Ops card schedules it daily. Add and remove events inline.
 
+The brief comes at two depths (`POST /dreamlayer/brief` with `depth`):
+
+- **`short`** (default) — the one-glance version the glasses wake to: today's
+  agenda plus what's new, turned into a warm couple of sentences.
+- **`long`** — the extended brief, walked in sections: **Today** (agenda),
+  **Due** (reminders), **Waiting on you** (open commitments the phone passes),
+  **Messages** (each new text and email spelled out, not just counted), and
+  **Yesterday** (kept moments the phone passes). The model writes a few
+  skimmable paragraphs; the structured `sections` ride alongside. The last
+  long brief is kept at `GET /dreamlayer/brief/long/latest`, and the phone's
+  **Brief** screen composes it on demand and stores it to read anytime — even
+  back offline.
+
 ## People and reminders
 
 ![People](assets/panel/people.png)

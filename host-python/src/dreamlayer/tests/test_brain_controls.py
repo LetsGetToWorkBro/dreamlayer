@@ -213,6 +213,64 @@ class TestControls:
         assert b["missed"] == {"texts": 1, "emails": 1}
         # 'since' powers what-did-I-miss: nothing after ts 7 → clear
         assert brain.brief(since=99)["missed"] == {"texts": 0, "emails": 0}
+        # depth defaults to short and keeps the one-glance contract
+        assert b.get("depth", "short") == "short" and "sections" not in b
+
+    def test_long_brief_walks_the_morning_in_sections(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", email_enabled=True).save(cfg)
+        feed = [{"channel": "imessage", "who": "Marcus", "from_me": False,
+                 "text": "did you send the lease?", "ts": 5.0},
+                {"channel": "email", "who": "landlord@oak.co", "from_me": False,
+                 "subject": "Lease renewal terms", "text": "…", "ts": 7.0}]
+        brain = Brain(cfg, messages_fn=lambda config, n=20: feed)
+        b = brain.brief(agenda=["Standup at 9:00 AM"],
+                        commitments=["Send Marcus the signed lease"],
+                        memories=["Parked level 3, blue pillar"],
+                        depth="long", since=0)
+        assert b["depth"] == "long"
+        titles = [s["title"] for s in b["sections"]]
+        assert "Today" in titles and "Waiting on you" in titles
+        assert "Messages" in titles and "Yesterday" in titles
+        flat = " ".join(i for s in b["sections"] for i in s["items"])
+        assert "Standup" in flat                       # agenda
+        assert "Send Marcus the signed lease" in flat  # commitment
+        assert "did you send the lease" in flat        # the actual text, not a count
+        assert "Lease renewal terms" in flat           # email subject spelled out
+        assert "Parked level 3" in flat                # yesterday's memory
+
+    def test_long_brief_is_stored_and_served(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        srv = make_brain_server(brain, port=0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        port = srv.server_address[1]
+        try:
+            def post(path, body):
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}{path}",
+                    data=json.dumps(body).encode(), method="POST",
+                    headers={"X-DreamLayer-Token": "t", "Content-Type": "application/json"})
+                return json.loads(urllib.request.urlopen(req).read())
+
+            def get(path):
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}{path}",
+                    headers={"X-DreamLayer-Token": "t"})
+                return json.loads(urllib.request.urlopen(req).read())
+
+            assert get("/dreamlayer/brief/long/latest") == {}      # none yet
+            out = post("/dreamlayer/brief", {"depth": "long",
+                                             "agenda": ["Standup at 9"]})
+            assert out["depth"] == "long"
+            latest = get("/dreamlayer/brief/long/latest")
+            assert latest.get("depth") == "long" and latest.get("ts", 0) > 0
+            # the short brief endpoint is unchanged
+            short = post("/dreamlayer/brief", {})
+            assert short.get("depth", "short") == "short"
+        finally:
+            srv.shutdown(); srv.server_close()
 
     def test_backup_restore_round_trips(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()

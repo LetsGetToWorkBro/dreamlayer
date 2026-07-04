@@ -92,6 +92,9 @@ export default function Now() {
         <View style={s.briefCard}>
           <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>Morning brief</Text>
           <Text style={[typography.body, { color: colors.textPrimary }]}>{brief}</Text>
+          <Tappable onPress={() => router.push("/brief")} style={{ marginTop: space.md }}>
+            <Text style={[typography.caption, { color: colors.accentMemory }]}>Read the full brief →</Text>
+          </Tappable>
         </View>
       ) : null}
 
