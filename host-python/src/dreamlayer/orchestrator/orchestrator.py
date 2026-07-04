@@ -162,6 +162,12 @@ class Orchestrator:
         # a seam that only reaches out when a Brain/cloud tier is available.
         from .veritas import Veritas
         self.veritas = Veritas(verify_fn=self._verify_claim)
+        # WorldChecker keeps the world check off the caption hot path: a claim
+        # already seen resolves from cache instantly; a new one runs on a
+        # single background worker with a hard deadline. Self-contradiction is
+        # the instant offline half; this is the fast-as-possible slow half.
+        from ..ai_brain.world_check import WorldChecker
+        self.world_check = WorldChecker(timeout_s=2.5)
         self.factcheck_on = False
         # Discernment: fuse Veritas (content) with Truth Lens (delivery, fed via
         # note_credibility) and the pattern of prior flags into one graded read.
@@ -1056,10 +1062,39 @@ class Orchestrator:
     def _fact_check(self, utterance) -> None:
         prior = [x.text for x in self.conversation.by_speaker(utterance.speaker)
                  if x is not utterance]
+        # Fast half, on this thread: the self-contradiction pass is offline and
+        # instant. Skip the world check here (world=False) so the caption
+        # pipeline never blocks on the network.
         res = self.veritas.check(utterance.text, utterance.speaker,
-                                 prior=prior, now=utterance.ts)
-        if not res.fired or res.card is None:
+                                 prior=prior, now=utterance.ts, world=False)
+        if res.fired and res.card is not None:
+            self._deliver_fact_check(res, utterance)
             return
+        # Slow half, off-path: schedule the world check. It resolves from cache
+        # instantly when the claim's been seen, else on a background worker with
+        # a hard deadline, and only delivers a verdict worth surfacing.
+        if self.veritas.checkable(utterance.text, utterance.speaker):
+            self._schedule_world_check(utterance)
+
+    def _schedule_world_check(self, utterance) -> None:
+        if not self.privacy.allow_capture() or not getattr(self, "brain", None):
+            return
+        text, speaker, ts = utterance.text, utterance.speaker, utterance.ts
+
+        def deliver(verdict: dict) -> None:
+            # Re-check the gate at delivery time: the veil may have dropped, or
+            # Focus started, in the seconds the ask took.
+            if not self.factcheck_on or self.focus_active():
+                return
+            if not self.privacy.allow_capture():
+                return
+            res = self.veritas.world_result(text, speaker, verdict, now=ts)
+            if res.fired and res.card is not None:
+                self._deliver_fact_check(res, utterance)
+
+        self.world_check.check_async(text, self.brain.ask, deliver)
+
+    def _deliver_fact_check(self, res, utterance) -> None:
         # Discernment: fuse the content verdict with the current delivery read
         # (Truth Lens, if a recent one exists) and the pattern of prior flags.
         from .discernment import discern

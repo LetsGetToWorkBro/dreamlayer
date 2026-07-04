@@ -18,6 +18,13 @@ Two independent checks over each spoken line:
                        opted in — which returns supported / disputed / unverified.
                        The verifier is a *seam*: pure here, injected by the hub.
 
+Speed: the offline self-contradiction pass fires synchronously and instantly;
+the world check is meant to run *off* the caption path. `check(..., world=False)`
+takes only the fast half, and `world_result()` folds an externally-fetched
+verdict back in under the same worth/cooldown rules — so the hub can cache the
+verify, run it on a background worker with a deadline (see
+`ai_brain/world_check.py`), and deliver the card when it lands in time.
+
 Claim detection is a conservative heuristic: only assertive, checkable
 statements (a number, a date, a factual predicate) are ever sent on — hedged
 opinions ("I think", "maybe") and questions never are. It fires sparingly, one
@@ -140,19 +147,29 @@ class Veritas:
     def mark(self, speaker: str, now: float) -> None:
         self._last[self._who(speaker)] = now
 
+    def checkable(self, text: str, speaker: str = "") -> bool:
+        """Would this line ever be worth a world check? Cheap and offline, so
+        the caller can gate an async verify without touching the network."""
+        return detect_claim(text, speaker).checkable
+
     def check(self, text: str, speaker: str = "",
               prior: Optional[list[str]] = None,
-              now: float = 0.0) -> FactCheck:
-        """Fact-check one spoken line. `prior` is this speaker's earlier lines
-        (for the self-contradiction pass); the world check runs through the
-        injected verifier. Returns a FactCheck — fired only when something is
-        worth surfacing and the cooldown has elapsed."""
+              now: float = 0.0, world: bool = True) -> FactCheck:
+        """Fact-check one spoken line.
+
+        `prior` is this speaker's earlier lines (the self-contradiction pass,
+        offline and instant). The world check runs through the injected
+        verifier only when `world=True`; set `world=False` to take just the
+        fast offline pass and schedule the world check asynchronously via
+        `world_result()`. Returns a FactCheck — fired only when something is
+        worth surfacing and the cooldown has elapsed.
+        """
         idle = FactCheck(False, "", text, speaker, "", "", 0.0, None)
         claim = detect_claim(text, speaker)
         if not claim.checkable:
             return idle
 
-        # 1) does the speaker contradict their *own* earlier words?
+        # 1) does the speaker contradict their *own* earlier words? (instant)
         for line in reversed(prior or []):
             clash = contradicts(text, line, self.min_shared)
             if clash is not None:
@@ -166,26 +183,38 @@ class Veritas:
                     _card("self_contradiction", speaker, text, basis, clash[1]))
 
         # 2) world check — hand the claim to the verifier (Brain / cloud seam)
-        if self.verify_fn is not None:
+        if world and self.verify_fn is not None:
             try:
                 v = self.verify_fn(text)
             except Exception:
                 v = None
-            if v and v.get("verdict") in _VERDICTS:
-                verdict = v["verdict"]
-                conf = float(v.get("confidence", 0.0) or 0.0)
-                # only "disputed" is worth interrupting for; a bare "supported"
-                # stays quiet unless it's a strong corroboration.
-                worth = (verdict == "disputed" and conf >= self.min_confidence) or \
-                        (verdict == "supported" and conf >= 0.85)
-                if worth:
-                    if self.cooling(speaker, now):
-                        return idle
-                    self.mark(speaker, now)
-                    basis = (v.get("basis") or "").strip()
-                    return FactCheck(True, verdict, text, speaker, basis, "",
-                                     conf, _card(verdict, speaker, text, basis, ""))
+            return self.world_result(text, speaker, v, now)
         return idle
+
+    def world_result(self, text: str, speaker: str, verdict: Optional[dict],
+                     now: float = 0.0) -> FactCheck:
+        """Turn an external world-check verdict into a FactCheck, applying the
+        same 'is this worth surfacing?' rule and per-speaker cooldown as the
+        inline path. Safe to call from the async world-check callback: a
+        None/unknown verdict, a bare supported, or a cooling speaker all yield
+        an idle (unfired) result."""
+        idle = FactCheck(False, "", text, speaker, "", "", 0.0, None)
+        if not verdict or verdict.get("verdict") not in _VERDICTS:
+            return idle
+        v = verdict["verdict"]
+        conf = float(verdict.get("confidence", 0.0) or 0.0)
+        # only "disputed" is worth interrupting for; a bare "supported" stays
+        # quiet unless it's a strong corroboration.
+        worth = (v == "disputed" and conf >= self.min_confidence) or \
+                (v == "supported" and conf >= 0.85)
+        if not worth:
+            return idle
+        if self.cooling(speaker, now):
+            return idle
+        self.mark(speaker, now)
+        basis = (verdict.get("basis") or "").strip()
+        return FactCheck(True, v, text, speaker, basis, "",
+                         conf, _card(v, speaker, text, basis, ""))
 
 
 def _clip(s: str, n: int = 60) -> str:

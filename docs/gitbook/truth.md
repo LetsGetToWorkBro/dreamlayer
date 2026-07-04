@@ -52,6 +52,24 @@ and disputed map to 0.8, knocked down to 0.55 if the model hedged. If no tier
 can answer (offline, no model), the seam returns `None` — and the offline
 self-contradiction pass still stands alone.
 
+### Fast by construction
+
+The world check never blocks the conversation. The offline self-contradiction
+pass runs synchronously and lands instantly; the world check runs *off* the
+caption path through `ai_brain/world_check.py: WorldChecker`:
+
+- **Cache** — a short-TTL, bounded cache keyed on the normalised claim. The
+  same assertion, or a repeat of a common one, is answered from memory with no
+  second round-trip.
+- **Deadline** — each ask has a hard `timeout_s` (2.5 s). A tier that answers
+  too late is cached but *not* surfaced — a fact-check that arrives after the
+  moment has passed is noise.
+- **Off-path** — a single background worker runs the ask (`check_async`), so
+  the ingest thread returns immediately; the card is delivered through a
+  callback when the verdict lands, re-checking the veil/Focus gate at delivery
+  time. `orchestrator._fact_check` takes the instant offline pass with
+  `world=False`, then schedules the world check via the WorldChecker.
+
 ### When it actually speaks
 
 Sparingly, by construction:
