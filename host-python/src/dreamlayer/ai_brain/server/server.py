@@ -112,6 +112,16 @@ class Brain:
         # here so the phone can read it — the hub->Brain bridge. Just a mirror;
         # the Brain never writes it, only stores what the hub sends.
         self.profile: dict = self._load_profile()
+        # Reality Compiler v2 (the Rehearsal paradigm, docs/RC_V2_*.md): the
+        # phone performs a behavior as beats; the Brain infers → verifies →
+        # signs → hot-swaps a Figment. The vault (signed, on-device storage)
+        # lives beside the Brain's config so kept figments persist. No bridge
+        # is wired here yet, so deploys run in dry-run (they record the exact
+        # BLE envelopes) until the glasses transport is attached.
+        from ...reality_compiler.v2.compiler import RealityCompilerV2
+        self.rc = RealityCompilerV2(vault_dir=self.cfg_dir / "vault")
+        self._rc_pending: dict = {}          # figment_id → Figment awaiting keep
+        self._rc_active: Optional[str] = None  # the figment on stage right now
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -176,6 +186,85 @@ class Brain:
         if ok:
             self.activity.add("plugin", f"Removed plugin {name}")
         return {"ok": ok, "state": self.plugins_state()}
+
+    # -- Reality Compiler v2 (Rehearsal) -------------------------------------
+
+    def rc_rehearse(self, name: str, beats: list) -> dict:
+        """Replay a performance (the phone's beats) into a rehearsal session,
+        infer → verify → run-through, and mirror the result back: the live
+        score, and either a budget-proved figment + folded preview (ok) or a
+        teach card worded in beats (not ok). A rehearsal figment is held
+        pending until the phone keeps it."""
+        from ...reality_compiler.v2 import present
+        session = self.rc.rehearse(name or "Rehearsed behavior")
+        for b in beats or []:
+            kind = (b or {}).get("kind")
+            if kind == "tap":
+                session.tap()
+            elif kind == "double_tap":
+                session.double_tap()
+            elif kind == "long_press":
+                session.long_press()
+            elif kind == "dwell":
+                session.dwell(float(b.get("seconds") or 0.0))
+            elif kind == "say":
+                session.say(str(b.get("text") or ""))
+            # unknown kinds are ignored — the grammar can't be smuggled past
+        result = session.finish()
+        resp: dict = {"ok": result.ok,
+                      "score": present.score_from_beats(result.beats)}
+        if result.report is not None:
+            resp["report"] = {"scenes": result.report.scene_count,
+                              "display_hz": result.report.worst_display_hz,
+                              "emit_per_sec": result.report.worst_emit_per_sec}
+        if result.ok:
+            fig = result.figment
+            self._rc_pending[fig.id] = fig
+            resp["figment_id"] = fig.id
+            resp["brief"] = present.figment_brief(fig)
+            resp["preview"] = present.playback_rows(result.playback)
+        elif result.teach is not None:
+            t = result.teach
+            resp["teach"] = {"title": t.title, "lines": t.hud_lines(),
+                             "beat": t.beat, "suggestion": t.suggestion}
+        return resp
+
+    def rc_keep(self, figment_id: str) -> dict:
+        """Sign + vault a rehearsed figment (must have been rehearsed ok this
+        session). Returns the new Repertoire card."""
+        from ...reality_compiler.v2 import present
+        fig = self._rc_pending.get(figment_id)
+        if fig is None:
+            return {"ok": False, "error": "no rehearsed figment with that id"}
+        entry = self.rc.keep(fig)
+        self._rc_pending.pop(figment_id, None)
+        self.activity.add("rc", f"Kept figment {fig.name!r}")
+        return {"ok": True,
+                "entry": present.repertoire_entry(entry, self._rc_active)}
+
+    def rc_repertoire(self) -> dict:
+        from ...reality_compiler.v2 import present
+        items = [present.repertoire_entry(e, self._rc_active)
+                 for e in self.rc.repertoire()]
+        return {"items": items, "active": self._rc_active}
+
+    def rc_deploy(self, figment_id: str) -> dict:
+        """Hot-swap a kept figment onto the stage. On success it's the one on
+        stage (the phone shows it armed)."""
+        record = self.rc.deploy(figment_id)
+        if record.success:
+            self._rc_active = figment_id
+            self.activity.add("rc", f"Deployed figment {figment_id}")
+        return {"ok": record.success, "message": record.message,
+                "active": self._rc_active, **self.rc_repertoire()}
+
+    def rc_revoke(self, figment_id: str) -> dict:
+        record = self.rc.revoke(figment_id)
+        if self._rc_active == figment_id:
+            self._rc_active = None
+        self.activity.add("rc", f"Revoked figment {figment_id}")
+        return {"ok": record.success, "message": record.message,
+                "active": self._rc_active, **self.rc_repertoire()}
 
     def reindex(self) -> dict:
         self.index.reindex()
@@ -981,6 +1070,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.saga.snapshot())
             elif path == "/dreamlayer/plugins":
                 self._json(200, brain.plugins_state())
+            elif path == "/dreamlayer/rc/repertoire":
+                # the Reality Compiler Repertoire: kept figments the phone lists
+                self._json(200, brain.rc_repertoire())
             elif path == "/dreamlayer/profile":
                 # what the Oracle has learned about you (mirrored from the hub)
                 self._json(200, brain.profile)
@@ -1081,6 +1173,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.install_plugin(self._body()))
             elif path == "/dreamlayer/plugins/remove":
                 self._json(200, brain.remove_plugin(self._body().get("name", "")))
+            elif path == "/dreamlayer/rc/rehearse":
+                b = self._body()
+                self._json(200, brain.rc_rehearse(b.get("name", ""),
+                                                  b.get("beats") or []))
+            elif path == "/dreamlayer/rc/keep":
+                self._json(200, brain.rc_keep(self._body().get("figment_id", "")))
+            elif path == "/dreamlayer/rc/deploy":
+                self._json(200, brain.rc_deploy(self._body().get("figment_id", "")))
+            elif path == "/dreamlayer/rc/revoke":
+                self._json(200, brain.rc_revoke(self._body().get("figment_id", "")))
             elif path == "/dreamlayer/brief":
                 b = self._body()
                 out = brain.brief(agenda=b.get("agenda"),

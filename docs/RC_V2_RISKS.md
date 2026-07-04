@@ -72,13 +72,19 @@ unchanged, so a byte-identical escape hatch exists during the deprecation
 window. **Tripwire:** any v1 test modified to accommodate v2.
 
 ## R9 — Scope: the demo proves the loop, not the polish
-**Certain, disclosed.** Voice capture, on-stage HUD recording UI, and the
-live phone bridge for the Rehearsal screen are stubbed at the edges: the
-session API is driven programmatically in the demo, and rehearsal.tsx shows
-the visual language with placeholder session state. The paradigm's spine —
-beats → inference → proof → sign → hot-swap → stage — is real end to end.
-Per the brief (Rule 2), the slice was cut without diluting the pitch;
-followups: mic beat capture, live Score streaming, head-roll winding.
+**Mostly closed.** The live phone bridge is now real: `rehearsal.tsx` drives
+the Brain over `/dreamlayer/rc/{rehearse,keep,repertoire,deploy,revoke}`
+(useRehearsalStore.ts ↔ server.py ↔ reality_compiler/v2), so every beat
+re-runs real inference and the Score, budget proof, folded run-through
+preview, teach cards, and Repertoire are all mirrored from the authoritative
+objects (present.py), not placeholder state. Speech capture rides the OS
+keyboard's own dictation into the "say" field — real mic input with no extra
+native dep. The paradigm's spine — beats → inference → proof → sign →
+hot-swap → stage — is real end to end and exercised over HTTP.
+Remaining edges (hardware- or model-dependent, deferred): a dedicated
+on-stage HUD recording UI with live audio→beat streaming (vs the keyboard
+dictation used today), and head-roll winding. Deploys run in dry-run
+(recording BLE envelopes) until the glasses transport is attached — see R6.
 
 ## R10 — The pick itself
 **The bet.** Rehearsal could be wrong — users might prefer describing to
