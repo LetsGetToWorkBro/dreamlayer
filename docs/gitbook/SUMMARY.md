@@ -1,16 +1,25 @@
 # Summary
 
 - [DreamLayer](README.md)
+
+## Using DreamLayer
+
+- [Start here](guide/start-here.md)
+- [Setting up](guide/setup.md)
+- [A day with DreamLayer](guide/a-day-with-dreamlayer.md)
+- [Talking to it](guide/talking-to-oracle.md)
+- [What just appeared on my glasses?](guide/cards.md)
+- [The fact-checker](guide/truth.md)
+- [Your privacy](guide/privacy.md)
+- [The phone and the Mac](guide/apps.md)
+- [Questions people ask](guide/faq.md)
+
+## Under the hood
+
 - [Ecosystem architecture](architecture.md)
-
-## The glasses
-
 - [The glasses experience](glasses-experience.md)
 - [HUD cards — the full gallery](hud-cards.md)
 - [Meridian — the design language](meridian.md)
-
-## The mind
-
 - [The Oracle](oracle.md)
 - [Perception and memory](perception-memory.md)
 - [Truth and discernment](truth.md)
@@ -18,9 +27,6 @@
 - [The six lenses and the wider set](lenses.md)
 - [Progression — the Saga](progression.md)
 - [Privacy and control](privacy.md)
-
-## The apps
-
 - [The phone app](phone-app.md)
 - [The desktop Brain app](brain-app.md)
 - [The AI Brain deep dive](ai-brain.md)
