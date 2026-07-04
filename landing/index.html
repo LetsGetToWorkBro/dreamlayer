@@ -212,6 +212,7 @@ section{position:relative}
   aspect-ratio:1;background:#000;
   box-shadow:0 0 90px -30px rgba(44,199,154,.35), inset 0 0 60px rgba(0,0,0,.5)}
 .vid-orb video{width:100%;height:100%;object-fit:cover}
+.vid-orb canvas{width:100%;height:100%;display:block}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -295,6 +296,39 @@ section{position:relative}
 .feat span{color:var(--text-2);font-size:13.5px;line-height:1.55}
 .coral-card .feat b i{color:var(--coral)}
 @media (prefers-reduced-motion:reduce){.xdetail{transition:none}}
+
+/* ---------- the software ---------- */
+.sw-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,5vw,72px);align-items:center}
+.sw-frame{display:flex;justify-content:center;margin-bottom:28px}
+/* iOS phone */
+.phone-stack{position:relative;display:flex;justify-content:center}
+.phone{width:min(260px,66vw);border-radius:38px;border:1px solid var(--border);
+  background:#05090a;padding:9px;position:relative;
+  box-shadow:0 44px 80px -34px rgba(0,0,0,.85),0 0 70px -26px rgba(47,212,196,.28)}
+.phone::before{content:"";position:absolute;top:15px;left:50%;transform:translateX(-50%);
+  width:44%;height:7px;border-radius:99px;background:#05090a;z-index:2}
+.phone .scr{border-radius:29px;overflow:hidden;aspect-ratio:720/1561;background:#000}
+.phone .scr img{width:100%;display:block}
+.phone.back{position:absolute;top:26px;width:min(232px,58vw);opacity:.5;
+  transform:translateX(-38%) rotate(-6deg);filter:saturate(.7)}
+/* Mac window */
+.win{width:100%;border-radius:12px;border:1px solid var(--border);overflow:hidden;
+  background:var(--surface);box-shadow:0 44px 90px -34px rgba(0,0,0,.85)}
+.win .bar{display:flex;align-items:center;gap:7px;padding:11px 14px;
+  border-bottom:1px solid var(--border);background:#0B1113}
+.win .bar i{width:11px;height:11px;border-radius:50%;background:#2A3C44}
+.win .bar i:nth-child(1){background:var(--coral)}
+.win .bar i:nth-child(2){background:#E0B152}
+.win .bar i:nth-child(3){background:var(--green)}
+.win .bar .mono{margin-left:10px;font-size:11px;color:var(--paused)}
+.win .shot{position:relative;max-height:430px;overflow:hidden}
+.win .shot img{width:100%;display:block}
+.win .shot::after{content:"";position:absolute;inset:auto 0 0 0;height:90px;
+  background:linear-gradient(transparent,var(--surface))}
+.sw-cap{text-align:center;max-width:420px;margin:0 auto}
+.sw-cap .eyebrow{display:block;margin-bottom:10px}
+.sw-cap h3{font-size:22px;font-weight:600;margin-bottom:10px}
+.sw-cap p{color:var(--text-2);font-size:15px;line-height:1.6}
 
 /* ---------- veil ---------- */
 .veil{height:200svh}
@@ -402,6 +436,10 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .hud-card .h-ghost{font-size:8.5px}
   .hud-card .h-dot{width:5px;height:5px;margin-top:4%}
   .lens-grid{grid-template-columns:1fr}
+  .sw-grid{grid-template-columns:1fr;gap:56px}
+  .sw-cell:first-child{margin-bottom:8px}
+  .phone.back{display:none}
+  .win .shot{max-height:360px}
 }
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){
@@ -553,48 +591,42 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <section class="section-pad" id="see">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow arrive">Rendered by the device code itself</span>
+      <span class="eyebrow arrive">The HUD, alive</span>
       <h2 class="headline arrive" style="--d:80ms">See it move.</h2>
-      <p class="body arrive" style="--d:160ms">These aren’t mockups — the on-glass renderer, stepped
-        frame by frame. Meridian’s motion physics and living light: closed-form springs, palette-light
-        auroras, particle bursts. All inside a 420-draw-call budget, honest to the glass.</p>
+      <p class="body arrive" style="--d:160ms">A live re-creation of how the display moves — drawn
+        in your browser with the same palette and the same signature motion the glasses run: closed-form
+        springs, flowing rim light, an answer that condenses in and files itself away.</p>
     </div>
 
     <div class="vid-grid">
       <div class="vid-cell arrive">
-        <div class="vid-orb">
-          <video muted playsinline loop preload="metadata" poster="assets/horizon_poster.jpg"
-                 src="assets/horizon.mp4" aria-label="The Horizon dial waking, aurora light flowing along the rim"></video>
-        </div>
+        <div class="vid-orb"><canvas data-hud="horizon"
+             aria-label="The Horizon dial: aurora light flowing along the rim, promises as embers"></canvas></div>
         <div class="cap">
           <span class="eyebrow">The Horizon</span>
           <div class="t">Your day wakes with you</div>
-          <div class="s">The dial assembles radially from the notch, then aurora light flows along the
-            rim. Promises sit as embers at the edge.</div>
+          <div class="s">Aurora light flows along the rim; the now-notch beats at the top. Promises sit
+            as embers at the edge, drifting closer as they come due.</div>
         </div>
       </div>
       <div class="vid-cell feature arrive" style="--d:120ms">
-        <div class="vid-orb">
-          <video muted playsinline loop preload="metadata" poster="assets/focus_poster.jpg"
-                 src="assets/focus.mp4" aria-label="Lucid Recall focus physics — a spatial keys card lands and recedes"></video>
-        </div>
+        <div class="vid-orb"><canvas data-hud="recall"
+             aria-label="Lucid Recall: a spatial keys card condenses in, lands, and recedes"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Lucid Recall</span>
           <div class="t">The answer is a place</div>
           <div class="s">“Where are my keys?” The card shows where — the object as a jewel, a light
-            trace down to you. Spring landing, phosphor tail, one glint as it settles.</div>
+            trace down to you. It condenses in, breathes, then files itself away.</div>
         </div>
       </div>
       <div class="vid-cell arrive" style="--d:240ms">
-        <div class="vid-orb">
-          <video muted playsinline loop preload="metadata" poster="assets/saved_poster.jpg"
-                 src="assets/saved.mp4" aria-label="Saved memory moment — a spring-drawn check with a particle burst"></video>
-        </div>
+        <div class="vid-orb"><canvas data-hud="saved"
+             aria-label="Saved memory: a spring-drawn check with a particle burst"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Saved Memory</span>
           <div class="t">One tap becomes a jewel</div>
-          <div class="s">A spring-drawn check, a twelve-particle burst, concentric gradient light over
-            glass. Kept, and it feels kept.</div>
+          <div class="s">A spring-drawn check, a twelve-particle burst, concentric rings of light.
+            Kept, and it feels kept.</div>
         </div>
       </div>
     </div>
@@ -757,6 +789,56 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
           <span>No Mac mini? You’re already set: the phone is the brain by default, glasses connect
           over Bluetooth, and everything runs offline. Add a Brain any time later — same one code.</span></div>
       </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= the software ======================= -->
+<section class="section-pad" id="software">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow arrive">The software you run</span>
+      <h2 class="headline arrive" style="--d:80ms">Two apps you can run today.</h2>
+      <p class="body arrive" style="--d:160ms">Both testable now, before the glasses ship. The iOS
+        app pairs your devices and puts your brain in your pocket; the Mac app turns a spare Mac mini
+        into a private knowledge node on your own network.</p>
+    </div>
+
+    <div class="sw-grid">
+      <div class="sw-cell arrive">
+        <div class="sw-frame">
+          <div class="phone-stack">
+            <div class="phone back" aria-hidden="true"><div class="scr"><img loading="lazy"
+                 src="assets/software/phone_memories.png" alt=""></div></div>
+            <div class="phone"><div class="scr"><img loading="lazy"
+                 src="assets/software/phone_brain.png" alt="The DreamLayer iOS app, Brain tab"></div></div>
+          </div>
+        </div>
+        <div class="sw-cap">
+          <span class="eyebrow">iOS app</span>
+          <h3>Your brain, in your pocket</h3>
+          <p>Pair the trio with one code, ask your brain from anywhere, and own your privacy from a
+            single screen. Opens on the Brain tab — phone-first, cloud a switch you hold.</p>
+        </div>
+      </div>
+
+      <div class="sw-cell arrive" style="--d:120ms">
+        <div class="sw-frame">
+          <div class="win">
+            <div class="bar" aria-hidden="true"><i></i><i></i><i></i>
+              <span class="mono">dreamlayer · brain</span></div>
+            <div class="shot"><img loading="lazy" src="assets/software/mac_panel.png"
+                 alt="The DreamLayer Mac Brain control panel"></div>
+          </div>
+        </div>
+        <div class="sw-cap">
+          <span class="eyebrow">macOS · the Brain</span>
+          <h3>A private knowledge node</h3>
+          <p>A small local server indexes your chosen folders and mail and serves a polished control
+            panel. Keyword search works with zero setup; add a local model for written answers and
+            vision. Everything stays on your LAN — nothing leaves the Mac.</p>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -1016,6 +1098,171 @@ function veilScroll(){
   veilCore.style.pointerEvents=rise>0.5?"auto":"none";
 }
 veilScroll();
+
+/* ---------- live HUD orbs (canvas) ----------
+   Replaces autoplay <video>, which iOS blocks in Low Power Mode. These
+   redraw the app's own motion — springs, the focus condense/recede law,
+   the Horizon's flowing rim — so they animate on every device. */
+(function(){
+  var TEAL="#2CC79A",TEALD="#1A7A60",CORAL="#E06B52",TEXT="#ECF0F1",
+      TEXT2="#A8B8C0",GHOST="#58686F",GREEN="#56D364",
+      FONT='"Space Grotesk",system-ui,sans-serif';
+  function eO(t){t=t<0?0:t>1?1:t;return 1-Math.pow(1-t,3);}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  var TWO=Math.PI*2;
+
+  function drawHorizon(ctx,S,t){
+    var cx=S/2,cy=S/2,R=S*0.40;
+    ctx.clearRect(0,0,S,S);
+    ctx.strokeStyle="rgba(42,60,68,.85)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(cx,cy,S*0.47,0,TWO);ctx.stroke();
+    var NT=72;
+    for(var i=0;i<NT;i++){
+      var a=(i/NT)*TWO-Math.PI/2;
+      var w=0.5+0.5*Math.sin(a-t*1.1+Math.sin(t*0.4));
+      var r1=R,r2=R+S*0.032*(0.4+w*0.9);
+      ctx.strokeStyle="rgba("+(26+w*22)+","+(122+w*95)+","+(96+w*40)+","+(0.22+w*0.6)+")";
+      ctx.lineWidth=1.4;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);
+      ctx.lineTo(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2);ctx.stroke();
+    }
+    // now-notch heartbeat at top
+    var beat=Math.pow(0.5+0.5*Math.sin(t*2.0),3),na=-Math.PI/2;
+    ctx.strokeStyle=TEAL;ctx.lineWidth=2.6;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(na)*(R-S*0.02),cy+Math.sin(na)*(R-S*0.02));
+    ctx.lineTo(cx+Math.cos(na)*(R+S*0.055+beat*S*0.02),cy+Math.sin(na)*(R+S*0.055+beat*S*0.02));
+    ctx.stroke();
+    // ember promises drifting on the rim
+    var embers=[{o:1.05,c:CORAL,sp:0.05},{o:2.6,c:TEAL,sp:0.03},{o:4.4,c:TEAL,sp:0.02}];
+    embers.forEach(function(e,k){
+      var a=-Math.PI/2+e.o+Math.sin(t*e.sp+k)*0.05,pulse=0.5+0.5*Math.sin(t*1.3+k*2);
+      var x=cx+Math.cos(a)*(R+S*0.016),y=cy+Math.sin(a)*(R+S*0.016);
+      ctx.fillStyle=e.c;ctx.globalAlpha=0.45+pulse*0.55;ctx.shadowColor=e.c;ctx.shadowBlur=S*0.03;
+      ctx.beginPath();ctx.arc(x,y,S*0.012,0,TWO);ctx.fill();
+      ctx.shadowBlur=0;ctx.globalAlpha=1;
+    });
+    // inner life
+    for(var j=0;j<10;j++){
+      var aa=t*0.05+(j/10)*TWO,n=vnoise(j*3.7+t*0.1),rr=R*0.6;
+      var bx=cx+Math.cos(aa)*rr,by=cy+Math.sin(aa)*rr,ca=aa+Math.PI/2+n*1.5,ln=S*0.03*(0.6+0.5*n);
+      ctx.strokeStyle="rgba(44,199,154,.15)";ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(bx-Math.cos(ca)*ln,by-Math.sin(ca)*ln);
+      ctx.lineTo(bx+Math.cos(ca)*ln,by+Math.sin(ca)*ln);ctx.stroke();
+    }
+    ctx.fillStyle=TEAL;ctx.beginPath();ctx.arc(cx,cy,S*0.008,0,TWO);ctx.fill();
+  }
+
+  function drawRecall(ctx,S,t){
+    var cx=S/2,cy=S/2,k=S/256,tt=t%6.0,breath=0.5+0.5*Math.sin(t*TWO/2.4);
+    ctx.clearRect(0,0,S,S);
+    ctx.strokeStyle="rgba(42,60,68,.8)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(cx,cy,S*0.47,0,TWO);ctx.stroke();
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    function txt(s,y,sz,col,al,w){ctx.globalAlpha=al;ctx.fillStyle=col;
+      ctx.font=(w||"400")+" "+(sz*k)+"px "+FONT;ctx.fillText(s,cx,cy+y*k);ctx.globalAlpha=1;}
+    if(tt<1.4){
+      var pr=eO(tt/0.4),r=92*k;
+      ctx.strokeStyle="rgba(44,199,154,"+((0.25+0.18*breath)*pr)+")";ctx.lineWidth=2*k;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,TWO);ctx.stroke();
+      for(var i=0;i<3;i++){var a=t*0.9+i*2.094;ctx.fillStyle=TEAL;ctx.globalAlpha=0.9*pr;
+        ctx.beginPath();ctx.arc(cx+r*Math.cos(a),cy+r*Math.sin(a),3.2*k,0,TWO);ctx.fill();}
+      ctx.globalAlpha=1;ctx.fillStyle=TEAL;ctx.beginPath();ctx.arc(cx,cy,3*k,0,TWO);ctx.fill();
+    } else if(tt<5.0){
+      var kf=eO(Math.min(1,(tt-1.4)/0.34)),hold=Math.min(1,(tt-1.74)/0.3);
+      var ry=cy-eO(hold)*58*k,rr=lerp(92,36,kf)*k*(1-0.25*eO(hold))*(1+0.03*breath);
+      if(hold>0){
+        ctx.globalAlpha=0.55*hold;
+        var g=ctx.createLinearGradient(cx,ry,cx,cy+92*k);
+        g.addColorStop(0,TEAL);g.addColorStop(1,"rgba(26,122,96,.15)");
+        ctx.strokeStyle=g;ctx.lineWidth=1.6*k;
+        ctx.beginPath();ctx.moveTo(cx,ry+rr);ctx.quadraticCurveTo(cx+18*k,cy+42*k,cx,cy+86*k);ctx.stroke();
+        ctx.globalAlpha=1;
+        ctx.fillStyle=TEAL;ctx.beginPath();ctx.arc(cx,cy+88*k,3*k,0,TWO);ctx.fill();
+        ctx.strokeStyle="rgba(44,199,154,.5)";ctx.lineWidth=1*k;
+        ctx.beginPath();ctx.arc(cx,cy+88*k,7*k,0,TWO);ctx.stroke();
+      }
+      ctx.strokeStyle="rgba(44,199,154,"+(0.55+0.15*breath)+")";ctx.lineWidth=2.2*k;
+      ctx.beginPath();ctx.arc(cx,ry,rr,0,TWO);ctx.stroke();
+      ctx.save();ctx.translate(cx,ry);ctx.rotate(Math.PI/4);
+      var js=rr*0.4;ctx.globalAlpha=hold;ctx.shadowColor=TEAL;ctx.shadowBlur=10*k;
+      ctx.fillStyle=TEAL;ctx.fillRect(-js/2,-js/2,js,js);
+      ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.restore();
+      var ta=eO(Math.min(1,(tt-1.9)/0.4)),rec=tt>4.6?Math.max(0,1-(tt-4.6)/0.4):1,a1=ta*rec;
+      // gradient separator under the eyebrow
+      if(a1>0){var gy=cy+18*k;var gs=ctx.createLinearGradient(cx-40*k,0,cx+40*k,0);
+        gs.addColorStop(0,"rgba(44,199,154,0)");gs.addColorStop(0.5,"rgba(44,199,154,"+(0.7*a1)+")");
+        gs.addColorStop(1,"rgba(44,199,154,0)");ctx.strokeStyle=gs;ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(cx-40*k,gy);ctx.lineTo(cx+40*k,gy);ctx.stroke();}
+      txt("KEYS",10,10.5,TEAL,a1*0.9,"700");
+      txt("Kitchen table",34,20,TEXT,a1,"700");
+      txt("[ beside blue notebook ]",56,10,TEXT2,a1,"400");
+      txt("LAST SEEN 7:42 PM",74,8.5,GHOST,a1,"400");
+    } else {
+      var kr=eO((tt-5.0)/1.0),r=lerp(27,92,kr)*k,ry2=cy-58*k*(1-kr);
+      ctx.strokeStyle="rgba(44,199,154,"+(0.6*(1-kr)+0.1)+")";ctx.lineWidth=2*k;
+      ctx.beginPath();ctx.arc(cx,ry2,r,0,TWO);ctx.stroke();
+      ctx.fillStyle=TEAL;ctx.globalAlpha=1-0.6*kr;
+      ctx.beginPath();ctx.arc(cx,ry2,3*k,0,TWO);ctx.fill();ctx.globalAlpha=1;
+    }
+  }
+
+  function drawSaved(ctx,S,t){
+    var cx=S/2,cy=S/2,k=S/256,tt=t%4.5;
+    ctx.clearRect(0,0,S,S);
+    ctx.strokeStyle="rgba(42,60,68,.8)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(cx,cy,S*0.47,0,TWO);ctx.stroke();
+    var appear=eO(Math.min(1,tt/0.6));
+    for(var i=0;i<4;i++){var rr=(20+i*12)*k,ra=appear*(0.5-i*0.09);
+      ctx.strokeStyle="rgba(86,211,100,"+Math.max(0,ra)+")";ctx.lineWidth=1.4*k;
+      ctx.beginPath();ctx.arc(cx,cy,rr,0,TWO);ctx.stroke();}
+    var cd=eO(Math.min(1,(tt-0.3)/0.5));
+    ctx.strokeStyle=GREEN;ctx.lineWidth=3*k;ctx.lineCap="round";ctx.lineJoin="round";
+    ctx.shadowColor=GREEN;ctx.shadowBlur=8*k;
+    var p0=[cx-14*k,cy+1*k],p1=[cx-4*k,cy+11*k],p2=[cx+16*k,cy-13*k];
+    ctx.beginPath();ctx.moveTo(p0[0],p0[1]);
+    if(cd<0.5){var f=cd/0.5;ctx.lineTo(lerp(p0[0],p1[0],f),lerp(p0[1],p1[1],f));}
+    else{ctx.lineTo(p1[0],p1[1]);var f2=(cd-0.5)/0.5;ctx.lineTo(lerp(p1[0],p2[0],f2),lerp(p1[1],p2[1],f2));}
+    ctx.stroke();ctx.shadowBlur=0;
+    if(tt>0.7&&tt<1.9){var bt=(tt-0.7)/1.2;
+      for(var p=0;p<12;p++){var pa=(p/12)*TWO+0.5,d=eO(bt)*S*0.22;
+        ctx.fillStyle=GREEN;ctx.globalAlpha=(1-bt)*0.85;
+        ctx.beginPath();ctx.arc(cx+Math.cos(pa)*d,cy+Math.sin(pa)*d,2*k*(1-bt),0,TWO);ctx.fill();}
+      ctx.globalAlpha=1;}
+    var la=eO(Math.min(1,(tt-0.5)/0.5)),fade=tt>3.8?Math.max(0,1-(tt-3.8)/0.7):1;
+    ctx.globalAlpha=la*fade;ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillStyle=GREEN;ctx.font="700 "+(15*k)+"px "+FONT;ctx.fillText("SAVED",cx,cy-52*k);
+    ctx.fillStyle=TEXT;ctx.font="700 "+(15*k)+"px "+FONT;ctx.fillText("House keys",cx,cy+52*k);
+    ctx.globalAlpha=1;
+  }
+
+  var FN={horizon:drawHorizon,recall:drawRecall,saved:drawSaved};
+  var orbs=[];
+  document.querySelectorAll("[data-hud]").forEach(function(c){
+    var ctx=c.getContext("2d");
+    function size(){var w=c.clientWidth||280;c.width=w*DPRc();c.height=w*DPRc();
+      ctx.setTransform(DPRc(),0,0,DPRc(),0,0);c._s=w;}
+    function DPRc(){return Math.min(devicePixelRatio||1,2);}
+    size();addEventListener("resize",size,{passive:true});
+    orbs.push({c:c,ctx:ctx,fn:FN[c.dataset.hud],vis:false});
+  });
+  if(!orbs.length) return;
+  if(reduced){orbs.forEach(function(o){o.fn(o.ctx,o.c._s,o.c.dataset.hud==="recall"?3.2:2.0);});return;}
+  var raf2=null,t0=performance.now();
+  function loop(){
+    raf2=null;var any=false,now=performance.now();
+    orbs.forEach(function(o){if(o.vis&&!document.hidden){any=true;o.fn(o.ctx,o.c._s,(now-t0)/1000);}});
+    if(any) raf2=requestAnimationFrame(loop);
+  }
+  function kick(){if(!raf2) loop();}
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){orbs.forEach(function(o){if(o.c===e.target)o.vis=e.isIntersecting;});});
+    kick();
+  },{threshold:0.08});
+  orbs.forEach(function(o){io.observe(o.c);});
+  document.addEventListener("visibilitychange",kick);
+})();
 
 /* ---------- mobile: give each story step its own inline circle ----------
    Built for every viewport but shown only on phones (CSS .step-hud). This
