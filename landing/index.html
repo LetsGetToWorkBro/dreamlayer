@@ -297,6 +297,18 @@ section{position:relative}
 .coral-card .feat b i{color:var(--coral)}
 @media (prefers-reduced-motion:reduce){.xdetail{transition:none}}
 
+/* ---------- capabilities ---------- */
+.can-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.can{border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);
+  padding:20px 22px;display:flex;flex-direction:column;gap:6px;
+  transition:border-color var(--base) var(--ease)}
+.can:hover{border-color:rgba(47,212,196,.45)}
+.can b{font-size:16px;font-weight:600;position:relative;padding-left:20px}
+.can b::before{content:"";position:absolute;left:0;top:5px;width:9px;height:9px;
+  border-radius:50%;border:1.5px solid var(--teal);box-shadow:0 0 8px rgba(47,212,196,.5)}
+.can span{color:var(--text-2);font-size:13.5px;line-height:1.55}
+@media (max-width:900px){.can-grid{grid-template-columns:repeat(2,1fr)}}
+
 /* ---------- walkthrough ---------- */
 .walk-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:clamp(28px,5vw,72px);align-items:center;max-width:960px;margin:0 auto}
@@ -457,6 +469,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .hud-card .h-ghost{font-size:8.5px}
   .hud-card .h-dot{width:5px;height:5px;margin-top:4%}
   .lens-grid{grid-template-columns:1fr}
+  .can-grid{grid-template-columns:1fr}
   .sw-grid{grid-template-columns:1fr;gap:56px}
   .sw-cell:first-child{margin-bottom:8px}
   .phone.back{display:none}
@@ -683,6 +696,44 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         </ol>
         <p class="walk-cap mono" id="walkCap" aria-live="polite">Watch a full loop →</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= capabilities ======================= -->
+<section class="section-pad" id="can">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow arrive">What it can do</span>
+      <h2 class="headline arrive" style="--d:80ms">A second memory, on your face.</h2>
+      <p class="body arrive" style="--d:160ms">Every one of these runs in the shipping codebase today
+        — nothing on this list is a mock-up.</p>
+    </div>
+    <div class="can-grid">
+      <div class="can arrive" style="--d:0ms"><b>Never forget a name</b><span>An introduction is kept
+        the moment it’s given, and a dossier starts — next time, the glasses greet you with who they
+        are, when you last met, and what about.</span></div>
+      <div class="can arrive" style="--d:40ms"><b>Live fact-check</b><span>When a claim doesn’t match
+        what they told you before — “we settled at two million” — a quiet verdict lands on the rim,
+        with the receipt.</span></div>
+      <div class="can arrive" style="--d:80ms"><b>Read the room</b><span>Ask, and the Truth Lens reads
+        face, voice, and history together into one credibility gauge. Explicit — never running in the
+        background.</span></div>
+      <div class="can arrive" style="--d:120ms"><b>Look → know</b><span>Glance at any object — the
+        plant, the wine, the part — and a panel tells you what it is and what you know about it.</span></div>
+      <div class="can arrive" style="--d:160ms"><b>Never lose your things</b><span>Keys, wallet, car,
+        water bottle — anchored where you left them, recalled as direction and distance: “12 m to your
+        left.”</span></div>
+      <div class="can arrive" style="--d:200ms"><b>Texts, hands-free</b><span>New messages surface on
+        the rim; answer by voice — “reply to Priya, on my way.”</span></div>
+      <div class="can arrive" style="--d:240ms"><b>“Hey Oracle” everything</b><span>Ask, recall,
+        locate, reply, brief, catch up on what you missed — the whole layer answers to one wake
+        word.</span></div>
+      <div class="can arrive" style="--d:280ms"><b>Your morning, briefed</b><span>Wake, and the day is
+        already synthesized — agenda, missed messages, open promises — at the hour you choose.</span></div>
+      <div class="can arrive" style="--d:320ms"><b>Works in airplane mode</b><span>The phone is the
+        brain: capture, recall, object naming, and the consistency check all run fully offline.
+        Incognito is one tap — or one “Hey Oracle, go incognito.”</span></div>
     </div>
   </div>
 </section>
