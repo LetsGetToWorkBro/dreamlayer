@@ -100,7 +100,12 @@ into one decision.
   Translate"). A pick runs that lens *and* teaches the arbiter.
 - **It learns you.** Per-scene priors (`GlancePriors`) reinforce the lens you
   keep choosing for a kind of scene, so tomorrow's ambiguous look leans your
-  way. Serialisable, so the Mac Brain can persist it.
+  way. They persist as a small JSON on the hub beside the vault
+  (`glancepriors.json`, the same pattern as the user model) — read once at
+  start, rewritten on each pick, in-memory only when there's no vault. The
+  local file stays the source of truth so a glance never waits on the network;
+  the dict is still serialisable, so a Mac Brain can later mirror it across
+  hubs.
 - **Spoken steer.** A recent "what's the answer / how do I fill this / explain
   this" biases the very next look to that lens for a few seconds — say it, then
   look.

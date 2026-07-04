@@ -254,7 +254,15 @@ class Orchestrator:
         # picker; the look decides. Coarse on-device read first, escalating to
         # the Brain's vision only when the cheap read can't tell (two-tier).
         from .glance import GlanceArbiter
-        self.glance_arbiter = GlanceArbiter()
+        # Learned priors persist beside the vault (same place, same pattern as
+        # usermodel.json): read once here, rewritten on each pick. Local file =
+        # source of truth, so a glance never waits on the Mac; in-memory for
+        # an :memory: db.
+        gp_path = None
+        if db_path and db_path != ":memory:":
+            gp_path = os.path.join(os.path.dirname(os.path.abspath(db_path)) or ".",
+                                   "glancepriors.json")
+        self.glance_arbiter = GlanceArbiter(priors_path=gp_path)
         self._recent_glance_intent = ("", 0.0)   # (lens-hint, ts) from voice
         # device seam: cheap on-device cues for the coarse glance read (a face
         # flag, a text-density estimate, a detected form grid). None → the

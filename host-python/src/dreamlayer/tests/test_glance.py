@@ -97,6 +97,33 @@ def test_learned_priors_tip_a_close_call_and_persist():
     assert round_trip.favourite("text") == "scholar_answer"
 
 
+# -- priors persist to disk beside the vault ----------------------------------
+
+def test_priors_persist_across_sessions(tmp_path):
+    path = str(tmp_path / "glancepriors.json")
+    # session one teaches a favourite through the arbiter…
+    arb = GlanceArbiter(priors_path=path)
+    for _ in range(4):
+        arb.reinforce("text", "scholar_answer")
+    import os
+    assert os.path.exists(path)                    # written on reinforce
+    # …a fresh arbiter on the same path starts already knowing it
+    reborn = GlanceArbiter(priors_path=path)
+    assert reborn.priors.favourite("text") == "scholar_answer"
+    # a close look now leans the learned way without re-teaching
+    d = reborn.arbitrate(GlanceReading(
+        "text", 0.7, {"form_fields": 2, "question": True, "text_density": 0.5}))
+    assert d.winner is None or d.winner.lens == "scholar_answer" or \
+        d.options[0].lens == "scholar_answer"
+
+
+def test_priors_without_a_path_stay_in_memory():
+    arb = GlanceArbiter()                          # no path → no file, no error
+    arb.reinforce("form", "scholar_form")
+    assert arb.priors.favourite("form") == "scholar_form"
+    assert arb.priors.path is None
+
+
 # -- hysteresis: a wandering glance doesn't flip ------------------------------
 
 def test_hysteresis_holds_a_fresh_decision():

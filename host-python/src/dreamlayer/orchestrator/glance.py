@@ -39,6 +39,8 @@ Design tenets:
 """
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -207,15 +209,25 @@ INTENT_LENS = {
 class GlancePriors:
     """A tiny online preference model: for each scene kind, how often you've
     chosen each lens. Reinforced when you pick from a chooser (or don't dismiss
-    a fired lens). Serialisable so the Mac Brain can persist it across sessions."""
+    a fired lens).
 
-    def __init__(self, counts: Optional[dict] = None, weight: float = 0.12):
+    Persisted as a small JSON on the hub, beside the vault, exactly like the
+    UserModel: read once at start, rewritten (atomically) on each reinforce, and
+    purely in-memory when no `path` is given. Serialisable either way, so the
+    Mac Brain can later mirror it across hubs — but the local file is the source
+    of truth on the hot path, so a glance never waits on the network."""
+
+    def __init__(self, counts: Optional[dict] = None, weight: float = 0.12,
+                 path: Optional[str] = None):
         self._c: dict[str, dict[str, float]] = counts or {}
         self.weight = float(weight)          # max salience nudge from a strong prior
+        self.path = path
+        self._load()
 
     def reinforce(self, scene: str, lens: str, amount: float = 1.0) -> None:
         self._c.setdefault(scene, {})
         self._c[scene][lens] = self._c[scene].get(lens, 0.0) + amount
+        self._save()
 
     def boost(self, scene: str, lens: str) -> float:
         """Salience nudge in [0, weight] for `lens` given past picks for `scene`."""
@@ -239,6 +251,31 @@ class GlancePriors:
         d = d or {}
         return cls(counts=d.get("counts") or {}, weight=d.get("weight", 0.12))
 
+    # -- persistence (mirrors UserModel: atomic write, silent on failure) --
+
+    def _save(self) -> None:
+        if not self.path:
+            return
+        try:
+            tmp = self.path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(self.to_dict(), f)
+            os.replace(tmp, self.path)
+        except Exception:
+            pass
+
+    def _load(self) -> None:
+        if not self.path or not os.path.exists(self.path):
+            return
+        try:
+            with open(self.path) as f:
+                d = json.load(f)
+            self._c = {str(scene): {str(lens): float(v) for lens, v in (row or {}).items()}
+                       for scene, row in (d.get("counts") or {}).items()}
+            self.weight = float(d.get("weight", self.weight))
+        except Exception:
+            pass
+
 
 # --- the arbiter -------------------------------------------------------------
 
@@ -251,6 +288,9 @@ class GlanceArbiter:
         The lenses that may bid. Defaults to the built-ins.
     priors : GlancePriors
         Learned per-scene preference; nudges close calls your way.
+    priors_path : str
+        When `priors` isn't supplied, load/persist the learned priors here (a
+        small JSON beside the vault). None ⇒ in-memory only.
     floor : float
         A top bid below this yields no action (nothing is worth surfacing).
     gap : float
@@ -265,9 +305,10 @@ class GlanceArbiter:
 
     def __init__(self, candidates=None, priors: Optional[GlancePriors] = None,
                  floor: float = 0.35, gap: float = 0.2, debounce_ms: float = 1200.0,
-                 now_fn: Optional[Callable[[], float]] = None):
+                 now_fn: Optional[Callable[[], float]] = None,
+                 priors_path: Optional[str] = None):
         self.candidates = list(candidates if candidates is not None else DEFAULT_CANDIDATES)
-        self.priors = priors or GlancePriors()
+        self.priors = priors or GlancePriors(path=priors_path)
         self.floor = float(floor)
         self.gap = float(gap)
         self.debounce_ms = float(debounce_ms)
