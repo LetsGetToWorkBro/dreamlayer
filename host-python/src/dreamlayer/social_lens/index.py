@@ -52,6 +52,24 @@ class ContactIndex:
     def size(self) -> int:
         return len(self._contacts)
 
+    def get(self, contact_id: str) -> Optional[ContactRecord]:
+        return self._contacts.get(contact_id)
+
+    def find_by_name(self, name: str) -> Optional[ContactRecord]:
+        """Resolve a spoken name to a contact — exact (case-insensitive)
+        first, then a unique first-name / prefix match. Ambiguous or absent
+        names return None so the caller can ask instead of guessing."""
+        q = (name or "").strip().lower()
+        if not q:
+            return None
+        exact = [c for c in self._contacts.values() if c.name.lower() == q]
+        if exact:
+            return exact[0]
+        starts = [c for c in self._contacts.values()
+                  if c.name.lower().split()[0] == q
+                  or c.name.lower().startswith(q + " ")]
+        return starts[0] if len(starts) == 1 else None
+
     # ------------------------------------------------------------------
     # Search
     # ------------------------------------------------------------------

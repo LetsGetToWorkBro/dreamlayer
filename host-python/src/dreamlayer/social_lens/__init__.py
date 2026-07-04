@@ -39,6 +39,18 @@ Name-you-were-told capture
   next identify(), and the conversation ledger grows its dossier from
   there.
 
+Jot a note on the spot
+----------------------
+    # "Oracle, remember Maya's into rock climbing"
+    fr.add_note("into rock climbing", who="Maya")   # by name
+    # or note whoever you just looked at:
+    fr.identify(frame); fr.add_note("just got a puppy")
+
+  The note is appended to that person's own contact and shows on the
+  recall card the next time you see them (SocialLensResult.to_hud_card
+  → card["note"]). Deliberate, local, veil-gated — same discipline as
+  everything else here.
+
 Privacy
 -------
   Your embeddings never leave the device.

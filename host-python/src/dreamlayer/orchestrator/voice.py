@@ -8,6 +8,8 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "Hey Oracle, what did Marcus need?"       → recall(query)
     "where did I leave my bike?"              → locate(subject="bike")
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
+    "remember Maya's into rock climbing"      → note_person(who="Maya", note="into rock climbing")
+    "remember she works at Google"            → note_person(who=None, note="works at Google")
     "set a timer for five minutes"            → timer(seconds=300)
     "interval timer, 30 on, 15 off, 8 rounds" → interval(work=30, rest=15, rounds=8)
     "stop the timer"                          → timer_cancel
@@ -103,6 +105,46 @@ def _parse_timer_clock(t: str) -> "Intent | None":
     return None
 
 
+# -- "jot a note about a person" ---------------------------------------------
+
+_REMEMBER_RE = re.compile(
+    r"^(?:remember|note|jot down|make a note)(?:\s+that)?\s+(.+)$", re.I)
+_WEARER_SUBJECT = re.compile(r"^(?:i|i'?m|im|my|me|myself)\b", re.I)
+_PERSON_PRONOUN = re.compile(
+    r"^(he|she|they|him|her|them|this\s+(?:person|guy|woman|man|lady|dude))\b(.*)$", re.I)
+_NAME_LEAD = re.compile(r"^([A-Z][a-zA-Z.\-]*)(?:['’]s)?\s+(.+)$")
+_NOT_A_NAME_WORD = {"the", "to", "that", "this", "it", "when", "where", "how",
+                    "what", "there", "here", "and", "but"}
+
+
+def _strip_copula(fact: str) -> str:
+    """Drop a leading 'is/are/was/'s' so "is into climbing" reads as a note."""
+    return re.sub(r"^(?:is|are|was|were|'?s)\s+", "", fact, flags=re.I).strip()
+
+
+def _parse_person_note(r: str) -> "Intent | None":
+    """"remember Maya's into rock climbing" / "note that Priya has two kids" /
+    "remember she works at Google" → a note about a person. `who` is a name, or
+    None to mean whoever you're looking at. Wearer statements ("remember I…")
+    are left alone. `r` is the original-case, wake-stripped line."""
+    m = _REMEMBER_RE.match(r.strip())
+    if not m:
+        return None
+    rest = m.group(1).strip()
+    if _WEARER_SUBJECT.match(rest):
+        return None                          # a fact about you, not a person
+    pm = _PERSON_PRONOUN.match(rest)
+    if pm:
+        fact = _strip_copula(pm.group(2).strip())
+        return Intent("note_person", {"who": None, "note": fact}) if fact else None
+    nm = _NAME_LEAD.match(rest)
+    if nm and nm.group(1).lower() not in _NOT_A_NAME_WORD:
+        fact = _strip_copula(nm.group(2).strip())
+        if fact:
+            return Intent("note_person", {"who": nm.group(1), "note": fact})
+    return None
+
+
 def detect_wake(text: str) -> tuple[bool, str]:
     """(heard_wake, remainder). True if a leading wake phrase is present; the
     remainder is whatever command followed it ('' if the wake stood alone)."""
@@ -166,6 +208,11 @@ def parse_intent(text: str) -> Intent:
                 r"(?:put (?:this|it) in )?plain (?:english|words|language)|"
                 r"break (?:this|it) down)\b", t):
         return Intent("scholar", {"mode": "explain"})
+
+    # "remember Maya's into climbing" — a note about a person you know
+    note = _parse_person_note(r)
+    if note is not None:
+        return note
 
     # native timers / clock — Oracle builds these; no rehearsal needed
     tc = _parse_timer_clock(t)

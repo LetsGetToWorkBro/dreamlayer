@@ -111,27 +111,43 @@ class SocialLensResult:
         conf_color = 0x07E0 if m.confidence >= 0.85 else (
             0xFFE0 if m.confidence >= 0.70 else 0xFD20
         )
+        note = _latest_note(c.notes)          # what you last asked to remember
+        note_line = f"“{note}”" if note else ""
+        lines = ["FACE RECALL", c.name, c.context_line()]
+        if note_line:
+            lines.append(note_line)
+        lines.append(f"{conf_pct}% match")
+        layout = {
+            "eyebrow": {"x": 128, "y": 186, "size": "sm",
+                        "color": conf_color, "tracking": 3},
+            "primary": {"x": 128, "y": 204, "size": "sm", "color": 0xFFFF},
+            "detail":  {"x": 128, "y": 220, "size": "sm", "color": 0x5EF7},
+        }
+        if note_line:
+            layout["note"] = {"x": 128, "y": 236, "size": "sm", "color": 0x2E9F}
+        layout["footer"] = {"x": 128, "y": 236 + (16 if note_line else 0),
+                            "size": "sm", "color": conf_color}
         return {
             "type": "SocialLensCard",
             "dismiss_ms": 5000,
             "eyebrow": "FACE RECALL",
             "primary": c.name,
             "detail": c.context_line(),
+            "note": note_line,
             "footer": f"{conf_pct}% match",
             "color": conf_color,
             "opacity": 0.9,
             "contact_id": c.contact_id,
             "confidence": m.confidence,
-            "lines": ["FACE RECALL", c.name, c.context_line(),
-                      f"{conf_pct}% match"],
-            "layout": {
-                "eyebrow": {"x": 128, "y": 192, "size": "sm",
-                            "color": conf_color, "tracking": 3},
-                "primary": {"x": 128, "y": 210, "size": "sm",
-                            "color": 0xFFFF},
-                "detail":  {"x": 128, "y": 226, "size": "sm",
-                            "color": 0x5EF7},
-                "footer":  {"x": 128, "y": 242, "size": "sm",
-                            "color": conf_color},
-            },
+            "lines": lines,
+            "layout": layout,
         }
+
+
+def _latest_note(notes: Optional[str]) -> str:
+    """The most recent freeform note on a contact (mirrors
+    ContactEnricher.latest_note without importing it)."""
+    if not notes:
+        return ""
+    parts = [p.strip() for p in notes.split(" • ") if p.strip()]
+    return parts[-1] if parts else ""

@@ -45,6 +45,36 @@ class ContactEnricher:
     def set_notes(self, contact_id: str, notes: str) -> None:
         self._backend.set(f"social_lens_notes_{contact_id}", notes)
 
+    NOTE_SEP = " • "
+    NOTES_MAX = 240                       # keep the record light; trim the oldest
+
+    def append_note(self, contact_id: str, note: str) -> str:
+        """Add one freeform note to a contact, keeping the ones already there.
+        Idempotent for an identical note; the newest is kept last (it's what
+        the recall card shows). Returns the full notes string after the add."""
+        note = " ".join((note or "").split()).strip(" .")
+        if not note:
+            return self.get_notes(contact_id) or ""
+        existing = self.get_notes(contact_id) or ""
+        parts = [p.strip() for p in existing.split(self.NOTE_SEP) if p.strip()]
+        low = note.lower()
+        parts = [p for p in parts if p.lower() != low]      # dedupe / move to end
+        parts.append(note)
+        merged = self.NOTE_SEP.join(parts)
+        while len(merged) > self.NOTES_MAX and len(parts) > 1:
+            parts.pop(0)                                    # drop the oldest
+            merged = self.NOTE_SEP.join(parts)
+        self.set_notes(contact_id, merged)
+        return merged
+
+    @staticmethod
+    def latest_note(notes: Optional[str]) -> str:
+        """The most recent note (what the recall card highlights)."""
+        if not notes:
+            return ""
+        parts = [p.strip() for p in notes.split(ContactEnricher.NOTE_SEP) if p.strip()]
+        return parts[-1] if parts else ""
+
     def enrich(self, contact: ContactRecord) -> ContactRecord:
         """Return a copy of the ContactRecord enriched with stored context."""
         last_met = self.get_last_met(contact.contact_id)

@@ -83,6 +83,10 @@ class SocialLens:
             auto_keep=auto_keep_introductions,
         )
 
+        # the last face recall — so "remember she's into climbing" can attach
+        # to whoever you were just looking at (set on every match)
+        self._last_identified: Optional[str] = None
+
         if contacts:
             self._load_contacts(contacts)
 
@@ -122,8 +126,9 @@ class SocialLens:
             is_match=True,
         )
 
-        # Stage 5: record encounter (update last-met)
+        # Stage 5: record encounter (update last-met) + remember who this was
         self._enricher.record_encounter(match.contact.contact_id)
+        self._last_identified = match.contact.contact_id
 
         return SocialLensResult(
             match=enriched_match,
@@ -149,6 +154,37 @@ class SocialLens:
     def dismiss_introduction(self) -> None:
         """Let the current offer go, unremembered."""
         self.introductions.dismiss()
+
+    def add_note(self, note: str, who: Optional[str] = None):
+        """Jot a note about a person, on the spot. `who` is a name; omit it to
+        note whoever you just looked at (the last identify() match). The note is
+        appended to that contact's own record — it shows on the recall card the
+        next time you see them. Returns the ContactRecord it landed on, or None
+        if the person couldn't be resolved (unknown name / nobody in view)."""
+        contact = None
+        if who:
+            contact = self._index.find_by_name(who)
+        elif self._last_identified:
+            contact = self._index.get(self._last_identified)
+        if contact is None:
+            return None
+        self._enricher.append_note(contact.contact_id, note)
+        return self._enricher.enrich(contact)
+
+    def add_note_by_id(self, contact_id: str, note: str):
+        """Append a note to a specific contact_id (the caller already resolved
+        who you were looking at). Returns the enriched record, or None if the
+        id isn't a known contact."""
+        contact = self._index.get(contact_id)
+        if contact is None:
+            return None
+        self._enricher.append_note(contact_id, note)
+        return self._enricher.enrich(contact)
+
+    @property
+    def last_identified(self) -> Optional[str]:
+        """contact_id of the person most recently recalled, or None."""
+        return self._last_identified
 
     def add_contact(self, contact: ContactRecord) -> None:
         """Add or update a contact in the live index."""

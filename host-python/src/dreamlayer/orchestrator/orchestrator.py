@@ -198,6 +198,7 @@ class Orchestrator:
         # dossier. Starts empty; Contacts sync fills it.
         from ..social_lens import SocialLens
         self.social = SocialLens(privacy=self.privacy)
+        self._last_person: dict | None = None    # who you last looked at (for on-the-spot notes)
         # Oracle — the assistant. "Hey Oracle" wakes it; tap / gaze / raise are
         # multimodal alternatives. On wake it shows a Listening ring + (device
         # seams) an earcon and a haptic tick, then stays open a short session so
@@ -1300,7 +1301,40 @@ class Orchestrator:
             return {"intent": "scholar", "mode": mode,
                     "answer": res.primary if res is not None else "",
                     "ok": bool(res.ok) if res is not None else False}
+        if it.kind == "note_person":
+            return self._note_about_person(it.args.get("who"),
+                                           it.args.get("note", ""))
         return {"intent": it.kind, **it.args}
+
+    def _note_about_person(self, who: str | None, note: str,
+                           within_sec: float = 90.0) -> dict:
+        """Jot a note about a person — by name, or (who=None) whoever you just
+        looked at. Appends to their own contact so it shows on the recall card
+        next time. Veil-gated: nothing is written while capture is paused."""
+        note = (note or "").strip()
+        if not note:
+            return {"intent": "note_person", "ok": False,
+                    "say": "What should I remember about them?"}
+        if not self.privacy.allow_capture():
+            return {"intent": "note_person", "ok": False,
+                    "say": "Not while you're incognito."}
+        if who:
+            contact = self.social.add_note(note, who=who)
+            if contact is None:
+                return {"intent": "note_person", "ok": False,
+                        "say": f"I don't know who {who} is yet."}
+            target_name = contact.name
+        else:
+            # "her / him / this person" → whoever you just looked at
+            lp = self._last_person
+            if not lp or (self._clock() - lp.get("ts", 0)) > within_sec:
+                return {"intent": "note_person", "ok": False,
+                        "say": "Look at someone first, then tell me to remember."}
+            contact = self.social.add_note_by_id(lp["contact_id"], note)
+            target_name = contact.name if contact is not None else lp["name"]
+        return {"intent": "note_person", "ok": True, "who": target_name,
+                "note": note,
+                "say": f"Got it — I'll remember that about {target_name}."}
 
     # -- conversation ledger: captions, recall, rewind, dossier ----------
 
@@ -1663,6 +1697,10 @@ class Orchestrator:
         if res is None or res.match is None:
             return None
         name = res.match.contact.name
+        # remember who you're looking at, so "remember she likes climbing"
+        # right after can attach the note to them
+        self._last_person = {"contact_id": res.match.contact.contact_id,
+                             "name": name, "ts": self._clock()}
         identity = res.to_hud_card()
         self.bridge.send_card(identity, event="social")
         out = {"person": name, "confidence": res.match.confidence,
