@@ -90,6 +90,7 @@ class Brain:
         self.last_index_ts = 0.0
         self.email_docs = 0
         self.last_brief = None
+        self.last_long_brief = None
         self._brief_ran_day = None
         self._brief_stop = None
         self._cal_stop = None
@@ -673,52 +674,117 @@ class Brain:
                 pass
         return ["On my way", "Give me a few", "Thanks!"][:n]
 
-    def brief(self, agenda=None, since: float = 0.0) -> dict:
-        """A one-glance morning brief: what's new (messages/mail) + what's on
-        you (agenda the phone passes: commitments, calendar). The model turns
-        the points into a warm couple of sentences; with no model it returns
-        the structured points. `since` powers 'what did I miss'."""
+    def brief(self, agenda=None, since: float = 0.0, depth: str = "short",
+              commitments=None, memories=None) -> dict:
+        """A morning brief at one of two depths.
+
+        `depth="short"` (default) is the one-glance version: today's agenda +
+        what's new, turned by the model into a warm couple of sentences (or the
+        structured points with no model). `depth="long"` walks the whole
+        morning in sections — Today, Due, Waiting on you, Messages, Yesterday —
+        each item spelled out, and the model writes a few skimmable paragraphs.
+
+        The phone passes what only it holds: `agenda` (calendar/commitment
+        lines it already folds), `commitments` (open promises), and `memories`
+        (yesterday's kept moments). `since` powers 'what did I miss'.
+        """
+        long = str(depth).lower() == "long"
         agenda = [a for a in (agenda or []) if a]
-        for e in self.calendar(5):                    # today's events lead the brief
+        events = []
+        for e in self.calendar(8 if long else 5):     # today's events lead the brief
             when = time.strftime("%I:%M %p", time.localtime(e["ts"])).lstrip("0") if e["ts"] else ""
-            agenda.append(e["title"] + (f" at {when}" if when else ""))
+            events.append(e["title"] + (f" at {when}" if when else ""))
         day_end = time.time() + 86400
         due = [r for r in self.reminders() if 0 < r.get("ts", 0) <= day_end]
-        for r in due[:3]:                             # to-dos due within a day
-            agenda.append("Reminder: " + r["title"])
+        due_lines = ["Reminder: " + r["title"] for r in due[:(8 if long else 3)]]
         try:
-            msgs = self._messages_fn(self.config, 20) if self.config.email_enabled else []
+            msgs = self._messages_fn(self.config, 30 if long else 20) if self.config.email_enabled else []
         except Exception:
             msgs = []
         incoming = [m for m in msgs if not m.get("from_me") and m.get("ts", 0) > since]
         texts = [m for m in incoming if m.get("channel") != "email"]
         emails = [m for m in incoming if m.get("channel") == "email"]
+        commitments = [c for c in (commitments or []) if c]
+        memories = [m for m in (memories or []) if m]
 
-        bullets = list(agenda)
-        if texts:
-            who = ", ".join(dict.fromkeys(m.get("who", "") for m in texts if m.get("who")))
-            bullets.append(f"{len(texts)} new text{'s' if len(texts) != 1 else ''}"
-                           + (f" (from {who[:60]})" if who else ""))
-        for m in emails[:3]:
-            subj = (m.get("subject") or m.get("text", "")[:40]).strip()
+        # -- the short brief: the original one-glance contract, unchanged ------
+        if not long:
+            bullets = list(agenda) + events + due_lines
+            if texts:
+                who = ", ".join(dict.fromkeys(m.get("who", "") for m in texts if m.get("who")))
+                bullets.append(f"{len(texts)} new text{'s' if len(texts) != 1 else ''}"
+                               + (f" (from {who[:60]})" if who else ""))
+            for m in emails[:3]:
+                subj = (m.get("subject") or m.get("text", "")[:40]).strip()
+                if subj:
+                    bullets.append(f"Email: {subj}")
+            if not bullets:
+                bullets = ["Nothing pressing — a clear morning."]
+            text = "  ·  ".join(bullets)
+            if self._backend is not None:
+                try:
+                    s = self._backend.chat(
+                        "Write a warm, two-sentence morning brief from these points. "
+                        "Be concrete, natural, and brief — no preamble:\n\n"
+                        + "\n".join("- " + b for b in bullets))
+                    if s and s.strip():
+                        text = s.strip()
+                except Exception:
+                    pass
+            self.saga_record("brief")
+            return {"text": text, "bullets": bullets, "depth": "short",
+                    "missed": {"texts": len(texts), "emails": len(emails)}}
+
+        # -- the long brief: sectioned, each item spelled out ------------------
+        text_lines = []
+        for m in texts:
+            who = (m.get("who") or "Someone").strip()
+            body = (m.get("text") or "").strip().replace("\n", " ")
+            text_lines.append(f"{who}: {_clip_brief(body, 80)}" if body else who)
+        email_lines = []
+        for m in emails:
+            subj = (m.get("subject") or m.get("text", "")[:60]).strip().replace("\n", " ")
+            who = (m.get("who") or "").strip()
             if subj:
-                bullets.append(f"Email: {subj}")
-        if not bullets:
-            bullets = ["Nothing pressing — a clear morning."]
+                email_lines.append(f"{who} — {subj}" if who else subj)
 
-        text = "  ·  ".join(bullets)
+        sections = []
+        if agenda or events:
+            sections.append({"title": "Today", "items": list(agenda) + events})
+        if due_lines:
+            sections.append({"title": "Due", "items": [d.replace("Reminder: ", "") for d in due_lines]})
+        if commitments:
+            sections.append({"title": "Waiting on you", "items": commitments})
+        if text_lines or email_lines:
+            items = list(text_lines)
+            if email_lines:
+                items += ["✉ " + e for e in email_lines[:6]]
+            sections.append({"title": "Messages", "items": items})
+        if memories:
+            sections.append({"title": "Yesterday", "items": memories})
+        if not sections:
+            sections = [{"title": "Today", "items": ["Nothing pressing — a clear morning."]}]
+
+        bullets = [f"{s['title']}: " + "; ".join(s["items"]) for s in sections]
+        text = "\n\n".join(f"{s['title']}\n" + "\n".join("• " + i for i in s["items"])
+                           for s in sections)
         if self._backend is not None:
             try:
-                s = self._backend.chat(
-                    "Write a warm, two-sentence morning brief from these points. "
-                    "Be concrete, natural, and brief — no preamble:\n\n"
-                    + "\n".join("- " + b for b in bullets))
+                prompt = (
+                    "Write a thorough but skimmable morning brief in a few short "
+                    "paragraphs. Lead with what's on today, then what's due and who's "
+                    "waiting on the reader, then notable messages, then a line on "
+                    "yesterday. Warm, concrete, second person, no preamble or headers:\n\n"
+                    + "\n".join(f"[{s['title']}]\n" + "\n".join("- " + i for i in s["items"])
+                                for s in sections))
+                s = self._backend.chat(prompt)
                 if s and s.strip():
                     text = s.strip()
             except Exception:
                 pass
         self.saga_record("brief")
-        return {"text": text, "bullets": bullets,
+        return {"text": text, "bullets": bullets, "sections": sections,
+                "depth": "long",
                 "missed": {"texts": len(texts), "emails": len(emails)}}
 
 
@@ -855,6 +921,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.profile)
             elif path == "/dreamlayer/brief/latest":
                 self._json(200, brain.last_brief or {})
+            elif path == "/dreamlayer/brief/long/latest":
+                self._json(200, brain.last_long_brief or {})
             elif path == "/dreamlayer/messages/recent":
                 # the live Messages/Mail feed the glasses read hands-free
                 if not brain.config.email_enabled:
@@ -946,8 +1014,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, _answer_json(ans))
             elif path == "/dreamlayer/brief":
                 b = self._body()
-                self._json(200, brain.brief(agenda=b.get("agenda"),
-                                            since=b.get("since", 0) or 0))
+                out = brain.brief(agenda=b.get("agenda"),
+                                  since=b.get("since", 0) or 0,
+                                  depth=b.get("depth", "short"),
+                                  commitments=b.get("commitments"),
+                                  memories=b.get("memories"))
+                if out.get("depth") == "long":     # keep the last long brief for the phone
+                    brain.last_long_brief = {**out, "ts": time.time()}
+                self._json(200, out)
             elif path == "/dreamlayer/replies":
                 b = self._body()
                 self._json(200, {"replies": brain.suggest_replies(b.get("text", ""))})
@@ -1082,6 +1156,11 @@ def _write_upload(brain: Brain, folder: str, name: str, data: bytes) -> bool:
         return True
     except OSError:
         return False
+
+
+def _clip_brief(s: str, n: int) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= n else s[: n - 1] + "…"
 
 
 def _version() -> str:

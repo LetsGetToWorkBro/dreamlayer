@@ -20,6 +20,13 @@ export type BrainKind = "phone" | "mac_mini";
 export type MacMini = { connected: boolean; url: string; token: string; relayUrl?: string };
 export type Glasses = { connected: boolean; id: string };
 export type AskResult = { text: string; tier: string; sources: string[] } | null;
+export type BriefSection = { title: string; items: string[] };
+export type LongBrief = {
+  text: string;
+  sections: BriefSection[];
+  missed?: { texts: number; emails: number };
+  ts: number;
+};
 export type CalendarEvent = { title: string; ts: number; place?: string; source?: string; calendar?: string };
 export type ActivityItem = { ts: number; kind: string; text?: string; query?: string; tier?: string };
 export type RewindItem = { ts: number; kind: string; text: string };
@@ -96,6 +103,10 @@ type BrainState = {
   getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
   // the brief the Brain's scheduler delivered on its own at brief_hour (no compute)
   getLatestBrief: () => Promise<{ text: string; bullets: string[]; ts: number } | null>;
+  // the extended "long brief" — sectioned; fetched on demand and kept on the phone
+  getLongBrief: (opts?: { agenda?: string[]; commitments?: string[]; memories?: string[] })
+    => Promise<LongBrief | null>;
+  longBrief: LongBrief | null;                 // last one, persisted on the phone
 
   // engines surfaced in the app
   proactiveCards: boolean;
@@ -146,6 +157,7 @@ function persist(s: BrainState) {
     proactiveAlerts: s.proactiveAlerts,
     factCheck: s.factCheck,
     answerAhead: s.answerAhead,
+    longBrief: s.longBrief,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
 }
@@ -203,6 +215,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   proactiveAlerts: true,
   factCheck: false,
   answerAhead: false,
+  longBrief: null,
   hydrated: false,
 
   brainKind: () => (get().macMini.connected ? "mac_mini" : "phone"),
@@ -484,6 +497,35 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       const j = await r.json();
       if (!j || !j.ts) return null;
       return { text: j.text ?? "", bullets: j.bullets ?? [], ts: j.ts };
+    } catch {
+      return null;
+    }
+  },
+
+  getLongBrief: async (opts = {}) => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/brief", {
+        method: "POST",
+        body: JSON.stringify({
+          depth: "long",
+          agenda: opts.agenda ?? [],
+          commitments: opts.commitments ?? [],
+          memories: opts.memories ?? [],
+        }),
+      });
+      const j = await r.json();
+      const brief: LongBrief = {
+        text: j.text ?? "",
+        sections: j.sections ?? [],
+        missed: j.missed,
+        ts: Date.now(),
+      };
+      const s = { ...get(), longBrief: brief };
+      set({ longBrief: brief });
+      persist(s);
+      return brief;
     } catch {
       return null;
     }
