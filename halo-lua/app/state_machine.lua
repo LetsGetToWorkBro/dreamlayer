@@ -253,6 +253,14 @@ function M.set_card(msg_payload)
     card = C.error_card(msg_payload.primary)
   elseif t == "LowConfidenceCard" then
     card = C.low_confidence()
+  elseif t == "FactCheckCard" then
+    card = C.fact_check(msg_payload)
+  elseif t == "AnswerAheadCard" then
+    card = C.answer_ahead(msg_payload)
+  elseif t == "OracleReplyCard" then
+    card = C.oracle_reply(msg_payload)
+  elseif t == "HarkCard" then
+    card = C.hark(msg_payload)
   else
     card = C.error_card("Unknown card: " .. tostring(t))
   end

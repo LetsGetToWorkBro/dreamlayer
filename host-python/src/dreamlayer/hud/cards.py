@@ -847,6 +847,20 @@ def deviation_alert(
     }
 
 
+def amp_message(level: float) -> dict:
+    """Live voice level for the listening waveform (Meridian Lumen).
+
+    ``{t="amp", v=0..99}`` — ~15 bytes on the wire, sent only while a
+    QueryListeningCard holds (the capture pipeline already has the audio
+    frames). The device springs the waveform toward it and warms the
+    bars through the voice palette slot; with no amp messages the card
+    keeps its self-running look. Mirrors halo-lua/ble/message_types.lua
+    AMP — keep in sync.
+    """
+    v = max(0.0, min(1.0, float(level)))
+    return {"t": "amp", "v": int(round(v * 99))}
+
+
 ALL_SAMPLES: dict[str, dict] = {
     "ready":               ready(),
     "saved_memory":        saved_memory("House keys"),

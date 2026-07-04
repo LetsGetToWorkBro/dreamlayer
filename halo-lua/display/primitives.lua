@@ -12,7 +12,39 @@
 local math       = math
 local HAS_FRAME  = (type(_G.frame) == "table")
 
+local T = require("display.typography")
+
 local primitives = {}
+
+-- ---------------------------------------------------------------------------
+-- Meridian Solid: live font sizes. Cached so repeated same-size text costs
+-- nothing; pcall-latched so a firmware without (or with a different)
+-- set_font degrades the WHOLE feature to today's single-size text by
+-- flipping nothing but _font_wired — no other code path changes.
+-- ---------------------------------------------------------------------------
+local _font_wired = true
+local _cur_size   = nil
+
+function primitives.set_font_size(size)
+  if not HAS_FRAME or not _font_wired then return end
+  size = T.DEVICE_FONT[size] and size or T.DEFAULT_SIZE
+  if size == _cur_size then return end
+  local f = T.DEVICE_FONT[size]
+  local ok = pcall(frame.display.set_font, f.fid, f.sz, f.sc)
+  if not ok then
+    _font_wired = false   -- device seam absent: single-size text forever
+    return
+  end
+  _cur_size = size
+end
+
+function primitives.font_wired()
+  return _font_wired
+end
+
+function primitives._reset_font_for_test()
+  _font_wired, _cur_size = true, nil
+end
 
 --- Draw a filled circle (dot).
 --- @param x      number  centre x
@@ -62,14 +94,17 @@ function primitives.vbar(x, y1, y2, w, color)
                      math.max(1, math.floor(w)), h, color, true)
 end
 
---- Draw a text string at (x, y).
+--- Draw a text string at (x, y) in a size token (Solid: the size stub is
+--- live). Unsized calls resolve to DEFAULT_SIZE explicitly, so a large
+--- font can never leak ("stick") into a module that didn't ask for one.
 --- @param x     number
 --- @param y     number
 --- @param text  string
---- @param _size number  font-size token -- passed to set_font if you wire it; otherwise ignored
+--- @param size  string|nil  typography size token ("hero".."sm")
 --- @param color number  0xRRGGBB integer
-function primitives.text_center(x, y, text, _size, color)
+function primitives.text_center(x, y, text, size, color)
   if not HAS_FRAME then return end
+  primitives.set_font_size(size or T.DEFAULT_SIZE)
   -- frame.display.text(txt, x, y, color_int) -- no table argument
   frame.display.text(tostring(text), math.floor(x), math.floor(y), color)
 end

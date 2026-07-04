@@ -41,12 +41,32 @@ local E     = require("lib.easing")
 local TR    = require("display.transitions")
 local F     = require("display.focus")
 local HZ    = require("display.horizon")
+local PA    = require("display.palette_animator")
+local PX    = require("display.parallax")
+local PT    = require("display.particles")
 
 local HAS_FRAME = (type(_G.frame) == "table")
 
 local ease_out_expo    = E.out_expo
 local ease_in_out_sine = E.in_out_sine
 local ease_linear      = E.linear
+
+-- Card light bands (Lumen): geometry drawn in these bases follows the
+-- card slots, so a leased wave program can flow light along it. The
+-- slots alias the aurora/dream bank — mode-exclusive by construction.
+P.reserve_dynamic("card_a", A.SPEC_BASE_A, 3)
+P.reserve_dynamic("card_b", A.SPEC_BASE_B, 4)
+P.reserve_dynamic("card_c", A.SPEC_BASE_C, 1)
+-- voice aliases card_a's slot (free during listening), NOT fx: fx's base
+-- is accent_memory, so painting that slot another hue would recolor every
+-- accent_memory draw on the panel (found by the Lumen audit render)
+P.reserve_dynamic("voice",  A.VOICE_BASE,  3)
+
+-- Live voice level for QueryListeningCard ({t="amp"} messages, 0-99).
+-- nil until the host ever sends one: the waveform then keeps its v1
+-- self-running look, so nothing regresses without the host feature.
+local _amp_target = nil
+local _amp        = 0
 
 -- ---------------------------------------------------------------------------
 -- Animation state
@@ -83,9 +103,13 @@ local function lerp(a, b, t)    return a + (b - a) * t end
 -- Primitive drawing (all frame.display.* line/circle/rect/text)
 -- ---------------------------------------------------------------------------
 
+-- color may be a single hex or a band table {hexA, hexB, ...}: banded
+-- segments follow the card slots, so a wave program flows light along
+-- the pre-drawn curve (Lumen — the memory-trace "conducts")
 local function bezier(p0x,p0y,p1x,p1y,p2x,p2y, color, steps)
   if not HAS_FRAME then return end
   steps = steps or 24
+  local banded = (type(color) == "table")
   local px,py = p0x,p0y
   for i = 1,steps do
     local t  = i/steps
@@ -93,7 +117,8 @@ local function bezier(p0x,p0y,p1x,p1y,p2x,p2y, color, steps)
     local x  = mt*mt*p0x + 2*mt*t*p1x + t*t*p2x
     local y  = mt*mt*p0y + 2*mt*t*p1y + t*t*p2y
     if math.floor(i*12/steps)%12 < 7 then
-      frame.display.line(floor(px),floor(py),floor(x),floor(y),color)
+      local c = banded and color[(i % #color) + 1] or color
+      frame.display.line(floor(px),floor(py),floor(x),floor(y),c)
     end
     px,py = x,y
   end
@@ -204,6 +229,34 @@ end
 
 local CX,CY = 128,128
 
+local MAT = require("display.materials")
+
+-- ObjectRecall trace: dim at the wearer, bright at the jewel; the bright
+-- half rides the card band bases so the conduct wave still flows there
+local RAMP_TRACE_UP = { 0x2A3C44, 0x1A7A60, 0x01FFAA, 0x00FFA9 }
+
+-- Solid: every renderer string goes through the sized-text seam. The
+-- size tokens are typography.DEVICE_FONT keys; primitives caches the
+-- set_font call and latches the feature off if firmware lacks it.
+local PR = require("display.primitives")
+local function text(str, x, y, color, size)
+  PR.text_center(x, y, str, size, color)
+end
+
+-- Wrapped, vertically-centered text block — for the O3 cards whose primary is a
+-- spoken sentence rather than a short label. Caps at `max_lines` so it never
+-- spills the circular panel; single-line callers still use text()+fit_size.
+local function text_block(str, x, y, color, size, width, max_lines)
+  local lines = T.wrap(str, size, width) or { str }
+  max_lines = max_lines or 3
+  local n = math.min(#lines, max_lines)
+  local lh = T.block_line_height(size)
+  local start = y - (n - 1) * lh / 2
+  for i = 1, n do
+    text(lines[i], x, floor(start + (i - 1) * lh), color, size)
+  end
+end
+
 -- stagger helpers: returns true when global enter_t has passed layer threshold
 local function layer_ok(enter_t, stagger_ms)
   return enter_t >= (stagger_ms / A.ENTER_DURATION_MS)
@@ -224,9 +277,9 @@ local function draw_ready(sc, enter_t, exit_t)
     end
     closed_poly(pts, P.memory_trace)
   end
-  -- rings
+  -- rings (Solid: gradient strokes — same call count, living light)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    arc(CX,CY,r2, 180,360, P.accent_memory)
+    MAT.grad_arc(CX,CY,r2, 180,360, MAT.RAMP_MEMORY, 32)
     arc(CX,CY,r3,   0,270, P.accent_memory_dim)
     arc(CX,CY,r4, 270,360, P.border_subtle)
   end
@@ -239,19 +292,39 @@ local function draw_ready(sc, enter_t, exit_t)
   end
 end
 
-local function draw_saved_memory(card, sc, enter_t, exit_t)
-  local r = floor(48 * sc)
+-- SavedMemoryCard v2 (Meridian Solid): the confirmation is a jewel —
+-- a giant double-struck check inside concentric gradient rings over a
+-- soft pane, SAVED in hero type. Spring draw-on, chime, and the burst
+-- flair keep their Lumen contracts.
+local function draw_saved_memory(card, sc, enter_t, exit_t, idle_t)
+  local r = floor(46 * sc)
   if r<1 then return end
-  arc(CX,CY,r,0,360,P.accent_success,48)
-  arc(CX,CY,r,-90,0,P.accent_success,12)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 124, floor(66*sc), MAT.PANE, 4)
+  end
+  frame.display.circle(CX, 124, floor(70*sc), P.border_subtle, false)
+  arc(CX,124,floor(62*sc),0,360,P.border_subtle,32)
+  arc(CX,124,floor(54*sc),0,360,P.accent_success_dim,28)
+  arc(CX,124,r,0,360,P.accent_success,24)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    check_glyph(CX,CY-8,floor(56*sc),P.accent_success, math.min(1, enter_t*2))
+    -- Lumen: the check draws on with a soft spring; Solid: it is giant
+    -- and double-struck (2px stroke reads as engraved, not sketched)
+    local prog = E.spring(math.min(1, enter_t*2),
+                          A.SPRING_ZETA_SOFT, A.SPRING_OMEGA)
+    check_glyph(CX,120,floor(72*sc),P.accent_success, prog)
+    check_glyph(CX,121,floor(72*sc),P.accent_success, prog)
+  end
+  -- Lumen: the chime ring breathes outward once as the card settles
+  if enter_t >= 1.0 and exit_t == 0 and idle_t and not TR.reduce_motion()
+     and idle_t < A.SIG_CHIME_MS then
+    TR.chime(idle_t / A.SIG_CHIME_MS, CX, 120)
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("SAVED",CX,CY-42,P.accent_success)
+    text("SAVED",CX,42,P.accent_success, "hero")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text((card and card.primary) or "Memory saved",CX,CY+22,P.text_primary)
+    local primary = (card and card.primary) or "Memory saved"
+    text(T.truncate(primary, "md", 180),CX,206,P.text_primary, "md")
   end
 end
 
@@ -263,8 +336,20 @@ local function draw_query_listening(sc, enter_t, idle_t)
     frame.display.line(80,CY,  94,CY,P.memory_trace)
     frame.display.circle(94,CY,2,P.memory_trace,true)
   end
-  -- waveform: phase advances with idle_t
+  -- waveform: phase advances with idle_t. Lumen: when the host streams
+  -- {t="amp"} the bars track the real voice level (spring-smoothed) and
+  -- the whole waveform warms with it through the voice slot — your words
+  -- visibly land in the glasses. Without amp data: the v1 look, exactly.
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    local scale = 1.0
+    local bar_color = P.accent_attention
+    if _amp_target and not TR.reduce_motion() then
+      _amp = _amp + 0.35 * (_amp_target - _amp)
+      scale = 0.35 + 0.65 * _amp
+      bar_color = P.dynamic_color("voice")
+      P.shift_dynamic("voice", _amp * A.VOICE_Y_GAIN, 0,
+                      _amp * A.VOICE_CR_GAIN)
+    end
     local phase_off = idle_t * 0.006  -- slow drift
     local bar_count=32; local bar_w=2; local gap=1
     local total_w=bar_count*(bar_w+gap)-gap
@@ -272,34 +357,52 @@ local function draw_query_listening(sc, enter_t, idle_t)
     for i=0,bar_count-1 do
       local envelope=math.sin(math.pi*i/(bar_count-1))
       local phase=math.abs(math.sin(math.pi*2*i/bar_count*3+1.2+phase_off))
-      local bh=math.max(2,floor(22*envelope*phase*sc))
+      local bh=math.max(2,floor(22*envelope*phase*scale*sc))
       local bx=start_x+i*(bar_w+gap)
-      frame.display.line(bx,CY-floor(bh/2),bx,CY+floor(bh/2),P.accent_attention)
+      frame.display.line(bx,CY-floor(bh/2),bx,CY+floor(bh/2),bar_color)
     end
   end
 end
 
+-- Lumen: the rotating-arc spinner is killed. Twelve STATIC segments band
+-- across the three card slots and a palette wave chases light around the
+-- stationary ring at the old spinner's RPM — motion by recolouring, not
+-- redrawing (docs/PALETTE_CYCLE.md, generalized). Fewer draw calls than
+-- the v1 spinner, and reduce_motion degrades to a static gradient ring
+-- (strictly better than a frozen spinner arc).
+local CHASE_BANDS = { A.SPEC_BASE_A, A.SPEC_BASE_B, A.SPEC_BASE_C }
+
 local function draw_loading(sc, enter_t, idle_t)
-  -- ghost rings scale in
+  -- ghost rings scale in (r=40 yielded to the chase ring)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    for _,gr in ipairs({16,28,40,52}) do
+    for _,gr in ipairs({16,28,52}) do
       arc(CX,CY,floor(gr*sc),0,360,P.border_subtle,24)
     end
   end
-  -- spinner: angle advances with idle_t
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    local spin_deg = (idle_t / A.SPINNER_RPM_MS) * 360
-    local arc_sweep = lerp(A.SPINNER_ARC_MIN_DEG, A.SPINNER_ARC_MAX_DEG,
-                           ease_in_out_sine((math.sin(idle_t/A.SPINNER_ARC_BREATH_MS * math.pi)+1)/2))
     local r = floor(40*sc)
-    arc(CX,CY,r, spin_deg,      spin_deg+arc_sweep*0.6, P.memory_trace,16)
-    arc(CX,CY,r, spin_deg-30,   spin_deg,               P.accent_memory,4)
-    arc(CX,CY,r, spin_deg-60,   spin_deg-30,            P.accent_memory_dim,2)
+    local n = A.CHASE_SEGMENTS
+    local span = 360 / n
+    local gap = 6
+    for i = 0, n-1 do
+      local a0 = -90 + i * span + gap / 2
+      arc(CX,CY,r, a0, a0 + span - gap, CHASE_BANDS[i % 3 + 1], 3)
+    end
     frame.display.circle(CX,CY,3,P.memory_trace,true)
     frame.display.circle(CX,CY,floor(6*sc),P.accent_memory_dim,false)
+    MAT.bloom_ring(CX,CY,6,P.memory_trace)
   end
 end
 
+-- ---------------------------------------------------------------------------
+-- ObjectRecallCard v3 (Meridian Solid): a spatial scene, not a text list.
+-- The place is a translucent field of light; the object is a jewel in it;
+-- you are a dot at the bottom; a gradient trace (dim at you, bright at the
+-- jewel) connects the two — the memory literally shows where the thing is
+-- relative to you. The conduct flair still flows on the trace's bright
+-- half (RAMP_MEMORY_LIVE leads with the card band bases). Confidence
+-- keeps its color semantics on the jewel.
+-- ---------------------------------------------------------------------------
 local function draw_object_recall(card, sc, enter_t, exit_t)
   local obj    = ((card.object or card.primary or ""):upper())
   local place  = card.place   or ""
@@ -311,38 +414,52 @@ local function draw_object_recall(card, sc, enter_t, exit_t)
     if conf>=0.75 then jcol=P.confidence_high
     elseif conf<0.40 then jcol=P.confidence_low end
   end
-  -- memory rail: scales from center outward
-  local rail_top = floor(lerp(CY, 72,  sc))
-  local rail_bot = floor(lerp(CY, 188, sc))
-  frame.display.line(44,rail_top,44,rail_bot,P.memory_trace)
-  frame.display.circle(44,rail_top,3,P.memory_trace,true)
-  frame.display.circle(44,rail_bot,3,jcol,true)
-  -- eyebrow
-  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text(obj,54,80,P.memory_trace)
+
+  -- the place, as a translucent field (panes never draw during exit)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 112, floor(62*sc), MAT.PANE, 3)
   end
-  -- bezier arc
+
+  -- gradient trace: you -> object, cooling away from the jewel
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    bezier(46,90,200,62,155,150,P.memory_trace,32)
-    local jx=floor(46*0.3025+2*0.55*0.45*200+0.2025*155)
-    local jy=floor(90*0.3025+2*0.55*0.45*62 +0.2025*150)
-    local jd=floor(4*sc)
-    if jd>=1 then
+    MAT.grad_bezier(128,192, 168,140, 132,102, RAMP_TRACE_UP, 24)
+  end
+
+  -- the object jewel: layered diamonds + orbit arcs + bloom
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local jx, jy = 128, 88
+    local jd = floor(9*sc)
+    if jd >= 2 then
       frame.display.line(jx,jy-jd,jx+jd,jy,jcol)
       frame.display.line(jx+jd,jy,jx,jy+jd,jcol)
       frame.display.line(jx,jy+jd,jx-jd,jy,jcol)
       frame.display.line(jx-jd,jy,jx,jy-jd,jcol)
+      local di = math.max(1, floor(4*sc))
+      frame.display.line(jx,jy-di,jx+di,jy,P.memory_trace)
+      frame.display.line(jx+di,jy,jx,jy+di,P.memory_trace)
+      frame.display.line(jx,jy+di,jx-di,jy,P.memory_trace)
+      frame.display.line(jx-di,jy,jx,jy-di,P.memory_trace)
     end
-    arc(jx,jy,floor(10*sc),  0, 90,jcol,8)
-    arc(jx,jy,floor(10*sc),120,210,jcol,8)
-    arc(jx,jy,floor(10*sc),240,330,jcol,8)
+    arc(jx,jy,floor(14*sc),  0, 90,jcol,8)
+    arc(jx,jy,floor(14*sc),120,210,jcol,8)
+    arc(jx,jy,floor(14*sc),240,330,jcol,8)
+    MAT.bloom_ring(jx, jy, floor(14*sc), jcol)
+  end
+
+  -- you, at the bottom of the scene
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    frame.display.circle(128, 198, 3, P.memory_trace, true)
+    MAT.bloom_ring(128, 198, 3, P.memory_trace)
+  end
+
+  -- type: time eyebrow, object label, HERO place, bracketed detail
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(footer, CX, 50, P.text_ghost, "sm")
+    text(obj, CX, 66, P.memory_trace, "md")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(place,155,150,P.text_primary)
-    if detail~="" then frame.display.text("[ "..detail.." ]",CX,178,P.text_secondary) end
-  end
-  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(footer,CX,198,P.text_ghost)
+    text(place, CX, 150, P.text_primary, T.fit_size(place, 170))
+    if detail~="" then text("[ "..detail.." ]",CX,176,P.text_secondary, "md") end
   end
 end
 
@@ -352,22 +469,40 @@ local function draw_commitment_recall(card, sc, enter_t, exit_t)
   local due    = card.due     or ""
   local conf   = card.confidence
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("YOU PROMISED "..person:upper(),CX,68,P.memory_trace)
+    text("YOU PROMISED "..person:upper(),CX,68,P.memory_trace, "sm")
   end
-  local link_w,link_h=floor(128*sc),18
-  local lx=CX-floor(link_w/2)
+  -- Lumen: the chain forges link by link — each spring-widens open on
+  -- its own stagger, so the promise visibly locks together (geometry
+  -- only; the task text keeps its plain stagger). Settled/reduce frames
+  -- are the pre-Lumen chain exactly (spring(1) = 1).
+  local link_h=18
   local link_ys={84,108,132}
+  local staggers={A.STAGGER_PRIMARY_MS, A.STAGGER_DETAIL_MS, A.STAGGER_FOOTER_MS}
   for li,ly in ipairs(link_ys) do
-    local c=(li==3) and P.memory_trace or P.border_subtle
-    polyline({{lx,ly},{lx+link_w,ly},{lx+link_w,ly+link_h},{lx,ly+link_h},{lx,ly}},c)
+    if layer_ok(enter_t, staggers[li]) then
+      local lt = clamp((enter_t * A.ENTER_DURATION_MS - staggers[li])
+                       / (A.ENTER_DURATION_MS - staggers[li] + 1), 0, 1)
+      local w = floor(128 * sc * E.spring(lt, A.SPRING_ZETA_SNAPPY,
+                                          A.SPRING_OMEGA))
+      if w >= 2 then
+        local lx=CX-floor(w/2)
+        local c=(li==3) and P.memory_trace or P.border_subtle
+        polyline({{lx,ly},{lx+w,ly},{lx+w,ly+link_h},{lx,ly+link_h},{lx,ly}},c)
+      end
+    end
   end
-  frame.display.line(CX,84+link_h, CX,108,P.border_subtle)
-  frame.display.line(CX,108+link_h,CX,132,P.border_subtle)
+  -- Solid: the live (final) link glows from within; the connectors are
+  -- gradient strokes falling toward it
+  if enter_t >= 1.0 and exit_t == 0 then
+    MAT.glass_capsule(CX-60, 133, 120, 16, MAT.PANE, 3)
+  end
+  MAT.grad_line(CX,84+link_h, CX,108, { P.border_subtle, P.accent_memory_dim })
+  MAT.grad_line(CX,108+link_h,CX,132, { P.accent_memory_dim, P.accent_memory_static })
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(task,CX,108+floor(link_h/2),P.text_primary)
+    text(task,CX,108+floor(link_h/2),P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(due,CX,132+floor(link_h/2),P.memory_trace)
+    text(due,CX,132+floor(link_h/2),P.memory_trace, "md")
   end
   local jcol=conf and (conf>=0.75 and P.confidence_high or conf>=0.40 and P.confidence_med or P.confidence_low) or P.text_ghost
   frame.display.circle(CX,168,2,jcol,true)
@@ -377,17 +512,18 @@ local function draw_proactive_memory(card, sc, enter_t, exit_t)
   local summary = card.primary or card.summary or ""
   local person  = card.person
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("LAST TIME HERE",CX,62,P.text_ghost)
+    text("LAST TIME HERE",CX,62,P.text_ghost, "sm")
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     radial_rays(CX,CY-10, floor(5*sc),floor(52*sc), 5,P.memory_trace,2)
     frame.display.circle(CX,CY-10,3,P.memory_trace,true)
+    MAT.bloom_ring(CX,CY-10,3,P.memory_trace)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(summary,CX,CY+50,P.text_secondary)
+    text(summary,CX,CY+50,P.text_secondary, "lg")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and person then
-    frame.display.text("With "..person,CX,CY+78,P.memory_trace)
+    text("With "..person,CX,CY+78,P.memory_trace, "sm")
   end
 end
 
@@ -402,29 +538,36 @@ local function draw_person_context(card, sc, enter_t, exit_t)
   local headline = card.headline or ""
   local why      = card.why      or ""
   local detail   = card.detail   or ""
+  -- Solid: the person is a centerpiece — avatar ring with bloom under an
+  -- enlarged crown over a soft pane, name in hero-class type. The chord
+  -- arpeggio and the one-why-line spec are unchanged.
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    polar_segs(CX,100, floor(38*sc),floor(56*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
-    frame.display.text(name,CX,100,P.memory_trace)
+    if exit_t == 0 then
+      MAT.glass_disc(CX, 96, floor(56*sc), MAT.PANE, 3)
+    end
+    frame.display.circle(CX, 84, floor(18*sc), P.border_subtle, false)
+    MAT.bloom_ring(CX, 84, floor(18*sc), P.accent_memory_static)
+    polar_segs(CX,84, floor(26*sc),floor(44*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
     if card.has_avatar then
-      -- chord arpeggio around the avatar sprite (drawn at top center by
-      -- the sprite handler); confidence shapes the arc sweep
-      TR.chord(enter_t, CX, 56, card.confidence or 1)
+      -- chord arpeggio around the avatar sprite; confidence shapes the sweep
+      TR.chord(enter_t, CX, 84, card.confidence or 1)
     end
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.line(floor(lerp(CX,72,sc)),116, floor(lerp(CX,184,sc)),116, P.border_subtle)
+    text(name,CX,148,P.memory_trace, T.fit_size(name, 170, {"hero","xl"}))
+    MAT.grad_line(76, 164, 180, 164, MAT.RAMP_MEMORY)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     -- spec: exactly ONE line of "why this person matters right now"
     local line = why ~= "" and why or headline
     if #line > 34 then line = line:sub(1, 33) .. "\xE2\x80\xA6" end
-    frame.display.text(line,CX,138,P.text_primary)
+    text(line,CX,180,P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     if why ~= "" and headline ~= "" then
-      frame.display.text(headline,CX,158,P.text_secondary)
+      text(headline,CX,196,P.text_secondary, "sm")
     end
-    frame.display.text(detail,CX,176,P.text_ghost)
+    text(detail,CX,210,P.text_ghost, "sm")
   end
 end
 
@@ -441,13 +584,19 @@ local function draw_privacy_veil(sc, enter_t, exit_t)
     shield_glyph(CX,CY-14,floor(52*ease_out_expo(glyph_t)*sc),P.privacy_danger,true)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text("PAUSED",CX,CY+32,P.privacy_caution)
-    frame.display.text("Nothing is captured",CX,CY+48,P.text_ghost)
+    text("PAUSED",CX,CY+32,P.privacy_caution, "lg")
+    text("Nothing is captured",CX,CY+48,P.text_ghost, "sm")
   end
 end
 
 local function draw_error(card, sc, enter_t, exit_t)
-  arc(CX,CY,floor(116*sc),0,360,P.warning_amber,48)
+  -- Lumen: the attention ring draws on as one sweep from 12 o'clock —
+  -- calm and legible (an error should never celebrate itself); settled
+  -- and reduce_motion frames are the full pre-Lumen ring
+  local ring_sweep = 360 * E.spring(clamp(enter_t, 0, 1),
+                                    A.SPRING_ZETA_SOFT, A.SPRING_OMEGA)
+  arc(CX,CY,floor(116*sc),-90,-90+ring_sweep,P.warning_amber,
+      math.max(6, floor(ring_sweep / 7.5)))
   local tri_cy=CY-8; local ts=floor(56*sc)
   polyline({
     {CX,               tri_cy-floor(ts/2)},
@@ -458,16 +607,16 @@ local function draw_error(card, sc, enter_t, exit_t)
   frame.display.circle(CX,tri_cy-6,2,P.warning_amber,true)
   frame.display.line(CX,tri_cy+2,CX,tri_cy+14,P.warning_amber)
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text((card and card.primary) or "Try again",CX,CY+52,P.text_ghost)
+    text((card and card.primary) or "Try again",CX,CY+52,P.text_ghost, "md")
   end
 end
 
 local function draw_low_confidence(sc, enter_t, exit_t)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text("Not sure",CX,CY-14,P.text_secondary)
+    text("Not sure",CX,CY-14,P.text_secondary, "lg")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text("Try rephrasing",CX,CY+16,P.text_ghost)
+    text("Try rephrasing",CX,CY+16,P.text_ghost, "md")
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     local dot_r=floor(2*sc)
@@ -516,15 +665,16 @@ local function draw_commitment_drift(card, sc, enter_t, exit_t, idle_t)
   end
   frame.display.circle(rail_x, rail_y0, 2, P.border_subtle, true)
   frame.display.circle(rail_x, rail_y1, 3, urgency_col,     true)
+  MAT.bloom_ring(rail_x, rail_y1, 3, urgency_col)
 
   -- Eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("DRIFT DETECTED", CX, 72, P.memory_trace)
+    text("DRIFT DETECTED", CX, 72, P.memory_trace, "sm")
   end
 
   -- Primary task text
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(task, CX, CY - 12, P.text_primary)
+    text(task, CX, CY - 12, P.text_primary, "lg")
   end
 
   -- Person chain: three dots then arrow then name
@@ -534,13 +684,13 @@ local function draw_commitment_drift(card, sc, enter_t, exit_t, idle_t)
       for i = 0, 2 do
         frame.display.circle(CX - 20 + i * 8, CY + 16, 2, P.border_subtle, true)
       end
-      frame.display.text("\xe2\x86\x92 " .. person, CX, CY + 32, P.memory_trace)
+      text("\xe2\x86\x92 " .. person, CX, CY + 32, P.memory_trace, "md")
     end
   end
 
   -- Footer detail
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
-    frame.display.text(detail, CX, 184, P.text_ghost)
+    text(detail, CX, 184, P.text_ghost, "sm")
   end
 
   -- Hold-phase confidence dot pulse (size oscillates)
@@ -591,6 +741,7 @@ local function draw_time_scrub_node(card, sc, enter_t, exit_t, idle_t)
         -- current node: larger dot in memory_trace
         local cur_r = floor(lerp(3, 5, ease_out_expo(clamp((enter_t - A.STAGGER_PRIMARY_MS / A.ENTER_DURATION_MS) * 3, 0, 1))))
         frame.display.circle(nx, bar_y, cur_r, P.memory_trace, true)
+        MAT.bloom_ring(nx, bar_y, cur_r, P.memory_trace)
         -- tick below current dot
         frame.display.line(nx, bar_y + cur_r + 1, nx, bar_y + cur_r + 6, P.memory_trace)
       else
@@ -604,26 +755,26 @@ local function draw_time_scrub_node(card, sc, enter_t, exit_t, idle_t)
   -- Eyebrow: timestamp / position
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     local crumb = timestamp ~= "" and timestamp or (idx .. " / " .. total)
-    frame.display.text(crumb, CX, 66, P.text_ghost)
+    text(crumb, CX, 66, P.text_ghost, "sm")
   end
 
   -- Primary summary
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(summary, CX, CY - 4, P.text_primary)
+    text(summary, CX, CY - 4, P.text_primary, "lg")
   end
 
   -- Place name
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and place ~= "" then
-    frame.display.text(place, CX, CY + 22, P.memory_trace)
+    text(place, CX, CY + 22, P.memory_trace, "md")
   end
 
   -- Prev / next neighbour ghost labels
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
     if prev_lbl ~= "" then
-      frame.display.text("\xe2\x97\x80 " .. prev_lbl, 56, 182, P.text_ghost)
+      text("\xe2\x97\x80 " .. prev_lbl, 56, 182, P.text_ghost, "sm")
     end
     if next_lbl ~= "" then
-      frame.display.text(next_lbl .. " \xe2\x96\xb6", 200, 182, P.text_ghost)
+      text(next_lbl .. " \xe2\x96\xb6", 200, 182, P.text_ghost, "sm")
     end
   end
 end
@@ -659,7 +810,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- Eyebrow
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.text("SOUNDS DIFFERENT", CX, 66, P.warning_amber)
+    text("SOUNDS DIFFERENT", CX, 66, P.warning_amber, "sm")
   end
 
   -- Separator
@@ -671,7 +822,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- Prior summary (above central divider)
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    frame.display.text(prior_text, CX, 100, P.text_ghost)
+    text(prior_text, CX, 100, P.text_ghost, "md")
   end
 
   -- Central dashed divider
@@ -688,7 +839,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
 
   -- New summary (below central divider)
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    frame.display.text(new_text, CX, 142, P.text_primary)
+    text(new_text, CX, 142, P.text_primary, "lg")
   end
 
   -- Score dot
@@ -696,6 +847,7 @@ local function draw_deviation_alert(card, sc, enter_t, exit_t, idle_t)
     local dot_r = floor(lerp(2, 5, score) * sc)
     if dot_r >= 1 then
       frame.display.circle(CX, 170, dot_r, score_col, true)
+      MAT.bloom_ring(CX, 170, dot_r, score_col)
     end
   end
 
@@ -728,15 +880,22 @@ local TESTIMONY_DIR_COLOR = {
   truthful  = P.accent_success,
   deceptive = P.accent_attention,
 }
+-- Solid: older testimony cools to the dim twin — temporal order becomes
+-- a visible bit (bright = the newest evidence), direction hue preserved
+local TESTIMONY_DIR_DIM = {
+  truthful  = P.accent_success_dim,
+  deceptive = P.accent_attention_dim,
+}
 
-local function draw_testimony_stage(i, stage, fraction)
+local function draw_testimony_stage(i, stage, fraction, bright)
   local dir = stage.direction or "insufficient"
   if dir == "insufficient" then return end
   local conf = clamp(stage.confidence or 0, 0, 1)
   local a0 = -90 + (i - 1) * A.TESTIMONY_SLOT_DEG + 2
   local span = conf * (A.TESTIMONY_SLOT_DEG - 4) * clamp(fraction, 0, 1)
   if span <= 1 then return end
-  local color = TESTIMONY_DIR_COLOR[dir]
+  local color = bright and TESTIMONY_DIR_COLOR[dir]
+                       or  TESTIMONY_DIR_DIM[dir]
   if dir == "truthful" then
     arc(CX, CY, A.TESTIMONY_R, a0, a0 + span, color, 12)
   else
@@ -751,6 +910,10 @@ local function draw_testimony_stage(i, stage, fraction)
     end
   end
 end
+
+-- one deterministic 3-shard spit as each torn stage reveals (Lumen);
+-- keyed per stage, reset on every show_card
+local _tear_fired = {}
 
 local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
   local stages  = card.stages or {}
@@ -769,26 +932,64 @@ local function draw_testimony(card, sc, enter_t, exit_t, idle_t, thread_t)
   end
 
   -- the thread accumulates in stage order: stage i draws over
-  -- [(i-1)/9, i/9] of thread_t
+  -- [(i-1)/9, i/9] of thread_t. Solid: the newest revealed stage is the
+  -- bright one; everything older has cooled to its dim twin.
+  local newest = math.min(9, math.floor(thread_t * 9) + 1)
   for i = 1, 9 do
     local stage = stages[i]
     if stage then
       local fraction = clamp(thread_t * 9 - (i - 1), 0, 1)
-      draw_testimony_stage(i, stage, fraction)
+      draw_testimony_stage(i, stage, fraction, i >= newest)
+      -- a torn stage spits three fragments the moment it reveals — the
+      -- thread visibly fails to hold there (deterministic per stage)
+      if stage.direction == "deceptive" and fraction > 0
+         and not _tear_fired[i] and not TR.reduce_motion() then
+        _tear_fired[i] = true
+        local mid = math.rad(-90 + (i - 0.5) * A.TESTIMONY_SLOT_DEG)
+        PT.burst(CX + A.TESTIMONY_R * math.cos(mid),
+                 CY + A.TESTIMONY_R * math.sin(mid),
+                 A.TEAR_SPIT_N,
+                 { t0 = _now_ms(), seed = i * 31, speed = 22,
+                   ttl_ms = A.TEAR_SPIT_MS, color = P.accent_attention })
+      end
     end
   end
 
-  -- verdict first, evidence second: word appears with the ripple landing
+  -- Lumen: once the thread settles, light runs its path once — a glint
+  -- travels the full nine slots and is gone (enter-adjacent, one-shot)
+  if thread_t >= 1 and idle_t and idle_t > 0 and idle_t < A.SPEC_SWEEP_MS
+     and not TR.reduce_motion() then
+    local st = idle_t / A.SPEC_SWEEP_MS
+    local g0 = -90 + (360 - 12) * ease_in_out_sine(st)
+    arc(CX, CY, A.TESTIMONY_R + 1, g0, g0 + 12, P.confidence_high, 3)
+  end
+
+  -- verdict first, evidence second: word appears with the ripple landing.
+  -- Solid: the verdict sits in a glass capsule in hero-class type — the
+  -- reading of the card, weighted like one.
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    local half_w = floor(#verdict * T.avg_w_with_tracking("md", 0) / 2) + 5
-    frame.display.rect(CX - half_w, CY - 15, half_w * 2, 19, P.background, true)
-    frame.display.text(verdict, CX, CY - 6, P.text_primary)
+    local vsize  = T.fit_size(verdict, 130, { "hero", "xl", "lg" })
+    local half_w = floor(#verdict * T.avg_w_with_tracking(vsize, 0) / 2) + 10
+    half_w = math.max(half_w, 26)
+    frame.display.rect(CX - half_w, CY - 16, half_w * 2, 33, P.background, true)
+    if exit_t == 0 then
+      MAT.glass_capsule(CX - half_w, CY - 16, half_w * 2, 32, MAT.PANE, 3)
+    end
+    -- capsule outline: two rails + rounded ends
+    local cr = 16
+    frame.display.line(CX - half_w + cr, CY - 16,
+                       CX + half_w - cr, CY - 16, P.border_subtle)
+    frame.display.line(CX - half_w + cr, CY + 16,
+                       CX + half_w - cr, CY + 16, P.border_subtle)
+    arc(CX - half_w + cr, CY, cr,  90, 270, P.border_subtle, 6)
+    arc(CX + half_w - cr, CY, cr, -90,  90, P.border_subtle, 6)
+    text(verdict, CX, CY, P.text_primary, vsize)
   end
   if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and conf then
     local jcol = (conf >= 0.75 and P.confidence_high)
               or (conf >= 0.40 and P.confidence_med)
               or  P.confidence_low
-    frame.display.circle(CX, CY + 16, 3, jcol, true)
+    frame.display.circle(CX, CY + 26, 3, jcol, true)
   end
 end
 
@@ -802,12 +1003,12 @@ end
 -- ---------------------------------------------------------------------------
 local function draw_layout_card(card, sc, enter_t, exit_t)
   local layout = card.layout or {}
-  local function row(name, text, fallback_y, fallback_color, stagger_ms)
-    if not text or text == "" then return end
+  local function row(name, str, fallback_y, fallback_color, stagger_ms, size)
+    if not str or str == "" then return end
     if not layer_ok(enter_t, stagger_ms) then return end
     local spec = layout[name] or {}
-    frame.display.text(text, floor(spec.x or CX), floor(spec.y or fallback_y),
-                       spec.color or fallback_color)
+    text(str, floor(spec.x or CX), floor(spec.y or fallback_y),
+         spec.color or fallback_color, spec.size or size)
   end
   local sep = layout.separator
   if sep and layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
@@ -821,16 +1022,186 @@ local function draw_layout_card(card, sc, enter_t, exit_t)
                  floor((glyph.r or 10) * 2 * sc), glyph.color or P.privacy_caution,
                  layout.shield ~= nil)
   end
-  row("eyebrow", card.eyebrow, 64, P.text_secondary, A.STAGGER_EYEBROW_MS)
-  row("primary", card.primary, 112, P.text_primary,  A.STAGGER_PRIMARY_MS)
-  row("detail",  card.detail,  144, P.text_secondary, A.STAGGER_DETAIL_MS)
-  row("footer",  card.footer,  168, P.text_ghost,     A.STAGGER_FOOTER_MS)
+  row("eyebrow", card.eyebrow, 64, P.text_secondary, A.STAGGER_EYEBROW_MS, "sm")
+  row("primary", card.primary, 112, P.text_primary,  A.STAGGER_PRIMARY_MS, "lg")
+  row("detail",  card.detail,  144, P.text_secondary, A.STAGGER_DETAIL_MS, "md")
+  row("footer",  card.footer,  168, P.text_ghost,     A.STAGGER_FOOTER_MS, "sm")
   if card.confidence and layout.conf_dot then
     local d = layout.conf_dot
     local jcol = (card.confidence >= 0.75 and P.confidence_high)
               or (card.confidence >= 0.40 and P.confidence_med)
               or  P.confidence_low
     frame.display.circle(floor(d.x or CX), floor(d.y or 185), d.r or 3, jcol, true)
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- O3 conversation cards (Meridian Solid + Lumen). Same material language as the
+-- hero cards: a surface-luma glass pane (panes never draw during exit), gradient
+-- separators, a bloomed status cue that spring-settles in, hero-class type via
+-- the fit ladder (wrapped for spoken sentences), secondary text cooled to the
+-- verdict/tone dim twin. reduce_motion: springs collapse to their still pose and
+-- the idle breathe is skipped; the materials stay (static richness, not motion).
+-- ---------------------------------------------------------------------------
+
+-- Verdict/tone mapping lives HERE, not in the cards.lua constructors:
+-- the real BLE pipeline (main.lua -> queue -> renderer) delivers host
+-- payloads that never pass through a constructor, so a draw fn may only
+-- rely on semantic fields (verdict / importance / kind). Found by the
+-- standards review of #86 — every BLE-delivered FactCheck rendered its
+-- verdict cue ghost-gray.
+local FACT_COLOR = {
+  supported          = P.accent_success,
+  disputed           = P.warning_amber,
+  self_contradiction = P.accent_attention,
+  unverified         = P.text_ghost_static,
+}
+local FACT_DIM = {
+  supported          = P.accent_success_dim,
+  disputed           = P.warning_amber_dim,
+  self_contradiction = P.accent_attention_dim,
+  unverified         = P.border_subtle,
+}
+
+--- The card's semantic accent, derived from its own fields — used for
+--- the focus travel/landing color so BLE-delivered cards match their
+--- verdict/tone even without a constructor-set conf_color.
+local function card_tone(card)
+  if not card then return nil end
+  if card.type == "FactCheckCard" then
+    return FACT_COLOR[card.verdict]
+  elseif card.type == "HarkCard" then
+    return card.importance == "urgent" and P.warning_amber
+                                        or P.accent_memory
+  elseif card.type == "OracleReplyCard" then
+    return card.kind == "action" and P.accent_success or P.accent_memory
+  end
+  return nil
+end
+
+local function draw_oracle_reply(card, sc, enter_t, exit_t)
+  local action = card.kind == "action"
+  local accent = action and P.accent_success or P.accent_memory
+  local ramp   = action and MAT.RAMP_SUCCESS or MAT.RAMP_MEMORY
+  local body   = card.primary or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 132, floor(78*sc), MAT.PANE, 4)
+  end
+  frame.display.circle(CX, 132, floor(82*sc), P.border_subtle, false)
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    frame.display.circle(CX-40, 64, 3, accent, true)
+    MAT.bloom_ring(CX-40, 64, 3, accent)
+    text("ORACLE", CX+6, 64, accent, "sm")
+    MAT.grad_line(60, 82, 196, 82, ramp)
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #body <= 20 then
+      text(body, CX, 132, P.text_primary, T.fit_size(body, 200))
+    else
+      text_block(body, CX, 128, P.text_primary, "md", 182, 3)
+    end
+  end
+end
+
+local function draw_answer_ahead(card, sc, enter_t, exit_t)
+  local answer   = card.primary or ""
+  local question = card.detail  or ""
+  local footer   = card.footer  or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(78*sc), MAT.PANE, 4)
+  end
+  frame.display.circle(CX, 128, floor(82*sc), P.border_subtle, false)
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    -- dot sits clear of the 25-char eyebrow (its bloom was grazing the
+    -- first glyph — found in the golden eyeball pass)
+    frame.display.circle(CX-88, 70, 3, P.accent_memory, true)
+    MAT.bloom_ring(CX-88, 70, 3, P.accent_memory)
+    text(card.eyebrow or "ON THE TIP OF YOUR TONGUE", CX+4, 70, P.accent_memory, "sm")
+    MAT.grad_line(52, 88, 204, 88, MAT.RAMP_MEMORY)
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #answer <= 22 then
+      text(answer, CX, 126, P.text_primary, T.fit_size(answer, 196))
+    else
+      text_block(answer, CX, 122, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and question ~= "" then
+    text(T.truncate(question, "sm", 200), CX, 166, P.accent_memory_dim, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and footer ~= "" then
+    text(footer, CX, 198, P.text_ghost, "sm")
+  end
+end
+
+local function draw_fact_check(card, sc, enter_t, exit_t, idle_t)
+  local color = FACT_COLOR[card.verdict] or card.conf_color
+                or P.text_ghost_static
+  local dim   = FACT_DIM[card.verdict] or P.border_subtle
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 134, floor(74*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    -- the status cue springs in, then blooms; disputed/contradiction pulse once
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    frame.display.circle(CX, 54, math.max(2, floor(9*rp)), color, false)
+    MAT.bloom_ring(CX, 54, 9, color)
+    if idle_t and idle_t < A.FACT_PULSE_MS and not TR.reduce_motion()
+       and (card.verdict == "self_contradiction" or card.verdict == "disputed") then
+      local ph = idle_t / A.FACT_PULSE_MS
+      frame.display.circle(CX, 54, floor(9 + 11*math.sin(ph*math.pi)), dim, false)
+    end
+    text(card.eyebrow or "", CX, 82, color, "sm")
+    MAT.grad_line(44, 96, 212, 96, { color, dim, P.border_subtle })
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local claim = card.primary or ""
+    if #claim <= 22 then
+      text(claim, CX, 130, P.text_primary, T.fit_size(claim, 200))
+    else
+      text_block(claim, CX, 126, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 210), CX, 170, dim, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and (card.footer or "") ~= "" then
+    text(card.footer, CX, 200, P.text_ghost, "sm")
+  end
+end
+
+local function draw_hark(card, sc, enter_t, exit_t, idle_t)
+  local urgent = card.importance == "urgent"
+  local color  = urgent and P.warning_amber or P.accent_memory
+  local dim    = urgent and P.warning_amber_dim or P.accent_memory_dim
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 134, floor(74*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    frame.display.circle(CX, 58, math.max(3, floor(12*rp)), color, false)
+    frame.display.circle(CX, 58, 3, color, true)
+    MAT.bloom_ring(CX, 58, 12, color)
+    -- "Listen!": the ring breathes on hold to catch the eye (urgent breathes harder)
+    if idle_t and not TR.reduce_motion() then
+      local period = urgent and A.HARK_BREATHE_URGENT_MS
+                             or  A.HARK_BREATHE_MS
+      local ph = (idle_t % period) / period
+      frame.display.circle(CX, 58, floor(12 + 8*math.sin(ph*math.pi)), dim, false)
+    end
+    text("LISTEN", CX, 84, color, "sm")
+    MAT.grad_line(48, 98, 208, 98, { color, dim, P.border_subtle })
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local clue = card.primary or ""
+    if #clue <= 22 then
+      text(clue, CX, 132, P.text_primary, T.fit_size(clue, 200))
+    else
+      text_block(clue, CX, 128, P.text_primary, "md", 188, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 200), CX, 172, dim, "sm")
   end
 end
 
@@ -844,7 +1215,7 @@ end
 -- ---------------------------------------------------------------------------
 local DRAW = {
   ReadyCard             = function(c,sc,et,xt,it) draw_ready(sc,et,xt)                    end,
-  SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt)           end,
+  SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt,it)        end,
   QueryListeningCard    = function(c,sc,et,xt,it) draw_query_listening(sc,et,it)           end,
   LoadingCard           = function(c,sc,et,xt,it) draw_loading(sc,et,it)                  end,
   ObjectRecallCard      = function(c,sc,et,xt,it) draw_object_recall(c,sc,et,xt)          end,
@@ -860,6 +1231,11 @@ local DRAW = {
   DeviationAlertCard    = function(c,sc,et,xt,it) draw_deviation_alert(c,sc,et,xt,it)     end,
   -- Meridian lens presentation
   TruthLensCard         = function(c,sc,et,xt,it,tt) draw_testimony(c,sc,et,xt,it,tt)     end,
+  -- O3 conversation cards (Meridian Solid + Lumen)
+  FactCheckCard         = function(c,sc,et,xt,it) draw_fact_check(c,sc,et,xt,it)          end,
+  AnswerAheadCard       = function(c,sc,et,xt,it) draw_answer_ahead(c,sc,et,xt)           end,
+  OracleReplyCard       = function(c,sc,et,xt,it) draw_oracle_reply(c,sc,et,xt)           end,
+  HarkCard              = function(c,sc,et,xt,it) draw_hark(c,sc,et,xt,it)                end,
   -- layout-driven cards (v1 queued these and drew nothing — see
   -- draw_layout_card)
   ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
@@ -877,11 +1253,18 @@ local DRAW = {
 --        card-specific idles stay in the DRAW fns
 -- release: recede (shared) — privacy-class cards hard-cut instead
 -- ---------------------------------------------------------------------------
+-- flair (Lumen): a one-shot hero accent fired when the card reaches HOLD
+-- — a particle burst, or a leased light program over the card's banded
+-- geometry. Flairs are additive: they never carry information the
+-- geometry underneath doesn't, and reduce_motion skips them entirely.
 local SIGNATURES = {
-  ObjectRecallCard     = { enter = "focus", hold = "ring" },
+  ObjectRecallCard     = { enter = "focus", hold = "ring",
+                           flair = "conduct" },
   CommitmentRecallCard = { enter = "focus", hold = "ring" },
   ProactiveMemoryCard  = { enter = "focus", hold = "ring" },
   PersonContextCard    = { enter = "focus", hold = "ring" },
+  SavedMemoryCard      = { enter = "focus", flair = "burst" },
+  LoadingCard          = { enter = "focus", flair = "chase" },
   TruthLensCard        = { enter = "ripple" },   -- thread is its own gauge
   PrivacyVeilCard    = { enter = "slam" },
   ConsentRequiredCard  = { enter = "slam" },
@@ -899,6 +1282,27 @@ local DEFAULT_SIGNATURE = { enter = "focus" }
 
 local function signature_for(card)
   return (card and SIGNATURES[card.type]) or DEFAULT_SIGNATURE
+end
+
+--- Fire a card's flair as it reaches HOLD. "card_light" is the single id
+--- for any card-owned light program: show_card/dismiss stop it, so a
+--- crossfade can never leave two programs fighting over the card slots.
+local function fire_flair(card, now)
+  local sig = signature_for(card)
+  if not sig.flair or TR.reduce_motion() then return end
+  if sig.flair == "burst" then
+    PT.burst(CX, CY, A.BURST_N,
+             { t0 = now, seed = floor(F.origin_or_now(card) * 7),
+               color = P.accent_success })
+  elseif sig.flair == "chase" then
+    PA.run("card_light",
+           { kind = "wave", names = { "card_a", "card_b", "card_c" },
+             period_ms = A.SPINNER_RPM_MS, y_amp = A.CHASE_Y_AMP })
+  elseif sig.flair == "conduct" then
+    PA.run("card_light",
+           { kind = "wave", names = { "card_a", "card_b" },
+             period_ms = A.CONDUCT_PERIOD_MS, y_amp = A.CONDUCT_Y_AMP })
+  end
 end
 
 local function enter_ms_for(card)
@@ -939,7 +1343,7 @@ local function composite(card, phase, elapsed_ms, idle_t)
         -- travel: the head flies in from the card's horizon angle;
         -- content is not yet on stage
         F.travel(elapsed_ms / A.SIG_FOCUS_TRAVEL_MS, origin_deg,
-                 card.conf_color or P.accent_memory)
+                 card.conf_color or card_tone(card) or P.accent_memory)
         return
       end
       -- landing: ring collapse gates the staggered content layers
@@ -947,7 +1351,8 @@ local function composite(card, phase, elapsed_ms, idle_t)
                            / A.SIG_FOCUS_LAND_MS, 0, 1)
       enter_t = land_t
       fn(card, sc, enter_t, exit_t, idle_t or 0)
-      F.landing_ring(land_t, card.conf_color or P.accent_memory)
+      F.landing_ring(land_t,
+                     card.conf_color or card_tone(card) or P.accent_memory)
       return
     end
 
@@ -1001,8 +1406,10 @@ local function composite(card, phase, elapsed_ms, idle_t)
     sc      = 1.0
     if sig.hold == "ring" and card.confidence then
       -- static focus ring: sweep = confidence; identical under
-      -- reduce_motion (the v2 standard)
-      F.hold_ring(card.confidence, card.conf_color or P.accent_memory)
+      -- reduce_motion (the v2 standard). idle_t lets the Lumen glint
+      -- run once along the arc as the hold settles.
+      F.hold_ring(card.confidence, card.conf_color or P.accent_memory,
+                  idle_t)
       if TR.reduce_motion() then
         F.origin_tick(origin_deg, card.conf_color or P.accent_memory)
       end
@@ -1047,6 +1454,21 @@ function renderer.show_card(card)
     TR.set_reduce_motion(settings.get("reduce_motion"))
   end
   local now = _now_ms()
+  -- A focused card owns its light: the idle programs yield their slots
+  -- (release restores base colors, so nothing arrives mid-shimmer), and
+  -- any previous card's light program / voice warmth yields with them
+  PA.stop("horizon_aurora")
+  PA.stop("premonition_shimmer")
+  PA.stop("card_light")
+  -- the shared slot behind card_a/voice takes the base the incoming
+  -- card draws in: voice orange while listening, band teal otherwise
+  if card.type == "QueryListeningCard" then
+    P.restore("voice")
+  else
+    P.restore("card_a")
+  end
+  _tear_fired = {}
+  _amp = 0
   -- If something is showing, capture it as the outgoing card
   if _card and _phase ~= "exit" then
     -- never two simultaneous recessions: a third card mid-crossfade
@@ -1067,8 +1489,19 @@ end
 function renderer.dismiss()
   if not _card then return end
   if _phase == "exit" then return end  -- already receding
+  -- light settles before the recession: no flow on a departing card
+  PA.stop("card_light")
+  P.restore("card_a")
   _phase       = "exit"
   _phase_start = _now_ms()
+end
+
+--- Live voice level from the host ({t="amp"}, v = 0..99). nil-safe;
+--- the listening waveform springs toward it (see draw_query_listening).
+function renderer.on_amp(msg)
+  local v = tonumber(msg and (msg.v or msg.amp))
+  if not v then return end
+  _amp_target = clamp(v / 99, 0, 1)
 end
 
 --- Release a finished recession: the content goes home — its mark pulses
@@ -1084,15 +1517,43 @@ end
 --- With no focused card this draws the Horizon — the display's resting
 --- state is the wearer's day, never a black screen
 --- (docs/cinema_v2/horizon.md; CINEMA_V2_DELTAS.md §6).
+-- Idle light programs (Lumen): the aurora flows along the day-ring and
+-- the premonition layer breathes — only while the Horizon IS the display.
+-- show_card() stops both, so a focused card always owns its light.
+local function ensure_idle_light()
+  if not PA.active("horizon_aurora") then
+    PA.run("horizon_aurora",
+           { kind = "wave", names = { "aurora_a", "aurora_b", "aurora_c" } })
+  end
+  if not PA.active("premonition_shimmer") then
+    PA.run("premonition_shimmer", { kind = "shimmer", name = "premo" })
+  end
+end
+
 function renderer.tick()
   if not HAS_FRAME then return end
 
   local now = _now_ms()
 
-  if not _card and not _prev_card then
+  -- Lumen engines advance once per frame, before any drawing: parallax
+  -- samples the IMU, the palette animator runs its light programs.
+  -- While a privacy-class card holds, the world grips: offsets freeze
+  -- to zero instantly (nothing about the veil may feel ambient).
+  local idle = (not _card and not _prev_card)
+  if idle then ensure_idle_light() end   -- register before PA.tick: light
+                                         -- flows from the first idle frame
+  PX.freeze(_card ~= nil and PRIVACY_CLASS[_card.type] or false)
+  PX.tick(now)
+  PA.tick(now, TR.reduce_motion())
+  local rim_ox, rim_oy = PX.offset("rim")
+
+  if idle then
     -- idle: the Horizon is the display
     frame.display.clear(0x000000)
-    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion() })
+    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion(),
+              aurora = true, ox = floor(rim_ox), oy = floor(rim_oy) })
+    local air_ox, air_oy = PX.offset("air")
+    PT.tick(now, air_ox, air_oy)
     frame.display.show()
     return
   end
@@ -1107,6 +1568,7 @@ function renderer.tick()
     elapsed      = 0
     idle_t       = 0
     _idle_t      = 0
+    fire_flair(_card, now)   -- Lumen: the card's hero accent, once
   elseif _phase == "hold" then
     _idle_t = _idle_t + 50  -- ~50 ms per tick at frame.sleep(0.05)
     idle_t  = _idle_t
@@ -1116,7 +1578,8 @@ function renderer.tick()
     _card  = nil
     _phase = nil
     frame.display.clear(0x000000)
-    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion() })
+    HZ.draw({ now_ms = now, reduce_motion = TR.reduce_motion(),
+              ox = floor(rim_ox), oy = floor(rim_oy) })
     frame.display.show()
     return
   end
@@ -1134,7 +1597,8 @@ function renderer.tick()
 
   -- Composite frame: the day stays under the card, one tier down
   frame.display.clear(0x000000)
-  HZ.draw({ now_ms = now, focus = true, reduce_motion = TR.reduce_motion() })
+  HZ.draw({ now_ms = now, focus = true, reduce_motion = TR.reduce_motion(),
+            ox = floor(rim_ox), oy = floor(rim_oy) })
 
   -- Outgoing card recedes underneath
   if _prev_card then
@@ -1145,6 +1609,10 @@ function renderer.tick()
   if elapsed >= 0 then
     composite(_card, _phase, elapsed, idle_t)
   end
+
+  -- hero particles ride above the card, below nothing (AIR tier)
+  local air_ox, air_oy = PX.offset("air")
+  PT.tick(now, air_ox, air_oy)
 
   frame.display.show()
 end
@@ -1178,5 +1646,10 @@ end
 function renderer.push(layer, fn)  if fn then fn() end end
 function renderer.flush()          end
 function renderer.clear()          end
+
+--- The renderer's monotonic clock (bound at boot, os.clock fallback).
+--- Exposed so main.lua can stamp memory-mode particle spawns (the dream
+--- branch runs on the tick clock; each consumer stays self-consistent).
+function renderer.now_ms()         return _now_ms() end
 
 return renderer

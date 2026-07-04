@@ -67,6 +67,15 @@ DETERMINISTIC = [
     "focus/hold_conf090.png",
     "testimony/elevated_mixed.png",
     "testimony/clean_truthful.png",
+    # Meridian Solid recomposed settled holds
+    "solid/saved_memory_hold.png",
+    "solid/person_context_hold.png",
+    "solid/commitment_recall_hold.png",
+    # O3 conversation cards (standards pass on #86)
+    "solid/fact_check_hold.png",
+    "solid/answer_ahead_hold.png",
+    "solid/oracle_reply_hold.png",
+    "solid/hark_hold.png",
 ]
 
 

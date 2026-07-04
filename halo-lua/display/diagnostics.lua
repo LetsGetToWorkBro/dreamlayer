@@ -89,6 +89,10 @@ local CARD_ABBREV = {
   CommitmentDriftCard   = "DRFT",
   TimeScrubNodeCard     = "SCRB",
   DeviationAlertCard    = "DEVN",
+  FactCheckCard         = "FACT",
+  AnswerAheadCard       = "ANSW",
+  OracleReplyCard       = "ORCL",
+  HarkCard              = "HARK",
 }
 
 -- ---------------------------------------------------------------------------
@@ -167,6 +171,8 @@ end
 
 local function _text(str,x,y,color)
   if not HAS_FRAME or str==nil or str=="" then return end
+  -- Solid: diagnostics always render small and never inherit card fonts
+  require("display.primitives").set_font_size("sm")
   frame.display.text(tostring(str),x,y,color)
 end
 

@@ -98,6 +98,100 @@ def draw_polyline(
         draw.line([points[i], points[i + 1]], fill=(r, g, b, alpha), width=stroke)
 
 
+# ---------------------------------------------------------------------------
+# Meridian Solid material twins (mirror halo-lua/display/materials.lua).
+# Same scanline rows, NO alpha — if 4bpp can't do it, the mirror can't
+# either (docs/cinema_v2/solid.md).
+# ---------------------------------------------------------------------------
+
+RAMP_MEMORY = (T.MEMORY_TRACE, T.ACCENT_MEMORY_STATIC,
+               T.ACCENT_MEMORY_DIM, T.BORDER_SUBTLE)
+RAMP_SUCCESS = (T.ACCENT_SUCCESS, T.ACCENT_SUCCESS_DIM, T.BORDER_SUBTLE)
+PANE = T.SURFACE
+
+_BLOOM_DIM = {
+    T.MEMORY_TRACE: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_MEMORY_STATIC: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_MEMORY: T.ACCENT_MEMORY_DIM,
+    T.ACCENT_SUCCESS: T.ACCENT_SUCCESS_DIM,
+    T.ACCENT_ATTENTION: T.ACCENT_ATTENTION_DIM,
+    T.WARNING_AMBER: T.WARNING_AMBER_DIM,
+    T.CONFIDENCE_HIGH: T.ACCENT_MEMORY_DIM,
+    T.CONFIDENCE_MED: T.ACCENT_MEMORY_DIM,
+    T.CONFIDENCE_LOW: T.WARNING_AMBER_DIM,
+    T.TEXT_GHOST_STATIC: T.BORDER_SUBTLE,
+}
+
+
+def glass_disc(draw, cx, cy, r, color=PANE, row_gap=3):
+    row_gap = max(2, row_gap)
+    rgb = _hex_to_rgb(color)
+    for y in range(cy - r + row_gap, cy + r, row_gap):
+        dy = y - cy
+        half = math.sqrt(max(0, r * r - dy * dy)) - 2
+        if half >= 1:
+            draw.line([(cx - half, y), (cx + half, y)], fill=rgb, width=1)
+
+
+def glass_capsule(draw, x, y, w, h, color=PANE, row_gap=3):
+    row_gap = max(2, row_gap)
+    rgb = _hex_to_rgb(color)
+    hr = h / 2
+    for ry in range(y + row_gap, y + h, row_gap):
+        dy = ry - y
+        cap = min(dy, h - dy)
+        inset = 0.0
+        if cap < hr:
+            inset = hr - math.sqrt(max(0.0, hr * hr - (hr - cap) ** 2))
+        x0, x1 = x + inset + 1, x + w - inset - 1
+        if x1 > x0:
+            draw.line([(x0, ry), (x1, ry)], fill=rgb, width=1)
+
+
+def grad_line(draw, x0, y0, x1, y1, ramp=RAMP_MEMORY, stroke=1):
+    n = len(ramp)
+    px, py = x0, y0
+    for i, color in enumerate(ramp, start=1):
+        t = i / n
+        nx, ny = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+        draw.line([(px, py), (nx, ny)], fill=_hex_to_rgb(color), width=stroke)
+        px, py = nx, ny
+
+
+def grad_arc(draw, cx, cy, r, a0, a1, ramp=RAMP_MEMORY, steps=32, stroke=1):
+    sweep = a1 - a0
+    def pt(deg):
+        rd = math.radians(deg)
+        return cx + r * math.cos(rd), cy + r * math.sin(rd)
+    x0, y0 = pt(a0)
+    for i in range(1, steps + 1):
+        x1, y1 = pt(a0 + sweep * i / steps)
+        ci = min(len(ramp) - 1, math.ceil(i / steps * len(ramp)) - 1)
+        draw.line([(x0, y0), (x1, y1)], fill=_hex_to_rgb(ramp[ci]),
+                  width=stroke)
+        x0, y0 = x1, y1
+
+
+def grad_bezier(draw, p0, p1, p2, ramp=RAMP_MEMORY, steps=24, stroke=1):
+    px, py = p0
+    for i in range(1, steps + 1):
+        t = i / steps
+        mt = 1 - t
+        x = mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0]
+        y = mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]
+        ci = min(len(ramp) - 1, math.ceil(i / steps * len(ramp)) - 1)
+        draw.line([(px, py), (x, y)], fill=_hex_to_rgb(ramp[ci]), width=stroke)
+        px, py = x, y
+
+
+def bloom_ring(draw, cx, cy, r, color):
+    dim = _BLOOM_DIM.get(color, T.BORDER_SUBTLE)
+    draw.ellipse([cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2],
+                 outline=_hex_to_rgb(dim), width=1)
+    draw.ellipse([cx - r - 5, cy - r - 5, cx + r + 5, cy + r + 5],
+                 outline=_hex_to_rgb(T.BORDER_SUBTLE), width=1)
+
+
 def draw_elliptical_arc(
     draw: ImageDraw.ImageDraw,
     cx: float, cy: float,
@@ -375,10 +469,12 @@ class CardRenderer:
             "PersonDossierCard":    self._layout_card,
             "MorningBriefCard":     self._layout_card,
             "ListeningCard":        self._layout_card,
-            "HarkCard":             self._layout_card,
-            "OracleReplyCard":      self._layout_card,
-            "FactCheckCard":        self._layout_card,
-            "AnswerAheadCard":      self._layout_card,
+            # Meridian Solid: the O3 conversation cards get the full material
+            # treatment (glass pane, gradient strokes, bloom, hero type).
+            "HarkCard":             self._hark,
+            "OracleReplyCard":      self._oracle_reply,
+            "FactCheckCard":        self._fact_check,
+            "AnswerAheadCard":      self._answer_ahead,
         }
         fn = dispatch.get(card.get("type", ""))
         if fn:
@@ -466,7 +562,7 @@ class CardRenderer:
         hex_pts.append(hex_pts[0])
         r_, g_, b_ = _hex_to_rgb(T.MEMORY_TRACE)
         draw.polygon(hex_pts[:6], fill=(r_, g_, b_, 255))
-        draw_elliptical_arc(draw, CX, CY, 24, 24, 180, 180, 1, T.MEMORY_TRACE, alpha=68)
+        grad_arc(draw, CX, CY, 24, 180, 360, RAMP_MEMORY, 32)
         draw_elliptical_arc(draw, CX, CY, 36, 36, 0, 270, 1, T.MEMORY_TRACE, alpha=34)
         draw_elliptical_arc(draw, CX, CY, 48, 48, 270, 90, 1, T.MEMORY_TRACE, alpha=17)
         for angle_deg in [0, 90, 180, 270]:
@@ -475,12 +571,21 @@ class CardRenderer:
             self._dot(draw, ax, ay, 2, T.MEMORY_TRACE, alpha=180)
 
     def _saved_memory(self, draw, card):
-        self._arc(draw, CX, CY, 48, 0, 360, 1, T.ACCENT_SUCCESS, alpha=51)
-        self._arc(draw, CX, CY, 48, -90, 0, 2, T.ACCENT_SUCCESS, alpha=255)
-        draw_check_glyph(draw, (CX, CY - 8), 56, 3, T.ACCENT_SUCCESS, alpha=255, progressive=0.6)
-        self._text_rgba(draw, CX, CY - 48 + 6, "SAVED", "xs", T.ACCENT_SUCCESS, alpha=255)
-        self._multiline_text(draw, CX, CY + 22, card.get("primary", ""),
-                             "lg", T.TEXT_PRIMARY, max_width=188)
+        # Meridian Solid v2: giant double-struck check jewel inside
+        # concentric gradient rings over a soft pane (mirrors the Lua).
+        glass_disc(draw, CX, 124, 66, PANE, 4)
+        self._circle(draw, CX, 124, 70, 1, T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX, 124, 62, 0, 360, 1, T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX, 124, 54, 0, 360, 1, T.ACCENT_SUCCESS_DIM, alpha=255)
+        self._arc(draw, CX, 124, 46, 0, 360, 1, T.ACCENT_SUCCESS, alpha=255)
+        draw_check_glyph(draw, (CX, 120), 72, 2, T.ACCENT_SUCCESS,
+                         alpha=255, progressive=1.0)
+        draw_check_glyph(draw, (CX, 121), 72, 2, T.ACCENT_SUCCESS,
+                         alpha=255, progressive=1.0)
+        self._text_rgba(draw, CX, 42, "SAVED", "hero", T.ACCENT_SUCCESS,
+                        alpha=255)
+        self._text_rgba(draw, CX, 206, card.get("primary", ""), "md",
+                        T.TEXT_PRIMARY, alpha=255)
 
     def _query_listening(self, draw, card):
         mic_cx, mic_cy = 84, CY
@@ -508,33 +613,31 @@ class CardRenderer:
             )
 
     def _loading(self, draw, card):
-        for ghost_r in [16, 28, 40, 52]:
+        # Lumen mirror: the rotating arc is gone on device — 12 static
+        # segments around r=40 that the palette chase lights in turn
+        # (halo-lua draw_loading). The mirror shows the chase mid-cycle.
+        for ghost_r in [16, 28, 52]:
             self._circle(draw, CX, CY, ghost_r, 1, T.GHOST_WHITE, alpha=8)
-        self._arc(draw, CX, CY, 40, -70, 50, 3, T.MEMORY_TRACE, alpha=255)
-        self._arc(draw, CX, CY, 40, -100, -70, 2, T.MEMORY_TRACE, alpha=140)
-        self._arc(draw, CX, CY, 40, -130, -100, 1, T.MEMORY_TRACE, alpha=70)
-        self._arc(draw, CX, CY, 40, -160, -130, 1, T.MEMORY_TRACE, alpha=30)
+        n, gap = 12, 6
+        span = 360 / n
+        for i in range(n):
+            a0 = -90 + i * span + gap / 2
+            # brightness chases: the lead segment glows, trail dims behind
+            alpha = 255 - ((i * 3) % n) * 18
+            self._arc(draw, CX, CY, 40, a0, a0 + span - gap, 2,
+                      T.MEMORY_TRACE, alpha=max(40, alpha))
         self._dot(draw, CX, CY, 3, T.MEMORY_TRACE, alpha=255)
         self._dot(draw, CX, CY, 6, T.MEMORY_TRACE, alpha=40)
 
     def _object_recall(self, draw, card):
-        """
-        AAA Hero card — unmistakably different from centered-text layout.
+        """Meridian Solid v3 — a spatial scene, not a text list.
 
-        Layout:
-          - Vertical memory RAIL on the left edge (x=44, y=72..188), 2px teal
-          - EYEBROW: object name, small caps, anchored to rail (x=56, y=80, left-align)
-          - BEZIER TRACE: wide arc from rail anchor (56,80) → hero place baseline (152,152)
-            via upper-right control point (196,72) — visually sweeps right then curves down
-          - CONFIDENCE JEWEL: 6px filled diamond at curve apex (~t=0.45)
-          - ORBIT ARCS: 3 partial arcs (radius 12) around the jewel, 120° each
-          - HERO PLACE: 22px, right-weighted anchor at (155,152) — clearly NOT centered
-          - DETAIL: bracketed, 2px below hero, ghost
-          - FOOTER: ghost, near bottom
-        """
+        The place is a translucent field; the object is a jewel in it;
+        you are a dot at the bottom; a gradient trace (dim at you,
+        bright at the jewel) connects the two. Mirrors the device Lua
+        draw_object_recall exactly (same geometry, no alpha tricks on
+        the load-bearing strokes)."""
         def _name(v) -> str:
-            # simulator scenarios send {"name": …, "near"/"signature": …}
-            # structures; halo_lab samples send flat strings — accept both
             if isinstance(v, dict):
                 return str(v.get("name") or v.get("near") or "")
             return str(v or "")
@@ -546,63 +649,43 @@ class CardRenderer:
         conf     = card.get("confidence")
         jewel_color = T.conf_color(conf)
 
-        # --- LEFT MEMORY RAIL ---
-        rail_x = 44
-        rail_y1, rail_y2 = 72, 188
-        self._vbar(draw, rail_x, rail_y1, rail_y2, 2, T.MEMORY_TRACE, alpha=220)
-        # Rail top dot
-        self._dot(draw, rail_x + 1, rail_y1, 3, T.MEMORY_TRACE, alpha=255)
+        # the place, as a translucent field
+        glass_disc(draw, CX, 112, 62, PANE, 3)
 
-        # --- EYEBROW: object label, left-anchored to rail ---
-        self._text_rgba(draw, rail_x + 10, 80, obj_name, "sm", T.MEMORY_TRACE,
-                        alpha=200, anchor="lm")
+        # gradient trace: you -> object, cooling away from the jewel
+        grad_bezier(draw, (128, 192), (168, 140), (132, 102),
+                    ramp=(T.BORDER_SUBTLE, T.ACCENT_MEMORY_DIM,
+                          T.ACCENT_MEMORY_STATIC, T.MEMORY_TRACE),
+                    steps=24)
 
-        # --- MEMORY TRACE BEZIER ---
-        # Starts at rail anchor, sweeps up-right then curves down to place text
-        p0 = (float(rail_x + 2), 90.0)   # rail anchor (just right of rail)
-        p1 = (200.0, 62.0)                # control — pulls trace up-right dramatically
-        p2 = (155.0, 150.0)               # endpoint — hero place text baseline
-        draw_quadratic_bezier(draw, p0, p1, p2,
-                              stroke=2, color=T.MEMORY_TRACE, alpha=255, dash_offset=2.0)
-
-        # --- CONFIDENCE JEWEL at curve apex (t≈0.45) ---
-        t_j = 0.45
-        apex_x = (1-t_j)**2 * p0[0] + 2*(1-t_j)*t_j * p1[0] + t_j**2 * p2[0]
-        apex_y = (1-t_j)**2 * p0[1] + 2*(1-t_j)*t_j * p1[1] + t_j**2 * p2[1]
-        jd = 4  # pass-1 vision fix: 6px diamond + wide bloom swallowed the trace
-        r_, g_, b_ = _hex_to_rgb(jewel_color)
-        draw.polygon([
-            (apex_x,      apex_y - jd),
-            (apex_x + jd, apex_y),
-            (apex_x,      apex_y + jd),
-            (apex_x - jd, apex_y),
-        ], fill=(r_, g_, b_, 255))
-        # Jewel bloom
-        self._dot(draw, apex_x, apex_y, jd + 3, jewel_color, alpha=25)
-
-        # --- ORBIT ARCS around jewel (radius=10, 3 × 90°) ---
+        # the object jewel: layered diamonds + orbit arcs + bloom
+        jx, jy = 128, 88
+        rj, gj, bj = _hex_to_rgb(jewel_color)
+        draw.polygon([(jx, jy - 9), (jx + 9, jy), (jx, jy + 9),
+                      (jx - 9, jy)], outline=(rj, gj, bj, 255))
+        rt_, gt_, bt_ = _hex_to_rgb(T.MEMORY_TRACE)
+        draw.polygon([(jx, jy - 4), (jx + 4, jy), (jx, jy + 4),
+                      (jx - 4, jy)], outline=(rt_, gt_, bt_, 255))
         for phase in [0, 120, 240]:
-            draw_elliptical_arc(draw, apex_x, apex_y, 10, 10,
-                                phase, 90, 1, jewel_color, alpha=160)
+            draw_elliptical_arc(draw, jx, jy, 14, 14, phase, 90, 1,
+                                jewel_color, alpha=255)
+        bloom_ring(draw, jx, jy, 14, jewel_color)
 
-        # --- HERO PLACE TEXT — right-weighted, large, NOT centered ---
-        # Teal ghost glow layer first
-        r_t, g_t, b_t = _hex_to_rgb(T.MEMORY_TRACE)
-        draw.text((157, 150), place, font=_font("hero"),
-                  fill=(r_t, g_t, b_t, 40), anchor="mm")
-        # Primary layer — bright, right of center
-        draw.text((155, 150), place, font=_font("hero"),
-                  fill=_hex_to_rgb(T.TEXT_PRIMARY), anchor="mm")
+        # you, at the bottom of the scene
+        self._dot(draw, 128, 198, 3, T.MEMORY_TRACE, alpha=255)
+        bloom_ring(draw, 128, 198, 3, T.MEMORY_TRACE)
 
-        # --- DETAIL line — dashed bracket style, below hero ---
-        self._text_rgba(draw, CX, 178, f"[ {detail} ]" if detail else "",
-                        "xs", T.TEXT_SECONDARY, alpha=160, anchor="mm")
-
-        # --- FOOTER (last seen) ---
-        self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=140, anchor="mm")
-
-        # --- Small confidence dot near rail bottom ---
-        self._dot(draw, rail_x + 1, rail_y2, 3, jewel_color, alpha=200)
+        # type: time eyebrow, object label, HERO place, bracketed detail
+        self._text_rgba(draw, CX, 50, footer, "xs", T.TEXT_GHOST, alpha=255)
+        self._text_rgba(draw, CX, 66, obj_name, "md", T.MEMORY_TRACE,
+                        alpha=255)
+        place_size = "hero" if len(place) * 12 <= 170 else (
+            "xl" if len(place) * 11 <= 170 else "lg")
+        self._text_rgba(draw, CX, 150, place, place_size, T.TEXT_PRIMARY,
+                        alpha=255)
+        if detail:
+            self._text_rgba(draw, CX, 176, f"[ {detail} ]", "md",
+                            T.TEXT_SECONDARY, alpha=255)
 
     def _commitment_recall(self, draw, card):
         person = card.get("person") or ""
@@ -622,13 +705,14 @@ class CardRenderer:
             draw.rounded_rectangle([lx, ly, lx + chain_w, ly + link_h],
                                    radius=4, outline=(r_, g_, b_, stroke_alpha), width=lw)
             if is_last:
-                draw.rounded_rectangle([lx, ly, lx + chain_w, ly + link_h],
-                                       radius=4, fill=(r_, g_, b_, 18))
-        for lx, ly in link_positions[:2]:
-            draw.line(
-                [(CX, ly + link_h), (CX, ly + link_h + (link_positions[1][1] - link_positions[0][1] - link_h))],
-                fill=(r_, g_, b_, 60), width=1
-            )
+                # Solid: the live link glows from within (scanline pane)
+                glass_capsule(draw, lx + 4, ly + 1, chain_w - 8, link_h - 2,
+                              PANE, 3)
+        # Solid: gradient connectors falling toward the live link
+        grad_line(draw, CX, 84 + link_h, CX, 108,
+                  (T.BORDER_SUBTLE, T.ACCENT_MEMORY_DIM))
+        grad_line(draw, CX, 108 + link_h, CX, 132,
+                  (T.ACCENT_MEMORY_DIM, T.ACCENT_MEMORY_STATIC))
         self._text_rgba(draw, CX, 108 + link_h // 2, task, "sm", T.TEXT_PRIMARY, alpha=230)
         self._text_rgba(draw, CX, 132 + link_h // 2, due, "sm", T.MEMORY_TRACE, alpha=255)
         self._dot(draw, CX, 168, 2, T.conf_color(conf))
@@ -641,53 +725,49 @@ class CardRenderer:
         draw_radial_rays(draw, CX, CY - 10, 5, lengths,
                          T.MEMORY_TRACE, alpha=160, tip_bloom=True, stroke=1)
         self._dot(draw, CX, CY - 10, 3, T.MEMORY_TRACE, alpha=200)
+        bloom_ring(draw, CX, CY - 10, 3, T.MEMORY_TRACE)
         self._multiline_text(draw, CX, CY + 50, summary, "md", T.TEXT_SECONDARY, max_width=180)
         if person:
             self._text_rgba(draw, CX, CY + 78, f"With {person}",
                             "sm", T.MEMORY_TRACE, alpha=200)
 
     def _person_context(self, draw, card):
-        """PersonContextCard. v2 (Halo Cinema v1): `why` replaces the
-        headline as the primary line, and a confidence halo (chord arcs)
-        rings the 32×32 avatar zone when has_avatar is set — avatars only
-        ever exist for registered contacts."""
+        """PersonContextCard — Meridian Solid centerpiece: avatar ring
+        with bloom under an enlarged crown over a soft pane, name in
+        hero-class type. `why` stays the one primary line; chord arcs
+        ring the avatar zone when has_avatar (registered contacts only).
+        Mirrors the device Lua draw_person_context."""
         name     = card.get("primary") or ""
         headline = card.get("headline") or ""
         why      = card.get("why") or ""
         detail   = card.get("detail") or ""
         conf     = card.get("confidence")
 
-        if card.get("has_avatar"):
-            # avatar zone at top center: chord arpeggio arcs, sweep = conf
-            sweep = (conf or 1.0) * 360
-            for i, r in enumerate((18, 23, 28)):
-                self._arc(draw, CX, 52, r, -90, -90 + sweep, 1,
-                          T.ACCENT_MEMORY, alpha=200 - i * 55)
-            # avatar placeholder ring (sprite streams separately on-device)
-            self._circle(draw, CX, 52, 15, 1, T.BORDER_SUBTLE, alpha=160)
-            self._text_rgba(draw, CX, 52, name[:1].upper(), "md",
-                            T.TEXT_PRIMARY, alpha=230)
-
-        # Crown segments only (skip the bottom three): the 90°-region
-        # segments used to strike through the why-line (pass-1 vision fix)
-        draw_polar_segments(draw, CX, 100, 38, 56, 12, [0, 1, 2],
+        glass_disc(draw, CX, 96, 56, PANE, 3)
+        self._circle(draw, CX, 84, 18, 1, T.BORDER_SUBTLE, alpha=255)
+        bloom_ring(draw, CX, 84, 18, T.ACCENT_MEMORY_STATIC)
+        draw_polar_segments(draw, CX, 84, 26, 44, 12, [0, 1, 2],
                             T.MEMORY_TRACE, alpha_lit=255, alpha_dim=35,
                             skip_indices=[5, 6, 7])
-        self._text(draw, CX, 100, name, "lg", T.MEMORY_TRACE)
-        self._hline(draw, 72, 184, 116, T.BORDER_SUBTLE)
-        if why:
-            # spec: exactly ONE line of "why this person matters right now"
-            why_line = why if len(why) <= 34 else why[:33] + "…"
-            self._text(draw, CX, 138, why_line, "sm", T.TEXT_PRIMARY)
-            self._text_rgba(draw, CX, 158, headline, "xs",
-                            T.TEXT_SECONDARY, alpha=170)
-            self._text_rgba(draw, CX, 176, detail, "xs", T.TEXT_GHOST, alpha=150)
-        else:
-            self._multiline_text(draw, CX, 140, headline, "md",
-                                 T.TEXT_PRIMARY, max_width=176)
-            self._text_rgba(draw, CX, 168, detail, "sm", T.TEXT_SECONDARY, alpha=200)
-        if conf is not None:
-            self._dot(draw, CX, 186, 3, T.conf_color(conf))
+        if card.get("has_avatar"):
+            sweep = (conf or 1.0) * 360
+            for i, r in enumerate((32, 40, 48)):
+                self._arc(draw, CX, 84, r, -90, -90 + sweep, 1,
+                          T.ACCENT_MEMORY, alpha=200 - i * 55)
+            self._text_rgba(draw, CX, 84, name[:1].upper(), "md",
+                            T.TEXT_PRIMARY, alpha=230)
+
+        name_size = "hero" if len(name) * 12 <= 170 else "xl"
+        self._text(draw, CX, 148, name, name_size, T.MEMORY_TRACE)
+        grad_line(draw, 76, 164, 180, 164)
+        line = why if why else headline
+        if len(line) > 34:
+            line = line[:33] + "…"
+        self._text(draw, CX, 180, line, "md", T.TEXT_PRIMARY)
+        if why and headline:
+            self._text_rgba(draw, CX, 196, headline, "sm",
+                            T.TEXT_SECONDARY, alpha=255)
+        self._text_rgba(draw, CX, 210, detail, "sm", T.TEXT_GHOST, alpha=255)
 
     def _privacy_veil(self, draw, card):
         self._arc(draw, CX, CY, 108, 10, 350, 1, T.PRIVACY_DANGER, alpha=34)
@@ -765,10 +845,20 @@ class CardRenderer:
             span = sconf * (self._THREAD_SLOT_DEG - 4)
             if span <= 1:
                 continue
+            # Solid: only the newest revealed stage is bright; older
+            # testimony cools to its dim twin (recency is a visible bit)
+            newest = max(idx for idx in range(9)
+                         if idx < len(stages)
+                         and (stages[idx] or {}).get("direction",
+                                                     "insufficient")
+                         != "insufficient")
             if direction == "truthful":
+                color = T.ACCENT_SUCCESS if i >= newest else T.ACCENT_SUCCESS_DIM
                 self._arc(draw, CX, CY, self._THREAD_R, a0, a0 + span, 2,
-                          T.ACCENT_SUCCESS, alpha=235)
+                          color, alpha=235)
             else:
+                color = (T.ACCENT_ATTENTION if i >= newest
+                         else T.ACCENT_ATTENTION_DIM)
                 # torn: 3 dashes alternating -3/+3/-3 px radial offset
                 dash = span / 4
                 for d, off in enumerate((-self._THREAD_TEAR_PX,
@@ -778,20 +868,29 @@ class CardRenderer:
                     da1 = min(da0 + dash, a0 + span)
                     if da1 > da0:
                         self._arc(draw, CX, CY, self._THREAD_R + off, da0, da1,
-                                  2, T.ACCENT_ATTENTION, alpha=235)
+                                  2, color, alpha=235)
 
-        # Black backing capsule so thread strokes never cross the verdict
-        # glyphs (v1's armor was right; device mirrors with a filled rect)
-        font = _font("md")
-        try:
-            tw = font.getlength(verdict)
-        except AttributeError:
-            tw = len(verdict) * 8
-        draw.rectangle([CX - tw / 2 - 5, CY - 15, CX + tw / 2 + 5, CY + 4],
+        # Solid: the verdict sits in a glass capsule in hero-class type
+        vsize = ("hero" if len(verdict) * 12 <= 130
+                 else "xl" if len(verdict) * 11 <= 130 else "lg")
+        adv = {"hero": 12, "xl": 11, "lg": 10}[vsize]
+        hw = max(26, int(len(verdict) * adv / 2) + 10)
+        draw.rectangle([CX - hw, CY - 16, CX + hw, CY + 17],
                        fill=(0, 0, 0, 255))
-        self._text(draw, CX, CY - 6, verdict, "md", T.TEXT_PRIMARY)
+        glass_capsule(draw, CX - hw, CY - 16, hw * 2, 32, PANE, 3)
+        cr = 16
+        rgb_b = _hex_to_rgb(T.BORDER_SUBTLE)
+        draw.line([(CX - hw + cr, CY - 16), (CX + hw - cr, CY - 16)],
+                  fill=rgb_b, width=1)
+        draw.line([(CX - hw + cr, CY + 16), (CX + hw - cr, CY + 16)],
+                  fill=rgb_b, width=1)
+        self._arc(draw, CX - hw + cr, CY, cr, 90, 270, 1,
+                  T.BORDER_SUBTLE, alpha=255)
+        self._arc(draw, CX + hw - cr, CY, cr, -90, 90, 1,
+                  T.BORDER_SUBTLE, alpha=255)
+        self._text(draw, CX, CY, verdict, vsize, T.TEXT_PRIMARY)
         if conf is not None:
-            self._dot(draw, CX, CY + 16, 3, T.conf_color(conf))
+            self._dot(draw, CX, CY + 26, 3, T.conf_color(conf))
         footer = card.get("footer") or ""
         if footer:
             self._text_rgba(draw, CX, 208, footer, "xs", T.TEXT_GHOST, alpha=150)
@@ -880,6 +979,7 @@ class CardRenderer:
             self._vbar(draw, rail_x, rail_y1 - live_h, rail_y1, 1, urgency)
         self._dot(draw, rail_x, rail_y0, 2, T.BORDER_SUBTLE, alpha=160)
         self._dot(draw, rail_x, rail_y1, 3, urgency)
+        bloom_ring(draw, rail_x, rail_y1, 3, urgency)
 
         self._text_rgba(draw, CX, 72, "DRIFT DETECTED", "xs", T.MEMORY_TRACE,
                         alpha=200)
@@ -958,6 +1058,136 @@ class CardRenderer:
         self._multiline_text(draw, CX, 142, new, "sm", T.TEXT_PRIMARY,
                              max_width=160)
         self._dot(draw, CX, 170, max(2, int(2 + score * 3)), score_col)
+
+    # ------------------------------------------------------------------
+    # Meridian Solid — the O3 conversation cards (Veritas / answer-ahead /
+    # Oracle reply / Listen!). Same material language as the hero cards:
+    # a surface-luma glass pane, gradient separators, bloom on the status
+    # cue, hero-class type via the fit ladder, secondary text cooled to a
+    # dim twin. Panes are additive (richer, not brighter); text is never in
+    # the pane color (solid.md).
+    # ------------------------------------------------------------------
+
+    _FIT_ADV = {"hero": 12, "xl": 11, "lg": 10, "md": 8, "sm": 6, "xs": 5}
+
+    def _fit(self, text, max_px=196, ladder=("hero", "xl", "lg", "md")):
+        """Largest size in `ladder` whose advance fits `text` in `max_px`
+        (mirrors typography.fit_size — drop, never clip the circular panel)."""
+        t = str(text or "")
+        for s in ladder:
+            if len(t) * self._FIT_ADV[s] <= max_px:
+                return s
+        return ladder[-1]
+
+    def _pane(self, draw, cy=128, r=76, rim=T.BORDER_SUBTLE):
+        """The shared soft glass pane + a faint rim — the material bed every
+        message card sits on."""
+        glass_disc(draw, CX, cy, r, PANE, 4)
+        self._circle(draw, CX, cy, r + 4, 1, rim, alpha=90)
+
+    def _oracle_reply(self, draw, card):
+        """OracleReplyCard — Oracle's answer/confirmation. Memory-toned pane,
+        ORACLE eyebrow with a bloom cue, the reply in hero type (or wrapped)."""
+        action = card.get("kind") == "action"
+        accent = T.ACCENT_SUCCESS if action else T.ACCENT_MEMORY
+        body = str(card.get("primary") or "")
+        self._pane(draw, 132, 78)
+        # eyebrow with a bloomed status dot
+        bloom_ring(draw, CX - 40, 64, 3, accent)
+        self._dot(draw, CX - 40, 64, 3, accent)
+        self._text_rgba(draw, CX + 6, 64, "ORACLE",
+                        "xs", accent, alpha=235)
+        grad_line(draw, 60, 82, 196, 82, RAMP_SUCCESS if action else RAMP_MEMORY)
+        if len(body) <= 20:
+            self._text(draw, CX, 132, body, self._fit(body, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 132, body, "md", T.TEXT_PRIMARY,
+                                 max_width=182)
+
+    def _answer_ahead(self, draw, card):
+        """AnswerAheadCard — the pre-fetched answer. Quiet memory tone: the
+        answer in hero type over a pane, the question cooled beneath it."""
+        answer = str(card.get("primary") or "")
+        question = str(card.get("detail") or "")
+        footer = str(card.get("footer") or "")
+        self._pane(draw, 128, 78)
+        # dot sits clear of the 25-char eyebrow (its bloom was grazing the first
+        # glyph — the golden eyeball pass in #87; mirrors the Lua CX-88 nudge)
+        bloom_ring(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
+        self._dot(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
+        self._text_rgba(draw, CX + 4, 70, "ON THE TIP OF YOUR TONGUE",
+                        "xs", T.ACCENT_MEMORY, alpha=225)
+        grad_line(draw, 52, 88, 204, 88, RAMP_MEMORY)
+        self._text(draw, CX, 126, answer, self._fit(answer, 196), T.TEXT_PRIMARY)
+        if question:
+            self._text_rgba(draw, CX, 166, question, "sm",
+                            T.ACCENT_MEMORY_DIM, alpha=235)
+        if footer:
+            self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=170)
+
+    def _fact_check(self, draw, card):
+        """FactCheckCard — Veritas verdict, in the Truth-Lens material family.
+        A bloomed status ring in the verdict hue, the claim in hero type over a
+        pane, the basis cooled to the verdict's dim twin, the fused footer in
+        ghost."""
+        verdict = card.get("verdict") or ""
+        _dim = {
+            "supported":          T.ACCENT_SUCCESS_DIM,
+            "disputed":           T.WARNING_AMBER_DIM,
+            "self_contradiction": T.ACCENT_ATTENTION_DIM,
+            "unverified":         T.BORDER_SUBTLE,
+        }
+        color = {
+            "supported":          T.ACCENT_SUCCESS,
+            "disputed":           T.WARNING_AMBER,
+            "self_contradiction": T.ACCENT_ATTENTION,
+            "unverified":         T.TEXT_GHOST_STATIC,
+        }.get(verdict, T.TEXT_GHOST_STATIC)
+        dim = _dim.get(verdict, T.BORDER_SUBTLE)
+        eyebrow = str(card.get("eyebrow") or "")
+        claim = str(card.get("primary") or "")
+        basis = str(card.get("detail") or "")
+        footer = str(card.get("footer") or "")
+
+        self._pane(draw, 134, 74)
+        # the status cue: a bloomed ring in the verdict hue
+        bloom_ring(draw, CX, 54, 9, color)
+        self._circle(draw, CX, 54, 9, 2, color, alpha=255)
+        self._text_rgba(draw, CX, 82, eyebrow, "xs", color, alpha=240)
+        grad_line(draw, 44, 96, 212, 96,
+                  (color, dim, T.BORDER_SUBTLE))
+        if len(claim) <= 22:
+            self._text(draw, CX, 130, claim, self._fit(claim, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 128, claim, "md", T.TEXT_PRIMARY,
+                                 max_width=188)
+        if basis:
+            self._text_rgba(draw, CX, 170, basis, "sm", dim, alpha=235)
+        if footer:
+            self._text_rgba(draw, CX, 200, footer, "xs", T.TEXT_GHOST, alpha=170)
+
+    def _hark(self, draw, card):
+        """HarkCard — Oracle's "Listen!" A bloomed ring pierces the eye, the one
+        thing worth hearing in hero type, the trailing detail cooled. Urgent
+        (watch-out) burns amber, a plain listen stays memory-teal."""
+        urgent = card.get("importance") == "urgent"
+        color = T.WARNING_AMBER if urgent else T.ACCENT_MEMORY
+        dim = T.WARNING_AMBER_DIM if urgent else T.ACCENT_MEMORY_DIM
+        clue = str(card.get("primary") or "")
+        detail = str(card.get("detail") or "")
+        self._pane(draw, 134, 74)
+        bloom_ring(draw, CX, 58, 12, color)
+        self._circle(draw, CX, 58, 12, 2, color, alpha=255)
+        self._dot(draw, CX, 58, 3, color)
+        self._text_rgba(draw, CX, 84, "LISTEN", "xs", color, alpha=245)
+        grad_line(draw, 48, 98, 208, 98, (color, dim, T.BORDER_SUBTLE))
+        if len(clue) <= 22:
+            self._text(draw, CX, 132, clue, self._fit(clue, 200), T.TEXT_PRIMARY)
+        else:
+            self._multiline_text(draw, CX, 130, clue, "md", T.TEXT_PRIMARY,
+                                 max_width=188)
+        if detail:
+            self._text_rgba(draw, CX, 172, detail, "sm", dim, alpha=230)
 
     def _layout_card(self, draw, card):
         """Generic renderer for the layout-driven cards (ForgetLast /

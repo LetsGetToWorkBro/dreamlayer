@@ -4,6 +4,20 @@
 Calm, glanceable, premium. One thought at a time. The HUD should feel composed,
 never like terminal output. Outlines over heavy fills. Generous breathing room.
 
+## Motion (Meridian Lumen)
+All motion carries material physics and living light — see
+`docs/cinema_v2/lumen.md`. The four engines: closed-form springs
+(`lib/easing.lua`; soft for text-adjacent geometry, snappy ≤8% rebound
+for rings/dots), budgeted palette-luma programs
+(`display/palette_animator.lua`, ≤8 writes/tick over leased slots),
+a pooled deterministic particle system (`display/particles.lua`,
+24 global), and IMU parallax depth (`display/parallax.lua`; text and
+information ALWAYS at LOCK depth — 0px). Standing rules: text never
+moves or distorts; every effect's reduce_motion pose is the static
+pre-Lumen state; nothing may strobe (no slot luma reverses direction
+more than 4×/sec — tested); every timing constant lives in
+`display/animations.lua`.
+
 ## Display target
 - 256×256 **circular** color display
 - Direct rendering (no Frame-style double buffering)

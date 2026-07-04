@@ -22,7 +22,7 @@ export const signatures = {
   focus: {
     travel: 140, land: 100, trail: 60,
     landRFrom: 56, landRTo: 36, ringR: 92,
-    recede: 160, textCut: 0.4, xfadeLag: 40,
+    recede: 200, textCut: 0.4, xfadeLag: 40,
   },
   ghostWake:   { duration: 320, jitterPx: 2 },
   truthRipple: { duration: 400, rMax: 120, coldDuration: 240 },

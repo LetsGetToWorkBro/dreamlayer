@@ -18,11 +18,14 @@ app/                the on-glass app
   imu_gesture.lua    taps, double-taps, dwell — the input grammar
   events.lua · commands.lua · session.lua
 ble/                the link to the phone hub
-  protocol.lua · message_types.lua · host_comm.lua · telemetry.lua
+  protocol.lua · message_types.lua · host_comm.lua · host_comm_dream.lua
+  telemetry.lua
 capture/            sensors: camera · microphone · activity · scheduler
 display/            the HUD — the visual system
   renderer.lua · cards.lua · layout.lua · typography.lua · palette.lua
-  focus.lua · transitions.lua · animations.lua · materials.lua
+  horizon.lua (the resting-state day ring) · focus.lua · transitions.lua
+  animations.lua · materials.lua · primitives.lua · palette_animator.lua
+  particles.lua · parallax.lua · diagnostics.lua
   prism.lua · palette_cycle.lua · dream_renderer.lua   (Atmosphere)
 lib/                json · queue · easing · constants · utils
 system/             power · settings · time · logging
@@ -37,7 +40,8 @@ the other way round — timings in `display/animations.lua` and colors in
 ([`../phone-app/src/ui/theme/`](../phone-app/src/ui/theme/)) so the two screens
 read as one product. If a value changes here, change it there too. The Cinema
 v2 visual language is documented in [`../docs/`](../docs/) (`HUD_DESIGN_SYSTEM.md`,
-`cinema_v2/`).
+`cinema_v2/`), and the full card gallery with real renders is in the
+knowledge base ([`../docs/gitbook/hud-cards.md`](../docs/gitbook/hud-cards.md)).
 
 ## Testing
 

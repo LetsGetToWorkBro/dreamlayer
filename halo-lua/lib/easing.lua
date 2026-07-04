@@ -35,6 +35,41 @@ function M.out_back(t)
 end
 
 -- ---------------------------------------------------------------------------
+-- Meridian Lumen: closed-form damped spring (docs/cinema_v2/lumen.md).
+-- x(t) = 1 - e^(-zeta*omega*t) * (cos(wd*t) + (zeta*omega/wd)*sin(wd*t)),
+-- wd = omega*sqrt(1 - zeta^2). A pure function of t — no integration
+-- state — so sequences are deterministic and golden-safe. zeta/omega
+-- values live in display/animations.lua (SPRING_*); callers pass them.
+-- First-peak overshoot is exp(-zeta*pi/sqrt(1-zeta^2)): the shipped
+-- zetas keep it under SPRING_OVERSHOOT_MAX (asserted in tests).
+-- ---------------------------------------------------------------------------
+function M.spring(t, zeta, omega)
+  if t <= 0 then return 0 end
+  if t >= 1 then return 1 end
+  zeta  = zeta  or 0.85
+  omega = omega or 7.4
+  if zeta >= 0.999 then zeta = 0.999 end
+  local wd    = omega * math.sqrt(1 - zeta * zeta)
+  local decay = math.exp(-zeta * omega * t)
+  return 1 - decay * (math.cos(wd * t) + (zeta * omega / wd) * math.sin(wd * t))
+end
+
+-- Anticipation: the first `frac` of the motion pulls BACK (to -amt at the
+-- window's midpoint, returning to 0 at its end), then the remaining time
+-- runs the main in_out_cubic flight. Never applied to text (the out_back
+-- rule above extends: anticipation moves geometry heads, not glyphs).
+function M.anticipate(t, frac, amt)
+  frac = frac or 0.12
+  amt  = amt  or 1.0
+  if t <= 0 then return 0 end
+  if t >= 1 then return 1 end
+  if t < frac then
+    return -amt * math.sin(math.pi * (t / frac))
+  end
+  return M.in_out_cubic((t - frac) / (1 - frac))
+end
+
+-- ---------------------------------------------------------------------------
 -- Perlin-noise-lite (1D value noise with smoothstep interpolation).
 -- Deterministic for a given x; callers seed by offsetting x with monotonic
 -- time and a per-element salt:  easing.perlin1d(now_ms * 0.004 + i * 7.13)

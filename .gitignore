@@ -15,3 +15,5 @@ node_modules/
 *.tsbuildinfo
 out/
 .pytest_cache/
+site/
+_site/

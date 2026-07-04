@@ -285,6 +285,54 @@ def export_all(out_root: Path | None = None) -> list[Path]:
     """)
     s.save(out_root, "weather/anchor_echo.png", written)
 
+    # ---------------- Meridian Solid: recomposed settled holds -----------
+    SOLID_CARDS = {
+        "saved_memory_hold": '{ type = "SavedMemoryCard", '
+                             'primary = "House keys" }',
+        "person_context_hold": """{
+          type = "PersonContextCard", primary = "Jordan",
+          why = "Owes you the contract draft",
+          headline = "Sent invoice Wed", detail = "Last seen today",
+          confidence = 0.8,
+        }""",
+        "commitment_recall_hold": """{
+          type = "CommitmentRecallCard", person = "Jordan",
+          primary = "Send the invoice", due = "Tomorrow before noon",
+          confidence = 0.72,
+        }""",
+    }
+    SOLID_CARDS["fact_check_hold"] = """{
+      type = "FactCheckCard", verdict = "self_contradiction",
+      eyebrow = "THEY SAID DIFFERENT BEFORE",
+      primary = "The deal closed at three million.",
+      detail = "earlier: we settled at two million",
+      footer = "Marcus - elevated - seen before",
+    }"""
+    SOLID_CARDS["answer_ahead_hold"] = """{
+      type = "AnswerAheadCard", primary = "March 14th - two pallets.",
+      detail = "When did we last ship to Denver?",
+      footer = "Priya - your files",
+    }"""
+    SOLID_CARDS["oracle_reply_hold"] = """{
+      type = "OracleReplyCard", kind = "action",
+      primary = "Focus on - the world is turned down.",
+    }"""
+    SOLID_CARDS["hark_hold"] = """{
+      type = "HarkCard", importance = "urgent",
+      primary = "Marcus is 2 min away - you owe him the lease.",
+      detail = "from your last chat",
+    }"""
+    for name, card in SOLID_CARDS.items():
+        s = GoldenSession()
+        s.now(1000)
+        s.frame(DAY_FRAME)
+        s.h.execute(f"_r.show_card({card})")
+        # settle far past enter + chime + specular windows: the frame is
+        # the card's steady state (deterministic by construction)
+        s.now(1000 + 2000)
+        s.tick()
+        s.save(out_root, f"solid/{name}.png", written)
+
     return written
 
 

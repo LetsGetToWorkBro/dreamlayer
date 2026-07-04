@@ -148,4 +148,62 @@ function M.low_confidence()
   }
 end
 
+-- ---------------------------------------------------------------------------
+-- O3 conversation cards (Veritas / answer-ahead / Oracle / Listen!). Payloads
+-- arrive from the host; the constructors are PURE pass-through. All tone
+-- mapping (verdict/importance/kind -> color) lives in renderer.lua
+-- card_tone/FACT_COLOR — the BLE path never runs these constructors, so a
+-- color set only here would be lost on the real pipeline (standards
+-- review of #86). The Solid materials + Lumen animation live in
+-- renderer.lua.
+-- ---------------------------------------------------------------------------
+
+function M.fact_check(c)
+  local verdict = c.verdict or "unverified"
+  return {
+    type          = "FactCheckCard",
+    dismiss_ms    = A.DISMISS_MS and A.DISMISS_MS.FactCheckCard or 7000,
+    verdict       = verdict,
+    eyebrow       = c.eyebrow or "",
+    primary       = c.primary or c.claim or "",
+    detail        = c.detail or c.basis or "",
+    footer        = c.footer or "",
+    corroboration = c.corroboration or "",
+    -- Visual: bloomed verdict ring, glass pane, hero claim, dim-twin basis
+  }
+end
+
+function M.answer_ahead(c)
+  return {
+    type       = "AnswerAheadCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.AnswerAheadCard or 8000,
+    eyebrow    = c.eyebrow or "ON THE TIP OF YOUR TONGUE",
+    primary    = c.primary or c.answer or "",
+    detail     = c.detail or c.question or "",
+    footer     = c.footer or "",
+    -- Visual: quiet memory pane, hero answer, cooled question beneath
+  }
+end
+
+function M.oracle_reply(c)
+  return {
+    type       = "OracleReplyCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.OracleReplyCard or 6000,
+    kind       = c.kind or "answer",
+    primary    = c.primary or c.text or "",
+    -- Visual: memory/success pane, ORACLE eyebrow with a bloom cue, hero reply
+  }
+end
+
+function M.hark(c)
+  return {
+    type       = "HarkCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.HarkCard or 6500,
+    importance = c.importance or "normal",
+    primary    = c.primary or c.clue or "",
+    detail     = c.detail or "",
+    -- Visual: bloomed Listen! ring that breathes on hold, hero clue, cooled detail
+  }
+end
+
 return M

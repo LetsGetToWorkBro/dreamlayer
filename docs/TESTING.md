@@ -174,12 +174,13 @@ the design system (see [phone-app/DESIGN.md](../phone-app/DESIGN.md)).
 ## Running the automated tests
 
 ```bash
-# Brain + all host logic (Python)
+# Brain + all host logic (Python) — install with the dev extra first:
+#   pip install -e ./host-python[dev]   (pytest, pytest-asyncio, lupa)
 cd host-python && python -m pytest -q
 
 # Phone app type/lint (needs deps installed)
 cd phone-app && npm install && npx tsc --noEmit
 ```
 
-The host suite (1000+ tests) covers the Brain server, the router/switches, the
+The host suite (1,368 tests) covers the Brain server, the router/switches, the
 pairing codec, and every lens.

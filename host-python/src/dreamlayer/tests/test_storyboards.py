@@ -11,8 +11,17 @@ from dreamlayer.demo.storyboards import SCENES
 from dreamlayer.demo import render_scene
 
 
-def test_the_three_clips_exist():
-    assert set(SCENES) == {"veritas", "answer_ahead", "owe_someone"}
+def test_the_clips_exist():
+    assert {"veritas", "answer_ahead", "owe_someone", "the_tour"} <= set(SCENES)
+
+
+def test_the_tour_shows_breadth():
+    tour = SCENES["the_tour"]
+    types = {b.card.get("type") for b in tour.beats}
+    # several distinct features, not just the fact-checker
+    assert "FactCheckCard" in types
+    assert len(types) >= 5
+    assert tour.duration() >= 25.0
 
 
 def test_every_beat_is_a_real_card_with_sane_timing():

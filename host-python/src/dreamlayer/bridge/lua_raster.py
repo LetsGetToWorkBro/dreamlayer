@@ -77,11 +77,29 @@ class RasterDisplay:
         self.canvas = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         self._draw = ImageDraw.Draw(self.canvas)
         self._font = _load_font()
+        self._fonts: dict[int, object] = {_FONT_PX: self._font}
         self.frames: list[Image.Image] = []
         # slot -> live RGB; base hex -> slot (learned via sync)
         self._slot_rgb: dict[int, tuple[int, int, int]] = {}
         self._slot_by_hex: dict[int, int] = {}
         self.draw_calls = 0
+        self.font_calls = 0
+
+    def set_font(self, fid, sz, sc) -> None:
+        """Model of frame.display.set_font (Meridian Solid).
+
+        Maps sz*sc to a PIL face of the same pixel size — goldens carry
+        the hierarchy the panel will. A state write like
+        assign_color_ycbcr: counted in font_calls, not draw_calls.
+        """
+        del fid  # single reference face; fid is a device-side concern
+        px = max(6, int(round(float(sz) * float(sc))))
+        font = self._fonts.get(px)
+        if font is None:
+            font = _load_font(px)
+            self._fonts[px] = font
+        self._font = font
+        self.font_calls += 1
 
     # -- palette model ------------------------------------------------
     def bind_slot(self, base_hex: int, slot: int) -> None:
@@ -166,7 +184,9 @@ class RasterDisplay:
 
 
 _FRAME_TABLE_LUA = """
+__imu = nil
 frame = {
+  imu_data = function() return __imu end,
   display = {
     clear   = function(c)            __raster.clear(c or 0x000000) end,
     show    = function()             __raster.show() end,
@@ -176,6 +196,7 @@ frame = {
     circle  = function(x, y, r, col, f)      __raster.circle(x, y, r, col, f or false) end,
     set_pixel = function(x, y, col)          __raster.set_pixel(x, y, col) end,
     bitmap  = function(...)          __raster.bitmap(...) end,
+    set_font = function(fid, sz, sc) __raster.set_font(fid, sz, sc or 1.0) end,
     assign_color_ycbcr = function(i, y, cb, cr) __raster.assign_color_ycbcr(i, y, cb, cr) end,
   },
 }
@@ -220,16 +241,42 @@ class LuaRasterHarness:
     def eval(self, lua_expr: str):
         return self.rt.eval(lua_expr)
 
+    def set_imu(self, pitch: Optional[float], roll: float = 0.0) -> None:
+        """Script the ``frame.imu_data()`` stub (None = sensor absent).
+
+        Parallax and any IMU-reactive display code become testable and
+        goldenable headless: set a pose per tick, the Lua reads it as
+        the device would.
+        """
+        if pitch is None:
+            self.rt.execute("__imu = nil")
+        else:
+            self.rt.execute(
+                f"__imu = {{ pitch = {float(pitch)}, roll = {float(roll)} }}"
+            )
+
     def sync_dynamic_slots(self) -> None:
         """Mirror palette.lua's reserved dynamic bank into the raster model.
 
         Call after the Lua side has reserved its slots (e.g. after
         requiring display modules) so draws in a base color follow the
         slot's live YCbCr, as they would on the indexed hardware.
+
+        Both module instances are synced: Lua keys package.loaded by the
+        literal require string, so ``display.palette`` (renderer/focus/
+        horizon side) and ``display/palette`` (dream/prism side) hold
+        separate reservation registries over the same hardware slots
+        (see palette_cycle.lua's header). Dream weather and the Prism
+        kaleidoscope reserve the sky bank on the slash instance — without
+        it their palette-cycled color never shows in the raster.
         """
-        pal = self.require("display.palette")
-        for name in pal.reserved_names().values():
-            slot = pal.dynamic_slot(name)
-            base = pal.dynamic_color(name)
-            if slot is not None and base is not None:
-                self.display.bind_slot(int(base), int(slot))
+        for module in ("display.palette", "display/palette"):
+            try:
+                pal = self.require(module)
+            except Exception:
+                continue
+            for name in pal.reserved_names().values():
+                slot = pal.dynamic_slot(name)
+                base = pal.dynamic_color(name)
+                if slot is not None and base is not None:
+                    self.display.bind_slot(int(base), int(slot))

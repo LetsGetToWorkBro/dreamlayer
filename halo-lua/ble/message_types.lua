@@ -64,6 +64,12 @@ local MT = {
   -- Python side dream_mode/prism.py MSG_PRISM — keep in sync
   PRISM           = "prism",
 
+  -- Live voice level while QueryListeningCard holds (host -> Halo)
+  -- {t="amp", v=0..99} — ~15 bytes, sent only during capture; the
+  -- waveform tracks the wearer's actual voice (Lumen). Python side
+  -- hud/cards.py amp_message — keep in sync
+  AMP             = "amp",
+
   -- Physical events (arrive as JSON envelopes via BLE receive)
   BUTTON          = "button",
   IMU_TAP         = "imu_tap",
