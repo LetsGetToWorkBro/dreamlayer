@@ -1,7 +1,7 @@
 {
   "schema": "1",
   "updated": "2026-07-04",
-  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Social numbers (downloads/rating/comments) are placeholders until the hosted layer lands; the schema already carries them.",
+  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Social numbers (downloads/rating/comments) are served by the social API when configured; the schema carries them so the surfaces render either way.",
   "plugins": [
     {
       "name": "face-synth",
@@ -10,9 +10,24 @@
       "description": "Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "url": "registry/packages/face-synth-0.1.0.json",
-      "checksum": "",
+      "checksum": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
       "requires": ["midi"],
       "tags": ["music", "creative", "mesh", "featured"],
+      "downloads": 0,
+      "rating": 0,
+      "ratings_count": 0,
+      "comments_count": 0
+    },
+    {
+      "name": "open-food-facts",
+      "version": "0.1.0",
+      "author": "dreamlayer",
+      "description": "Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+      "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
+      "url": "registry/packages/open-food-facts-0.1.0.json",
+      "checksum": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
+      "requires": ["network"],
+      "tags": ["shopping", "food", "connector", "tastelens", "featured"],
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,

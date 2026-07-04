@@ -1,0 +1,17 @@
+{
+  "manifest": {
+    "name": "open-food-facts",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "dreamlayer",
+    "description": "Rank a shelf by Open Food Facts \u2014 Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
+    "requires": [
+      "network"
+    ],
+    "api": "1",
+    "checksum": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
+    "signature": ""
+  },
+  "source": "from dreamlayer.plugins.openfoodfacts import openfoodfacts_plugin\n\ndef plugin():\n    # first-party TasteLens connector, bundled with the app; enabling it\n    # registers the Open Food Facts shop provider. Uses urllib -> network.\n    return openfoodfacts_plugin()\n"
+}

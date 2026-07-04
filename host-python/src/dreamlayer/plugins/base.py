@@ -74,7 +74,7 @@ class PluginContext:
     def __init__(self, *, object_registry=None, glance_arbiter=None,
                  brain=None, perception=None, renderer=None,
                  capabilities=frozenset(), ring=None, veil=None,
-                 mesh=None, config: Optional[dict] = None):
+                 mesh=None, shop_registry=None, config: Optional[dict] = None):
         self._object_registry = object_registry
         self._glance = glance_arbiter
         self._brain = brain
@@ -84,10 +84,12 @@ class PluginContext:
         self._ring = ring
         self._veil = veil
         self._mesh = mesh
+        self._shop_registry = shop_registry
         self.config = dict(config or {})
         self.added: dict[str, list] = {
             "object_provider": [], "glance_candidate": [], "vision_brain": [],
             "knowledge_brain": [], "perceptor": [], "card_renderer": [],
+            "shop_provider": [],
         }
 
     # -- capability queries --------------------------------------------------
@@ -148,6 +150,13 @@ class PluginContext:
         self.added["card_renderer"].append(card_type)
         if self._renderer is not None and hasattr(self._renderer, "register"):
             self._renderer.register(card_type, fn)
+
+    def add_shop_provider(self, fn) -> None:
+        """Register a TasteLens price/review connector: fn(label, attrs) ->
+        {rating?, price?, …}. Consulted when a shelf/menu is ranked."""
+        self.added["shop_provider"].append(fn)
+        if self._shop_registry is not None:
+            self._shop_registry.append(fn)
 
 
 # --- the loader --------------------------------------------------------------

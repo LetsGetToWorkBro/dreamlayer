@@ -39,7 +39,7 @@ ENTRY_RE = re.compile(r"^[A-Za-z_][\w]*:[A-Za-z_][\w]*$")
 # is rejected — no undeclared reach.
 KNOWN_CAPABILITIES = frozenset({
     "object_lens", "glance", "perception", "cards", "ring", "vision",
-    "mesh", "midi", "network", "fs",
+    "mesh", "midi", "network", "fs", "shop",
 })
 
 

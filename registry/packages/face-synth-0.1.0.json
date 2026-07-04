@@ -1,0 +1,17 @@
+{
+  "manifest": {
+    "name": "face-synth",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "dreamlayer",
+    "description": "Your head is a MIDI controller.",
+    "homepage": "",
+    "requires": [
+      "midi"
+    ],
+    "api": "1",
+    "checksum": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
+    "signature": ""
+  },
+  "source": "from dreamlayer.plugins.face_synth import face_synth_plugin\n\ndef plugin():\n    return face_synth_plugin()\n"
+}

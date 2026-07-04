@@ -287,7 +287,11 @@ class Orchestrator:
         # shelf through the Brain's vision tier (_taste_read); ranks against
         # your DietaryProfile. shop_fn is wired by a shop plugin.
         from .taste import TasteLens
-        self.taste_lens = TasteLens(read_fn=self._taste_read, profile=self.dietary)
+        # shop connectors (prices/reviews) plugins register here; TasteLens
+        # consults them through _taste_shop. Off by default (empty).
+        self._shop_providers: list = []
+        self.taste_lens = TasteLens(read_fn=self._taste_read, profile=self.dietary,
+                                    shop_fn=self._taste_shop)
         # Glance Arbiter: on a look, decide which lens owns it — fire the clear
         # winner, offer a one-tap chooser when ambiguous, or do nothing. No mode
         # picker; the look decides. Coarse on-device read first, escalating to
@@ -726,9 +730,15 @@ class Orchestrator:
         """What this host offers plugins right now — checked against each
         plugin's `requires` at load time (so a vision-needing plugin waits
         until a vision tier is present)."""
-        caps = {"object_lens", "glance", "perception", "cards", "ring"}
+        caps = {"object_lens", "glance", "perception", "cards", "ring", "shop"}
         if getattr(self, "mesh", None) is not None:
             caps.add("mesh")
+        # the hub can reach the internet unless the Veil / incognito is on
+        try:
+            if self.privacy.allow_capture():
+                caps.add("network")
+        except Exception:
+            caps.add("network")
         try:
             if self.brain is not None and self.brain.has_vision():
                 caps.add("vision")
@@ -745,7 +755,8 @@ class Orchestrator:
             glance_arbiter=self.glance_arbiter,
             brain=self.brain, perception=self.perception, renderer=renderer,
             capabilities=self._plugin_capabilities(),
-            ring=self.ring, veil=self.privacy, mesh=self.mesh, config=config)
+            ring=self.ring, veil=self.privacy, mesh=self.mesh,
+            shop_registry=self._shop_providers, config=config)
 
     def load_plugins(self, plugins, renderer=None, config=None):
         """Load a list of plugins into this orchestrator. Gated by capabilities,
@@ -847,6 +858,20 @@ class Orchestrator:
         card = cards.taste(ranking, unavailable=ranking.unavailable)
         self.bridge.send_card(card, event="taste")
         return ranking
+
+    def _taste_shop(self, label, attrs):
+        """TasteLens's price/review seam. Merges the registered shop-provider
+        plugins (first provider wins per field); returns {} when none are
+        installed. Each provider is isolated — one throwing doesn't sink the rest."""
+        merged: dict = {}
+        for fn in self._shop_providers:
+            try:
+                data = fn(label, attrs) or {}
+            except Exception:
+                continue
+            for k, v in data.items():
+                merged.setdefault(k, v)
+        return merged
 
     def _taste_read(self, frame):
         """TasteLens's vision seam: read a shelf/menu into a list of items,
