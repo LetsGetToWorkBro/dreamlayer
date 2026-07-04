@@ -88,6 +88,12 @@ section{position:relative}
 .pill:hover{border-color:var(--teal);color:var(--text)}
 .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);
   animation:blink var(--breath) var(--ease) infinite}
+.barnav{display:flex;align-items:center;gap:clamp(14px,2.4vw,26px)}
+.barnav>a:not(.pill){font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--text-2);
+  transition:color var(--base) var(--ease)}
+.barnav>a:not(.pill):hover{color:var(--text)}
+@media(max-width:600px){.barnav>a:not(.pill){display:none}}
+.hero-cta{margin-top:clamp(28px,4vh,40px)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 
 /* ---------- hero ---------- */
@@ -510,7 +516,11 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <!-- ======================= top bar ======================= -->
 <header class="bar" id="bar" aria-hidden="true">
   <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
-  <a class="pill" href="#soon"><span class="dot"></span>Coming soon</a>
+  <nav class="barnav">
+    <a href="./playground.html">Playground</a>
+    <a href="./plugins.html">Plugin&nbsp;store</a>
+    <a class="pill" href="#soon"><span class="dot"></span>Early&nbsp;access</a>
+  </nav>
 </header>
 
 <!-- ======================= hero ======================= -->
@@ -529,6 +539,11 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
     <p class="body sub arrive in" style="--d:300ms">Your glasses see what you see. DreamLayer
       remembers it, understands it, and hands it back the instant you need it —
       privately, on your own hardware.</p>
+    <div class="cta-row hero-cta arrive in" style="--d:380ms">
+      <a class="btn primary" href="#soon">Get early access</a>
+      <a class="btn ghost" href="./plugins.html">Plugin store</a>
+      <a class="btn ghost" href="./playground.html">Try in browser</a>
+    </div>
   </div>
   <div class="scroll-cue" aria-hidden="true"><span>Scroll</span><span class="line"></span></div>
 </section>
@@ -1059,6 +1074,33 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   </div>
 </section>
 
+<!-- ======================= playground ======================= -->
+<section class="section-pad" id="playground">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow arrive">No app store required</span>
+      <h2 class="headline arrive" style="--d:80ms">Poke the HUD from your browser.</h2>
+      <p class="body arrive" style="--d:160ms">Because the whole thing is open, you can talk to the
+        glasses straight from a web page — no build, no install. The playground connects to your Halo
+        over Bluetooth and speaks Lua to it: push a card, run a gesture, read the IMU, live.</p>
+    </div>
+    <div class="can-grid">
+      <div class="can arrive" style="--d:0ms"><b>A live Lua REPL</b><span>Type Lua, hit send, watch it
+        run on the glass — replies stream straight back. The fastest way to learn the on-device API
+        and prototype a card.</span></div>
+      <div class="can arrive" style="--d:60ms"><b>Canned demos</b><span>One-tap buttons — show text,
+        clear, read the battery — over the Nordic UART service the phone hub uses. See the HUD react
+        without writing a line.</span></div>
+      <div class="can arrive" style="--d:120ms"><b>Honest about the caveat</b><span>Works in Chrome or
+        Edge on Android, macOS, Windows, and Linux. iPhone Safari can’t do Web Bluetooth — there, use
+        the app. The page tells you plainly instead of failing silently.</span></div>
+    </div>
+    <div class="cta-row arrive" style="--d:200ms;margin-top:36px">
+      <a class="btn primary" href="./playground.html">Open the playground →</a>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= coming soon ======================= -->
 <section class="soon" id="soon">
   <div class="halo-bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -1089,6 +1131,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
     <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
     <span class="mono"><a href="mailto:hello@dreamlayer.app">hello@dreamlayer.app</a>
       &nbsp;·&nbsp; <a href="./plugins.html">plugin store</a>
+      &nbsp;·&nbsp; <a href="./playground.html">playground</a>
       &nbsp;·&nbsp; <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank"
       rel="noopener">knowledge base ↗</a></span>
     <small>Private by architecture. Yours to run, yours to keep.</small>

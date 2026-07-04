@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DreamLayer · WebBLE Playground</title>
+<style>
+  :root{
+    --bg:#000; --surface:#0a0f10; --border:#1b2a2c; --text:#e7f3f1;
+    --text-2:#88a09c; --teal:#2CC79A; --coral:#E06B52; --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    max-width:760px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:22px;letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  .ring{width:16px;height:16px;border:2px solid var(--teal);border-radius:50%;position:relative;flex:none}
+  .ring::after{content:"";position:absolute;inset:4px;background:var(--teal);border-radius:50%}
+  .sub{color:var(--text-2);margin:0 0 22px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin:14px 0}
+  button{font:inherit;font-weight:600;border-radius:999px;border:1px solid var(--border);
+    background:transparent;color:var(--text);padding:11px 18px;cursor:pointer;transition:.15s}
+  button:hover:not(:disabled){border-color:var(--teal);color:#fff}
+  button.primary{background:var(--teal);color:#00201c;border-color:var(--teal)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=text]{flex:1;min-width:220px;background:#050a0a;border:1px solid var(--border);
+    border-radius:10px;color:var(--text);padding:11px 14px;font-family:var(--mono);font-size:13px}
+  input:focus{outline:none;border-color:var(--teal)}
+  .status{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#456;margin-right:7px;vertical-align:middle}
+  .dot.on{background:var(--teal);box-shadow:0 0 8px var(--teal)}
+  pre#log{background:#050a0a;border:1px solid var(--border);border-radius:10px;padding:14px;
+    font-family:var(--mono);font-size:12px;color:#bfe;min-height:120px;max-height:280px;overflow:auto;white-space:pre-wrap;margin:0}
+  .grid{display:flex;gap:10px;flex-wrap:wrap}
+  .warn{border-color:var(--coral)}
+  .warn b{color:var(--coral)}
+  code{font-family:var(--mono);background:#0d1414;padding:1px 6px;border-radius:5px;font-size:12.5px}
+  a{color:var(--teal)}
+  .muted{color:var(--text-2);font-size:13px}
+</style>
+</head>
+<body>
+  <p style="margin:0 0 18px;font-size:13px"><a href="./index.html" style="color:var(--text-2)">← DreamLayer</a>
+    &nbsp;·&nbsp; <a href="./plugins.html" style="color:var(--text-2)">Plugin store</a></p>
+  <h1><span class="ring"></span>WebBLE Playground</h1>
+  <p class="sub">Drive the Halo / Frame HUD straight from your browser over Bluetooth — no app store,
+    no build. Talks Lua to the glasses over the Nordic UART service.</p>
+
+  <div id="unsupported" class="card warn" hidden>
+    <b>This browser can't do Web Bluetooth.</b>
+    <p class="muted" style="margin:.5em 0 0">Web Bluetooth needs <b>Chrome or Edge on Android, macOS,
+      Windows, or Linux</b>. <b>iPhone/iPad Safari does not support it</b> (Apple blocks the API) — on
+      iOS use the DreamLayer app instead. Firefox doesn't support it either.</p>
+  </div>
+
+  <div class="card" id="panel">
+    <div class="row" style="justify-content:space-between">
+      <span class="status"><span class="dot" id="dot"></span><span id="state">disconnected</span></span>
+      <div class="row">
+        <button class="primary" id="connect">Connect glasses</button>
+        <button id="disconnect" disabled>Disconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="status" style="margin-bottom:10px">Canned demos</div>
+    <div class="grid">
+      <button class="demo" data-lua="frame.display.text('DreamLayer',120,220);frame.display.show()" disabled>Show text</button>
+      <button class="demo" data-lua="frame.display.clear();frame.display.show()" disabled>Clear</button>
+      <button class="demo" data-lua="print(frame.battery_level())" disabled>Battery</button>
+      <button class="demo" data-lua="for i=1,3 do frame.display.text('•',120+i*20,220);frame.display.show();end" disabled>Dots</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="status" style="margin-bottom:10px">Lua REPL</div>
+    <div class="row">
+      <input type="text" id="lua" placeholder="print('hello from the browser')" disabled
+             value="print(1+1)">
+      <button id="send" class="primary" disabled>Send</button>
+    </div>
+    <p class="muted" style="margin:.7em 0 0">Sent verbatim to the glasses' Lua VM over the UART RX
+      characteristic; replies stream back on TX below.</p>
+  </div>
+
+  <div class="card">
+    <div class="status" style="margin-bottom:10px">Log</div>
+    <pre id="log">Ready. Connect to begin.</pre>
+  </div>
+
+  <p class="muted">Nordic UART Service <code>6e400001-…</code> · RX write <code>…0002</code> ·
+    TX notify <code>…0003</code>. This is a companion/dev surface — the phone app stays the hub.</p>
+
+<script>
+// Nordic UART Service (Frame's Lua transport)
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const RX  = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";  // browser -> glasses (write)
+const TX  = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";  // glasses -> browser (notify)
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls) => {
+  const el = $("log");
+  el.textContent += "\n" + msg;
+  el.scrollTop = el.scrollHeight;
+};
+const enc = new TextEncoder(), dec = new TextDecoder();
+let device = null, rxChar = null;
+
+function setConnected(on) {
+  $("dot").classList.toggle("on", on);
+  $("state").textContent = on ? "connected" : "disconnected";
+  $("connect").disabled = on;
+  $("disconnect").disabled = !on;
+  $("lua").disabled = !on;
+  $("send").disabled = !on;
+  document.querySelectorAll(".demo").forEach(b => b.disabled = !on);
+}
+
+async function connect() {
+  try {
+    log("Requesting device…");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [NUS] }],
+      optionalServices: [NUS],
+    });
+    device.addEventListener("gattserverdisconnected", () => {
+      setConnected(false); log("Disconnected.");
+    });
+    log("Connecting to " + (device.name || "glasses") + "…");
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(NUS);
+    rxChar = await svc.getCharacteristic(RX);
+    const txChar = await svc.getCharacteristic(TX);
+    await txChar.startNotifications();
+    txChar.addEventListener("characteristicvaluechanged", (e) => {
+      const s = dec.decode(e.target.value).replace(/\s+$/, "");
+      if (s) log("← " + s);
+    });
+    setConnected(true);
+    log("Connected. Send some Lua.");
+  } catch (err) {
+    log("✕ " + (err && err.message ? err.message : err));
+  }
+}
+
+async function sendLua(code) {
+  if (!rxChar || !code) return;
+  try {
+    // Frame convention: a leading 0x01 marks a Lua string for the REPL
+    const body = enc.encode(code);
+    const buf = new Uint8Array(body.length + 1);
+    buf[0] = 0x01; buf.set(body, 1);
+    await rxChar.writeValue(buf);
+    log("→ " + code);
+  } catch (err) {
+    log("✕ " + (err && err.message ? err.message : err));
+  }
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) device.gatt.disconnect();
+}
+
+// wire up + honest degradation
+if (!navigator.bluetooth) {
+  $("unsupported").hidden = false;
+  $("panel").style.display = "none";
+  $("log").textContent = "Web Bluetooth unavailable in this browser.";
+} else {
+  $("connect").onclick = connect;
+  $("disconnect").onclick = disconnect;
+  $("send").onclick = () => sendLua($("lua").value.trim());
+  $("lua").addEventListener("keydown", (e) => { if (e.key === "Enter") sendLua($("lua").value.trim()); });
+  document.querySelectorAll(".demo").forEach(b =>
+    b.onclick = () => sendLua(b.dataset.lua));
+}
+</script>
+</body>
+</html>

@@ -74,6 +74,33 @@
   .safety b{color:var(--teal)}
   footer{border-top:1px solid var(--border);padding:26px 0;color:var(--text-3);font-size:13px;text-align:center}
   .empty{text-align:center;color:var(--text-2);padding:50px 0}
+  .card{cursor:pointer}
+  .card .actions,.card .rate,.card .star{cursor:default}
+  .more{color:var(--teal);font-size:12.5px;font-weight:600;margin-top:12px;opacity:.85}
+  /* detail modal */
+  .overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.74);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    display:none;align-items:flex-start;justify-content:center;padding:44px 18px;overflow:auto}
+  .overlay.on{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;max-width:600px;
+    width:100%;overflow:hidden;position:relative;animation:pop .24s var(--ease)}
+  @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+  .modal .shot{width:100%;display:block;border-bottom:1px solid var(--border)}
+  .modal .x{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:50%;
+    border:1px solid var(--border);background:rgba(0,0,0,.45);color:var(--text);font-size:15px;
+    cursor:pointer;display:grid;place-items:center;z-index:2}
+  .modal .x:hover{border-color:var(--teal);color:#fff}
+  .modal-body{padding:24px}
+  .modal h2{margin:0 0 3px;font-size:24px;letter-spacing:-.01em}
+  .modal .mby{color:var(--text-3);font-family:var(--mono);font-size:13px;margin-bottom:16px}
+  .modal .mlong p{color:var(--text-2);font-size:15px;line-height:1.65;margin:0 0 12px}
+  .modal .msec{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--teal);margin:20px 0 8px}
+  .modal .forwho{color:var(--text-2);font-size:14.5px;margin:0}
+  .perm-row{display:flex;gap:12px;align-items:baseline;margin:7px 0;color:var(--text-2);font-size:14px}
+  .perm-row b{color:var(--coral);font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;
+    flex:none;min-width:70px;text-transform:uppercase}
+  .mmeta{display:flex;gap:20px;color:var(--text-2);font-size:13px;font-family:var(--mono);margin:18px 0 4px}
   @media(max-width:560px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -107,6 +134,8 @@
 
   <div class="count" id="count"></div>
   <section class="grid" id="grid"></section>
+
+  <div class="overlay" id="detail"><div class="modal" id="detail-inner"></div></div>
 
   <section class="build">
     <h2>Made something? Add it to the store.</h2>
@@ -182,7 +211,7 @@ function render(){
     const perms = (p.requires||[]).length
       ? (p.requires||[]).map(r=>`<span class="chip perm">needs ${esc(r)}</span>`).join("")
       : '<span class="chip">no special access</span>';
-    return `<div class="card">
+    return `<div class="card" data-name="${esc(p.name)}">
       <div class="top">
         <div class="icon">${esc(initial)}</div>
         <div><h3>${esc(p.name)}${feat}</h3><div class="by">v${esc(p.version)} · ${esc(p.author||"community")}</div></div>
@@ -195,7 +224,7 @@ function render(){
         <button class="btn primary" onclick="copyInstall('${esc(p.name)}')">Install</button>
         ${p.homepage?`<a class="btn" href="${esc(p.homepage)}" target="_blank" rel="noopener">Source</a>`:""}
       </div>
-      <div class="perms-note">Installs through the app / Mac panel — validated on your device before it runs.</div>
+      <div class="more">See what it does & a preview →</div>
     </div>`;
   }).join("");
 }
@@ -216,11 +245,107 @@ async function rate(name, stars){
     refresh();
   }catch(e){}
 }
-// delegated click for the rating stars
+// ---- plugin detail: how it helps + a preview ----
+const CAP_HELP = {
+  midi:"Send MIDI notes to music apps on your Mac (e.g. Ableton, VCV).",
+  network:"Reach the internet to look things up.",
+  vision:"Use the Brain’s on-device vision model to read what you see.",
+  fs:"Read files you point it at.",
+  mesh:"Talk to a GhostMode circle of nearby wearers.",
+  object_lens:"Add rows to the look-at-a-thing panel.",
+  glance:"Add a lens the look can route to.",
+  cards:"Draw its own card on the HUD.",
+  perception:"Use the fast on-glass perception tier.",
+  ring:"Read your kept-memory ledger.",
+  shop:"Feed prices/reviews into TasteLens.",
+};
+const SHOT_FACE = `<svg class="shot" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Face Synth preview">
+  <defs><radialGradient id="fg" cx="28%" cy="46%" r="62%"><stop offset="0" stop-color="#0d2a24"/><stop offset="1" stop-color="#05100e"/></radialGradient></defs>
+  <rect width="320" height="170" fill="url(#fg)"/>
+  <circle cx="84" cy="80" r="46" fill="none" stroke="#2CC79A" stroke-width="10" opacity=".12"/>
+  <circle cx="84" cy="80" r="46" fill="none" stroke="#2CC79A" stroke-width="2" opacity=".9"/>
+  <rect x="74" y="70" width="20" height="20" rx="3" fill="#2CC79A" transform="rotate(45 84 80)"/>
+  <text x="84" y="140" fill="#e7f3f1" font-family="monospace" font-size="16" text-anchor="middle" font-weight="700">C4</text>
+  <g fill="#2CC79A"><rect x="168" y="94" width="10" height="26" opacity=".5"/><rect x="184" y="80" width="10" height="40" opacity=".7"/><rect x="200" y="64" width="10" height="56" opacity=".95"/><rect x="216" y="80" width="10" height="40" opacity=".7"/><rect x="232" y="94" width="10" height="26" opacity=".5"/><rect x="248" y="102" width="10" height="18" opacity=".35"/></g>
+  <text x="168" y="50" fill="#88a09c" font-family="monospace" font-size="11" letter-spacing="1">yaw → note</text>
+  <text x="168" y="150" fill="#88a09c" font-family="monospace" font-size="11" letter-spacing="1">tap → play · mic → velocity</text>
+</svg>`;
+const SHOT_OFF = `<svg class="shot" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TasteLens ranking preview">
+  <rect width="320" height="170" fill="#05100e"/>
+  <text x="22" y="28" fill="#2CC79A" font-family="monospace" font-size="11" letter-spacing="2">TASTELENS · BEST PICK</text>
+  <rect x="20" y="40" width="280" height="34" rx="8" fill="#0d2a24" stroke="#2CC79A" stroke-opacity=".45"/>
+  <circle cx="40" cy="57" r="10" fill="#56D364"/><text x="40" y="61" fill="#03150c" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">A</text>
+  <text x="60" y="61" fill="#e7f3f1" font-size="14" font-family="system-ui">Almond Drink</text>
+  <text x="292" y="61" fill="#2CC79A" font-size="13" font-family="monospace" text-anchor="end">4.8★</text>
+  <rect x="20" y="82" width="280" height="30" rx="8" fill="#160b09"/>
+  <circle cx="40" cy="97" r="10" fill="#E06B52"/><text x="40" y="101" fill="#1a0805" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">D</text>
+  <text x="60" y="101" fill="#88a09c" font-size="14" font-family="system-ui">Whole Milk</text>
+  <text x="292" y="101" fill="#E06B52" font-size="12" font-family="monospace" text-anchor="end">✕ dairy</text>
+  <rect x="20" y="118" width="280" height="30" rx="8" fill="#0a1412"/>
+  <circle cx="40" cy="133" r="10" fill="#7f8f94"/><text x="40" y="137" fill="#0a1412" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">C</text>
+  <text x="60" y="137" fill="#88a09c" font-size="14" font-family="system-ui">Dark Chocolate</text>
+  <text x="292" y="137" fill="#88a09c" font-size="13" font-family="monospace" text-anchor="end">3.0★</text>
+</svg>`;
+const DETAILS = {
+  "face-synth": {
+    long: [
+      "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
+      "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
+      "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."
+    ],
+    forwho: "For musicians, performers, and tinkerers who want to play the world.",
+    shot: SHOT_FACE
+  },
+  "open-food-facts": {
+    long: [
+      "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
+      "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
+      "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."
+    ],
+    forwho: "For anyone with dietary goals or allergies — or who just wants the better pick.",
+    shot: SHOT_OFF
+  }
+};
+
+function openDetail(name){
+  const p = plugins.find(x=>x.name===name); if(!p) return;
+  const d = DETAILS[name] || {};
+  const perms = (p.requires||[]);
+  const permHtml = perms.length
+    ? perms.map(r=>`<div class="perm-row"><b>${esc(r)}</b><span>${esc(CAP_HELP[r]||"a capability it requested")}</span></div>`).join("")
+    : '<div class="perm-row"><span>No special access — it only extends the layer’s own surfaces.</span></div>';
+  const long = (d.long||[p.description]).map(t=>`<p>${esc(t)}</p>`).join("");
+  const dl = p.downloads ? `↓ ${num(p.downloads)} installs` : "new";
+  const rt = p.ratings_count ? `★ ${p.rating.toFixed(1)} (${p.ratings_count})` : "unrated";
+  $("#detail-inner").innerHTML = `
+    <button class="x" onclick="closeDetail()" aria-label="Close">✕</button>
+    ${d.shot||""}
+    <div class="modal-body">
+      <h2>${esc(p.name)}</h2>
+      <div class="mby">v${esc(p.version)} · ${esc(p.author||"community")}</div>
+      <div class="mlong">${long}</div>
+      ${d.forwho?`<div class="msec">Who it’s for</div><p class="forwho">${esc(d.forwho)}</p>`:""}
+      <div class="msec">Permissions it asks for</div>${permHtml}
+      <div class="mmeta"><span>${dl}</span><span>${rt}</span></div>
+      <div class="actions">
+        <button class="btn primary" onclick="copyInstall('${esc(p.name)}')">Install</button>
+        ${p.homepage?`<a class="btn" href="${esc(p.homepage)}" target="_blank" rel="noopener">Source</a>`:""}
+      </div>
+    </div>`;
+  $("#detail").classList.add("on");
+}
+function closeDetail(){ $("#detail").classList.remove("on"); }
+window.openDetail = openDetail; window.closeDetail = closeDetail;
+$("#detail").addEventListener("click",e=>{ if(e.target.id==="detail") closeDetail(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeDetail(); });
+
+// delegated card click: stars rate, actions act, the rest opens the detail
 $("#grid").addEventListener("click",e=>{
-  const star=e.target.closest(".star"); if(!star) return;
-  const wrap=star.closest(".rate"); if(!wrap) return;
-  rate(wrap.dataset.name, +star.dataset.n);
+  const star=e.target.closest(".star");
+  if(star){ const wrap=star.closest(".rate"); if(wrap) rate(wrap.dataset.name, +star.dataset.n); return; }
+  if(e.target.closest(".actions")) return;          // Install / Source handle themselves
+  const card=e.target.closest(".card");
+  if(card && card.dataset.name) openDetail(card.dataset.name);
 });
 
 // tabs + search
