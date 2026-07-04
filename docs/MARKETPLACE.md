@@ -104,7 +104,7 @@ serves numbers, so a compromise there can't ship code. Hardening (auth on
 ratings, rate limits, moderation) is noted in `registry-api/README.md`.
 
 **Deployed.** The Worker is live at
-`https://dreamlayer-registry-api.nameless-forest-17dc.workers.dev` (KV-backed),
+`https://api.dreamlayer.app` (KV-backed),
 and the web + phone clients point at it. Because the registry repo is private,
 the *catalogue* lives with the clients (a bundled snapshot, overlaid by the git
 index when it's public) and the API supplies only the numbers — `GET

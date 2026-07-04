@@ -143,7 +143,7 @@ const INDEX_URL = "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer
 // The deployed social-API Worker (registry-api/): live downloads/ratings +
 // one-tap rating. The catalogue comes from the snapshot/index; the API only
 // supplies the numbers, merged by name. Empty ⇒ static, git-backed store.
-const SOCIAL_API = "https://dreamlayer-registry-api.nameless-forest-17dc.workers.dev";
+const SOCIAL_API = "https://api.dreamlayer.app";
 const USER = (()=>{ let u=localStorage.getItem("dl_uid"); if(!u){u="u"+Math.random().toString(36).slice(2);localStorage.setItem("dl_uid",u);} return u; })();
 
 let plugins = SNAPSHOT.plugins.slice();

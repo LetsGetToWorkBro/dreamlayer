@@ -30,10 +30,11 @@ npx wrangler kv namespace create SOCIAL      # copy the id into wrangler.toml
 npx wrangler deploy
 ```
 
-Then point the clients at it by setting the store's API base:
+It's deployed at **`https://api.dreamlayer.app`** (a Workers custom domain; the
+`*.workers.dev` URL keeps working too). The clients already point at it:
 
-- **Website** — set `SOCIAL_API` in `landing/plugins.html` to your Worker URL.
-- **Phone app** — set `SOCIAL_API` in `phone-app/src/state/usePluginStore.ts`.
+- **Website** — `SOCIAL_API` in `landing/plugins.html`.
+- **Phone app** — `SOCIAL_API` in `phone-app/src/state/usePluginStore.ts`.
 
 Both clients **degrade gracefully**: with `SOCIAL_API` empty or the Worker
 unreachable, they fall back to the static `registry/index.json` (the git-backed
