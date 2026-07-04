@@ -1307,7 +1307,59 @@ class Orchestrator:
         if it.kind == "meet_person":
             return self._meet_person(it.args.get("who"), it.args.get("relation"),
                                      it.args.get("note"), frame)
+        if it.kind == "debt":
+            return self._debt(it.args.get("who"), it.args.get("dir", "they_owe"),
+                              it.args.get("what", ""))
+        if it.kind == "debt_settle":
+            return self._debt_settle(it.args.get("who"))
         return {"intent": it.kind, **it.args}
+
+    def _debt(self, who: str | None, direction: str, what: str,
+              within_sec: float = 90.0) -> dict:
+        """Track "Marcus owes me $20" / "I owe Dana lunch" on that person, so it
+        surfaces on their recall card next time. By name, or (who=None) whoever
+        you just looked at. Veil-gated."""
+        what = (what or "").strip()
+        if not what:
+            return {"intent": "debt", "ok": False, "say": "Owes what?"}
+        if not self.privacy.allow_capture():
+            return {"intent": "debt", "ok": False, "say": "Not while you're incognito."}
+        if who:
+            contact = self.social.add_debt(direction, what, who=who)
+            if contact is None:
+                return {"intent": "debt", "ok": False,
+                        "say": f"I don't know who {who} is yet."}
+            name = contact.name
+        else:
+            lp = self._last_person
+            if not lp or (self._clock() - lp.get("ts", 0)) > within_sec:
+                return {"intent": "debt", "ok": False,
+                        "say": "Look at someone first, then tell me."}
+            contact = self.social.add_debt_by_id(lp["contact_id"], direction, what)
+            name = contact.name if contact is not None else lp["name"]
+        say = (f"Noted — {name} owes you {what}." if direction == "they_owe"
+               else f"Noted — you owe {name} {what}.")
+        return {"intent": "debt", "ok": True, "who": name, "dir": direction,
+                "what": what, "say": say}
+
+    def _debt_settle(self, who: str | None, within_sec: float = 90.0) -> dict:
+        if not self.privacy.allow_capture():
+            return {"intent": "debt_settle", "ok": False, "say": "Not while you're incognito."}
+        if who:
+            contact = self.social.settle(who=who)
+            if contact is None:
+                return {"intent": "debt_settle", "ok": False,
+                        "say": f"I don't know who {who} is yet."}
+            name = contact.name
+        else:
+            lp = self._last_person
+            if not lp or (self._clock() - lp.get("ts", 0)) > within_sec:
+                return {"intent": "debt_settle", "ok": False,
+                        "say": "Look at someone first, then tell me."}
+            self.social.settle_by_id(lp["contact_id"])
+            name = lp["name"]
+        return {"intent": "debt_settle", "ok": True, "who": name,
+                "say": f"Squared up with {name}."}
 
     def _meet_person(self, name: str | None, relation: str | None,
                      note: str | None, frame=None) -> dict:
@@ -1745,6 +1797,7 @@ class Orchestrator:
             else (f"met {c.last_met}" if c.last_met else ""),
             "note": c.latest_note(),
             "topic": (d.get("topics") or [""])[0] if d.get("known") else "",
+            "debts": c.debt_lines(),
         }
         return out
 

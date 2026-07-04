@@ -28,6 +28,7 @@ class ContactRecord:
     last_met: Optional[str] = None
     notes: Optional[str] = None
     relation: Optional[str] = None
+    debts: tuple = ()                 # [{dir, what}] — owes/owed, kept on-device
     email: Optional[str] = None
 
     def __post_init__(self):
@@ -39,6 +40,17 @@ class ContactRecord:
     def latest_note(self) -> str:
         """The most recent freeform note (what the recall card highlights)."""
         return _latest_note(self.notes)
+
+    def debt_lines(self) -> list:
+        """Open debts as plain phrases: "owes you $20", "you owe lunch"."""
+        out = []
+        for d in self.debts or ():
+            what = str(d.get("what", "")).strip()
+            if not what:
+                continue
+            out.append(f"owes you {what}" if d.get("dir") == "they_owe"
+                       else f"you owe {what}")
+        return out
 
     def context_line(self) -> str:
         """One-line context string for the HUD card."""
@@ -123,9 +135,12 @@ class SocialLensResult:
         note = _latest_note(c.notes)          # what you last asked to remember
         note_line = f"“{note}”" if note else ""
         ctx = c.context_line()
+        debt_line = "  ·  ".join(c.debt_lines())   # "owes you $20"
         lines = ["FACE RECALL", c.name]
         if relation:
             lines.append(relation)
+        if debt_line:
+            lines.append(debt_line)
         if ctx:
             lines.append(ctx)
         if note_line:
@@ -140,6 +155,9 @@ class SocialLensResult:
         if relation:
             y += 16
             layout["relation"] = {"x": 128, "y": y, "size": "sm", "color": 0x2E9F}
+        if debt_line:
+            y += 16
+            layout["debt"] = {"x": 128, "y": y, "size": "sm", "color": 0xFD20}
         if ctx:
             y += 16
             layout["detail"] = {"x": 128, "y": y, "size": "sm", "color": 0x5EF7}
@@ -154,6 +172,7 @@ class SocialLensResult:
             "eyebrow": "FACE RECALL",
             "primary": c.name,
             "relation": relation,
+            "debt": debt_line,
             "detail": ctx,
             "note": note_line,
             "footer": f"{conf_pct}% match",

@@ -196,6 +196,33 @@ class SocialLens:
         self._last_identified = record.contact_id
         return self._enricher.enrich(record)
 
+    def add_debt(self, direction: str, what: str, who: Optional[str] = None):
+        """Track a debt/favor with a person — by name, or (who=None) whoever you
+        just looked at. Returns the enriched record, or None if unresolved."""
+        contact = self._index.find_by_name(who) if who else (
+            self._index.get(self._last_identified) if self._last_identified else None)
+        if contact is None:
+            return None
+        self._enricher.add_debt(contact.contact_id, direction, what)
+        return self._enricher.enrich(contact)
+
+    def add_debt_by_id(self, contact_id: str, direction: str, what: str):
+        self._enricher.add_debt(contact_id, direction, what)
+        contact = self._index.get(contact_id)
+        return self._enricher.enrich(contact) if contact is not None else None
+
+    def settle(self, who: Optional[str] = None):
+        """Clear all debts with a person (settled up). Returns the record."""
+        contact = self._index.find_by_name(who) if who else (
+            self._index.get(self._last_identified) if self._last_identified else None)
+        if contact is None:
+            return None
+        self._enricher.clear_debts(contact.contact_id)
+        return self._enricher.enrich(contact)
+
+    def settle_by_id(self, contact_id: str) -> None:
+        self._enricher.clear_debts(contact_id)
+
     def add_note_by_id(self, contact_id: str, note: str):
         """Append a note to a specific contact_id (the caller already resolved
         who you were looking at). The enricher stores notes by id whether or not

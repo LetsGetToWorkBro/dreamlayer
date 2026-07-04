@@ -12,6 +12,7 @@ and an in-memory dict backend for test/standalone use.
 """
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from .schema import ContactRecord
@@ -75,6 +76,28 @@ class ContactEnricher:
         self.set_notes(contact_id, merged)
         return merged
 
+    # -- debts / favors (per person, kept on your device) ----------------
+
+    def get_debts(self, contact_id: str) -> list:
+        """Open debts/favors with this person: [{dir, what}], dir ∈
+        {they_owe, i_owe}. Stored as JSON so any string backend works."""
+        raw = self._backend.get(f"social_lens_debts_{contact_id}")
+        if not raw:
+            return []
+        try:
+            return json.loads(raw) if isinstance(raw, str) else list(raw)
+        except Exception:
+            return []
+
+    def add_debt(self, contact_id: str, direction: str, what: str) -> list:
+        debts = self.get_debts(contact_id)
+        debts.append({"dir": direction, "what": what})
+        self._backend.set(f"social_lens_debts_{contact_id}", json.dumps(debts))
+        return debts
+
+    def clear_debts(self, contact_id: str) -> None:
+        self._backend.set(f"social_lens_debts_{contact_id}", json.dumps([]))
+
     @staticmethod
     def latest_note(notes: Optional[str]) -> str:
         """The most recent note (what the recall card highlights)."""
@@ -88,6 +111,7 @@ class ContactEnricher:
         last_met = self.get_last_met(contact.contact_id)
         notes = self.get_notes(contact.contact_id)
         relation = self.get_relation(contact.contact_id)
+        debts = self.get_debts(contact.contact_id)
         return ContactRecord(
             contact_id=contact.contact_id,
             name=contact.name,
@@ -97,6 +121,7 @@ class ContactEnricher:
             last_met=last_met or contact.last_met,
             notes=notes or contact.notes,
             relation=relation or contact.relation,
+            debts=tuple(debts) or contact.debts,
             email=contact.email,
         )
 

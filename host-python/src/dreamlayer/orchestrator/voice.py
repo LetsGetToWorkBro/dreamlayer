@@ -11,6 +11,8 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "remember Maya's into rock climbing"      → note_person(who="Maya", note="into rock climbing")
     "remember she works at Google"            → note_person(who=None, note="works at Google")
     "this is my colleague Sarah, she's a PM"  → meet_person(who="Sarah", relation="colleague", note="she's a PM")
+    "Marcus owes me $20" / "I owe Dana lunch"  → debt(who, dir=they_owe|i_owe, what)
+    "Marcus paid me back"                     → debt_settle(who="Marcus")
     "set a timer for five minutes"            → timer(seconds=300)
     "interval timer, 30 on, 15 off, 8 rounds" → interval(work=30, rest=15, rounds=8)
     "stop the timer"                          → timer_cancel
@@ -121,6 +123,43 @@ _NOT_A_NAME_WORD = {"the", "to", "that", "this", "it", "when", "where", "how",
 def _strip_copula(fact: str) -> str:
     """Drop a leading 'is/are/was/'s' so "is into climbing" reads as a note."""
     return re.sub(r"^(?:is|are|was|were|'?s)\s+", "", fact, flags=re.I).strip()
+
+
+# -- debts & favors: "Marcus owes me $20" / "I owe Dana lunch" ---------------
+
+_DEBT_THEY = re.compile(r"^(.+?)\s+owes?\s+(?:me|you)\s+(.+)$", re.I)
+_DEBT_I = re.compile(r"^i\s+owe\s+(\w[\w'’.\-]*)\s+(.+)$", re.I)
+_SETTLE_A = re.compile(
+    r"^(?:i\s+)?(?:paid\s+(?:back\s+)?|settled\s+up\s+with\s+|squared\s+up\s+with\s+|"
+    r"we(?:'re| are)\s+(?:even|square)\s+with\s+|clear\s+with\s+)(\w[\w'’.\-]*)", re.I)
+_SETTLE_B = re.compile(r"^(\w[\w'’.\-]*)\s+(?:paid|got)\s+me\s+back\b", re.I)
+_PRONOUNS = {"he", "she", "they", "him", "her", "them"}
+
+
+def _clean_amount(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip(" .,!?")).strip()
+
+
+def _parse_debt(r: str) -> "Intent | None":
+    """A debt/favor you want tracked per person, or None. `r` is original case."""
+    core = r.strip()
+    m = re.match(r"^(?:remember|note)(?:\s+that)?\s+(.+)$", core, re.I)
+    if m:
+        core = m.group(1).strip()
+    ms = _SETTLE_A.match(core) or _SETTLE_B.match(core)
+    if ms:
+        return Intent("debt_settle", {"who": ms.group(1)})
+    mi = _DEBT_I.match(core)
+    if mi:
+        return Intent("debt", {"who": mi.group(1), "dir": "i_owe",
+                               "what": _clean_amount(mi.group(2))})
+    mt = _DEBT_THEY.match(core)
+    if mt:
+        who = mt.group(1).strip()
+        who = None if who.lower() in _PRONOUNS else who
+        return Intent("debt", {"who": who, "dir": "they_owe",
+                               "what": _clean_amount(mt.group(2))})
+    return None
 
 
 def _parse_meet_person(r: str) -> "Intent | None":
@@ -234,6 +273,12 @@ def parse_intent(text: str) -> Intent:
                 r"(?:put (?:this|it) in )?plain (?:english|words|language)|"
                 r"break (?:this|it) down)\b", t):
         return Intent("scholar", {"mode": "explain"})
+
+    # "Marcus owes me $20" / "I owe Dana lunch" — a debt on the person
+    # (checked before meet/note so "owe" wins over a generic note)
+    debt = _parse_debt(r)
+    if debt is not None:
+        return debt
 
     # "this is my colleague Sarah, she runs marketing" — meet someone new,
     # grabbing the face in view (checked before the plain note below)
