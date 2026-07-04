@@ -403,7 +403,21 @@ section{position:relative}
 .soon .device span{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--text-2);
   text-transform:uppercase}
 .soon h2.display{margin-bottom:22px}
-.soon .body{max-width:560px;margin:0 auto 44px}
+.soon .body{max-width:560px;margin:0 auto 40px}
+/* early-access opt-in */
+.early{max-width:468px;margin:0 auto 20px}
+.early-row{display:flex;gap:10px}
+.early-row input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-pill);padding:16px 22px;color:var(--text);font-size:15px;
+  font-family:inherit;transition:border-color var(--base) var(--ease),box-shadow var(--base) var(--ease)}
+.early-row input::placeholder{color:var(--text-2);opacity:.7}
+.early-row input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(47,212,196,.14)}
+.early-row input.err{border-color:var(--coral);box-shadow:0 0 0 3px rgba(224,107,82,.16)}
+.early-row .btn{flex:none;white-space:nowrap}
+.early-note{margin-top:16px;font-size:13.5px;color:var(--text-2);text-align:center;line-height:1.55}
+.early.done .early-row{display:none}
+.early.done .early-note{color:var(--teal);font-size:15px}
+@media (max-width:520px){.early-row{flex-direction:column}.early-row .btn{justify-content:center}}
 .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:10px;border-radius:var(--r-pill);
   padding:16px 30px;font-weight:600;font-size:15px;letter-spacing:.02em;
@@ -825,9 +839,14 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="13.5" cy="19" r="9"/><circle cx="24.5" cy="19" r="9"/></svg></div>
           <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Together</h4><div class="for">two wearers, one sky</div>
-        <div class="inc">Confluence — bonds, the entangled sky, weather gifts</div>
+        <div class="inc">Confluence — the entangled sky · silent pings · shared futures · weather gifts</div>
         <div class="xdetail"><div>
-          <div class="feat"><b>Confluence</b><span>Bond with another wearer: your ambient skies entangle when you’re together and drift apart when you’re not. Silent pings, weather as a gift — and only weather ever crosses. Never words, places, or names.</span></div>
+          <div class="feat"><b>The bond</b><span>Trade a short code with someone in front of you and your two glasses pair — explicit, mutual, revocable. It expires on its own in a few hours; either of you can dissolve it in a blink.</span></div>
+          <div class="feat"><b>One entangled sky</b><span>Bonded, your two ambient auroras blend into a single shared weather. In sync, the sky settles seamless; drift apart and it splits down a visible seam — you feel how aligned you are with no word said. Only weather ever crosses: never speech, places, or names.</span></div>
+          <div class="feat"><b>Silent pings</b><span>A discreet tap sends a pulse of light at their bearing across a room — “thinking of you,” “look here,” “let’s go.” No phone, no notification, no sound.</span></div>
+          <div class="feat"><b>Shared futures</b><span>Where both your rhythms already meet — the café you both drift to on Thursdays — a shared ghost lights on both horizons. Only scrambled place-hashes cross, so it works without either of you revealing where you go.</span></div>
+          <div class="feat"><b>Duet rehearsal</b><span>Learn a routine together — a dance, a drill, a two-person flow — as one shared figment. Either can correct any beat; each keeps a separately signed copy.</span></div>
+          <div class="feat"><b>Weather gift</b><span>Hand a moment of your day across: your sunrise plays on their sky for thirty seconds, your palette, verbatim. A feeling passed hand to hand.</span></div>
         </div></div>
       </div>
     </div>
@@ -1011,9 +1030,16 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
       <a href="https://brilliant.xyz/" target="_blank" rel="noopener"
          style="color:var(--teal)">Brilliant&nbsp;Labs&nbsp;Halo</a> — currently the only glasses
       capable of running it. More devices as they catch up. Be there when the layer wakes.</p>
-    <div class="cta-row arrive" style="--d:300ms">
-      <a class="btn primary" href="mailto:hello@dreamlayer.app?subject=DreamLayer%20early%20access">
-        Request early access</a>
+    <form class="early arrive" id="early" style="--d:300ms" novalidate>
+      <div class="early-row">
+        <input type="email" id="early-email" required placeholder="you@email.com"
+               autocomplete="email" inputmode="email" aria-label="Your email address">
+        <button class="btn primary" type="submit">Get early access</button>
+      </div>
+      <p class="early-note" id="early-note">Be first when the layer wakes — one note when it’s
+        ready, nothing else.</p>
+    </form>
+    <div class="cta-row arrive" style="--d:380ms">
       <a class="btn ghost" href="https://brilliant.xyz/" target="_blank" rel="noopener">The hardware ↗</a>
     </div>
   </div>
@@ -1498,6 +1524,29 @@ veilScroll();
   },{threshold:0.08});
   orbs.forEach(function(o){io.observe(o.c);});
   document.addEventListener("visibilitychange",kick);
+})();
+
+/* ---------- early-access opt-in ----------
+   Static Pages has no backend, so the opt-in composes a prefilled mail to
+   earlyaccess@dreamlayer.app (caught by the @dreamlayer.app catch-all and
+   forwarded). Honest and dependency-free: the visitor hits send from their
+   own client, so their real address lands in the inbox. */
+(function(){
+  var f=document.getElementById("early");
+  if(!f) return;
+  var input=document.getElementById("early-email");
+  var note=document.getElementById("early-note");
+  input.addEventListener("input",function(){input.classList.remove("err");});
+  f.addEventListener("submit",function(e){
+    e.preventDefault();
+    var email=(input.value||"").trim();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){input.classList.add("err");input.focus();return;}
+    var subj=encodeURIComponent("DreamLayer early access");
+    var body=encodeURIComponent("Add me to early access: "+email);
+    window.location.href="mailto:earlyaccess@dreamlayer.app?subject="+subj+"&body="+body;
+    f.classList.add("done");
+    note.textContent="Opening your mail — hit send and you’re on the list.";
+  });
 })();
 
 /* ---------- mobile: give each story step its own inline circle ----------
