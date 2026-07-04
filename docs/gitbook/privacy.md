@@ -45,9 +45,10 @@ On the Brain, incognito maps to `network_mode: "lan_only"`, which hard-fails
 
 ## Consent moments
 
-- **Name capture** — a name is offered only from a closed, offline grammar
-  of self-introductions; the offer expires in 12 seconds; **nothing is saved
-  without a deliberate confirm**; the veil closes the ear.
+- **Name capture** — a name is kept only from a closed, offline grammar of
+  self-introductions ("Hi, I'm Maya" — never ambient chatter, never a
+  bystander), saved automatically the moment it is given; the veil closes
+  the ear, and "forget that" erases it.
 - **ConsentRequiredCard** — a new data source stops the world until you say
   yes.
 - **Private zones** — places you mark never-record; entering one shows the

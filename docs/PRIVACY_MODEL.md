@@ -16,6 +16,21 @@ first-class, visible feature.
 - While paused, capture helpers **bypass** all camera/mic triggers (enforced in
   `capture/scheduler.lua` and tested in `test_privacy.py`).
 
+## People
+- **Name capture is automatic — and bounded.** When someone introduces
+  themselves out loud ("Hi, I'm Maya"), the name — and the face in front of
+  you — is kept as your own local contact the moment it is given, and the
+  conversation ledger grows a dossier (last met, topics, their last line,
+  your notes) from there. The KeptCard states the saved fact in-eye.
+- **The boundary is the closed grammar.** Only a spoken self-introduction
+  triggers capture. Ambient chatter, overheard third-party mentions, and
+  people who never addressed you produce nothing — bystanders are never
+  enrolled. There is no stranger lookup, no public database, no network.
+- **The veil wins.** While the Privacy Veil is down the ear is closed: no
+  name is kept or offered, no face is grabbed. "Forget that" erases a kept
+  introduction; the consent flow (offer + deliberate confirm) remains
+  available via `auto_keep_introductions=False`.
+
 ## Retention guidance
 - Store structured summaries, not raw audio/video.
 - Per-session capture enable/disable persisted via `system/settings.lua`.
@@ -28,4 +43,5 @@ first-class, visible feature.
 | memory summaries           | raw video frames |
 | entities, places           | raw audio waveforms |
 | commitments, timestamps    | continuous transcripts |
-| confidence scores          | biometric identifiers |
+| confidence scores          | raw media of any kind |
+| kept contacts' face embeddings (local only) | biometric identifiers of strangers |

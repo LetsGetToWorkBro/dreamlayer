@@ -1,28 +1,33 @@
 """social_lens/introduction.py — name-you-were-told capture.
 
-The consent-first counterpart to face recall. Social Lens never looks a
-stranger up. But when someone introduces themselves *out loud* — "Hi,
-I'm Maya" — you were told their name, to your face, on purpose. This
-module lets you keep that name in your *own* memory, and nothing else.
+The self-introduction counterpart to face recall. Social Lens never
+looks a stranger up. But when someone introduces themselves *out loud*
+— "Hi, I'm Maya" — you were told their name, to your face, on purpose.
+This module keeps that name in your *own* memory, and nothing else.
 
 The discipline, end to end:
 
-  voluntary   Hearing a name only *offers* to remember it. Nothing is
-              saved until you confirm with a deliberate gesture. An
-              unconfirmed offer expires on its own (OFFER_TTL_S).
+  automatic   By default (auto_keep=True) a heard self-introduction is
+              kept immediately — the way a person keeps a name they were
+              just given — and the KeptCard states the saved fact. With
+              auto_keep=False the older consent flow runs instead:
+              hearing only *offers*, nothing is saved until a deliberate
+              confirm, and an unconfirmed offer expires (OFFER_TTL_S).
   spoken      Only a closed, offline grammar of self-introductions
               ("my name is …", "I'm …", "this is …", "call me …") ever
-              produces an offer. Ambient chatter produces nothing.
-  in-place    The name — and, if you confirm, the face in front of you —
-              is written to your local contacts. No lookup, no database,
-              no network. Ever.
+              captures anything. Ambient chatter produces nothing —
+              this is what keeps the boundary at people who chose to
+              give you their name, never bystanders.
+  in-place    The name — and the face in front of you — is written to
+              your local contacts. No lookup, no database, no network.
+              Ever.
   veiled      While Privacy Veil is paused, the ear is closed too: a
-              heard name during the veil produces no offer and grabs no
-              face. Silence means silence.
+              heard name during the veil is neither kept nor offered and
+              grabs no face. Silence means silence.
 
-A confirmed introduction becomes a normal ContactRecord, so the very
-next time that face appears, ordinary Social Lens recall says the name
-back to you — because *you* saved it, from a name *you* were given.
+A kept introduction becomes a normal ContactRecord, so the very next
+time that face appears, ordinary Social Lens recall says the name back
+to you — and the conversation ledger grows its dossier from there.
 """
 from __future__ import annotations
 
@@ -167,14 +172,33 @@ class IntroductionOffer:
             "lines": ["REMEMBER THEM?", self.name, detail],
         }
 
+    def to_kept_card(self) -> dict:
+        """The kept card (auto_keep). It states the saved fact."""
+        detail = ("introduced themselves — kept"
+                  if self.has_face()
+                  else "name only — no face in view")
+        return {
+            "type": "IntroKeptCard",
+            "dismiss_ms": 5000,
+            "eyebrow": "KEPT",
+            "primary": self.name,
+            "detail": detail,
+            "footer": "on your device · veil silences this",
+            "color": 0x5EF7,
+            "opacity": 0.9,
+            "has_face": self.has_face(),
+            "contact_id": self.contact_id,
+            "lines": ["KEPT", self.name, detail],
+        }
+
 
 class IntroductionCapture:
-    """Turns a name you were told into a contact you chose to keep.
+    """Turns a name you were told into a contact of your own.
 
     Parameters
     ----------
     index : ContactIndex-like, optional
-        Where a confirmed face-bearing introduction is enrolled (so the
+        Where a kept face-bearing introduction is enrolled (so the
         SocialLens recall path finds it next time). Usually a live
         SocialLens' internal index, supplied via SocialLens.introductions.
     enricher : ContactEnricher-like, optional
@@ -184,15 +208,22 @@ class IntroductionCapture:
         the ear is closed: heard() returns None and grabs no face.
     embedder : FaceEmbedder, optional
         Shared embedder for the in-the-moment face.
+    auto_keep : bool
+        When True (the default), a heard self-introduction is kept
+        immediately and heard() returns the KeptCard. When False, the
+        consent flow runs: heard() stages an offer that confirm() /
+        dismiss() decide and that expires on its own.
     """
 
     def __init__(self, index=None, enricher=None, privacy=None,
-                 embedder: Optional[FaceEmbedder] = None, now_fn=None):
+                 embedder: Optional[FaceEmbedder] = None, now_fn=None,
+                 auto_keep: bool = True):
         self._index = index
         self._enricher = enricher
         self._privacy = privacy or _AlwaysOn()
         self._embedder = embedder
         self._now = now_fn or time.time
+        self.auto_keep = auto_keep
         self._pending: Optional[IntroductionOffer] = None
 
     # -- hearing ---------------------------------------------------------
@@ -200,11 +231,14 @@ class IntroductionCapture:
     def heard(self, utterance: str,
               frame: Optional[np.ndarray] = None,
               now: Optional[float] = None) -> Optional[dict]:
-        """Offer to remember a name spoken in a self-introduction.
+        """React to a name spoken in a self-introduction.
 
-        Returns an offer card dict when a name was recognised, else None.
-        Recognising a name saves *nothing* — it only stages an offer that
+        auto_keep on (default): the name is saved immediately and the
+        KeptCard is returned — the card states the saved fact.
+        auto_keep off: nothing is saved; an offer card is returned that
         confirm() can act on and that expires on its own.
+        Returns None when no self-introduction was recognised, and always
+        when the veil is down.
         """
         if not self._privacy.allow_capture():
             return None                      # veiled: the ear is closed
@@ -218,9 +252,14 @@ class IntroductionCapture:
         if frame is not None:
             embedding, face_conf = embed_frame(frame, self._embedder)
 
-        self._pending = IntroductionOffer(
+        offer = IntroductionOffer(
             name=name, heard_ts=now,
             embedding=embedding, face_confidence=face_conf)
+        if self.auto_keep:
+            self._pending = None
+            self._save(offer)
+            return offer.to_kept_card()
+        self._pending = offer
         return self._pending.to_hud_card()
 
     # -- deciding --------------------------------------------------------
@@ -233,15 +272,20 @@ class IntroductionCapture:
                 **extra) -> Optional[ContactRecord]:
         """Keep the currently offered name. Returns the saved record.
 
-        Nothing is saved unless there is a live, un-expired offer — this
-        is the only path from a heard name to stored memory. Optional
-        keyword fields (company, role, notes, email) ride along.
+        The consent-flow (auto_keep=False) counterpart to heard():
+        nothing is saved unless there is a live, un-expired offer.
+        Optional keyword fields (company, role, notes, email) ride along.
+        Under auto_keep the save already happened in heard(), so there is
+        no pending offer and this returns None.
         """
         now = now if now is not None else self._now()
         offer = self._take_fresh(now)
         if offer is None:
             return None
+        return self._save(offer, **extra)
 
+    def _save(self, offer: IntroductionOffer, **extra) -> ContactRecord:
+        """Write an introduction to your own contacts. The only writer."""
         record = ContactRecord(
             contact_id=offer.contact_id,
             name=offer.name,

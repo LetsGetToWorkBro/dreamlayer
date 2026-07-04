@@ -32,8 +32,8 @@ Only people you know; never strangers.
 - **Social Lens** — recognises your own contacts and labels them.
 - **Timbre** — familiar voices glow as waveforms at the rim; strangers are
   anonymous static.
-- **Name Capture** — someone introduces themselves out loud → keep the name,
-  on consent.
+- **Name Capture** — someone introduces themselves out loud → the name is
+  kept automatically, and their dossier starts.
 
 ## ⚖️ Truth — *what's true, and where beliefs come from*
 

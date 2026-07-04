@@ -49,7 +49,8 @@ From other modules:
 |---|---|---|
 | QuestCard / QuestRewardCard | `orchestrator/quest.py` | quests and QUEST COMPLETE / LEVEL UP / RANK UP rewards |
 | SocialLensCard | `social_lens/` | identity match result |
-| IntroOfferCard | `social_lens/introduction.py` | the consent-first name offer |
+| IntroKeptCard | `social_lens/introduction.py` | a self-introduction, kept automatically |
+| IntroOfferCard | `social_lens/introduction.py` | the consent-flow name offer (auto_keep=False) |
 | ConsistencyCard | Candor | self-consistency flags |
 | Provenance / Waypath panels | their lenses | belief origins; bearing to your things |
 | AnswerCard | inline in `ask_brain` | brain answers with tier attribution |

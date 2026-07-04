@@ -61,6 +61,7 @@ class SocialLens:
         threshold: float = 0.65,
         memory_backend=None,
         privacy=None,
+        auto_keep_introductions: bool = True,
     ):
         self._embedder = FaceEmbedder(threshold=0.40)
         self._index = ContactIndex(threshold=threshold)
@@ -70,13 +71,16 @@ class SocialLens:
         self._privacy = privacy or _AlwaysOn()
 
         # Name-you-were-told capture shares this instance's index,
-        # enricher, embedder, and privacy gate, so a confirmed
-        # introduction is recallable by the very next identify().
+        # enricher, embedder, and privacy gate, so a kept introduction
+        # is recallable by the very next identify(). auto_keep (the
+        # default) saves a heard self-introduction immediately;
+        # auto_keep_introductions=False restores the offer/confirm flow.
         self.introductions = IntroductionCapture(
             index=self._index,
             enricher=self._enricher,
             privacy=self._privacy,
             embedder=self._embedder,
+            auto_keep=auto_keep_introductions,
         )
 
         if contacts:
@@ -128,15 +132,18 @@ class SocialLens:
 
     def offer_introduction(self, utterance: str, frame=None,
                            now=None) -> Optional[dict]:
-        """Hear a spoken self-introduction and offer to remember the name.
+        """Hear a spoken self-introduction.
 
-        Returns an offer card when a name was recognised, else None.
-        Saves nothing — confirm_introduction() is the only path to memory.
+        With auto_keep (the default) the name is saved immediately and
+        the KeptCard is returned. With auto_keep_introductions=False this
+        returns an offer card and saves nothing until
+        confirm_introduction(). Returns None when nothing was recognised
+        or the veil is down.
         """
         return self.introductions.heard(utterance, frame=frame, now=now)
 
     def confirm_introduction(self, **extra) -> Optional[ContactRecord]:
-        """Keep the currently offered name as your own contact."""
+        """Keep the currently offered name (consent flow only)."""
         return self.introductions.confirm(**extra)
 
     def dismiss_introduction(self) -> None:

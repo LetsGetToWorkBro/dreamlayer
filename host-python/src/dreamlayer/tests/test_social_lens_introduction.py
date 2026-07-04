@@ -1,8 +1,9 @@
-"""Name-you-were-told capture: consent-first, spoken, in-place, veiled.
+"""Name-you-were-told capture: spoken, in-place, veiled — kept automatically.
 
-Covers the offline grammar, the voluntary confirm gate, the veil, offer
-expiry, the name-only vs face-bearing split, and the round-trip where a
-confirmed introduction is recalled by face on the next identify()."""
+Covers the offline grammar, the automatic keep (the default), the older
+consent flow behind auto_keep=False, the veil, offer expiry, the name-only
+vs face-bearing split, and the round-trip where a kept introduction is
+recalled by face on the next identify()."""
 import numpy as np
 import pytest
 
@@ -70,13 +71,64 @@ class TestParseIntroduction:
 
 
 # --------------------------------------------------------------------------
-# The offer: hearing stages, it does not save.
+# The default: a self-introduction is kept automatically.
+# --------------------------------------------------------------------------
+
+class TestAutomaticKeep:
+    def test_heard_keeps_immediately(self):
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        card = cap.heard("I'm Maya", frame=make_frame(0.8))
+        assert card["type"] == "IntroKeptCard"
+        assert card["primary"] == "Maya"
+        assert idx.size == 1                     # saved, no gesture
+        assert cap.pending is None               # nothing staged
+
+    def test_kept_card_states_the_fact(self):
+        cap = IntroductionCapture(index=ContactIndex())
+        card = cap.heard("my name is Sam", frame=make_frame())
+        assert card["eyebrow"] == "KEPT"
+        assert "double-tap" not in card["detail"]
+
+    def test_ambient_chatter_keeps_nothing(self):
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx)
+        assert cap.heard("what a nice day", frame=make_frame()) is None
+        assert idx.size == 0
+
+    def test_veil_still_closes_the_ear(self):
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx, privacy=Paused())
+        assert cap.heard("I'm Maya", frame=make_frame()) is None
+        assert idx.size == 0
+
+    def test_name_only_auto_keep_stays_out_of_the_face_index(self):
+        idx = ContactIndex()
+        enr = ContactEnricher()
+        cap = IntroductionCapture(index=idx, enricher=enr)
+        card = cap.heard("I'm Maya")             # no frame -> no face
+        assert card["type"] == "IntroKeptCard"
+        assert card["has_face"] is False
+        assert idx.size == 0                      # never a false-matchable face
+        assert enr.get_notes(card["contact_id"])  # kept as a note instead
+
+    def test_confirm_is_a_noop_after_auto_keep(self):
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx)
+        cap.heard("I'm Maya", frame=make_frame())
+        assert cap.confirm() is None             # already kept in heard()
+        assert idx.size == 1
+
+
+# --------------------------------------------------------------------------
+# The consent flow (auto_keep=False): hearing stages, it does not save.
 # --------------------------------------------------------------------------
 
 class TestOfferIsVoluntary:
     def test_heard_returns_offer_but_saves_nothing(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher(),
+                                  auto_keep=False)
         card = cap.heard("I'm Maya", frame=make_frame())
         assert card["type"] == "IntroOfferCard"
         assert card["primary"] == "Maya"
@@ -90,7 +142,8 @@ class TestOfferIsVoluntary:
 
     def test_confirm_saves_a_recallable_contact(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher(),
+                                  auto_keep=False)
         cap.heard("I'm Maya", frame=make_frame(0.8))
         rec = cap.confirm()
         assert rec is not None and rec.name == "Maya"
@@ -99,13 +152,13 @@ class TestOfferIsVoluntary:
 
     def test_confirm_without_offer_saves_nothing(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx)
+        cap = IntroductionCapture(index=idx, auto_keep=False)
         assert cap.confirm() is None
         assert idx.size == 0
 
     def test_dismiss_drops_the_offer(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx)
+        cap = IntroductionCapture(index=idx, auto_keep=False)
         cap.heard("I'm Maya", frame=make_frame())
         cap.dismiss()
         assert cap.pending is None
@@ -126,7 +179,7 @@ class TestPrivacyAndLifecycle:
     def test_offer_expires_unconfirmed(self):
         clock = Clock()
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx, now_fn=clock)
+        cap = IntroductionCapture(index=idx, now_fn=clock, auto_keep=False)
         cap.heard("I'm Maya", frame=make_frame())
         clock.t += OFFER_TTL_S + 1.0
         cap.tick()
@@ -136,7 +189,7 @@ class TestPrivacyAndLifecycle:
     def test_name_only_offer_stays_out_of_the_face_index(self):
         idx = ContactIndex()
         enr = ContactEnricher()
-        cap = IntroductionCapture(index=idx, enricher=enr)
+        cap = IntroductionCapture(index=idx, enricher=enr, auto_keep=False)
         card = cap.heard("I'm Maya")             # no frame -> no face
         assert card["has_face"] is False
         rec = cap.confirm()
@@ -155,13 +208,25 @@ class TestSocialLensRoundTrip:
         frame = make_frame(0.83)
         card = fr.offer_introduction("hi, my name is Maya", frame=frame)
         assert card and card["primary"] == "Maya"
+        assert card["type"] == "IntroKeptCard"   # kept automatically
+        assert fr.contact_count == 1
+
+        # the same face now recalls the name you were given
+        result = fr.identify(make_frame(0.83))
+        assert result.match is not None
+        assert result.match.contact.name == "Maya"
+
+    def test_consent_flow_round_trip(self):
+        fr = SocialLens(auto_keep_introductions=False)
+        frame = make_frame(0.83)
+        card = fr.offer_introduction("hi, my name is Maya", frame=frame)
+        assert card and card["type"] == "IntroOfferCard"
         assert fr.contact_count == 0             # still just an offer
 
         saved = fr.confirm_introduction(company="Acme")
         assert saved is not None
         assert fr.contact_count == 1
 
-        # the same face now recalls the name you were given
         result = fr.identify(make_frame(0.83))
         assert result.match is not None
         assert result.match.contact.name == "Maya"

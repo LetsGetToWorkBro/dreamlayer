@@ -100,9 +100,10 @@ Privacy isn't a setting here; it's the architecture.
   remembers — people you were introduced to and chose to keep. No public
   database, no face lookup against the open world. *"I've met them, remind me,"*
   never *"identify this stranger."*
-- **Voluntary, spoken name capture.** A name is offered only from a closed,
-  offline grammar of self-introductions, nothing is saved without a deliberate
-  confirm, and the Veil silences it like everything else.
+- **Spoken, bounded name capture.** A name is kept automatically — but only
+  from a closed, offline grammar of self-introductions ("Hi, I'm Maya"), so
+  only people who chose to give you their name are ever remembered. The Veil
+  silences it like everything else, and "forget that" erases it.
 - **Structured memory, never raw.** Audio, video, and embeddings are not stored
   or transmitted — DreamLayer keeps meaning, not recordings.
 - **One gate, honored everywhere.** `allow_capture()` / the Privacy Veil is
@@ -164,7 +165,7 @@ ai_brain/           tiered vision + knowledge router → device / Mac mini / clo
   └── server/       the Mac Brain: index, control panel, pairing, macOS sources
 lucid_recall/       query router → SocialLens / MemoryIndex → HUD card
 object_lens/        Oracle + Label — look at a thing → a contextual panel
-social_lens/        recognise your own people; consent-first name capture
+social_lens/        recognise your own people; automatic self-introduction capture
 truth_lens/         9-stage multimodal deception analysis
 dream_mode/         the ambient loop, Ghost Layer, world-anchored cards
 rem/                the sleep cycle: dream, consolidate, morning reel
@@ -192,10 +193,10 @@ orchestrator.connect_mac_mini(True)     # use the Mac mini as the local brain
 orchestrator.use_cloud(False)           # keep the hardest asks off the cloud
 orchestrator.set_incognito(True)        # doors shut: cloud off, capture paused
 
-# Social Lens — recall your own people, and consent-first name capture
+# Social Lens — recall your own people; introductions are kept automatically
 result = social_lens.identify(camera_frame)            # on double-tap
-offer  = social_lens.offer_introduction("hi, I'm Maya", frame=camera_frame)
-if offer: social_lens.confirm_introduction()           # only on a deliberate tap
+kept   = social_lens.offer_introduction("hi, I'm Maya", frame=camera_frame)
+# kept is the KeptCard — Maya is already your contact, dossier started
 ```
 
 ```bash
