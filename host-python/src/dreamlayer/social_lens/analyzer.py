@@ -171,15 +171,35 @@ class SocialLens:
         self._enricher.append_note(contact.contact_id, note)
         return self._enricher.enrich(contact)
 
+    def meet(self, name: str, frame=None, note: Optional[str] = None):
+        """Meet someone on the spot — "this is Sarah" while looking at them.
+        If a contact by that name already exists, the note is added to them;
+        otherwise a new contact is created from the face in view (or name-only
+        if no face). Sets last_identified so a follow-up "remember she…"
+        attaches. Returns the enriched record, or None (veiled / no name)."""
+        if not name:
+            return None
+        existing = self._index.find_by_name(name)
+        if existing is not None:
+            if note:
+                self._enricher.append_note(existing.contact_id, note)
+            self._last_identified = existing.contact_id
+            return self._enricher.enrich(existing)
+        record = self.introductions.enroll(name, frame=frame, note=note)
+        if record is None:
+            return None                       # veiled
+        self._last_identified = record.contact_id
+        return self._enricher.enrich(record)
+
     def add_note_by_id(self, contact_id: str, note: str):
         """Append a note to a specific contact_id (the caller already resolved
-        who you were looking at). Returns the enriched record, or None if the
-        id isn't a known contact."""
-        contact = self._index.get(contact_id)
-        if contact is None:
-            return None
+        who you were looking at). The enricher stores notes by id whether or not
+        a face is in the recall index, so name-only contacts get notes too.
+        Returns the enriched record when the contact is in the index, else None
+        (the note is still stored)."""
         self._enricher.append_note(contact_id, note)
-        return self._enricher.enrich(contact)
+        contact = self._index.get(contact_id)
+        return self._enricher.enrich(contact) if contact is not None else None
 
     @property
     def last_identified(self) -> Optional[str]:

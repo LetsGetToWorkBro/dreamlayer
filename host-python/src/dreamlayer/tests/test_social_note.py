@@ -164,3 +164,66 @@ def test_orchestrator_note_blocked_while_capture_veiled():
     r = orc.handle_voice("remember Maya loves oat milk")
     assert r["ok"] is False
     assert orc.social._enricher.get_notes("maya") in (None, "")
+
+
+# -- third-party introductions (professional / family) ------------------------
+
+def test_intro_grammar_captures_relationship():
+    from dreamlayer.social_lens.introduction import parse_introduction_ex
+    assert parse_introduction_ex("this is my brother Dan") == ("Dan", "brother")
+    assert parse_introduction_ex("meet my colleague Sarah") == ("Sarah", "colleague")
+    assert parse_introduction_ex("have you met Tom") == ("Tom", None)
+    # still a self-intro, and still refuses non-names
+    assert parse_introduction_ex("I'm Maya") == ("Maya", None)
+    assert parse_introduction_ex("this is my car") is None
+    assert parse_introduction_ex("I'm running late") is None
+
+
+def test_third_party_intro_creates_contact_with_relationship_note():
+    fr = SocialLens()                               # empty — never met anyone
+    card = fr.offer_introduction("this is my brother Dan", frame=_frame(0.8))
+    assert card is not None and fr.contact_count == 1
+    res = fr.identify(_frame(0.8))
+    assert res.match.contact.name == "Dan"
+    assert "brother" in (res.match.contact.notes or "")   # dossier seeded
+
+
+# -- meet someone on the spot -------------------------------------------------
+
+def test_meet_person_grammar():
+    it = parse_intent("Hey Oracle, this is my colleague Sarah, she runs marketing")
+    assert it.kind == "meet_person"
+    assert it.args["who"] == "Sarah" and it.args["relation"] == "colleague"
+    assert it.args["note"] == "she runs marketing"
+    # "meet" and bare "this is Name"
+    assert parse_intent("meet my brother Dan").args["who"] == "Dan"
+    assert parse_intent("this is Tom").kind == "meet_person"
+
+
+def test_orchestrator_meet_someone_new_then_recall_shows_dossier():
+    orc = Orchestrator(FakeBridge())                # no contacts at all
+    r = orc.handle_voice(
+        "this is my colleague Sarah, she runs marketing", frame=_frame(0.8))
+    assert r["ok"] is True and r["who"] == "Sarah"
+    # created + recallable, dossier seeded with relation and note
+    res = orc.look_at_person(_frame(0.8))
+    assert res is not None and res["person"] == "Sarah"
+    note_line = res["identity"]["note"]
+    assert "runs marketing" in note_line             # newest note shown
+    stored = orc.social._enricher.get_notes(res["identity"]["contact_id"])
+    assert "colleague" in stored and "runs marketing" in stored
+
+
+def test_orchestrator_meet_is_veil_gated():
+    orc = Orchestrator(FakeBridge())
+    orc.privacy.pause()
+    r = orc.handle_voice("this is Sarah", frame=_frame(0.8))
+    assert r["ok"] is False and orc.social.contact_count == 0
+
+
+def test_meet_existing_contact_just_adds_the_note():
+    orc = _orc_with_maya()
+    before = orc.social.contact_count
+    r = orc.handle_voice("this is Maya, she loves tea", frame=_frame(0.8))
+    assert r["ok"] is True and orc.social.contact_count == before   # no dup
+    assert "loves tea" in orc.social._enricher.get_notes("maya")

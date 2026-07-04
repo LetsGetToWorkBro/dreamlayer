@@ -10,6 +10,7 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
     "remember Maya's into rock climbing"      → note_person(who="Maya", note="into rock climbing")
     "remember she works at Google"            → note_person(who=None, note="works at Google")
+    "this is my colleague Sarah, she's a PM"  → meet_person(who="Sarah", relation="colleague", note="she's a PM")
     "set a timer for five minutes"            → timer(seconds=300)
     "interval timer, 30 on, 15 off, 8 rounds" → interval(work=30, rest=15, rounds=8)
     "stop the timer"                          → timer_cancel
@@ -122,6 +123,31 @@ def _strip_copula(fact: str) -> str:
     return re.sub(r"^(?:is|are|was|were|'?s)\s+", "", fact, flags=re.I).strip()
 
 
+def _parse_meet_person(r: str) -> "Intent | None":
+    """"this is Sarah" / "remember this is my colleague Sarah, she runs
+    marketing" / "meet my brother Dan" → meet someone on the spot: create the
+    contact from the face in view + the name, seeding the dossier with the
+    relationship and any trailing note. `r` is the original-case line."""
+    from ..social_lens.introduction import parse_introduction_ex
+    core = r.strip()
+    m = re.match(r"^(?:remember|note|jot down|make a note)(?:\s+that)?\s+(.+)$",
+                 core, re.I)
+    if m:
+        core = m.group(1).strip()
+    parsed = parse_introduction_ex(core)      # (name, relation) or None
+    if parsed is None:
+        return None
+    name, relation = parsed
+    note = None
+    idx = core.lower().find(name.lower())
+    if idx >= 0:
+        tail = core[idx + len(name):]
+        tail = re.sub(r"^[\s,;:.\-–—]+", "", tail)         # drop the joiner
+        tail = re.sub(r"^(?:and|who)\s+", "", tail, flags=re.I).strip()
+        note = tail or None
+    return Intent("meet_person", {"who": name, "relation": relation, "note": note})
+
+
 def _parse_person_note(r: str) -> "Intent | None":
     """"remember Maya's into rock climbing" / "note that Priya has two kids" /
     "remember she works at Google" → a note about a person. `who` is a name, or
@@ -208,6 +234,12 @@ def parse_intent(text: str) -> Intent:
                 r"(?:put (?:this|it) in )?plain (?:english|words|language)|"
                 r"break (?:this|it) down)\b", t):
         return Intent("scholar", {"mode": "explain"})
+
+    # "this is my colleague Sarah, she runs marketing" — meet someone new,
+    # grabbing the face in view (checked before the plain note below)
+    met = _parse_meet_person(r)
+    if met is not None:
+        return met
 
     # "remember Maya's into climbing" — a note about a person you know
     note = _parse_person_note(r)

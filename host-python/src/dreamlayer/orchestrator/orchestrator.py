@@ -1304,7 +1304,34 @@ class Orchestrator:
         if it.kind == "note_person":
             return self._note_about_person(it.args.get("who"),
                                            it.args.get("note", ""))
+        if it.kind == "meet_person":
+            return self._meet_person(it.args.get("who"), it.args.get("relation"),
+                                     it.args.get("note"), frame)
         return {"intent": it.kind, **it.args}
+
+    def _meet_person(self, name: str | None, relation: str | None,
+                     note: str | None, frame=None) -> dict:
+        """Meet someone on the spot — "this is my colleague Sarah, she's a PM".
+        Grabs the face in view + the name, creates the contact, and seeds the
+        dossier with the relationship and any note. Veil-gated."""
+        if not name:
+            return {"intent": "meet_person", "ok": False, "say": "Who is this?"}
+        if not self.privacy.allow_capture():
+            return {"intent": "meet_person", "ok": False,
+                    "say": "Not while you're incognito."}
+        rec = self.social.meet(name, frame=frame, note=relation)
+        if rec is None:
+            return {"intent": "meet_person", "ok": False,
+                    "say": "Couldn't add them just now."}
+        if note:
+            self.social.add_note_by_id(rec.contact_id, note)
+        self._last_person = {"contact_id": rec.contact_id, "name": name,
+                             "ts": self._clock()}
+        tail = (" — I'll know them next time" if frame is not None
+                else " (no face in view, so name only)")
+        return {"intent": "meet_person", "ok": True, "who": name,
+                "relation": relation, "note": note,
+                "say": f"Good to meet {name}{tail}."}
 
     def _note_about_person(self, who: str | None, note: str,
                            within_sec: float = 90.0) -> dict:

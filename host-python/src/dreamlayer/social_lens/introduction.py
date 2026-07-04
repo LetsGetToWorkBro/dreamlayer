@@ -55,13 +55,27 @@ MAX_NAME_WORDS = 3        # "Maya", "Maya Chen", "Maria del Carmen"
 #              while "I'm running late" and "I'm sorry" fall out, with no
 #              brittle list of non-name words to maintain.
 # Longer phrases are tried first so they win over their own prefixes.
+#
+# Both self-introductions ("I'm Maya") and third-party ones ("this is my
+# colleague Sarah", "meet Tom", "have you met Dan") land here — the latter
+# is how you meet people in a professional setting or through family. A
+# third-party intro can name a relationship or role ("my brother", "our
+# CTO") before the name; that phrase is captured as the first note on the
+# new contact, so the dossier starts the moment you're introduced.
 _EXPLICIT = ("my name is", "my name's", "the name's", "call me")
-_SOFT = ("i am", "i'm", "im", "this is", "that's")
+_SOFT = ("i am", "i'm", "im", "this is", "that's", "meet",
+         "have you met", "introduce you to", "say hi to", "say hello to")
 
 # Lower-case connectors that stay part of a multiword name.
 _CONNECTORS = frozenset({"del", "van", "de", "la", "der", "bin", "von", "di"})
+# Determiners that open a relationship/role clause before a third-party name.
+_DETERMINERS = frozenset({"my", "our", "the", "a", "an"})
+# Titles skipped so the name is the name, not the honorific.
+_TITLES = frozenset({"dr", "doctor", "mr", "mrs", "ms", "miss", "prof",
+                     "professor", "sir", "dame", "madam", "rev", "fr"})
 
 _WORD = re.compile(r"[A-Za-z][A-Za-z'\-]*")
+_MAX_RELATION_WORDS = 5
 
 
 def _find_trigger(low: str):
@@ -84,11 +98,24 @@ def _find_trigger(low: str):
 
 
 def parse_introduction(utterance: Optional[str]) -> Optional[str]:
-    """Return the introduced name from a self-introduction, else None.
+    """Return the introduced name from an introduction, else None.
 
     Deterministic, offline, closed-grammar. Recognises only the shapes a
-    person actually uses to give you their name, and refuses everything
-    else — including "nice to meet you", which names no one.
+    person actually uses to give you a name — self ("I'm Maya") or third-party
+    ("this is my colleague Sarah") — and refuses everything else, including
+    "nice to meet you", which names no one.
+    """
+    res = parse_introduction_ex(utterance)
+    return res[0] if res else None
+
+
+def parse_introduction_ex(
+        utterance: Optional[str]) -> Optional[tuple[str, Optional[str]]]:
+    """Like parse_introduction, but also returns the *relationship or role*
+    when a third-party introduction states one — "this is my brother Dan" →
+    ("Dan", "brother"), "meet my colleague Sarah" → ("Sarah", "colleague"),
+    "have you met Tom" → ("Tom", None). That relation becomes the first note
+    on the new contact, so the dossier starts the moment you're introduced.
     """
     if not utterance:
         return None
@@ -96,24 +123,41 @@ def parse_introduction(utterance: Optional[str]) -> Optional[str]:
     if found is None:
         return None
     end, explicit = found
-
     words = _WORD.findall(utterance[end:])
+    if not words:
+        return None
+
+    i = 0
+    relation_words: list[str] = []
+    if words[0].lower() in _DETERMINERS:
+        # third-party clause: "my brother …", "our new CTO …" — consume the
+        # determiner and the lowercase relationship words, then demand a name
+        i = 1
+        while (i < len(words) and len(relation_words) < _MAX_RELATION_WORDS
+               and not words[i][0].isupper()
+               and words[i].lower() not in _CONNECTORS):
+            relation_words.append(words[i])
+            i += 1
+        if i >= len(words) or not words[i][0].isupper():
+            return None                      # "this is my car" — no name follows
+    else:
+        if words[0].lower().strip(".") in _TITLES:
+            i = 1                            # skip a leading honorific
+        if i >= len(words):
+            return None
+        # a soft trigger still demands a capitalised first name token
+        if not explicit and not words[i][0].isupper():
+            return None
+
     name_words: list[str] = []
     prev_connector = False
-    for w in words:
+    for w in words[i:]:
         if not name_words:
-            # First word after the trigger. A soft trigger demands a
-            # capitalised token; an explicit trigger takes it as given.
-            if not explicit and not w[0].isupper():
-                return None
             name_words.append(w)
             prev_connector = w.lower() in _CONNECTORS
             continue
         if len(name_words) >= MAX_NAME_WORDS:
             break
-        # Continue the name through capitalised words, known connectors,
-        # and the single word that follows a connector; stop at the first
-        # ordinary word ("Maya and I..." -> "Maya").
         wl = w.lower()
         if w[0].isupper() or wl in _CONNECTORS or prev_connector:
             name_words.append(w)
@@ -123,11 +167,12 @@ def parse_introduction(utterance: Optional[str]) -> Optional[str]:
     if not name_words:
         return None
     name = " ".join(name_words).strip("'-")
-    # Title-case an all-lower-case transcription ("maya" -> "Maya"); leave
-    # already-cased names ("Maya Chen") as the speaker's casing.
     if name and name == name.lower():
         name = name.title()
-    return name or None
+    if not name:
+        return None
+    relation = " ".join(relation_words).strip() or None
+    return (name, relation)
 
 
 @dataclass
@@ -144,6 +189,7 @@ class IntroductionOffer:
     embedding: Optional[list[float]] = None
     face_confidence: float = 0.0
     contact_id: str = ""
+    relation: Optional[str] = None       # "brother", "colleague" — seeds the note
 
     def __post_init__(self):
         if not self.contact_id:
@@ -242,9 +288,10 @@ class IntroductionCapture:
         """
         if not self._privacy.allow_capture():
             return None                      # veiled: the ear is closed
-        name = parse_introduction(utterance)
-        if name is None:
+        parsed = parse_introduction_ex(utterance)
+        if parsed is None:
             return None
+        name, relation = parsed
 
         now = now if now is not None else self._now()
         embedding: Optional[list[float]] = None
@@ -253,7 +300,7 @@ class IntroductionCapture:
             embedding, face_conf = embed_frame(frame, self._embedder)
 
         offer = IntroductionOffer(
-            name=name, heard_ts=now,
+            name=name, heard_ts=now, relation=relation,
             embedding=embedding, face_confidence=face_conf)
         if self.auto_keep:
             self._pending = None
@@ -308,6 +355,30 @@ class IntroductionCapture:
                 self._enricher.set_notes(
                     record.contact_id,
                     f"Introduced themselves — name only ({offer.name}).")
+            # a stated relationship/role becomes the first dossier note
+            if offer.relation:
+                self._enricher.append_note(record.contact_id, offer.relation)
+        return record
+
+    def enroll(self, name: str, frame: Optional[np.ndarray] = None,
+               note: Optional[str] = None,
+               now: Optional[float] = None) -> Optional[ContactRecord]:
+        """Meet someone on the spot: you supply the name (e.g. "this is Sarah"),
+        the glasses grab the face in view, and it's kept immediately — the
+        command counterpart to heard(). An optional note seeds the dossier.
+        Veil-gated; returns the saved record, or None while capture is paused."""
+        if not self._privacy.allow_capture():
+            return None
+        if not name:
+            return None
+        now = now if now is not None else self._now()
+        embedding, face_conf = (embed_frame(frame, self._embedder)
+                                if frame is not None else (None, 0.0))
+        offer = IntroductionOffer(name=name, heard_ts=now, embedding=embedding,
+                                  face_confidence=face_conf)
+        record = self._save(offer)
+        if note:
+            self._enricher.append_note(record.contact_id, note)
         return record
 
     def dismiss(self) -> None:
