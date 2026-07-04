@@ -1,0 +1,22 @@
+{
+  "schema": "1",
+  "updated": "2026-07-04",
+  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Social numbers (downloads/rating/comments) are placeholders until the hosted layer lands; the schema already carries them.",
+  "plugins": [
+    {
+      "name": "face-synth",
+      "version": "0.1.0",
+      "author": "dreamlayer",
+      "description": "Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
+      "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
+      "url": "registry/packages/face-synth-0.1.0.json",
+      "checksum": "",
+      "requires": ["midi"],
+      "tags": ["music", "creative", "mesh", "featured"],
+      "downloads": 0,
+      "rating": 0,
+      "ratings_count": 0,
+      "comments_count": 0
+    }
+  ]
+}

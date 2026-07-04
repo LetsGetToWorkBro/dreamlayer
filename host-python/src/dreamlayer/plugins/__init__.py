@@ -10,8 +10,19 @@ from .base import (
     Plugin, SimplePlugin, make_plugin, PluginContext, PluginRegistry,
     LoadResult,
 )
+from .package import (
+    PluginManifest, PluginPackage, sha256_of, KNOWN_CAPABILITIES, API_VERSION,
+)
+from .validate import validate, scan_source, smoke_load, ValidationReport
+from .store import (
+    RegistryIndex, StoreEntry, PluginStore, load_plugin_object,
+)
 
 __all__ = [
     "Plugin", "SimplePlugin", "make_plugin", "PluginContext",
     "PluginRegistry", "LoadResult",
+    "PluginManifest", "PluginPackage", "sha256_of", "KNOWN_CAPABILITIES",
+    "API_VERSION",
+    "validate", "scan_source", "smoke_load", "ValidationReport",
+    "RegistryIndex", "StoreEntry", "PluginStore", "load_plugin_object",
 ]
