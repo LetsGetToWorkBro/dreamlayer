@@ -14,10 +14,16 @@ from .remote import (
     RemoteVisionBrain, RemoteKnowledgeBrain, connect_brain,
 )
 from .cloud import CloudVisionBrain, CloudKnowledgeBrain
+from .perception import (
+    PerceptSignals, AudioPercept, Perceptor, HeuristicPerceptor,
+    NpuPerceptor, PerceptionRouter, text_density,
+)
 
 __all__ = [
     "Answer", "VisionBrain", "KnowledgeBrain",
     "MockVisionBrain", "MockKnowledgeBrain", "BrainRouter",
     "RemoteVisionBrain", "RemoteKnowledgeBrain", "connect_brain",
     "CloudVisionBrain", "CloudKnowledgeBrain",
+    "PerceptSignals", "AudioPercept", "Perceptor", "HeuristicPerceptor",
+    "NpuPerceptor", "PerceptionRouter", "text_density",
 ]

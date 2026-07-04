@@ -266,8 +266,15 @@ class Orchestrator:
         self._recent_glance_intent = ("", 0.0)   # (lens-hint, ts) from voice
         # device seam: cheap on-device cues for the coarse glance read (a face
         # flag, a text-density estimate, a detected form grid). None → the
-        # coarse read leans on whatever the fine vision tier returns.
+        # coarse read draws from the Tier-0 PerceptionRouter below.
         self._glance_signals_fn = None
+        # Tier 0 — on-glass perception. Heuristic today (no model, works
+        # offline); on Halo the Ethos-U55 NPU plugs a Vela-compiled int8 model
+        # into NpuPerceptor behind the same protocol. Feeds the Glance Arbiter's
+        # coarse read and wake-word; a real model upgrades both with no change
+        # upstream (add via self.perception.add_perceptor(NpuPerceptor(...))).
+        from ..ai_brain import PerceptionRouter
+        self.perception = PerceptionRouter()
 
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
@@ -677,6 +684,9 @@ class Orchestrator:
         try:
             if self._glance_signals_fn is not None:
                 signals = self._glance_signals_fn(frame) or {}
+            else:
+                # Tier 0: model-backed on the NPU, heuristic offline.
+                signals = self.perception.perceive(frame).as_signals()
         except Exception:
             signals = {}
         reading = classify_coarse(signals, user_language=lang)
