@@ -483,6 +483,7 @@ class CardRenderer:
             "AnswerAheadCard":      self._answer_ahead,
             "ScholarCard":          self._scholar,
             "GlanceChoiceCard":     self._scholar,
+            "TasteCard":            self._scholar,
         }
         if self._extra:
             dispatch.update(self._extra)   # plugin card renderers

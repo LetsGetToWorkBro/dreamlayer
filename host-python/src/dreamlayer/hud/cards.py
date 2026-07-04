@@ -497,6 +497,46 @@ def scholar(mode: str = "answer", primary: str = "", detail: str = "",
     }
 
 
+def taste(ranking=None, unavailable: bool = False) -> dict:
+    """TasteLens — look at a shelf/menu, get the pick. The winner in hero type,
+    the runners-up stacked beneath with the *why* (dairy-free · 4.6★ · $3.20).
+    Reuses the World-lens material family (ScholarCard renderer). `ranking` is a
+    TasteRanking; the honest 'connect a Brain' state shows when there's nothing
+    to read. Vetoed options are shown last, flagged, never silently dropped."""
+    items = list(getattr(ranking, "items", []) or [])
+    winner = getattr(ranking, "winner", None) if ranking is not None else None
+    unavailable = bool(unavailable or getattr(ranking, "unavailable", False)
+                       or not items)
+    primary = winner.label if winner is not None else ""
+    detail = " · ".join(winner.reasons) if winner is not None else ""
+    rows = []
+    for it in items:
+        if winner is not None and it.label == winner.label and it.ok:
+            continue                          # the winner is the hero, not a row
+        mark = "" if it.ok else "✕ "
+        why = " · ".join(it.reasons)
+        rows.append(f"{mark}{it.label}" + (f" — {why}" if why else ""))
+    eyebrow = "BEST PICK" if not unavailable else "TASTELENS"
+    accent = T.TEXT_GHOST if unavailable else T.ACCENT_MEMORY
+    lines = [eyebrow] + ([primary] if primary else []) + rows[:6]
+    return {
+        "type":        "TasteCard",
+        "dismiss_ms":  9000,
+        "eyebrow":     eyebrow,
+        "primary":     primary,
+        "detail":      detail,
+        "items":       rows[:5],
+        "unavailable": unavailable,
+        "color":       accent,
+        "lines":       lines,
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 60, "size": "sm", "color": accent, "tracking": 3},
+            "separator": {"x1": 44, "x2": 212, "y": 76},
+            "primary":   {"x": 128, "y": 106, "size": "md", "color": T.TEXT_PRIMARY},
+        },
+    }
+
+
 _FACT_STYLE = {
     "supported":          ("VERIFIED",   T.ACCENT_SUCCESS,   "chime"),
     "disputed":           ("CHECK THIS", T.WARNING_AMBER,    "hark_urgent"),

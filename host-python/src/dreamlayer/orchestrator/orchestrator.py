@@ -89,6 +89,38 @@ def _parse_scene_reply(text: str):
     return GlanceReading(scene, conf, signals)
 
 
+def _parse_taste_reply(text: str):
+    """Parse a vision tier's shelf/menu listing into TasteItems. Lenient about
+    the 'NAME | ingredients | price | rating' shape: missing fields are fine,
+    '?' means unknown, a bare '$3.20' or '4.6' anywhere in a field is picked up."""
+    import re
+    from .taste import TasteItem
+    items = []
+    for raw in (text or "").splitlines():
+        line = raw.strip().lstrip("-*• ").strip()
+        if not line or line.startswith(("NAME", "http")):
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        name = parts[0].strip(" .")
+        if not name or name == "?":
+            continue
+        text_field = parts[1] if len(parts) > 1 and parts[1] not in ("?", "") else ""
+        price = rating = None
+        rest = " ".join(parts[2:]) if len(parts) > 2 else ""
+        pm = re.search(r"\$?\s*(\d+(?:\.\d{1,2})?)", parts[2]) if len(parts) > 2 else None
+        if pm:
+            price = float(pm.group(1))
+        rm = re.search(r"(\d(?:\.\d)?)\s*(?:/\s*5|★|stars?)?", parts[3]) if len(parts) > 3 else None
+        if rm:
+            try:
+                r = float(rm.group(1))
+                rating = r if 0 <= r <= 5 else None
+            except ValueError:
+                pass
+        items.append(TasteItem(label=name, text=text_field, price=price, rating=rating))
+    return items
+
+
 class Orchestrator:
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
@@ -249,6 +281,13 @@ class Orchestrator:
         # local model first, cloud only when opted in, never while incognito.
         from .scholar import Scholar
         self.scholar = Scholar(read_fn=self._scholar_read)
+        # TasteLens: look at a whole shelf/menu → a ranked pick against your
+        # rules (dietary vetoes, budget, rating, price). First-party lens; its
+        # price/review data is pluggable (shop_fn, opt-in cloud). Reads the
+        # shelf through the Brain's vision tier (_taste_read); ranks against
+        # your DietaryProfile. shop_fn is wired by a shop plugin.
+        from .taste import TasteLens
+        self.taste_lens = TasteLens(read_fn=self._taste_read, profile=self.dietary)
         # Glance Arbiter: on a look, decide which lens owns it — fire the clear
         # winner, offer a one-tap chooser when ambiguous, or do nothing. No mode
         # picker; the look decides. Coarse on-device read first, escalating to
@@ -679,6 +718,8 @@ class Orchestrator:
             return self.look_at_person(frame)
         if action == "translate":
             return self.look_at_object(frame, facet="ai")
+        if action == "taste":
+            return self.taste(frame)
         return self.look_at_object(frame)     # oracle / default
 
     def _plugin_capabilities(self) -> frozenset:
@@ -796,6 +837,34 @@ class Orchestrator:
         if ans is None or ans.is_empty():
             return None
         return ans.text
+
+    def taste(self, frame, budget: float | None = None, now: float | None = None):
+        """TasteLens: look at a shelf/menu and put the ranked pick on the glass —
+        dietary vetoes first, then budget, then rating/price. Veil-gated; sends a
+        TasteCard. Reads through the Brain's vision tier; ranks against your
+        DietaryProfile with a pluggable shop_fn for prices/reviews."""
+        ranking = self.taste_lens.look(frame, budget=budget)
+        card = cards.taste(ranking, unavailable=ranking.unavailable)
+        self.bridge.send_card(card, event="taste")
+        return ranking
+
+    def _taste_read(self, frame):
+        """TasteLens's vision seam: read a shelf/menu into a list of items,
+        through the Brain's vision tier — local first, cloud only when opted in,
+        never while incognito. Returns [] when nothing can read it (so the card
+        shows the honest 'connect a Brain' state)."""
+        if not self.privacy.allow_capture() or not getattr(self, "brain", None):
+            return []
+        prompt = ("List the products or dishes in view for a shopping assistant, "
+                  "one per line: NAME | ingredients | price | rating(0-5). "
+                  "Use '?' for anything unknown. Nothing else.")
+        try:
+            ans = self.brain.explain(frame, prompt, want="more")
+        except Exception:
+            ans = None
+        if ans is None or ans.is_empty():
+            return []
+        return _parse_taste_reply(ans.text)
 
     def find_way(self, subject: str, heading_deg: float = 0.0):
         """Waypath Lens: where is my <thing> / where do I go, as a direction

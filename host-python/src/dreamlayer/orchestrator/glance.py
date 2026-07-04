@@ -49,7 +49,7 @@ from typing import Callable, Optional
 
 # scene kinds the classifier may return. Kept small and concrete.
 SCENES = ("object", "text", "form", "question", "foreign_text", "person",
-          "screen", "unknown")
+          "screen", "shelf", "menu", "unknown")
 
 
 @dataclass
@@ -191,16 +191,29 @@ class PersonCandidate(LensCandidate):
         return None
 
 
+class TasteLensCandidate(LensCandidate):
+    lens, label = "taste", "Compare"
+
+    def bid(self, reading, ctx):
+        items = reading.sig("items", 0) or 0
+        if reading.scene in ("shelf", "menu") or items >= 2:
+            s = 0.88 if reading.scene in ("shelf", "menu") else 0.6
+            return LensBid(self.lens, self.label, s, "taste",
+                           reason=f"{items} items to compare" if items else "a shelf/menu")
+        return None
+
+
 DEFAULT_CANDIDATES = [
-    PersonCandidate(), ScholarFormCandidate(), ScholarAnswerCandidate(),
-    RosettaCandidate(), ScholarExplainCandidate(), OracleCandidate(),
+    PersonCandidate(), TasteLensCandidate(), ScholarFormCandidate(),
+    ScholarAnswerCandidate(), RosettaCandidate(), ScholarExplainCandidate(),
+    OracleCandidate(),
 ]
 
 # spoken lens hints → the lens key they favour
 INTENT_LENS = {
     "answer": "scholar_answer", "form": "scholar_form",
     "explain": "scholar_explain", "translate": "rosetta",
-    "object": "oracle", "person": "person",
+    "object": "oracle", "person": "person", "compare": "taste",
 }
 
 
@@ -411,8 +424,13 @@ def classify_coarse(signals: dict, user_language: str = "en") -> GlanceReading:
     lang = (s.get("language") or "").lower()
     foreign = bool(lang and lang != (user_language or "en").lower())
 
+    items = int(s.get("items", 0) or 0)
     if has_face and density < 0.3:
         return GlanceReading("person", 0.7, s)
+    if s.get("menu"):
+        return GlanceReading("menu", 0.65, s)
+    if s.get("shelf") or items >= 2:
+        return GlanceReading("shelf", 0.65, s)
     if fields >= 2:
         return GlanceReading("form", 0.65, s)
     if question and density > 0.05:

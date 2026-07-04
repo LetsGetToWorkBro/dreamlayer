@@ -62,6 +62,12 @@ One family, three directions.
   a form and each field says what to write; look at dense legal or technical
   text and it comes back in plain words. Reads through the Brain's vision tier
   (local first, cloud only when opted in), veil-gated.
+- **TasteLens** — look at a whole shelf or menu and get the *pick*: a ranked
+  comparison against your rules (dietary vetoes first, then budget, then
+  rating/price). Label Lens grown up — from facts about one thing to which to
+  choose among many. First-party lens; its price/review data is a **plugin**
+  (opt-in cloud), so "your rules" stays local and "the world's data" is
+  swappable. Reads the shelf through the Brain's vision tier; veil-gated.
 
 ## 🎯 Life — *do, keep, and build*
 
