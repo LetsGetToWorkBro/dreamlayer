@@ -126,7 +126,10 @@ class Choreographer:
 
             elif tag == "count":
                 counter_label = beat.parsed[1] or "count"
-                fig.add_counter(CounterDecl(name="count", start=0))
+                # more than one "count" beat feeds the same counter, not a
+                # duplicate declaration
+                if not any(c.name == "count" for c in fig.counters):
+                    fig.add_counter(CounterDecl(name="count", start=0))
 
             elif tag == "emit":
                 _, emit_tag, per_second = beat.parsed

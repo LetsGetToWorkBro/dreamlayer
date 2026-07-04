@@ -82,3 +82,33 @@ def test_empty_performance_is_a_gentle_teach_not_a_crash(tmp_path):
     b = Brain(tmp_path)
     r = b.rc_rehearse("Nothing", [])
     assert r["ok"] is False and r.get("teach")
+
+
+def test_repeated_count_beats_do_not_crash(tmp_path):
+    # two "count this" beats used to raise a duplicate-counter FigmentError and
+    # 500 the endpoint; now they feed one counter (or degrade to a teach card).
+    b = Brain(tmp_path)
+    r = b.rc_rehearse("Double count", [
+        {"kind": "double_tap"},
+        {"kind": "say", "text": "three minutes"},
+        {"kind": "say", "text": "count this"},
+        {"kind": "say", "text": "count this"},
+    ])
+    assert isinstance(r, dict) and "ok" in r     # returned, did not raise
+
+    # "send the count to my phone" reads as a send, not a count
+    from dreamlayer.reality_compiler.v2.rehearsal import parse_utterance
+    assert parse_utterance("send the count to my phone")[0] == "emit"
+    assert parse_utterance("count this")[0] == "count"
+
+
+def test_pathological_performance_degrades_gracefully(tmp_path):
+    # whatever we throw at it, the Brain returns a result, never an exception
+    b = Brain(tmp_path)
+    for beats in (
+        [{"kind": "say", "text": "count this"}, {"kind": "say", "text": "count this"}],
+        [{"kind": "long_press"}, {"kind": "long_press"}, {"kind": "long_press"}],
+        [{"kind": "say", "text": "banana"}, {"kind": "say", "text": "again"}],
+    ):
+        r = b.rc_rehearse("stress", beats)
+        assert isinstance(r, dict) and "ok" in r
