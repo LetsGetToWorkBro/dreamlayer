@@ -20,7 +20,7 @@ const INDEX_URL =
 // The deployed social-API Worker (registry-api/): live downloads/ratings and
 // one-tap rating. The catalogue comes from the snapshot/index; the API only
 // supplies the numbers, merged by name. Empty ⇒ static, git-backed store.
-const SOCIAL_API = "https://dreamlayer-registry-api.nameless-forest-17dc.workers.dev";
+const SOCIAL_API = "https://api.dreamlayer.app";
 
 const STORAGE_KEY = "dreamlayer.plugins.installed.v1";
 const UID_KEY = "dreamlayer.plugins.uid.v1";

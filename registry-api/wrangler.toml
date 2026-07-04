@@ -4,13 +4,23 @@ compatibility_date = "2024-11-01"
 
 # The social layer for the plugin store — ratings, comments, downloads.
 # Plugin CODE lives in the git-backed registry; this only serves the numbers.
+# Deployed at https://api.dreamlayer.app (Workers custom domain).
 
 # KV namespace holding the social data. Create it once, then paste the id:
 #   npx wrangler kv namespace create SOCIAL
+# (Deployed namespace id: 5e9450711c634998aa38df97aa230da5)
 [[kv_namespaces]]
 binding = "SOCIAL"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "5e9450711c634998aa38df97aa230da5"
+
+# Custom domain — api.dreamlayer.app routes to this Worker. custom_domain=true
+# makes wrangler manage the DNS record + cert on deploy.
+[[routes]]
+pattern = "api.dreamlayer.app"
+custom_domain = true
 
 [vars]
-# Raw registry index the /api/plugins list folds live stats into.
+# The registry repo is private, so the Worker doesn't read it — the client owns
+# the catalogue and the Worker serves stats for names it has seen (KV
+# index:names). INDEX_URL is kept only as an optional public-repo convenience.
 INDEX_URL = "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json"
