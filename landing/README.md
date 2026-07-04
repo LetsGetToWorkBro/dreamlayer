@@ -22,10 +22,18 @@ Everything in `assets/` is derived from this repo:
 
 | Asset | Source |
 |---|---|
-| `weather.mp4` | frame-by-frame render of the `DreamCanvas.tsx` mock-tick math (Dream Mode ambient weather) |
-| `recall.mp4` | the Focus law (`motion.ts` `signatures.focus`) applied to the object-recall card |
-| `reel.mp4` | actual frames from `out/mindblow_demo/` (the flagship demo scenario), crossfaded |
-| `hud/*.png` | verbatim copies of `assets/hud/samples/` — real renderer output, 256 px, one eye |
+| `horizon.mp4` | `scripts/export_meridian_motion.py` `wake_and_aurora` — the device Lua stepped on a 50 ms clock |
+| `focus.mp4` | same exporter, `focus_physics` (ObjectRecall v3 spatial card; settled hold extended for the loop) |
+| `saved.mp4` | same exporter, `save_moment` (SavedMemory v2 jewel; hold + crossfade back to idle) |
+| `hud/*.png` | verbatim copies of `assets/hud/samples/` — Meridian Solid renderer output, 256 px, one eye |
+
+To regenerate the clips after a renderer change:
+
+```bash
+pip install -e ./host-python lupa pillow
+python3 scripts/export_meridian_motion.py        # writes out/meridian_motion/
+# upscale + encode (see git history of this file for the exact ffmpeg calls)
+```
 
 Fonts load from Google Fonts (Space Grotesk) with a system-stack fallback;
 the page works fully offline minus that one request. All motion respects

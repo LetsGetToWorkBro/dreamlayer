@@ -138,23 +138,51 @@ section{position:relative}
   justify-content:center;text-align:center;padding:14%;opacity:0;transform:translateY(14px);
   transition:opacity var(--slow) var(--ease),transform var(--slow) var(--ease);pointer-events:none}
 .hud-card.active{opacity:1;transform:none}
-.hud-card .h-eyebrow{font-size:clamp(9px,1.1vh,12px);font-weight:600;letter-spacing:.3em;
-  text-transform:uppercase;color:var(--h-teal);margin-bottom:4.5%}
+/* Meridian Solid: the glass pane — row-gap scanline disc in surface luma */
+.hud-card .h-pane{position:absolute;left:50%;top:50%;width:78%;aspect-ratio:1;
+  transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
+  background:repeating-linear-gradient(180deg,rgba(20,31,35,.9) 0 2px,transparent 2px 6px);
+  -webkit-mask-image:radial-gradient(closest-side,#000 62%,transparent 100%);
+  mask-image:radial-gradient(closest-side,#000 62%,transparent 100%)}
+.hud-card .h-eyebrow{position:relative;font-size:clamp(9px,1.1vh,12px);font-weight:600;
+  letter-spacing:.3em;text-transform:uppercase;color:var(--h-teal);
+  margin-bottom:4.5%;padding-bottom:8px}
+/* the gradient separator under every Solid eyebrow */
+.hud-card .h-eyebrow::after{content:"";position:absolute;left:-16%;right:-16%;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--h-teal) 30%,var(--h-teal-dim) 70%,transparent)}
+.hud-card.coral .h-eyebrow::after{
+  background:linear-gradient(90deg,transparent,var(--h-coral) 30%,rgba(122,58,44,.9) 70%,transparent)}
 .hud-card .h-title{font-size:clamp(20px,3.4vh,30px);font-weight:700;color:var(--h-text);
-  letter-spacing:-.01em;line-height:1.15}
+  letter-spacing:-.01em;line-height:1.15;
+  text-shadow:0 0 22px rgba(44,199,154,.28)}
+.hud-card.coral .h-title{text-shadow:0 0 22px rgba(224,107,82,.28)}
 .hud-card .h-cap{font-size:clamp(12px,1.7vh,15px);color:var(--h-text2);margin-top:3%}
 .hud-card .h-ghost{font-family:var(--mono);font-size:clamp(9px,1.25vh,12px);
   color:var(--h-ghost);letter-spacing:.14em;margin-top:4.5%;text-transform:uppercase}
+/* information dots get bloom halos (Solid material pass) */
 .hud-card .h-dot{width:7px;height:7px;border-radius:50%;background:var(--h-teal);margin-top:6%;
+  box-shadow:0 0 10px 2px rgba(44,199,154,.55);
   animation:blink var(--breath) ease-in-out infinite}
 .hud-card.coral .h-eyebrow{color:var(--h-coral)}
-.hud-card.coral .h-dot{background:var(--h-coral)}
+.hud-card.coral .h-dot{background:var(--h-coral);box-shadow:0 0 10px 2px rgba(224,107,82,.55)}
+/* the object jewel — layered diamond with orbit ring and bloom */
 .hud-card .h-glyph{width:17%;aspect-ratio:1;border:2px solid var(--h-teal);border-radius:50%;
-  display:grid;place-items:center;margin-bottom:5%}
-.hud-card .h-glyph::after{content:"";width:34%;aspect-ratio:1;background:var(--h-teal);
-  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
-.hud-card.coral .h-glyph{border-color:var(--h-coral)}
-.hud-card.coral .h-glyph::after{background:var(--h-coral)}
+  display:grid;place-items:center;margin-bottom:5%;
+  box-shadow:0 0 16px rgba(44,199,154,.4),inset 0 0 12px rgba(44,199,154,.18)}
+.hud-card .h-glyph::after{content:"";width:36%;aspect-ratio:1;background:var(--h-teal);
+  transform:rotate(45deg);box-shadow:0 0 10px rgba(44,199,154,.7)}
+.hud-card.coral .h-glyph{border-color:var(--h-coral);
+  box-shadow:0 0 16px rgba(224,107,82,.4),inset 0 0 12px rgba(224,107,82,.18)}
+.hud-card.coral .h-glyph::after{background:var(--h-coral);box-shadow:0 0 10px rgba(224,107,82,.7)}
+/* the avatar iris — PersonContext centerpiece: bloomed ring, initial inside */
+.hud-card .h-iris{width:19%;aspect-ratio:1;border-radius:50%;border:2px solid var(--h-teal);
+  display:grid;place-items:center;margin-bottom:5%;position:relative;
+  font-weight:700;font-size:clamp(14px,2.2vh,20px);color:var(--h-text);
+  box-shadow:0 0 18px rgba(44,199,154,.45),inset 0 0 12px rgba(44,199,154,.22)}
+.hud-card .h-iris::before{content:"";position:absolute;inset:-22%;border-radius:50%;
+  border:1px solid rgba(44,199,154,.35)}
+.hud-card .h-iris::after{content:"";position:absolute;inset:-40%;border-radius:50%;
+  border:1px solid rgba(44,199,154,.14)}
 .hud-card .h-brackets{position:absolute;inset:24% 12% auto 12%;height:52%;pointer-events:none}
 .hud-card .h-brackets i{position:absolute;width:26px;height:26px;border:0 solid var(--h-teal-dim)}
 .hud-card .h-brackets i:first-child{left:0;top:0;border-left-width:1.5px;border-top-width:1.5px}
@@ -164,7 +192,8 @@ section{position:relative}
 .hud-card .h-rail{position:absolute;left:14%;top:30%;bottom:30%;width:2px;
   background:linear-gradient(var(--h-border),var(--h-coral))}
 .hud-card .h-rail::after{content:"";position:absolute;bottom:-4px;left:-3px;width:8px;height:8px;
-  border-radius:50%;background:var(--h-coral);animation:blink var(--breath) ease-in-out infinite}
+  border-radius:50%;background:var(--h-coral);box-shadow:0 0 12px 2px rgba(224,107,82,.6);
+  animation:blink var(--breath) ease-in-out infinite}
 /* steps */
 .story-steps{padding:6vh 0 20vh}
 .step{min-height:88svh;display:flex;flex-direction:column;justify-content:center;max-width:440px}
@@ -181,7 +210,6 @@ section{position:relative}
   aspect-ratio:1;background:#000;
   box-shadow:0 0 90px -30px rgba(44,199,154,.35), inset 0 0 60px rgba(0,0,0,.5)}
 .vid-orb video{width:100%;height:100%;object-fit:cover}
-.vid-orb.inset video{transform:scale(.82)}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -370,9 +398,10 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow arrive">What it feels like</span>
-      <h2 class="headline arrive" style="--d:80ms">Nothing pops. Everything arrives.</h2>
-      <p class="body arrive" style="--d:160ms">No feeds, no pings, no screens to check. A soft card
-        surfaces on the rim of your sight the moment it's useful — then gets out of the way.</p>
+      <h2 class="headline arrive" style="--d:80ms">The display is a place, not a stage.</h2>
+      <p class="body arrive" style="--d:160ms">No feeds, no pings, no screens to check. A card of
+        light and glass surfaces on the rim of your sight the moment it's useful — then files itself
+        away. Nothing pops; everything arrives.</p>
     </div>
   </div>
   <div class="wrap">
@@ -384,6 +413,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
             <span class="tick"></span>
 
             <div class="hud-card" data-card="0">
+              <div class="h-pane"></div>
               <div class="h-glyph"></div>
               <div class="h-eyebrow">Oracle</div>
               <div class="h-title">Snake plant</div>
@@ -393,7 +423,8 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
             </div>
 
             <div class="hud-card" data-card="1">
-              <div class="h-brackets"><i></i><i></i></div>
+              <div class="h-pane"></div>
+              <div class="h-iris">M</div>
               <div class="h-eyebrow">Introduction</div>
               <div class="h-title">“Hi, I’m Maya.”</div>
               <div class="h-cap">keep Maya?</div>
@@ -402,6 +433,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
             </div>
 
             <div class="hud-card" data-card="2">
+              <div class="h-pane"></div>
               <div class="h-eyebrow">Lucid Recall</div>
               <div class="h-title">North rack<br>4th &amp; Alder</div>
               <div class="h-cap">your bike</div>
@@ -419,6 +451,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
             </div>
 
             <div class="hud-card" data-card="4">
+              <div class="h-pane"></div>
               <div class="h-eyebrow">Rosetta · ES → EN</div>
               <div class="h-title">“Grilled octopus,<br>house lemon.”</div>
               <div class="h-cap">read back in yours</div>
@@ -447,7 +480,8 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
           <div class="n">03 / ASK</div>
           <h3>“Where did I leave the bike?” <em>North rack.</em></h3>
           <p>Your ambient second memory has been quietly keeping what matters — objects, places,
-             promises. Ask out loud, or just look where you last saw it. It answers in a glance.</p>
+             promises. Say “Hey Oracle,” or just ask out loud. The answer often lands before you
+             finish the question.</p>
         </div>
         <div class="step coral-step" data-step="3">
           <div class="n">04 / KEEP</div>
@@ -470,44 +504,48 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <section class="section-pad" id="see">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow arrive">Straight from the display pipeline</span>
+      <span class="eyebrow arrive">Rendered by the device code itself</span>
       <h2 class="headline arrive" style="--d:80ms">See it move.</h2>
-      <p class="body arrive" style="--d:160ms">Rendered by DreamLayer’s own HUD engine — the same
-        palette, the same 2.4-second breath, the same signature motion the glasses run.</p>
+      <p class="body arrive" style="--d:160ms">These aren’t mockups — the on-glass renderer, stepped
+        frame by frame. Meridian’s motion physics and living light: closed-form springs, palette-light
+        auroras, particle bursts. All inside a 420-draw-call budget, honest to the glass.</p>
     </div>
 
     <div class="vid-grid">
       <div class="vid-cell arrive">
         <div class="vid-orb">
-          <video muted playsinline loop preload="metadata" poster="assets/weather_poster.jpg"
-                 src="assets/weather.mp4" aria-label="Dream Mode ambient weather animation"></video>
+          <video muted playsinline loop preload="metadata" poster="assets/horizon_poster.jpg"
+                 src="assets/horizon.mp4" aria-label="The Horizon dial waking, aurora light flowing along the rim"></video>
         </div>
         <div class="cap">
-          <span class="eyebrow">Dream Mode</span>
-          <div class="t">The ambient weather</div>
-          <div class="s">The room’s sound and motion, felt as a quiet line field. 2&nbsp;Hz, like a resting pulse.</div>
+          <span class="eyebrow">The Horizon</span>
+          <div class="t">Your day wakes with you</div>
+          <div class="s">The dial assembles radially from the notch, then aurora light flows along the
+            rim. Promises sit as embers at the edge.</div>
         </div>
       </div>
       <div class="vid-cell feature arrive" style="--d:120ms">
         <div class="vid-orb">
-          <video muted playsinline loop preload="metadata" poster="assets/recall_poster.jpg"
-                 src="assets/recall.mp4" aria-label="Lucid Recall focus animation finding keys"></video>
+          <video muted playsinline loop preload="metadata" poster="assets/focus_poster.jpg"
+                 src="assets/focus.mp4" aria-label="Lucid Recall focus physics — a spatial keys card lands and recedes"></video>
         </div>
         <div class="cap">
           <span class="eyebrow">Lucid Recall</span>
-          <div class="t">Ask → the answer condenses in</div>
-          <div class="s">“Where are my keys?” The Focus law: condense, land, breathe, recede.</div>
+          <div class="t">The answer is a place</div>
+          <div class="s">“Where are my keys?” The card shows where — the object as a jewel, a light
+            trace down to you. Spring landing, phosphor tail, one glint as it settles.</div>
         </div>
       </div>
       <div class="vid-cell arrive" style="--d:240ms">
-        <div class="vid-orb inset">
-          <video muted playsinline loop preload="metadata" poster="assets/reel_poster.jpg"
-                 src="assets/reel.mp4" aria-label="Reel of real DreamLayer HUD cards"></video>
+        <div class="vid-orb">
+          <video muted playsinline loop preload="metadata" poster="assets/saved_poster.jpg"
+                 src="assets/saved.mp4" aria-label="Saved memory moment — a spring-drawn check with a particle burst"></video>
         </div>
         <div class="cap">
-          <span class="eyebrow">The flagship demo</span>
-          <div class="t">Save · ask · recall · protect</div>
-          <div class="s">Actual frames from the end-to-end demo run — pair, remember, recall, go private.</div>
+          <span class="eyebrow">Saved Memory</span>
+          <div class="t">One tap becomes a jewel</div>
+          <div class="s">A spring-drawn check, a twelve-particle burst, concentric gradient light over
+            glass. Kept, and it feels kept.</div>
         </div>
       </div>
     </div>
@@ -515,7 +553,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
     <div class="marquee arrive" aria-hidden="true">
       <div class="track" id="mqTrack"></div>
     </div>
-    <p class="mono marquee-note arrive">every card above is real — drawn by the shipping renderer, 256&nbsp;px, one eye</p>
+    <p class="mono marquee-note arrive">every card above is real — the Meridian Solid pass, drawn by the shipping renderer, 256&nbsp;px, one eye</p>
   </div>
 </section>
 
@@ -663,7 +701,9 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <footer>
   <div class="wrap foot">
     <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
-    <span class="mono"><a href="mailto:info@labyrinth.vision">info@labyrinth.vision</a></span>
+    <span class="mono"><a href="mailto:info@labyrinth.vision">info@labyrinth.vision</a>
+      &nbsp;·&nbsp; <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank"
+      rel="noopener">knowledge base ↗</a></span>
     <small>Private by architecture. Yours to run, yours to keep.</small>
   </div>
 </footer>
@@ -805,9 +845,9 @@ var vIO=new IntersectionObserver(function(entries){
 vids.forEach(function(v){ if(!reduced) vIO.observe(v); });
 
 /* ---------- marquee: the real HUD frames, doubled for the loop ---------- */
-var mqImgs=["ready","query_listening","saved_memory","object_recall","person_context_v2",
-  "truth_gauge","proactive_memory","world_anchor","synesthesia_v2","time_scrub_node",
-  "consent_required","wallet_recall","deviation_alert","forget_last","private_zone"];
+var mqImgs=["ready","listening","saved_memory","object_recall","person_context_v2",
+  "oracle_reply","hark","answer_ahead","fact_check","morning_brief","person_dossier",
+  "spoken_caption","truth_gauge","commitment_drift","privacy_veil","world_anchor"];
 var track=document.getElementById("mqTrack");
 if(track){
   var html="";
