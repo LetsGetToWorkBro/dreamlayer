@@ -295,6 +295,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/confluence")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Confluence — two wearers, one sky →</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/plugins")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Plugins — build on the layer →</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.section}>

@@ -29,6 +29,7 @@ export default function Layout() {
       <Tabs.Screen name="settings" options={{ title: "Settings" }} />
       {/* reachable from Settings → Labs, kept out of the bar for a clean 5 */}
       <Tabs.Screen name="brief" options={{ href: null }} />
+      <Tabs.Screen name="plugins" options={{ href: null }} />
       <Tabs.Screen name="rewind" options={{ href: null }} />
       <Tabs.Screen name="saga" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
