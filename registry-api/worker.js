@@ -1,0 +1,121 @@
+/**
+ * DreamLayer plugin store — social API (Cloudflare Worker).
+ *
+ * The hosted half of the marketplace (docs/MARKETPLACE.md, phase 2): ratings,
+ * comments, and download counts. Plugin *code* stays in the git-backed registry
+ * and passes the validation gate; this only serves the numbers. It mirrors the
+ * Python reference contract in host-python/.../plugins/social.py exactly.
+ *
+ *   GET  /api/plugins                 -> {plugins:[{name, ...stats}]}  (index + live stats)
+ *   GET  /api/plugins/:name           -> {name, ...stats, comments:[…]}
+ *   POST /api/plugins/:name/rate      {stars, user} -> stats           (one vote/user)
+ *   POST /api/plugins/:name/comment   {text, user}  -> comment
+ *   POST /api/plugins/:name/download                 -> {downloads}
+ *
+ * Binding: a KV namespace `SOCIAL`. Optional var `INDEX_URL` (the raw
+ * registry/index.json) so GET /api/plugins can fold stats into the catalogue.
+ */
+
+const INDEX_URL_DEFAULT =
+  "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS },
+  });
+}
+
+const clampStars = (v) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 0;
+};
+
+async function readJSON(kv, key, fallback) {
+  const raw = await kv.get(key);
+  if (!raw) return fallback;
+  try { return JSON.parse(raw); } catch { return fallback; }
+}
+
+async function stats(env, name) {
+  const ratings = await readJSON(env.SOCIAL, `ratings:${name}`, {});
+  const votes = Object.values(ratings);
+  const rating = votes.length
+    ? Math.round((votes.reduce((a, b) => a + b, 0) / votes.length) * 100) / 100
+    : 0;
+  const downloads = Number(await env.SOCIAL.get(`downloads:${name}`)) || 0;
+  const comments = await readJSON(env.SOCIAL, `comments:${name}`, []);
+  return { name, downloads, rating, ratings_count: votes.length, comments_count: comments.length };
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+    const url = new URL(request.url);
+    const parts = url.pathname.split("/").filter(Boolean); // ["api","plugins",name?,action?]
+    if (parts[0] !== "api" || parts[1] !== "plugins") return json({ error: "not found" }, 404);
+
+    const name = parts[2] ? decodeURIComponent(parts[2]) : "";
+    const action = parts[3] || "";
+
+    // GET /api/plugins — the index with live stats folded in
+    if (request.method === "GET" && !name) {
+      let index = { plugins: [] };
+      try {
+        const r = await fetch(env.INDEX_URL || INDEX_URL_DEFAULT, { cf: { cacheTtl: 60 } });
+        if (r.ok) index = await r.json();
+      } catch { /* serve stats-only if the index is unreachable */ }
+      const plugins = await Promise.all(
+        (index.plugins || []).map(async (p) => ({ ...p, ...(await stats(env, p.name)) })),
+      );
+      return json({ plugins });
+    }
+
+    if (!name) return json({ error: "method not allowed" }, 405);
+
+    // GET /api/plugins/:name — stats + comments
+    if (request.method === "GET" && !action) {
+      const s = await stats(env, name);
+      const comments = await readJSON(env.SOCIAL, `comments:${name}`, []);
+      return json({ ...s, comments: comments.slice(-50).reverse() });
+    }
+
+    if (request.method === "POST") {
+      const body = await request.json().catch(() => ({}));
+      if (action === "rate") {
+        const s = clampStars(body.stars);
+        const user = String(body.user || "").slice(0, 64);
+        if (s && user) {
+          const ratings = await readJSON(env.SOCIAL, `ratings:${name}`, {});
+          ratings[user] = s;                          // one vote per user, updatable
+          await env.SOCIAL.put(`ratings:${name}`, JSON.stringify(ratings));
+        }
+        return json(await stats(env, name));
+      }
+      if (action === "download") {
+        const n = (Number(await env.SOCIAL.get(`downloads:${name}`)) || 0) + 1;
+        await env.SOCIAL.put(`downloads:${name}`, String(n));
+        return json({ name, downloads: n });
+      }
+      if (action === "comment") {
+        const text = String(body.text || "").trim().slice(0, 2000);
+        if (!text) return json({ error: "empty comment" }, 400);
+        const comments = await readJSON(env.SOCIAL, `comments:${name}`, []);
+        const c = { id: comments.length + 1, user: String(body.user || "anon").slice(0, 40),
+                    text, ts: Date.now() / 1000 };
+        comments.push(c);
+        await env.SOCIAL.put(`comments:${name}`, JSON.stringify(comments));
+        return json(c);
+      }
+    }
+
+    return json({ error: "not found" }, 404);
+  },
+};

@@ -38,6 +38,7 @@ export default function Plugins() {
   const hydrate = usePluginStore((s) => s.hydrate);
   const install = usePluginStore((s) => s.install);
   const remove = usePluginStore((s) => s.remove);
+  const rate = usePluginStore((s) => s.rate);
   const mac = useBrainStore((s) => s.macMini);
 
   const [query, setQuery] = React.useState("");
@@ -135,9 +136,21 @@ export default function Plugins() {
 
               <View style={st.meta}>
                 <Text style={st.metaText}>{p.downloads ? `↓ ${fmt(p.downloads)}` : "new"}</Text>
-                <Text style={st.metaText}>
-                  {p.ratings_count ? `★ ${p.rating.toFixed(1)}` : "unrated"}
-                </Text>
+                <View style={st.stars}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Pressable key={n} onPress={() => rate(p.name, n)} hitSlop={4}>
+                      <Text
+                        style={{
+                          color: n <= Math.round(p.rating) ? colors.accentMemory : colors.statusPaused,
+                          fontSize: 15,
+                        }}
+                      >
+                        ★
+                      </Text>
+                    </Pressable>
+                  ))}
+                  <Text style={st.metaText}>{p.ratings_count ? ` ${p.rating.toFixed(1)}` : ""}</Text>
+                </View>
               </View>
 
               <View style={st.chips}>
@@ -209,8 +222,9 @@ const st = StyleSheet.create({
   },
   iconText: { color: colors.accentMemory, fontWeight: "800", fontSize: 18 },
   by: { color: colors.statusPaused, fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
-  meta: { flexDirection: "row", gap: space.lg, marginTop: space.md },
+  meta: { flexDirection: "row", alignItems: "center", gap: space.lg, marginTop: space.md },
   metaText: { color: colors.textSecondary, fontSize: 13 },
+  stars: { flexDirection: "row", alignItems: "center", gap: 2 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.md },
   chip: {
     borderWidth: 1,
