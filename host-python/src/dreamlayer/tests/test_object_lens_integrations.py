@@ -40,13 +40,16 @@ def frame():
 class TestPolledSource:
     def test_first_call_is_cold_then_fills(self):
         calls = {"n": 0}
+        release = threading.Event()
         def fetch():
+            release.wait(2.0)                     # hold until the cold read is captured
             calls["n"] += 1
             return {"battery": 80}
         src = PolledSource(fetch, ttl=10, now_fn=Clock())
-        snap = src()                              # cold: kicks a fetch
-        src.wait_idle()
+        snap = src()                              # cold: kicks a fetch (still gated)
         assert snap["_ok"] is False               # nothing yet on the first glance
+        release.set()                             # now let the fetch finish
+        src.wait_idle()
         assert src()["battery"] == 80             # the fetch landed in cache
         assert src.ok() is True
 
