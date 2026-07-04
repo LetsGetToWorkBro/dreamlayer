@@ -196,6 +196,7 @@ section{position:relative}
   border-radius:50%;background:var(--h-coral);box-shadow:0 0 12px 2px rgba(224,107,82,.6);
   animation:blink var(--breath) ease-in-out infinite}
 /* steps */
+.step-hud{display:none}   /* mobile-only: each step's own inline circle */
 .story-steps{padding:6vh 0 20vh}
 .step{min-height:88svh;display:flex;flex-direction:column;justify-content:center;max-width:440px}
 .step .n{font-family:var(--mono);font-size:12px;color:var(--teal);letter-spacing:.2em;margin-bottom:18px}
@@ -384,21 +385,22 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .veil-core .body{font-size:15px}
   .veil-contract{margin-top:24px;gap:8px}
   .veil-contract span{font-size:10.5px;padding:6px 12px}
-  /* sticky scope must live directly inside the block that also contains the
-     steps, or it stops sticking once its own column ends */
+  /* On phones the sticky-pinned scope pinned into the top bar (clipping the
+     circle) and its svh sizing recomputed every time the address bar showed
+     or hid — that was the jitter. Drop the pin entirely: each step carries
+     its own inline circle, so the section just scrolls, plainly. */
   .story-grid{display:block}
-  .scope-col{position:sticky;top:0;z-index:5;background:#000;
-    padding:56px 0 14px;box-shadow:0 26px 22px -20px rgba(0,0,0,.96)}
-  .scope-sticky{position:static;height:auto;display:grid;place-items:center}
-  .scope{width:min(48vw,240px)}
-  .hud-card{padding:11%}
-  .hud-card .h-eyebrow{font-size:8px;letter-spacing:.22em;padding-bottom:5px;margin-bottom:3.5%}
-  .hud-card .h-title{font-size:16px}
-  .hud-card .h-cap{font-size:11px}
-  .hud-card .h-ghost{font-size:8px}
+  .scope-col{display:none}
+  .story-steps{padding:0 0 6vh}
+  .step{min-height:auto;max-width:none;display:block;padding:26px 0 40px}
+  .step-hud{display:flex;justify-content:center;margin-bottom:26px}
+  .step-hud .scope{width:min(66vw,280px)}
+  .hud-card{padding:12%}
+  .hud-card .h-eyebrow{font-size:8.5px;letter-spacing:.22em;padding-bottom:5px;margin-bottom:3.5%}
+  .hud-card .h-title{font-size:17px}
+  .hud-card .h-cap{font-size:11.5px}
+  .hud-card .h-ghost{font-size:8.5px}
   .hud-card .h-dot{width:5px;height:5px;margin-top:4%}
-  .story-steps{padding:2vh 0 10vh}
-  .step{min-height:64svh;max-width:none}
   .lens-grid{grid-template-columns:1fr}
 }
 /* ---------- reduced motion ---------- */
@@ -645,8 +647,9 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><line x1="19" y1="5" x2="19" y2="33"/><line x1="7" y1="11" x2="31" y2="11"/><path d="M7 11l-4 9h8zM31 11l-4 9h8z"/></svg></div>
           <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Truth</h4><div class="for">what’s true, and where beliefs come from</div>
-        <div class="inc">Truth Lens · Candor · Provenance</div>
+        <div class="inc">Veritas · Truth Lens · Candor · Provenance</div>
         <div class="xdetail"><div>
+          <div class="feat"><b>Veritas — live fact-check</b><span>When a claim doesn’t hold up, a quiet verdict on the rim: green <i>verified</i>, amber <i>check this</i>, or red <i>they said different before</i> — with the basis, like an earlier “we settled at two million.”</span></div>
           <div class="feat"><b>Truth Lens</b><span>Outward: when you ask, a read on how credible what you’re hearing is. Explicit, never running in the background.</span></div>
           <div class="feat"><b>Candor</b><span>Inward: keeps your own story straight — “last week you said the deal closed at two million.”</span></div>
           <div class="feat"><b>Provenance</b><span>Backward: trace any belief to who told you, when, and whether it held up since.</span></div>
@@ -1013,6 +1016,30 @@ function veilScroll(){
   veilCore.style.pointerEvents=rise>0.5?"auto":"none";
 }
 veilScroll();
+
+/* ---------- mobile: give each story step its own inline circle ----------
+   Built for every viewport but shown only on phones (CSS .step-hud). This
+   is why the phone story needs no sticky pin, no scroll-swap, and no
+   viewport-height math — the source of the jitter and the clipped circle. */
+(function(){
+  var scope=document.getElementById("scope");
+  if(!scope) return;
+  document.querySelectorAll(".step").forEach(function(step){
+    var i=+step.dataset.step;
+    var mini=scope.cloneNode(true);
+    mini.removeAttribute("id");
+    mini.classList.add("mini");
+    if(i===3) mini.classList.add("alert");
+    mini.querySelectorAll(".hud-card").forEach(function(c){
+      if(+c.dataset.card===i) c.classList.add("active");
+      else c.remove();
+    });
+    var wrap=document.createElement("div");
+    wrap.className="step-hud"; wrap.setAttribute("aria-hidden","true");
+    wrap.appendChild(mini);
+    step.insertBefore(wrap, step.firstChild);
+  });
+})();
 })();
 </script>
 </body>
