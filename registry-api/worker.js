@@ -71,8 +71,15 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
 
     const url = new URL(request.url);
+    // This is the store's API, not the store. A human landing on the root
+    // should go to the browsable store, not see a JSON error.
+    if (url.pathname === "/" || url.pathname === "") {
+      return Response.redirect("https://dreamlayer.app/plugins", 302);
+    }
     const parts = url.pathname.split("/").filter(Boolean); // ["api","plugins",name?,action?]
-    if (parts[0] !== "api" || parts[1] !== "plugins") return json({ error: "not found" }, 404);
+    if (parts[0] !== "api" || parts[1] !== "plugins") {
+      return json({ error: "not found", store: "https://dreamlayer.app/plugins" }, 404);
+    }
 
     const name = parts[2] ? decodeURIComponent(parts[2]) : "";
     const action = parts[3] || "";
