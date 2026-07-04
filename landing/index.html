@@ -133,10 +133,11 @@ section{position:relative}
   border-radius:50%;animation:ringbreathe var(--breath) ease-in-out infinite}
 .scope.alert .breath-ring{border-color:rgba(224,107,82,.4)}
 .scope .tick{position:absolute;top:4%;left:calc(50% - 1px);width:2px;height:3.5%;background:var(--h-teal)}
-/* HUD cards inside the scope */
+/* HUD cards inside the scope — unhurried crossfade, never a snap */
 .hud-card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;text-align:center;padding:14%;opacity:0;transform:translateY(14px);
-  transition:opacity var(--slow) var(--ease),transform var(--slow) var(--ease);pointer-events:none}
+  justify-content:center;text-align:center;padding:14%;opacity:0;
+  transform:translateY(14px) scale(.985);
+  transition:opacity 560ms var(--ease),transform 560ms var(--ease);pointer-events:none}
 .hud-card.active{opacity:1;transform:none}
 /* Meridian Solid: the glass pane — row-gap scanline disc in surface luma */
 .hud-card .h-pane{position:absolute;left:50%;top:50%;width:78%;aspect-ratio:1;
@@ -228,7 +229,7 @@ section{position:relative}
 .marquee-note{margin-top:18px;text-align:center}
 
 /* ---------- lenses ---------- */
-.lens-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.lens-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
   padding:26px 24px;position:relative;overflow:hidden;
   transition:border-color var(--base) var(--ease),transform var(--base) var(--ease),
@@ -265,8 +266,34 @@ section{position:relative}
 .tier.cloud.lit .node{background:var(--paused);box-shadow:0 0 14px rgba(107,122,130,.6)}
 .tier.cloud .k{color:var(--paused)}
 .arch-note{margin-top:clamp(40px,6vh,56px);border:1px solid var(--border);border-radius:var(--r-lg);
-  background:var(--surface);padding:22px 26px;display:flex;gap:16px;align-items:baseline;max-width:760px}
-.arch-note .mono{color:var(--teal);white-space:nowrap}
+  background:var(--surface);padding:22px 26px;max-width:760px}
+.pair-head{display:flex;gap:16px;align-items:flex-start}
+.pair-glyph{flex:none;width:38px;height:38px;border-radius:var(--r-sm);
+  border:1.5px solid var(--teal);display:grid;place-items:center;color:var(--teal)}
+.pair-glyph svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.pair-head h4{font-size:17px;font-weight:600;margin-bottom:4px}
+
+/* ---------- expandable cards (pairing modes, the lenses) ---------- */
+.xcard{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.xcard:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.chev{flex:none;margin-left:auto;width:24px;height:24px;border-radius:50%;
+  border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2);
+  transition:transform var(--base) var(--ease),border-color var(--base) var(--ease),
+             color var(--base) var(--ease)}
+.chev svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.xcard.open .chev{transform:rotate(180deg);border-color:var(--teal);color:var(--teal)}
+.xcard .card-head{display:flex;align-items:flex-start}
+.xdetail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 420ms var(--ease)}
+.xcard.open .xdetail{grid-template-rows:1fr}
+.xdetail>div{overflow:hidden}
+.feat{display:flex;flex-direction:column;gap:3px;padding:12px 0;border-top:1px solid var(--border)}
+.xdetail .feat:first-child{margin-top:16px}
+.feat b{color:var(--text);font-weight:600;font-size:14px}
+.feat b i{font-style:normal;color:var(--teal);font-family:var(--mono);font-size:11px;
+  letter-spacing:.1em;margin-left:8px}
+.feat span{color:var(--text-2);font-size:13.5px;line-height:1.55}
+.coral-card .feat b i{color:var(--coral)}
+@media (prefers-reduced-motion:reduce){.xdetail{transition:none}}
 
 /* ---------- veil ---------- */
 .veil{height:200svh}
@@ -340,13 +367,17 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 @media (max-width:760px){
   /* tighter rhythm: mobile scroll distances shrink with the viewport */
   .section-pad{padding:clamp(64px,9vh,104px) 0}
-  .veil{height:165svh}
-  /* the veil's world: one calm row of three, never a wrapped scatter */
+  /* the veil is a calm, ordinary section on phones — the scroll-driven
+     dimming scene is a desktop moment. No pin, no dead space. */
+  .veil{height:auto;padding:72px 0 56px}
+  .veil-sticky{position:static;height:auto;display:flex;flex-direction:column;
+    align-items:center;gap:36px}
+  .veil-world{position:static;opacity:.34!important;filter:blur(1.5px) saturate(.35)!important;
+    transform:none!important}
   .veil-world .row{flex-wrap:nowrap;gap:14px;padding:0}
   .veil-world img{width:clamp(88px,26vw,132px)}
   .veil-world .row img:nth-child(n+4){display:none}
-  /* the veil core must fit one phone viewport under the fixed bar */
-  .veil-core{padding-top:44px}
+  .veil-core{opacity:1!important;transform:none!important;pointer-events:auto!important}
   .hex{width:64px;height:64px;margin-bottom:20px}
   .hex .pause i{width:5px;height:17px}
   .veil-core h2{font-size:24px}
@@ -356,14 +387,16 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   /* sticky scope must live directly inside the block that also contains the
      steps, or it stops sticking once its own column ends */
   .story-grid{display:block}
-  .scope-col{position:sticky;top:0;z-index:5;
-    background:linear-gradient(#000 82%,transparent);padding:60px 0 20px}
+  .scope-col{position:sticky;top:0;z-index:5;background:#000;
+    padding:56px 0 14px;box-shadow:0 26px 22px -20px rgba(0,0,0,.96)}
   .scope-sticky{position:static;height:auto;display:grid;place-items:center}
-  .scope{width:min(58vw,300px)}
-  .hud-card .h-eyebrow{font-size:8.5px;letter-spacing:.24em}
-  .hud-card .h-title{font-size:19px}
-  .hud-card .h-cap{font-size:12px}
-  .hud-card .h-ghost{font-size:8.5px}
+  .scope{width:min(48vw,240px)}
+  .hud-card{padding:11%}
+  .hud-card .h-eyebrow{font-size:8px;letter-spacing:.22em;padding-bottom:5px;margin-bottom:3.5%}
+  .hud-card .h-title{font-size:16px}
+  .hud-card .h-cap{font-size:11px}
+  .hud-card .h-ghost{font-size:8px}
+  .hud-card .h-dot{width:5px;height:5px;margin-top:4%}
   .story-steps{padding:2vh 0 10vh}
   .step{min-height:64svh;max-width:none}
   .lens-grid{grid-template-columns:1fr}
@@ -580,36 +613,77 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
       <p class="body arrive" style="--d:160ms">Everything DreamLayer does groups into six lenses.
         Underneath them all: the Privacy Veil, and Atmosphere — the ambient light and feel.</p>
     </div>
+    <p class="mono arrive" style="margin:-28px 0 28px">tap a lens to open it</p>
     <div class="lens-grid">
-      <div class="card arrive" style="--d:0ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="13"/><circle cx="19" cy="19" r="5"/><line x1="19" y1="2" x2="19" y2="8"/></svg></div>
+      <div class="card xcard arrive" style="--d:0ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="13"/><circle cx="19" cy="19" r="5"/><line x1="19" y1="2" x2="19" y2="8"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Memory</h4><div class="for">your life, remembered</div>
         <div class="inc">Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition · Waypath</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Dream Mode</b><span>The calm default — the glasses quietly sense your day without ever interrupting it.</span></div>
+          <div class="feat"><b>Ghost Layer</b><span>Memories echo in the places they happened — walk back in, and they’re there.</span></div>
+          <div class="feat"><b>Lucid Recall</b><span>Ask “where are my keys?” and the answer lands in a glance — including from your own files.</span></div>
+          <div class="feat"><b>REM</b><span>Overnight, the glasses replay and recombine your day — the dreaming is how memory settles.</span></div>
+          <div class="feat"><b>Yesterlight</b><span>Roll your head back and the room replays its own light from earlier.</span></div>
+          <div class="feat"><b>Premonition</b><span>Your routines shimmer just ahead of now — the 9 AM standup glows at 8:56.</span></div>
+          <div class="feat"><b>Waypath</b><span>Direction and distance to your own things: “keys, 12 m to your left.”</span></div>
+        </div></div>
       </div>
-      <div class="card arrive" style="--d:60ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="13" r="6"/><path d="M7 32c0-7 5-11 12-11s12 4 12 11"/></svg></div>
+      <div class="card xcard arrive" style="--d:60ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="13" r="6"/><path d="M7 32c0-7 5-11 12-11s12 4 12 11"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>People</h4><div class="for">who’s around you</div>
         <div class="inc">Social Lens · Timbre · Name Capture — consent-first, introductions only</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Social Lens</b><span>Recognises the people you chose to keep — and only them. Never strangers, never a public database.</span></div>
+          <div class="feat"><b>Timbre</b><span>Familiar voices glow as waveforms at the rim of sight; strangers stay anonymous static.</span></div>
+          <div class="feat"><b>Name Capture</b><span>Someone says “Hi, I’m Maya” — one deliberate tap and the name is yours to recall. Nothing kept without it.</span></div>
+        </div></div>
       </div>
-      <div class="card arrive" style="--d:120ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><line x1="19" y1="5" x2="19" y2="33"/><line x1="7" y1="11" x2="31" y2="11"/><path d="M7 11l-4 9h8zM31 11l-4 9h8z"/></svg></div>
+      <div class="card xcard arrive" style="--d:120ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><line x1="19" y1="5" x2="19" y2="33"/><line x1="7" y1="11" x2="31" y2="11"/><path d="M7 11l-4 9h8zM31 11l-4 9h8z"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Truth</h4><div class="for">what’s true, and where beliefs come from</div>
         <div class="inc">Truth Lens · Candor · Provenance</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Truth Lens</b><span>Outward: when you ask, a read on how credible what you’re hearing is. Explicit, never running in the background.</span></div>
+          <div class="feat"><b>Candor</b><span>Inward: keeps your own story straight — “last week you said the deal closed at two million.”</span></div>
+          <div class="feat"><b>Provenance</b><span>Backward: trace any belief to who told you, when, and whether it held up since.</span></div>
+        </div></div>
       </div>
-      <div class="card arrive" style="--d:180ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><ellipse cx="19" cy="19" rx="6.5" ry="14"/><line x1="5" y1="19" x2="33" y2="19"/></svg></div>
+      <div class="card xcard arrive" style="--d:180ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><ellipse cx="19" cy="19" rx="6.5" ry="14"/><line x1="5" y1="19" x2="33" y2="19"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>World</h4><div class="for">understand what you look at</div>
         <div class="inc">Oracle (look → know) · Label Lens · AI Brain · Rosetta · Puente</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Oracle</b><span>Look at anything and know it — the plant, the wine, the part number. Objects, never people.</span></div>
+          <div class="feat"><b>Label Lens</b><span>Your own rules on what you’re holding: “you’re avoiding dairy,” “you returned this brand last year.”</span></div>
+          <div class="feat"><b>AI Brain</b><span>Name and explain anything; ask your own files and mail. On-device first, your Mac mini next, cloud only if you switched it on.</span></div>
+          <div class="feat"><b>Rosetta</b><span>The eye: menus and signs you look at, read back in your language.</span></div>
+          <div class="feat"><b>Puente</b><span>The ear: live voice translation as the other person speaks.</span></div>
+        </div></div>
       </div>
-      <div class="card coral-card arrive" style="--d:240ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><circle cx="19" cy="19" r="8"/><circle cx="19" cy="19" r="2.5"/></svg></div>
+      <div class="card xcard coral-card arrive" style="--d:240ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><circle cx="19" cy="19" r="8"/><circle cx="19" cy="19" r="2.5"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Life</h4><div class="for">do, keep, and build</div>
         <div class="inc">Commitment Drift · Saga · Reality Compiler (Rehearsal + Wayfinding)</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Commitment Drift</b><span>Promises live on the display — they bloom, drift toward the rim, and glow as deadlines near. You don’t forget.</span></div>
+          <div class="feat"><b>Saga</b><span>The same promises as a personal RPG: streaks, XP, and rescues for the ones about to slip.</span></div>
+          <div class="feat"><b>Reality Compiler</b><span>Teach a behaviour once — rehearse it or walk it — and a verified routine runs it on-glass forever.</span></div>
+        </div></div>
       </div>
-      <div class="card arrive" style="--d:300ms">
-        <div class="glyph"><svg viewBox="0 0 38 38"><circle cx="13.5" cy="19" r="9"/><circle cx="24.5" cy="19" r="9"/></svg></div>
+      <div class="card xcard arrive" style="--d:300ms" role="button" tabindex="0" aria-expanded="false">
+        <div class="card-head"><div class="glyph"><svg viewBox="0 0 38 38"><circle cx="13.5" cy="19" r="9"/><circle cx="24.5" cy="19" r="9"/></svg></div>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span></div>
         <h4>Together</h4><div class="for">two wearers, one sky</div>
         <div class="inc">Confluence — bonds, the entangled sky, weather gifts</div>
+        <div class="xdetail"><div>
+          <div class="feat"><b>Confluence</b><span>Bond with another wearer: your ambient skies entangle when you’re together and drift apart when you’re not. Silent pings, weather as a gift — and only weather ever crosses. Never words, places, or names.</span></div>
+        </div></div>
       </div>
     </div>
   </div>
@@ -652,11 +726,34 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
         <p>Frontier reach for the hardest, non-personal asks. A switch you own — not a default you accept.</p>
       </div>
     </div>
-    <div class="arch-note arrive">
-      <span class="mono">$ pair</span>
-      <p class="body" style="font-size:15px">Pairing the whole trio — phone + Brain + glasses — is
-        <b style="color:var(--text)">one code</b>, scanned or pasted once. Nothing marked private ever
-        leaves, in any configuration.</p>
+    <div class="arch-note xcard arrive" role="button" tabindex="0" aria-expanded="false">
+      <div class="pair-head">
+        <span class="pair-glyph" aria-hidden="true">
+          <svg viewBox="0 0 20 20"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4"/>
+          <rect x="7.5" y="7.5" width="5" height="5"/></svg>
+        </span>
+        <div>
+          <h4>One code pairs the trio</h4>
+          <p class="body" style="font-size:15px">Phone + Brain + glasses, scanned or pasted once.
+            Nothing marked private ever leaves, in any configuration. <span style="color:var(--teal)">Three
+            ways in ↓</span></p>
+        </div>
+        <span class="chev" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1 3l4 4 4-4"/></svg></span>
+      </div>
+      <div class="xdetail"><div>
+        <div class="feat"><b>Scan it <i>FASTEST</i></b>
+          <span>The Brain’s control panel shows a QR code; point your phone at it. One scan carries
+          the Brain’s address, its access token, and your glasses’ identity in a single
+          <code style="font-family:var(--mono)">dreamlayer:</code> code — the trio is paired before
+          the coffee cools.</span></div>
+        <div class="feat"><b>Paste it <i>NO CAMERA NEEDED</i></b>
+          <span>The same code works as plain text — copy it from the panel and paste it into the
+          app. Byte-for-byte identical to the QR, so it also works over a message to yourself or
+          from another room.</span></div>
+        <div class="feat"><b>Skip it <i>WORKS OUT OF THE BOX</i></b>
+          <span>No Mac mini? You’re already set: the phone is the brain by default, glasses connect
+          over Bluetooth, and everything runs offline. Add a Brain any time later — same one code.</span></div>
+      </div></div>
     </div>
   </div>
 </section>
@@ -870,6 +967,21 @@ if(track){
   });
   track.innerHTML=html;
 }
+
+/* ---------- expandable cards: pairing modes + the lenses ---------- */
+document.querySelectorAll(".xcard").forEach(function(c){
+  function toggle(){
+    var open=c.classList.toggle("open");
+    c.setAttribute("aria-expanded",String(open));
+  }
+  c.addEventListener("click",function(e){
+    if(e.target.closest("a")) return;
+    toggle();
+  });
+  c.addEventListener("keydown",function(e){
+    if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggle(); }
+  });
+});
 
 /* ---------- architecture: light the tiers in sequence ---------- */
 var tiers=[].slice.call(document.querySelectorAll(".tier"));

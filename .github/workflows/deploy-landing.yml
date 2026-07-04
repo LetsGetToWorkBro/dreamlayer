@@ -1,0 +1,30 @@
+# Deploys landing/ to Cloudflare Pages (project "dreamlayer") on every push
+# to main that touches it. The custom domain dreamlayer.app is attached to
+# the Pages project in the Cloudflare dashboard (or via API) once.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   — API token with "Cloudflare Pages — Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID  — the account id shown on the Cloudflare dashboard
+name: Deploy landing to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["landing/**", ".github/workflows/deploy-landing.yml"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          preCommands: wrangler pages project create dreamlayer --production-branch=main || true
+          command: pages deploy landing --project-name=dreamlayer --branch=main
