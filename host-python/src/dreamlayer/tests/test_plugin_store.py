@@ -63,6 +63,49 @@ def test_package_disk_round_trip(tmp_path):
     assert back.manifest.name == "gadget" and back.checksum_ok()
 
 
+# -- author-shipped store detail (long/forwho/screenshot) --------------------
+
+def test_manifest_carries_store_detail_and_it_survives_round_trip(tmp_path):
+    pkg = PluginPackage.build(
+        name="gadget", version="1.0.0", entry="plugin:gadget_plugin",
+        source=GOOD_SRC, author="tester", description="a test gadget",
+        long=("first line", "second line"), forwho="for testers",
+        screenshot="https://example.test/shot.png")
+    m = pkg.manifest
+    assert m.long == ("first line", "second line")
+    assert m.forwho == "for testers"
+    assert m.screenshot == "https://example.test/shot.png"
+    # and it round-trips through disk (manifest.json)
+    pkg.write(tmp_path / "gadget")
+    back = PluginPackage.load(tmp_path / "gadget")
+    assert back.manifest.long == ("first line", "second line")
+    assert back.manifest.forwho == "for testers"
+    assert back.manifest.screenshot == "https://example.test/shot.png"
+
+
+def test_store_detail_does_not_change_the_checksum():
+    # the checksum covers the code payload only, so an author can revise their
+    # write-up or screenshot without re-signing the code.
+    plain = PluginPackage.build(name="gadget", version="1.0.0",
+                                entry="plugin:gadget_plugin", source=GOOD_SRC)
+    rich = PluginPackage.build(name="gadget", version="1.0.0",
+                               entry="plugin:gadget_plugin", source=GOOD_SRC,
+                               long=("a", "b"), forwho="w", screenshot="s")
+    assert plain.manifest.checksum == rich.manifest.checksum
+    assert rich.checksum_ok()
+
+
+def test_store_entry_carries_detail_through_json():
+    e = StoreEntry.from_dict({
+        "name": "gadget", "version": "1.0.0",
+        "long": ["p1", "p2"], "forwho": "for you",
+        "screenshot": "https://example.test/s.png"})
+    assert e.long == ("p1", "p2") and e.forwho == "for you"
+    d = e.to_dict()
+    assert d["long"] == ["p1", "p2"]
+    assert d["screenshot"] == "https://example.test/s.png"
+
+
 # -- the static scan ----------------------------------------------------------
 
 def test_scan_flags_dangerous_ops_without_capability():

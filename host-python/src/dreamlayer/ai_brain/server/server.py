@@ -140,9 +140,11 @@ class Brain:
         for name in self.plugins.installed():
             try:
                 pkg = PluginPackage.load(self.plugins.dir / name)
-                installed.append({"name": pkg.manifest.name, "version": pkg.manifest.version,
-                                  "author": pkg.manifest.author,
-                                  "requires": list(pkg.manifest.requires)})
+                m = pkg.manifest
+                installed.append({"name": m.name, "version": m.version,
+                                  "author": m.author, "requires": list(m.requires),
+                                  "description": m.description, "long": list(m.long),
+                                  "forwho": m.forwho, "screenshot": m.screenshot})
             except Exception:
                 installed.append({"name": name, "version": "", "author": "", "requires": []})
         return {"installed": installed,

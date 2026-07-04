@@ -159,6 +159,16 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .diritem:before{content:"";width:8px;height:8px;border-radius:2px;background:var(--memory);opacity:.7}
   .diritem.up:before{background:var(--ghost);border-radius:50%}
   .modal .mfoot{display:flex;gap:10px;justify-content:flex-end}
+  /* plugin detail */
+  .modal.pd{max-width:600px;padding:0;overflow:hidden}
+  .pd .shot{width:100%;display:block;border-bottom:1px solid var(--line);background:var(--bg)}
+  .pd .pdbody{padding:22px;overflow-y:auto}
+  .pd h3{font-size:1.3rem} .pd .pdby{font:12px ui-monospace,Menlo,monospace;color:var(--muted);margin-bottom:14px}
+  .pd .pdlong p{color:var(--muted2,#b9c8c5);margin:0 0 11px;line-height:1.6}
+  .pd .pdsec{font:10px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.12em;color:var(--memory);margin:18px 0 7px}
+  .pd .permr{display:flex;gap:12px;align-items:baseline;margin:6px 0;font-size:.92rem;color:var(--text)}
+  .pd .permr b{color:var(--attention);font:11px ui-monospace,Menlo,monospace;letter-spacing:.04em;min-width:66px;text-transform:uppercase;flex:none}
+  .pd .pill{cursor:pointer}
 
   #toast{position:fixed;left:50%;bottom:30px;transform:translate(-50%,20px);background:var(--surf2);
         border:1px solid var(--line);border-radius:var(--r-pill);padding:11px 20px;color:var(--text);
@@ -406,6 +416,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <button class="ghost" onclick="browseClose()">Cancel</button>
       <button onclick="browseAdd()">Add this folder</button></div>
   </div>
+</div>
+<div class="overlay" id="pdetail">
+  <div class="modal pd"><div id="pdinner"></div></div>
 </div>
 <div id="toast"></div>
 <script>
@@ -811,17 +824,42 @@ drop.addEventListener("drop",async ev=>{
   toast(n===1?"1 file added":n+" files added");load();
 });
 $("browser").addEventListener("click",e=>{if(e.target.id==="browser")browseClose();});
+$("pdetail").addEventListener("click",e=>{if(e.target.id==="pdetail")closePluginDetail();});
 
+const CAP_HELP={midi:"Send MIDI notes to music apps on your Mac (e.g. Ableton, VCV).",
+  network:"Reach the internet to look things up.",vision:"Use the Brain’s on-device vision model to read what you see.",
+  fs:"Read files you point it at.",mesh:"Talk to a GhostMode circle of nearby wearers.",
+  object_lens:"Add rows to the look-at-a-thing panel.",glance:"Add a lens the look can route to.",
+  cards:"Draw its own card on the HUD.",perception:"Use the fast on-glass perception tier.",
+  ring:"Read your kept-memory ledger.",shop:"Feed prices/reviews into TasteLens."};
+let pluginsById={};
 async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch(e){return;}
   $("plugCaps").textContent=(r.capabilities||[]).join(", ")||"the basics";
+  pluginsById={};(r.installed||[]).forEach(p=>{pluginsById[p.name]=p;});
   const ul=$("plugins");
   if(!(r.installed||[]).length){ul.innerHTML='<li class="conn-s" style="margin:0">No plugins installed yet — browse the store.</li>';return;}
   ul.innerHTML=(r.installed||[]).map(p=>{
     const perms=(p.requires||[]).length?(p.requires||[]).map(x=>"needs "+esc(x)).join(" · "):"no special access";
-    return '<li class="conn"><div style="flex:1"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span></div>'+
-      '<div class="conn-s">'+perms+'</div></div>'+
+    return '<li class="conn"><div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span></div>'+
+      '<div class="conn-s">'+perms+' · <span style="color:var(--memory)">See what it does →</span></div></div>'+
       '<button class="sm ghost" onclick="removePlugin(\''+esc(p.name)+'\')">Remove</button></li>';
   }).join("");}
+function openPluginDetail(name){const p=pluginsById[name];if(!p)return;
+  const long=((p.long&&p.long.length)?p.long:[p.description||""]).map(t=>'<p>'+esc(t)+'</p>').join("");
+  const shot=p.screenshot?'<img class="shot" src="'+esc(p.screenshot)+'" alt="'+esc(p.name)+' preview">':"";
+  const perms=(p.requires||[]).length
+    ?(p.requires||[]).map(x=>'<div class="permr"><b>'+esc(x)+'</b><span>'+esc(CAP_HELP[x]||"a capability it requested")+'</span></div>').join("")
+    :'<div class="permr"><span>No special access — it only extends the layer’s own surfaces.</span></div>';
+  $("pdinner").innerHTML=shot+'<div class="pdbody">'+
+    '<h3>'+esc(p.name)+'</h3><div class="pdby">v'+esc(p.version||"")+' · '+esc(p.author||"community")+'</div>'+
+    '<div class="pdlong">'+long+'</div>'+
+    (p.forwho?'<div class="pdsec">Who it’s for</div><p style="color:var(--muted2,#b9c8c5);margin:0">'+esc(p.forwho)+'</p>':"")+
+    '<div class="pdsec">Permissions it asks for</div>'+perms+
+    '<div class="mfoot" style="margin-top:20px"><button class="ghost" onclick="closePluginDetail()">Close</button>'+
+    '<button class="ghost" onclick="removePlugin(\''+esc(p.name)+'\');closePluginDetail()">Remove</button></div></div>';
+  $("pdetail").classList.add("show");}
+function closePluginDetail(){$("pdetail").classList.remove("show");}
+window.openPluginDetail=openPluginDetail;window.closePluginDetail=closePluginDetail;
 async function removePlugin(name){await api("/dreamlayer/plugins/remove",{method:"POST",body:JSON.stringify({name})});
   toast("Removed "+name);loadPlugins();}
 async function installPlugin(){const raw=$("plugPkg").value.trim();if(!raw){return;}

@@ -160,11 +160,23 @@ const SNAPSHOT = {
       "description":"Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "requires":["midi"],"tags":["music","creative","mesh","featured"],
+      "screenshot":"https://dreamlayer.app/plugin-shots/face-synth.png",
+      "forwho":"For musicians, performers, and tinkerers who want to play the world.",
+      "long":[
+        "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
+        "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
+        "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"open-food-facts","version":"0.1.0","author":"dreamlayer",
       "description":"Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
       "requires":["network"],"tags":["shopping","food","connector","tastelens","featured"],
+      "screenshot":"https://dreamlayer.app/plugin-shots/open-food-facts.png",
+      "forwho":"For anyone with dietary goals or allergies — or who just wants the better pick.",
+      "long":[
+        "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
+        "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
+        "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 }
   ]
 };
@@ -259,72 +271,27 @@ const CAP_HELP = {
   ring:"Read your kept-memory ledger.",
   shop:"Feed prices/reviews into TasteLens.",
 };
-const SHOT_FACE = `<svg class="shot" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Face Synth preview">
-  <defs><radialGradient id="fg" cx="28%" cy="46%" r="62%"><stop offset="0" stop-color="#0d2a24"/><stop offset="1" stop-color="#05100e"/></radialGradient></defs>
-  <rect width="320" height="170" fill="url(#fg)"/>
-  <circle cx="84" cy="80" r="46" fill="none" stroke="#2CC79A" stroke-width="10" opacity=".12"/>
-  <circle cx="84" cy="80" r="46" fill="none" stroke="#2CC79A" stroke-width="2" opacity=".9"/>
-  <rect x="74" y="70" width="20" height="20" rx="3" fill="#2CC79A" transform="rotate(45 84 80)"/>
-  <text x="84" y="140" fill="#e7f3f1" font-family="monospace" font-size="16" text-anchor="middle" font-weight="700">C4</text>
-  <g fill="#2CC79A"><rect x="168" y="94" width="10" height="26" opacity=".5"/><rect x="184" y="80" width="10" height="40" opacity=".7"/><rect x="200" y="64" width="10" height="56" opacity=".95"/><rect x="216" y="80" width="10" height="40" opacity=".7"/><rect x="232" y="94" width="10" height="26" opacity=".5"/><rect x="248" y="102" width="10" height="18" opacity=".35"/></g>
-  <text x="168" y="50" fill="#88a09c" font-family="monospace" font-size="11" letter-spacing="1">yaw → note</text>
-  <text x="168" y="150" fill="#88a09c" font-family="monospace" font-size="11" letter-spacing="1">tap → play · mic → velocity</text>
-</svg>`;
-const SHOT_OFF = `<svg class="shot" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TasteLens ranking preview">
-  <rect width="320" height="170" fill="#05100e"/>
-  <text x="22" y="28" fill="#2CC79A" font-family="monospace" font-size="11" letter-spacing="2">TASTELENS · BEST PICK</text>
-  <rect x="20" y="40" width="280" height="34" rx="8" fill="#0d2a24" stroke="#2CC79A" stroke-opacity=".45"/>
-  <circle cx="40" cy="57" r="10" fill="#56D364"/><text x="40" y="61" fill="#03150c" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">A</text>
-  <text x="60" y="61" fill="#e7f3f1" font-size="14" font-family="system-ui">Almond Drink</text>
-  <text x="292" y="61" fill="#2CC79A" font-size="13" font-family="monospace" text-anchor="end">4.8★</text>
-  <rect x="20" y="82" width="280" height="30" rx="8" fill="#160b09"/>
-  <circle cx="40" cy="97" r="10" fill="#E06B52"/><text x="40" y="101" fill="#1a0805" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">D</text>
-  <text x="60" y="101" fill="#88a09c" font-size="14" font-family="system-ui">Whole Milk</text>
-  <text x="292" y="101" fill="#E06B52" font-size="12" font-family="monospace" text-anchor="end">✕ dairy</text>
-  <rect x="20" y="118" width="280" height="30" rx="8" fill="#0a1412"/>
-  <circle cx="40" cy="133" r="10" fill="#7f8f94"/><text x="40" y="137" fill="#0a1412" font-size="11" font-family="monospace" text-anchor="middle" font-weight="700">C</text>
-  <text x="60" y="137" fill="#88a09c" font-size="14" font-family="system-ui">Dark Chocolate</text>
-  <text x="292" y="137" fill="#88a09c" font-size="13" font-family="monospace" text-anchor="end">3.0★</text>
-</svg>`;
-const DETAILS = {
-  "face-synth": {
-    long: [
-      "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
-      "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
-      "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."
-    ],
-    forwho: "For musicians, performers, and tinkerers who want to play the world.",
-    shot: SHOT_FACE
-  },
-  "open-food-facts": {
-    long: [
-      "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
-      "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
-      "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."
-    ],
-    forwho: "For anyone with dietary goals or allergies — or who just wants the better pick.",
-    shot: SHOT_OFF
-  }
-};
-
+// Detail copy travels *with the plugin* — the author ships `long`,
+// `forwho`, and a `screenshot` in the manifest/registry, so the store
+// renders their page, not one hardcoded here.
 function openDetail(name){
   const p = plugins.find(x=>x.name===name); if(!p) return;
-  const d = DETAILS[name] || {};
   const perms = (p.requires||[]);
   const permHtml = perms.length
     ? perms.map(r=>`<div class="perm-row"><b>${esc(r)}</b><span>${esc(CAP_HELP[r]||"a capability it requested")}</span></div>`).join("")
     : '<div class="perm-row"><span>No special access — it only extends the layer’s own surfaces.</span></div>';
-  const long = (d.long||[p.description]).map(t=>`<p>${esc(t)}</p>`).join("");
+  const long = ((p.long&&p.long.length?p.long:[p.description])).map(t=>`<p>${esc(t)}</p>`).join("");
+  const shot = p.screenshot ? `<img class="shot" src="${esc(p.screenshot)}" alt="${esc(p.name)} preview" loading="lazy">` : "";
   const dl = p.downloads ? `↓ ${num(p.downloads)} installs` : "new";
   const rt = p.ratings_count ? `★ ${p.rating.toFixed(1)} (${p.ratings_count})` : "unrated";
   $("#detail-inner").innerHTML = `
     <button class="x" onclick="closeDetail()" aria-label="Close">✕</button>
-    ${d.shot||""}
+    ${shot}
     <div class="modal-body">
       <h2>${esc(p.name)}</h2>
       <div class="mby">v${esc(p.version)} · ${esc(p.author||"community")}</div>
       <div class="mlong">${long}</div>
-      ${d.forwho?`<div class="msec">Who it’s for</div><p class="forwho">${esc(d.forwho)}</p>`:""}
+      ${p.forwho?`<div class="msec">Who it’s for</div><p class="forwho">${esc(p.forwho)}</p>`:""}
       <div class="msec">Permissions it asks for</div>${permHtml}
       <div class="mmeta"><span>${dl}</span><span>${rt}</span></div>
       <div class="actions">

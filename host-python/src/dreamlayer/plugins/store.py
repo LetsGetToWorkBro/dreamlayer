@@ -38,11 +38,16 @@ class StoreEntry:
     rating: float = 0.0             # 0..5, community average
     ratings_count: int = 0
     comments_count: int = 0
+    # store display (the author's own detail page)
+    long: tuple = ()                # paragraphs: how it helps you
+    forwho: str = ""
+    screenshot: str = ""            # image URL or data-URI
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d["requires"] = list(self.requires)
         d["tags"] = list(self.tags)
+        d["long"] = list(self.long)
         return d
 
     @classmethod
@@ -57,7 +62,9 @@ class StoreEntry:
             downloads=int(d.get("downloads", 0) or 0),
             rating=float(d.get("rating", 0.0) or 0.0),
             ratings_count=int(d.get("ratings_count", 0) or 0),
-            comments_count=int(d.get("comments_count", 0) or 0))
+            comments_count=int(d.get("comments_count", 0) or 0),
+            long=tuple(d.get("long") or ()), forwho=str(d.get("forwho", "")),
+            screenshot=str(d.get("screenshot", "")))
 
 
 class RegistryIndex:

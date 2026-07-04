@@ -1,7 +1,7 @@
 {
   "schema": "1",
   "updated": "2026-07-04",
-  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Social numbers (downloads/rating/comments) are served by the social API when configured; the schema carries them so the surfaces render either way.",
+  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Each plugin ships its own detail copy (long, forwho) and a screenshot URL; social numbers (downloads/rating/comments) come from the social API when configured.",
   "plugins": [
     {
       "name": "face-synth",
@@ -13,6 +13,13 @@
       "checksum": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
       "requires": ["midi"],
       "tags": ["music", "creative", "mesh", "featured"],
+      "screenshot": "https://dreamlayer.app/plugin-shots/face-synth.png",
+      "forwho": "For musicians, performers, and tinkerers who want to play the world.",
+      "long": [
+        "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
+        "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
+        "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."
+      ],
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,
@@ -28,6 +35,13 @@
       "checksum": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
       "requires": ["network"],
       "tags": ["shopping", "food", "connector", "tastelens", "featured"],
+      "screenshot": "https://dreamlayer.app/plugin-shots/open-food-facts.png",
+      "forwho": "For anyone with dietary goals or allergies — or who just wants the better pick.",
+      "long": [
+        "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
+        "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
+        "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."
+      ],
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,

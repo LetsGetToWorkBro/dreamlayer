@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Linking,
+  View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Linking, Modal, Image,
 } from "react-native";
 import { usePluginStore, PluginEntry, SortKey } from "../src/state/usePluginStore";
 import { useBrainStore } from "../src/state/useBrainStore";
@@ -24,6 +24,21 @@ function fmt(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(n);
 }
 
+// Plain-English gloss for each capability a plugin can ask for.
+const CAP_HELP: Record<string, string> = {
+  midi: "Send MIDI notes to music apps on your Mac (e.g. Ableton, VCV).",
+  network: "Reach the internet to look things up.",
+  vision: "Use the Brain’s on-device vision model to read what you see.",
+  fs: "Read files you point it at.",
+  mesh: "Talk to a GhostMode circle of nearby wearers.",
+  object_lens: "Add rows to the look-at-a-thing panel.",
+  glance: "Add a lens the look can route to.",
+  cards: "Draw its own card on the HUD.",
+  perception: "Use the fast on-glass perception tier.",
+  ring: "Read your kept-memory ledger.",
+  shop: "Feed prices/reviews into TasteLens.",
+};
+
 /**
  * The Plugins screen — browse the git-backed registry and manage what your
  * layer runs. Installing grants a plugin the capabilities it asks for and tells
@@ -43,6 +58,7 @@ export default function Plugins() {
 
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<Sort>("featured");
+  const [detail, setDetail] = React.useState<PluginEntry | null>(null);
 
   React.useEffect(() => {
     hydrate();
@@ -179,11 +195,132 @@ export default function Plugins() {
                   </Pressable>
                 ) : null}
               </View>
+
+              <Pressable onPress={() => setDetail(p)} hitSlop={6}>
+                <Text style={st.more}>See what it does & a preview →</Text>
+              </Pressable>
             </Card>
           );
         })
       )}
+
+      <PluginDetail
+        plugin={detail}
+        installed={detail ? !!installedMap[detail.name] : false}
+        onClose={() => setDetail(null)}
+        onInstall={onInstall}
+        onRemove={onRemove}
+      />
     </Screen>
+  );
+}
+
+/** The plugin's own detail page — screenshot + how-it-helps copy + the exact
+ *  permissions it asks for. All of it travels with the plugin (the author ships
+ *  `long`, `forwho`, and `screenshot` in the registry), so this renders their
+ *  page, not one hardcoded here. */
+function PluginDetail({
+  plugin, installed, onClose, onInstall, onRemove,
+}: {
+  plugin: PluginEntry | null;
+  installed: boolean;
+  onClose: () => void;
+  onInstall: (p: PluginEntry) => void;
+  onRemove: (p: PluginEntry) => void;
+}) {
+  const p = plugin;
+  const paras = p ? (p.long.length ? p.long : [p.description]) : [];
+  return (
+    <Modal visible={!!p} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={st.overlay}>
+        <Pressable style={st.overlayBg} onPress={onClose} />
+        {p ? (
+          <View style={st.sheet}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {p.screenshot ? (
+                <Image source={{ uri: p.screenshot }} style={st.shot} resizeMode="cover" />
+              ) : null}
+              <View style={st.sheetBody}>
+                <View style={st.sheetHead}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.headline, { color: colors.textPrimary }]}>{p.name}</Text>
+                    <Text style={st.by}>
+                      v{p.version} · {p.author}
+                    </Text>
+                  </View>
+                  <Pressable onPress={onClose} hitSlop={8} style={st.x}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16 }}>✕</Text>
+                  </Pressable>
+                </View>
+
+                {paras.map((t, i) => (
+                  <Text key={i} style={st.long}>
+                    {t}
+                  </Text>
+                ))}
+
+                {p.forwho ? (
+                  <>
+                    <Text style={st.sec}>WHO IT’S FOR</Text>
+                    <Text style={[typography.body, { color: colors.textSecondary }]}>{p.forwho}</Text>
+                  </>
+                ) : null}
+
+                <Text style={st.sec}>PERMISSIONS IT ASKS FOR</Text>
+                {p.requires.length ? (
+                  p.requires.map((r) => (
+                    <View key={r} style={st.permRow}>
+                      <Text style={st.permName}>{r}</Text>
+                      <Text style={st.permHelp}>{CAP_HELP[r] || "a capability it requested"}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>
+                    No special access — it only extends the layer’s own surfaces.
+                  </Text>
+                )}
+
+                <View style={st.meta}>
+                  <Text style={st.metaText}>{p.downloads ? `↓ ${fmt(p.downloads)} installs` : "new"}</Text>
+                  <Text style={st.metaText}>
+                    {p.ratings_count ? `★ ${p.rating.toFixed(1)} (${p.ratings_count})` : "unrated"}
+                  </Text>
+                </View>
+
+                <View style={st.actions}>
+                  {installed ? (
+                    <Pressable
+                      style={[st.btn, st.btnGhost]}
+                      onPress={() => {
+                        onClose();
+                        onRemove(p);
+                      }}
+                    >
+                      <Text style={st.btnGhostText}>Remove</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={[st.btn, st.btnPrimary]}
+                      onPress={() => {
+                        onClose();
+                        onInstall(p);
+                      }}
+                    >
+                      <Text style={st.btnPrimaryText}>Install</Text>
+                    </Pressable>
+                  )}
+                  {p.homepage ? (
+                    <Pressable style={[st.btn, st.btnGhost]} onPress={() => Linking.openURL(p.homepage!)}>
+                      <Text style={st.btnGhostText}>Source</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
   );
 }
 
@@ -242,4 +379,47 @@ const st = StyleSheet.create({
   btnPrimaryText: { color: "#00201C", fontWeight: "700" },
   btnGhost: { borderWidth: 1, borderColor: colors.borderSubtle },
   btnGhostText: { color: colors.textPrimary, fontWeight: "600" },
+  more: { color: colors.accentMemory, fontSize: 12.5, fontWeight: "600", marginTop: space.md },
+  // detail sheet
+  overlay: { flex: 1, justifyContent: "flex-end" },
+  overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheet: {
+    maxHeight: "88%",
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    overflow: "hidden",
+  },
+  shot: { width: "100%", aspectRatio: 640 / 340, backgroundColor: colors.background },
+  sheetBody: { padding: space.lg },
+  sheetHead: { flexDirection: "row", alignItems: "flex-start", marginBottom: space.md },
+  x: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  long: { color: colors.textSecondary, fontSize: 15, lineHeight: 23, marginBottom: space.sm },
+  sec: {
+    color: colors.accentMemory,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    marginTop: space.lg,
+    marginBottom: space.xs,
+  },
+  permRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md, marginTop: space.xs },
+  permName: {
+    color: colors.accentAttention,
+    fontSize: 11.5,
+    letterSpacing: 0.4,
+    minWidth: 68,
+    textTransform: "uppercase",
+    fontWeight: "700",
+  },
+  permHelp: { color: colors.textSecondary, fontSize: 14, flex: 1 },
 });

@@ -53,18 +53,24 @@ class PluginManifest:
     version: str
     entry: str                       # "module:factory"
     author: str = ""
-    description: str = ""
+    description: str = ""             # one-line summary
     homepage: str = ""
     requires: tuple = ()             # capability names
     api: str = API_VERSION
     checksum: str = ""               # sha256 of the code payload
     signature: str = ""              # author signature (reserved; verified later)
+    # -- store display (optional; authors ship these so the detail view is
+    #    theirs, not the store's) ------------------------------------------
+    long: tuple = ()                 # paragraphs: how it helps you
+    forwho: str = ""                 # a short "who it's for"
+    screenshot: str = ""             # image URL or data-URI for a preview
 
     # -- (de)serialise -------------------------------------------------------
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d["requires"] = list(self.requires)
+        d["long"] = list(self.long)
         return d
 
     @classmethod
@@ -81,6 +87,9 @@ class PluginManifest:
             api=str(d.get("api", API_VERSION)),
             checksum=str(d.get("checksum", "")),
             signature=str(d.get("signature", "")),
+            long=tuple(d.get("long") or ()),
+            forwho=str(d.get("forwho", "")),
+            screenshot=str(d.get("screenshot", "")),
         )
 
     # -- shape validation (no code runs) -------------------------------------
@@ -143,11 +152,16 @@ class PluginPackage:
 
     @classmethod
     def build(cls, *, name, version, entry, source, author="", description="",
-              homepage="", requires=(), signature="") -> "PluginPackage":
+              homepage="", requires=(), signature="",
+              long=(), forwho="", screenshot="") -> "PluginPackage":
         """Make a package from source, stamping the checksum for you (authoring
-        helper — a real publish tool would sign here too)."""
+        helper — a real publish tool would sign here too). `long`/`forwho`/
+        `screenshot` are the author's own store-detail copy; they ride in the
+        manifest but *not* the checksum (which covers the code payload only), so
+        an author can revise their write-up without re-signing the code."""
         m = PluginManifest(name=name, version=version, entry=entry, author=author,
                            description=description, homepage=homepage,
                            requires=tuple(requires), checksum=sha256_of(source),
-                           signature=signature)
+                           signature=signature, long=tuple(long), forwho=forwho,
+                           screenshot=screenshot)
         return cls(manifest=m, source=source)

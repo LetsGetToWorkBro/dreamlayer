@@ -65,3 +65,20 @@ def test_install_needs_a_package_or_name(tmp_path):
     b = Brain(tmp_path)
     res = b.install_plugin({})
     assert not res["ok"] and res["errors"]
+
+
+def test_plugins_state_exposes_author_detail(tmp_path):
+    # the panel/phone detail view reads long/forwho/screenshot from here, so an
+    # author's own store copy shows on-device, not just on the website.
+    b = Brain(tmp_path)
+    rich = PluginPackage.build(
+        name="tidy", version="1.0.0", entry="plugin:p", source=GOOD_SRC,
+        author="tester", description="keeps things tidy",
+        long=("how it helps you", "and a second paragraph"),
+        forwho="for the tidy-minded",
+        screenshot="https://dreamlayer.app/plugin-shots/tidy.png")
+    assert b.install_plugin(body_for(rich))["ok"]
+    entry = b.plugins_state()["installed"][0]
+    assert entry["long"] == ["how it helps you", "and a second paragraph"]
+    assert entry["forwho"] == "for the tidy-minded"
+    assert entry["screenshot"] == "https://dreamlayer.app/plugin-shots/tidy.png"

@@ -21,13 +21,26 @@ manifest.json
   { "name": "face-synth", "version": "0.1.0",
     "entry": "plugin:face_synth_plugin",   # module:factory
     "author": "…", "requires": ["midi"],   # capabilities it asks for
-    "api": "1", "checksum": "sha256:…" }    # of plugin.py — integrity
+    "api": "1", "checksum": "sha256:…",     # of plugin.py — integrity
+    # -- store detail (optional; your page, not ours) --
+    "description": "one line, shown on the card",
+    "screenshot": "https://…/shot.png",     # a preview image (URL or data-URI)
+    "forwho": "who it's for, in one sentence",
+    "long": ["paragraph 1 — how it helps you", "paragraph 2 — …"] }
 plugin.py                                    # exposes register(ctx)
 ```
 
 It plugs into the extension points we already have (`docs/PLATFORM.md`): object
 providers, glance candidates, brain/perception tiers, card renderers. Nothing
 more — the `PluginContext` is the whole surface a plugin can touch.
+
+**Your detail page travels with the plugin.** `description`, `screenshot`,
+`forwho`, and `long` live in the manifest, so the same copy renders everywhere —
+the website store, the phone app, and the Mac panel all read these fields and
+show *your* page when someone taps the plugin. They're the only manifest fields
+that don't feed the checksum (which covers `plugin.py` only), so you can revise
+your write-up or swap the screenshot without re-signing the code. Keep the shot
+light — host it (≤~640×340 works well) or inline a small `data:` URI.
 
 ---
 

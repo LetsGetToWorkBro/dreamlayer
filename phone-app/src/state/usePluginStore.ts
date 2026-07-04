@@ -37,6 +37,10 @@ export type PluginEntry = {
   rating: number;
   ratings_count: number;
   comments_count: number;
+  // Detail copy the author ships with the plugin (travels in the registry).
+  long: string[];
+  forwho: string;
+  screenshot: string;
 };
 
 export type InstalledPlugin = {
@@ -64,6 +68,13 @@ const SNAPSHOT: PluginEntry[] = [
     rating: 0,
     ratings_count: 0,
     comments_count: 0,
+    screenshot: "https://dreamlayer.app/plugin-shots/face-synth.png",
+    forwho: "For musicians, performers, and tinkerers who want to play the world.",
+    long: [
+      "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
+      "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
+      "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble.",
+    ],
   },
   {
     name: "open-food-facts",
@@ -79,6 +90,13 @@ const SNAPSHOT: PluginEntry[] = [
     rating: 0,
     ratings_count: 0,
     comments_count: 0,
+    screenshot: "https://dreamlayer.app/plugin-shots/open-food-facts.png",
+    forwho: "For anyone with dietary goals or allergies — or who just wants the better pick.",
+    long: [
+      "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
+      "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
+      "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up.",
+    ],
   },
 ];
 
@@ -95,6 +113,9 @@ function normalize(p: any): PluginEntry {
     rating: Number(p?.rating ?? 0) || 0,
     ratings_count: Number(p?.ratings_count ?? 0) || 0,
     comments_count: Number(p?.comments_count ?? 0) || 0,
+    long: Array.isArray(p?.long) ? p.long.map(String) : [],
+    forwho: String(p?.forwho ?? ""),
+    screenshot: String(p?.screenshot ?? ""),
   };
 }
 
