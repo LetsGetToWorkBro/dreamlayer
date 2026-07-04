@@ -135,6 +135,10 @@ const SNAPSHOT = {
   ]
 };
 const INDEX_URL = "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
+// Set this to your deployed social-API Worker (registry-api/) to get live
+// download/rating numbers and one-tap rating. Empty ⇒ static, git-backed store.
+const SOCIAL_API = "";
+const USER = (()=>{ let u=localStorage.getItem("dl_uid"); if(!u){u="u"+Math.random().toString(36).slice(2);localStorage.setItem("dl_uid",u);} return u; })();
 
 let plugins = SNAPSHOT.plugins.slice();
 let sort = "featured", query = "";
@@ -163,8 +167,10 @@ function render(){
   grid.innerHTML = list.map(p => {
     const initial = (p.name[0]||"?").toUpperCase();
     const feat = (p.tags||[]).includes("featured") ? '<span class="featured-dot">● featured</span>' : "";
-    const rating = p.ratings_count ? `<span class="stars">${stars(p.rating)}</span> ${p.rating.toFixed(1)}`
-                                   : '<span style="color:var(--text-3)">unrated</span>';
+    const rating = SOCIAL_API
+      ? `<span class="rate" data-name="${esc(p.name)}">${[1,2,3,4,5].map(n=>`<span class="star" data-n="${n}" style="cursor:pointer;color:${n<=Math.round(p.rating)?'var(--teal)':'var(--text-3)'}">★</span>`).join("")}</span> ${p.ratings_count?p.rating.toFixed(1):""}`
+      : (p.ratings_count ? `<span class="stars">${stars(p.rating)}</span> ${p.rating.toFixed(1)}`
+                         : '<span style="color:var(--text-3)">unrated</span>');
     const dl = p.downloads ? `↓ ${num(p.downloads)}` : "new";
     const tags = (p.tags||[]).filter(t=>t!=="featured").map(t=>`<span class="chip">${esc(t)}</span>`).join("");
     const perms = (p.requires||[]).length
@@ -191,9 +197,25 @@ function render(){
 function copyInstall(name){
   const cmd = "dreamlayer plugins install " + name;
   navigator.clipboard && navigator.clipboard.writeText(cmd);
+  if(SOCIAL_API){ fetch(SOCIAL_API.replace(/\/$/,"")+"/api/plugins/"+encodeURIComponent(name)+"/download",{method:"POST"}).catch(()=>{}); }
   alert("Install from the DreamLayer app or Mac panel.\n\nCLI:  " + cmd + "\n\nEvery plugin is validated on your device (integrity + capability scan + smoke test) before it runs.");
 }
 window.copyInstall = copyInstall;
+
+async function rate(name, stars){
+  if(!SOCIAL_API) return;
+  try{
+    await fetch(SOCIAL_API.replace(/\/$/,"")+"/api/plugins/"+encodeURIComponent(name)+"/rate",
+      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stars,user:USER})});
+    refresh();
+  }catch(e){}
+}
+// delegated click for the rating stars
+$("#grid").addEventListener("click",e=>{
+  const star=e.target.closest(".star"); if(!star) return;
+  const wrap=star.closest(".rate"); if(!wrap) return;
+  rate(wrap.dataset.name, +star.dataset.n);
+});
 
 // tabs + search
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
@@ -203,10 +225,15 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 $("#q").addEventListener("input", e => { query = e.target.value; render(); });
 
 render();
-// refresh from the live registry if reachable (never blocks the page)
-fetch(INDEX_URL, {cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
-  if(d && Array.isArray(d.plugins) && d.plugins.length){ plugins = d.plugins; render(); }
-}).catch(()=>{});
+// live data: the social API when configured (folds in downloads/ratings),
+// else the git-backed index. Never blocks the page; falls back on failure.
+function refresh(){
+  const src = SOCIAL_API ? SOCIAL_API.replace(/\/$/,"")+"/api/plugins" : INDEX_URL;
+  fetch(src, {cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
+    if(d && Array.isArray(d.plugins) && d.plugins.length){ plugins = d.plugins; render(); }
+  }).catch(()=>{});
+}
+refresh();
 </script>
 </body>
 </html>

@@ -17,7 +17,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const INDEX_URL =
   "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
 
+// Set to your deployed social-API Worker (registry-api/) for live
+// downloads/ratings and one-tap rating. Empty ⇒ static, git-backed store.
+const SOCIAL_API = "";
+
 const STORAGE_KEY = "dreamlayer.plugins.installed.v1";
+const UID_KEY = "dreamlayer.plugins.uid.v1";
 
 export type PluginEntry = {
   name: string;
@@ -92,7 +97,21 @@ type PluginState = {
   isInstalled: (name: string) => boolean;
   install: (entry: PluginEntry, mac?: MacTarget) => Promise<void>;
   remove: (name: string, mac?: MacTarget) => Promise<void>;
+  rate: (name: string, stars: number) => Promise<void>;
 };
+
+async function userId(): Promise<string> {
+  try {
+    let u = await AsyncStorage.getItem(UID_KEY);
+    if (!u) {
+      u = "u" + Math.random().toString(36).slice(2);
+      await AsyncStorage.setItem(UID_KEY, u);
+    }
+    return u;
+  } catch {
+    return "anon";
+  }
+}
 
 async function persist(installed: Record<string, InstalledPlugin>) {
   try {
@@ -134,7 +153,9 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   fetchIndex: async () => {
     set({ loading: true });
     try {
-      const res = await fetch(INDEX_URL, { cache: "no-store" } as any);
+      // live stats from the social API when configured; else the git-backed index
+      const src = SOCIAL_API ? SOCIAL_API.replace(/\/$/, "") + "/api/plugins" : INDEX_URL;
+      const res = await fetch(src, { cache: "no-store" } as any);
       const data = await res.json();
       const list = Array.isArray(data?.plugins) ? data.plugins.map(normalize) : [];
       if (list.length) set({ index: list });
@@ -181,6 +202,16 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       version: entry.version,
       grant: entry.requires,
     });
+    if (SOCIAL_API) {
+      try {
+        await fetch(
+          SOCIAL_API.replace(/\/$/, "") + "/api/plugins/" + encodeURIComponent(entry.name) + "/download",
+          { method: "POST" },
+        );
+      } catch {
+        /* best effort */
+      }
+    }
   },
 
   remove: async (name, mac = null) => {
@@ -189,5 +220,19 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     set({ installed });
     await persist(installed);
     await postToMac(mac, "/dreamlayer/plugins/remove", { name });
+  },
+
+  rate: async (name, stars) => {
+    if (!SOCIAL_API) return;
+    try {
+      await fetch(SOCIAL_API.replace(/\/$/, "") + "/api/plugins/" + encodeURIComponent(name) + "/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stars, user: await userId() }),
+      });
+      get().fetchIndex();
+    } catch {
+      /* best effort */
+    }
   },
 }));

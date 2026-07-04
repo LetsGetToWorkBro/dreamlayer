@@ -76,12 +76,33 @@ contributed by **pull request**; CI runs the gate on it before it can merge, so
 nothing lands that doesn't pass. This is the Homebrew-taps model: trustworthy
 because everything is reviewed and checksummed, and it needs **no backend**.
 
-**Phase 2 (later): the hosted social layer.** A small API + DB for the
-CurseForge numbers — real download counts, star ratings, comments, author
-accounts, moderation. The index schema already carries `downloads`, `rating`,
-`ratings_count`, `comments_count`, so the stores render them from day one and
-simply point at the static file until the API exists. **Zero rework** to
-upgrade — the client's `fetch_fn` swaps a file read for an HTTP call.
+**Phase 2 (built): the hosted social layer.** The CurseForge numbers — download
+counts, star ratings, comments — as a small shared service. Delivered as:
+
+- a **tested reference implementation + contract** in
+  `plugins/social.py` (`SocialStore` + pure `route()`), so the behaviour is
+  pinned and a self-hoster has something to run;
+- a deployable **Cloudflare Worker** over KV in `registry-api/` (mirrors the
+  contract exactly) — `npx wrangler deploy`;
+- **client wiring**: the website (`landing/plugins.html`) and phone
+  (`usePluginStore.ts`) read live stats and offer one-tap rating when a
+  `SOCIAL_API` base is set, and **fall back to the static `registry/index.json`**
+  when it isn't or is unreachable.
+
+The contract:
+
+```
+GET  /api/plugins                 → index + live stats
+GET  /api/plugins/<name>          → stats + comments
+POST /api/plugins/<name>/rate     {stars, user} → stats   (one vote/user)
+POST /api/plugins/<name>/comment  {text, user}  → comment
+POST /api/plugins/<name>/download                → {downloads}
+```
+
+The plugins themselves stay git-backed and validated — the social service only
+serves numbers, so a compromise there can't ship code. Deploy it and set
+`SOCIAL_API`; nothing else changes. Hardening (auth on ratings, rate limits,
+moderation) is noted in `registry-api/README.md`.
 
 ---
 
