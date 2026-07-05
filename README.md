@@ -217,6 +217,14 @@ Lenses: [`docs/LENSES.md`](docs/LENSES.md)
 
 Future lenses under exploration: **Health** · **Focus** · **Skill**.
 
+DreamLayer is a **pre-hardware build** and honest about it: every lens's logic
+is built and tested against the lupa raster harness, but the physical seams —
+camera/mic/ASR, the on-NPU vision models, the BLE render+input transport, and
+the coded-PHY mesh — are wired points, not live silicon. Features that depend on
+a second wearer or an on-glass display (Confluence, live Reality Compiler
+deploys) render demo state until the transport is attached. The full seam matrix
+is in [`docs/gitbook/hardware-seams.md`](docs/gitbook/hardware-seams.md).
+
 ---
 
 *Built for Brilliant Labs Halo. Yours to run, yours to keep.*
