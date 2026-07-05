@@ -76,13 +76,20 @@ One family, three directions.
 - **Saga** — the same commitments as a personal RPG: XP, streaks, rescues.
 - **Reality Compiler** — teach a behaviour once and a verified Figment runs
   it forever. Two authoring modes: **Rehearsal** (reactive) and
-  **Wayfinding** (linear how-tos).
+  **Wayfinding** (linear how-tos). *Pre-hardware:* the compile → verify → sign
+  → deploy loop is built and tested end to end; deploys run in dry-run
+  (recording the exact BLE envelopes) until the glasses transport is attached,
+  and the phone's Rehearsal screen renders demo state until then. See
+  [hardware seams](gitbook/hardware-seams.md).
 
 ## 🤝 Together — *two wearers, one sky*
 
 - **Confluence** — bond with another wearer: entangled skies that merge and
   split, silent TinCan pings, weather gifts. Only weather crosses — never
-  words, places, or names.
+  words, places, or names. *Pre-hardware:* the bond model is built and tested;
+  streaming live bond state between two paired wearers needs the radio, so the
+  phone screen is presentational for now. See
+  [hardware seams](gitbook/hardware-seams.md).
 
 ---
 
