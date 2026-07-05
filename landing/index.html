@@ -53,6 +53,46 @@ img,video{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
+/* ============================================================
+   Cinematic layer — grain, vignette, colour tint, motes, glass.
+   All fixed, pointer-events:none overlays above content but below the
+   menu (z 110/120). Net weight ~0: SVG data-URI grain + CSS gradients.
+   ============================================================ */
+.cine{position:fixed;inset:0;pointer-events:none}
+/* colour tint — a soft-light wash whose hue follows the section (set in JS) */
+.tint{z-index:86;mix-blend-mode:soft-light;opacity:.7;
+  background:radial-gradient(130% 90% at 50% 8%, rgba(47,212,196,.5), transparent 68%);
+  transition:background 1200ms var(--ease)}
+/* drifting motes */
+#motes{z-index:87}
+/* film grain — animated turbulence, ~4% over the frame */
+.grain{z-index:90;opacity:.05;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:180px 180px;animation:grainshift 6s steps(6) infinite}
+@keyframes grainshift{
+  0%{background-position:0 0}17%{background-position:-40px 20px}33%{background-position:24px -32px}
+  50%{background-position:-28px -18px}67%{background-position:36px 26px}83%{background-position:-16px 34px}
+  100%{background-position:0 0}}
+/* vignette — darken the far edges, stronger top/bottom */
+.vignette{z-index:91;
+  background:radial-gradient(120% 80% at 50% 42%, transparent 52%, rgba(0,0,0,.28) 82%, rgba(0,0,0,.6) 100%)}
+
+/* glass cards — refine the existing surfaces (progressive enhancement) */
+@supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+  .can,.xcard,.sim-live,.cmd,.win,.plugin-card{
+    background:linear-gradient(180deg,rgba(20,31,35,.66),rgba(14,20,22,.72));
+    -webkit-backdrop-filter:blur(9px) saturate(1.12);backdrop-filter:blur(9px) saturate(1.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 0 24px rgba(47,212,196,.03),
+      0 22px 46px -28px rgba(0,0,0,.75)}
+  .can:hover,.sim-live:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
+    inset 0 0 30px rgba(47,212,196,.06),0 26px 54px -26px rgba(0,0,0,.8)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .grain{animation:none}
+  #motes{display:none}
+}
+
 /* ---------- type scale (typography.ts) ---------- */
 .eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
   color:var(--teal)}
@@ -583,6 +623,10 @@ body.menu-open{overflow:hidden}
 </style>
 </head>
 <body>
+<div class="cine tint" id="tint" aria-hidden="true"></div>
+<canvas class="cine" id="motes" aria-hidden="true"></canvas>
+<div class="cine grain" aria-hidden="true"></div>
+<div class="cine vignette" aria-hidden="true"></div>
 <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false" aria-controls="drawer">
   <span></span><span></span><span></span>
 </button>
@@ -1913,6 +1957,86 @@ applyVeil();
     }});
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot); else boot();
+})();
+
+/* ============================================================
+   Cinematic layer runtime: drifting motes, per-section colour tint,
+   and section-head parallax. All reduced-motion aware and cheap.
+   ============================================================ */
+(function(){
+  "use strict";
+  var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- colour tint per section (soft-light wash following the 3/15/40 arc) ---- */
+  var TINTS = {
+    top:"rgba(44,199,154,.5)", feel:"rgba(180,150,110,.42)", see:"rgba(44,199,154,.44)",
+    walk:"rgba(150,165,175,.36)", can:"rgba(44,199,154,.4)", lenses:"rgba(120,150,200,.36)",
+    brain:"rgba(120,150,200,.4)", software:"rgba(160,150,120,.36)",
+    veil:"rgba(90,120,150,.5)", platform:"rgba(44,199,154,.44)",
+    simulator:"rgba(44,199,154,.5)", playground:"rgba(120,160,200,.4)", soon:"rgba(30,44,52,.5)"
+  };
+  var tintEl=document.getElementById("tint");
+  function setTint(id){
+    var c=TINTS[id]; if(!c||!tintEl) return;
+    tintEl.style.background="radial-gradient(130% 90% at 50% 8%, "+c+", transparent 68%)";
+  }
+  var secs=[].slice.call(document.querySelectorAll("section[id]"));
+  if(tintEl && secs.length){
+    var tintIO=new IntersectionObserver(function(en){
+      en.forEach(function(e){ if(e.isIntersecting) setTint(e.target.id); });
+    },{rootMargin:"-45% 0px -45% 0px"});     // whichever section owns the centre
+    secs.forEach(function(s){ tintIO.observe(s); });
+    setTint("top");
+  }
+
+  /* ---- drifting motes: a light dust field over the whole frame ---- */
+  var cv=document.getElementById("motes");
+  if(cv){
+    var ctx=cv.getContext("2d"), DPR=Math.min(devicePixelRatio||1,2), W=0,H=0, motes=[], raf=0, vis=true;
+    function size(){ W=innerWidth; H=innerHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+    function seed(){
+      var n=Math.max(18,Math.min(46,Math.round(W*H/34000)));
+      motes=[]; for(var i=0;i<n;i++) motes.push({
+        x:Math.random()*W, y:Math.random()*H, r:0.6+Math.random()*1.6,
+        vx:(Math.random()-0.5)*0.06, vy:-0.05-Math.random()*0.12,
+        a:0.05+Math.random()*0.14, p:Math.random()*Math.PI*2 });
+    }
+    size(); seed();
+    addEventListener("resize",function(){ size(); seed(); if(reduced) draw(0); },{passive:true});
+    var px=0.5,py=0.5; addEventListener("pointermove",function(e){ px=e.clientX/innerWidth; py=e.clientY/innerHeight; },{passive:true});
+    function draw(t){
+      ctx.clearRect(0,0,W,H);
+      for(var i=0;i<motes.length;i++){ var m=motes[i];
+        var tw=0.6+0.4*Math.sin(t*0.001+m.p);              // gentle twinkle
+        ctx.beginPath(); ctx.arc(m.x+(px-0.5)*10*m.r, m.y+(py-0.5)*8*m.r, m.r, 0, 6.2832);
+        ctx.fillStyle="rgba(120,220,200,"+(m.a*tw)+")"; ctx.fill();
+        if(!reduced){ m.x+=m.vx; m.y+=m.vy; if(m.y<-4){ m.y=H+4; m.x=Math.random()*W; } if(m.x<-4)m.x=W+4; if(m.x>W+4)m.x=-4; }
+      }
+    }
+    function loop(t){ draw(t); if(vis && !reduced) raf=requestAnimationFrame(loop); }
+    if(reduced){ draw(0); }
+    else{
+      loop(0);
+      // pause when the tab is hidden (battery)
+      document.addEventListener("visibilitychange",function(){
+        vis=!document.hidden; if(vis && !raf) raf=requestAnimationFrame(loop); if(!vis){ cancelAnimationFrame(raf); raf=0; }
+      });
+    }
+  }
+
+  /* ---- scroll pacing: section heads rise a touch slower for depth ---- */
+  function initPacing(){
+    var G=window.gsap, ST=window.ScrollTrigger;
+    if(!G || !ST || reduced) return;
+    document.querySelectorAll(".sec-head").forEach(function(head){
+      G.fromTo(head, { y:26 }, { y:-14, ease:"none",
+        scrollTrigger:{ trigger:head, start:"top bottom", end:"top 30%", scrub:true } });
+    });
+    // keep triggers honest once fonts/images settle
+    addEventListener("load", function(){ setTimeout(function(){ ST.refresh(); }, 200); });
+  }
+  if(document.readyState!=="loading") initPacing();
+  else document.addEventListener("DOMContentLoaded", initPacing);
 })();
 </script>
 </body>
