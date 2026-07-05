@@ -200,7 +200,7 @@ kept   = social_lens.offer_introduction("hi, I'm Maya", frame=camera_frame)
 ```
 
 ```bash
-cd host-python && python -m pytest -q        # the full host suite (1,368 tests)
+cd host-python && python -m pytest -q        # the full host suite (1,606 tests)
 ```
 
 **Knowledge base — the complete reference with real renders of every card,

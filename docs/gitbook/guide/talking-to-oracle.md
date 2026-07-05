@@ -30,6 +30,37 @@ twenty seconds, so follow-up questions need no wake word. Just keep talking.
 > "Brief me."
 > "Remind me to call the plumber tomorrow."
 
+### People
+
+> "This is my brother Dan." / "Meet my colleague Sarah, she runs marketing."
+> "Remember Maya's into rock climbing." — or just "remember she has two
+> kids" about whoever you just looked at.
+> "Marcus owes me twenty bucks." / "I owe Dana lunch."
+> "Marcus paid me back." — "Squared up with Marcus."
+
+Everything lands on that person's card — and on the phone's People tab,
+where you can read and edit it all by hand.
+
+### Timers and the clock
+
+> "Set a timer for five minutes."
+> "Interval timer — 30 on, 15 off, 8 rounds."
+> "Show a clock." / "What time is it?"
+> "Cancel the timer." — or just hold the button.
+
+These run *on the glasses themselves* — no Mac needed, no internet, and
+they vanish when done.
+
+### Read what's in front of you
+
+> "What's the answer?" — reads the question you're looking at and answers it.
+> "How do I fill this out?" — spells out a form, field by field.
+> "Explain this." / "Put this in plain English." — dense text, translated
+> into words people actually use.
+
+Say it, then look — the next glance goes straight to that read. More in
+[the day-with guide](a-day-with-dreamlayer.md).
+
 ### Control it
 
 > "Focus mode." — quiet for 25 minutes; "focus off" ends it early.

@@ -47,6 +47,11 @@ From other modules:
 
 | Card | Module | Purpose |
 |---|---|---|
+| ScholarCard | `hud/cards.py: scholar` | answer / form help / plain words (mirror renderer; dismiss 9000) — [chapter](../world-lenses.md) |
+| GlanceChoiceCard | `hud/cards.py: glance_choice` | the arbiter's one-tap chooser, up to 3 options (mirror; dismiss 6000) |
+| TasteCard | `hud/cards.py: taste` | the shelf/menu pick with reasons; vetoed items flagged, never dropped (mirror) |
+| BeaconCard | `confluence/beacon.py` | your GhostMode circle by bearing and band ("Maya - close, ahead-left") |
+| ReactionCard / FillerCard / AirDrumCard / FaceSynthCard | registry plugins | plugin-registered renderers via `add_card_renderer` |
 | QuestCard / QuestRewardCard | `orchestrator/quest.py` | quests and QUEST COMPLETE / LEVEL UP / RANK UP rewards |
 | SocialLensCard | `social_lens/` | identity match result |
 | IntroKeptCard | `social_lens/introduction.py` | a self-introduction, kept automatically |

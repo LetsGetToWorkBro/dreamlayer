@@ -30,8 +30,16 @@ of the time the display shows almost nothing at all.
 - **It hands you answers.** When someone in the room asks "what was our Q3
   number again?", the answer can appear on your glass before you speak —
   silently, so nothing interrupts the conversation.
+- **It reads what is in front of you.** A form: every field spelled out. A
+  question: answered. Dense small print: put in plain words. A shelf or a
+  menu: the best pick, with reasons, and anything that breaks your dietary
+  rules flagged.
 - **It briefs you in the morning.** Put the glasses on and today is already
   there: what is coming, what you missed, what you owe.
+- **It is extendable.** A community plugin store
+  ([dreamlayer.app/plugins](https://dreamlayer.app/plugins.html)) adds
+  things like live currency conversion on price tags — each plugin
+  showing exactly what it is allowed to do before you install it.
 - **It shuts up when you want.** One long press and the glasses go completely
   deaf and blind — nothing seen, heard, or kept — until you turn them back
   on. Privacy is a physical gesture, not a buried setting.

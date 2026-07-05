@@ -113,8 +113,11 @@ into one decision.
   glance wandering across a page doesn't flip lenses. Veiled ⇒ nothing.
 
 The candidate lenses today: Person (a face → Social Lens), Scholar (answer /
-form / plain-words), Rosetta (foreign text → translate), and Oracle (an object,
-or a weak fallback to name what's here).
+form / plain-words), TasteLens (a shelf or menu → the pick), Rosetta (foreign
+text → translate), and Oracle (an object, or a weak fallback to name what's
+here). The chooser, when a look is genuinely ambiguous:
+
+![GlanceChoiceCard — a pick runs the lens and teaches the arbiter](assets/cards/glance_choice.png)
 
 ## Who gets to interrupt — the summary
 

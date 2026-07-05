@@ -72,7 +72,45 @@ Parsed by a closed grammar (`commands.py`); each returns an
 Off-cues (off, stop, end, disable, exit, cancel, pause, hide, quiet) flip any
 toggleable command the other way.
 
-### 3. Knowledge intents
+### 3. Timers, intervals, and the clock — no Brain required
+
+Say *"set a timer for five minutes"*, *"interval timer, 30 on, 15 off, 8
+rounds"*, *"show a clock"*, or *"what time is it"* and the Oracle builds the
+behavior on the spot: each becomes a budget-verified Reality Compiler
+figment deployed straight to the glasses' stage. Two execution paths, same
+grammar (`voice.py: _parse_timer_clock`): with a paired Brain the figment is
+compiled there (and pruned from the vault afterward — timers never clutter
+the Repertoire); **with no Brain at all, the hub compiles and deploys it
+directly over BLE** — no vault, no HTTP, fully offline. Hold the button to
+stop early; *"cancel the timer"* works too. Deliberately ephemeral: nothing
+persists. Veil-gated. (Tests: `test_native_timers.py`,
+`test_hub_offline.py`.)
+
+### 4. People, spoken
+
+The social memory is voice-first (`voice.py`; full detail in
+[Perception and memory](perception-memory.md#the-social-memory-spoken)):
+
+| Say | Intent | Effect |
+|---|---|---|
+| "remember Maya's into rock climbing" / "note that she works at Google" | `note_person` | a note on that person (by name, or whoever you looked at in the last 90 s) |
+| "this is my brother Dan" / "meet my colleague Sarah, she runs marketing" | `meet_person` | keeps them on the spot — face if one is in view, relationship and note attached |
+| "Marcus owes me $20" / "I owe Dana lunch" | `debt` | a debt line on their card |
+| "Marcus paid me back" / "we're even with Dana" | `debt_settle` | clears it — "Squared up with Marcus." |
+
+All veil-gated ("Not while you're incognito."), all confirmed in-voice, all
+mirrored to the phone's People tab. The same intents work **typed** from the
+phone through `POST /dreamlayer/voice`, so the pocket and the glasses share
+one grammar.
+
+### 5. Scholar, spoken
+
+*"What's the answer"*, *"how do I fill this out"*, *"explain this"* route to
+the [Scholar lens](world-lenses.md) — and saying one arms the next look for
+6 seconds, so "explain this" followed by a glance at the page goes straight
+to plain words with no chooser.
+
+### 6. Knowledge intents
 
 Anything else runs through `parse_intent` (`voice.py`) and `handle_voice`:
 

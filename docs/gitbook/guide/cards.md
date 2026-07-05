@@ -37,6 +37,16 @@ engineering-level detail on every card lives in
 | ![Person](../assets/cards/person_context.png) | **Someone you know is here.** Name, one line of why they matter right now ("owes you the lease"). |
 | ![Dossier](../assets/cards/person_dossier.png) | **Your history with them.** When you last met and what you two tend to talk about. Only for people you chose to save — never strangers. |
 
+## Looking at the world
+
+| | |
+|---|---|
+| ![Scholar answer](../assets/cards/scholar_answer.png) | **The answer, read off the page.** You looked at a question and asked for the answer. |
+| ![Form help](../assets/cards/scholar_form.png) | **Form help.** Every field on the form in front of you, and what goes in it. |
+| ![Plain words](../assets/cards/scholar_explain.png) | **In plain words.** Dense text — a contract clause, a spec — translated into language people actually use. |
+| ![Best pick](../assets/cards/taste.png) | **The pick.** You looked at a shelf or a menu; the winner is big, the runners-up show their reasons, and anything that breaks your dietary rules is flagged with a cross — never silently hidden. |
+| ![Which one?](../assets/cards/glance_choice.png) | **"What do you want?"** Your look was ambiguous — one tap picks, and it learns your preference for next time. |
+
 ## Conversation helpers
 
 | | |

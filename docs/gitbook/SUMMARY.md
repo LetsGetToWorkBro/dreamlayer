@@ -24,12 +24,14 @@
 - [Perception and memory](perception-memory.md)
 - [Truth and discernment](truth.md)
 - [Attention and focus](attention-focus.md)
+- [Scholar and TasteLens — the World lenses](world-lenses.md)
 - [The six lenses and the wider set](lenses.md)
 - [Progression — the Saga](progression.md)
 - [Privacy and control](privacy.md)
 - [The phone app](phone-app.md)
 - [The desktop Brain app](brain-app.md)
 - [The AI Brain deep dive](ai-brain.md)
+- [The platform — plugins, the mesh, and the store](platform.md)
 
 ## Reference
 

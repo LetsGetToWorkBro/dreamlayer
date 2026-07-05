@@ -56,10 +56,24 @@ before, or does not survive a quick check, you see it — quietly, just you:
 
 ![Truth, checked live](../assets/demo/catalog/features/veritas/preview.gif)
 
+## Looking at the world
+
+The look itself is a command. Glance at a form and ask "how do I fill this
+out?" — every field, spelled out. Glance at dense small print and say
+"explain this" — plain words. A question on a page: "what's the answer?"
+Stand at a shelf or a menu and the pick appears with its reasons — anything
+that breaks your dietary rules flagged, never hidden. When a look could
+mean two things, a small chooser offers both; your tap teaches it your
+preference for next time.
+
+![The best pick, with reasons](../assets/cards/taste.png)
+
 ## Through the day
 
 - Walk away from your bike and it taps you on the shoulder: *"You're leaving
   your bike."* One line, one sound, gone.
+- "Set a timer for five minutes" — it runs on the glasses themselves, even
+  with your phone in another room.
 - Arrive somewhere that holds a memory and the memory arrives with you —
   "you left the charger here."
 - Eight minutes before you need to leave for a meeting, it says so.

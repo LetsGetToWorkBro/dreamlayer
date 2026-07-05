@@ -5,6 +5,17 @@ This chapter is the technical companion to
 model seams, and the exact rules that keep private things private. Code:
 `host-python/src/dreamlayer/ai_brain/`.
 
+## Three routers, one shape
+
+The tiered-router idea now appears three times, deliberately identical in
+shape: the **BrainRouter** (vision + knowledge, this chapter), the
+**PerceptionRouter** (`ai_brain/perception.py` — coarse per-frame percepts;
+a zero-model heuristic tier ships today and an NPU tier plugs into the
+`NpuPerceptor` seam when hardware arrives), and the **WorldChecker**
+(`ai_brain/world_check.py` — Veritas' cached, deadline-bounded verification
+worker; see [Truth](truth.md#fast-by-construction)). Prefer the lowest tier
+that can answer; degrade gracefully; never block the moment.
+
 ## Two capabilities, one architecture
 
 - **Vision** — name and explain what is in view: `identify(frame)` returns a

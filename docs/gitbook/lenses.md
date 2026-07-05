@@ -70,6 +70,12 @@ real), hardening the model when a predicted event lands.
 
 ## World — look at anything
 
+- **Scholar** (`orchestrator/scholar.py`) — read the question and answer
+  it, spell out a form's fields, or put dense text in plain words; and
+  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice oracle
+  with hard dietary vetoes and plugin data connectors. Both routed by the
+  Glance Arbiter or voice; full chapter:
+  [Scholar and TasteLens](world-lenses.md).
 - **Object Lens / Oracle-look** (`object_lens/`, specs `docs/OBJECT_LENS.md`)
   — `look_at_object(frame, facet=None|"own"|"ai"|"shop")` builds a
   contextual panel for the thing in view. Providers plug in per domain
@@ -114,7 +120,12 @@ real), hardening the model when a predicted event lands.
   a budget-verified little program that runs *on the glass stage* with the
   button driving it. `build_skill(name, text)` is the orchestrator surface;
   the wire protocol has first-class figment put/swap/revoke/ack messages,
-  and the phone's Rehearsal screen mirrors the score-and-repertoire model.
+  and the phone's Rehearsal screen is now **live end to end** — every beat
+  round-trips the Brain's `rc/*` endpoints (rehearse, keep, deploy, revoke),
+  with deploys recording BLE envelopes until the glasses transport attaches.
+  The Oracle also compiles **native timers, intervals, and a clock** through
+  the same engine, on the spot, with or without a Brain
+  ([Oracle](oracle.md#3-timers-intervals-and-the-clock--no-brain-required)).
   The five recorded sessions under `out/rc_v2/` (round timer, rolling
   rounds, spar night, a refused strobe — the safety path — and hot-swap
   revoke) are its executable spec, alongside `docs/rc_v2/echo.md`,
@@ -132,6 +143,11 @@ send the other a sky. The orchestrator surface is
 dreaming. **Timbre** (`docs/TIMBRE.md`, People lens) gives known voices their
 own audio texture. The phone's Confluence screen presents the bond
 lifecycle; live two-device streaming is the pre-hardware seam.
+
+The bond now scales to a group: **GhostMode mesh** entangles a whole circle
+under one three-word code, and **The Beacon** finds your people in a crowd
+by feel — bearings and distance bands, never coordinates. See
+[The platform](platform.md#pillar-2--ghostmode-mesh-and-the-beacon).
 
 ## Lucid Recall — the query router
 

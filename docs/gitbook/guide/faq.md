@@ -7,8 +7,9 @@ keeps anything while capture is on; Incognito or the Veil stops even that.
 
 **Can it tell me who a stranger is?**
 No, and it never will — the capability was deliberately left out of the
-product. It only recognizes people who introduced themselves to you and
-whom you chose, with a deliberate tap, to remember.
+product. It only knows people who were introduced to you — "Hi, I'm Maya,"
+or you saying "meet my colleague Sarah" — kept on your device, erasable
+with "forget that."
 
 **Does it work without internet?**
 Yes. Memory, people, promises, finding your things, the Oracle, live
@@ -53,6 +54,16 @@ until you hold it again.
 The Saga — a light progression system that celebrates using the product:
 your first recall, your first rescued promise, a ten-promise streak. Purely
 for fun; it affects nothing.
+
+**What are plugins, and are they safe?**
+Community-built extensions — a currency converter for price tags, a
+Nutri-Score connector for the shelf ranking, an air-drum kit. Every one
+declares exactly what it needs ("network", "your HUD") and you see that
+list in plain English before installing; the Mac refuses anything that
+asks for more than it is willing to grant, and checks every install's
+integrity. Ratings and downloads live on a separate service that never
+touches plugin code. Browse at
+[dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
 
 **What is Dream Mode?**
 Double-tap the glasses and the display becomes something quieter and

@@ -31,6 +31,10 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/saga` | token | the progression profile: rank, level, XP, every achievement |
 | `/dreamlayer/profile` | token | the mirrored Oracle user-model profile |
 | `/dreamlayer/brief/latest` | token | the scheduler's most recent morning brief (or `{}`) |
+| `/dreamlayer/brief/long/latest` | token | the last extended (long) brief (or `{}`) |
+| `/dreamlayer/social/people` | token | the mirrored social memory: people with relations, notes, debts, topics |
+| `/dreamlayer/plugins` | token | installed plugins + the capabilities this Brain can grant |
+| `/dreamlayer/rc/repertoire` | token | kept Reality Compiler figments `{items, active}` |
 | `/dreamlayer/model/status` | token | Ollama reachability + which configured models are pulled |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the panel's folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token |
@@ -43,8 +47,8 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 |---|---|---|
 | `/dreamlayer/brain/ask` | token | `{query}` → `Answer {text, tier, sources, confidence}`; logged; may cross to cloud under the gate |
 | `/dreamlayer/brain/explain` | token | `{label, image?, want?}` → object `Answer` |
-| `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall answered inline, brief inlined, others returned as `{intent, ...args}` |
-| `/dreamlayer/brief` | token | `{agenda?, since?}` → `{text, bullets, missed}` |
+| `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall/brief answered inline; timers/intervals/clock compiled and deployed (`rc_native`); notes/meet/debts/settle applied to the people mirror (`voice_social`); others returned as `{intent, ...args}` |
+| `/dreamlayer/brief` | token | `{agenda?, since?, depth?, commitments?, memories?}` → `{text, bullets, missed}`; `depth: "long"` adds `sections` and is cached for `brief/long/latest` |
 | `/dreamlayer/replies` | token | `{text}` → `{replies: [three short replies]}` |
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → save + reindex |
 | `/dreamlayer/config` | token | partial config patch (whitelisted keys) → apply + reindex |
@@ -57,6 +61,14 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/saga/record` | token | `{event}` → `{unlocked, saga}` |
 | `/dreamlayer/profile` | token | hub pushes the user-model snapshot; Brain mirrors, never authors |
 | `/dreamlayer/reindex` | token | `{}` → rebuild now `{stats, missing}` |
+| `/dreamlayer/social/people` | token | the hub pushes the social-memory snapshot; the Brain mirrors, never authors |
+| `/dreamlayer/social/people/edit` | token | `{contact_id, action: note\|remove_note\|relation\|settle, value?}` → phone edits `{items}` |
+| `/dreamlayer/rc/rehearse` | token | `{name, beats[]}` → live score, budget report, teach card; never 500s on a pathological performance |
+| `/dreamlayer/rc/keep` | token | `{figment_id}` → sign + vault |
+| `/dreamlayer/rc/deploy` | token | `{figment_id}` → hot-swap onto the stage (BLE envelopes recorded until the glasses transport attaches) |
+| `/dreamlayer/rc/revoke` | token | `{figment_id}` → pull it from the stage/vault |
+| `/dreamlayer/plugins/install` | token | `{name}` from the registry or a sideloaded `{manifest, source}` → validated install `{ok, errors, warnings, state}` |
+| `/dreamlayer/plugins/remove` | token | `{name}` → uninstall |
 | `/dreamlayer/message/draft` | token | `{channel, to, subject?, text}` → `{script}` — preview only, nothing sent |
 | `/dreamlayer/message/send` | **local** | same + `approved: true` → osascript send — **seam**; refused without approval |
 | `/dreamlayer/model/pull` | **local** | `{model}` → blocking `ollama pull` `{ok, status, model}` |
@@ -77,3 +89,9 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 - The **laptop companion** (a different, minimal agent) serves exactly one
   route on its own port: `GET /dreamlayer/context` → recent file names,
   hostname, battery; token required to serve beyond localhost.
+- The **plugin social API** is a separate public service at
+  `https://api.dreamlayer.app` (Cloudflare Worker, `registry-api/`):
+  `GET /api/plugins`, `GET /api/plugins/<name>`, and
+  `POST /api/plugins/<name>/{rate|comment|download}`. It serves only
+  ratings/downloads/comments — never plugin code — and clients fall back to
+  their bundled catalog when it is unreachable.

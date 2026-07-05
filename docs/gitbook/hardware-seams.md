@@ -1,7 +1,7 @@
 # Hardware and seams
 
 DreamLayer is a **pre-hardware build**: the intelligence stack is complete
-and tested (1,368 passing tests), and the handful of places where physical
+and tested (1,606 passing tests), and the handful of places where physical
 hardware plugs in are explicit, narrow, and documented. This chapter is the
 honest matrix.
 
@@ -67,15 +67,19 @@ display runtime, BLE, and the basic sensors could host the same experience.
 | Phone notifications | `services/notify.ts` | permission on a real device |
 | Reach-anywhere relay | pairing `relay_url` + `brainFetch` | any secure tunnel to the Brain; client already prefers LAN and falls back |
 | OCR + translation models | Rosetta / Puente | the recognition and translation models behind the seams |
+| Tier-0 NPU perception | `ai_brain/perception.py: NpuPerceptor` | a Vela-compiled model for the Halo's Ethos-U55; the heuristic tier answers until then |
+| GhostMode radio | `confluence/mesh.py: MeshTransport` | the LE Coded PHY group transport; an in-memory bus stands in today |
+| MIDI bridge | plugin `midi_out` seams (Face Synth, Air Drums) | python-rtmidi or an OSC bridge; plugins stay dormant without one |
+| Scholar / Glance / Taste on glass | `hud/renderer.py: _scholar` family | device-Lua renderers for the three World-lens cards (mirror-rendered today) |
 
 ### Pre-hardware (interaction model built; live cross-device streaming pending)
 
-- **Confluence live bonds** — the engine, wire messages, and phone UI exist;
-  streaming live bond state between two paired wearers is pending hardware.
-- **Rehearsal on the phone** — the Reality Compiler engine and device
-  figment protocol are real (see the recorded `out/rc_v2/` sessions); the
-  phone screen renders the interaction model on demo state until the bridge
-  streams live figments.
+- **Confluence live bonds and the GhostMode mesh** — the engines, wire
+  messages, crypto, and phone UI exist; live streaming between physically
+  separate wearers is pending the radio.
+- **Rehearsal deploys** — the phone Rehearsal screen is now live end to end
+  against the Brain's `rc/*` endpoints (rehearse, keep, deploy, revoke);
+  deploys record their BLE envelopes until the glasses transport attaches.
 - **On-glass calibration** — pane luma, aurora amplitude, `DEVICE_FONT`
   metrics, and IMU gain are single-table constants explicitly flagged for
   tuning on real glass.

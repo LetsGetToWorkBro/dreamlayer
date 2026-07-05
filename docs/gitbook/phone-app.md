@@ -3,9 +3,9 @@
 The phone app (`phone-app/`, Expo / React Native, TypeScript strict) is the
 remote control and the pocket brain: pairing, the three switches, every
 toggle, message approval, and a phone-sized view of everything the Brain
-knows. Five tabs — **Brain, Now, Messages, Memories, Settings** — plus Labs
-screens reached from Settings (Rewind, Saga, Profile, Rehearsal, Confluence)
-and a five-step onboarding.
+knows. Six tabs — **Brain, Now, Messages, People, Memories, Settings** —
+plus hidden screens reached from Settings and Now (Brief, Plugins, Rewind,
+Saga, Profile, Rehearsal, Confluence) and a five-step onboarding.
 
 *Every screenshot in this chapter is the real app: the repository's code
 exported to web (`npx expo export --platform web`) and captured headlessly at
@@ -16,7 +16,12 @@ is configured yet.*
 
 ## State: one store
 
-`src/state/useBrainStore.ts` (Zustand) is the single source of truth:
+`src/state/useBrainStore.ts` (Zustand) is the source of truth for
+connections and toggles; three sibling stores carry the newer surfaces —
+`usePeopleStore` (the social memory), `usePluginStore` (the plugin store;
+the phone never runs plugin code, it posts install intent to the paired
+Brain), and `useRehearsalStore` (the live Reality Compiler bridge). The
+brain store holds:
 connection state for the Mac mini (URL, token, relay URL) and glasses, the
 three switches, and every toggle. A whitelisted snapshot persists to
 AsyncStorage under the key `dreamlayer.brain.v1` and rehydrates on launch.
@@ -72,6 +77,20 @@ replies (`POST /dreamlayer/replies`) as tap-to-fill chips, then **Approve and
 send** — which is the only send path, and it posts `approved: true`
 explicitly. Gated empty states cover no-Mac, relay-off, and no-messages.
 
+## People — your social memory
+
+![People tab](assets/phone/people.png)
+
+Everything the Social Lens knows, readable and editable: search across
+names, relationships, and notes; per-person cards with the relationship
+line, last seen, expandable notes (add or remove by hand), the topics you
+two return to, and open debts in a coral box with a one-tap **Settle up**.
+It reads the Brain's mirror (`GET /dreamlayer/social/people`) and edits
+through `POST /dreamlayer/social/people/edit` — the same record the glasses
+build when you say "this is my colleague Sarah" or "Marcus owes me $20".
+The footer states the contract: your own contacts only, never a stranger
+lookup.
+
 ## Memories — recall, grouped by day
 
 ![Memories tab](assets/phone/memories.png)
@@ -117,13 +136,26 @@ is in [Settings and modes](reference/settings.md).
 |---|---|
 | ![Rehearsal](assets/phone/rehearsal.png) | ![Confluence](assets/phone/confluence.png) |
 
-- **Rehearsal** — the Reality Compiler's score-and-repertoire view (beats on
-  a timeline, figments to arm and revoke). Presentational today: it renders
-  demo state and documents the interaction model until the phone bridge
-  streams live figment state — a labeled seam, not a hidden one.
+- **Rehearsal** — the Reality Compiler studio, now **live end to end**:
+  every beat you perform (tap, double, hold, or a spoken beat via the
+  keyboard's dictation) round-trips `POST /dreamlayer/rc/rehearse`, the
+  score and budget proof render from the Brain's real reply, Keep signs the
+  figment into the vault, and Arm / Revoke drive
+  `rc/deploy` / `rc/revoke`. The one remaining seam: deploys record their
+  BLE envelopes until the glasses transport attaches.
+- **Brief** — the extended morning brief, in sections (Today, Due, Waiting
+  on you, Messages, Yesterday), composed on demand via
+  `POST /dreamlayer/brief` with `depth: "long"` and stored to read offline.
+  Reached from the Now tab's brief card.
+
+  ![Brief screen](assets/phone/brief.png)
+
+- **Plugins** — the store: browse and search the registry, Featured / Top
+  rated / Downloads tabs, one-tap star ratings, and a permissions alert
+  before any install. See [The platform](platform.md#the-store-in-three-places).
 - **Confluence** — the bond lifecycle (propose, accept, live), togetherness,
-  TinCan pings, weather gifts. Same status: presentational until live bond
-  streaming lands.
+  TinCan pings, weather gifts. Presentational until live bond streaming
+  lands.
 
 ## Onboarding
 

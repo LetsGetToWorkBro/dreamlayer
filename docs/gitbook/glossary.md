@@ -33,6 +33,14 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   Compiler runs on the glass stage.
 - **Focus** — do-not-disturb: interruptions held, capture keeps running.
   [Attention and focus](attention-focus.md)
+- **Glance Arbiter** — the look decides the lens: candidate lenses bid on
+  each glance, the winner fires, ambiguity offers a one-tap chooser that
+  teaches per-scene priors. [Attention and focus](attention-focus.md)
+- **GhostMode** — the Confluence bond lifted to a whole circle: one
+  three-word code, only feeling crosses the wire.
+  [Platform](platform.md)
+- **Beacon (The)** — find your group by feel: bearings and distance bands
+  on the rim, never coordinates. [Platform](platform.md)
 - **Ghost Layer** — Dream Mode's world-anchored memory echoes.
 - **Halo** — Brilliant Labs' glasses; DreamLayer's launch device.
 - **Hark** — the spoken tap on the shoulder: "Listen!" or the urgent
@@ -64,8 +72,13 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **REM** — the nightly consolidation cycle; its retrieval bias tunes the
   next day's Horizon.
 - **Rosetta** — the eye: translate text you look at.
+- **Plugin** — a validated, capability-gated extension: one manifest, one
+  Python file, six possible hooks. [Platform](platform.md)
 - **Saga** — progression: XP, levels, seven ranks, achievements.
   [Progression](progression.md)
+- **Scholar** — the read-what-is-in-front-of-you lens: answer a question,
+  spell out a form, put dense text in plain words.
+  [World lenses](world-lenses.md)
 - **Seam** — a named point where tested software meets physical hardware.
   [Hardware and seams](hardware-seams.md)
 - **Social Lens** — recognizing your own people, consent-first; never
@@ -73,6 +86,8 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
   gradient ramps, blooms. [Meridian](meridian.md)
 - **Synesthesia** — Dream Mode's six-word poetic sense read.
+- **TasteLens** — the shelf/menu choice oracle: hard dietary vetoes, soft
+  budget, plugin data connectors. [World lenses](world-lenses.md)
 - **Testimony thread** — the Truth Lens gauge: nine stages around the ring,
   torn where deceptive.
 - **Three switches** — Mac mini, Cloud, Incognito; independent, never a mode

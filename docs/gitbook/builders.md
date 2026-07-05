@@ -22,8 +22,15 @@ dreamlayer/
 │       ├── bridge/        BLE bridge + the Lua raster harness
 │       ├── demo/          the emissive overlay / film pipeline
 │       └── tests/         the whole suite lives here
+│       ├── plugins/       the plugin API, validation gate, store client,
+│       │                  and the first-party plugins
+│       └── reality_compiler/  v2: rehearsal, figments, native timers
 ├── phone-app/           Expo / React Native
 ├── laptop-companion/    the minimal context agent + macOS installer
+├── registry/            the plugin marketplace catalog (index + packages)
+├── registry-api/        the social-layer Cloudflare Worker (api.dreamlayer.app)
+├── landing/             the website (dreamlayer.app: home, plugins store, playground)
+├── web/                 the WebBLE playground dev surface
 ├── docs/                specs; docs/gitbook/ is this book
 └── scripts/             demos, exporters, the Halo lab
 ```
@@ -46,7 +53,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 1,368 passing at time of writing
+cd host-python && python -m pytest -q     # 1,606 passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain

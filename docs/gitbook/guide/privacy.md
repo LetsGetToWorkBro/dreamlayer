@@ -49,11 +49,14 @@ Short version: **on your own devices, and it works that way by default.**
 
 - **It never identifies strangers.** There is no giant face database to
   search, by design — the capability simply does not exist in the product.
-  It recognizes only people who introduced themselves to you and whom you
-  deliberately chose to save.
-- **Names are saved only with your say-so.** When someone says "Hi, I'm
-  Maya," a card *offers* the name for a few seconds. If you do not confirm
-  it, nothing is kept. Ever.
+  It recognizes only people who were introduced to you.
+- **Names come only from introductions.** When someone says "Hi, I'm Maya"
+  — or you say "meet my colleague Sarah" — the name is kept and a card
+  says so plainly ("KEPT - on your device"). Only a real introduction ever
+  matches: ambient chatter, an overheard name, a bystander — none of it
+  qualifies. Say **"forget that"** and it is gone; the Veil closes the ear
+  entirely. (Prefer the old ask-first flow? The offer-and-confirm mode
+  still exists as a setting.)
 - **No recordings.** DreamLayer keeps meaning — "Maya mentioned the lease" —
   never audio or video of anyone.
 

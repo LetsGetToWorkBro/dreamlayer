@@ -59,16 +59,50 @@ The invariants are architectural, not policy:
 - **No stranger lookup.** There is no public database and no cloud face
   search anywhere in the codebase. The index contains only contacts you
   enrolled.
-- **Consent-first name capture.** A name is offered only from a closed,
-  offline grammar of self-introductions — explicit forms ("my name is...",
+- **Closed-grammar name capture.** A name is captured only from a closed,
+  offline grammar of introductions — explicit forms ("my name is...",
   "call me...") taken as given, soft forms ("I'm Maya") only when the next
-  token is capitalized. The offer expires after 12 seconds; **nothing is
-  saved until a deliberate confirm**; the Veil closes the ear entirely.
+  token is capitalized. Since #101 the default is **auto-keep**: a matched
+  self-introduction is saved the moment it is given and confirmed with an
+  **IntroKeptCard** ("KEPT - on your device - veil silences this"), so the
+  dossier works from day one; "forget that" erases it, the Veil closes the
+  ear entirely, and ambient chatter or a bystander's name never matches the
+  grammar. The old offer-then-confirm flow remains available
+  (`auto_keep=False`, the IntroOfferCard with its 12-second window).
 - Contacts sync from the Brain can enroll faces via
   `load_contact_faces(contacts, face_embed_fn)`.
 
 **Seam:** the camera frame and the 512-dimension face-embedding model
 (MobileFaceNet-class, on the NPU).
+
+## The social memory, spoken
+
+The Social Lens now takes dictation (`voice.py` grammars; each veil-gated,
+each confirmed in the Oracle's voice, each mirrored to the phone's People
+tab):
+
+- **Notes** — "remember Maya's into rock climbing", or "note that she has
+  two kids" about whoever you looked at in the last 90 seconds. Notes join
+  that person's record (deduped, newest last, capped at 240 characters) and
+  the latest one rides their recall card in quotes.
+- **Introductions, third-party** — "this is my brother Dan", "meet my
+  colleague Sarah, she runs marketing", "have you met Tom?". The
+  relationship ("brother", "colleague") is kept as a first-class field, the
+  trailing clause becomes the first note, and the face in view is enrolled
+  (name-only when there is none). A deliberate command keeps immediately;
+  "this is my car" and "this is amazing" match nothing.
+- **Debts and favors** — "Marcus owes me $20", "I owe Dana lunch"; settle
+  with "Marcus paid me back" or "we're even". Debts render as a coral line
+  on the person's card and a count on the phone.
+- **The rescue stack** — a look at a known person now never comes back
+  blank: name, then relationship, then open debts, then last-seen, then the
+  latest note, in that order, so *something* useful always surfaces even
+  when the dossier is thin.
+
+Every social edit publishes the people snapshot to the paired Brain
+(`POST /dreamlayer/social/people`), which mirrors it for the phone's
+[People tab](phone-app.md#people--your-social-memory) — where the same
+notes, relations, and debts can be read and edited by hand.
 
 ## Ask and receive — object and commitment recall
 

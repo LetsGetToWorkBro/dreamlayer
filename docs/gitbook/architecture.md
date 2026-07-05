@@ -148,9 +148,12 @@ dreamlayer/
 │       ├── demo/          the emissive-overlay demo/film pipeline
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         1,368 collected tests
+│       └── tests/         1,606 collected tests
 ├── phone-app/             Expo / React Native app
 ├── laptop-companion/      minimal context agent + macOS Brain installer
+├── registry/              the plugin marketplace catalog
+├── registry-api/          the social API worker (api.dreamlayer.app)
+├── landing/  web/         the website (dreamlayer.app) + WebBLE playground
 ├── docs/                  design specs, integration map, this book (gitbook/)
 └── scripts/               demos, exporters, the Lua lab
 ```

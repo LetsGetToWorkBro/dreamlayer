@@ -11,7 +11,7 @@ control panel) live here as one installable package, `dreamlayer`.
 
 ```bash
 pip install -e .[dev]       # editable install + pytest, pytest-asyncio, lupa
-python -m pytest -q         # the full suite (1,368 tests)
+python -m pytest -q         # the full suite (1,606 tests)
 ```
 
 Requires Python 3.11+. The runtime is largely standard-library; heavier

@@ -121,6 +121,20 @@ lifetime **cloud egress counter**, backup (full restorable snapshot,
 local-only) and restore, and selective erase: questions, activity, or
 folders.
 
+## Plugins — extend the Brain
+
+![Plugins](assets/panel/plugins.png)
+
+Community plugins this Brain runs, each validated on the way in (integrity
+checksum, a static capability scan, a smoke load) — the shot above is a
+real session where two registry plugins installed and a third was refused
+because this machine could not grant the `mesh` capability it requires. The
+card lists what this Brain can grant, links to the store at
+[dreamlayer.app/plugins](https://dreamlayer.app/plugins.html), and takes a
+pasted package for sideloading through the same gate. The full platform
+story — the API, the marketplace, the live social layer at
+api.dreamlayer.app — is in [The platform](platform.md).
+
 ## Messages, activity, health
 
 ![Activity](assets/panel/activity.png)

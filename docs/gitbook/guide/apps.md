@@ -6,7 +6,7 @@ the first and almost none in the second once it is set up.
 
 ## The phone app
 
-Five tabs along the bottom:
+Six tabs along the bottom:
 
 **Brain** — the home tab. Pairing, the three switches (Mac, Cloud,
 Incognito), and a box to ask your brain anything from your pocket.
@@ -22,6 +22,15 @@ you always see exactly what goes out.
 
 ![Messages tab](../assets/phone/messages.png)
 
+**People** — your social memory, readable and editable: everyone you have
+been introduced to, their relationship to you, your notes about them, who
+owes whom what (with a one-tap "Settle up"), and the topics you two return
+to. Everything you say on the glasses — "meet my colleague Sarah,"
+"Marcus owes me $20" — lands here, and everything here can be fixed by
+hand.
+
+![People tab](../assets/phone/people.png)
+
 **Memories** — everything remembered, grouped by day and searchable. With a
 Mac connected, the same search box also asks your files and mail.
 
@@ -32,6 +41,15 @@ alerts, the fact-checker, answer-ahead, how the Oracle wakes, and how it
 shows it is listening. Plus the danger zone (erase all memories) and the
 Labs screens:
 
+- **Brief** — the extended morning brief, in sections: Today, Due, Waiting
+  on you, Messages, Yesterday. Composed on demand and saved to read offline.
+- **Plugins** — the community plugin store: browse, see exactly what each
+  plugin is allowed to do (in plain English, before you install), rate with
+  one tap. The store also lives on the web at
+  [dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
+- **Rehearsal** — teach the glasses a routine by performing it: tap out the
+  beats ("Tap - Tap - Hold"), watch it learn live, keep it, and put it on
+  stage.
 - **Rewind** — your day as a scrollable timeline.
 - **Saga** — your rank, level, and achievements.
 - **Profile** — "What Oracle knows about you," the complete list.
@@ -64,6 +82,9 @@ everything from setup:
   (better answers, one-click install, still entirely on your Mac).
 - **Privacy controls** — the pairing key, the cloud egress counter, backup
   and restore, and erase buttons.
+- **Plugins** — what is installed, what this Mac is willing to grant each
+  plugin, and a remove button per plugin. Every install passes a safety
+  gate; one that asks for more than your Mac allows is refused outright.
 - **Activity** — a complete, honest log of everything the Brain has done.
 
 There is also a menu-bar dot for the Mac (green means running; one click for
