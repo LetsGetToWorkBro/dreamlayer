@@ -131,6 +131,13 @@ class Brain:
         # screen can read and edit them. The hub owns the truth; this is a
         # mirror the phone drives.
         self.social_people: list = self._load_people()
+        # Waypath: where you left your things. "I left my bike at the north rack"
+        # → a spoken anchor; "where's my bike?" reads it back. Persisted so the
+        # phone's typed-voice loop (stash then locate) is self-contained here,
+        # independent of the glasses hub (which keeps its own IMU anchors).
+        from ...orchestrator.waypath import WaypathLens
+        self.waypath = WaypathLens()
+        self._load_waypath()
         # Reality Compiler v2 (the Rehearsal paradigm, docs/RC_V2_*.md): the
         # phone performs a behavior as beats; the Brain infers → verifies →
         # signs → hot-swaps a Figment. The vault (signed, on-device storage)
@@ -953,6 +960,97 @@ class Brain:
         self._save_people()
         return {"intent": intent, "ok": True, "who": name, "say": say}
 
+    # -- waypath: where you left your things ---------------------------------
+
+    def _load_waypath(self) -> None:
+        p = self.cfg_dir / "waypath.json"
+        if p.exists():
+            try:
+                for a in json.loads(p.read_text()) or []:
+                    self.waypath.remember(
+                        a.get("subject", ""), bearing_deg=a.get("bearing_deg"),
+                        distance_m=a.get("distance_m"), place=a.get("place", ""),
+                        ts=a.get("ts"))
+            except Exception:
+                pass
+
+    def _save_waypath(self) -> None:
+        try:
+            anchors = [{"subject": a.subject, "bearing_deg": a.bearing_deg,
+                        "distance_m": a.distance_m, "place": a.place, "ts": a.ts}
+                       for a in self.waypath._anchors.values()]
+            (self.cfg_dir / "waypath.json").write_text(json.dumps(anchors))
+        except Exception:
+            pass
+
+    def waypath_stash(self, subject: str, place: str) -> dict:
+        subject = (subject or "").strip()
+        place = (place or "").strip()
+        if not subject:
+            return {"intent": "stash", "ok": False, "say": "Left what where?"}
+        self.waypath.remember_place(subject, place)
+        self._save_waypath()
+        say = (f"Got it — your {subject} is at {place}." if place
+               else f"Got it — I'll remember your {subject}.")
+        return {"intent": "stash", "ok": True, "say": say,
+                "subject": subject, "place": place}
+
+    def waypath_locate(self, subject: str) -> dict:
+        subject = (subject or "").strip()
+        if not subject:
+            return {"intent": "locate", "ok": False, "say": "Find what?"}
+        cue = self.waypath.locate(subject)
+        if not cue.found:
+            return {"intent": "locate", "ok": False, "found": False,
+                    "say": f"I don't have a spot saved for your {subject} yet."}
+        return {"intent": "locate", "ok": True, "found": True,
+                "subject": cue.subject, "place": cue.place, "detail": cue.text,
+                "say": f"Your {cue.subject} — {cue.text}."}
+
+    def missed(self, since: float = 0.0) -> dict:
+        """"What did I miss?" — the incoming texts and emails since you last
+        looked, spoken as a short line. Uses the same message source as the
+        brief; `since` defaults to the last few hours."""
+        import time as _t
+        if since <= 0:
+            since = _t.time() - 6 * 3600
+        try:
+            msgs = self._messages_fn(self.config, 40) if self.config.email_enabled else []
+        except Exception:
+            msgs = []
+        incoming = [m for m in msgs if not m.get("from_me") and m.get("ts", 0) > since]
+        texts = [m for m in incoming if m.get("channel") != "email"]
+        emails = [m for m in incoming if m.get("channel") == "email"]
+        if not incoming:
+            return {"intent": "missed", "ok": True, "texts": 0, "emails": 0,
+                    "say": "Nothing while you were away."}
+        who = ", ".join(dict.fromkeys(
+            (m.get("who") or "").strip() for m in texts if m.get("who")))
+        bits = []
+        if texts:
+            bits.append(f"{len(texts)} text{'s' if len(texts) != 1 else ''}"
+                        + (f" from {who[:60]}" if who else ""))
+        if emails:
+            bits.append(f"{len(emails)} email{'s' if len(emails) != 1 else ''}")
+        return {"intent": "missed", "ok": True, "texts": len(texts),
+                "emails": len(emails), "say": "You missed " + " and ".join(bits) + "."}
+
+    def voice_reply(self, to: str, text: str) -> dict:
+        """A spoken/typed "reply to Priya saying on my way" — stage the reply
+        (drafting one with the model if you didn't dictate the words) and hand it
+        back for the app to send. Never auto-sends: sending stays a deliberate
+        tap in Messages."""
+        to = (to or "").strip()
+        text = (text or "").strip()
+        if not to:
+            return {"intent": "reply", "ok": False, "say": "Reply to whom?"}
+        if not text:
+            sug = self.suggest_replies(f"(reply to {to})", n=1)
+            text = sug[0] if sug else ""
+        return {"intent": "reply", "ok": True, "to": to, "text": text,
+                "say": (f"Reply to {to}: “{text}” — open Messages to send."
+                        if text else f"Open Messages to reply to {to}.")}
+
     def set_profile(self, data: dict) -> dict:
         """Store the Oracle profile the glasses hub just pushed (a mirror, so the
         phone can read it). Keeps only the known shape; persists to profile.json."""
@@ -1442,6 +1540,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     # full parity with the hub: apply to the people mirror the
                     # People screen reads, so typed voice works like spoken
                     self._json(200, brain.voice_social(it.kind, it.args))
+                elif it.kind == "stash":
+                    self._json(200, brain.waypath_stash(
+                        it.args.get("subject", ""), it.args.get("place", "")))
+                elif it.kind == "locate":
+                    self._json(200, brain.waypath_locate(it.args.get("subject", "")))
+                elif it.kind == "missed":
+                    self._json(200, brain.missed(it.args.get("since", 0) or 0))
+                elif it.kind == "reply":
+                    self._json(200, brain.voice_reply(
+                        it.args.get("to", ""), it.args.get("text", "")))
                 else:
                     self._json(200, {"intent": it.kind, **it.args})
             elif path == "/dreamlayer/calendar":

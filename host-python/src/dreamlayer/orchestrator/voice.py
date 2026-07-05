@@ -8,6 +8,8 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "Hey Oracle, what did Marcus need?"       → recall(query)
     "where did I leave my bike?"              → locate(subject="bike")
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
+    "I left my bike at the north rack"        → stash(subject="bike", place="the north rack")
+    "I parked on level 3"                     → stash(subject="the car", place="level 3")
     "remember Maya's into rock climbing"      → note_person(who="Maya", note="into rock climbing")
     "remember she works at Google"            → note_person(who=None, note="works at Google")
     "this is my colleague Sarah, she's a PM"  → meet_person(who="Sarah", relation="colleague", note="she's a PM")
@@ -41,7 +43,7 @@ WAKE = ("hey oracle", "ok oracle", "okay oracle", "oracle",
 
 @dataclass
 class Intent:
-    kind: str                       # recall|locate|reply|brief|missed|scholar|ask
+    kind: str                       # recall|locate|stash|reply|brief|missed|scholar|ask
     args: dict = field(default_factory=dict)
 
 
@@ -159,6 +161,49 @@ def _parse_debt(r: str) -> "Intent | None":
         who = None if who.lower() in _PRONOUNS else who
         return Intent("debt", {"who": who, "dir": "they_owe",
                                "what": _clean_amount(mt.group(2))})
+    return None
+
+
+# -- stash: "I left my bike at the north rack" -> where you put a thing --------
+
+_LOC = r"(?:at|in|on|by|near|under|underneath|inside|behind|next\s+to|beside)"
+_STASH_LEFT = re.compile(
+    r"^(?:i\s+)?(?:left|put|stashed?|dropped|stowed|set)\s+"
+    r"(?:my\s+|the\s+|our\s+|a\s+)?(.+?)\s+" + _LOC + r"\s+(.+)$", re.I)
+_STASH_PARKED = re.compile(r"^(?:i\s+)?parked\s+(?:the\s+car\s+)?(?:" + _LOC + r"\s+)?(.+)$", re.I)
+_STASH_IS = re.compile(
+    r"^(?:my|our)\s+(.+?)\s+(?:is|are|'?s)\s+" + _LOC + r"\s+(.+)$", re.I)
+
+
+def _clean_subject(s: str) -> str:
+    return re.sub(r"^(?:my|the|our|a|an)\s+", "", (s or "").strip(), flags=re.I).strip()
+
+
+def _parse_stash(r: str) -> "Intent | None":
+    """"I left my bike at the north rack" / "I parked on level 3" / "my keys are
+    on the desk" → remember where a thing is, so 'where's my bike?' can answer.
+    `r` is the original-case line (place words are captured verbatim)."""
+    core = r.strip()
+    m = re.match(r"^(?:remember|note)(?:\s+that)?\s+(.+)$", core, re.I)
+    if m:
+        core = m.group(1).strip()
+    ml = _STASH_LEFT.match(core)
+    if ml:
+        subj = _clean_subject(ml.group(1))
+        place = ml.group(2).strip()
+        if subj and place:
+            return Intent("stash", {"subject": subj, "place": place})
+    mi = _STASH_IS.match(core)
+    if mi:
+        subj = _clean_subject(mi.group(1))
+        place = mi.group(2).strip()
+        if subj and place:
+            return Intent("stash", {"subject": subj, "place": place})
+    mp = _STASH_PARKED.match(core)
+    if mp:
+        place = mp.group(1).strip()
+        if place:
+            return Intent("stash", {"subject": "the car", "place": place})
     return None
 
 
@@ -291,9 +336,16 @@ def parse_intent(text: str) -> Intent:
     if note is not None:
         return note
 
-    # native timers / clock — Oracle builds these; no rehearsal needed
+    # native timers / clock — Oracle builds these; no rehearsal needed. Checked
+    # before stash so "put a clock on the hud" is a clock, not a stashed "clock".
     tc = _parse_timer_clock(t)
     if tc is not None:
         return tc
+
+    # "I left my bike at the north rack" — remember where a thing is, so a later
+    # "where's my bike?" can answer (checked after the person notes above)
+    stash = _parse_stash(r)
+    if stash is not None:
+        return stash
 
     return Intent("ask", {"query": raw.strip()})

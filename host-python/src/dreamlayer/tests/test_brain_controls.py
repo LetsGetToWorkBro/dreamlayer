@@ -292,9 +292,10 @@ class TestControls:
     def test_voice_and_calendar_endpoints(self, tmp_path):
         lb = Live(tmp_path)
         try:
-            # voice: a command comes back as a structured intent
+            # voice: a reply is staged (never auto-sent) for the app to send
             r = lb.post("/dreamlayer/voice", {"text": "reply to Priya saying on my way"})
-            assert r == {"intent": "reply", "to": "Priya", "text": "on my way"}
+            assert r["intent"] == "reply" and r["to"] == "Priya" and r["text"] == "on my way"
+            assert r["ok"] and "Messages" in r["say"]
             assert lb.post("/dreamlayer/voice", {"text": "brief me"})["intent"] == "brief"
             # calendar: add an event, then it's returned
             import time as _t

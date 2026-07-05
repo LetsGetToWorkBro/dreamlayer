@@ -1235,6 +1235,10 @@ class Orchestrator:
             line = "Pulling up your brief."
         elif kind == "missed":
             line = "Here's what you missed."
+        elif res.get("say"):
+            # native behaviors that already speak their own confirmation:
+            # stash/locate, timers, notes, debts, meet
+            line = res["say"]
         else:
             line = persona.dunno()
         self.bridge.send_card(cards.oracle_reply(line, "answer"), event="oracle")
@@ -1352,7 +1356,43 @@ class Orchestrator:
             return self._native_behavior(it.kind, it.args)
         if it.kind == "timer_cancel":
             return self._native_cancel()
+        if it.kind == "stash":
+            return self._stash(it.args.get("subject", ""), it.args.get("place", ""))
+        if it.kind == "locate":
+            return self._locate(it.args.get("subject", ""))
         return {"intent": it.kind, **it.args}
+
+    def _stash(self, subject: str, place: str) -> dict:
+        """"I left my bike at the north rack" — drop a Waypath anchor so a later
+        "where's my bike?" answers. Veil-gated (it's a memory of your things)."""
+        subject = (subject or "").strip()
+        place = (place or "").strip()
+        if not subject:
+            return {"intent": "stash", "ok": False, "say": "Left what where?"}
+        if not self.privacy.allow_capture():
+            return {"intent": "stash", "ok": False, "say": "Not while you're incognito."}
+        self.waypath.remember_place(subject, place)
+        say = (f"Got it — your {subject} is at {place}." if place
+               else f"Got it — I'll remember your {subject}.")
+        return {"intent": "stash", "ok": True, "say": say,
+                "subject": subject, "place": place}
+
+    def _locate(self, subject: str, heading_deg: float = 0.0) -> dict:
+        """"where's my bike?" — answer from a Waypath anchor you dropped. Draws
+        the direction/place card on the glasses when found."""
+        subject = (subject or "").strip()
+        if not subject:
+            return {"intent": "locate", "ok": False, "say": "Find what?"}
+        cue = self.find_way(subject, heading_deg)   # veil-gated; draws the card
+        if cue is None:
+            return {"intent": "locate", "ok": False,
+                    "say": "Not while you're incognito."}
+        if not cue.found:
+            return {"intent": "locate", "ok": False, "found": False,
+                    "say": f"I don't have a spot saved for your {subject} yet."}
+        return {"intent": "locate", "ok": True, "found": True,
+                "subject": cue.subject, "place": cue.place, "detail": cue.text,
+                "say": f"Your {cue.subject} — {cue.text}."}
 
     def _native_behavior(self, intent: str, args: dict) -> dict:
         """Build a timer / interval / clock and deploy it straight to the glasses
