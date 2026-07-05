@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DreamLayer · Halo Simulator</title>
+<meta name="description" content="Run the whole DreamLayer stack in your browser — talk to Oracle, set a timer that counts down on the glass, introduce someone and be recognised. No app, no glasses.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232CC79A' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232CC79A'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#000; --surface:#0E1416; --surface-2:#141F23; --border:#1F2A2E;
+    --text:#fff; --text-2:#8A9BA3; --text-3:#5b6f6b;
+    --teal:#2FD4C4; --coral:#FF6B5E;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace; --r:14px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--text);min-height:100svh;
+    font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:var(--teal);text-decoration:none}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;z-index:20;background:rgba(0,0,0,.82);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  .bar{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .wordmark{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;color:#fff;font-size:14px}
+  .ring{width:15px;height:15px;border:2px solid var(--teal);border-radius:50%;position:relative}
+  .ring::after{content:"";position:absolute;inset:3px;background:var(--teal);border-radius:50%}
+  .bar .sub{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal)}
+  .bar a.home{color:var(--text-2);font-size:13px}
+  .bar a.home:hover{color:#fff}
+
+  main{padding:24px 0 48px}
+  .lede{text-align:center;max-width:640px;margin:6px auto 26px}
+  .lede .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--teal)}
+  .lede h1{font-size:clamp(26px,5vw,40px);letter-spacing:-.02em;margin:10px 0 8px;line-height:1.08}
+  .lede p{color:var(--text-2);font-size:15.5px}
+
+  .cockpit{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:26px;align-items:start}
+  @media(max-width:860px){.cockpit{grid-template-columns:1fr;gap:20px}}
+
+  .stage{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .glass-wrap{position:relative;width:min(78vw,400px);aspect-ratio:1}
+  canvas.glass{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+    border:1px solid #14211f;
+    box-shadow:0 0 60px rgba(44,199,154,.14),0 0 160px rgba(44,199,154,.05),inset 0 0 40px rgba(0,0,0,.7)}
+  .glass-wrap.veiled canvas.glass{box-shadow:0 0 40px rgba(255,107,94,.12),inset 0 0 40px rgba(0,0,0,.85)}
+  .glass-wrap::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.06),transparent 45%)}
+  .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
+  .statusline b{color:var(--teal);font-weight:600}
+  .statusline .v{color:var(--coral)}
+
+  .say{width:100%;max-width:520px;display:flex;gap:10px}
+  .say input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:999px;
+    color:var(--text);padding:14px 18px;font-size:16px;min-width:0}
+  .say input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(47,212,196,.12)}
+  .say button{flex:none;background:var(--teal);color:#00201c;border:0;border-radius:999px;width:52px;
+    font-size:18px;font-weight:800;cursor:pointer}
+  .say button:active{transform:scale(.94)}
+
+  .grouplbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--text-3);margin:6px 0 -2px;text-align:center}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:520px}
+  .chip{font:inherit;font-size:13.5px;color:var(--text-2);background:transparent;border:1px solid var(--border);
+    border-radius:999px;padding:9px 15px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent}
+  .chip:hover{color:#fff;border-color:var(--teal)}
+  .chip.on{color:#00201c;background:var(--teal);border-color:var(--teal)}
+  .chip.danger.on{color:#fff;background:var(--coral);border-color:var(--coral)}
+  .chip:active{transform:scale(.95)}
+
+  .rail{display:flex;flex-direction:column;gap:16px}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .panel h3{margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal);font-weight:600}
+  .log{display:flex;flex-direction:column;gap:7px;max-height:280px;overflow-y:auto;overscroll-behavior:contain}
+  .log div{font-size:13.5px;line-height:1.4}
+  .log .you{color:var(--text)}
+  .log .you::before{content:"you  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
+  .log .oracle{color:var(--teal)}
+  .log .oracle::before{content:"oracle  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
+  .try{display:flex;flex-direction:column;gap:2px}
+  .try button{font:inherit;text-align:left;font-size:13.5px;color:var(--text-2);background:transparent;border:0;
+    padding:7px 2px;cursor:pointer;border-radius:6px}
+  .try button:hover{color:var(--teal)}
+  .try button::before{content:"› ";color:var(--teal)}
+  .people{color:var(--text-2);font-size:13.5px;line-height:1.6}
+  .people b{color:var(--teal);font-weight:600}
+  footer{color:var(--text-3);font-size:12.5px;text-align:center;padding:26px 20px;border-top:1px solid var(--border);margin-top:20px}
+  footer b{color:var(--text-2)}
+  footer a{color:var(--text-2)}
+  @media(max-width:430px){.bar .sub{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="wordmark" href="./index.html"><span class="ring"></span>DREAMLAYER</a>
+    <span class="sub">Halo Simulator</span>
+    <a class="home" href="./index.html">← Home</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="lede">
+    <span class="eyebrow">Runs in your browser</span>
+    <h1>Meet the Halo, without the Halo.</h1>
+    <p>The whole DreamLayer loop — the voice grammar, Social Lens recall, native timers, the Privacy
+      Veil — ported to run right here. Talk to Oracle below and watch the glass answer.</p>
+  </div>
+
+  <div class="cockpit">
+    <section class="stage">
+      <div class="glass-wrap" id="glassWrap"><canvas class="glass" id="glass"></canvas></div>
+      <div class="statusline" id="status">ready</div>
+
+      <form class="say" id="sayform" autocomplete="off">
+        <input id="sayinput" placeholder="Say something… “set a timer for 2 minutes”"
+               enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button type="submit" aria-label="Send">↳</button>
+      </form>
+
+      <div class="grouplbl">Looking at</div>
+      <div class="row" id="looks">
+        <button type="button" class="chip on" data-look="">Nobody</button>
+        <button type="button" class="chip" data-look="face-a">Face A</button>
+        <button type="button" class="chip" data-look="face-b">Face B</button>
+        <button type="button" class="chip" data-look="face-c">Face C</button>
+        <button type="button" class="chip" id="glancebtn">👁 Glance</button>
+      </div>
+
+      <div class="grouplbl">Temple &amp; veil</div>
+      <div class="row">
+        <button type="button" class="chip" data-g="single">Tap</button>
+        <button type="button" class="chip" data-g="double">Double-tap</button>
+        <button type="button" class="chip" data-g="long">Hold</button>
+        <button type="button" class="chip danger" id="veilbtn">◐ Privacy Veil</button>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="panel">
+        <h3>Conversation</h3>
+        <div class="log" id="log"></div>
+      </div>
+      <div class="panel">
+        <h3>Try saying</h3>
+        <div class="try" id="try">
+          <button>set a timer for 30 seconds</button>
+          <button>interval timer 20 seconds on 10 seconds off 3 rounds</button>
+          <button>what time is it?</button>
+          <button data-look="face-a">this is my colleague Sarah, she runs marketing</button>
+          <button>Sarah owes me $20</button>
+          <button data-look="face-a" data-glance="1">— now glance at Face A —</button>
+          <button>I left my bike at the north rack</button>
+          <button>where's my bike?</button>
+          <button>call me Sam</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>People it knows</h3>
+        <div class="people" id="people">no one yet — introduce someone</div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  Every pixel on the glass is drawn by a faithful port of the <b>real DreamLayer renderer</b> — the
+  same voice grammar, Social Lens, and Figment timer stage the
+  <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/host-python/src/dreamlayer/simulator" target="_blank" rel="noopener">Python simulator</a>
+  runs. Only the hardware is simulated. · <a href="./index.html">Home</a> · <a href="./plugins.html">Plugin store</a>
+</footer>
+
+<script src="./assets/sim/halo-sim.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var sim = new Halo.Sim();
+  var glass = new Halo.Glass($("glass"), sim);
+  var look = "", veiled = false;
+  glass.start();
+  addEventListener("resize", function(){ glass.resize(); }, {passive:true});
+  // pause the RAF loop when the tab is hidden (battery)
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) glass.stop(); else { glass._on = true; glass.start(); }
+  });
+
+  var esc = function(s){ return (s||"").replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); };
+
+  function paint(){
+    var st = sim.state();
+    var line = "state <b>" + (veiled ? '<span class="v">veiled</span>' :
+      (sim.figment ? (sim.figment.kind) : (sim.card && sim.card.type === "recall" ? "recall" : "ready"))) + "</b>";
+    if (sim.figment && sim.figment.kind !== "clock" && !sim.figment.done)
+      line += " · " + (sim.figment.kind === "interval" ? sim.figment.phase : Math.ceil(sim.figment.remaining) + "s");
+    $("status").innerHTML = line;
+    $("glassWrap").classList.toggle("veiled", veiled);
+    $("log").innerHTML = st.transcript.map(function(t){
+      return '<div class="' + t.who + '">' + esc(t.line) + '</div>'; }).join("");
+    $("log").scrollTop = $("log").scrollHeight;
+    $("people").innerHTML = st.people.length
+      ? st.people.map(function(n){ return "<b>" + esc(n) + "</b>"; }).join(" · ")
+      : "no one yet — introduce someone";
+  }
+  setInterval(paint, 200); paint();
+
+  $("sayform").addEventListener("submit", function(e){
+    e.preventDefault();
+    var v = $("sayinput").value.trim(); if (!v) return;
+    $("sayinput").value = "";
+    sim.handleVoice(v, look); paint();
+  });
+
+  $("looks").addEventListener("click", function(e){
+    var b = e.target.closest("[data-look]"); if (!b) return;
+    look = b.dataset.look;
+    [].forEach.call(document.querySelectorAll("#looks [data-look]"),
+      function(x){ x.classList.toggle("on", x === b); });
+  });
+  $("glancebtn").addEventListener("click", function(){ sim.lookAt(look); paint(); });
+
+  [].forEach.call(document.querySelectorAll("[data-g]"), function(b){
+    b.addEventListener("click", function(){ sim.gesture(b.dataset.g); paint(); });
+  });
+  $("veilbtn").addEventListener("click", function(){
+    veiled = !veiled; sim.veil(veiled);
+    $("veilbtn").classList.toggle("on", veiled); paint();
+  });
+
+  $("try").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.look) {
+      look = b.dataset.look;
+      [].forEach.call(document.querySelectorAll("#looks [data-look]"),
+        function(x){ x.classList.toggle("on", x.dataset.look === look); });
+    }
+    if (b.dataset.glance) { sim.lookAt(look); paint(); return; }
+    sim.handleVoice(b.textContent.replace(/^—.*—$/, "").trim(), look); paint();
+  });
+})();
+</script>
+</body>
+</html>
