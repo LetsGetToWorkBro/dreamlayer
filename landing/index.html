@@ -517,6 +517,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 <header class="bar" id="bar" aria-hidden="true">
   <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
   <nav class="barnav">
+    <a href="#simulator">Simulator</a>
     <a href="./playground.html">Playground</a>
     <a href="./plugins.html">Plugin&nbsp;store</a>
     <a class="pill" href="#soon"><span class="dot"></span>Early&nbsp;access</a>
@@ -1074,6 +1075,77 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   </div>
 </section>
 
+<!-- ======================= simulator ======================= -->
+<style>
+  .sim-figure{margin:34px auto 0;max-width:920px;border:1px solid var(--border);
+    border-radius:var(--r-lg);overflow:hidden;background:#000;
+    box-shadow:0 0 60px rgba(47,212,196,.08),0 24px 60px rgba(0,0,0,.5)}
+  .sim-figure img{display:block;width:100%;height:auto}
+  .sim-cap{display:block;text-align:center;color:var(--text-2);font-size:12.5px;
+    margin-top:14px}
+  .sim-cap b{color:var(--teal);font-weight:600}
+  .cmd{max-width:640px;margin:30px auto 0;border:1px solid var(--border);
+    border-radius:var(--r-sm);background:var(--surface);overflow:hidden}
+  .cmd .cmd-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--text-2);padding:9px 16px;
+    border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+  .cmd .cmd-h .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
+  .cmd pre{margin:0;padding:16px;overflow-x:auto;font-family:var(--mono);
+    font-size:13px;line-height:1.7;color:var(--h-text)}
+  .cmd pre .c{color:var(--text-2)}
+  .cmd pre .t{color:var(--teal)}
+</style>
+<section class="section-pad" id="simulator">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow arrive">Try it without glasses</span>
+      <h2 class="headline arrive" style="--d:80ms">Run the whole thing on your desk.</h2>
+      <p class="body arrive" style="--d:160ms">The Halo Simulator is DreamLayer with the hardware
+        drawn in software — a browser cockpit around the <em style="font-style:normal;color:var(--teal)">real
+        stack</em>. Talk to Oracle, set a timer that actually counts down on the glass, introduce
+        someone and have them recognised next time, drop the Privacy Veil. Nothing in it is a mock;
+        only the glasses are simulated.</p>
+    </div>
+
+    <figure class="sim-figure arrive" style="--d:220ms">
+      <picture>
+        <source srcset="./assets/sim/simulator.webp" type="image/webp">
+        <img src="./assets/sim/simulator.jpg" width="1600" height="1013" loading="lazy"
+             alt="The Halo Simulator: a round HUD showing a FACE RECALL card for Sarah, beside a
+                  live transcript where you introduce her, note a debt, and glance to recall her.">
+      </picture>
+    </figure>
+    <span class="sim-cap arrive" style="--d:260ms">Every pixel on the glass is rendered by the
+      <b>same card renderer the device uses</b> — and the countdown runs on the Figment stage that’s
+      the Python twin of the on-glass Lua, pinned in lock-step by the test suite.</span>
+
+    <div class="can-grid" style="margin-top:44px">
+      <div class="can arrive" style="--d:0ms"><b>The real loop, end to end</b><span>Your typed line is
+        the transcript the mic would deliver; it runs the full “Hey&nbsp;Oracle” surface — commands,
+        learned facts, every intent, native timers, Social Lens. The same code that will run on the
+        glasses runs here.</span></div>
+      <div class="can arrive" style="--d:60ms"><b>Talk, look, tap</b><span>Say a command, pick a face
+        to look at, tap or hold the temple, veil it. Introduce “my colleague Sarah” and a later glance
+        greets her by name — with the relationship, your notes, and any favour owed.</span></div>
+      <div class="can arrive" style="--d:120ms"><b>Not a mockup</b><span>The display streams from the
+        device renderer, the timer counts down on the reference Figment stage, and the Privacy Veil
+        blacks the whole loop out for real. If it works in the simulator, it works on the glass.</span></div>
+    </div>
+
+    <div class="cmd arrive" style="--d:180ms">
+      <div class="cmd-h"><span class="dot"></span>one command, no device</div>
+<pre><span class="c"># clone, install, run — then open http://127.0.0.1:8765</span>
+pip install -e <span class="t">"host-python[dev]"</span>
+python -m <span class="t">dreamlayer.simulator</span></pre>
+    </div>
+
+    <div class="cta-row arrive" style="--d:240ms;margin-top:32px">
+      <a class="btn primary" href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/host-python/src/dreamlayer/simulator" target="_blank" rel="noopener">See the simulator source ↗</a>
+      <a class="btn ghost" href="https://github.com/LetsGetToWorkBro/dreamlayer#readme" target="_blank" rel="noopener">Get the code ↗</a>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= playground ======================= -->
 <section class="section-pad" id="playground">
   <div class="wrap">
@@ -1130,6 +1202,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   <div class="wrap foot">
     <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
     <span class="mono"><a href="mailto:hello@dreamlayer.app">hello@dreamlayer.app</a>
+      &nbsp;·&nbsp; <a href="#simulator">simulator</a>
       &nbsp;·&nbsp; <a href="./plugins.html">plugin store</a>
       &nbsp;·&nbsp; <a href="./playground.html">playground</a>
       &nbsp;·&nbsp; <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank"
