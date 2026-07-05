@@ -87,6 +87,16 @@ class WaypathLens:
     def forget(self, subject: str) -> bool:
         return self._anchors.pop(subject.strip().lower(), None) is not None
 
+    def forget_all(self) -> int:
+        """Purge every anchor (the memory-erase hook). Returns how many."""
+        n = len(self._anchors)
+        self._anchors.clear()
+        return n
+
+    def anchors(self) -> list:
+        """Every anchor, for persistence and the memories feed."""
+        return list(self._anchors.values())
+
     def locate(self, subject: str, heading_deg: float = 0.0) -> WaypathCue:
         """Where is `subject`, relative to where you're facing?"""
         key = subject.strip().lower()

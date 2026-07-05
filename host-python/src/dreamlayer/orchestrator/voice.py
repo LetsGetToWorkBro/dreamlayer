@@ -9,7 +9,11 @@ text*, strips the wake phrase (detect_wake), and figures out what you meant:
     "where did I leave my bike?"              → locate(subject="bike")
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
     "I left my bike at the north rack"        → stash(subject="bike", place="the north rack")
-    "I parked on level 3"                     → stash(subject="the car", place="level 3")
+    "I'm parked on level 3"                   → stash(subject="the car", place="level 3")
+    "my car's in the garage"                  → stash(subject="car", place="the garage")
+    "where did I park?"                       → locate(subject="car")
+    ("my mom is in the hospital" is NOT a stash — person/event/idiom subjects
+     stand down and fall through to ask; see _STASH_NOT_A_THING)
     "remember Maya's into rock climbing"      → note_person(who="Maya", note="into rock climbing")
     "remember she works at Google"            → note_person(who=None, note="works at Google")
     "this is my colleague Sarah, she's a PM"  → meet_person(who="Sarah", relation="colleague", note="she's a PM")
@@ -167,42 +171,92 @@ def _parse_debt(r: str) -> "Intent | None":
 # -- stash: "I left my bike at the north rack" -> where you put a thing --------
 
 _LOC = r"(?:at|in|on|by|near|under|underneath|inside|behind|next\s+to|beside)"
+
+# "my X is at Y" / "I left my X at Y" phrasings that AREN'T a misplaced thing:
+# people (that's social memory, not a stash), events and times, idioms, body
+# parts, and the native behaviors (timer/alarm). A subject hit here makes the
+# stash parser stand down — the line degrades to `ask`, which is always safe.
+# Better to answer a question than to confidently mis-file your mom as an
+# object ("Got it — your mom is at the hospital").
+_STASH_NOT_A_THING = frozenset("""
+    mom mother dad father parent parents brother brothers sister sisters wife
+    husband partner boyfriend girlfriend son daughter kid kids child children
+    family friend friends buddy boss coworker colleague roommate aunt uncle
+    cousin grandma grandmother grandpa grandfather nephew niece baby sitter
+    nanny doctor dentist therapist team guy guys everyone everybody
+    job work career shift meeting appointment interview call class lecture
+    exam test flight train bus ride birthday anniversary wedding party dinner
+    lunch breakfast reservation game match show concert
+    faith heart mind trust hope luck life word words promise message voicemail
+    ball eye eyes head back foot feet hand hands
+    alarm timer clock countdown reminder alert
+    early late everything nothing
+""".split())
+
+# Places that are really times, modes, or people — "at 3", "on Friday",
+# "on silent", "in you". Not somewhere a thing can be found later.
+_STASH_NOT_A_PLACE = re.compile(
+    r"^(?:\d{1,2}(?::\d{2})?\s*(?:am|pm|o'?clock)?|noon|midnight|dawn|dusk|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"today|tonight|tomorrow|yesterday|"
+    r"silent|mute|vibrate|hold|do\s+not\s+disturb|"
+    r"you|me|him|her|them|us|it|that)[.!]?$", re.I)
+
 _STASH_LEFT = re.compile(
     r"^(?:i\s+)?(?:left|put|stashed?|dropped|stowed|set)\s+"
-    r"(?:my\s+|the\s+|our\s+|a\s+)?(.+?)\s+" + _LOC + r"\s+(.+)$", re.I)
-_STASH_PARKED = re.compile(r"^(?:i\s+)?parked\s+(?:the\s+car\s+)?(?:" + _LOC + r"\s+)?(.+)$", re.I)
+    r"(?:my\s+|the\s+|our\s+|a\s+|an\s+)?(.+?)\s+" + _LOC + r"\s+(.+)$", re.I)
+# adverb places carry no preposition: "I left my bike downstairs"
+_STASH_ADV = re.compile(
+    r"^(?:i\s+)?(?:left|put|stashed?|dropped|stowed|set)\s+"
+    r"(?:my\s+|the\s+|our\s+)?(.+?)\s+"
+    r"(downstairs|upstairs|outside|inside|out\s+front|out\s+back)$", re.I)
+# "I parked on level 3" / "I'm parked in the garage" / "we parked at the far
+# end". The pronoun and the place are both required — a bare "I parked the
+# car" carries nothing worth remembering.
+_STASH_PARKED = re.compile(
+    r"^(?:i|i'?m|i\s+am|we|we'?re|we\s+are)\s+parked\s+(?:the\s+car\s+)?"
+    + _LOC + r"\s+(.+)$", re.I)
+# "my keys are on the desk" / "my car's in the garage" (contraction too)
 _STASH_IS = re.compile(
-    r"^(?:my|our)\s+(.+?)\s+(?:is|are|'?s)\s+" + _LOC + r"\s+(.+)$", re.I)
+    r"^(?:my|our)\s+(.+?)(?:['’]s|\s+(?:is|are))\s+" + _LOC + r"\s+(.+)$", re.I)
 
 
 def _clean_subject(s: str) -> str:
     return re.sub(r"^(?:my|the|our|a|an)\s+", "", (s or "").strip(), flags=re.I).strip()
 
 
+def _stashable(subj: str, place: str) -> bool:
+    """True only when the subject reads like a thing and the place like a
+    place. Tokens are checked so "spare key" passes and "my little brother"
+    doesn't."""
+    if not subj or not place:
+        return False
+    tokens = {t.strip("'’.,!?").lower() for t in subj.split()}
+    if tokens & _STASH_NOT_A_THING:
+        return False
+    return not _STASH_NOT_A_PLACE.match(place.strip())
+
+
 def _parse_stash(r: str) -> "Intent | None":
-    """"I left my bike at the north rack" / "I parked on level 3" / "my keys are
-    on the desk" → remember where a thing is, so 'where's my bike?' can answer.
-    `r` is the original-case line (place words are captured verbatim)."""
+    """"I left my bike at the north rack" / "I'm parked on level 3" / "my car's
+    in the garage" → remember where a thing is, so 'where's my bike?' can
+    answer. `r` is the original-case line (place words are captured verbatim).
+    Deliberately conservative: person/event/idiom subjects fall through to ask."""
     core = r.strip()
     m = re.match(r"^(?:remember|note)(?:\s+that)?\s+(.+)$", core, re.I)
     if m:
         core = m.group(1).strip()
-    ml = _STASH_LEFT.match(core)
-    if ml:
-        subj = _clean_subject(ml.group(1))
-        place = ml.group(2).strip()
-        if subj and place:
-            return Intent("stash", {"subject": subj, "place": place})
-    mi = _STASH_IS.match(core)
-    if mi:
-        subj = _clean_subject(mi.group(1))
-        place = mi.group(2).strip()
-        if subj and place:
-            return Intent("stash", {"subject": subj, "place": place})
+    for rx in (_STASH_LEFT, _STASH_IS, _STASH_ADV):
+        mm = rx.match(core)
+        if mm:
+            subj = _clean_subject(mm.group(1))
+            place = mm.group(2).strip()
+            if _stashable(subj, place):
+                return Intent("stash", {"subject": subj, "place": place})
     mp = _STASH_PARKED.match(core)
     if mp:
         place = mp.group(1).strip()
-        if place:
+        if _stashable("car", place):
             return Intent("stash", {"subject": "the car", "place": place})
     return None
 
@@ -285,11 +339,14 @@ def parse_intent(text: str) -> Intent:
     if m:
         return Intent("reply", {"to": m.group(1), "text": (m.group(2) or "").strip()})
 
-    # where's my <thing> / where did I leave <thing>
-    m = re.match(r"(?:where'?s|where is|where did i (?:leave|put))\s+(?:my\s+|the\s+)?(.+)$",
-                 r, re.IGNORECASE)
+    # where's my <thing> / where are my keys / where did I leave|put|park <thing>
+    m = re.match(r"(?:where'?s|where is|where are|where did i (?:leave|put|park))\s+"
+                 r"(?:my\s+|the\s+)?(.+)$", r, re.IGNORECASE)
     if m:
         return Intent("locate", {"subject": m.group(1).strip()})
+    # bare parking retrieval — "where did I park", "where am I parked"
+    if re.match(r"^where (?:did i park|do i park|am i parked)$", t):
+        return Intent("locate", {"subject": "car"})
 
     # what did/does <who> need/want/say/owe → recall (send the whole phrasing)
     if re.match(r"what (?:did|does|is|are)\s+\w+.*(need|want|say|said|owe|owes)", t):
