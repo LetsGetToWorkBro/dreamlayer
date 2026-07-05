@@ -52,6 +52,56 @@ def test_stash_does_not_eat_person_notes():
     assert parse_intent("remember I prefer aisle seats").kind == "ask"
 
 
+def test_stash_stands_down_for_people_events_idioms():
+    """The review pass's headline finding: "my X is at Y" phrasings about
+    people, events, and idioms must NOT become stashes — a wrong stash is
+    spoken back as a confident confirmation and lands in Memories."""
+    not_stash = [
+        "my brother is in town", "my mom is in the hospital",
+        "my sister is at Stanford", "my son is at soccer practice",
+        "my wife is at work", "my meeting is at 3", "my flight is at noon",
+        "my birthday is on Friday", "our anniversary is on Tuesday",
+        "I left my job at Google", "I left my wife at the altar",
+        "I dropped my kids at school", "I dropped the ball on that project",
+        "I left a message on her voicemail", "I put my faith in you",
+        "I set my phone on silent", "I set the meeting at 3pm",
+        "I left early on Friday", "I left my heart in San Francisco",
+        "note that my brother is in town",
+    ]
+    for line in not_stash:
+        assert parse_intent(line).kind != "stash", line
+
+
+def test_stash_duration_less_timer_words_are_not_stashes():
+    # "put a timer on the oven" must not file a "timer" at "the oven"
+    assert parse_intent("put a timer on the oven").kind != "stash"
+    assert parse_intent("set a timer on the counter").kind != "stash"
+    # and the clock phrasing still routes to clock
+    assert parse_intent("put a clock on the hud").kind == "clock"
+
+
+def test_stash_degenerate_parking_is_ignored():
+    assert parse_intent("I parked the car").kind != "stash"       # no place
+    assert parse_intent("I parked illegally").kind != "stash"     # not a place
+
+
+def test_stash_natural_variants_parse():
+    it = parse_intent("my car's in the garage")                   # contraction
+    assert it.kind == "stash" and it.args["subject"] == "car"
+    assert parse_intent("I'm parked on level 3").kind == "stash"
+    assert parse_intent("we parked at the far end").kind == "stash"
+    it = parse_intent("I left my bike downstairs")                # adverb place
+    assert it.kind == "stash" and it.args["place"] == "downstairs"
+
+
+def test_locate_natural_variants_parse():
+    assert parse_intent("where are my keys").kind == "locate"
+    it = parse_intent("where did I park")
+    assert it.kind == "locate" and it.args["subject"] == "car"
+    assert parse_intent("where did I park the car").kind == "locate"
+    assert parse_intent("where am I parked").kind == "locate"
+
+
 # -- lens: place-only anchors -------------------------------------------------
 
 def test_place_only_anchor():
@@ -91,6 +141,21 @@ def test_hub_stash_veil_gated():
     orc.privacy.pause()                        # Veil down
     r = orc.handle_voice("I left my bike at the rack")
     assert r["ok"] is False and "incognito" in r["say"].lower()
+
+
+def test_hub_memory_writes_refuse_under_incognito_flag():
+    """"Go incognito" promises a session that keeps nothing — the deliberate
+    memory writes (stash, debts, notes, meet) must refuse under the flag, not
+    only under the long-press veil."""
+    orc = Orchestrator(FakeBridge())
+    orc.set_incognito(True)
+    assert orc.handle_voice("I left my bike at the rack")["ok"] is False
+    assert orc.handle_voice("Marcus owes me $20")["ok"] is False
+    # asking your brain still works in incognito — only writes are refused
+    r = orc.handle_voice("where's my bike?")
+    assert "incognito" not in (r.get("say") or "").lower()
+    orc.set_incognito(False)
+    assert orc.handle_voice("I left my bike at the rack")["ok"] is True
 
 
 def test_oracle_wrapper_speaks_locate():

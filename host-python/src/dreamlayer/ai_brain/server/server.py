@@ -17,6 +17,7 @@ panel page is injected with the token only when opened from localhost.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import urllib.parse
 from dataclasses import asdict
@@ -968,22 +969,31 @@ class Brain:
 
     def _load_waypath(self) -> None:
         p = self.cfg_dir / "waypath.json"
-        if p.exists():
-            try:
-                for a in json.loads(p.read_text()) or []:
-                    self.waypath.remember(
-                        a.get("subject", ""), bearing_deg=a.get("bearing_deg"),
-                        distance_m=a.get("distance_m"), place=a.get("place", ""),
-                        ts=a.get("ts"))
+        if not p.exists():
+            return
+        try:
+            rows = json.loads(p.read_text()) or []
+        except Exception:
+            return
+        for a in rows if isinstance(rows, list) else []:
+            try:                       # one bad row must not drop the rest
+                self.waypath.remember(
+                    a.get("subject", ""), bearing_deg=a.get("bearing_deg"),
+                    distance_m=a.get("distance_m"), place=a.get("place", ""),
+                    ts=a.get("ts"))
             except Exception:
-                pass
+                continue
 
     def _save_waypath(self) -> None:
         try:
             anchors = [{"subject": a.subject, "bearing_deg": a.bearing_deg,
                         "distance_m": a.distance_m, "place": a.place, "ts": a.ts}
-                       for a in self.waypath._anchors.values()]
-            (self.cfg_dir / "waypath.json").write_text(json.dumps(anchors))
+                       for a in self.waypath.anchors()]
+            # atomic: the server is threaded, and a torn write would silently
+            # lose every anchor on the next load
+            tmp = self.cfg_dir / "waypath.json.tmp"
+            tmp.write_text(json.dumps(anchors))
+            os.replace(tmp, self.cfg_dir / "waypath.json")
         except Exception:
             pass
 
@@ -1059,27 +1069,38 @@ class Brain:
         """A read of DreamLayer's own kept memory for the phone's Memories tab,
         assembled from what the Brain holds: places you saved (Waypath), people
         you've met and favors owed (Social Lens), and dated reminders. Not raw
-        recordings — the moments that matter, newest first."""
+        recordings — the moments that matter. Timestamped rows sort newest
+        first (an upcoming reminder floats to the very top); people and open
+        debts are living memory with no event time, so they carry ts=0 and
+        settle at the bottom instead of masquerading as fresh."""
         import time as _t
+        from datetime import date
         now = _t.time()
-        today = _t.localtime(now).tm_yday
+        today = date.fromtimestamp(now)
 
         def when(ts: float) -> str:
             if not ts:
                 return ""
-            lt = _t.localtime(ts)
-            if lt.tm_yday == today and (now - ts) < 18 * 3600:
-                return _t.strftime("%-I:%M %p", lt)
-            if (now - ts) < 48 * 3600:
-                return "Yesterday, " + _t.strftime("%-I:%M %p", lt)
-            return _t.strftime("%a, %-I:%M %p", lt)
+            # calendar days, not 24h buckets — so tomorrow's reminder reads
+            # "Tomorrow", not "Yesterday", and a same-day dawn stash stays today
+            days = (date.fromtimestamp(ts) - today).days
+            clock = _t.strftime("%-I:%M %p", _t.localtime(ts))
+            if days == 0:
+                return clock
+            if days == -1:
+                return "Yesterday, " + clock
+            if days == 1:
+                return "Tomorrow, " + clock
+            if -7 < days < 7:
+                return _t.strftime("%a, ", _t.localtime(ts)) + clock
+            return _t.strftime("%b %-d, ", _t.localtime(ts)) + clock
 
         rows = []
         # places you saved (Waypath) — real timestamps
-        for a in self.waypath._anchors.values():
+        for a in self.waypath.anchors():
             loc = f"at {a.place}" if a.place else "somewhere you saved"
             rows.append(("Place", f"Your {a.subject} — {loc}", a.ts or now, when(a.ts)))
-        # people you've met + favors owed (Social Lens) — living memory
+        # people you've met + favors owed (Social Lens) — living memory, undated
         for p in self.social_people:
             name = (p.get("name") or "").strip()
             if not name:
@@ -1087,7 +1108,7 @@ class Brain:
             detail = ", ".join([x for x in [p.get("relation", "")]
                                 + (p.get("notes") or [])[:1] if x])
             rows.append(("Person", name + (f" — {detail}" if detail else ""),
-                         now, p.get("last_seen", "") or ""))
+                         0.0, p.get("last_seen", "") or ""))
             for d in (p.get("debts") or []):
                 dl = d.strip()
                 low = dl.lower()
@@ -1097,14 +1118,14 @@ class Brain:
                     s = f"{name} {dl}"
                 else:
                     s = f"{name}: {dl}"
-                rows.append(("Promise", s, now, ""))
+                rows.append(("Promise", s, 0.0, "open"))
         # dated reminders (Promise)
         for r in self.reminders():
             ts = float(r.get("ts", 0) or 0)
             if ts:
                 rows.append(("Promise", r["title"], ts, when(ts)))
 
-        rows.sort(key=lambda x: x[2], reverse=True)
+        rows.sort(key=lambda x: (-x[2], x[1].lower()))
         out = [{"id": f"m{i}", "kind": kind, "summary": summary,
                 "createdAt": label, "ts": int(ts * 1000)}
                for i, (kind, summary, ts, label) in enumerate(rows[:limit])]

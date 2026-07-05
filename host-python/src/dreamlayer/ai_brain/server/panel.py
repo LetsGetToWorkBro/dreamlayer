@@ -425,7 +425,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
 const api=(p,o={})=>fetch(p,Object.assign({headers:H},o)).then(r=>r.json());
-const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+// quotes included: esc() output also lands inside single-quoted onclick
+// attributes (Remove buttons), where a stray ' would open an attribute break
+const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const $=id=>document.getElementById(id);
 let modelSel="keyword", ollamaOK=null, browsePath="";
 
@@ -473,7 +475,7 @@ async function loadAgenda(){let r;try{r=await api("/dreamlayer/calendar");}catch
   $("agenda").innerHTML=items.length?items.map(e=>{
     const synced=e.source==="calendar";
     const badge=synced?`<span class="tag">${esc(e.calendar||"Calendar")}</span>`:"";
-    const rm=synced?"":`<button class="sm ghost" onclick='rmEvent(${JSON.stringify(e.title)},${e.ts})'>Remove</button>`;
+    const rm=synced?"":`<button class="sm ghost" onclick='rmEvent(${esc(JSON.stringify(e.title))},${e.ts})'>Remove</button>`;
     return `<li><div><div class="q">${esc(e.title)} ${badge}</div>`+
       `<div class="a">${esc(fmtWhen(e.ts))}${e.place?" · "+esc(e.place):""}</div></div>${rm}</li>`;}).join("")
     :'<li class="empty">Nothing scheduled — sync your calendar or add what you’re tracking.</li>';}
@@ -520,16 +522,18 @@ async function loadPeople(){
   let reg={items:[]}, soc={people:[]};
   try{reg=await api("/dreamlayer/people");}catch(e){}
   try{soc=await api("/dreamlayer/social/people");}catch(e){}
-  const map={};
+  // a real Map: names are user/contact data — on a plain object a person
+  // named "__proto__" vanishes and "constructor" resolves to Object itself
+  const map=new Map();
   (reg.items||[]).forEach(p=>{const k=(p.name||"").trim().toLowerCase();if(!k)return;
-    map[k]={name:p.name,note:p.note||"",tags:p.tags||[],source:p.source||"",
-            relation:"",notes:[],debts:[]};});
+    map.set(k,{name:p.name,note:p.note||"",tags:p.tags||[],source:p.source||"",
+            relation:"",notes:[],debts:[]});});
   (soc.people||[]).forEach(p=>{const k=(p.name||"").trim().toLowerCase();if(!k)return;
-    const e=map[k]||{name:p.name,note:"",tags:[],source:"glasses",relation:"",notes:[],debts:[]};
+    const e=map.get(k)||{name:p.name,note:"",tags:[],source:"glasses",relation:"",notes:[],debts:[]};
     e.relation=p.relation||e.relation||"";
     e.notes=p.notes||[];e.debts=p.debts||[];e.last_seen=p.last_seen||"";
-    if(!map[k])e.source="glasses";map[k]=e;});
-  const items=Object.values(map);
+    map.set(k,e);});
+  const items=[...map.values()];
   $("people").innerHTML=items.length?items.map(p=>{
     const tags=(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(" ");
     const badge=p.source==="contacts"?`<span class="tag">contact</span>`
@@ -539,7 +543,7 @@ async function loadPeople(){
     const notes=(p.notes&&p.notes.length)?p.notes.map(esc).join(" · "):"";
     const detail=[esc(p.note||""),notes].filter(Boolean).join(" · ");
     const removable=p.source!=="contacts"&&p.source!=="glasses";
-    const rm=removable?`<button class="sm ghost" onclick='rmPerson(${JSON.stringify(p.name)})'>Remove</button>`:"";
+    const rm=removable?`<button class="sm ghost" onclick='rmPerson(${esc(JSON.stringify(p.name))})'>Remove</button>`:"";
     return `<li><div><div class="q">${esc(p.name)} ${rel} ${badge}</div>`+
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
     :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';}
@@ -687,7 +691,7 @@ async function checkModel(){
       `<span class="st ${have?'ok-t':'warn-t'}">${have?'✓ ready':'not pulled'}</span></div>`;}).join("");
   let pull = miss.length?`<div class="lead" style="margin:12px 0 0">One-click pull the missing model${miss.length>1?'s':''}:</div>`+
       `<div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">`+
-      miss.map(nm=>`<button class="sm" onclick='pullModel(${JSON.stringify(nm)})'>⬇ Pull ${esc(nm)}</button>`).join("")+
+      miss.map(nm=>`<button class="sm" onclick='pullModel(${esc(JSON.stringify(nm))})'>⬇ Pull ${esc(nm)}</button>`).join("")+
       `</div><div id="pullOut" class="conn-s" style="margin-top:8px"></div>`:'';
   el.innerHTML='<div class="mstat"><div class="head"><span class="sdot ok"></span>'+
     `<b>Ollama reachable</b></div><div class="lead" style="margin:0 0 8px">at <code>${esc(r.url)}</code></div>`+

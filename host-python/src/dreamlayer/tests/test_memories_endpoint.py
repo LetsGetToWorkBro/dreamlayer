@@ -44,6 +44,52 @@ def test_memories_empty_is_clean(tmp_path):
     assert Brain(tmp_path).memories()["memories"] == []
 
 
+def test_future_reminder_reads_tomorrow_not_yesterday(tmp_path):
+    """Review finding: a reminder for tomorrow 9am was labeled "Yesterday" —
+    the 48h window was signed-blind. Calendar-day labels fix it."""
+    b = Brain(tmp_path)
+    tomorrow = time.time() + 24 * 3600
+    (tmp_path / "reminders.json").write_text(json.dumps(
+        [{"title": "Dentist", "ts": tomorrow, "list": ""}]))
+    m = next(x for x in b.memories()["memories"] if x["summary"] == "Dentist")
+    assert m["createdAt"].startswith("Tomorrow, ")
+    # and it floats to the top — upcoming beats past
+    assert b.memories()["memories"][0]["summary"] == "Dentist"
+
+
+def test_old_memory_gets_a_date_not_a_bare_weekday(tmp_path):
+    b = Brain(tmp_path)
+    b.waypath.remember_place("skis", "the storage unit",
+                             ts=time.time() - 21 * 86400)
+    b._save_waypath()
+    m = next(x for x in b.memories()["memories"] if "skis" in x["summary"])
+    # three weeks old: "Jun 14, 4:15 PM"-style, not an ambiguous "Tue, 4:15 PM"
+    assert m["createdAt"][0].isupper() and any(c.isdigit() for c in m["createdAt"].split(",")[0])
+
+
+def test_people_and_debts_are_undated_living_memory(tmp_path):
+    """Review finding: person/debt rows were stamped ts=now on every call —
+    pinned above genuinely recent places, forever "today" on the phone."""
+    b = _seed(tmp_path)
+    mems = b.memories()["memories"]
+    for m in mems:
+        if m["kind"] == "Person" or m["createdAt"] == "open":
+            assert m["ts"] == 0, m
+    # the dated rows (place, reminder) outrank the undated living memory
+    kinds_in_order = [m["kind"] for m in mems]
+    assert kinds_in_order.index("Place") < kinds_in_order.index("Person")
+
+
+def test_waypath_load_survives_a_bad_row(tmp_path):
+    """Review finding: one malformed row silently dropped every anchor."""
+    (tmp_path / "waypath.json").write_text(json.dumps([
+        {"subject": None, "place": "x"},                 # bad
+        {"subject": "bike", "place": "the rack", "ts": time.time()},
+    ]))
+    b = Brain(tmp_path)
+    assert b.waypath_locate("bike")["found"]
+
+
 def test_debt_you_owe_phrasing(tmp_path):
     b = Brain(tmp_path)
     b.voice_social("meet_person", {"who": "Dana"})

@@ -1369,7 +1369,7 @@ class Orchestrator:
         place = (place or "").strip()
         if not subject:
             return {"intent": "stash", "ok": False, "say": "Left what where?"}
-        if not self.privacy.allow_capture():
+        if self.incognito or not self.privacy.allow_capture():
             return {"intent": "stash", "ok": False, "say": "Not while you're incognito."}
         self.waypath.remember_place(subject, place)
         say = (f"Got it — your {subject} is at {place}." if place
@@ -1450,7 +1450,7 @@ class Orchestrator:
         what = (what or "").strip()
         if not what:
             return {"intent": "debt", "ok": False, "say": "Owes what?"}
-        if not self.privacy.allow_capture():
+        if self.incognito or not self.privacy.allow_capture():
             return {"intent": "debt", "ok": False, "say": "Not while you're incognito."}
         if who:
             contact = self.social.add_debt(direction, what, who=who)
@@ -1472,7 +1472,7 @@ class Orchestrator:
                 "what": what, "say": say}
 
     def _debt_settle(self, who: str | None, within_sec: float = 90.0) -> dict:
-        if not self.privacy.allow_capture():
+        if self.incognito or not self.privacy.allow_capture():
             return {"intent": "debt_settle", "ok": False, "say": "Not while you're incognito."}
         if who:
             contact = self.social.settle(who=who)
@@ -1498,7 +1498,7 @@ class Orchestrator:
         dossier with the relationship and any note. Veil-gated."""
         if not name:
             return {"intent": "meet_person", "ok": False, "say": "Who is this?"}
-        if not self.privacy.allow_capture():
+        if self.incognito or not self.privacy.allow_capture():
             return {"intent": "meet_person", "ok": False,
                     "say": "Not while you're incognito."}
         rec = self.social.meet(name, frame=frame, note=note, relation=relation)
@@ -1523,7 +1523,7 @@ class Orchestrator:
         if not note:
             return {"intent": "note_person", "ok": False,
                     "say": "What should I remember about them?"}
-        if not self.privacy.allow_capture():
+        if self.incognito or not self.privacy.allow_capture():
             return {"intent": "note_person", "ok": False,
                     "say": "Not while you're incognito."}
         if who:
