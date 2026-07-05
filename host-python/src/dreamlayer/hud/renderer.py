@@ -469,6 +469,11 @@ class CardRenderer:
             "ForgetLastCard":       self._layout_card,
             "PrivateZoneCard":      self._layout_card,
             "ConsentRequiredCard":  self._layout_card,
+            # Social Lens face recall + Waypath — layout-driven (the recall
+            # card self-describes rows; Waypath falls back to generic rows).
+            # Both used to black-golden: the device drew them, this didn't.
+            "SocialLensCard":       self._layout_card,
+            "WaypathCard":          self._layout_card,
             "LiveCaptionCard":      self._layout_card,
             # Conversation ledger: live transcript + dossier on greet
             "SpokenCaptionCard":    self._layout_card,
@@ -490,6 +495,10 @@ class CardRenderer:
         fn = dispatch.get(card.get("type", ""))
         if fn:
             fn(draw, card)
+        else:
+            # Never black-golden a card the dispatch doesn't know
+            # (CINEMA_V1_JUDGMENT Wrong #1): draw its standard rows instead.
+            self._generic_rows(draw, card)
         img = img.convert("RGBA")
         img.putalpha(self._mask)
         return img
@@ -1227,12 +1236,37 @@ class CardRenderer:
         if detail:
             self._text_rgba(draw, CX, 172, detail, "sm", dim, alpha=230)
 
+    def _generic_rows(self, draw, card):
+        """Fallback rows for any card without a bespoke renderer or a layout
+        dict: eyebrow / primary / detail / footer, centered on the glass. Keeps
+        an unmapped card legible instead of a silent black disc."""
+        eyebrow = str(card.get("eyebrow") or "").strip()
+        primary = str(card.get("primary") or "").strip()
+        detail = str(card.get("detail") or "").strip()
+        footer = str(card.get("footer") or "").strip()
+        if not (eyebrow or primary or detail or footer):
+            for i, ln in enumerate((card.get("lines") or [])[:4]):
+                self._text(draw, CX, 92 + i * 30, ln,
+                           "lg" if i == 1 else "md", T.TEXT_PRIMARY)
+            return
+        if eyebrow:
+            self._text(draw, CX, 82, eyebrow, "sm", T.ACCENT_MEMORY)
+        if primary:
+            self._text(draw, CX, 120, _ellipsize(primary, 22), "lg", T.TEXT_PRIMARY)
+        if detail:
+            self._multiline_text(draw, CX, 150, detail, "md", T.TEXT_SECONDARY)
+        if footer:
+            self._text(draw, CX, 190, _ellipsize(footer, 30), "xs", T.TEXT_GHOST)
+
     def _layout_card(self, draw, card):
         """Generic renderer for the layout-driven cards (ForgetLast /
         PrivateZone / ConsentRequired / LiveCaption): the payload
         self-describes rows via card['layout'] (built in cards.py).
-        Mirrors halo-lua/display/renderer.lua draw_layout_card."""
+        Mirrors halo-lua/display/renderer.lua draw_layout_card. A card that
+        arrives with no layout dict falls back to the generic rows."""
         layout = card.get("layout") or {}
+        if not layout:
+            return self._generic_rows(draw, card)
 
         sep = layout.get("separator")
         if sep:
