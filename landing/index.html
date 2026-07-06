@@ -136,13 +136,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   opacity:0;transform:translateY(8px);
   transition:opacity 1200ms var(--ease) 200ms,transform 1200ms var(--ease) 200ms}
 .section-bg.in ~ .wrap .hud-float{opacity:1;transform:none}
-/* the card reads as AR glass: translucent lens (alpha baked into the asset)
-   shows the illustrative environment through it, softly frosted, HUD glyphs
-   glowing on top — not an opaque black puck. */
-.hud-float img{width:100%;height:auto;border-radius:50%;
+/* the honest composite is the LIVE renderer: a see-through glass lens (the engine
+   fills the disc at 42% so the illustrative environment shows through) with the
+   HUD glyphs glowing on top and a frosted rim — not an opaque black puck. */
+/* beat .hero-glass width/height (later in the file) so the glass fills its
+   column (184px desktop / 148px mobile) instead of a viewport-height clamp */
+.hud-float .can-glass{width:100%;height:auto;aspect-ratio:1;margin:0}
+.hud-float .can-glass canvas{background:transparent;
+  box-shadow:0 0 40px -8px rgba(44,199,154,.34),inset 0 0 22px rgba(0,0,0,.35)}
+.lens-fallback{display:none;width:100%;height:auto;border-radius:50%;
   -webkit-backdrop-filter:blur(3px) saturate(1.15);backdrop-filter:blur(3px) saturate(1.15);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.10),0 0 22px rgba(44,199,154,.22);
-  filter:drop-shadow(0 0 16px rgba(44,199,154,.26))}
+  filter:drop-shadow(0 0 16px rgba(44,199,154,.26))}   /* shown only under reduced motion */
 .hud-float figcaption{font-family:var(--mono);font-size:9.5px;line-height:1.5;
   letter-spacing:.05em;color:var(--text-2);text-align:center;
   background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:var(--r-pill);
@@ -154,6 +159,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 @media (prefers-reduced-motion:reduce){
   .section-bg>video,.section-bg>img{transition:opacity 700ms linear;transform:none}
   .section-bg.in>video,.section-bg.in>img{transform:none}
+  /* #can: swap the live glass for the calm still */
+  .can-glass{display:none}
+  .lens-fallback{display:block}
 }
 
 /* ---------- type scale (typography.ts) ---------- */
@@ -951,7 +959,9 @@ body.menu-open{overflow:hidden}
           — nothing on this list is a mock-up.</p>
       </div>
       <figure class="hud-float">
-        <img src="assets/hud/person_context_lens.png"
+        <div class="hero-glass can-glass"><canvas id="canGlass"
+             aria-label="A live DreamLayer HUD recognising someone you've met before"></canvas></div>
+        <img class="lens-fallback" src="assets/hud/person_context_lens.png" aria-hidden="true"
              alt="A real DreamLayer HUD card recognising someone you've met before">
         <figcaption>Environment illustrative · interface is real DreamLayer.</figcaption>
       </figure>
@@ -2058,15 +2068,23 @@ applyVeil();
   /* ---- the live glasses: a gentle scripted loop of the real loop ---- */
   function startGlass(canvas, opts){
     if(!canvas || !window.Halo) return null;
+    opts = opts || {};
     var sim=new Halo.Sim(), glass=new Halo.Glass(canvas, sim);
+    if(opts.glassBg!=null) glass.bgAlpha=opts.glassBg;   // <1 → see-through lens
     addEventListener("resize",function(){ glass.resize(); glass.render(); },{passive:true});
-    if(reduced){ sim.handleVoice("set a timer for 5 minutes"); glass.render(); return { sim:sim, glass:glass }; }
-    glass.start();
-    var say=opts && opts.onSay;
+    var say=opts.onSay;
     function v(text,look){ var r=sim.handleVoice(text,look); if(say && r.say) say(r.say, text); }
     function glance(look){ var r=sim.lookAt(look); if(say && r.say) say(r.say); }
-    // a looping story: timer → meet + recall → stash + locate → veil → reset
-    var script=[
+    if(reduced){
+      // calm single frame: a caller can render its own still, else the default timer
+      if(opts.reducedFrame) opts.reducedFrame(sim, { v:v, glance:glance });
+      else sim.handleVoice("set a timer for 5 minutes");
+      glass.render(); return { sim:sim, glass:glass };
+    }
+    glass.start();
+    // a looping story: timer → meet + recall → stash + locate → veil → reset.
+    // A caller can supply opts.buildScript({v,glance,sim}) for a section-specific loop.
+    var script = opts.buildScript ? opts.buildScript({ v:v, glance:glance, sim:sim }) : [
       [600,  function(){ v("set a timer for 5 minutes"); }],
       [3400, function(){ v("this is my colleague Sarah, she runs marketing","face-a"); }],
       [1900, function(){ v("Sarah owes me twenty dollars"); }],
@@ -2100,6 +2118,18 @@ applyVeil();
     startGlass(document.getElementById("simEmbed"), { onSay:function(sayLine){
       if(capEl) capEl.innerHTML="<b>Oracle</b> " + (sayLine||"").replace(/[<>&]/g,"");
     }});
+    // #can: the honest composite is now the LIVE renderer — a short person-recall
+    // loop (meet → glance → the FACE RECALL card → reset), matching the section copy.
+    function canMeet(v){ v("this is my colleague Jordan, asked about the invoice","face-b"); }
+    startGlass(document.getElementById("canGlass"), {
+      glassBg:0.42,                                        // see-through lens, not a black puck
+      reducedFrame:function(sim,h){ canMeet(h.v); h.glance("face-b"); },
+      buildScript:function(h){ return [
+        [500,  function(){ canMeet(h.v); }],
+        [1600, function(){ h.glance("face-b"); }],           // FACE RECALL card appears
+        [4600, function(){ h.sim.card=null; h.sim.people=[]; h.sim._faceOf={}; }],
+      ]; }
+    });
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot); else boot();
 })();

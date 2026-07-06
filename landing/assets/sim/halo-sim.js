@@ -507,7 +507,10 @@
     var c = this.ctx, sim = this.sim, t = now() - this._t0;
     c.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     c.clearRect(0, 0, SIZE, SIZE);
-    c.fillStyle = C.bg; c.beginPath(); c.arc(CX, CX, CX, 0, Math.PI * 2); c.fill();
+    // opaque disc by default; a translucent bgAlpha lets the glass read as a
+    // see-through lens (the environment behind the canvas shows through).
+    c.fillStyle = this.bgAlpha != null ? rgba(C.bg, this.bgAlpha) : C.bg;
+    c.beginPath(); c.arc(CX, CX, CX, 0, Math.PI * 2); c.fill();
     this.clip();
     // a freshly-triggered card (a glance recall, a waypath/brief toast) briefly
     // interrupts a running figment, then the glass returns to the countdown —
