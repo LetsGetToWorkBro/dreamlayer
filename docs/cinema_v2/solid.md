@@ -145,3 +145,28 @@ the reduce frame keeps ≥80% of the full frame's light).
   their owners (animations.lua / typography.BLOCK_H); mirror parity for
   the unverified hue; the four settled holds joined the deterministic
   golden contract; AnswerAhead's cue dot nudged clear of its eyebrow.
+- 2026-07-05 — World lenses standards pass (review of #106/#108/#116):
+  Scholar / GlanceChoice / Taste shipped as Python-mirror-only — on the
+  BLE path `composite()` found no draw fn and rendered NOTHING (the
+  black-disc failure class the O3 pass already closed once; the
+  device-Lua-first policy above was violated twice in two waves). Now on
+  the device: `draw_scholar` / `draw_taste` share a World-lens bed (pane,
+  bloomed cue, gradient separator, hero type, dim-twin rows, honest
+  ghost "connect a Brain" state); `draw_glance_choice` is a
+  circular-native radial chooser — up to three option nodes on an upper
+  arc that spring in staggered, labels inside the ring (the docstring
+  promised "around the ring"; the mirror had drawn a text line). Routed
+  through cards.lua pass-through constructors, state_machine, the URGENT
+  queue, DISMISS_MS, and diagnostics; `GLANCE_NODE_R`/`_STAGGER_MS` in
+  animations.lua (+ motion_math parity). The mirror `_scholar` catch-all
+  split into three parity renderers (dead `RAMP if not x else RAMP`
+  conditional removed; `TEXT_GHOST_STATIC` for the ghost state).
+  **The enforcement, not just the doc:** `test_world_cards_device.py`
+  drives all three through the raster harness AND builds payloads with
+  the HOST constructors to assert content reaches pixels — the exact
+  test class that would have caught the black frame at commit time. Four
+  settled holds joined the deterministic golden contract. (Separate
+  finding, out of this scope: Message #41, Here/Upcoming #45, Dossier/
+  SpokenCaption #53, MorningBrief #61, Listening #62 are also
+  device-Lua-less — long-standing, pre-overhaul; flagged for a later
+  pass.)

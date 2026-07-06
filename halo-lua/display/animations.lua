@@ -74,6 +74,10 @@ M.DISMISS_MS = {
   AnswerAheadCard      = 8000,
   OracleReplyCard      = 6000,
   HarkCard             = 6500,
+  -- World lenses (Scholar / Glance chooser / TasteLens) — match host payloads
+  ScholarCard          = 9000,
+  GlanceChoiceCard     = 6000,
+  TasteCard            = 9000,
 }
 
 M.LOADING_TO_OBJECT_SPINNER_FADE_MS = 160
@@ -268,6 +272,10 @@ M.CHASE_SEGMENTS       = 12
 M.HARK_BREATHE_MS        = 1100  -- Listen! ring breathe period
 M.HARK_BREATHE_URGENT_MS = 700   -- ...urgent breathes harder
 M.FACT_PULSE_MS          = 420   -- disputed/contradiction one-shot pulse
+
+-- Glance chooser: option nodes on an upper arc that spring in staggered.
+M.GLANCE_NODE_R          = 84    -- ring radius the option nodes sit on
+M.GLANCE_NODE_STAGGER_MS = 60    -- per-node spring-in delay (left -> right)
 
 -- Prism Lens (Lumen rebuild): the kaleidoscope blooms open on a spring,
 -- its rotation breathes (speeds and slows on a slow sine), and two thin

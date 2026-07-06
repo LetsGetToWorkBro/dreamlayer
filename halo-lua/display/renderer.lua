@@ -1075,6 +1075,11 @@ local function card_tone(card)
                                         or P.accent_memory
   elseif card.type == "OracleReplyCard" then
     return card.kind == "action" and P.accent_success or P.accent_memory
+  elseif card.type == "ScholarCard" or card.type == "TasteCard" then
+    -- the honest "connect a Brain" state tones ghost; a real read is memory
+    return card.unavailable and P.text_ghost_static or P.accent_memory
+  elseif card.type == "GlanceChoiceCard" then
+    return P.accent_memory
   end
   return nil
 end
@@ -1206,6 +1211,142 @@ local function draw_hark(card, sc, enter_t, exit_t, idle_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- World lenses (Scholar / Glance chooser / TasteLens) — Meridian Solid + Lumen,
+-- same material language as the O3 cards: a surface-luma glass pane (never
+-- during exit), a bloomed status cue that spring-settles in, an eyebrow over a
+-- gradient separator, hero-class type via the fit ladder, secondary rows cooled
+-- to dim twins. The honest "connect a Brain" state tones ghost, never a guess.
+-- ---------------------------------------------------------------------------
+
+-- the ✕ veto mark the TasteLens host emits leads a vetoed row (U+2715)
+local VETO_MARK = "\xE2\x9C\x95"
+
+-- shared World-lens bed: pane + eyebrow with a bloomed cue over a separator.
+local function world_bed(card, sc, enter_t, exit_t, accent, eyebrow, cue_hollow)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(76*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    -- a bloomed cue dot springs in beside the eyebrow (hollow when ghost)
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    local cw = math.max(2, floor(6*rp))
+    frame.display.circle(CX-84, 60, cw, accent, not cue_hollow)
+    MAT.bloom_ring(CX-84, 60, 5, accent)
+    text(eyebrow, CX+8, 60, accent, "sm")
+    MAT.grad_line(44, 76, 212, 76, { accent, P.accent_memory_dim, P.border_subtle })
+  end
+end
+
+-- stacked info rows for Scholar / Taste: capped, chord-safe, veto rows cooled.
+local function world_rows(items, enter_t, y0)
+  if not layer_ok(enter_t, A.STAGGER_DETAIL_MS) then return end
+  local y = y0
+  for i = 1, math.min(#items, 4) do
+    if y > 200 then break end            -- stay inside the circular chord
+    local row = tostring(items[i] or "")
+    if row ~= "" then
+      local veto = row:sub(1, #VETO_MARK) == VETO_MARK
+      local col  = veto and P.accent_attention_dim or P.text_secondary
+      frame.display.circle(30, y, 2, veto and P.accent_attention_dim
+                                         or P.accent_memory_dim, true)
+      text(T.truncate(row, "sm", 188), CX+6, y, col, "sm")
+      y = y + 22
+    end
+  end
+end
+
+local function draw_scholar(card, sc, enter_t, exit_t)
+  local unavail = card.unavailable and true or false
+  local accent  = unavail and P.text_ghost_static or P.accent_memory
+  local eyebrow = (card.eyebrow or "") ~= "" and card.eyebrow
+                  or (unavail and "SCHOLAR" or "ANSWER")
+  world_bed(card, sc, enter_t, exit_t, accent, eyebrow, unavail)
+  local body  = card.primary or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if body ~= "" then
+      if #body <= 22 then
+        text(body, CX, 104, P.text_primary, T.fit_size(body, 200))
+      else
+        text_block(body, CX, 102, P.text_primary, "md", 190, 2)
+      end
+    elseif unavail then
+      text("Connect a Brain", CX, 116, P.text_ghost, "md")
+    end
+  end
+  world_rows(card.items or {}, enter_t, body ~= "" and 138 or 150)
+  if (card.detail or "") ~= "" and body == "" and not unavail
+     and layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    text(T.truncate(card.detail, "sm", 200), CX, 150, P.text_ghost, "sm")
+  end
+end
+
+local function draw_taste(card, sc, enter_t, exit_t)
+  local unavail = card.unavailable and true or false
+  local accent  = unavail and P.text_ghost_static or P.accent_memory
+  world_bed(card, sc, enter_t, exit_t, accent,
+            (card.eyebrow or "") ~= "" and card.eyebrow or "BEST PICK", unavail)
+  local winner = card.primary or ""
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if winner ~= "" then
+      text(winner, CX, 104, P.text_primary, T.fit_size(winner, 200))
+      if (card.detail or "") ~= "" then
+        text(T.truncate(card.detail, "sm", 200), CX, 128, P.accent_memory_dim, "sm")
+      end
+    elseif unavail then
+      text("Connect a Brain", CX, 116, P.text_ghost, "md")
+    end
+  end
+  world_rows(card.items or {}, enter_t, winner ~= "" and 150 or 138)
+end
+
+-- Glance chooser: up to three option nodes on an upper arc, each a bloomed dot
+-- with its label just inside the ring. A circular-native interaction surface —
+-- the options live AROUND the ring, not stacked as a line (docstring intent).
+local GLANCE_ANGLES = {
+  [1] = { -90 },
+  [2] = { -120, -60 },
+  [3] = { -150, -90, -30 },
+}
+
+local function draw_glance_choice(card, sc, enter_t, exit_t)
+  local opts = {}
+  for _, o in ipairs(card.options or {}) do
+    if o and o.label and o.label ~= "" then opts[#opts+1] = o.label end
+    if #opts >= 3 then break end
+  end
+  local n = #opts
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(72*sc), MAT.PANE, 4)
+  end
+  if (card.scene or "") ~= "" and layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(card.scene, "md", 150), CX, 128, P.text_secondary, "md")
+  end
+  local angles = GLANCE_ANGLES[n] or {}
+  for i = 1, n do
+    local rp = TR.reduce_motion() and 1
+               or E.spring(clamp(enter_t*2 - (i-1)*0.3, 0, 1),
+                           A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    if rp > 0.05 then
+      local rad = math.rad(angles[i])
+      local r   = A.GLANCE_NODE_R * rp
+      local nx  = CX + r * math.cos(rad)
+      local ny  = CY + r * math.sin(rad)
+      frame.display.circle(floor(nx), floor(ny), 4, P.accent_memory, true)
+      MAT.bloom_ring(floor(nx), floor(ny), 4, P.accent_memory)
+      if rp > 0.9 then
+        local lx = CX + (r-20) * math.cos(rad)
+        local ly = CY + (r-20) * math.sin(rad)
+        text(T.truncate(opts[i], "sm", 96), floor(lx), floor(ly),
+             P.text_primary, "sm")
+      end
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(card.eyebrow or "WHAT DO YOU WANT?", CX, 200, P.accent_memory, "sm")
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -1236,6 +1377,10 @@ local DRAW = {
   AnswerAheadCard       = function(c,sc,et,xt,it) draw_answer_ahead(c,sc,et,xt)           end,
   OracleReplyCard       = function(c,sc,et,xt,it) draw_oracle_reply(c,sc,et,xt)           end,
   HarkCard              = function(c,sc,et,xt,it) draw_hark(c,sc,et,xt,it)                end,
+  -- World lenses (Meridian Solid + Lumen)
+  ScholarCard           = function(c,sc,et,xt,it) draw_scholar(c,sc,et,xt)               end,
+  GlanceChoiceCard      = function(c,sc,et,xt,it) draw_glance_choice(c,sc,et,xt)          end,
+  TasteCard             = function(c,sc,et,xt,it) draw_taste(c,sc,et,xt)                  end,
   -- layout-driven cards (v1 queued these and drew nothing — see
   -- draw_layout_card)
   ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,

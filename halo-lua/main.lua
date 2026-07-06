@@ -73,6 +73,10 @@ local CARD_PRIORITY = {
   AnswerAheadCard      = CardQueue.URGENT,    -- the answer, in time to say it
   HarkCard             = CardQueue.URGENT,    -- Oracle's "Listen!"
   OracleReplyCard      = CardQueue.CONTEXT,   -- Oracle's answer / confirmation
+  -- World lenses (each answers an active look / tap)
+  ScholarCard          = CardQueue.URGENT,    -- an answer/form read off the world
+  GlanceChoiceCard     = CardQueue.URGENT,    -- the chooser: awaiting your tap
+  TasteCard            = CardQueue.URGENT,    -- the pick, while you're deciding
 }
 
 -- ---------------------------------------------------------------------------
