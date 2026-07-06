@@ -16,7 +16,7 @@
     --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{-webkit-text-size-adjust:100%}
+  html{-webkit-text-size-adjust:100%;overflow-x:clip}
   body{background:var(--bg);color:var(--text);min-height:100svh;
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     -webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -43,12 +43,25 @@
 
   .stage{display:flex;flex-direction:column;align-items:center;gap:16px}
   .glass-wrap{position:relative;width:min(78vw,400px);aspect-ratio:1}
-  canvas.glass{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+  canvas.glass{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
     border:1px solid #14211f;
     box-shadow:0 0 60px rgba(44,199,154,.14),0 0 160px rgba(44,199,154,.05),inset 0 0 40px rgba(0,0,0,.7)}
   .glass-wrap.veiled canvas.glass{box-shadow:0 0 40px rgba(255,107,94,.12),inset 0 0 40px rgba(0,0,0,.85)}
-  .glass-wrap::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  .glass-wrap::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
     background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.06),transparent 45%)}
+  /* a living, state-reactive halo bleeding past the rim */
+  .glass-glow{position:absolute;inset:-16%;z-index:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,var(--g,rgba(44,199,154,.22)),transparent 62%);
+    filter:blur(16px);animation:breathe 4.6s ease-in-out infinite;transition:background .55s ease}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.72}50%{transform:scale(1.06);opacity:1}}
+  .glass-wrap[data-s="answer"] .glass-glow,.glass-wrap[data-s="recall"] .glass-glow{--g:rgba(91,124,255,.30)}
+  .glass-wrap[data-s="timer"] .glass-glow,.glass-wrap[data-s="interval"] .glass-glow{--g:rgba(232,181,74,.26)}
+  .glass-wrap[data-s="veiled"] .glass-glow{--g:rgba(230,107,94,.30)}
+  .glass-wrap[data-s="listening"] .glass-glow{--g:rgba(44,199,154,.48);animation-duration:1.6s}
+  @media(prefers-reduced-motion:reduce){.glass-glow{animation:none}}
+  .say .mic{background:var(--surface);border:1px solid var(--border);color:var(--text-2);font-size:17px}
+  .say .mic.on{background:var(--coral);border-color:var(--coral);color:#2a0d08;animation:micpulse 1.1s ease-in-out infinite}
+  @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(230,107,94,.5)}50%{box-shadow:0 0 0 9px rgba(230,107,94,0)}}
   .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
   .statusline b{color:var(--teal);font-weight:600}
   .statusline .v{color:var(--coral)}
@@ -112,12 +125,13 @@
 
   <div class="cockpit">
     <section class="stage">
-      <div class="glass-wrap" id="glassWrap"><canvas class="glass" id="glass"></canvas></div>
+      <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><canvas class="glass" id="glass"></canvas></div>
       <div class="statusline" id="status">ready</div>
 
       <form class="say" id="sayform" autocomplete="off">
-        <input id="sayinput" placeholder="Say something… “set a timer for 2 minutes”"
+        <input id="sayinput" placeholder="Ask Oracle… “what’s 15% of 240?”"
                enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden>🎙</button>
         <button type="submit" aria-label="Send">↳</button>
       </form>
 
@@ -147,6 +161,9 @@
       <div class="panel">
         <h3>Try saying</h3>
         <div class="try" id="try">
+          <button>what's 15% of 240?</button>
+          <button>5 miles in km</button>
+          <button>how do you say thank you in Japanese?</button>
           <button>set a timer for 30 seconds</button>
           <button>interval timer 20 seconds on 10 seconds off 3 rounds</button>
           <button>what time is it?</button>
@@ -191,14 +208,24 @@
   var esc = function(s){ return (s||"").replace(/[&<>"']/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); };
 
+  var listening = false;
+  function stateName(){
+    if (veiled) return "veiled";
+    if (listening) return "listening";
+    if (sim.figment && !sim.figment.done) return sim.figment.kind;   // timer/interval/clock
+    if (sim.card && sim.card.type === "recall") return "recall";
+    if (sim.card && sim.card.type === "answer") return "answer";
+    if (sim.card && sim.card.type === "toast")  return "toast";
+    return "ready";
+  }
   function paint(){
-    var st = sim.state();
-    var line = "state <b>" + (veiled ? '<span class="v">veiled</span>' :
-      (sim.figment ? (sim.figment.kind) : (sim.card && sim.card.type === "recall" ? "recall" : "ready"))) + "</b>";
-    if (sim.figment && sim.figment.kind !== "clock" && !sim.figment.done)
+    var st = sim.state(), s = stateName();
+    var line = "state <b>" + (veiled ? '<span class="v">veiled</span>' : s) + "</b>";
+    if (sim.figment && sim.figment.kind !== "clock" && !sim.figment.done && !veiled)
       line += " · " + (sim.figment.kind === "interval" ? sim.figment.phase : Math.ceil(sim.figment.remaining) + "s");
     $("status").innerHTML = line;
     $("glassWrap").classList.toggle("veiled", veiled);
+    $("glassWrap").setAttribute("data-s", s);
     $("log").innerHTML = st.transcript.map(function(t){
       return '<div class="' + t.who + '">' + esc(t.line) + '</div>'; }).join("");
     $("log").scrollTop = $("log").scrollHeight;
@@ -241,6 +268,37 @@
     if (b.dataset.glance) { sim.lookAt(look); paint(); return; }
     sim.handleVoice(b.textContent.replace(/^—.*—$/, "").trim(), look); paint();
   });
+
+  // ---- voice input (Web Speech API): actually talk to Oracle ----
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    var mic = $("micbtn"); mic.hidden = false;
+    var rec = new SR(); rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+    function setListen(on){ listening = on; mic.classList.toggle("on", on); paint(); }
+    mic.addEventListener("click", function(){
+      if (listening) { try { rec.stop(); } catch(_){}; return; }
+      try { rec.start(); setListen(true); } catch(_){ setListen(false); }
+    });
+    rec.onresult = function(e){
+      var text = e.results[0][0].transcript;
+      $("sayinput").value = "";
+      sim.handleVoice(text, look); paint();
+    };
+    rec.onerror = function(){ setListen(false); };
+    rec.onend   = function(){ setListen(false); };
+  }
+
+  // ---- cycling placeholder hints the breadth of what Oracle can do ----
+  (function(){
+    var eg = ["what’s 15% of 240?", "5 miles in km", "set a timer for 2 minutes",
+      "this is my colleague Sarah…", "how do you say hello in French?", "where’s my bike?"];
+    var i = 0, input = $("sayinput");
+    setInterval(function(){
+      if (document.activeElement === input || input.value) return;
+      i = (i + 1) % eg.length;
+      input.setAttribute("placeholder", "Ask Oracle… “" + eg[i] + "”");
+    }, 3200);
+  })();
 })();
 </script>
 </body>
