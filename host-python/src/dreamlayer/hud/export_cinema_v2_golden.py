@@ -235,14 +235,28 @@ def export_all(out_root: Path | None = None) -> list[Path]:
         s = GoldenSession()
         s.now(1000)
         s.frame(DAY_FRAME)
-        # palette weather: shift the sky/energy slots as the mic reactor would
+        # Palette weather reproduced through the REAL runtime path. The mic
+        # reactor sends { t="palette", colors={ {idx,y,cb,cr}, … } }, which
+        # main.lua hands to dream_renderer.apply_palette_shift — an
+        # index-based assign_color_ycbcr on the *reserved* sky/energy slots.
+        # (The old export shifted via require("display.palette") — the DOT
+        # module instance — while these slots live on the SLASH instance
+        # require("display/palette"); shift_dynamic("sky") found no
+        # reservation and silently no-op'd, so storm == quiet. That was the
+        # golden-export footgun, not a device bug: the field is drawn in the
+        # slot's live colour, so the index path DOES reach it. Gated by
+        # test_dream_weather.)
+        s.h.execute("_dr.draw_frame(__now)")   # seed _last_now_ms = 1000
         if mood == "storm":
-            # storm-strength shifts (pass-1 finding: mild values were
-            # sub-visible in the golden — the mood must be unmistakable)
+            # storm-strength absolute YCbCr on slot 1 (sky) and slot 2
+            # (energy); apply_palette_shift sets _reactor_until = 1000 + 1200
+            # = 2200, so the idle sky-cycle stays off the slots through the
+            # now=2000 render and the storm colour survives.
             s.h.execute("""
-              local P = require("display.palette")
-              P.shift_dynamic("sky", 80, 240, -80)
-              P.shift_dynamic("energy", 200, -80, 300)
+              _dr.apply_palette_shift({
+                { idx = 1, y = 600, cb = 760, cr = 440 },
+                { idx = 2, y = 760, cb = 440, cr = 820 },
+              })
             """)
         # a plausible rim-tangent field frame (precomputed, as the host sends)
         s.h.execute("""
