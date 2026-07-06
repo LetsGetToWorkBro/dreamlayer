@@ -77,6 +77,9 @@
   .scenebtn.playing{background:var(--teal);color:#00201c;border-color:var(--teal)}
   .pulse{animation:ctlpulse 1s ease-in-out infinite;border-color:var(--teal)!important;color:#fff!important}
   @keyframes ctlpulse{0%,100%{box-shadow:0 0 0 0 rgba(44,199,154,.55)}50%{box-shadow:0 0 0 8px rgba(44,199,154,0)}}
+  .soundtgl{font:inherit;font-size:12px;color:var(--text-3);background:transparent;border:0;cursor:pointer;
+    padding:2px 6px;-webkit-tap-highlight-color:transparent}
+  .soundtgl:hover{color:var(--teal)}
   .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
   .statusline b{color:var(--teal);font-weight:600}
   .statusline .v{color:var(--coral)}
@@ -152,6 +155,7 @@
         <button type="button" class="scenebtn" data-scene="veil"><span class="ic">◐</span>Privacy Veil</button>
         <button type="button" class="scenebtn" data-scene="timer"><span class="ic">⏱</span>Focus timer</button>
       </div>
+      <button type="button" class="soundtgl" id="soundbtn" aria-pressed="true">🔊 sound</button>
 
       <div class="grouplbl">Or ask anything</div>
       <form class="say" id="sayform" autocomplete="off">
@@ -258,7 +262,13 @@
     $("people").innerHTML = st.people.length
       ? st.people.map(function(n){ return "<b>" + esc(n) + "</b>"; }).join(" · ")
       : "no one yet — introduce someone";
+    // a soft chime the moment a new card lands (post-gesture only, autoplay-safe)
+    var ck = veiled ? "veil" : (sim.card && sim.card.shownAt != null ? sim.card.type + sim.card.shownAt
+      : (sim.figment && !sim.figment.done ? "fig" : ""));
+    if (ck && ck !== _lastReveal) chime(veiled ? "veil" : (sim.card ? sim.card.type : "fig"));
+    _lastReveal = ck;
   }
+  var _lastReveal = "";
   setInterval(paint, 200); paint();
 
   $("sayform").addEventListener("submit", function(e){
@@ -403,6 +413,48 @@
   $("scenes").addEventListener("click", function(e){
     var b = e.target.closest("[data-scene]"); if (!b) return; play(b.dataset.scene, b);
   });
+
+  // ---- soft synthesised chimes, unlocked on first user gesture (autoplay-safe) ----
+  var actx = null, muted = false;
+  function unlockAudio(){ if (actx) return; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(_){ actx = null; } }
+  addEventListener("pointerdown", unlockAudio); addEventListener("keydown", unlockAudio);
+  function chime(kind){
+    if (!actx || muted) return;
+    if (actx.state === "suspended") { try { actx.resume(); } catch(_){} }
+    var t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+    var f = kind === "answer" ? 784 : kind === "recall" ? 659 : kind === "veil" ? 330 : kind === "toast" ? 587 : 698;
+    o.type = "sine"; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.09);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.45);
+  }
+  var soundBtn = $("soundbtn");
+  if (soundBtn) soundBtn.addEventListener("click", function(){
+    muted = !muted; unlockAudio();
+    soundBtn.setAttribute("aria-pressed", String(!muted));
+    soundBtn.textContent = muted ? "🔇 sound" : "🔊 sound";
+    if (!muted) chime("answer");
+  });
+
+  // ---- auto-play tour on first load; any interaction hands control over ----
+  var tourAbort = false;
+  async function tour(){
+    var order = ["face", "park", "answer", "veil", "timer"];
+    for (var i = 0; i < order.length; i++){
+      if (tourAbort) return;
+      await play(order[i], document.querySelector('.scenebtn[data-scene="' + order[i] + '"]'));
+      if (tourAbort) return;
+      await sleep(650);
+    }
+    if (!tourAbort) cap("");
+  }
+  function stopTour(){ tourAbort = true; sceneStop = true; }
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches){
+    var kick = setTimeout(function(){ if (!tourAbort){ cap("Watch — or tap anything to drive it yourself."); tour(); } }, 1700);
+    ["pointerdown", "keydown"].forEach(function(ev){
+      addEventListener(ev, function once(){ clearTimeout(kick); stopTour(); removeEventListener(ev, once); });
+    });
+  }
 })();
 </script>
 </body>
