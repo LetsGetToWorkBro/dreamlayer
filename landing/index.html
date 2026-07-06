@@ -126,13 +126,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* the hero plate sits deepest and softest — the field + text ride over it */
 .hero .section-bg.in>video,.hero .section-bg.in>img{opacity:.4}
 
-/* the honest composite: the REAL HUD, floated over the illustrative plate */
-.hud-float{position:absolute;z-index:3;top:clamp(88px,13vh,150px);
-  right:clamp(14px,5vw,56px);width:clamp(124px,15vw,184px);margin:0;
+/* the honest composite: the REAL HUD, beside the illustrative plate's intro.
+   In normal flow (a two-column intro row) so it can never ride up behind the
+   fixed header/hamburger or clip off the viewport edge. */
+.can-head{max-width:960px;display:flex;gap:clamp(20px,3vw,40px);align-items:center}
+.can-head>.sec-copy{flex:1 1 auto;min-width:0}
+.hud-float{flex:0 0 auto;z-index:3;width:clamp(150px,16vw,184px);margin:0;
   display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;
   opacity:0;transform:translateY(8px);
-  transition:opacity 1200ms var(--ease) 300ms,transform 1200ms var(--ease) 300ms}
-.section-bg.in ~ .hud-float{opacity:1;transform:none}
+  transition:opacity 1200ms var(--ease) 200ms,transform 1200ms var(--ease) 200ms}
+.section-bg.in ~ .wrap .hud-float{opacity:1;transform:none}
 .hud-float img{width:100%;height:auto;mix-blend-mode:screen;
   filter:drop-shadow(0 0 18px rgba(44,199,154,.28))}
 .hud-float figcaption{font-family:var(--mono);font-size:9.5px;line-height:1.5;
@@ -140,8 +143,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:var(--r-pill);
   padding:5px 11px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 @media(max-width:820px){
-  .hud-float{position:relative;top:auto;right:auto;width:148px;
-    margin:14px auto 0;opacity:1;transform:none}
+  .can-head{flex-direction:column;align-items:flex-start}
+  .hud-float{width:148px;margin:6px auto 0;opacity:1;transform:none}
 }
 @media (prefers-reduced-motion:reduce){
   .section-bg>video,.section-bg>img{transition:opacity 700ms linear;transform:none}
@@ -708,8 +711,8 @@ body.menu-open{overflow:hidden}
 <section class="hero has-cine" id="top">
   <div class="section-bg" data-cine aria-hidden="true">
     <video muted loop playsinline preload="none" poster="assets/cine/hero.webp">
-      <source data-src="assets/cine/hero.webm" type="video/webm">
       <source data-src="assets/cine/hero.mp4" type="video/mp4">
+      <source data-src="assets/cine/hero.webm" type="video/webm">
     </video>
   </div>
   <canvas id="field" aria-hidden="true"></canvas>
@@ -735,8 +738,8 @@ body.menu-open{overflow:hidden}
 <section class="section-pad has-cine" id="feel">
   <div class="section-bg" data-cine aria-hidden="true">
     <video muted loop playsinline preload="none" poster="assets/cine/feel.webp">
-      <source data-src="assets/cine/feel.webm" type="video/webm">
       <source data-src="assets/cine/feel.mp4" type="video/mp4">
+      <source data-src="assets/cine/feel.webm" type="video/webm">
     </video>
   </div>
   <div class="wrap">
@@ -900,8 +903,8 @@ body.menu-open{overflow:hidden}
 <section class="section-pad has-cine" id="walk">
   <div class="section-bg" data-cine aria-hidden="true">
     <video muted loop playsinline preload="none" poster="assets/cine/walk.webp">
-      <source data-src="assets/cine/walk.webm" type="video/webm">
       <source data-src="assets/cine/walk.mp4" type="video/mp4">
+      <source data-src="assets/cine/walk.webm" type="video/webm">
     </video>
   </div>
   <div class="wrap">
@@ -934,17 +937,19 @@ body.menu-open{overflow:hidden}
       <source data-src="assets/cine/can.mp4" type="video/mp4">
     </video>
   </div>
-  <figure class="hud-float">
-    <img src="assets/hud/person_context_v2.png"
-         alt="A real DreamLayer HUD card recognising someone you've met before">
-    <figcaption>Environment illustrative · interface is real DreamLayer.</figcaption>
-  </figure>
   <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow arrive">What it can do</span>
-      <h2 class="headline arrive" style="--d:80ms">A second memory, on your face.</h2>
-      <p class="body arrive" style="--d:160ms">Every one of these runs in the shipping codebase today
-        — nothing on this list is a mock-up.</p>
+    <div class="sec-head can-head">
+      <div class="sec-copy">
+        <span class="eyebrow arrive">What it can do</span>
+        <h2 class="headline arrive" style="--d:80ms">A second memory, on your face.</h2>
+        <p class="body arrive" style="--d:160ms">Every one of these runs in the shipping codebase today
+          — nothing on this list is a mock-up.</p>
+      </div>
+      <figure class="hud-float">
+        <img src="assets/hud/person_context_v2.png"
+             alt="A real DreamLayer HUD card recognising someone you've met before">
+        <figcaption>Environment illustrative · interface is real DreamLayer.</figcaption>
+      </figure>
     </div>
     <div class="can-grid">
       <div class="can arrive" style="--d:0ms"><b>Never forget a name</b><span>An introduction is kept
