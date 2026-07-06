@@ -62,6 +62,21 @@
   .say .mic{background:var(--surface);border:1px solid var(--border);color:var(--text-2);font-size:17px}
   .say .mic.on{background:var(--coral);border-color:var(--coral);color:#2a0d08;animation:micpulse 1.1s ease-in-out infinite}
   @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(230,107,94,.5)}50%{box-shadow:0 0 0 9px rgba(230,107,94,0)}}
+
+  /* interactive feature scenes — the glass plays the product, you drive it */
+  .scene-cap{min-height:38px;max-width:520px;text-align:center;font-size:15px;line-height:1.45;
+    color:var(--text-2);opacity:0;transform:translateY(3px);transition:opacity .35s ease,transform .35s ease;padding:0 10px}
+  .scene-cap.show{opacity:1;transform:none}
+  .scene-cap b{color:var(--teal);font-weight:600}
+  .scenes{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;max-width:560px}
+  .scenebtn{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:11px 15px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:8px;
+    -webkit-tap-highlight-color:transparent}
+  .scenebtn:hover{border-color:var(--teal);color:#fff}
+  .scenebtn .ic{font-size:15px;line-height:1}
+  .scenebtn.playing{background:var(--teal);color:#00201c;border-color:var(--teal)}
+  .pulse{animation:ctlpulse 1s ease-in-out infinite;border-color:var(--teal)!important;color:#fff!important}
+  @keyframes ctlpulse{0%,100%{box-shadow:0 0 0 0 rgba(44,199,154,.55)}50%{box-shadow:0 0 0 8px rgba(44,199,154,0)}}
   .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
   .statusline b{color:var(--teal);font-weight:600}
   .statusline .v{color:var(--coral)}
@@ -127,7 +142,18 @@
     <section class="stage">
       <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><canvas class="glass" id="glass"></canvas></div>
       <div class="statusline" id="status">ready</div>
+      <div class="scene-cap" id="sceneCap" aria-live="polite"></div>
 
+      <div class="grouplbl">Watch it work</div>
+      <div class="scenes" id="scenes">
+        <button type="button" class="scenebtn" data-scene="face"><span class="ic">👤</span>Recognise a face</button>
+        <button type="button" class="scenebtn" data-scene="park"><span class="ic">🅿️</span>Park &amp; recall</button>
+        <button type="button" class="scenebtn" data-scene="answer"><span class="ic">✨</span>Answer on the glass</button>
+        <button type="button" class="scenebtn" data-scene="veil"><span class="ic">◐</span>Privacy Veil</button>
+        <button type="button" class="scenebtn" data-scene="timer"><span class="ic">⏱</span>Focus timer</button>
+      </div>
+
+      <div class="grouplbl">Or ask anything</div>
       <form class="say" id="sayform" autocomplete="off">
         <input id="sayinput" placeholder="Ask Oracle… “what’s 15% of 240?”"
                enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -299,6 +325,84 @@
       input.setAttribute("placeholder", "Ask Oracle… “" + eg[i] + "”");
     }, 3200);
   })();
+
+  // ---- interactive scenes: the glass plays a real feature, you drive it ----
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function cap(html){ var el = $("sceneCap");
+    if (!html){ el.classList.remove("show"); return; } el.innerHTML = html; el.classList.add("show"); }
+  function syncLooks(){ [].forEach.call(document.querySelectorAll("#looks [data-look]"),
+    function(x){ x.classList.toggle("on", x.dataset.look === look); }); }
+  function resetScene(){
+    sim.people = []; sim.waypath = {}; sim._faceOf = {}; sim.lastPerson = null;
+    sim.card = null; sim.figment = null; sim.incognito = false; sim.transcript = [];
+    veiled = false; look = ""; $("veilbtn").classList.remove("on"); syncLooks(); paint();
+  }
+  var scenePlaying = false, sceneStop = false;
+  function waitTap(id, ms){
+    return new Promise(function(resolve){
+      var el = $(id), done = false;
+      function fin(t){ if (done) return; done = true; if (el){ el.classList.remove("pulse"); el.removeEventListener("click", onTap); } resolve(t); }
+      function onTap(){ fin(true); }
+      if (el){ el.classList.add("pulse"); el.addEventListener("click", onTap); }
+      setTimeout(function(){ fin(false); }, ms);
+    });
+  }
+  var SCENES = {
+    face: async function(){
+      cap("You met <b>Sarah</b> once, last week.");
+      sim.handleVoice("this is my colleague Sarah, she runs marketing", "face-a"); look = "face-a"; syncLooks(); paint();
+      await sleep(2600); if (sceneStop) return;
+      cap("She walks up again — <b>glance</b> at her.");
+      var tapped = await waitTap("glancebtn", 4500); if (sceneStop) return;
+      if (!tapped) sim.lookAt("face-a"); paint();
+      cap("Recognised — before you had to reach for the name.");
+      await sleep(3000); if (sceneStop) return;
+      cap("Tell it something to keep."); sim.handleVoice("Sarah owes me $20"); paint();
+      await sleep(1800); if (sceneStop) return;
+      sim.lookAt("face-a"); paint();
+      cap("Now it's on the glass every time you see her."); await sleep(3200);
+    },
+    park: async function(){
+      cap("Parking. Just say where."); sim.handleVoice("I left my bike at the north rack"); paint();
+      await sleep(2600); if (sceneStop) return;
+      cap("Hours later, you've forgotten…"); await sleep(2100); if (sceneStop) return;
+      cap("Ask, and it points you back."); sim.handleVoice("where's my bike"); paint(); await sleep(3400);
+    },
+    answer: async function(){
+      cap("Look at a problem — ask out loud."); sim.handleVoice("what's 15% of 240"); paint();
+      await sleep(2900); if (sceneStop) return;
+      cap("Distance, units, another language — answered on the lens."); sim.handleVoice("5 miles in km"); paint();
+      await sleep(2700); if (sceneStop) return;
+      sim.handleVoice("how do you say thank you in Japanese"); paint(); await sleep(3200);
+    },
+    veil: async function(){
+      cap("One gesture, and it goes blind."); veiled = true; sim.veil(true); $("veilbtn").classList.add("on"); paint();
+      await sleep(2700); if (sceneStop) return;
+      cap("Try to make it recognise someone now."); sim.lookAt("face-a"); paint();
+      await sleep(2900); if (sceneStop) return;
+      cap("Nothing seen, nothing kept. You lift it when you choose.");
+      veiled = false; sim.veil(false); $("veilbtn").classList.remove("on"); paint(); await sleep(2800);
+    },
+    timer: async function(){
+      cap("A timer that lives on the glass, not your phone."); sim.handleVoice("set a timer for 20 seconds"); paint();
+      await sleep(3000); if (sceneStop) return;
+      cap("It counts down in the corner of your eye — hands free."); await sleep(3600);
+    }
+  };
+  async function play(key, btn){
+    if (scenePlaying){ sceneStop = true; await sleep(90); }
+    sceneStop = false; scenePlaying = true;
+    [].forEach.call(document.querySelectorAll(".scenebtn"), function(b){ b.classList.remove("playing"); });
+    if (btn) btn.classList.add("playing");
+    resetScene();
+    try { await SCENES[key](); } catch(_){}
+    if (!sceneStop) cap("");
+    if (btn) btn.classList.remove("playing");
+    scenePlaying = false;
+  }
+  $("scenes").addEventListener("click", function(e){
+    var b = e.target.closest("[data-scene]"); if (!b) return; play(b.dataset.scene, b);
+  });
 })();
 </script>
 </body>
