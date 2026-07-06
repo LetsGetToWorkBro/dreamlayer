@@ -207,3 +207,31 @@ the reduce frame keeps ≥80% of the full frame's light).
   FaceSynthCard / WidgetCard were not confirmed bridged to glass (no
   send_card site found) — likely phone/panel surfaces; the safety net
   catches them regardless if they ever are sent.
+- 2026-07-06 — Dream weather storm reacts again (was a silent no-op). The
+  golden `dream_storm.png` shipped byte-identical to `dream_quiet.png` —
+  the storm mood changed nothing. **Root cause was the golden exporter,
+  not the device.** The reactor sends `{ t="palette", colors={ {idx,y,cb,
+  cr} } }`, which `main.lua` hands to `dream_renderer.apply_palette_shift`
+  — an index-based `assign_color_ycbcr` on the reserved sky/energy slots;
+  `draw_line_field` draws in the slot's live colour, so that path reaches
+  the field (the same base-hex→slot premise the aurora and ghost text
+  rely on — if it were broken the whole Lumen palette system would be).
+  The export instead shifted via `require("display.palette")` (the DOT
+  module instance) with `shift_dynamic("sky",…)`, but the slots are
+  reserved on the SLASH instance `require("display/palette")` — separate
+  reservation registries over the same hardware (the footgun in
+  palette_cycle.lua's header). `shift_dynamic` found no reservation and
+  silently no-op'd. **No device change** — the exporter now reproduces the
+  real `{ t="palette" }` path via `apply_palette_shift({ {idx=1,…},
+  {idx=2,…} })`, seeding `draw_frame(1000)` first so the shift's
+  `_reactor_until = 2200` holds the idle sky-cycle off the slots through
+  the now=2000 render. Why it stayed green for months: **nothing compared
+  the two weather frames** — they're (correctly) out of the deterministic
+  byte-golden set because particles use `math.random`.
+  `test_dream_weather` closes that gap: it drives both moods through the
+  device Lua and asserts storm differs from quiet by a margin (>300 px;
+  observed ~1.5k), pins the dot-instance no-op directly, and confirms the
+  hold expires back to the idle cycle — all via difference thresholds,
+  never byte-equality, so cross-platform AA/particle jitter can't flake
+  it. Regenerated `weather/dream_storm.png` (blue field, hot-pink
+  particles) + `dream_quiet.png`.
