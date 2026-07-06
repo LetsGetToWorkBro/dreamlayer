@@ -170,3 +170,40 @@ the reduce frame keeps ≥80% of the full frame's light).
   SpokenCaption #53, MorningBrief #61, Listening #62 are also
   device-Lua-less — long-standing, pre-overhaul; flagged for a later
   pass.)
+- 2026-07-06 — The missing frames + the structural safety net. The
+  audit behind the World-lens note turned out to understate it: **22**
+  glass-bound card types had no device draw fn and rendered a black
+  frame on the real BLE path (`composite()`'s `if not fn then return
+  end`). Seven were product-designed HUD cards — Message, Upcoming,
+  Here, PersonDossier, SpokenCaption, MorningBrief, Listening — each now
+  has a bespoke Solid renderer (`draw_message`/`draw_upcoming`/…) on the
+  shared World-lens bed; ListeningCard gets a Lumen wake-ring breathe
+  (distinct from the capture waveform); UpcomingCard warms to amber
+  inside 5 min; Message/Here/Upcoming finally surface the `headline`
+  hero field the mirror `_generic_rows` had been dropping. Wired through
+  cards.lua / state_machine / DISMISS_MS / CARD_PRIORITY / diagnostics /
+  motion_math parity, with bespoke mirror methods for all seven.
+  **The systemic fix:** `composite()` no longer returns on an unmapped
+  type — it falls back to `draw_layout_card` when the card carries a
+  `layout`, else a minimal titled Solid card. And `draw_layout_card`
+  itself now draws the glass bed + gradient separator (privacy-class
+  cards, which carry a shield/lock glyph, stay pane-free per the Solid
+  rule). Net effect: every current and future unmapped card renders
+  something legible, and the whole layout-driven family — the four
+  existing cards plus the safety-net-routed lens tail — is lifted to
+  Solid standard in one change. `test_missing_cards_device.py` covers
+  the seven (budget / richness / stillness / listening breathe), the
+  BLE-path host-payload-reaches-pixels class, and two safety-net tests
+  (an unknown type is never black; a layout-carrying unknown uses the
+  layout renderer). Seven settled holds joined the deterministic golden
+  contract. Full suite 1701 passing.
+  **Remaining lens tail (covered by the safety net, bespoke deferred):**
+  Waypath, SocialLens, Provenance, Consistency, Answer, ObjectPanel,
+  Quest/QuestReward, Reaction, IntroOffer/IntroKept, LucidRecall each
+  carry a `layout` and now render on the Solid layout bed via the safety
+  net — legible and material, not black. Genuine heroes worth a bespoke
+  pass later: Waypath (a direction dial + distance), SocialLens (a
+  person centerpiece), Quest/Reward (an XP/rank moment). BeaconCard /
+  FaceSynthCard / WidgetCard were not confirmed bridged to glass (no
+  send_card site found) — likely phone/panel surfaces; the safety net
+  catches them regardless if they ever are sent.

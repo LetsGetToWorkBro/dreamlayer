@@ -1010,11 +1010,22 @@ local function draw_layout_card(card, sc, enter_t, exit_t)
     text(str, floor(spec.x or CX), floor(spec.y or fallback_y),
          spec.color or fallback_color, spec.size or size)
   end
+  -- Solid: layout cards sit on the glass bed too — EXCEPT privacy-class ones
+  -- (they carry a shield/lock glyph; "privacy cards get no pane" stands).
+  local privacy = layout.shield ~= nil or layout.lock ~= nil
+  if not privacy and layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(74*sc), MAT.PANE, 4)
+  end
   local sep = layout.separator
   if sep and layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    frame.display.line(floor(sep.x1 or 48), floor(sep.y or 80),
-                       floor(sep.x2 or 208), floor(sep.y or 80),
-                       P.border_subtle)
+    if privacy then
+      frame.display.line(floor(sep.x1 or 48), floor(sep.y or 80),
+                         floor(sep.x2 or 208), floor(sep.y or 80),
+                         P.border_subtle)
+    else
+      MAT.grad_line(floor(sep.x1 or 48), floor(sep.y or 80),
+                    floor(sep.x2 or 208), floor(sep.y or 80), MAT.RAMP_MEMORY)
+    end
   end
   local glyph = layout.shield or layout.lock
   if glyph and layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
@@ -1080,6 +1091,10 @@ local function card_tone(card)
     return card.unavailable and P.text_ghost_static or P.accent_memory
   elseif card.type == "GlanceChoiceCard" then
     return P.accent_memory
+  elseif card.type == "UpcomingCard" then
+    -- an event within 5 min warms to amber (the travel ring matches)
+    return (tonumber(card.minutes) or 99) <= 5 and P.warning_amber
+                                                or P.accent_memory
   end
   return nil
 end
@@ -1347,6 +1362,142 @@ local function draw_glance_choice(card, sc, enter_t, exit_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- Missing frames (Meridian Solid + Lumen). Seven glass-bound cards that had no
+-- device renderer and drew a black frame on the real BLE path. Same material
+-- language as the O3 / World-lens cards: the world_bed pane+cue+separator, hero
+-- type via the fit ladder / text_block, secondary cooled to dim twins.
+-- ---------------------------------------------------------------------------
+
+-- ListeningCard: Oracle's wake-acknowledgment cue — a soft pulse ring that
+-- breathes on hold (reduce_motion: a still ring), distinct from the active
+-- capture waveform (draw_query_listening). Not the same card.
+local function draw_listening(card, sc, enter_t, exit_t, idle_t)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 118, floor(74*sc), MAT.PANE, 4)
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    -- the wake ring springs in, then breathes to signal "I'm listening"
+    local rp = E.spring(math.min(1, enter_t*2), A.SPRING_ZETA_SNAPPY, A.SPRING_OMEGA)
+    local base = floor(28*rp)
+    frame.display.circle(CX, 104, base, P.accent_memory, false)
+    MAT.bloom_ring(CX, 104, base, P.accent_memory)
+    if idle_t and not TR.reduce_motion() then
+      local ph = (idle_t % A.LISTEN_PULSE_MS) / A.LISTEN_PULSE_MS
+      frame.display.circle(CX, 104, floor(base + 10*math.sin(ph*math.pi)),
+                           P.accent_memory_dim, false)
+    end
+    frame.display.circle(CX, 104, 3, P.accent_memory, true)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(card.eyebrow or "ORACLE", CX, 158, P.accent_memory, "sm")
+    text(card.primary or "Listening\xE2\x80\xA6", CX, 180, P.text_primary, "md")
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(card.detail, CX, 202, P.text_ghost, "sm")
+  end
+end
+
+-- MessageCard: a text/email arriving. Channel cue (Text/Mail) as the eyebrow,
+-- sender in hero, body wrapped, a quiet reply/dismiss affordance hint.
+local function draw_message(card, sc, enter_t, exit_t)
+  local kind = card.headline or "Text"
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory, kind:upper(), false)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(card.primary or "Message", "lg", 190), CX, 104,
+         P.text_primary, T.fit_size(card.primary or "Message", 190, {"hero","xl","lg"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text_block(card.detail, CX, 142, P.text_secondary, "sm", 190, 2)
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
+    text("tap to reply", CX, 198, P.accent_memory_dim, "sm")
+  end
+end
+
+-- UpcomingCard: an event about to start. The "when" (in N min / now) is the
+-- bloomed hero cue; warms to amber as the minutes run out.
+local function draw_upcoming(card, sc, enter_t, exit_t)
+  local soon  = (tonumber(card.minutes) or 99) <= 5
+  local accent = soon and P.warning_amber or P.accent_memory
+  world_bed(card, sc, enter_t, exit_t, accent,
+            (card.headline or "SOON"):upper(), false)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(card.primary or "", "lg", 196), CX, 108, P.text_primary,
+         T.fit_size(card.primary or "", 196, {"hero","xl","lg"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 196), CX, 148, accent, "sm")
+  end
+end
+
+-- HereCard: something you left is right here, surfaced as you arrive.
+local function draw_here(card, sc, enter_t, exit_t)
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory,
+            (card.headline or "you left this here"):upper(), false)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(card.primary or "", "lg", 196), CX, 108, P.text_primary,
+         T.fit_size(card.primary or "", 196, {"hero","xl","lg"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 196), CX, 150, P.accent_memory_dim, "sm")
+  end
+end
+
+-- PersonDossierCard: "YOU KNOW" — the conversation ledger for a person.
+local function draw_person_dossier(card, sc, enter_t, exit_t)
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory,
+            card.eyebrow or "YOU KNOW", false)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(card.person or card.primary or "", "hero", 200), CX, 104,
+         P.text_primary, T.fit_size(card.person or card.primary or "", 200, {"hero","xl"}))
+    if (card.headline or "") ~= "" then
+      text(T.truncate(card.headline, "sm", 200), CX, 130, P.accent_memory_dim, "sm")
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 200), CX, 158, P.text_secondary, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and (card.footer or "") ~= "" then
+    text(T.truncate(card.footer, "sm", 200), CX, 184, P.text_ghost, "sm")
+  end
+end
+
+-- SpokenCaptionCard: a live caption of what a familiar voice just said.
+local function draw_spoken_caption(card, sc, enter_t, exit_t)
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory,
+            card.eyebrow or "HEARD", false)
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local body = card.primary or ""
+    if #body <= 20 then
+      text(body, CX, 116, P.text_primary, T.fit_size(body, 200, {"xl","lg","md"}))
+    else
+      text_block(body, CX, 116, P.text_primary, "md", 194, 3)
+    end
+  end
+end
+
+-- MorningBriefCard: "YOUR DAY" — the wake brief, with up to three bullets.
+local function draw_morning_brief(card, sc, enter_t, exit_t)
+  world_bed(card, sc, enter_t, exit_t, P.accent_memory,
+            card.eyebrow or "YOUR DAY", false)
+  local bullets = card.bullets or {}
+  if #bullets == 0 then
+    for _, k in ipairs({ card.detail, card.footer }) do
+      if k and k ~= "" then bullets[#bullets+1] = k end
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local body = card.primary or ""
+    if #body <= 22 then
+      text(body, CX, 104, P.text_primary, T.fit_size(body, 196))
+    else
+      text_block(body, CX, 102, P.text_primary, "md", 190, 2)
+    end
+  end
+  world_rows(bullets, enter_t, #(card.primary or "") <= 22 and 138 or 150)
+end
+
+-- ---------------------------------------------------------------------------
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -1381,6 +1532,14 @@ local DRAW = {
   ScholarCard           = function(c,sc,et,xt,it) draw_scholar(c,sc,et,xt)               end,
   GlanceChoiceCard      = function(c,sc,et,xt,it) draw_glance_choice(c,sc,et,xt)          end,
   TasteCard             = function(c,sc,et,xt,it) draw_taste(c,sc,et,xt)                  end,
+  -- Missing frames (Meridian Solid + Lumen) — were black on the BLE path
+  ListeningCard         = function(c,sc,et,xt,it) draw_listening(c,sc,et,xt,it)          end,
+  MessageCard           = function(c,sc,et,xt,it) draw_message(c,sc,et,xt)               end,
+  UpcomingCard          = function(c,sc,et,xt,it) draw_upcoming(c,sc,et,xt)              end,
+  HereCard              = function(c,sc,et,xt,it) draw_here(c,sc,et,xt)                  end,
+  PersonDossierCard     = function(c,sc,et,xt,it) draw_person_dossier(c,sc,et,xt)        end,
+  SpokenCaptionCard     = function(c,sc,et,xt,it) draw_spoken_caption(c,sc,et,xt)        end,
+  MorningBriefCard      = function(c,sc,et,xt,it) draw_morning_brief(c,sc,et,xt)         end,
   -- layout-driven cards (v1 queued these and drew nothing — see
   -- draw_layout_card)
   ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,
@@ -1461,6 +1620,32 @@ local function enter_ms_for(card)
 end
 
 -- ---------------------------------------------------------------------------
+-- Safety net: any card the host sends whose type has no draw fn used to hit
+-- `if not fn then return end` and render a black frame for its whole dismiss
+-- window (the failure class that black-framed the O3 / World-lens / missing
+-- cards in turn). Now an unmapped type falls back to the layout renderer when
+-- it carries a `layout`, else a minimal titled Solid card — never pure black.
+-- ---------------------------------------------------------------------------
+local function draw_fallback(card, sc, enter_t, exit_t)
+  if type(card.layout) == "table" then
+    draw_layout_card(card, sc, enter_t, exit_t)
+    return
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, 128, floor(70*sc), MAT.PANE, 4)
+  end
+  local title = card.primary or card.eyebrow or card.headline
+                or (card.type or "Card"):gsub("Card$", "")
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(T.truncate(title, "md", 196), CX, 122, P.text_primary,
+         T.fit_size(title, 196, {"lg","md"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
+    text(T.truncate(card.detail, "sm", 196), CX, 150, P.text_secondary, "sm")
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Internal composite: draw one card, routed through the Focus law.
 -- CONDENSE — travel (content absent) then landing (ring gates staggered
 --            content); ripple/slam keep their special entries
@@ -1470,8 +1655,7 @@ end
 -- ---------------------------------------------------------------------------
 local function composite(card, phase, elapsed_ms, idle_t)
   if not card then return end
-  local fn = DRAW[card.type]
-  if not fn then return end
+  local fn = DRAW[card.type] or draw_fallback
   local sig = signature_for(card)
   local origin_deg = F.origin_or_now(card)
 
@@ -1768,8 +1952,7 @@ function renderer.show_card_immediate(card)
   -- HOLD state once synchronously (horizon backdrop + ring + content)
   if not HAS_FRAME then return end
   if not card then return end
-  local fn = DRAW[card.type]
-  if not fn then return end
+  local fn = DRAW[card.type] or draw_fallback
   frame.display.clear(0x000000)
   HZ.draw({ now_ms = _now_ms(), focus = true, reduce_motion = true })
   local sig = signature_for(card)

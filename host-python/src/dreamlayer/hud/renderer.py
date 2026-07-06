@@ -476,10 +476,13 @@ class CardRenderer:
             "WaypathCard":          self._layout_card,
             "LiveCaptionCard":      self._layout_card,
             # Conversation ledger: live transcript + dossier on greet
-            "SpokenCaptionCard":    self._layout_card,
-            "PersonDossierCard":    self._layout_card,
-            "MorningBriefCard":     self._layout_card,
-            "ListeningCard":        self._layout_card,
+            "SpokenCaptionCard":    self._spoken_caption,
+            "PersonDossierCard":    self._person_dossier,
+            "MorningBriefCard":     self._morning_brief,
+            "ListeningCard":        self._listening,
+            "MessageCard":          self._message,
+            "UpcomingCard":         self._upcoming,
+            "HereCard":             self._here,
             # Meridian Solid: the O3 conversation cards get the full material
             # treatment (glass pane, gradient strokes, bloom, hero type).
             "HarkCard":             self._hark,
@@ -1215,6 +1218,91 @@ class CardRenderer:
         elif unavail:
             self._text(draw, CX, 116, "Connect a Brain", "md", T.TEXT_GHOST)
         self._world_rows(draw, card.get("items") or [], 150 if winner else 138)
+
+    # -- Missing frames (parity with renderer.lua draw_* — same beds) --------
+
+    def _listening(self, draw, card):
+        """ListeningCard — Oracle's wake cue: a soft ring + ORACLE/Listening…
+        (mirrors renderer.lua draw_listening; the device breathes on hold)."""
+        self._pane(draw, 118, 74)
+        self._circle(draw, CX, 104, 28, 1, T.ACCENT_MEMORY)
+        bloom_ring(draw, CX, 104, 28, T.ACCENT_MEMORY)
+        self._dot(draw, CX, 104, 3, T.ACCENT_MEMORY)
+        self._text_rgba(draw, CX, 158, str(card.get("eyebrow") or "ORACLE"),
+                        "xs", T.ACCENT_MEMORY, alpha=230)
+        self._text(draw, CX, 180, str(card.get("primary") or "Listening…"),
+                   "md", T.TEXT_PRIMARY)
+        if card.get("detail"):
+            self._text_rgba(draw, CX, 202, str(card["detail"]), "xs",
+                            T.TEXT_GHOST, alpha=180)
+
+    def _message(self, draw, card):
+        """MessageCard — channel eyebrow, sender hero, wrapped body, reply hint."""
+        kind = str(card.get("headline") or "Text").upper()
+        self._world_bed(draw, T.ACCENT_MEMORY, kind)
+        self._text(draw, CX, 104, str(card.get("primary") or "Message"),
+                   self._fit(card.get("primary") or "Message", 190,
+                             ("hero", "xl", "lg")), T.TEXT_PRIMARY)
+        if card.get("detail"):
+            self._multiline_text(draw, CX, 142, str(card["detail"]), "sm",
+                                 T.TEXT_SECONDARY, max_width=190)
+        self._text_rgba(draw, CX, 198, "tap to reply", "xs",
+                        T.ACCENT_MEMORY_DIM, alpha=230)
+
+    def _upcoming(self, draw, card):
+        soon = (card.get("minutes") or 99) <= 5
+        accent = T.WARNING_AMBER if soon else T.ACCENT_MEMORY
+        self._world_bed(draw, accent, str(card.get("headline") or "SOON").upper())
+        self._text(draw, CX, 108, str(card.get("primary") or ""),
+                   self._fit(card.get("primary") or "", 196, ("hero", "xl", "lg")),
+                   T.TEXT_PRIMARY)
+        if card.get("detail"):
+            self._text_rgba(draw, CX, 148, str(card["detail"]), "sm", accent,
+                            alpha=235)
+
+    def _here(self, draw, card):
+        self._world_bed(draw, T.ACCENT_MEMORY,
+                        str(card.get("headline") or "you left this here").upper())
+        self._text(draw, CX, 108, str(card.get("primary") or ""),
+                   self._fit(card.get("primary") or "", 196, ("hero", "xl", "lg")),
+                   T.TEXT_PRIMARY)
+        if card.get("detail"):
+            self._text_rgba(draw, CX, 150, str(card["detail"]), "sm",
+                            T.ACCENT_MEMORY_DIM, alpha=235)
+
+    def _person_dossier(self, draw, card):
+        self._world_bed(draw, T.ACCENT_MEMORY, str(card.get("eyebrow") or "YOU KNOW"))
+        name = str(card.get("person") or card.get("primary") or "")
+        self._text(draw, CX, 104, name, self._fit(name, 200, ("hero", "xl")),
+                   T.TEXT_PRIMARY)
+        if card.get("headline"):
+            self._text_rgba(draw, CX, 130, str(card["headline"]), "sm",
+                            T.ACCENT_MEMORY_DIM, alpha=235)
+        if card.get("detail"):
+            self._text_rgba(draw, CX, 158, str(card["detail"]), "sm",
+                            T.TEXT_SECONDARY, alpha=235)
+        if card.get("footer"):
+            self._text_rgba(draw, CX, 184, str(card["footer"]), "sm",
+                            T.TEXT_GHOST, alpha=200)
+
+    def _spoken_caption(self, draw, card):
+        self._world_bed(draw, T.ACCENT_MEMORY, str(card.get("eyebrow") or "HEARD"))
+        self._multiline_text(draw, CX, 116, str(card.get("primary") or ""),
+                             "md", T.TEXT_PRIMARY, max_width=194)
+
+    def _morning_brief(self, draw, card):
+        self._world_bed(draw, T.ACCENT_MEMORY, str(card.get("eyebrow") or "YOUR DAY"))
+        bullets = list(card.get("bullets") or [])
+        if not bullets:
+            bullets = [b for b in (card.get("detail"), card.get("footer")) if b]
+        body = str(card.get("primary") or "")
+        if len(body) <= 22:
+            self._text(draw, CX, 104, body, self._fit(body, 196), T.TEXT_PRIMARY)
+            self._world_rows(draw, bullets, 138)
+        else:
+            self._multiline_text(draw, CX, 102, body, "md", T.TEXT_PRIMARY,
+                                 max_width=190)
+            self._world_rows(draw, bullets, 150)
 
     _GLANCE_ANGLES = {1: (-90,), 2: (-120, -60), 3: (-150, -90, -30)}
 

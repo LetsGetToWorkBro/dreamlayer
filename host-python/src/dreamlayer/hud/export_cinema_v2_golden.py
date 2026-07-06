@@ -341,6 +341,36 @@ def export_all(out_root: Path | None = None) -> list[Path]:
       primary = "Oatly Barista", detail = "dairy-free, 4.6 stars",
       items = { "Almond Breeze - 4.1 stars", "x Whole milk - dairy" },
     }"""
+    # Missing frames (glass-bound cards that used to render black)
+    SOLID_CARDS["listening_hold"] = """{
+      type = "ListeningCard", eyebrow = "ORACLE", primary = "Listening...",
+      detail = "woke by Hey Oracle", source = "voice",
+    }"""
+    SOLID_CARDS["message_hold"] = """{
+      type = "MessageCard", headline = "Text", primary = "Priya",
+      detail = "Running 10 late, start without me.",
+    }"""
+    SOLID_CARDS["upcoming_hold"] = """{
+      type = "UpcomingCard", headline = "in 5 min", primary = "Standup",
+      detail = "Room 4B", minutes = 5,
+    }"""
+    SOLID_CARDS["here_hold"] = """{
+      type = "HereCard", primary = "Your umbrella", detail = "by the door",
+    }"""
+    SOLID_CARDS["dossier_hold"] = """{
+      type = "PersonDossierCard", person = "Marcus",
+      headline = "last spoke 2 days ago", detail = "about the lease, the move",
+      footer = "you owe him a reply",
+    }"""
+    SOLID_CARDS["caption_hold"] = """{
+      type = "SpokenCaptionCard", eyebrow = "JORDAN",
+      primary = "Can you send the invoice today?",
+    }"""
+    SOLID_CARDS["morning_brief_hold"] = """{
+      type = "MorningBriefCard", eyebrow = "YOUR DAY",
+      primary = "Three meetings, rain at noon.",
+      bullets = { "Standup 9:00", "Dentist 2:30", "Call Mom" },
+    }"""
     for name, card in SOLID_CARDS.items():
         s = GoldenSession()
         s.now(1000)

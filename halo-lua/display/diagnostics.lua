@@ -96,6 +96,13 @@ local CARD_ABBREV = {
   ScholarCard           = "SCHL",
   GlanceChoiceCard      = "GLNC",
   TasteCard             = "TSTE",
+  ListeningCard         = "LIST",
+  MessageCard           = "MSG ",
+  UpcomingCard          = "UPCM",
+  HereCard              = "HERE",
+  PersonDossierCard     = "DOSS",
+  SpokenCaptionCard     = "SPKN",
+  MorningBriefCard      = "MORN",
 }
 
 -- ---------------------------------------------------------------------------

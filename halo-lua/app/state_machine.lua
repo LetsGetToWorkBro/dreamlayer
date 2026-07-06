@@ -267,6 +267,20 @@ function M.set_card(msg_payload)
     card = C.glance_choice(msg_payload)
   elseif t == "TasteCard" then
     card = C.taste(msg_payload)
+  elseif t == "ListeningCard" then
+    card = C.listening(msg_payload)
+  elseif t == "MessageCard" then
+    card = C.message(msg_payload)
+  elseif t == "UpcomingCard" then
+    card = C.upcoming(msg_payload)
+  elseif t == "HereCard" then
+    card = C.here_reminder(msg_payload)
+  elseif t == "PersonDossierCard" then
+    card = C.person_dossier(msg_payload)
+  elseif t == "SpokenCaptionCard" then
+    card = C.spoken_caption(msg_payload)
+  elseif t == "MorningBriefCard" then
+    card = C.morning_brief(msg_payload)
   else
     card = C.error_card("Unknown card: " .. tostring(t))
   end

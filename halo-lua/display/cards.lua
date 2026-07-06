@@ -250,4 +250,87 @@ function M.taste(c)
   }
 end
 
+-- ---------------------------------------------------------------------------
+-- Missing frames — glass-bound cards that used to render a black frame on the
+-- device (no draw fn). Pass-through: renderer.lua owns the visual + tone.
+-- ---------------------------------------------------------------------------
+
+function M.listening(c)
+  return {
+    type       = "ListeningCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.ListeningCard or 0,
+    eyebrow    = c.eyebrow or "ORACLE",
+    primary    = c.primary or "Listening\xE2\x80\xA6",
+    detail     = c.detail or "",
+    source     = c.source or "voice",
+  }
+end
+
+function M.message(c)
+  return {
+    type       = "MessageCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.MessageCard or 6000,
+    channel    = c.channel or "imessage",
+    headline   = c.headline or "Text",
+    primary    = c.primary or "Message",
+    detail     = c.detail or "",
+  }
+end
+
+function M.upcoming(c)
+  return {
+    type       = "UpcomingCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.UpcomingCard or 6000,
+    headline   = c.headline or "",
+    primary    = c.primary or "",
+    detail     = c.detail or "",
+    minutes    = c.minutes,
+  }
+end
+
+function M.here_reminder(c)
+  return {
+    type       = "HereCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.HereCard or 5000,
+    headline   = c.headline or "you left this here",
+    primary    = c.primary or "",
+    detail     = c.detail or "",
+  }
+end
+
+function M.person_dossier(c)
+  return {
+    type       = "PersonDossierCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.PersonDossierCard or 5000,
+    eyebrow    = c.eyebrow or "YOU KNOW",
+    person     = c.person or c.primary or "",
+    primary    = c.primary or c.person or "",
+    headline   = c.headline or "",
+    detail     = c.detail or "",
+    footer     = c.footer or "",
+  }
+end
+
+function M.spoken_caption(c)
+  return {
+    type       = "SpokenCaptionCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.SpokenCaptionCard or 0,
+    eyebrow    = c.eyebrow or "HEARD",
+    primary    = c.primary or "",
+    speaker    = c.speaker or "",
+  }
+end
+
+function M.morning_brief(c)
+  return {
+    type       = "MorningBriefCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.MorningBriefCard or 8000,
+    eyebrow    = c.eyebrow or "YOUR DAY",
+    primary    = c.primary or "",
+    bullets    = c.bullets or {},
+    detail     = c.detail or "",
+    footer     = c.footer or "",
+  }
+end
+
 return M

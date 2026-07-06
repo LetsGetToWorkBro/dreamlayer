@@ -81,6 +81,14 @@ DETERMINISTIC = [
     "solid/scholar_unavailable_hold.png",
     "solid/glance_choice_hold.png",
     "solid/taste_hold.png",
+    # Missing frames (glass-bound cards that were black on device)
+    "solid/listening_hold.png",
+    "solid/message_hold.png",
+    "solid/upcoming_hold.png",
+    "solid/here_hold.png",
+    "solid/dossier_hold.png",
+    "solid/caption_hold.png",
+    "solid/morning_brief_hold.png",
 ]
 
 

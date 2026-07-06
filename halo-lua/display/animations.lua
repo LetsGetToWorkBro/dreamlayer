@@ -78,6 +78,14 @@ M.DISMISS_MS = {
   ScholarCard          = 9000,
   GlanceChoiceCard     = 6000,
   TasteCard            = 9000,
+  -- Missing frames — match host constructors (cards.py)
+  ListeningCard        =    0,
+  MessageCard          = 6000,
+  UpcomingCard         = 6000,
+  HereCard             = 5000,
+  PersonDossierCard    = 5000,
+  SpokenCaptionCard    =    0,
+  MorningBriefCard     = 8000,
 }
 
 M.LOADING_TO_OBJECT_SPINNER_FADE_MS = 160
@@ -276,6 +284,9 @@ M.FACT_PULSE_MS          = 420   -- disputed/contradiction one-shot pulse
 -- Glance chooser: option nodes on an upper arc that spring in staggered.
 M.GLANCE_NODE_R          = 84    -- ring radius the option nodes sit on
 M.GLANCE_NODE_STAGGER_MS = 60    -- per-node spring-in delay (left -> right)
+
+-- ListeningCard wake cue: the "I'm listening" ring breathe period.
+M.LISTEN_PULSE_MS        = 1400
 
 -- Prism Lens (Lumen rebuild): the kaleidoscope blooms open on a spring,
 -- its rotation breathes (speeds and slows on a slow sine), and two thin
