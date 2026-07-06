@@ -136,8 +136,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   opacity:0;transform:translateY(8px);
   transition:opacity 1200ms var(--ease) 200ms,transform 1200ms var(--ease) 200ms}
 .section-bg.in ~ .wrap .hud-float{opacity:1;transform:none}
-.hud-float img{width:100%;height:auto;mix-blend-mode:screen;
-  filter:drop-shadow(0 0 18px rgba(44,199,154,.28))}
+/* the card reads as AR glass: translucent lens (alpha baked into the asset)
+   shows the illustrative environment through it, softly frosted, HUD glyphs
+   glowing on top — not an opaque black puck. */
+.hud-float img{width:100%;height:auto;border-radius:50%;
+  -webkit-backdrop-filter:blur(3px) saturate(1.15);backdrop-filter:blur(3px) saturate(1.15);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.10),0 0 22px rgba(44,199,154,.22);
+  filter:drop-shadow(0 0 16px rgba(44,199,154,.26))}
 .hud-float figcaption{font-family:var(--mono);font-size:9.5px;line-height:1.5;
   letter-spacing:.05em;color:var(--text-2);text-align:center;
   background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:var(--r-pill);
@@ -946,7 +951,7 @@ body.menu-open{overflow:hidden}
           — nothing on this list is a mock-up.</p>
       </div>
       <figure class="hud-float">
-        <img src="assets/hud/person_context_v2.png"
+        <img src="assets/hud/person_context_lens.png"
              alt="A real DreamLayer HUD card recognising someone you've met before">
         <figcaption>Environment illustrative · interface is real DreamLayer.</figcaption>
       </figure>
