@@ -261,6 +261,12 @@ function M.set_card(msg_payload)
     card = C.oracle_reply(msg_payload)
   elseif t == "HarkCard" then
     card = C.hark(msg_payload)
+  elseif t == "ScholarCard" then
+    card = C.scholar(msg_payload)
+  elseif t == "GlanceChoiceCard" then
+    card = C.glance_choice(msg_payload)
+  elseif t == "TasteCard" then
+    card = C.taste(msg_payload)
   else
     card = C.error_card("Unknown card: " .. tostring(t))
   end

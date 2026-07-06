@@ -487,8 +487,8 @@ class CardRenderer:
             "FactCheckCard":        self._fact_check,
             "AnswerAheadCard":      self._answer_ahead,
             "ScholarCard":          self._scholar,
-            "GlanceChoiceCard":     self._scholar,
-            "TasteCard":            self._scholar,
+            "GlanceChoiceCard":     self._glance_choice,
+            "TasteCard":            self._taste,
         }
         if self._extra:
             dispatch.update(self._extra)   # plugin card renderers
@@ -1145,32 +1145,101 @@ class CardRenderer:
         if footer:
             self._text_rgba(draw, CX, 198, footer, "xs", T.TEXT_GHOST, alpha=170)
 
-    def _scholar(self, draw, card):
-        """ScholarCard / GlanceChoiceCard — the World-lens material family:
-        a memory-toned pane, an eyebrow over a gradient separator, the primary
-        (answer / gist / summary / the chooser) in hero type, and up to a few
-        items stacked beneath (form fields, key points, or the chooser's
-        options). Honest 'connect a Brain' state when unavailable."""
-        eyebrow = str(card.get("eyebrow") or "")
-        primary = str(card.get("primary") or "")
-        detail = str(card.get("detail") or "")
-        items = card.get("items") or []
-        unavailable = bool(card.get("unavailable"))
-        accent = T.TEXT_GHOST if unavailable else T.ACCENT_MEMORY
-        self._pane(draw, 128, 78)
+    _VETO_MARK = "✕"
+
+    def _world_bed(self, draw, accent, eyebrow, cue_hollow=False):
+        """Shared World-lens bed — mirrors renderer.lua world_bed: pane +
+        bloomed cue dot beside the eyebrow over a gradient separator."""
+        self._pane(draw, 128, 76)
         if eyebrow:
-            self._text_rgba(draw, CX, 60, eyebrow, "xs", accent, alpha=230)
+            if cue_hollow:
+                self._circle(draw, CX - 84, 60, 6, 1, accent)
+            else:
+                self._dot(draw, CX - 84, 60, 6, accent)
+            bloom_ring(draw, CX - 84, 60, 5, accent)
+            self._text_rgba(draw, CX + 8, 60, eyebrow, "xs", accent, alpha=230)
             grad_line(draw, 44, 76, 212, 76,
-                      RAMP_MEMORY if not unavailable else RAMP_MEMORY)
-        if primary:
-            self._text(draw, CX, 104, primary, self._fit(primary, 200), T.TEXT_PRIMARY)
-        # stacked items (form fields / key points / chooser options)
-        y = 138 if primary else 108
+                      (accent, T.ACCENT_MEMORY_DIM, T.BORDER_SUBTLE))
+
+    def _world_rows(self, draw, items, y0):
+        """Stacked Scholar/Taste rows: capped, chord-safe, veto rows cooled —
+        mirrors renderer.lua world_rows."""
+        y = y0
         for it in items[:4]:
-            self._text_rgba(draw, CX, y, str(it), "sm", T.TEXT_SECONDARY, alpha=235)
+            if y > 200:
+                break
+            row = str(it or "")
+            if not row:
+                continue
+            veto = row.startswith(self._VETO_MARK)
+            col = T.ACCENT_ATTENTION_DIM if veto else T.TEXT_SECONDARY
+            tick = T.ACCENT_ATTENTION_DIM if veto else T.ACCENT_MEMORY_DIM
+            self._dot(draw, 30, y, 2, tick)
+            self._text_rgba(draw, CX + 6, y, row, "sm", col, alpha=235)
             y += 22
-        if detail and not primary:
+
+    def _scholar(self, draw, card):
+        """ScholarCard — an answer / form help / plain-words read off the
+        world (mirrors renderer.lua draw_scholar). Honest ghost 'connect a
+        Brain' state when unavailable."""
+        unavail = bool(card.get("unavailable"))
+        accent = T.TEXT_GHOST_STATIC if unavail else T.ACCENT_MEMORY
+        eyebrow = str(card.get("eyebrow") or "") or (
+            "SCHOLAR" if unavail else "ANSWER")
+        self._world_bed(draw, accent, eyebrow, cue_hollow=unavail)
+        body = str(card.get("primary") or "")
+        detail = str(card.get("detail") or "")
+        if body:
+            self._text(draw, CX, 104, body, self._fit(body, 200), T.TEXT_PRIMARY)
+        elif unavail:
+            self._text(draw, CX, 116, "Connect a Brain", "md", T.TEXT_GHOST)
+        self._world_rows(draw, card.get("items") or [], 138 if body else 150)
+        if detail and not body and not unavail:
             self._text_rgba(draw, CX, 150, detail, "sm", T.TEXT_GHOST, alpha=200)
+
+    def _taste(self, draw, card):
+        """TasteCard — the pick in hero type, runner-up rows beneath with the
+        why; vetoed options cooled (attention dim), never dropped. Mirrors
+        renderer.lua draw_taste."""
+        unavail = bool(card.get("unavailable"))
+        accent = T.TEXT_GHOST_STATIC if unavail else T.ACCENT_MEMORY
+        eyebrow = str(card.get("eyebrow") or "") or "BEST PICK"
+        self._world_bed(draw, accent, eyebrow, cue_hollow=unavail)
+        winner = str(card.get("primary") or "")
+        detail = str(card.get("detail") or "")
+        if winner:
+            self._text(draw, CX, 104, winner, self._fit(winner, 200), T.TEXT_PRIMARY)
+            if detail:
+                self._text_rgba(draw, CX, 128, detail, "sm",
+                                T.ACCENT_MEMORY_DIM, alpha=235)
+        elif unavail:
+            self._text(draw, CX, 116, "Connect a Brain", "md", T.TEXT_GHOST)
+        self._world_rows(draw, card.get("items") or [], 150 if winner else 138)
+
+    _GLANCE_ANGLES = {1: (-90,), 2: (-120, -60), 3: (-150, -90, -30)}
+
+    def _glance_choice(self, draw, card):
+        """GlanceChoiceCard — the chooser: up to three option nodes on an upper
+        arc, each a bloomed dot with its label just inside the ring. The
+        circular-native interaction surface (mirrors renderer.lua
+        draw_glance_choice — options AROUND the ring, not a text line)."""
+        opts = [o["label"] for o in (card.get("options") or [])
+                if o and o.get("label")][:3]
+        n = len(opts)
+        self._pane(draw, 128, 72)
+        scene = str(card.get("scene") or "")
+        if scene:
+            self._text_rgba(draw, CX, 128, scene, "md", T.TEXT_SECONDARY, alpha=235)
+        r = 84
+        for i, deg in enumerate(self._GLANCE_ANGLES.get(n, ())):
+            rad = math.radians(deg)
+            nx, ny = CX + r * math.cos(rad), CY + r * math.sin(rad)
+            self._dot(draw, nx, ny, 4, T.ACCENT_MEMORY)
+            bloom_ring(draw, nx, ny, 4, T.ACCENT_MEMORY)
+            lx, ly = CX + (r - 20) * math.cos(rad), CY + (r - 20) * math.sin(rad)
+            self._text(draw, lx, ly, opts[i], "sm", T.TEXT_PRIMARY)
+        self._text_rgba(draw, CX, 200, str(card.get("eyebrow") or "WHAT DO YOU WANT?"),
+                        "xs", T.ACCENT_MEMORY, alpha=230)
 
     def _fact_check(self, draw, card):
         """FactCheckCard — Veritas verdict, in the Truth-Lens material family.

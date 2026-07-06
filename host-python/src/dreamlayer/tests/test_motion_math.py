@@ -146,6 +146,8 @@ def test_lua_constants_match_python_mirror(lua):
         "HARK_BREATHE_MS": mm.HARK_BREATHE_MS,
         "HARK_BREATHE_URGENT_MS": mm.HARK_BREATHE_URGENT_MS,
         "FACT_PULSE_MS": mm.FACT_PULSE_MS,
+        "GLANCE_NODE_R": mm.GLANCE_NODE_R,
+        "GLANCE_NODE_STAGGER_MS": mm.GLANCE_NODE_STAGGER_MS,
         "PRISM_BLOOM_MS": mm.PRISM_BLOOM_MS,
         "PRISM_BREATH_MS": mm.PRISM_BREATH_MS,
         "PRISM_RING_R_A": mm.PRISM_RING_R_A,

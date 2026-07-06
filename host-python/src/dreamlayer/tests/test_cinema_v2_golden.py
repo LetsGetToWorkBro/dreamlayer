@@ -76,6 +76,11 @@ DETERMINISTIC = [
     "solid/answer_ahead_hold.png",
     "solid/oracle_reply_hold.png",
     "solid/hark_hold.png",
+    # World lenses (standards pass on #106/#108/#116)
+    "solid/scholar_answer_hold.png",
+    "solid/scholar_unavailable_hold.png",
+    "solid/glance_choice_hold.png",
+    "solid/taste_hold.png",
 ]
 
 

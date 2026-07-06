@@ -206,4 +206,48 @@ function M.hark(c)
   }
 end
 
+-- ---------------------------------------------------------------------------
+-- World lenses (Scholar / Glance chooser / TasteLens). Pass-through, same as
+-- the O3 cards: tone (mode / unavailable) is derived renderer-side so the BLE
+-- path matches. The Solid materials + Lumen animation live in renderer.lua.
+-- ---------------------------------------------------------------------------
+
+function M.scholar(c)
+  return {
+    type        = "ScholarCard",
+    dismiss_ms  = A.DISMISS_MS and A.DISMISS_MS.ScholarCard or 9000,
+    mode        = c.mode or "answer",
+    eyebrow     = c.eyebrow or "",
+    primary     = c.primary or "",
+    detail      = c.detail or "",
+    items       = c.items or {},
+    unavailable = c.unavailable and true or false,
+    -- Visual: memory pane, bloomed mode cue, hero answer, item rows
+  }
+end
+
+function M.glance_choice(c)
+  return {
+    type        = "GlanceChoiceCard",
+    dismiss_ms  = A.DISMISS_MS and A.DISMISS_MS.GlanceChoiceCard or 6000,
+    scene       = c.scene or "",
+    eyebrow     = c.eyebrow or "WHAT DO YOU WANT?",
+    options     = c.options or {},   -- { {label=, lens=, ...}, ... }
+    -- Visual: up to three option nodes on an upper arc, springing in
+  }
+end
+
+function M.taste(c)
+  return {
+    type        = "TasteCard",
+    dismiss_ms  = A.DISMISS_MS and A.DISMISS_MS.TasteCard or 9000,
+    eyebrow     = c.eyebrow or "BEST PICK",
+    primary     = c.primary or "",
+    detail      = c.detail or "",
+    items       = c.items or {},     -- pre-formatted rows (veto rows lead with the mark)
+    unavailable = c.unavailable and true or false,
+    -- Visual: memory pane, winner hero + pick cue, runner-up rows (vetoes cooled)
+  }
+end
+
 return M

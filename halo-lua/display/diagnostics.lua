@@ -93,6 +93,9 @@ local CARD_ABBREV = {
   AnswerAheadCard       = "ANSW",
   OracleReplyCard       = "ORCL",
   HarkCard              = "HARK",
+  ScholarCard           = "SCHL",
+  GlanceChoiceCard      = "GLNC",
+  TasteCard             = "TSTE",
 }
 
 -- ---------------------------------------------------------------------------

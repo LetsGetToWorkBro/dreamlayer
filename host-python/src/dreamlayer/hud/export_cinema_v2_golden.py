@@ -322,6 +322,25 @@ def export_all(out_root: Path | None = None) -> list[Path]:
       primary = "Marcus is 2 min away - you owe him the lease.",
       detail = "from your last chat",
     }"""
+    # World lenses (Scholar / Glance chooser / TasteLens)
+    SOLID_CARDS["scholar_answer_hold"] = """{
+      type = "ScholarCard", mode = "answer", eyebrow = "ANSWER",
+      primary = "Take 400mg twice daily.",
+      items = { "Max 1200mg per day", "Not with alcohol" },
+    }"""
+    SOLID_CARDS["scholar_unavailable_hold"] = """{
+      type = "ScholarCard", mode = "answer", unavailable = true,
+    }"""
+    SOLID_CARDS["glance_choice_hold"] = """{
+      type = "GlanceChoiceCard", scene = "a French menu",
+      options = { {label = "Translate"}, {label = "Best pick"},
+                  {label = "Explain"} },
+    }"""
+    SOLID_CARDS["taste_hold"] = """{
+      type = "TasteCard", eyebrow = "BEST PICK",
+      primary = "Oatly Barista", detail = "dairy-free, 4.6 stars",
+      items = { "Almond Breeze - 4.1 stars", "x Whole milk - dairy" },
+    }"""
     for name, card in SOLID_CARDS.items():
         s = GoldenSession()
         s.now(1000)
