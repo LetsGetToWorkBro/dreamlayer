@@ -1,5 +1,6 @@
 import React from "react";
-import { Animated, View, Text, StyleSheet, StyleProp, ViewStyle } from "react-native";
+import { Animated, View, Text, StyleSheet, StyleProp, ViewStyle, Platform } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
@@ -7,9 +8,10 @@ import { useEntrance } from "../anim";
 import { Tappable } from "./Tappable";
 
 /**
- * Card — the standard surface. One radius, one border, one padding. When
- * `active` it takes the accent edge; when `onPress` is given it becomes a
- * tactile Tappable. `delay` staggers a column of cards into view.
+ * Card — the standard glass surface. A translucent panel over the cinematic
+ * backdrop with a faint top sheen and a soft lift, so cards read as luminous
+ * glass (matching the Mac panel). `active` takes the accent edge + glow;
+ * `onPress` makes it a tactile Tappable; `delay` staggers a column into view.
  */
 export function Card({
   children,
@@ -29,7 +31,18 @@ export function Card({
   animate?: boolean;
 }) {
   const anim = useEntrance(delay);
-  const body = <View style={[s.card, active ? { borderColor: accent } : null, style]}>{children}</View>;
+  const body = (
+    <View style={[s.card, active ? { borderColor: accent, shadowColor: accent, shadowOpacity: 0.28 } : null, style]}>
+      <LinearGradient
+        colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0)"]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.5, y: 0.9 }}
+        style={s.sheen}
+        pointerEvents="none"
+      />
+      {children}
+    </View>
+  );
   const wrapped = onPress ? <Tappable onPress={onPress}>{body}</Tappable> : body;
   if (!animate) return wrapped;
   return <Animated.View style={anim}>{wrapped}</Animated.View>;
@@ -46,11 +59,19 @@ export function Section({ label, accent = colors.accentMemory, first }: { label:
 
 const s = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: "rgba(20, 31, 35, 0.64)",
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderColor: "rgba(140, 190, 190, 0.14)",
     padding: space.lg,
     marginBottom: space.md,
+    overflow: "hidden",
+    // soft lift
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    ...(Platform.OS === "android" ? { elevation: 6 } : null),
   },
+  sheen: { position: "absolute", top: 0, left: 0, right: 0, height: "60%" },
 });
