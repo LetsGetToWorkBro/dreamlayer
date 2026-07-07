@@ -8,6 +8,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { HaloMirror } from "../src/ui/components/HaloMirror";
 import { StatusPill } from "../src/ui/components/StatusPill";
 import { Tappable } from "../src/ui/components/Tappable";
+import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { useEntrance } from "../src/ui/anim";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
@@ -118,14 +119,12 @@ export default function Now() {
       ) : null}
 
       <View style={s.actions}>
-        <Tappable onPress={doBrief} style={[s.wide, s.actionGhost, { borderColor: colors.borderSubtle }]}>
-          <Text style={[typography.body, { color: colors.accentMemory, fontWeight: "600" }]}>
-            {briefing ? "Thinking…" : brief ? "Refresh brief" : "Morning brief"}
-          </Text>
-        </Tappable>
+        <PrimaryButton label="Ask your brain" onPress={() => router.push("/brain")} />
         <View style={s.actionRow}>
-          <Tappable onPress={() => router.push("/brain")} style={[s.action, { backgroundColor: colors.accentMemory }]}>
-            <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>Ask your brain</Text>
+          <Tappable onPress={doBrief} style={[s.action, s.actionGhost, { borderColor: colors.borderSubtle }]}>
+            <Text style={[typography.body, { color: colors.accentMemory, fontWeight: "600" }]}>
+              {briefing ? "Thinking…" : brief ? "Refresh brief" : "Morning brief"}
+            </Text>
           </Tappable>
           <Tappable
             onPress={togglePause}
@@ -154,22 +153,21 @@ const s = StyleSheet.create({
   actions: { gap: space.md, paddingBottom: space.xl },
   actionRow: { flexDirection: "row", gap: space.md },
   action: { flex: 1, borderRadius: radius.pill, paddingVertical: space.lg, alignItems: "center" },
-  wide: { borderRadius: radius.pill, paddingVertical: space.lg, alignItems: "center" },
-  actionGhost: { backgroundColor: "transparent", borderWidth: 1 },
+  actionGhost: { backgroundColor: "rgba(20, 31, 35, 0.5)", borderWidth: 1 },
   briefCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: "rgba(20, 31, 35, 0.64)",
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderColor: "rgba(140, 190, 190, 0.14)",
     padding: space.lg,
     marginBottom: space.md,
   },
   voiceRow: { flexDirection: "row", gap: space.sm, marginBottom: space.sm },
   voiceInput: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: "rgba(20, 31, 35, 0.5)",
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderColor: "rgba(140, 190, 190, 0.14)",
     borderRadius: radius.pill,
     color: colors.textPrimary,
     paddingHorizontal: space.lg,
