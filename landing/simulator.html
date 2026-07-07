@@ -309,10 +309,9 @@
   // land. Reduced-motion holds every world on its poster (no playback).
   var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   var VEXT = document.createElement("video").canPlayType('video/webm; codecs="vp9"') ? "webm" : "mp4";
-  // Flip to true once the per-scene clips (lens_<scene>.{mp4,webm} + .webp posters)
-  // are committed to assets/sim/. Until then the lens holds on the idle poster
-  // still — no playback, no 404s.
-  var WORLDS_READY = false;
+  // Per-scene clips (lens_<scene>.{mp4,webm} + .webp posters) live in assets/sim/;
+  // the lens plays the world matching the active feature and settles to idle.
+  var WORLDS_READY = true;
   var IDLE_WORLD = "lens_world";
   var SCENE_WORLD = {
     face:   "lens_face",    // a person across the room
@@ -475,7 +474,7 @@
     sim.card = null; sim.figment = null; sim.incognito = false; sim.transcript = [];
     veiled = false; look = ""; $("veilbtn").classList.remove("on"); syncLooks(); paint();
   }
-  var scenePlaying = false, sceneStop = false;
+  var scenePlaying = false, sceneStop = false, _playGen = 0;
   function waitTap(id, ms){
     return new Promise(function(resolve){
       var el = $(id), done = false;
@@ -542,12 +541,14 @@
   };
   async function play(key, btn){
     if (scenePlaying){ sceneStop = true; await sleep(90); }
+    var gen = ++_playGen;
     sceneStop = false; scenePlaying = true;
     [].forEach.call(document.querySelectorAll(".scenebtn"), function(b){ b.classList.remove("playing"); });
     if (btn) btn.classList.add("playing");
     resetScene();
     setLensScene(key);                 // the world behind the lens matches this scene
     try { await SCENES[key](); } catch(_){}
+    if (gen !== _playGen) return;      // superseded by a newer play — leave its world/UI alone
     if (!sceneStop) cap("");
     if (btn) btn.classList.remove("playing");
     scenePlaying = false;
