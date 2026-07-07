@@ -1,0 +1,6 @@
+# DreamLayer — https://dreamlayer.app
+# Crawlers welcome everywhere; nothing on this site is private.
+User-agent: *
+Allow: /
+
+Sitemap: https://dreamlayer.app/sitemap.xml
