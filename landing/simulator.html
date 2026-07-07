@@ -45,13 +45,14 @@
   .stage{display:flex;flex-direction:column;align-items:center;gap:16px;min-width:0}
   .rail{min-width:0}
   .glass-wrap{position:relative;width:min(78vw,400px);aspect-ratio:1}
-  /* the world behind the lens (AI environment, illustrative) — the glass frosts it */
-  .lens-scene{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
-    background:#05080a url(./assets/sim/lens_world.webp) center/cover no-repeat;
-    box-shadow:inset 0 0 60px rgba(0,0,0,.85)}
-  .lens-scene::after{content:"";position:absolute;inset:0;border-radius:50%;
+  /* the world behind the lens (AI environment, illustrative) — the glass frosts it.
+     two stacked layers crossfade so the world can change to match the active scene */
+  .lens-stack{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
+    background:#05080a;box-shadow:inset 0 0 60px rgba(0,0,0,.85)}
+  .lens-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#05080a;opacity:0;transition:opacity .6s ease}
+  .lens-stack::after{content:"";position:absolute;inset:0;
     background:radial-gradient(circle at 50% 42%,rgba(2,6,8,.30),rgba(2,6,8,.72) 78%)}
-  .glass-wrap.veiled .lens-scene{filter:brightness(.35) saturate(.4)}
+  .glass-wrap.veiled .lens-stack{filter:brightness(.35) saturate(.4);transition:filter .5s ease}
   canvas.glass{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
     border:1px solid #14211f;
     box-shadow:0 0 60px rgba(44,199,154,.14),0 0 160px rgba(44,199,154,.05),inset 0 0 40px rgba(0,0,0,.7)}
@@ -194,7 +195,7 @@
 
   <div class="cockpit">
     <section class="stage">
-      <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><div class="lens-scene" id="lensScene" aria-hidden="true"></div><canvas class="glass" id="glass"></canvas></div>
+      <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><div class="lens-stack" aria-hidden="true"><video class="lens-scene" id="lensA" muted loop playsinline preload="none" poster="./assets/sim/lens_world.webp"></video><video class="lens-scene" id="lensB" muted loop playsinline preload="none"></video></div><canvas class="glass" id="glass"></canvas></div>
       <div class="statusline" id="status">ready</div>
       <div class="lens-note">Environment illustrative · the interface is the real DreamLayer renderer</div>
       <div class="scene-cap" id="sceneCap" aria-live="polite"></div>
@@ -300,6 +301,60 @@
   glass.bgAlpha = 0.5;
   var look = "", veiled = false;
   glass.start();
+
+  // ---- the world behind the lens: a per-scene video that crossfades to match ----
+  // Two stacked <video> layers cross-dissolve. Each scene maps to lens_<scene>;
+  // a missing clip falls back to the idle world, and idle itself degrades to its
+  // poster still — so this works today (poster only) and comes alive as the clips
+  // land. Reduced-motion holds every world on its poster (no playback).
+  var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var VEXT = document.createElement("video").canPlayType('video/webm; codecs="vp9"') ? "webm" : "mp4";
+  // Flip to true once the per-scene clips (lens_<scene>.{mp4,webm} + .webp posters)
+  // are committed to assets/sim/. Until then the lens holds on the idle poster
+  // still — no playback, no 404s.
+  var WORLDS_READY = false;
+  var IDLE_WORLD = "lens_world";
+  var SCENE_WORLD = {
+    face:   "lens_face",    // a person across the room
+    park:   "lens_park",    // a street / where you parked
+    answer: "lens_answer",  // a desk, a problem in front of you
+    fact:   "lens_fact",    // two people mid-conversation
+    brief:  "lens_brief"    // a window at dawn
+  };
+  var wVid = function(b){ return "./assets/sim/" + b + "." + VEXT; };
+  var wPos = function(b){ return "./assets/sim/" + b + ".webp"; };
+  var _lensFront = $("lensA"), _lensBack = $("lensB"), _curWorld = null, _worldTok = 0;
+  function _reveal(v){
+    v.style.opacity = "1"; _lensFront.style.opacity = "0";
+    var old = _lensFront; _lensFront = v; _lensBack = old;
+    setTimeout(function(){ try { old.pause(); } catch(_){} }, 700);   // free the hidden layer
+  }
+  function showWorld(base){
+    if (!WORLDS_READY) base = IDLE_WORLD;                // no clips yet → hold on idle poster
+    if (base === _curWorld) return;
+    _curWorld = base;
+    var tok = ++_worldTok, v = _lensBack, done = false;
+    var reveal = function(){ if (done || tok !== _worldTok) return; done = true; _reveal(v); };
+    v.poster = wPos(base);
+    if (!WORLDS_READY || RM) {                           // poster still only (no playback)
+      v.removeAttribute("src"); reveal(); return;
+    }
+    v.onerror = function(){
+      if (tok !== _worldTok) return;
+      if (base !== IDLE_WORLD) showWorld(IDLE_WORLD);    // missing clip → idle world
+      else reveal();                                     // idle clip missing → its poster
+    };
+    v.src = wVid(base);
+    try { v.load(); v.play().then(reveal).catch(reveal); } catch(_){ reveal(); }
+    setTimeout(reveal, 1400);                            // safety if playback stalls
+  }
+  function setLensScene(key){ showWorld((key && SCENE_WORLD[key]) || IDLE_WORLD); }
+  showWorld(IDLE_WORLD);                                 // boot the neutral world
+  // pause playback when the tab is hidden (battery); the glass loop is paused too
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) { try { _lensFront.pause(); } catch(_){} }
+    else if (!RM) { try { _lensFront.play().catch(function(){}); } catch(_){} }
+  });
   addEventListener("resize", function(){ glass.resize(); }, {passive:true});
   // pause the RAF loop when the tab is hidden (battery)
   document.addEventListener("visibilitychange", function(){
@@ -491,10 +546,12 @@
     [].forEach.call(document.querySelectorAll(".scenebtn"), function(b){ b.classList.remove("playing"); });
     if (btn) btn.classList.add("playing");
     resetScene();
+    setLensScene(key);                 // the world behind the lens matches this scene
     try { await SCENES[key](); } catch(_){}
     if (!sceneStop) cap("");
     if (btn) btn.classList.remove("playing");
     scenePlaying = false;
+    if (!touring && !sceneStop) setLensScene("idle");   // settle back to the neutral world
   }
   $("scenes").addEventListener("click", function(e){
     var b = e.target.closest("[data-scene]"); if (!b) return; play(b.dataset.scene, b);
@@ -529,6 +586,7 @@
     touring = false; tourAbort = true;
     $("tourflag").hidden = true; $("welcome").hidden = false;
     $("tourbtn").textContent = "▶ Watch the tour";
+    setLensScene("idle");
   }
   async function tour(){
     if (touring) return;
