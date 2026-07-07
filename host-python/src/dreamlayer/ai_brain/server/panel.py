@@ -222,16 +222,75 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .xcard .xbody h3{margin:2px 0 8px;font-size:1.3rem;letter-spacing:-.02em}
   .xcard .xbody p{margin:0;color:var(--muted);line-height:1.6}
   .xcard .xclose{margin:0 20px 20px;padding:9px 16px}
+  /* ================= native app chrome ==================================
+     The single biggest "browser vs app" tell is the page scrolling as one with
+     a fat scrollbar. So: the window never scrolls; a fixed sidebar + an
+     independently-scrolling content pane, thin overlay scrollbars, and no
+     text-selection or focus rings on the chrome. Feels like a real Mac app. */
+  html,body{height:100%}
+  body{overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;
+    cursor:default}
+  .cine-bg,.grain,.vignette{position:fixed}     /* stay put; only content scrolls */
+  .wrap{max-width:none;width:100%;height:100vh;display:flex;gap:0;padding:0;align-items:stretch;z-index:2}
+  .side{width:232px;flex:none;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
+    padding:18px 12px 16px;border-right:1px solid var(--line);border-radius:0;
+    background:linear-gradient(180deg,rgba(16,26,29,.62),rgba(10,15,17,.72));
+    -webkit-backdrop-filter:blur(22px) saturate(1.1);backdrop-filter:blur(22px) saturate(1.1)}
+  .side .brand2{display:flex;align-items:center;gap:10px;padding:4px 10px 16px;font-weight:700;
+    letter-spacing:-.01em;font-size:1.05rem}
+  .side .brand2 .rd{position:relative;width:18px;height:18px;flex:none;border-radius:50%;
+    border:2px solid var(--memory)}
+  .side .brand2 .rd::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--memory)}
+  .side .navlabel{font:10px var(--mono,ui-monospace);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ghost);padding:12px 11px 5px}
+  .side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:0;
+    color:var(--muted);font:inherit;font-size:.93rem;font-weight:500;padding:8px 11px;border-radius:8px;
+    cursor:default;outline:none;transition:background .13s,color .13s}
+  .side button svg{width:17px;height:17px;flex:none;opacity:.85}
+  .side button:hover{background:rgba(255,255,255,.05);color:var(--text)}
+  .side button.on{background:linear-gradient(180deg,rgba(47,212,196,.2),rgba(47,212,196,.12));color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(47,212,196,.22)}
+  .side button.on svg{opacity:1;color:var(--memory)}
+  .content{flex:1;min-width:0;height:100vh;overflow-y:auto;position:relative;padding:30px 40px 64px}
+  .content .bar{justify-content:flex-end;margin:0;padding:0;position:static;
+    background:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .content .bar .brand{display:none}     /* brand lives in the sidebar now */
+  h1#pageTitle{font-size:2rem;margin:2px 0 2px;letter-spacing:-.03em}
+  .content>main{max-width:760px}          /* comfortable native reading column */
+  /* thin, native-style overlay scrollbars */
+  .content::-webkit-scrollbar,.side::-webkit-scrollbar{width:11px;height:11px}
+  .content::-webkit-scrollbar-thumb{background:rgba(200,220,220,.16);border-radius:8px;
+    border:3px solid transparent;background-clip:padding-box}
+  .content::-webkit-scrollbar-thumb:hover{background:rgba(200,220,220,.28);background-clip:padding-box}
+  .side::-webkit-scrollbar-thumb{background:transparent}
+  .content::-webkit-scrollbar-track,.side::-webkit-scrollbar-track{background:transparent}
+  /* selection + normal cursor only where it belongs */
+  input,textarea,pre,.line,.conn-s,.lead,p,#briefout,#recallout{-webkit-user-select:text;user-select:text}
+  input,textarea{cursor:text}
+  main>section{display:none}                       /* only the active view shows */
+  main>section.pon{display:block;opacity:1;transform:none;
+    animation:pagein .3s var(--ease) both}         /* override the scroll-reveal's opacity:0 */
+  @keyframes pagein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .head-cine{display:none}                          /* clean app header, not a web hero */
+  @media(max-width:760px){body{overflow:auto}
+    .wrap{flex-direction:column;height:auto}
+    .side{width:auto;height:auto;flex-direction:row;flex-wrap:wrap;gap:4px;border-right:0;
+      border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+    .side .brand2,.side .navlabel{width:100%}
+    .side button{width:auto}
+    .content{height:auto;padding:22px 20px 60px}}
 </style></head><body>
 <div class="cine-bg" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
 <div class="vignette" aria-hidden="true"></div>
 <div class="wrap">
+  <nav class="side" id="side"></nav>
+  <div class="content">
   <div class="head-cine" aria-hidden="true"></div>
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><span class="dot"></span><span id="livetext">Brain online</span></span></div>
-  <h1>Brain</h1>
-  <p class="sub">This Mac mini is the brain — your files, your memory, your reach.</p>
+  <h1 id="pageTitle">Home</h1>
+  <p class="sub" id="pageSub">This Mac mini is the brain — your files, your memory, your reach.</p>
 
   <main>
   <section>
@@ -485,6 +544,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <button class="sm" onclick="saveOps()">Save</button></div></div>
   </section>
   </main>
+  </div>
 </div>
 
 <div class="xmodal" id="xmodal" onclick="if(event.target===this)closeX()">
@@ -536,6 +596,50 @@ function openX(i){const x=EXPLAINERS[i];$("ximg").src="/panel-assets/"+x.img;$("
   $("xtitle").textContent=x.t;$("xtext").textContent=x.b;$("xmodal").classList.add("on");}
 function closeX(){$("xmodal").classList.remove("on");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeX();});
+
+/* sidebar navigation — group the sections into app-style views. Each section
+   is matched to a page by its heading, so the layout needs no per-section markup. */
+const PAGES=[
+  {id:"home",label:"Home",sub:"This Mac mini is the brain — your files, your memory, your reach.",match:["What's connected","Free · local"]},
+  {id:"day",label:"Your day",sub:"Your morning brief, agenda, reminders, and the people you meet.",match:["Morning brief","Agenda","Who you","Reminders"]},
+  {id:"mind",label:"Intelligence",sub:"Choose your AI, point it at your files, and tune how it thinks.",match:["Wire the cloud","Folders it reads","Ask your stuff","Model"]},
+  {id:"reach",label:"Connections",sub:"Pair your phone and glasses, and decide how far the Brain reaches.",match:["Reach","On your glasses"]},
+  {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, and the controls that keep it yours.",match:["Privacy controls"]},
+  {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
+  {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
+  {id:"advanced",label:"Advanced",sub:"Activity, health, schedules, and maintenance.",match:["Activity","Health"]},
+];
+let curPage="home";
+function pageOf(sec){
+  const h=(sec.querySelector(".eyebrow")?.textContent||"")+" "+(sec.querySelector("h2")?.textContent||"");
+  for(const p of PAGES){if(p.match.some(m=>h.includes(m)))return p.id;}
+  return "home";
+}
+const _sv='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">';
+const ICONS={
+  home:_sv+'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
+  day:_sv+'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>',
+  mind:_sv+'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>',
+  reach:_sv+'<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+  privacy:_sv+'<path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>',
+  plugins:_sv+'<rect x="3" y="3" width="8" height="8" rx="1.4"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
+  learn:_sv+'<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M18 3v18"/></svg>',
+  advanced:_sv+'<path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>',
+};
+function buildNav(){
+  document.querySelectorAll("main>section").forEach(s=>{s.dataset.page=pageOf(s);});
+  $("side").innerHTML='<div class="brand2"><span class="rd"></span>DreamLayer</div>'+
+    '<div class="navlabel">Brain</div>'+
+    PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
+  showPage(curPage);
+}
+function showPage(id){curPage=id;
+  document.querySelectorAll("main>section").forEach(s=>s.classList.toggle("pon",s.dataset.page===id));
+  document.querySelectorAll(".side button").forEach(b=>b.classList.toggle("on",b.dataset.p===id));
+  const p=PAGES.find(x=>x.id===id);
+  if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
+  const c=document.querySelector(".content"); if(c)c.scrollTop=0;
+}
 
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
   t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1900);}
@@ -1024,6 +1128,7 @@ window.removePlugin=removePlugin;
 load();
 loadPlugins();
 renderExplainers();
+buildNav();
 setInterval(refreshStatus,4000);
 setInterval(()=>{if(modelSel==="ollama")checkModel();},15000);
 </script></body></html>"""
