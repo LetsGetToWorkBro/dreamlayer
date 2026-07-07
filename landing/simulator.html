@@ -57,6 +57,10 @@
   .glass-wrap[data-s="answer"] .glass-glow,.glass-wrap[data-s="recall"] .glass-glow{--g:rgba(91,124,255,.30)}
   .glass-wrap[data-s="timer"] .glass-glow,.glass-wrap[data-s="interval"] .glass-glow{--g:rgba(232,181,74,.26)}
   .glass-wrap[data-s="veiled"] .glass-glow{--g:rgba(230,107,94,.30)}
+  .glass-wrap[data-s^="fact"] .glass-glow{--g:rgba(255,102,0,.26)}
+  .glass-wrap[data-s="fact-supported"] .glass-glow{--g:rgba(86,211,100,.28)}
+  .glass-wrap[data-s="fact-self_contradiction"] .glass-glow{--g:rgba(230,107,94,.30)}
+  .glass-wrap[data-s="brief"] .glass-glow{--g:rgba(44,199,154,.30)}
   .glass-wrap[data-s="listening"] .glass-glow{--g:rgba(44,199,154,.48);animation-duration:1.6s}
   @media(prefers-reduced-motion:reduce){.glass-glow{animation:none}}
   .say .mic{background:var(--surface);border:1px solid var(--border);color:var(--text-2);font-size:17px}
@@ -152,6 +156,8 @@
         <button type="button" class="scenebtn" data-scene="face"><span class="ic">👤</span>Recognise a face</button>
         <button type="button" class="scenebtn" data-scene="park"><span class="ic">🅿️</span>Park &amp; recall</button>
         <button type="button" class="scenebtn" data-scene="answer"><span class="ic">✨</span>Answer on the glass</button>
+        <button type="button" class="scenebtn" data-scene="fact"><span class="ic">✓</span>Fact-check live</button>
+        <button type="button" class="scenebtn" data-scene="brief"><span class="ic">☀️</span>Morning brief</button>
         <button type="button" class="scenebtn" data-scene="veil"><span class="ic">◐</span>Privacy Veil</button>
         <button type="button" class="scenebtn" data-scene="timer"><span class="ic">⏱</span>Focus timer</button>
       </div>
@@ -194,6 +200,8 @@
           <button>what's 15% of 240?</button>
           <button>5 miles in km</button>
           <button>how do you say thank you in Japanese?</button>
+          <button>is it true the Great Wall is visible from space?</button>
+          <button>brief me on my day</button>
           <button>set a timer for 30 seconds</button>
           <button>interval timer 20 seconds on 10 seconds off 3 rounds</button>
           <button>what time is it?</button>
@@ -245,6 +253,8 @@
     if (sim.figment && !sim.figment.done) return sim.figment.kind;   // timer/interval/clock
     if (sim.card && sim.card.type === "recall") return "recall";
     if (sim.card && sim.card.type === "answer") return "answer";
+    if (sim.card && sim.card.type === "fact")   return "fact";
+    if (sim.card && sim.card.type === "brief")  return "brief";
     if (sim.card && sim.card.type === "toast")  return "toast";
     return "ready";
   }
@@ -255,7 +265,7 @@
       line += " · " + (sim.figment.kind === "interval" ? sim.figment.phase : Math.ceil(sim.figment.remaining) + "s");
     $("status").innerHTML = line;
     $("glassWrap").classList.toggle("veiled", veiled);
-    $("glassWrap").setAttribute("data-s", s);
+    $("glassWrap").setAttribute("data-s", (s === "fact" && sim.card) ? "fact-" + sim.card.verdict : s);
     $("log").innerHTML = st.transcript.map(function(t){
       return '<div class="' + t.who + '">' + esc(t.line) + '</div>'; }).join("");
     $("log").scrollTop = $("log").scrollHeight;
@@ -385,6 +395,24 @@
       await sleep(2700); if (sceneStop) return;
       sim.handleVoice("how do you say thank you in Japanese"); paint(); await sleep(3200);
     },
+    fact: async function(){
+      cap("Mid-conversation, someone claims something.");
+      sim.say("you", "“The Great Wall is visible from space.”");
+      sim.say("oracle", sim._factCheck("disputed", "Great Wall visible from space", "Not with the naked eye — a myth.", "them"));
+      paint(); await sleep(3400); if (sceneStop) return;
+      cap("Veritas checked it against what you know — quietly, no interruption.");
+      await sleep(2900); if (sceneStop) return;
+      cap("And when a claim holds up —");
+      sim.say("you", "“The sun is a star.”");
+      sim.say("oracle", sim._factCheck("supported", "The sun is a star", "A G-type main-sequence star.", "them"));
+      paint(); await sleep(3400);
+    },
+    brief: async function(){
+      cap("Put the glasses on. Your day is already there.");
+      sim.say("oracle", sim._brief()); paint(); await sleep(3400); if (sceneStop) return;
+      cap("A short synthesis, the first things that matter — before you ask.");
+      await sleep(3400);
+    },
     veil: async function(){
       cap("One gesture, and it goes blind."); veiled = true; sim.veil(true); $("veilbtn").classList.add("on"); paint();
       await sleep(2700); if (sceneStop) return;
@@ -422,7 +450,8 @@
     if (!actx || muted) return;
     if (actx.state === "suspended") { try { actx.resume(); } catch(_){} }
     var t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
-    var f = kind === "answer" ? 784 : kind === "recall" ? 659 : kind === "veil" ? 330 : kind === "toast" ? 587 : 698;
+    var f = kind === "answer" ? 784 : kind === "recall" ? 659 : kind === "veil" ? 330
+      : kind === "fact" ? 523 : kind === "brief" ? 698 : kind === "toast" ? 587 : 698;
     o.type = "sine"; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.09);
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
@@ -439,7 +468,7 @@
   // ---- auto-play tour on first load; any interaction hands control over ----
   var tourAbort = false;
   async function tour(){
-    var order = ["face", "park", "answer", "veil", "timer"];
+    var order = ["face", "park", "answer", "fact", "brief", "veil", "timer"];
     for (var i = 0; i < order.length; i++){
       if (tourAbort) return;
       await play(order[i], document.querySelector('.scenebtn[data-scene="' + order[i] + '"]'));

@@ -23,6 +23,7 @@
     tealDim: "#1A7A60",
     coral: "#E06B52",      // ACCENT_ATTENTION / debts
     green: "#56D364",      // ACCENT_SUCCESS
+    amber: "#FF6600",      // WARNING_AMBER (fact-check "check this")
     recall: "#5B7CFF",     // face-recall eyebrow
     border: "#2A3C44",
   };
@@ -223,6 +224,8 @@
       return { kind: "missed", args: {} };
     if (t.indexOf("brief") >= 0 || t === "my day" || t === "what's my day" || t === "whats my day")
       return { kind: "brief", args: {} };
+    var fc = r.match(/^(?:is it true(?: that)?|is that (?:true|real|correct)|fact.?check|verify|check (?:that|this))\b\s*(.*)$/i);
+    if (fc) return { kind: "fact_check", args: { claim: (fc[1] || raw).trim() } };
 
     var d = parseDebt(r); if (d) return d;
     var mt = parseMeet(r); if (mt) return mt;
@@ -427,7 +430,8 @@
       case "stash": return this._stash(a.subject, a.place);
       case "locate": return this._locate(a.subject);
       case "missed": return { say: "You're all caught up — nothing while you were away." };
-      case "brief": this._toast("MORNING BRIEF", "A clear morning — nothing pressing.", C.teal); return { say: "Here's your morning: a clear one, nothing pressing." };
+      case "brief": return { say: this._brief() };
+      case "fact_check": return { say: this._checkClaim(a.claim || text) };
       case "reply": this._toast("REPLY", "to " + a.to + ": " + (a.text || "…"), C.teal); return { say: "Reply to " + a.to + ": “" + (a.text || "") + "” — open Messages to send." };
       case "recall": return { say: this._recallAnswer(a.query) };
       default: {
@@ -510,6 +514,41 @@
     this.figment = null;
     this.card = { type: "answer", eyebrow: "ANSWER", primary: String(a.primary), sub: a.sub || "", shownAt: now() };
     return a.sub ? (a.primary + "  ·  " + a.sub) : String(a.primary);
+  };
+  // Morning Brief (cards.morning_brief) — the day, flashed on the glass.
+  Sim.prototype._brief = function () {
+    this.figment = null;
+    this.card = { type: "brief", eyebrow: "YOUR DAY",
+      primary: "Three meetings, one deadline.",
+      detail: "Clear after 3pm.", footer: "next — 10:00 standup", shownAt: now() };
+    return "Your day: three meetings, one deadline, clear after three.";
+  };
+  // Truth Lens / Veritas (cards.fact_check) — a quiet verdict on a claim.
+  var FACT_STYLE = { supported: ["VERIFIED", C.green], disputed: ["CHECK THIS", C.amber],
+    self_contradiction: ["SAID OTHERWISE", C.coral], unverified: ["UNVERIFIED", C.ghost] };
+  Sim.prototype._factCheck = function (verdict, claim, basis, speaker) {
+    var s = FACT_STYLE[verdict] || FACT_STYLE.unverified;
+    this.figment = null;
+    this.card = { type: "fact", verdict: verdict, eyebrow: s[0], color: s[1],
+      primary: claim || "—", detail: basis || "", footer: speaker || "",
+      flash: (verdict === "disputed" || verdict === "self_contradiction"), shownAt: now() };
+    return s[0] + " — " + (claim || "");
+  };
+  var CLAIMS = {
+    "the earth is flat": ["disputed", "The Earth is an oblate spheroid."],
+    "the great wall is visible from space": ["disputed", "Not with the naked eye — a persistent myth."],
+    "humans only use 10% of their brain": ["disputed", "A myth — you use virtually all of it."],
+    "we only use 10% of our brain": ["disputed", "A myth — you use virtually all of it."],
+    "water boils at 100": ["supported", "At sea level, yes — 100 °C / 212 °F."],
+    "the sun is a star": ["supported", "Yes — a G-type main-sequence star."],
+    "lightning never strikes the same place twice": ["disputed", "It does — tall structures get hit often."],
+    "goldfish have a three second memory": ["disputed", "They remember for months, actually."]
+  };
+  Sim.prototype._checkClaim = function (q) {
+    var claim = (q || "").trim().replace(/^(?:is it true(?: that)?|is that (?:true|real|correct)|fact.?check|verify|check (?:that|this))\s*/i, "").trim() || q;
+    var t = (claim || "").toLowerCase();
+    for (var k in CLAIMS) { if (t.indexOf(k) >= 0) { var c = CLAIMS[k]; return this._factCheck(c[0], claim, c[1], "them"); } }
+    return this._factCheck("unverified", claim, "Your Brain would check this against the world.", "you");
   };
   Sim.prototype._ask = function (q) {
     var who = this.profile.name ? (", " + this.profile.name) : "";
@@ -605,10 +644,14 @@
     if (sim.incognito) this._veil(t);
     else if (fresh && sim.card.type === "recall") this._recall(sim.card);
     else if (fresh && sim.card.type === "answer") this._answer(sim.card, t);
+    else if (fresh && sim.card.type === "fact") this._fact(sim.card, t);
+    else if (fresh && sim.card.type === "brief") this._brief(sim.card);
     else if (fresh && sim.card.type === "toast") this._toast(sim.card);
     else if (sim.figment && !sim.figment.ended) this._figment(sim.figment.frame(), t);
     else if (sim.card && sim.card.type === "recall") this._recall(sim.card);
     else if (sim.card && sim.card.type === "answer") this._answer(sim.card, t);
+    else if (sim.card && sim.card.type === "fact") this._fact(sim.card, t);
+    else if (sim.card && sim.card.type === "brief") this._brief(sim.card);
     else if (sim.card && sim.card.type === "toast") this._toast(sim.card);
     else this._ready(t);
     c.restore();
@@ -669,6 +712,31 @@
     }
     if (cur) lines.push(cur);
     return lines;
+  };
+  // Truth Lens verdict — colored ring dot, eyebrow, separator, claim, basis, footer.
+  Glass.prototype._fact = function (card, t) {
+    var c = this.ctx, col = card.color || C.ghost;
+    var fl = card.flash ? (0.55 + 0.45 * (0.5 + 0.5 * Math.sin((t || 0) * 6))) : 1;
+    c.fillStyle = rgba(col, 0.9 * fl); c.beginPath(); c.arc(CX, 54, 6, 0, Math.PI * 2); c.fill();
+    this.text(this._clip(card.eyebrow, 26), CX, 84, "sm", col);
+    c.strokeStyle = rgba(C.border, 0.9); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(CX - 72, 100); c.lineTo(CX + 72, 100); c.stroke();
+    var lines = this._wrap(card.primary, 20).slice(0, 2), y = 126;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, "md", C.text); y += 26; }
+    if (card.detail) { var d = this._wrap(card.detail, 22).slice(0, 2), dy = y + 8;
+      for (var j = 0; j < d.length; j++) { this.text(d[j], CX, dy, "sm", C.text2); dy += 20; } y = dy; }
+    if (card.footer) this.text(this._clip(card.footer, 26), CX, Math.max(y + 6, 198), "xs", C.ghost);
+  };
+  // Morning Brief — YOUR DAY, a short synthesis, the first points beneath.
+  Glass.prototype._brief = function (card) {
+    var c = this.ctx;
+    this.text(card.eyebrow || "YOUR DAY", CX, 62, "sm", C.teal);
+    c.strokeStyle = rgba(C.border, 0.9); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(CX - 64, 78); c.lineTo(CX + 64, 78); c.stroke();
+    var lines = this._wrap(card.primary, 16).slice(0, 3), y = 106;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, "md", C.text); y += 26; }
+    if (card.detail) this.text(this._clip(card.detail, 24), CX, y + 10, "sm", C.text2);
+    if (card.footer) this.text(this._clip(card.footer, 24), CX, y + 32, "sm", C.ghost);
   };
   Glass.prototype._toast = function (card) {
     this.text(card.eyebrow, CX, 96, "sm", card.color || C.teal);
