@@ -23,11 +23,16 @@ APP = ["app_main.py"]
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": "dreamlayer.icns",                  # built from icon.png in CI
-    # bundle the whole package + the GUI toolkit
-    "packages": ["dreamlayer", "rumps"],
+    # bundle the whole package + the GUI toolkit. PIL and numpy MUST be here
+    # (not in `includes`): py2app zips `includes` into python3xx.zip, but these
+    # ship vendored dylibs under a `.dylibs/` dir. Zipped, those dylibs can't be
+    # reached by codesign (so notarization rejects them as unsigned) and can't be
+    # dlopen'd at runtime. Listed as packages, py2app copies them unzipped onto
+    # disk, where the CI signing loop signs each dylib with a secure timestamp.
+    "packages": ["dreamlayer", "rumps", "PIL", "numpy"],
     # transitive imports py2app's static analysis tends to miss
     "includes": ["pydantic", "pydantic_core", "openai", "httpx", "httpcore",
-                 "certifi", "PIL", "numpy"],
+                 "certifi"],
     "plist": {
         "CFBundleName": "DreamLayer",
         "CFBundleDisplayName": "DreamLayer",
