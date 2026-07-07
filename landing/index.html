@@ -683,11 +683,25 @@ body.menu-open{overflow:hidden}
 /* hero live glass — the decorative ring, alive */
 .hero-glass{position:relative;width:clamp(150px,20vh,196px);height:clamp(150px,20vh,196px);
   margin:0 auto 40px;border-radius:50%}
-.hero-glass canvas{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+.hero-glass canvas{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
   border:1px solid rgba(44,199,154,.28);
   box-shadow:0 0 50px -8px rgba(44,199,154,.35),inset 0 0 30px rgba(0,0,0,.7)}
-.hero-glass::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+.hero-glass::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 33% 27%,rgba(255,255,255,.07),transparent 46%)}
+
+/* see-through lens over a dim, blurred world — the lens is the in-focus window
+   (matches #can + the simulator). A local world sits behind the frosted disc. */
+.lens-world{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
+  background:#0a1216 center/cover no-repeat;filter:brightness(1.4) saturate(1.12);
+  box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
+.lens-world::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
+.hero-glass .lens-world{background-image:url(assets/sim/lens_alt.webp)}
+.sim-live .g .lens-world{background-image:url(assets/sim/lens_world.webp)}
+@supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+  .hero .hero-glass>canvas,#simulator .sim-live .g canvas{background:transparent;
+    -webkit-backdrop-filter:blur(6px) saturate(1.15);backdrop-filter:blur(6px) saturate(1.15)}
+}
 
 /* the sim section's live embed (replaces the static screenshot) */
 .sim-live{margin:34px auto 0;max-width:900px;display:grid;grid-template-columns:auto 1fr;
@@ -695,9 +709,9 @@ body.menu-open{overflow:hidden}
   border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);
   padding:clamp(22px,4vw,40px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
 .sim-live .g{position:relative;width:min(46vw,240px);aspect-ratio:1}
-.sim-live .g canvas{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+.sim-live .g canvas{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
   border:1px solid #14211f;box-shadow:0 0 50px rgba(44,199,154,.14),inset 0 0 34px rgba(0,0,0,.7)}
-.sim-live .g::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+.sim-live .g::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.06),transparent 45%)}
 .sim-live .cap .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal)}
 .sim-live .cap p{color:var(--text-2);font-size:14px;line-height:1.6;margin:8px 0 16px}
@@ -745,7 +759,7 @@ body.menu-open{overflow:hidden}
   <canvas id="field" aria-hidden="true"></canvas>
   <div class="hero-vignette"></div>
   <div class="hero-core" id="heroCore">
-    <div class="hero-glass" aria-hidden="true"><canvas id="heroGlass"></canvas></div>
+    <div class="hero-glass" aria-hidden="true"><div class="lens-world"></div><canvas id="heroGlass"></canvas></div>
     <span class="eyebrow arrive in" style="--d:60ms">A layer for smart AR glasses</span>
     <h1 class="display arrive in" style="--d:140ms">DreamLayer</h1>
     <p class="tag arrive in" style="--d:220ms">A memory layer for the real world.</p>
@@ -1346,7 +1360,7 @@ body.menu-open{overflow:hidden}
     </div>
 
     <div class="sim-live arrive" style="--d:220ms">
-      <div class="g"><canvas id="simEmbed"></canvas></div>
+      <div class="g"><div class="lens-world"></div><canvas id="simEmbed"></canvas></div>
       <div class="cap">
         <span class="k">Live · running now</span>
         <p>This glass is the in-browser simulator, playing itself. Every pixel is drawn by a faithful
@@ -2138,9 +2152,9 @@ applyVeil();
 
   function boot(){
     if(!window.Halo){ return setTimeout(boot, 60); }   // wait for the deferred engine
-    startGlass(document.getElementById("heroGlass"));
+    startGlass(document.getElementById("heroGlass"), { glassBg:0.5 });   // see-through lens over its world
     var capEl=document.getElementById("simEmbedCap");
-    startGlass(document.getElementById("simEmbed"), { onSay:function(sayLine){
+    startGlass(document.getElementById("simEmbed"), { glassBg:0.5, onSay:function(sayLine){
       if(capEl) capEl.innerHTML="<b>Oracle</b> " + (sayLine||"").replace(/[<>&]/g,"");
     }});
     // #can: the honest composite is now the LIVE renderer — a short person-recall
