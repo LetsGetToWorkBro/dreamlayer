@@ -148,15 +148,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* beat .hero-glass width/height (later in the file) so the glass fills its
    column (184px desktop / 148px mobile) instead of a viewport-height clamp */
 .hud-float .can-glass{position:relative;width:100%;height:auto;aspect-ratio:1;margin:0}
-/* a dim, visible world behind the disc (AI environment, illustrative) so the
-   frosted lens has something to reveal instead of the near-black section scrim */
-.hud-float .can-scene{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;
-  background:#0a1216 url(assets/sim/lens_face.webp) center/cover no-repeat;
-  filter:brightness(1.5) saturate(1.15);box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
-.hud-float .can-scene::after{content:"";position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
 .hud-float .can-glass canvas{position:relative;z-index:1;background:transparent;border-radius:50%;
-  -webkit-backdrop-filter:blur(7px) saturate(1.2);backdrop-filter:blur(7px) saturate(1.2);
+  -webkit-backdrop-filter:blur(7px) brightness(1.75) saturate(1.2);backdrop-filter:blur(7px) brightness(1.75) saturate(1.2);
   box-shadow:0 0 40px -8px rgba(44,199,154,.34),inset 0 0 22px rgba(0,0,0,.35)}
 .lens-fallback{display:none;width:100%;height:auto;border-radius:50%;
   -webkit-backdrop-filter:blur(6px) saturate(1.2);backdrop-filter:blur(6px) saturate(1.2);
@@ -351,14 +344,21 @@ section{position:relative}
 .vid-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
 /* the feature orbs: a dim, softly-blurred world behind the transparent HUD canvas
    (the glyphs are drawn on a cleared canvas, so the world reads straight through) */
-.vid-orb .lens-world,.walk-orb .lens-world,.scope .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
-.vid-orb .lens-world::after,.walk-orb .lens-world::after,.scope .lens-world::after{
+/* the #see feature orbs have no section plate → a dim fallback world behind the HUD */
+.vid-orb .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
+.vid-orb .lens-world::after{
   background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.5),rgba(4,8,10,.86) 86%)}
 .lens-world[data-w="horizon"]{background-image:url(assets/sim/lens_brief.webp)}
 .lens-world[data-w="recall"]{background-image:url(assets/sim/lens_answer.webp)}
 .lens-world[data-w="saved"]{background-image:url(assets/sim/lens_alt.webp)}
-.lens-world[data-w="walk"]{background-image:url(assets/sim/lens_park.webp)}
-.lens-world[data-w="scope"]{background-image:url(assets/sim/lens_alt.webp)}
+/* scope (over #feel) + walk orb (over #walk) frost the REAL section video behind them */
+@supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+  #feel .scope,#walk .walk-orb{background:transparent}   /* section-id so it beats the base bg */
+  .scope .lens-world,.walk-orb .lens-world{background:none;filter:none;
+    -webkit-backdrop-filter:blur(9px) brightness(1.85) saturate(1.22);backdrop-filter:blur(9px) brightness(1.85) saturate(1.22)}
+  .scope .lens-world::after,.walk-orb .lens-world::after{
+    background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.3),rgba(4,8,10,.8) 86%)}
+}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -699,17 +699,20 @@ body.menu-open{overflow:hidden}
 .hero-glass::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 33% 27%,rgba(255,255,255,.07),transparent 46%)}
 
-/* see-through lens over a dim, blurred world — the lens is the in-focus window
-   (matches #can + the simulator). A local world sits behind the frosted disc. */
+/* see-through lens: the frosted disc reveals the REAL section environment behind
+   it (brightened past the section scrim), so each lens shows exactly what it sits
+   in front of. A dim fallback world is used only where the section has no plate. */
 .lens-world{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
   background:#0a1216 center/cover no-repeat;filter:brightness(1.4) saturate(1.12);
   box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
 .lens-world::after{content:"";position:absolute;inset:0;border-radius:50%;
   background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
-.hero-glass .lens-world{background-image:url(assets/sim/lens_alt.webp)}
 .sim-live .g .lens-world{background-image:url(assets/sim/lens_world.webp)}
 @supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
-  .hero .hero-glass>canvas,#simulator .sim-live .g canvas{background:transparent;
+  /* hero + #can glasses frost the real section video behind them */
+  .hero .hero-glass>canvas{background:transparent;
+    -webkit-backdrop-filter:blur(7px) brightness(2.1) saturate(1.25);backdrop-filter:blur(7px) brightness(2.1) saturate(1.25)}
+  #simulator .sim-live .g canvas{background:transparent;
     -webkit-backdrop-filter:blur(6px) saturate(1.15);backdrop-filter:blur(6px) saturate(1.15)}
 }
 
@@ -769,7 +772,7 @@ body.menu-open{overflow:hidden}
   <canvas id="field" aria-hidden="true"></canvas>
   <div class="hero-vignette"></div>
   <div class="hero-core" id="heroCore">
-    <div class="hero-glass" aria-hidden="true"><div class="lens-world"></div><canvas id="heroGlass"></canvas></div>
+    <div class="hero-glass" aria-hidden="true"><canvas id="heroGlass"></canvas></div>
     <span class="eyebrow arrive in" style="--d:60ms">A layer for smart AR glasses</span>
     <h1 class="display arrive in" style="--d:140ms">DreamLayer</h1>
     <p class="tag arrive in" style="--d:220ms">A memory layer for the real world.</p>
@@ -998,7 +1001,7 @@ body.menu-open{overflow:hidden}
           — nothing on this list is a mock-up.</p>
       </div>
       <figure class="hud-float">
-        <div class="hero-glass can-glass"><div class="can-scene" aria-hidden="true"></div><canvas id="canGlass"
+        <div class="hero-glass can-glass"><canvas id="canGlass"
              aria-label="A live DreamLayer HUD recognising someone you've met before"></canvas></div>
         <img class="lens-fallback" src="assets/hud/person_context_lens.png" aria-hidden="true"
              alt="A real DreamLayer HUD card recognising someone you've met before">
