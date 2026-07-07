@@ -348,7 +348,16 @@ section{position:relative}
   aspect-ratio:1;background:#000;
   box-shadow:0 0 90px -30px rgba(44,199,154,.35), inset 0 0 60px rgba(0,0,0,.5)}
 .vid-orb video{width:100%;height:100%;object-fit:cover}
-.vid-orb canvas{width:100%;height:100%;display:block}
+.vid-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
+/* the feature orbs: a dim, softly-blurred world behind the transparent HUD canvas
+   (the glyphs are drawn on a cleared canvas, so the world reads straight through) */
+.vid-orb .lens-world,.walk-orb .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
+.vid-orb .lens-world::after,.walk-orb .lens-world::after{
+  background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.5),rgba(4,8,10,.86) 86%)}
+.lens-world[data-w="horizon"]{background-image:url(assets/sim/lens_brief.webp)}
+.lens-world[data-w="recall"]{background-image:url(assets/sim/lens_answer.webp)}
+.lens-world[data-w="saved"]{background-image:url(assets/sim/lens_alt.webp)}
+.lens-world[data-w="walk"]{background-image:url(assets/sim/lens_park.webp)}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -451,7 +460,7 @@ section{position:relative}
 .walk-orb{position:relative;border-radius:50%;overflow:hidden;border:1px solid var(--h-border);
   aspect-ratio:1;background:#000;justify-self:center;width:min(100%,440px);
   box-shadow:0 0 100px -30px rgba(44,199,154,.4),inset 0 0 60px rgba(0,0,0,.5)}
-.walk-orb canvas{width:100%;height:100%;display:block}
+.walk-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
 .walk-steps{list-style:none;display:flex;flex-direction:column;gap:6px}
 .walk-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:var(--r-lg);
   border:1px solid transparent;transition:border-color var(--base) var(--ease),
@@ -902,7 +911,7 @@ body.menu-open{overflow:hidden}
 
     <div class="vid-grid">
       <div class="vid-cell arrive">
-        <div class="vid-orb"><canvas data-hud="horizon"
+        <div class="vid-orb"><div class="lens-world" data-w="horizon"></div><canvas data-hud="horizon"
              aria-label="The Horizon dial: aurora light flowing along the rim, promises as embers"></canvas></div>
         <div class="cap">
           <span class="eyebrow">The Horizon</span>
@@ -912,7 +921,7 @@ body.menu-open{overflow:hidden}
         </div>
       </div>
       <div class="vid-cell feature arrive" style="--d:120ms">
-        <div class="vid-orb"><canvas data-hud="recall"
+        <div class="vid-orb"><div class="lens-world" data-w="recall"></div><canvas data-hud="recall"
              aria-label="Lucid Recall: a spatial keys card condenses in, lands, and recedes"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Lucid Recall</span>
@@ -922,7 +931,7 @@ body.menu-open{overflow:hidden}
         </div>
       </div>
       <div class="vid-cell arrive" style="--d:240ms">
-        <div class="vid-orb"><canvas data-hud="saved"
+        <div class="vid-orb"><div class="lens-world" data-w="saved"></div><canvas data-hud="saved"
              aria-label="Saved memory: a spring-drawn check with a particle burst"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Saved Memory</span>
@@ -956,7 +965,7 @@ body.menu-open{overflow:hidden}
         when you need it back, or just return: it resurfaces on its own the moment you’re near.</p>
     </div>
     <div class="walk-stage arrive" style="--d:120ms">
-      <div class="walk-orb"><canvas data-hud="walk"
+      <div class="walk-orb"><div class="lens-world" data-w="walk"></div><canvas data-hud="walk"
            aria-label="A 30-second walkthrough: saving your parking spot, then recalling it"></canvas></div>
       <div class="walk-side">
         <ol class="walk-steps" id="walkSteps">
