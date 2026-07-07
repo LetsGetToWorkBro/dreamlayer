@@ -741,7 +741,8 @@ body.menu-open{overflow:hidden}
   <a href="./plugins.html"><span class="k">02</span><span>Plugin store<span class="d">Browse, rate, and install what the community builds.</span></span></a>
   <a href="./playground.html"><span class="k">03</span><span>Web BLE playground<span class="d">Talk Lua to a real Halo over Bluetooth, from the page.</span></span></a>
   <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank" rel="noopener"><span class="k">04</span><span>Knowledge base ↗<span class="d">Every card, screen, and panel — the complete reference.</span></span></a>
-  <a href="#soon"><span class="k">05</span><span>Get early access<span class="d">One note when the layer wakes. Nothing else.</span></span></a>
+  <a href="https://github.com/LetsGetToWorkBro/dreamlayer-releases/releases/latest" target="_blank" rel="noopener"><span class="k">05</span><span>Download for Mac ↗<span class="d">The Brain as a signed, notarized menu-bar app.</span></span></a>
+  <a href="#soon"><span class="k">06</span><span>Get early access<span class="d">One note when the layer wakes. Nothing else.</span></span></a>
   <span class="close-note">Esc or tap ✕ to close</span>
 </nav>
 
@@ -775,7 +776,7 @@ body.menu-open{overflow:hidden}
       privately, on your own hardware.</p>
     <div class="cta-row hero-cta arrive in" style="--d:380ms">
       <a class="btn primary" href="./simulator.html">Try the simulator</a>
-      <a class="btn ghost" href="./plugins.html">Plugin store</a>
+      <a class="btn ghost" href="https://github.com/LetsGetToWorkBro/dreamlayer-releases/releases/latest/download/DreamLayer.dmg">Download for Mac</a>
       <a class="btn ghost" href="#soon">Get early access</a>
     </div>
   </div>
@@ -1355,6 +1356,19 @@ body.menu-open{overflow:hidden}
     font-size:13px;line-height:1.7;color:var(--h-text)}
   .cmd pre .c{color:var(--text-2)}
   .cmd pre .t{color:var(--teal)}
+  .getapp{max-width:640px;margin:30px auto 0;border:1px solid var(--border);
+    border-radius:var(--r-sm);background:var(--surface);padding:20px 22px;
+    display:flex;gap:20px 24px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .getapp .g-copy{flex:1 1 300px;min-width:0}
+  .getapp .g-copy .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--teal);display:block;margin-bottom:7px}
+  .getapp .g-copy p{color:var(--text-2);font-size:13.5px;line-height:1.6;margin:0}
+  .getapp .btn.dl{display:inline-flex;flex-direction:column;align-items:center;
+    line-height:1.2;text-align:center;white-space:nowrap}
+  .getapp .btn.dl small{font-family:var(--mono);font-size:9px;letter-spacing:.09em;
+    text-transform:uppercase;opacity:.72;margin-top:4px;font-weight:400}
+  @media(max-width:520px){.getapp{justify-content:center;text-align:center}
+    .getapp .btn.dl{width:100%}}
 </style>
 <section class="section-pad has-cine" id="simulator">
   <div class="section-bg" data-cine aria-hidden="true"><img src="assets/cine/still-dusk.webp" alt=""></div>
@@ -1393,8 +1407,21 @@ body.menu-open{overflow:hidden}
         blacks the whole loop out for real. If it works in the simulator, it works on the glass.</span></div>
     </div>
 
+    <div class="getapp arrive" style="--d:150ms">
+      <div class="g-copy">
+        <span class="k">No terminal — get the Mac app</span>
+        <p>The same Orchestrator + Figment stage, packaged as a signed, notarized menu-bar
+          appliance. Double-click the&nbsp;.dmg, drag DreamLayer to Applications, and it lives in
+          your menu bar.</p>
+      </div>
+      <a class="btn primary dl" href="https://github.com/LetsGetToWorkBro/dreamlayer-releases/releases/latest/download/DreamLayer.dmg">
+        Download for Mac ↓
+        <small>Apple&nbsp;Silicon · notarized</small>
+      </a>
+    </div>
+
     <div class="cmd arrive" style="--d:180ms">
-      <div class="cmd-h"><span class="dot"></span>prefer the full Python stack? one command</div>
+      <div class="cmd-h"><span class="dot"></span>prefer the terminal? one command</div>
 <pre><span class="c"># the real Orchestrator + Figment stage, served to your browser</span>
 pip install -e <span class="t">"host-python[dev]"</span>
 python -m <span class="t">dreamlayer.simulator</span></pre>
