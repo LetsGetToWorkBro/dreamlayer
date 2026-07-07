@@ -99,6 +99,13 @@
   .soundtgl{font:inherit;font-size:12px;color:var(--text-3);background:transparent;border:0;cursor:pointer;
     padding:2px 6px;-webkit-tap-highlight-color:transparent}
   .soundtgl:hover{color:var(--teal)}
+  /* inline SVG icons (replacing emoji) inherit colour + size from their button */
+  svg.i{width:1em;height:1em;flex:none;vertical-align:-.13em;stroke-width:2}
+  .scenebtn .ic{display:inline-flex;align-items:center}
+  .tourbtn,.tour-flag,.soundtgl,#glancebtn,#veilbtn,#micbtn{display:inline-flex;align-items:center;gap:7px}
+  #soundbtn .off{display:none}
+  #soundbtn.muted .on{display:none}
+  #soundbtn.muted .off{display:inline-block}
 
   /* first-run: a clear welcome + one obvious action */
   .welcome{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:520px;width:100%}
@@ -201,33 +208,33 @@
       <div class="scene-cap" id="sceneCap" aria-live="polite"></div>
 
       <div class="welcome" id="welcome">
-        <button type="button" class="tourbtn" id="tourbtn">▶ Watch the tour</button>
+        <button type="button" class="tourbtn" id="tourbtn"><svg class="i" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Watch the tour</button>
         <span class="welcome-sub">or tap a feature below</span>
       </div>
-      <div class="tour-flag" id="tourflag" hidden>▶ Touring — tap anything to take control</div>
+      <div class="tour-flag" id="tourflag" hidden><svg class="i" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Touring — tap anything to take control</div>
 
       <div class="grouplbl">See it in action</div>
       <div class="scenes" id="scenes">
         <button type="button" class="scenebtn" data-scene="face">
-          <span class="ttl"><span class="ic">👤</span>Remember a face</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/></svg></span>Remember a face</span>
           <span class="desc">Recognises someone you've met — before you can.</span></button>
         <button type="button" class="scenebtn" data-scene="park">
-          <span class="ttl"><span class="ic">🅿️</span>Never lose things</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11 6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg></span>Never lose things</span>
           <span class="desc">Park it, forget it, ask — it points you back.</span></button>
         <button type="button" class="scenebtn" data-scene="answer">
-          <span class="ttl"><span class="ic">✨</span>Answer on the glass</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.7 6.3 6.3 1.7-6.3 1.7L12 18.5l-1.7-6.3L4 10.5l6.3-1.7z"/></svg></span>Answer on the glass</span>
           <span class="desc">Ask anything; the answer lands on the lens.</span></button>
         <button type="button" class="scenebtn" data-scene="fact">
-          <span class="ttl"><span class="ic">✓</span>Live fact-check</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.6 2.6L16 9.5"/></svg></span>Live fact-check</span>
           <span class="desc">A claim gets checked the moment it's said.</span></button>
         <button type="button" class="scenebtn" data-scene="brief">
-          <span class="ttl"><span class="ic">☀️</span>Morning brief</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.8"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span>Morning brief</span>
           <span class="desc">Your day, the moment you put them on.</span></button>
         <button type="button" class="scenebtn" data-scene="veil">
-          <span class="ttl"><span class="ic">◐</span>Privacy Veil</span>
+          <span class="ttl"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.6 9.6 0 0 1 12 5c5 0 9 4.5 10 7a17 17 0 0 1-2.6 3.5M6.1 6.1C3.8 7.5 2.4 9.6 2 12c1 2.5 5 7 10 7 1.6 0 3-.4 4.3-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></span>Privacy Veil</span>
           <span class="desc">One gesture and it sees and keeps nothing.</span></button>
       </div>
-      <button type="button" class="soundtgl" id="soundbtn" aria-pressed="true">🔊 sound</button>
+      <button type="button" class="soundtgl" id="soundbtn" aria-pressed="true"><svg class="i on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h3.5L13 19V5L7.5 9z"/><path d="M16.5 9.2a4 4 0 0 1 0 5.6M19 7a7.5 7.5 0 0 1 0 10"/></svg><svg class="i off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h3.5L13 19V5L7.5 9z"/><path d="M17 9.5l4 5M21 9.5l-4 5"/></svg>sound</button>
 
       <details class="tryself" id="tryself">
         <summary>Try it yourself</summary>
@@ -236,7 +243,7 @@
           <form class="say" id="sayform" autocomplete="off">
             <input id="sayinput" placeholder="e.g. “what’s 15% of 240?”"
                    enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
-            <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden>🎙</button>
+            <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button>
             <button type="submit" aria-label="Send">↳</button>
           </form>
           <div class="grouplbl">…or tap an example</div>
@@ -257,14 +264,14 @@
             <button type="button" class="chip" data-look="face-a">Person A</button>
             <button type="button" class="chip" data-look="face-b">Person B</button>
             <button type="button" class="chip" data-look="face-c">Person C</button>
-            <button type="button" class="chip" id="glancebtn">👁 Look at them</button>
+            <button type="button" class="chip" id="glancebtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-6.5 10-6.5S22 12 22 12s-4 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>Look at them</button>
           </div>
           <div class="grouplbl">Gestures &amp; privacy</div>
           <div class="row">
             <button type="button" class="chip" data-g="single">Tap</button>
             <button type="button" class="chip" data-g="double">Double-tap</button>
             <button type="button" class="chip" data-g="long">Hold</button>
-            <button type="button" class="chip danger" id="veilbtn">◐ Privacy Veil</button>
+            <button type="button" class="chip danger" id="veilbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.6 9.6 0 0 1 12 5c5 0 9 4.5 10 7a17 17 0 0 1-2.6 3.5M6.1 6.1C3.8 7.5 2.4 9.6 2 12c1 2.5 5 7 10 7 1.6 0 3-.4 4.3-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>Privacy Veil</button>
           </div>
         </div>
       </details>
@@ -577,7 +584,7 @@
   if (soundBtn) soundBtn.addEventListener("click", function(){
     muted = !muted; unlockAudio();
     soundBtn.setAttribute("aria-pressed", String(!muted));
-    soundBtn.textContent = muted ? "🔇 sound" : "🔊 sound";
+    soundBtn.classList.toggle("muted", muted);
     if (!muted) chime("answer");
   });
 
@@ -586,7 +593,6 @@
   function endTour(){
     touring = false; tourAbort = true;
     $("tourflag").hidden = true; $("welcome").hidden = false;
-    $("tourbtn").textContent = "▶ Watch the tour";
     setLensScene("idle");
   }
   async function tour(){
