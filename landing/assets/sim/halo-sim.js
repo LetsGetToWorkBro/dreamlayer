@@ -23,6 +23,7 @@
     tealDim: "#1A7A60",
     coral: "#E06B52",      // ACCENT_ATTENTION / debts
     green: "#56D364",      // ACCENT_SUCCESS
+    amber: "#FF6600",      // WARNING_AMBER (fact-check "check this")
     recall: "#5B7CFF",     // face-recall eyebrow
     border: "#2A3C44",
   };
@@ -223,6 +224,8 @@
       return { kind: "missed", args: {} };
     if (t.indexOf("brief") >= 0 || t === "my day" || t === "what's my day" || t === "whats my day")
       return { kind: "brief", args: {} };
+    var fc = r.match(/^(?:is it true(?: that)?|is that (?:true|real|correct)|fact.?check|verify|check (?:that|this))\b\s*(.*)$/i);
+    if (fc) return { kind: "fact_check", args: { claim: (fc[1] || raw).trim() } };
 
     var d = parseDebt(r); if (d) return d;
     var mt = parseMeet(r); if (mt) return mt;
@@ -306,6 +309,76 @@
      ====================================================================== */
   var FACES = { "face-a": 0.82, "face-b": 0.37, "face-c": 0.61 };
 
+  /* ---- Oracle answer engine — honest in-browser computation + a small demo
+     set. Real math / unit / tip / temperature answers; a curated fact & phrase
+     set for the demo. Anything else returns null so Oracle answers honestly that
+     it would reach your Brain. On the glasses the Brain answers on the glass;
+     here we answer what a browser honestly can, and show it on the same card. -- */
+  var UNITS = {
+    mi:["km",1.60934], mile:["km",1.60934], miles:["km",1.60934],
+    km:["mi",0.621371], kilometre:["mi",0.621371], kilometres:["mi",0.621371],
+    kilometer:["mi",0.621371], kilometers:["mi",0.621371],
+    kg:["lb",2.20462], kilo:["lb",2.20462], kilos:["lb",2.20462],
+    lb:["kg",0.453592], lbs:["kg",0.453592], pound:["kg",0.453592], pounds:["kg",0.453592],
+    ft:["cm",30.48], foot:["cm",30.48], feet:["cm",30.48],
+    cm:["in",0.393701], m:["ft",3.28084], metre:["ft",3.28084], metres:["ft",3.28084],
+    meter:["ft",3.28084], meters:["ft",3.28084],
+    "in":["cm",2.54], inch:["cm",2.54], inches:["cm",2.54],
+    mph:["km/h",1.60934], kmh:["mph",0.621371]
+  };
+  var FACTS = {
+    "capital of france":"Paris", "capital of japan":"Tokyo", "capital of italy":"Rome",
+    "capital of spain":"Madrid", "capital of germany":"Berlin", "capital of england":"London",
+    "capital of canada":"Ottawa", "capital of australia":"Canberra", "capital of egypt":"Cairo",
+    "capital of brazil":"Brasília", "capital of the united states":"Washington, D.C.",
+    "speed of light":"299,792 km/s", "days in a year":"365 (366 leap)"
+  };
+  var PHRASES = {
+    "thank you":{ spanish:"gracias", french:"merci", german:"danke", italian:"grazie", japanese:"arigatō", portuguese:"obrigado" },
+    "hello":{ spanish:"hola", french:"bonjour", german:"hallo", italian:"ciao", japanese:"konnichiwa", portuguese:"olá" },
+    "goodbye":{ spanish:"adiós", french:"au revoir", german:"auf wiedersehen", italian:"arrivederci", japanese:"sayōnara", portuguese:"tchau" },
+    "please":{ spanish:"por favor", french:"s'il vous plaît", german:"bitte", italian:"per favore", japanese:"onegai", portuguese:"por favor" }
+  };
+  function fmtNum(n) { if (typeof n !== "number" || !isFinite(n)) return null; return String(Math.round(n * 1000) / 1000); }
+  function safeMath(expr) {
+    var e = " " + expr.toLowerCase() + " ";
+    e = e.replace(/\bplus\b/g, "+").replace(/\bminus\b/g, "-")
+         .replace(/\btimes\b/g, "*").replace(/×/g, "*").replace(/÷/g, "/")
+         .replace(/\bdivided by\b/g, "/").replace(/\bover\b/g, "/")
+         .replace(/\bsquared\b/g, "^2").replace(/\bcubed\b/g, "^3")
+         .replace(/\^/g, "**")
+         .replace(/sqrt\s*\(?\s*([\d.]+)\s*\)?/g, "Math.sqrt($1)");
+    var guard = e.replace(/Math\.sqrt/g, "");
+    if (/[^-+*/()., \d]/.test(guard)) return null;   // only safe tokens remain
+    if (!/\d/.test(guard)) return null;
+    try { var v = Function('"use strict";return (' + e + ")")(); return (typeof v === "number" && isFinite(v)) ? v : null; }
+    catch (_) { return null; }
+  }
+  function answerQuery(raw) {
+    var q = (raw || "").trim().toLowerCase().replace(/[?.!]+$/, "")
+      .replace(/^(hey |ok |okay )?(oracle|dreamlayer)[,\s]+/, "").trim();
+    if (!q) return null;
+    var m = q.match(/([\d.]+)\s*(?:%|percent)\s*of\s*\$?([\d.]+)/);
+    if (m) return { primary: fmtNum(parseFloat(m[1]) / 100 * parseFloat(m[2])), sub: m[1] + "% of " + m[2] };
+    m = q.match(/(?:([\d.]+)\s*(?:%|percent)\s*)?tip\s*(?:on|for)?\s*\$?([\d.]+)/);
+    if (m) { var pct = m[1] ? parseFloat(m[1]) : 18, base = parseFloat(m[2]), tip = pct / 100 * base;
+      return { primary: "$" + fmtNum(tip) + " tip", sub: "total $" + fmtNum(base + tip) + " · " + pct + "% on $" + fmtNum(base) }; }
+    m = q.match(/(-?[\d.]+)\s*(?:°|deg|degrees)?\s*(celsius|fahrenheit|c|f)\b.*?\b(?:in|to|into|as)?\s*(celsius|fahrenheit|c|f)\b/);
+    if (m) { var val = parseFloat(m[1]), from = m[2][0], to = m[3][0];
+      var out = from === to ? val : (from === "c" ? val * 9 / 5 + 32 : (val - 32) * 5 / 9);
+      return { primary: fmtNum(out) + "°" + to.toUpperCase(), sub: fmtNum(val) + "°" + from.toUpperCase() }; }
+    m = q.match(/(-?[\d.]+)\s*([a-z]+)\s*(?:in|to|into|as)\s+([a-z/]+)/);
+    if (m && UNITS[m[2]]) { var rule = UNITS[m[2]]; return { primary: fmtNum(parseFloat(m[1]) * rule[1]) + " " + rule[0], sub: fmtNum(parseFloat(m[1])) + " " + m[2] }; }
+    m = q.match(/(?:how do you say|say|translate)\s+"?([a-z\s]+?)"?\s+(?:in|to|into)\s+([a-z]+)/);
+    if (m) { var pk = PHRASES[m[1].trim()]; if (pk && pk[m[2].trim()]) return { primary: pk[m[2].trim()], sub: '"' + m[1].trim() + '" in ' + m[2].trim() }; }
+    for (var k in FACTS) { if (q.indexOf(k) >= 0) return { primary: FACTS[k], sub: k }; }
+    if (/\d\s*[-+*/^]|\bsqrt\b|\bsquared\b|\bcubed\b|\btimes\b|\bplus\b|\bminus\b|\bdivided\b/.test(q)) {
+      var expr = q.replace(/^(what'?s|what is|whats|calculate|compute|how much is|solve)\s+/, "");
+      var mv = safeMath(expr); if (mv != null) return { primary: fmtNum(mv), sub: expr.trim() };
+    }
+    return null;
+  }
+
   function Sim() {
     this.people = [];            // {id, name, relation, notes[], debts[], last}
     this.waypath = {};           // subject → place
@@ -357,10 +430,14 @@
       case "stash": return this._stash(a.subject, a.place);
       case "locate": return this._locate(a.subject);
       case "missed": return { say: "You're all caught up — nothing while you were away." };
-      case "brief": this._toast("MORNING BRIEF", "A clear morning — nothing pressing.", C.teal); return { say: "Here's your morning: a clear one, nothing pressing." };
+      case "brief": return { say: this._brief() };
+      case "fact_check": return { say: this._checkClaim(a.claim || text) };
       case "reply": this._toast("REPLY", "to " + a.to + ": " + (a.text || "…"), C.teal); return { say: "Reply to " + a.to + ": “" + (a.text || "") + "” — open Messages to send." };
       case "recall": return { say: this._recallAnswer(a.query) };
-      default: return { say: this._ask(a.query) };
+      default: {
+        var ans = this._answer(text);           // compute on the glass if we honestly can
+        return { say: ans != null ? ans : this._ask(a.query) };
+      }
     }
   };
 
@@ -431,9 +508,57 @@
     if (p) return "Nothing open with " + p.name + " right now.";
     return "I don't have anything on that yet — introduce them and I'll keep track.";
   };
+  Sim.prototype._answer = function (q) {
+    var a = answerQuery(q);
+    if (!a || a.primary == null) return null;
+    this.figment = null;
+    this.card = { type: "answer", eyebrow: "ANSWER", primary: String(a.primary), sub: a.sub || "", shownAt: now() };
+    return a.sub ? (a.primary + "  ·  " + a.sub) : String(a.primary);
+  };
+  // Morning Brief (cards.morning_brief) — the day, flashed on the glass.
+  Sim.prototype._brief = function () {
+    this.figment = null;
+    this.card = { type: "brief", eyebrow: "YOUR DAY",
+      primary: "Three meetings, one deadline.",
+      detail: "Clear after 3pm.", footer: "next — 10:00 standup", shownAt: now() };
+    return "Your day: three meetings, one deadline, clear after three.";
+  };
+  // Truth Lens / Veritas (cards.fact_check) — a quiet verdict on a claim.
+  var FACT_STYLE = { supported: ["VERIFIED", C.green], disputed: ["CHECK THIS", C.amber],
+    self_contradiction: ["SAID OTHERWISE", C.coral], unverified: ["UNVERIFIED", C.ghost] };
+  Sim.prototype._factCheck = function (verdict, claim, basis, speaker) {
+    var s = FACT_STYLE[verdict] || FACT_STYLE.unverified;
+    this.figment = null;
+    this.card = { type: "fact", verdict: verdict, eyebrow: s[0], color: s[1],
+      primary: claim || "—", detail: basis || "", footer: speaker || "",
+      flash: (verdict === "disputed" || verdict === "self_contradiction"), shownAt: now() };
+    return s[0] + " — " + (claim || "");
+  };
+  var CLAIMS = {
+    "the earth is flat": ["disputed", "The Earth is an oblate spheroid."],
+    "the great wall is visible from space": ["disputed", "Not with the naked eye — a persistent myth."],
+    "humans only use 10% of their brain": ["disputed", "A myth — you use virtually all of it."],
+    "we only use 10% of our brain": ["disputed", "A myth — you use virtually all of it."],
+    "water boils at 100": ["supported", "At sea level, yes — 100 °C / 212 °F."],
+    "the sun is a star": ["supported", "Yes — a G-type main-sequence star."],
+    "lightning never strikes the same place twice": ["disputed", "It does — tall structures get hit often."],
+    "goldfish have a three second memory": ["disputed", "They remember for months, actually."]
+  };
+  Sim.prototype._checkClaim = function (q) {
+    var claim = (q || "").trim().replace(/^(?:is it true(?: that)?|is that (?:true|real|correct)|fact.?check|verify|check (?:that|this))\s*/i, "").trim() || q;
+    var t = (claim || "").toLowerCase();
+    for (var k in CLAIMS) { if (t.indexOf(k) >= 0) { var c = CLAIMS[k]; return this._factCheck(c[0], claim, c[1], "them"); } }
+    return this._factCheck("unverified", claim, "Your Brain would check this against the world.", "you");
+  };
   Sim.prototype._ask = function (q) {
-    if (this.profile.name) return "You'd know better than me — but I'm listening, " + this.profile.name + ".";
-    return "I'd reach your brain for that — files, mail, the web. Here in the demo I just listen.";
+    var who = this.profile.name ? (", " + this.profile.name) : "";
+    var tips = [
+      "On the glasses your Brain answers that — files, mail, the web. In this browser demo I answer what I can compute: try “15% of 240”, “5 miles in km”, or “what time is it”.",
+      "No Brain wired in here" + who + " — but I can do timers, conversions, Social Lens recall, Waypath, and the Privacy Veil. Introduce someone, or set a timer.",
+      "That one needs your Brain. Here I can still count, convert, remember faces, and hold a countdown — what next" + who + "?"
+    ];
+    this._askN = ((this._askN || 0) + 1);
+    return tips[this._askN % tips.length];
   };
 
   Sim.prototype._personForFace = function (look) {
@@ -518,9 +643,15 @@
     var fresh = sim.card && sim.card.shownAt != null && (now() - sim.card.shownAt) < 5;
     if (sim.incognito) this._veil(t);
     else if (fresh && sim.card.type === "recall") this._recall(sim.card);
+    else if (fresh && sim.card.type === "answer") this._answer(sim.card, t);
+    else if (fresh && sim.card.type === "fact") this._fact(sim.card, t);
+    else if (fresh && sim.card.type === "brief") this._brief(sim.card);
     else if (fresh && sim.card.type === "toast") this._toast(sim.card);
     else if (sim.figment && !sim.figment.ended) this._figment(sim.figment.frame(), t);
     else if (sim.card && sim.card.type === "recall") this._recall(sim.card);
+    else if (sim.card && sim.card.type === "answer") this._answer(sim.card, t);
+    else if (sim.card && sim.card.type === "fact") this._fact(sim.card, t);
+    else if (sim.card && sim.card.type === "brief") this._brief(sim.card);
     else if (sim.card && sim.card.type === "toast") this._toast(sim.card);
     else this._ready(t);
     c.restore();
@@ -552,6 +683,60 @@
     if (card.relation) { this.text(card.relation, CX, y, "md", C.teal); y += 28; }
     if (card.debts && card.debts.length) { this.text(card.debts[0], CX, y, "sm", C.coral); y += 24; }
     if (card.note) { this.text(this._clip(card.note, 26), CX, y, "sm", C.text2); }
+  };
+  Glass.prototype._answer = function (card, t) {
+    var c = this.ctx;
+    // a soft bloomed cue ring — the "answer on the glass" arriving
+    var br = 0.5 + 0.5 * Math.sin((t || 0) * 2.2);
+    c.strokeStyle = rgba(C.teal, 0.14 + 0.12 * br); c.lineWidth = 1.5;
+    c.beginPath(); c.arc(CX, 66, 4, 0, Math.PI * 2); c.stroke();
+    this.text("ANSWER", CX, 66, "sm", C.teal);
+    // hero answer — wrap to at most two lines, drop a size if long
+    var p = String(card.primary), lines = this._wrap(p, p.length > 14 ? 16 : 12).slice(0, 2);
+    var tok = (p.length > 22 || lines.length > 1) ? "lg" : "xl";
+    var y = lines.length > 1 ? 104 : 120;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, tok, C.text); y += tok === "xl" ? 34 : 28; }
+    // gradient separator + the restated ask
+    if (card.sub) {
+      c.strokeStyle = rgba(C.border, 0.9); c.lineWidth = 1;
+      c.beginPath(); c.moveTo(CX - 46, y + 2); c.lineTo(CX + 46, y + 2); c.stroke();
+      var subs = this._wrap(card.sub, 30).slice(0, 2), sy = y + 22;
+      for (var j = 0; j < subs.length; j++) { this.text(subs[j], CX, sy, "sm", C.text2); sy += 20; }
+    }
+  };
+  Glass.prototype._wrap = function (str, max) {
+    var words = String(str).split(" "), lines = [], cur = "";
+    for (var i = 0; i < words.length; i++) {
+      var test = (cur + " " + words[i]).trim();
+      if (test.length > max && cur) { lines.push(cur); cur = words[i]; } else cur = test;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  // Truth Lens verdict — colored ring dot, eyebrow, separator, claim, basis, footer.
+  Glass.prototype._fact = function (card, t) {
+    var c = this.ctx, col = card.color || C.ghost;
+    var fl = card.flash ? (0.55 + 0.45 * (0.5 + 0.5 * Math.sin((t || 0) * 6))) : 1;
+    c.fillStyle = rgba(col, 0.9 * fl); c.beginPath(); c.arc(CX, 54, 6, 0, Math.PI * 2); c.fill();
+    this.text(this._clip(card.eyebrow, 26), CX, 84, "sm", col);
+    c.strokeStyle = rgba(C.border, 0.9); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(CX - 72, 100); c.lineTo(CX + 72, 100); c.stroke();
+    var lines = this._wrap(card.primary, 20).slice(0, 2), y = 126;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, "md", C.text); y += 26; }
+    if (card.detail) { var d = this._wrap(card.detail, 22).slice(0, 2), dy = y + 8;
+      for (var j = 0; j < d.length; j++) { this.text(d[j], CX, dy, "sm", C.text2); dy += 20; } y = dy; }
+    if (card.footer) this.text(this._clip(card.footer, 26), CX, Math.max(y + 6, 198), "xs", C.ghost);
+  };
+  // Morning Brief — YOUR DAY, a short synthesis, the first points beneath.
+  Glass.prototype._brief = function (card) {
+    var c = this.ctx;
+    this.text(card.eyebrow || "YOUR DAY", CX, 62, "sm", C.teal);
+    c.strokeStyle = rgba(C.border, 0.9); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(CX - 64, 78); c.lineTo(CX + 64, 78); c.stroke();
+    var lines = this._wrap(card.primary, 16).slice(0, 3), y = 106;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, "md", C.text); y += 26; }
+    if (card.detail) this.text(this._clip(card.detail, 24), CX, y + 10, "sm", C.text2);
+    if (card.footer) this.text(this._clip(card.footer, 24), CX, y + 32, "sm", C.ghost);
   };
   Glass.prototype._toast = function (card) {
     this.text(card.eyebrow, CX, 96, "sm", card.color || C.teal);
