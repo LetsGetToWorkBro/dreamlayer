@@ -351,13 +351,14 @@ section{position:relative}
 .vid-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
 /* the feature orbs: a dim, softly-blurred world behind the transparent HUD canvas
    (the glyphs are drawn on a cleared canvas, so the world reads straight through) */
-.vid-orb .lens-world,.walk-orb .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
-.vid-orb .lens-world::after,.walk-orb .lens-world::after{
+.vid-orb .lens-world,.walk-orb .lens-world,.scope .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
+.vid-orb .lens-world::after,.walk-orb .lens-world::after,.scope .lens-world::after{
   background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.5),rgba(4,8,10,.86) 86%)}
 .lens-world[data-w="horizon"]{background-image:url(assets/sim/lens_brief.webp)}
 .lens-world[data-w="recall"]{background-image:url(assets/sim/lens_answer.webp)}
 .lens-world[data-w="saved"]{background-image:url(assets/sim/lens_alt.webp)}
 .lens-world[data-w="walk"]{background-image:url(assets/sim/lens_park.webp)}
+.lens-world[data-w="scope"]{background-image:url(assets/sim/lens_alt.webp)}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -806,6 +807,7 @@ body.menu-open{overflow:hidden}
       <div class="scope-col">
         <div class="scope-sticky">
           <div class="scope" id="scope" role="img" aria-label="Simulated Halo heads-up display">
+            <div class="lens-world" data-w="scope" aria-hidden="true"></div>
             <span class="breath-ring"></span>
             <span class="tick"></span>
 
