@@ -17,6 +17,16 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   [hidden]{display:none!important}
+  /* the world fills the page as a dim, hazy backdrop; the lens is the clear window
+     onto it — depth-of-field: in-focus at the lens, soft + dark everywhere else */
+  .world-haze{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#04080a;pointer-events:none}
+  .world-haze .hz{position:absolute;inset:-10%;background:center/cover no-repeat;
+    filter:blur(52px) brightness(.42) saturate(.9);transform:scale(1.06);
+    opacity:0;transition:opacity .7s ease}
+  .world-haze .hz.on{opacity:1}
+  .world-haze::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(130% 100% at 50% 30%,rgba(4,8,10,.34),rgba(4,8,10,.74) 82%)}
+  @media(prefers-reduced-motion:reduce){.world-haze .hz{transition:none}}
   html{-webkit-text-size-adjust:100%;overflow-x:clip}
   body{background:var(--bg);color:var(--text);min-height:100svh;
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -184,6 +194,7 @@
 </style>
 </head>
 <body>
+<div class="world-haze" aria-hidden="true"><div class="hz" id="hazeLayer"></div></div>
 <header>
   <div class="wrap bar">
     <a class="wordmark" href="./index.html"><span class="ring"></span>DREAMLAYER</a>
@@ -335,10 +346,13 @@
     var old = _lensFront; _lensFront = v; _lensBack = old;
     setTimeout(function(){ try { old.pause(); } catch(_){} }, 700);   // free the hidden layer
   }
+  var _haze = $("hazeLayer");
   function showWorld(base){
     if (!WORLDS_READY) base = IDLE_WORLD;                // no clips yet → hold on idle poster
     if (base === _curWorld) return;
     _curWorld = base;
+    if (_haze){ _haze.style.backgroundImage = "url('" + wPos(base) + "')"; _haze.classList.add("on"); }
+    // ↑ the page-wide hazy world tracks the lens (poster still, heavily blurred)
     var tok = ++_worldTok, v = _lensBack, done = false;
     var reveal = function(){ if (done || tok !== _worldTok) return; done = true; _reveal(v); };
     v.poster = wPos(base);
