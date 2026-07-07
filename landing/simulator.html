@@ -16,6 +16,7 @@
     --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none!important}
   html{-webkit-text-size-adjust:100%;overflow-x:clip}
   body{background:var(--bg);color:var(--text);min-height:100svh;
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -41,7 +42,8 @@
   .cockpit{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:26px;align-items:start}
   @media(max-width:860px){.cockpit{grid-template-columns:1fr;gap:20px}}
 
-  .stage{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:16px;min-width:0}
+  .rail{min-width:0}
   .glass-wrap{position:relative;width:min(78vw,400px);aspect-ratio:1}
   canvas.glass{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
     border:1px solid #14211f;
@@ -84,6 +86,38 @@
   .soundtgl{font:inherit;font-size:12px;color:var(--text-3);background:transparent;border:0;cursor:pointer;
     padding:2px 6px;-webkit-tap-highlight-color:transparent}
   .soundtgl:hover{color:var(--teal)}
+
+  /* first-run: a clear welcome + one obvious action */
+  .welcome{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:520px;width:100%}
+  .tourbtn{font:inherit;font-weight:700;font-size:15px;color:#00201c;background:var(--teal);border:0;
+    border-radius:999px;padding:13px 24px;cursor:pointer;transition:transform .12s;-webkit-tap-highlight-color:transparent}
+  .tourbtn:hover{filter:brightness(1.06)} .tourbtn:active{transform:scale(.96)}
+  .welcome-sub{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3)}
+  .tour-flag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--teal);
+    background:rgba(47,212,196,.08);border:1px solid rgba(47,212,196,.25);border-radius:999px;padding:7px 14px}
+
+  /* scenes as descriptive cards — you know what each shows before you tap */
+  .scenes{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;max-width:600px;width:100%}
+  .scenebtn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;
+    font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);
+    border-radius:13px;padding:13px 15px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent}
+  .scenebtn:hover{border-color:var(--teal);transform:translateY(-1px)}
+  .scenebtn .ttl{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+  .scenebtn .ic{font-size:15px;line-height:1}
+  .scenebtn .desc{font-size:12px;color:var(--text-3);line-height:1.36}
+  .scenebtn.playing{background:var(--teal);border-color:var(--teal)}
+  .scenebtn.playing .ttl,.scenebtn.playing .desc{color:#00201c}
+
+  /* everything advanced tucked away until asked for */
+  details.tryself{max-width:520px;width:100%;border-top:1px solid var(--border);padding-top:8px}
+  details.tryself>summary{list-style:none;cursor:pointer;text-align:center;font-family:var(--mono);
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-2);padding:8px}
+  details.tryself>summary::-webkit-details-marker{display:none}
+  details.tryself>summary::after{content:" ▾";color:var(--teal)}
+  details.tryself[open]>summary::after{content:" ▴"}
+  details.tryself>summary:hover{color:var(--teal)}
+  .tryself-body{display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:6px}
+  .tryself-body .try{align-self:stretch;width:100%;max-width:520px;margin:0 auto}
   .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
   .statusline b{color:var(--teal);font-weight:600}
   .statusline .v{color:var(--coral)}
@@ -139,10 +173,10 @@
 
 <main class="wrap">
   <div class="lede">
-    <span class="eyebrow">Runs in your browser</span>
-    <h1>Meet the Halo, without the Halo.</h1>
-    <p>The whole DreamLayer loop — the voice grammar, Social Lens recall, native timers, the Privacy
-      Veil — ported to run right here. Talk to Oracle below and watch the glass answer.</p>
+    <span class="eyebrow">Runs in your browser — no app, no glasses</span>
+    <h1>See DreamLayer work.</h1>
+    <p>The circle below is the glasses' live display, running the real DreamLayer stack.
+      Watch what it does — then try it yourself.</p>
   </div>
 
   <div class="cockpit">
@@ -151,67 +185,80 @@
       <div class="statusline" id="status">ready</div>
       <div class="scene-cap" id="sceneCap" aria-live="polite"></div>
 
-      <div class="grouplbl">Watch it work</div>
+      <div class="welcome" id="welcome">
+        <button type="button" class="tourbtn" id="tourbtn">▶ Watch the tour</button>
+        <span class="welcome-sub">or tap a feature below</span>
+      </div>
+      <div class="tour-flag" id="tourflag" hidden>▶ Touring — tap anything to take control</div>
+
+      <div class="grouplbl">See it in action</div>
       <div class="scenes" id="scenes">
-        <button type="button" class="scenebtn" data-scene="face"><span class="ic">👤</span>Recognise a face</button>
-        <button type="button" class="scenebtn" data-scene="park"><span class="ic">🅿️</span>Park &amp; recall</button>
-        <button type="button" class="scenebtn" data-scene="answer"><span class="ic">✨</span>Answer on the glass</button>
-        <button type="button" class="scenebtn" data-scene="fact"><span class="ic">✓</span>Fact-check live</button>
-        <button type="button" class="scenebtn" data-scene="brief"><span class="ic">☀️</span>Morning brief</button>
-        <button type="button" class="scenebtn" data-scene="veil"><span class="ic">◐</span>Privacy Veil</button>
-        <button type="button" class="scenebtn" data-scene="timer"><span class="ic">⏱</span>Focus timer</button>
+        <button type="button" class="scenebtn" data-scene="face">
+          <span class="ttl"><span class="ic">👤</span>Remember a face</span>
+          <span class="desc">Recognises someone you've met — before you can.</span></button>
+        <button type="button" class="scenebtn" data-scene="park">
+          <span class="ttl"><span class="ic">🅿️</span>Never lose things</span>
+          <span class="desc">Park it, forget it, ask — it points you back.</span></button>
+        <button type="button" class="scenebtn" data-scene="answer">
+          <span class="ttl"><span class="ic">✨</span>Answer on the glass</span>
+          <span class="desc">Ask anything; the answer lands on the lens.</span></button>
+        <button type="button" class="scenebtn" data-scene="fact">
+          <span class="ttl"><span class="ic">✓</span>Live fact-check</span>
+          <span class="desc">A claim gets checked the moment it's said.</span></button>
+        <button type="button" class="scenebtn" data-scene="brief">
+          <span class="ttl"><span class="ic">☀️</span>Morning brief</span>
+          <span class="desc">Your day, the moment you put them on.</span></button>
+        <button type="button" class="scenebtn" data-scene="veil">
+          <span class="ttl"><span class="ic">◐</span>Privacy Veil</span>
+          <span class="desc">One gesture and it sees and keeps nothing.</span></button>
       </div>
       <button type="button" class="soundtgl" id="soundbtn" aria-pressed="true">🔊 sound</button>
 
-      <div class="grouplbl">Or ask anything</div>
-      <form class="say" id="sayform" autocomplete="off">
-        <input id="sayinput" placeholder="Ask Oracle… “what’s 15% of 240?”"
-               enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
-        <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden>🎙</button>
-        <button type="submit" aria-label="Send">↳</button>
-      </form>
-
-      <div class="grouplbl">Looking at</div>
-      <div class="row" id="looks">
-        <button type="button" class="chip on" data-look="">Nobody</button>
-        <button type="button" class="chip" data-look="face-a">Face A</button>
-        <button type="button" class="chip" data-look="face-b">Face B</button>
-        <button type="button" class="chip" data-look="face-c">Face C</button>
-        <button type="button" class="chip" id="glancebtn">👁 Glance</button>
-      </div>
-
-      <div class="grouplbl">Temple &amp; veil</div>
-      <div class="row">
-        <button type="button" class="chip" data-g="single">Tap</button>
-        <button type="button" class="chip" data-g="double">Double-tap</button>
-        <button type="button" class="chip" data-g="long">Hold</button>
-        <button type="button" class="chip danger" id="veilbtn">◐ Privacy Veil</button>
-      </div>
+      <details class="tryself" id="tryself">
+        <summary>Try it yourself</summary>
+        <div class="tryself-body">
+          <div class="grouplbl">Ask it anything — type or speak</div>
+          <form class="say" id="sayform" autocomplete="off">
+            <input id="sayinput" placeholder="e.g. “what’s 15% of 240?”"
+                   enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden>🎙</button>
+            <button type="submit" aria-label="Send">↳</button>
+          </form>
+          <div class="grouplbl">…or tap an example</div>
+          <div class="try" id="try">
+            <button>what's 15% of 240?</button>
+            <button>how do you say thank you in Japanese?</button>
+            <button>is it true the Great Wall is visible from space?</button>
+            <button>brief me on my day</button>
+            <button>set a timer for 30 seconds</button>
+            <button data-look="face-a">this is my colleague Sarah, she runs marketing</button>
+            <button data-look="face-a" data-glance="1">— now glance at Sarah —</button>
+            <button>I left my bike at the north rack</button>
+            <button>where's my bike?</button>
+          </div>
+          <div class="grouplbl">Who's in front of you</div>
+          <div class="row" id="looks">
+            <button type="button" class="chip on" data-look="">Nobody</button>
+            <button type="button" class="chip" data-look="face-a">Person A</button>
+            <button type="button" class="chip" data-look="face-b">Person B</button>
+            <button type="button" class="chip" data-look="face-c">Person C</button>
+            <button type="button" class="chip" id="glancebtn">👁 Look at them</button>
+          </div>
+          <div class="grouplbl">Gestures &amp; privacy</div>
+          <div class="row">
+            <button type="button" class="chip" data-g="single">Tap</button>
+            <button type="button" class="chip" data-g="double">Double-tap</button>
+            <button type="button" class="chip" data-g="long">Hold</button>
+            <button type="button" class="chip danger" id="veilbtn">◐ Privacy Veil</button>
+          </div>
+        </div>
+      </details>
     </section>
 
     <aside class="rail">
       <div class="panel">
         <h3>Conversation</h3>
         <div class="log" id="log"></div>
-      </div>
-      <div class="panel">
-        <h3>Try saying</h3>
-        <div class="try" id="try">
-          <button>what's 15% of 240?</button>
-          <button>5 miles in km</button>
-          <button>how do you say thank you in Japanese?</button>
-          <button>is it true the Great Wall is visible from space?</button>
-          <button>brief me on my day</button>
-          <button>set a timer for 30 seconds</button>
-          <button>interval timer 20 seconds on 10 seconds off 3 rounds</button>
-          <button>what time is it?</button>
-          <button data-look="face-a">this is my colleague Sarah, she runs marketing</button>
-          <button>Sarah owes me $20</button>
-          <button data-look="face-a" data-glance="1">— now glance at Face A —</button>
-          <button>I left my bike at the north rack</button>
-          <button>where's my bike?</button>
-          <button>call me Sam</button>
-        </div>
       </div>
       <div class="panel">
         <h3>People it knows</h3>
@@ -420,11 +467,6 @@
       await sleep(2900); if (sceneStop) return;
       cap("Nothing seen, nothing kept. You lift it when you choose.");
       veiled = false; sim.veil(false); $("veilbtn").classList.remove("on"); paint(); await sleep(2800);
-    },
-    timer: async function(){
-      cap("A timer that lives on the glass, not your phone."); sim.handleVoice("set a timer for 20 seconds"); paint();
-      await sleep(3000); if (sceneStop) return;
-      cap("It counts down in the corner of your eye — hands free."); await sleep(3600);
     }
   };
   async function play(key, btn){
@@ -465,25 +507,40 @@
     if (!muted) chime("answer");
   });
 
-  // ---- auto-play tour on first load; any interaction hands control over ----
-  var tourAbort = false;
+  // ---- guided tour: one button walks every feature; any touch hands control back ----
+  var tourAbort = false, touring = false;
+  function endTour(){
+    touring = false; tourAbort = true;
+    $("tourflag").hidden = true; $("welcome").hidden = false;
+    $("tourbtn").textContent = "▶ Watch the tour";
+  }
   async function tour(){
-    var order = ["face", "park", "answer", "fact", "brief", "veil", "timer"];
+    if (touring) return;
+    unlockAudio(); touring = true; tourAbort = false;
+    $("welcome").hidden = true; $("tourflag").hidden = false;
+    var order = ["face", "park", "answer", "fact", "brief", "veil"];
     for (var i = 0; i < order.length; i++){
-      if (tourAbort) return;
+      if (tourAbort) break;
       await play(order[i], document.querySelector('.scenebtn[data-scene="' + order[i] + '"]'));
-      if (tourAbort) return;
+      if (tourAbort) break;
       await sleep(650);
     }
-    if (!tourAbort) cap("");
+    if (!tourAbort) cap("That's the tour — now try it yourself below.");
+    endTour();
   }
-  function stopTour(){ tourAbort = true; sceneStop = true; }
-  if (!matchMedia("(prefers-reduced-motion: reduce)").matches){
-    var kick = setTimeout(function(){ if (!tourAbort){ cap("Watch — or tap anything to drive it yourself."); tour(); } }, 1700);
-    ["pointerdown", "keydown"].forEach(function(ev){
-      addEventListener(ev, function once(){ clearTimeout(kick); stopTour(); removeEventListener(ev, once); });
-    });
-  }
+  $("tourbtn").addEventListener("click", tour);
+  // during the tour, any interaction hands control to the visitor
+  ["pointerdown", "keydown"].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      if (!touring) return;
+      var t = e.target;
+      if (ev === "pointerdown" && t && t.closest && t.closest("#tourbtn")) return; // re-clicking the button
+      tourAbort = true;
+      // tapping a feature card starts that scene itself; otherwise just stop
+      if (!(t && t.closest && t.closest(".scenebtn"))) { sceneStop = true; cap(""); }
+      endTour();
+    }, true);
+  });
 })();
 </script>
 </body>
