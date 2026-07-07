@@ -347,10 +347,10 @@ section{position:relative}
 .lens-world[data-w="saved"]{background-image:url(assets/sim/lens_alt.webp)}
 /* scope (over #feel) + walk orb (over #walk) frost the REAL section video behind them */
 @supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
-  #feel .scope,#walk .walk-orb{background:transparent}   /* section-id so it beats the base bg */
-  .scope .lens-world,.walk-orb .lens-world{background:none;filter:none;
+  #feel .scope,#walk .walk-orb,#see .vid-orb{background:transparent}   /* section-id so it beats the base bg */
+  .scope .lens-world,.walk-orb .lens-world,#see .vid-orb .lens-world{background:none;filter:none;
     -webkit-backdrop-filter:blur(9px) brightness(1.85) saturate(1.22);backdrop-filter:blur(9px) brightness(1.85) saturate(1.22)}
-  .scope .lens-world::after,.walk-orb .lens-world::after{
+  .scope .lens-world::after,.walk-orb .lens-world::after,#see .vid-orb .lens-world::after{
     background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.3),rgba(4,8,10,.8) 86%)}
 }
 .vid-cell .cap{margin-top:22px}
@@ -701,7 +701,7 @@ body.menu-open{overflow:hidden}
   box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
 .lens-world::after{content:"";position:absolute;inset:0;border-radius:50%;
   background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
-.sim-live .g .lens-world{background-image:url(assets/sim/lens_world.webp)}
+.sim-live .g .lens-world{background-image:url(assets/cine/still-dusk.webp);filter:brightness(.62) saturate(1.05)}
 @supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
   /* hero + #can glasses frost the real section video behind them */
   .hero .hero-glass>canvas{background:transparent;
@@ -898,7 +898,8 @@ body.menu-open{overflow:hidden}
 </section>
 
 <!-- ======================= videos ======================= -->
-<section class="section-pad" id="see">
+<section class="section-pad has-cine" id="see">
+  <div class="section-bg" data-cine aria-hidden="true"><img src="assets/cine/still-lightleak.webp" alt=""></div>
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow arrive">The HUD, alive</span>
@@ -1355,7 +1356,8 @@ body.menu-open{overflow:hidden}
   .cmd pre .c{color:var(--text-2)}
   .cmd pre .t{color:var(--teal)}
 </style>
-<section class="section-pad" id="simulator">
+<section class="section-pad has-cine" id="simulator">
+  <div class="section-bg" data-cine aria-hidden="true"><img src="assets/cine/still-dusk.webp" alt=""></div>
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow arrive">Try it without glasses</span>
