@@ -12,9 +12,21 @@ name: Build macOS app (.dmg)
 #   APPLE_TEAM_ID           10-char Apple Developer Team ID
 #   APPLE_APP_PASSWORD      app-specific password for that Apple ID (appleid.apple.com)
 #   KEYCHAIN_PASSWORD       any string — password for the ephemeral build keychain
+#   RELEASES_TOKEN          fine-grained PAT with Contents:write on the PUBLIC
+#                           LetsGetToWorkBro/dreamlayer-releases repo — used to
+#                           publish the .dmg there (product source stays private)
+#
+# Publishing: a `git push` of a `v*` tag builds AND publishes a Release to
+# dreamlayer-releases (tag = the pushed tag). A manual run publishes only when
+# you tick the `publish` box, tagged from the package __version__.
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Also publish the .dmg as a Release on dreamlayer-releases"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -120,8 +132,26 @@ jobs:
           name: DreamLayer-dmg
           path: DreamLayer.dmg
 
-      - name: Attach .dmg to Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Resolve release tag
+        id: rel
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$(python -c 'from dreamlayer import __version__ as v; print(v)')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish .dmg to the public dreamlayer-releases repo
+        if: github.ref_type == 'tag' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
+          repository: LetsGetToWorkBro/dreamlayer-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: DreamLayer ${{ steps.rel.outputs.tag }} — macOS
+          fail_on_unmatched_files: true
           files: DreamLayer.dmg
+          body: |
+            Signed & notarized macOS Brain app. Double-click the .dmg, drag
+            DreamLayer to Applications, and it runs from the menu bar — no
+            Gatekeeper warning.
