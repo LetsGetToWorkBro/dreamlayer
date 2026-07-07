@@ -148,15 +148,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* beat .hero-glass width/height (later in the file) so the glass fills its
    column (184px desktop / 148px mobile) instead of a viewport-height clamp */
 .hud-float .can-glass{position:relative;width:100%;height:auto;aspect-ratio:1;margin:0}
-/* a dim, visible world behind the disc (AI environment, illustrative) so the
-   frosted lens has something to reveal instead of the near-black section scrim */
-.hud-float .can-scene{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;
-  background:#0a1216 url(assets/sim/lens_face.webp) center/cover no-repeat;
-  filter:brightness(1.5) saturate(1.15);box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
-.hud-float .can-scene::after{content:"";position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
 .hud-float .can-glass canvas{position:relative;z-index:1;background:transparent;border-radius:50%;
-  -webkit-backdrop-filter:blur(7px) saturate(1.2);backdrop-filter:blur(7px) saturate(1.2);
+  -webkit-backdrop-filter:blur(7px) brightness(1.75) saturate(1.2);backdrop-filter:blur(7px) brightness(1.75) saturate(1.2);
   box-shadow:0 0 40px -8px rgba(44,199,154,.34),inset 0 0 22px rgba(0,0,0,.35)}
 .lens-fallback{display:none;width:100%;height:auto;border-radius:50%;
   -webkit-backdrop-filter:blur(6px) saturate(1.2);backdrop-filter:blur(6px) saturate(1.2);
@@ -348,7 +341,24 @@ section{position:relative}
   aspect-ratio:1;background:#000;
   box-shadow:0 0 90px -30px rgba(44,199,154,.35), inset 0 0 60px rgba(0,0,0,.5)}
 .vid-orb video{width:100%;height:100%;object-fit:cover}
-.vid-orb canvas{width:100%;height:100%;display:block}
+.vid-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
+/* the feature orbs: a dim, softly-blurred world behind the transparent HUD canvas
+   (the glyphs are drawn on a cleared canvas, so the world reads straight through) */
+/* the #see feature orbs have no section plate → a dim fallback world behind the HUD */
+.vid-orb .lens-world{filter:blur(8px) brightness(.42) saturate(.95)}
+.vid-orb .lens-world::after{
+  background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.5),rgba(4,8,10,.86) 86%)}
+.lens-world[data-w="horizon"]{background-image:url(assets/sim/lens_brief.webp)}
+.lens-world[data-w="recall"]{background-image:url(assets/sim/lens_answer.webp)}
+.lens-world[data-w="saved"]{background-image:url(assets/sim/lens_alt.webp)}
+/* scope (over #feel) + walk orb (over #walk) frost the REAL section video behind them */
+@supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+  #feel .scope,#walk .walk-orb{background:transparent}   /* section-id so it beats the base bg */
+  .scope .lens-world,.walk-orb .lens-world{background:none;filter:none;
+    -webkit-backdrop-filter:blur(9px) brightness(1.85) saturate(1.22);backdrop-filter:blur(9px) brightness(1.85) saturate(1.22)}
+  .scope .lens-world::after,.walk-orb .lens-world::after{
+    background:radial-gradient(circle at 50% 44%,rgba(4,8,10,.3),rgba(4,8,10,.8) 86%)}
+}
 .vid-cell .cap{margin-top:22px}
 .vid-cell .cap .eyebrow{display:block;margin-bottom:8px}
 .vid-cell .cap .t{font-weight:600;font-size:17px}
@@ -451,7 +461,7 @@ section{position:relative}
 .walk-orb{position:relative;border-radius:50%;overflow:hidden;border:1px solid var(--h-border);
   aspect-ratio:1;background:#000;justify-self:center;width:min(100%,440px);
   box-shadow:0 0 100px -30px rgba(44,199,154,.4),inset 0 0 60px rgba(0,0,0,.5)}
-.walk-orb canvas{width:100%;height:100%;display:block}
+.walk-orb canvas{position:relative;z-index:1;width:100%;height:100%;display:block}
 .walk-steps{list-style:none;display:flex;flex-direction:column;gap:6px}
 .walk-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:var(--r-lg);
   border:1px solid transparent;transition:border-color var(--base) var(--ease),
@@ -683,11 +693,28 @@ body.menu-open{overflow:hidden}
 /* hero live glass — the decorative ring, alive */
 .hero-glass{position:relative;width:clamp(150px,20vh,196px);height:clamp(150px,20vh,196px);
   margin:0 auto 40px;border-radius:50%}
-.hero-glass canvas{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+.hero-glass canvas{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
   border:1px solid rgba(44,199,154,.28);
   box-shadow:0 0 50px -8px rgba(44,199,154,.35),inset 0 0 30px rgba(0,0,0,.7)}
-.hero-glass::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+.hero-glass::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 33% 27%,rgba(255,255,255,.07),transparent 46%)}
+
+/* see-through lens: the frosted disc reveals the REAL section environment behind
+   it (brightened past the section scrim), so each lens shows exactly what it sits
+   in front of. A dim fallback world is used only where the section has no plate. */
+.lens-world{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
+  background:#0a1216 center/cover no-repeat;filter:brightness(1.4) saturate(1.12);
+  box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
+.lens-world::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
+.sim-live .g .lens-world{background-image:url(assets/sim/lens_world.webp)}
+@supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+  /* hero + #can glasses frost the real section video behind them */
+  .hero .hero-glass>canvas{background:transparent;
+    -webkit-backdrop-filter:blur(7px) brightness(2.1) saturate(1.25);backdrop-filter:blur(7px) brightness(2.1) saturate(1.25)}
+  #simulator .sim-live .g canvas{background:transparent;
+    -webkit-backdrop-filter:blur(6px) saturate(1.15);backdrop-filter:blur(6px) saturate(1.15)}
+}
 
 /* the sim section's live embed (replaces the static screenshot) */
 .sim-live{margin:34px auto 0;max-width:900px;display:grid;grid-template-columns:auto 1fr;
@@ -695,9 +722,9 @@ body.menu-open{overflow:hidden}
   border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);
   padding:clamp(22px,4vw,40px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
 .sim-live .g{position:relative;width:min(46vw,240px);aspect-ratio:1}
-.sim-live .g canvas{width:100%;height:100%;display:block;border-radius:50%;background:#000;
+.sim-live .g canvas{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
   border:1px solid #14211f;box-shadow:0 0 50px rgba(44,199,154,.14),inset 0 0 34px rgba(0,0,0,.7)}
-.sim-live .g::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+.sim-live .g::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.06),transparent 45%)}
 .sim-live .cap .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal)}
 .sim-live .cap p{color:var(--text-2);font-size:14px;line-height:1.6;margin:8px 0 16px}
@@ -783,6 +810,7 @@ body.menu-open{overflow:hidden}
       <div class="scope-col">
         <div class="scope-sticky">
           <div class="scope" id="scope" role="img" aria-label="Simulated Halo heads-up display">
+            <div class="lens-world" data-w="scope" aria-hidden="true"></div>
             <span class="breath-ring"></span>
             <span class="tick"></span>
 
@@ -888,7 +916,7 @@ body.menu-open{overflow:hidden}
 
     <div class="vid-grid">
       <div class="vid-cell arrive">
-        <div class="vid-orb"><canvas data-hud="horizon"
+        <div class="vid-orb"><div class="lens-world" data-w="horizon"></div><canvas data-hud="horizon"
              aria-label="The Horizon dial: aurora light flowing along the rim, promises as embers"></canvas></div>
         <div class="cap">
           <span class="eyebrow">The Horizon</span>
@@ -898,7 +926,7 @@ body.menu-open{overflow:hidden}
         </div>
       </div>
       <div class="vid-cell feature arrive" style="--d:120ms">
-        <div class="vid-orb"><canvas data-hud="recall"
+        <div class="vid-orb"><div class="lens-world" data-w="recall"></div><canvas data-hud="recall"
              aria-label="Lucid Recall: a spatial keys card condenses in, lands, and recedes"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Lucid Recall</span>
@@ -908,7 +936,7 @@ body.menu-open{overflow:hidden}
         </div>
       </div>
       <div class="vid-cell arrive" style="--d:240ms">
-        <div class="vid-orb"><canvas data-hud="saved"
+        <div class="vid-orb"><div class="lens-world" data-w="saved"></div><canvas data-hud="saved"
              aria-label="Saved memory: a spring-drawn check with a particle burst"></canvas></div>
         <div class="cap">
           <span class="eyebrow">Saved Memory</span>
@@ -942,7 +970,7 @@ body.menu-open{overflow:hidden}
         when you need it back, or just return: it resurfaces on its own the moment you’re near.</p>
     </div>
     <div class="walk-stage arrive" style="--d:120ms">
-      <div class="walk-orb"><canvas data-hud="walk"
+      <div class="walk-orb"><div class="lens-world" data-w="walk"></div><canvas data-hud="walk"
            aria-label="A 30-second walkthrough: saving your parking spot, then recalling it"></canvas></div>
       <div class="walk-side">
         <ol class="walk-steps" id="walkSteps">
@@ -973,7 +1001,7 @@ body.menu-open{overflow:hidden}
           — nothing on this list is a mock-up.</p>
       </div>
       <figure class="hud-float">
-        <div class="hero-glass can-glass"><div class="can-scene" aria-hidden="true"></div><canvas id="canGlass"
+        <div class="hero-glass can-glass"><canvas id="canGlass"
              aria-label="A live DreamLayer HUD recognising someone you've met before"></canvas></div>
         <img class="lens-fallback" src="assets/hud/person_context_lens.png" aria-hidden="true"
              alt="A real DreamLayer HUD card recognising someone you've met before">
@@ -1346,7 +1374,7 @@ body.menu-open{overflow:hidden}
     </div>
 
     <div class="sim-live arrive" style="--d:220ms">
-      <div class="g"><canvas id="simEmbed"></canvas></div>
+      <div class="g"><div class="lens-world"></div><canvas id="simEmbed"></canvas></div>
       <div class="cap">
         <span class="k">Live · running now</span>
         <p>This glass is the in-browser simulator, playing itself. Every pixel is drawn by a faithful
@@ -2138,9 +2166,9 @@ applyVeil();
 
   function boot(){
     if(!window.Halo){ return setTimeout(boot, 60); }   // wait for the deferred engine
-    startGlass(document.getElementById("heroGlass"));
+    startGlass(document.getElementById("heroGlass"), { glassBg:0.5 });   // see-through lens over its world
     var capEl=document.getElementById("simEmbedCap");
-    startGlass(document.getElementById("simEmbed"), { onSay:function(sayLine){
+    startGlass(document.getElementById("simEmbed"), { glassBg:0.5, onSay:function(sayLine){
       if(capEl) capEl.innerHTML="<b>Oracle</b> " + (sayLine||"").replace(/[<>&]/g,"");
     }});
     // #can: the honest composite is now the LIVE renderer — a short person-recall
