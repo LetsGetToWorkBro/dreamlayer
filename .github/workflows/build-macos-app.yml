@@ -1,0 +1,127 @@
+name: Build macOS app (.dmg)
+
+# Builds the double-click DreamLayer Brain menu-bar app, signs + notarizes it,
+# and wraps it in a .dmg. Manual (Run workflow) or on a version tag (v*).
+# Does NOT run on normal pushes/PRs, so it never gates regular CI.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   MACOS_CERT_P12_BASE64   Developer ID Application cert + key, exported .p12, base64-encoded
+#   MACOS_CERT_PASSWORD     password for that .p12
+#   MACOS_SIGN_IDENTITY     e.g. "Developer ID Application: Your Name (TEAMID)"
+#   APPLE_ID                Apple ID email used for notarization
+#   APPLE_TEAM_ID           10-char Apple Developer Team ID
+#   APPLE_APP_PASSWORD      app-specific password for that Apple ID (appleid.apple.com)
+#   KEYCHAIN_PASSWORD       any string — password for the ephemeral build keychain
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # so a tag build can attach the .dmg to a Release
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install app + build tooling
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install ./host-python          # dreamlayer + Pillow/numpy/openai
+          pip install py2app rumps            # rumps pulls in pyobjc
+          brew install create-dmg
+
+      - name: Build .icns from icon.png
+        run: |
+          cd host-python/packaging
+          rm -rf DreamLayer.iconset && mkdir DreamLayer.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s        icon.png --out DreamLayer.iconset/icon_${s}x${s}.png
+            sips -z $((s*2)) $((s*2)) icon.png --out DreamLayer.iconset/icon_${s}x${s}@2x.png
+          done
+          iconutil -c icns DreamLayer.iconset -o dreamlayer.icns
+
+      - name: Build the .app (py2app)
+        run: |
+          cd host-python/packaging
+          python setup_app.py py2app
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$MACOS_CERT_P12_BASE64" | base64 --decode > cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm -f cert.p12
+
+      - name: Sign the .app (hardened runtime + entitlements)
+        env:
+          SIGN_ID: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          APP="host-python/packaging/dist/DreamLayer.app"
+          ENT="host-python/packaging/entitlements.plist"
+          # sign every nested Mach-O first (notarization rejects unsigned nested code)
+          find "$APP/Contents" \( -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' f; do
+            codesign --force --timestamp --options runtime -s "$SIGN_ID" "$f"
+          done
+          find "$APP/Contents" -type f -perm -111 \( -name "python*" -o -name "*.bin" \) -print0 | while IFS= read -r -d '' f; do
+            codesign --force --timestamp --options runtime -s "$SIGN_ID" "$f" || true
+          done
+          codesign --force --deep --timestamp --options runtime \
+            --entitlements "$ENT" -s "$SIGN_ID" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Create .dmg
+        run: |
+          mkdir -p stage && cp -R host-python/packaging/dist/DreamLayer.app stage/
+          create-dmg \
+            --volname "DreamLayer" \
+            --window-size 600 380 \
+            --icon "DreamLayer.app" 150 180 \
+            --app-drop-link 450 180 \
+            --hdiutil-quiet \
+            "DreamLayer.dmg" "stage/" || \
+          hdiutil create -volname "DreamLayer" -srcfolder stage -ov -format UDZO "DreamLayer.dmg"
+
+      - name: Sign the .dmg
+        env:
+          SIGN_ID: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: codesign --force --timestamp -s "$SIGN_ID" "DreamLayer.dmg"
+
+      - name: Notarize + staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit "DreamLayer.dmg" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "DreamLayer.dmg"
+          spctl -a -t open --context context:primary-signature -v "DreamLayer.dmg" || true
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DreamLayer-dmg
+          path: DreamLayer.dmg
+
+      - name: Attach .dmg to Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DreamLayer.dmg
