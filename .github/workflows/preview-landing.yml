@@ -1,0 +1,45 @@
+name: Preview landing (Cloudflare)
+
+# Publishes landing/ from any branch to a Cloudflare Pages *preview* URL
+# (https://<alias>.dreamlayer.pages.dev) — separate from production
+# (dreamlayer.app). Manual only. Uses the same secrets as deploy-landing.yml:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#
+# Run it from Actions -> "Preview landing (Cloudflare)" -> Run workflow, and set
+# `ref` to the branch you want to preview and `alias` to the subdomain to use.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or ref to preview"
+        required: true
+        default: "main"
+      alias:
+        description: "Preview subdomain (a-z, 0-9, -)"
+        required: true
+        default: "preview"
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Bundle plugin registry into the site
+        run: cp -r registry landing/registry
+      - name: Deploy preview to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy landing --project-name=dreamlayer --branch=${{ inputs.alias }} --commit-dirty=true
+      - name: Print preview URL
+        run: |
+          echo "Preview: https://${{ inputs.alias }}.dreamlayer.pages.dev/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Simulator: https://${{ inputs.alias }}.dreamlayer.pages.dev/simulator.html" >> "$GITHUB_STEP_SUMMARY"
