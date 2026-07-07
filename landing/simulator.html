@@ -45,9 +45,21 @@
   .stage{display:flex;flex-direction:column;align-items:center;gap:16px;min-width:0}
   .rail{min-width:0}
   .glass-wrap{position:relative;width:min(78vw,400px);aspect-ratio:1}
+  /* the world behind the lens (AI environment, illustrative) — the glass frosts it */
+  .lens-scene{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
+    background:#05080a url(./assets/sim/lens_world.webp) center/cover no-repeat;
+    box-shadow:inset 0 0 60px rgba(0,0,0,.85)}
+  .lens-scene::after{content:"";position:absolute;inset:0;border-radius:50%;
+    background:radial-gradient(circle at 50% 42%,rgba(2,6,8,.30),rgba(2,6,8,.72) 78%)}
+  .glass-wrap.veiled .lens-scene{filter:brightness(.35) saturate(.4)}
   canvas.glass{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;background:#000;
     border:1px solid #14211f;
     box-shadow:0 0 60px rgba(44,199,154,.14),0 0 160px rgba(44,199,154,.05),inset 0 0 40px rgba(0,0,0,.7)}
+  /* where the browser supports it, the lens goes truly see-through: transparent
+     canvas + backdrop blur frosts the scene behind, engine paints a translucent disc */
+  @supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))){
+    canvas.glass{background:transparent;-webkit-backdrop-filter:blur(6px) saturate(1.15);backdrop-filter:blur(6px) saturate(1.15)}
+  }
   .glass-wrap.veiled canvas.glass{box-shadow:0 0 40px rgba(255,107,94,.12),inset 0 0 40px rgba(0,0,0,.85)}
   .glass-wrap::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;pointer-events:none;
     background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.06),transparent 45%)}
@@ -118,6 +130,7 @@
   details.tryself>summary:hover{color:var(--teal)}
   .tryself-body{display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:6px}
   .tryself-body .try{align-self:stretch;width:100%;max-width:520px;margin:0 auto}
+  .lens-note{font-size:11px;color:var(--text-3);text-align:center;max-width:340px;line-height:1.4;margin-top:-6px}
   .statusline{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
   .statusline b{color:var(--teal);font-weight:600}
   .statusline .v{color:var(--coral)}
@@ -181,8 +194,9 @@
 
   <div class="cockpit">
     <section class="stage">
-      <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><canvas class="glass" id="glass"></canvas></div>
+      <div class="glass-wrap" id="glassWrap"><div class="glass-glow" aria-hidden="true"></div><div class="lens-scene" id="lensScene" aria-hidden="true"></div><canvas class="glass" id="glass"></canvas></div>
       <div class="statusline" id="status">ready</div>
+      <div class="lens-note">Environment illustrative · the interface is the real DreamLayer renderer</div>
       <div class="scene-cap" id="sceneCap" aria-live="polite"></div>
 
       <div class="welcome" id="welcome">
@@ -282,6 +296,8 @@
   var $ = function(id){ return document.getElementById(id); };
   var sim = new Halo.Sim();
   var glass = new Halo.Glass($("glass"), sim);
+  // translucent disc: the glass reads as a see-through lens over the world behind it
+  glass.bgAlpha = 0.5;
   var look = "", veiled = false;
   glass.start();
   addEventListener("resize", function(){ glass.resize(); }, {passive:true});
