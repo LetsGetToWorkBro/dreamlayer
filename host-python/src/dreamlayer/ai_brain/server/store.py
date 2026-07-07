@@ -33,7 +33,14 @@ class BrainConfig:
     network_mode: str = "connected"
     cloud_enabled: bool = True      # cloud tier allowed by default
     token: str = ""                 # pairing secret the phone must send
+    # billing tier (seam only — no paywall). "free" = local & open, grants
+    # everything today. A future "cloud" plan is where hosted capabilities
+    # (managed AI, sync, relay) would attach. See server.PLAN_CAPS.
+    plan: str = "free"
     # -- cloud provider (batch 2) — the tier that leaves the device ------
+    # provider: openai | anthropic | gemini | openrouter | ollama | custom
+    # (see backends.PROVIDER_PRESETS). Ollama is local + free + needs no key.
+    cloud_provider: str = "openai"
     cloud_base_url: str = "https://api.openai.com"
     cloud_api_key: str = ""
     cloud_model: str = "gpt-4o-mini"
@@ -61,9 +68,18 @@ class BrainConfig:
         return self.network_mode == "lan_only"
 
     def cloud_ready(self) -> bool:
-        """Cloud can actually answer: allowed by posture AND configured."""
-        return (self.network_mode != "lan_only" and self.cloud_enabled
-                and bool(self.cloud_api_key) and bool(self.cloud_model))
+        """Cloud can actually answer: allowed by posture AND configured.
+
+        Ollama-local runs on-device with no key, so it only needs a model;
+        every other provider also needs an API key.
+        """
+        if self.network_mode == "lan_only" or not self.cloud_enabled:
+            return False
+        if not self.cloud_model:
+            return False
+        if self.cloud_provider == "ollama":
+            return True
+        return bool(self.cloud_api_key)
 
     def add_folder(self, path: str) -> bool:
         p = str(Path(path).expanduser())

@@ -10,10 +10,87 @@ injectable so it's testable without Ollama running.
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 from typing import Callable, Optional
 
 from ..schema import Answer
+
+
+# Cloud providers the panel offers. `wire` is the on-the-wire format the
+# adapter speaks; `base_url`/`model` are pre-fills the panel suggests (still
+# user-editable). `needs_key` drives whether the panel shows the API-key field
+# — Ollama runs locally with no key (free + private).
+PROVIDER_PRESETS: dict[str, dict] = {
+    "openai": {
+        "label": "OpenAI", "base_url": "https://api.openai.com",
+        "model": "gpt-4o-mini", "needs_key": True, "wire": "openai"},
+    "anthropic": {
+        "label": "Anthropic", "base_url": "https://api.anthropic.com",
+        "model": "claude-3-5-haiku-latest", "needs_key": True, "wire": "anthropic"},
+    "gemini": {
+        "label": "Google Gemini",
+        "base_url": "https://generativelanguage.googleapis.com",
+        "model": "gemini-1.5-flash", "needs_key": True, "wire": "gemini"},
+    "openrouter": {
+        "label": "OpenRouter", "base_url": "https://openrouter.ai/api",
+        "model": "openai/gpt-4o-mini", "needs_key": True, "wire": "openai"},
+    "ollama": {
+        "label": "Ollama · local", "base_url": "http://localhost:11434",
+        "model": "llama3.2", "needs_key": False, "wire": "openai"},
+    "custom": {
+        "label": "Custom (OpenAI-compatible)", "base_url": "",
+        "model": "", "needs_key": True, "wire": "openai"},
+}
+
+
+def _build_cloud_request(config, prompt: str):
+    """Return (wire, url, body_dict, headers) for the configured provider.
+
+    Three wire formats, all hand-rolled (no SDK): OpenAI-compatible chat
+    completions (openai/openrouter/ollama/custom), Anthropic messages, and
+    Gemini generateContent. Pure — unit-testable without a network.
+    """
+    provider = getattr(config, "cloud_provider", "openai") or "openai"
+    preset = PROVIDER_PRESETS.get(provider, PROVIDER_PRESETS["custom"])
+    wire = preset["wire"]
+    base = (config.cloud_base_url or preset["base_url"]).rstrip("/")
+    model = config.cloud_model
+    key = config.cloud_api_key or ""
+    if wire == "anthropic":
+        url = base + "/v1/messages"
+        body = {"model": model, "max_tokens": 1024,
+                "messages": [{"role": "user", "content": prompt}]}
+        headers = {"Content-Type": "application/json", "x-api-key": key,
+                   "anthropic-version": "2023-06-01"}
+    elif wire == "gemini":
+        url = (f"{base}/v1beta/models/{model}:generateContent"
+               f"?key={urllib.parse.quote(key)}")
+        body = {"contents": [{"parts": [{"text": prompt}]}]}
+        headers = {"Content-Type": "application/json"}
+    else:  # openai-compatible
+        url = base + "/v1/chat/completions"
+        body = {"model": model,
+                "messages": [{"role": "user", "content": prompt}]}
+        headers = {"Content-Type": "application/json"}
+        if key:  # Ollama-local sends no key
+            headers["Authorization"] = "Bearer " + key
+    return wire, url, body, headers
+
+
+def _parse_cloud_response(wire: str, d: dict) -> str:
+    """Pull the answer text out of a provider's JSON response."""
+    if wire == "anthropic":
+        parts = d.get("content") or []
+        return "".join(p.get("text", "") for p in parts
+                       if isinstance(p, dict)).strip()
+    if wire == "gemini":
+        cands = d.get("candidates") or [{}]
+        parts = ((cands[0].get("content") or {}).get("parts")) or [{}]
+        return "".join(p.get("text", "") for p in parts
+                       if isinstance(p, dict)).strip()
+    choices = d.get("choices") or [{}]
+    return ((choices[0].get("message") or {}).get("content") or "").strip()
 
 
 def _urllib_post(url: str, payload: dict, timeout: float = 30.0) -> dict:
@@ -115,23 +192,20 @@ class OllamaBackend:
 
 def cloud_chat(config, prompt: str, http_post: Optional[Callable] = None,
                timeout: float = 30.0) -> str:
-    """Ask an OpenAI-compatible cloud model. Provider-agnostic: point
-    cloud_base_url at any compatible API. The call is injectable for tests."""
+    """Ask the configured cloud model. Supports OpenAI, Anthropic, Gemini,
+    OpenRouter, Ollama-local, and any custom OpenAI-compatible endpoint —
+    dispatched on config.cloud_provider. The call is injectable for tests."""
     if http_post is not None:
         out = http_post(config.cloud_base_url, {"model": config.cloud_model,
                                                 "prompt": prompt})
         return (out or {}).get("text", "").strip()
-    url = config.cloud_base_url.rstrip("/") + "/v1/chat/completions"
-    data = json.dumps({"model": config.cloud_model,
-                       "messages": [{"role": "user", "content": prompt}]}).encode()
-    req = urllib.request.Request(url, data=data, headers={
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + config.cloud_api_key})
+    wire, url, body, headers = _build_cloud_request(config, prompt)
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(req, timeout=timeout) as resp:
         d = json.loads(resp.read().decode("utf-8"))
-    choices = d.get("choices") or [{}]
-    return ((choices[0].get("message") or {}).get("content") or "").strip()
+    return _parse_cloud_response(wire, d)
 
 
 def cloud_test(config, http_post: Optional[Callable] = None) -> dict:

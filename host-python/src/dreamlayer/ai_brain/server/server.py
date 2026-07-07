@@ -37,6 +37,15 @@ from .panel import render_panel
 
 TOKEN_HEADER = "X-DreamLayer-Token"
 
+# Billing-tier seam (no paywall). Extra capabilities each plan grants ON TOP OF
+# the always-free base set in Brain.plugin_capabilities(). `free` adds nothing —
+# everything works locally & open. A future hosted plan (managed AI, sync,
+# relay) would list its capabilities here; the base set is never taken away.
+PLAN_CAPS: dict[str, frozenset] = {
+    "free": frozenset(),
+    "cloud": frozenset(),   # reserved — hosted capabilities attach here later
+}
+
 
 def lan_ip() -> str:
     """This machine's LAN address — the one the phone can actually reach.
@@ -173,6 +182,10 @@ class Brain:
             caps.add("vision")
         if not self.config.lan_only:
             caps.add("network")
+        # Billing-tier seam (no paywall today): the free plan grants everything
+        # above; a future hosted plan would add its capabilities here. Kept as a
+        # union so `free` never removes a capability — see BrainConfig.plan.
+        caps |= PLAN_CAPS.get(getattr(self.config, "plan", "free"), frozenset())
         return frozenset(caps)
 
     def plugins_state(self) -> dict:
@@ -441,7 +454,8 @@ class Brain:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
                   "email_enabled", "summarize_emails", "cloud_enabled",
-                  "network_mode", "cloud_base_url", "cloud_api_key", "cloud_model",
+                  "network_mode", "cloud_provider", "cloud_base_url",
+                  "cloud_api_key", "cloud_model", "plan",
                   "semantic_search", "index_extensions", "max_file_kb",
                   "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
                   "calendar_sync", "calendar_names", "calendar_days",

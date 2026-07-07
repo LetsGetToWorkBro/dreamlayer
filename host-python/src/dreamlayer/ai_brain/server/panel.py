@@ -272,8 +272,18 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
   <section>
     <div class="eyebrow">Cloud provider</div><h2>Wire the cloud tier</h2>
-    <p class="lead">The Cloud switch decides whether the cloud is <i>allowed</i>. To make it actually
-      answer, point it at an OpenAI-compatible provider. The key is stored only on this Mac mini and never shown again.</p>
+    <p class="lead">Pick a provider — OpenAI, Anthropic, Gemini, or OpenRouter — or run a model
+      locally with <b>Ollama</b> (free, no key, nothing leaves your Mac). Custom points at any
+      OpenAI-compatible endpoint. Any key is stored only on this Mac mini and never shown again.</p>
+    <div class="row" style="margin-bottom:12px">
+      <select id="cprov" onchange="provPreset(true)" style="max-width:220px">
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="ollama">Ollama · local (free)</option>
+        <option value="custom">Custom (OpenAI-compatible)</option>
+      </select></div>
     <div class="row">
       <input type="text" id="cbase" placeholder="https://api.openai.com" style="max-width:230px">
       <input type="password" id="ckey" placeholder="API key" style="max-width:200px">
@@ -330,10 +340,13 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <input type="text" id="ovis" placeholder="vision model" style="max-width:170px"></div>
     </div>
     <div id="modelStatus"></div>
-    <div class="row" style="margin-top:16px;justify-content:space-between">
-      <label class="tog" style="display:flex;gap:10px;align-items:center;color:var(--muted);cursor:pointer">
-        <input type="checkbox" id="email" style="accent-color:var(--memory)"> Read email &amp; iMessage</label>
+    <div class="row" style="margin-top:16px;justify-content:flex-end">
       <button class="sm" onclick="saveModel()">Save</button></div>
+    <div class="conn" style="margin-top:14px">
+      <div><div class="conn-t">Read email &amp; iMessage</div>
+        <div class="conn-s">Let the Brain read Mail and Messages so a glance can catch a reply you owe.
+          Nothing is sent; it stays on this Mac. Saves the moment you flip it.</div></div>
+      <label class="sw"><input type="checkbox" id="email" onchange="saveEmail()"><span class="track"></span></label></div>
   </section>
 
   <section>
@@ -451,8 +464,10 @@ async function load(){
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   // cloud provider
+  $("cprov").value=c.config.cloud_provider||"openai";
   $("cbase").value=c.config.cloud_base_url||"";$("cmodel").value=c.config.cloud_model||"";
   $("ckey").placeholder=c.config.cloud_api_key==="set"?"key saved — leave blank to keep":"API key";
+  provPreset(false);   // reflect key-field visibility without clobbering saved values
   // knowledge filters
   $("semantic").checked=!!c.config.semantic_search;
   $("exts").value=(c.config.index_extensions||[]).join(",");
@@ -706,8 +721,13 @@ async function pullModel(name){const o=$("pullOut");
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
     ollama_url:$("ourl").value,ollama_chat_model:$("ochat").value,
-    ollama_vision_model:$("ovis").value,email_enabled:$("email").checked})});
+    ollama_vision_model:$("ovis").value})});
   if(!silent)toast("Saved"); if(modelSel==="ollama")checkModel(); load();
+}
+async function saveEmail(){   // the email/iMessage switch saves instantly, like the other toggles
+  await api("/dreamlayer/config",{method:"POST",
+    body:JSON.stringify({email_enabled:$("email").checked})});
+  toast($("email").checked?"Reading email & iMessage":"Email & iMessage off"); load();
 }
 async function ask(){const q=$("q").value.trim();if(!q)return;
   $("answer").innerHTML='<div class="ans"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
@@ -745,8 +765,22 @@ async function loadHistory(){const h=await api("/dreamlayer/history");
     ||'<li class="empty">Nothing yet — add a folder, ask a question, pair your phone.</li>';
 }
 
-/* cloud provider */
-async function saveCloud(){const body={cloud_base_url:$("cbase").value,cloud_model:$("cmodel").value};
+/* cloud provider — presets mirror backends.PROVIDER_PRESETS */
+const CPROV={
+  openai:{base:"https://api.openai.com",model:"gpt-4o-mini",key:true},
+  anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},
+  gemini:{base:"https://generativelanguage.googleapis.com",model:"gemini-1.5-flash",key:true},
+  openrouter:{base:"https://openrouter.ai/api",model:"openai/gpt-4o-mini",key:true},
+  ollama:{base:"http://localhost:11434",model:"llama3.2",key:false},
+  custom:{base:"",model:"",key:true},
+};
+function provPreset(apply){const p=CPROV[$("cprov").value]||CPROV.custom;
+  if(apply){$("cbase").value=p.base;$("cmodel").value=p.model;}      // manual switch → fill
+  $("cbase").placeholder=p.base||"https://…";$("cmodel").placeholder=p.model||"model name";
+  $("ckey").style.display=p.key?"":"none";                          // Ollama-local needs no key
+}
+async function saveCloud(){const body={cloud_provider:$("cprov").value,
+    cloud_base_url:$("cbase").value,cloud_model:$("cmodel").value};
   const k=$("ckey").value.trim(); if(k) body.cloud_api_key=k;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});$("ckey").value="";
   toast("Cloud provider saved");load();}
