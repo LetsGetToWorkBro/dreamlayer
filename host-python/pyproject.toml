@@ -19,5 +19,14 @@ dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0"]
 hardware = ["brilliant-ble", "brilliant-msg"]
 dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
 
+[tool.setuptools.package-data]
+# ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)
+# so it's installed with the package and lands in the py2app .dmg bundle.
+dreamlayer = [
+    "ai_brain/server/assets/*.webp",
+    "ai_brain/server/assets/*.png",
+    "ai_brain/server/assets/*.woff2",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]

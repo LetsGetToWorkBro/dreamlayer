@@ -204,6 +204,24 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     border-color:rgba(120,180,180,.16);
     -webkit-backdrop-filter:blur(16px) saturate(1.18);backdrop-filter:blur(16px) saturate(1.18)}
   @media (prefers-reduced-motion:reduce){.grain{display:none}}
+  /* feature explainers — a chip grid that opens an illustrated drawer */
+  .xgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
+  .xchip{display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer;
+    background:var(--surf2);border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:11px 13px;color:var(--text);font:inherit;font-size:.92rem;transition:border-color .15s,transform .15s var(--ease)}
+  .xchip:hover{border-color:var(--memory);transform:translateY(-1px)}
+  .xchip .xdot{width:7px;height:7px;border-radius:50%;background:var(--memory);flex:none}
+  .xmodal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(3,6,8,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .xmodal.on{display:flex}
+  .xcard{max-width:440px;width:100%;background:linear-gradient(180deg,var(--surf2),var(--surf));
+    border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .xcard img{display:block;width:100%;background:#05090b;border-bottom:1px solid var(--line)}
+  .xcard .xbody{padding:18px 20px}
+  .xcard .xbody h3{margin:2px 0 8px;font-size:1.3rem;letter-spacing:-.02em}
+  .xcard .xbody p{margin:0;color:var(--muted);line-height:1.6}
+  .xcard .xclose{margin:0 20px 20px;padding:9px 16px}
 </style></head><body>
 <div class="cine-bg" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
@@ -219,6 +237,13 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <section>
     <div class="eyebrow">System</div><h2>What's connected</h2>
     <div id="sysrows"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Learn</div><h2>How it works</h2>
+    <p class="lead">The glasses show cards; this Brain makes them. Tap a feature to see what it does
+      and the card it draws.</p>
+    <div class="xgrid" id="xgrid"></div>
   </section>
 
   <section>
@@ -323,6 +348,17 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <button class="sm ghost" onclick="testCloud()">Test connection</button>
       <button class="sm" onclick="saveCloud()">Save cloud</button></div>
     <div id="cloudStatus"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Plan</div><h2>Free · local &amp; open</h2>
+    <p class="lead">DreamLayer runs entirely on your own hardware, on code you can read. Every feature
+      here is free — bring your own AI key, or run a model locally with Ollama and pay nothing at all.</p>
+    <div class="conn">
+      <div><div class="conn-t">DreamLayer&nbsp;Cloud <span style="color:var(--amber)">· coming soon</span></div>
+        <div class="conn-s">An optional hosted tier: managed AI with no key to wire, cross-device sync,
+          and a private relay for the glasses mesh. The local app always stays free and open.</div></div>
+      <button class="ghost" disabled style="opacity:.55;cursor:default">Notify me</button></div>
   </section>
 
   <section>
@@ -451,6 +487,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </main>
 </div>
 
+<div class="xmodal" id="xmodal" onclick="if(event.target===this)closeX()">
+  <div class="xcard">
+    <img id="ximg" alt="" src="">
+    <div class="xbody"><div class="eyebrow" id="xkick"></div><h3 id="xtitle"></h3><p id="xtext"></p></div>
+    <button class="ghost xclose" onclick="closeX()">Done</button>
+  </div>
+</div>
+
 <div class="overlay" id="browser">
   <div class="modal">
     <h3>Choose a folder</h3>
@@ -474,6 +518,24 @@ const api=(p,o={})=>fetch(p,Object.assign({headers:H},o)).then(r=>r.json());
 const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const $=id=>document.getElementById(id);
 let modelSel="keyword", ollamaOK=null, browsePath="";
+
+/* feature explainers — each pairs a real HUD card image with what it does */
+const EXPLAINERS=[
+  {t:"Oracle",img:"oracle_reply.png",b:"Ask anything out loud. Oracle answers on the glass in a line or two — drawn from your own memory first, the web only when it must."},
+  {t:"Morning brief",img:"morning_brief.png",b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
+  {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
+  {t:"Face recall",img:"person_dossier.png",b:"Glance at someone you've met and their name, how you know them, and your last note surface — privately, only to you."},
+  {t:"Object recall",img:"object_recall.png",b:"“Where are my keys?” The card shows where you last saw the thing, as a place you can walk back to."},
+  {t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
+  {t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
+  {t:"Privacy veil",img:"privacy_veil.png",b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
+];
+function renderExplainers(){const g=$("xgrid");if(!g)return;
+  g.innerHTML=EXPLAINERS.map((x,i)=>`<button class="xchip" onclick="openX(${i})"><span class="xdot"></span>${esc(x.t)}</button>`).join("");}
+function openX(i){const x=EXPLAINERS[i];$("ximg").src="/panel-assets/"+x.img;$("xkick").textContent="How it works";
+  $("xtitle").textContent=x.t;$("xtext").textContent=x.b;$("xmodal").classList.add("on");}
+function closeX(){$("xmodal").classList.remove("on");}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeX();});
 
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
   t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1900);}
@@ -961,6 +1023,7 @@ window.removePlugin=removePlugin;
 
 load();
 loadPlugins();
+renderExplainers();
 setInterval(refreshStatus,4000);
 setInterval(()=>{if(modelSel==="ollama")checkModel();},15000);
 </script></body></html>"""
