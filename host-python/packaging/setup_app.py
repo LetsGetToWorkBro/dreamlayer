@@ -32,7 +32,7 @@ OPTIONS = {
     "packages": ["dreamlayer", "rumps", "PIL", "numpy"],
     # transitive imports py2app's static analysis tends to miss
     "includes": ["pydantic", "pydantic_core", "openai", "httpx", "httpcore",
-                 "certifi"],
+                 "certifi", "WebKit"],   # WebKit → the native panel window
     "plist": {
         "CFBundleName": "DreamLayer",
         "CFBundleDisplayName": "DreamLayer",

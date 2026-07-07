@@ -159,8 +159,16 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
                 (fetch_status(port, token) or {}).get("incognito"))
 
         def _clicked_open_panel(self):
+            url = f"http://127.0.0.1:{port}/"
+            # a real native window (WKWebView) if we can; else the browser
+            try:
+                from .webview_window import open_panel_window
+                if open_panel_window(url, "DreamLayer"):
+                    return
+            except Exception:
+                pass
             import webbrowser
-            webbrowser.open(f"http://127.0.0.1:{port}/")
+            webbrowser.open(url)
 
         @rumps.clicked("Open panel")
         def open_panel(self, _):
