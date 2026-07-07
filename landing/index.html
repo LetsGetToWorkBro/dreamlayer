@@ -141,8 +141,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    HUD glyphs glowing on top and a frosted rim — not an opaque black puck. */
 /* beat .hero-glass width/height (later in the file) so the glass fills its
    column (184px desktop / 148px mobile) instead of a viewport-height clamp */
-.hud-float .can-glass{width:100%;height:auto;aspect-ratio:1;margin:0}
-.hud-float .can-glass canvas{background:transparent;border-radius:50%;
+.hud-float .can-glass{position:relative;width:100%;height:auto;aspect-ratio:1;margin:0}
+/* a dim, visible world behind the disc (AI environment, illustrative) so the
+   frosted lens has something to reveal instead of the near-black section scrim */
+.hud-float .can-scene{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;
+  background:#0a1216 url(assets/sim/lens_face.webp) center/cover no-repeat;
+  filter:brightness(1.5) saturate(1.15);box-shadow:inset 0 0 26px rgba(0,0,0,.7)}
+.hud-float .can-scene::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 42%,rgba(4,10,12,.08),rgba(4,10,12,.5) 82%)}
+.hud-float .can-glass canvas{position:relative;z-index:1;background:transparent;border-radius:50%;
   -webkit-backdrop-filter:blur(7px) saturate(1.2);backdrop-filter:blur(7px) saturate(1.2);
   box-shadow:0 0 40px -8px rgba(44,199,154,.34),inset 0 0 22px rgba(0,0,0,.35)}
 .lens-fallback{display:none;width:100%;height:auto;border-radius:50%;
@@ -960,7 +967,7 @@ body.menu-open{overflow:hidden}
           — nothing on this list is a mock-up.</p>
       </div>
       <figure class="hud-float">
-        <div class="hero-glass can-glass"><canvas id="canGlass"
+        <div class="hero-glass can-glass"><div class="can-scene" aria-hidden="true"></div><canvas id="canGlass"
              aria-label="A live DreamLayer HUD recognising someone you've met before"></canvas></div>
         <img class="lens-fallback" src="assets/hud/person_context_lens.png" aria-hidden="true"
              alt="A real DreamLayer HUD card recognising someone you've met before">
@@ -2077,17 +2084,16 @@ applyVeil();
     function v(text,look){ var r=sim.handleVoice(text,look); if(say && r.say) say(r.say, text); }
     function glance(look){ var r=sim.lookAt(look); if(say && r.say) say(r.say); }
     if(reduced){
-      // calm single frame: a caller can render its own still, else the default timer
+      // calm single frame: a caller can render its own still, else a person recall
       if(opts.reducedFrame) opts.reducedFrame(sim, { v:v, glance:glance });
-      else sim.handleVoice("set a timer for 5 minutes");
+      else { v("this is my colleague Sarah, she runs marketing","face-a"); glance("face-a"); }
       glass.render(); return { sim:sim, glass:glass };
     }
     glass.start();
-    // a looping story: timer → meet + recall → stash + locate → veil → reset.
+    // a looping story: meet + recall → stash + locate → veil → reset.
     // A caller can supply opts.buildScript({v,glance,sim}) for a section-specific loop.
     var script = opts.buildScript ? opts.buildScript({ v:v, glance:glance, sim:sim }) : [
-      [600,  function(){ v("set a timer for 5 minutes"); }],
-      [3400, function(){ v("this is my colleague Sarah, she runs marketing","face-a"); }],
+      [800,  function(){ v("this is my colleague Sarah, she runs marketing","face-a"); }],
       [1900, function(){ v("Sarah owes me twenty dollars"); }],
       [1500, function(){ glance("face-a"); }],
       [4200, function(){ v("I left my bike at the north rack"); }],
