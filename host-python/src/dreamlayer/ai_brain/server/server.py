@@ -1412,6 +1412,28 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if path.startswith("/panel-assets/"):
+                # bundled panel imagery (cinematic stills, HUD thumbnails) —
+                # static, read-only, no token needed so the page can paint.
+                name = path[len("/panel-assets/"):]
+                if "/" in name or ".." in name:
+                    self._json(404, {"error": "not found"}); return
+                fp = Path(__file__).resolve().parent / "assets" / name
+                if not fp.is_file():
+                    self._json(404, {"error": "not found"}); return
+                ctype = {"webp": "image/webp", "png": "image/png",
+                         "jpg": "image/jpeg", "svg": "image/svg+xml",
+                         "woff2": "font/woff2"}.get(
+                             name.rsplit(".", 1)[-1].lower(),
+                             "application/octet-stream")
+                data = fp.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if not self._authed():
                 self._json(401, {"error": "unauthorised"}); return
             if path == "/dreamlayer/config":

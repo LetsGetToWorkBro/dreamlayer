@@ -177,8 +177,39 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   #toast.show{opacity:1;transform:translate(-50%,0)}
   #toast .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:9px;vertical-align:middle}
   a{color:var(--memory)}
+  /* --- cinematic restyle: a dim dusk still + film grain + vignette so the
+     Brain feels like the product, not a form. All overlays are inert. --- */
+  .cine-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:#05090b url("/panel-assets/still-dusk.webp") center/cover no-repeat;
+    opacity:.16;filter:blur(2px) saturate(1.06)}
+  .cine-bg::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(3,6,8,.4),rgba(3,6,8,.9) 64%)}
+  .grain{position:fixed;inset:0;z-index:1;opacity:.05;mix-blend-mode:overlay;pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(120% 85% at 50% -5%,transparent 55%,rgba(0,0,0,.55))}
+  .wrap{position:relative;z-index:2}
+  /* cinematic header band — a visible dusk still behind the title, faded out */
+  .head-cine{position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:100vw;height:360px;z-index:-1;pointer-events:none;
+    background:#05090b url("/panel-assets/still-dusk.webp") center 28%/cover no-repeat;
+    opacity:.62;-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 34%,transparent 96%);
+    mask-image:linear-gradient(180deg,#000 0%,#000 34%,transparent 96%)}
+  .head-cine::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(3,6,8,.15),rgba(3,6,8,.6) 68%,var(--bg))}
+  .bar,h1,.sub{position:relative}
+  h1{text-shadow:0 2px 30px rgba(0,0,0,.6)}
+  /* stronger glass on cards so the backdrop reads clearly through them */
+  main>section{background:linear-gradient(180deg,rgba(18,29,33,.68),rgba(12,18,20,.8));
+    border-color:rgba(120,180,180,.16);
+    -webkit-backdrop-filter:blur(16px) saturate(1.18);backdrop-filter:blur(16px) saturate(1.18)}
+  @media (prefers-reduced-motion:reduce){.grain{display:none}}
 </style></head><body>
+<div class="cine-bg" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
 <div class="wrap">
+  <div class="head-cine" aria-hidden="true"></div>
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><span class="dot"></span><span id="livetext">Brain online</span></span></div>
   <h1>Brain</h1>
