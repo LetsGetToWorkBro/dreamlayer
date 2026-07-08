@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Switch, SafeAreaView, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
+import { View, Text, Switch, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";
@@ -60,6 +60,7 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
       <Text style={[typography.title, s.heading]}>Settings</Text>
       <View style={{ paddingHorizontal: 24 }}>
         <DemoBanner />
@@ -337,12 +338,15 @@ export default function Settings() {
           <Text style={[typography.body, { color: colors.accentError }]}>Erase all memories</Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  // room so the last row clears the floating tab bar
+  scrollBody: { paddingBottom: 120 },
   heading: { color: colors.textPrimary, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8 },
   section: { marginHorizontal: 24, marginTop: 32 },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
