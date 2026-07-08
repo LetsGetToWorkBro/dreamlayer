@@ -6,3 +6,8 @@ expo-env.d.ts
 # @end expo-cli
 # web export artifact (preview only)
 dist-web/
+
+# fastlane App Store Connect API key (never commit)
+fastlane/asc_key.json
+fastlane/report.xml
+fastlane/Preview.html

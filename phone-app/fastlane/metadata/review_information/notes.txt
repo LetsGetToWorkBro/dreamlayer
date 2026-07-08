@@ -1,0 +1,27 @@
+DreamLayer is a companion app for Brilliant Labs Halo smart glasses (a pre-release
+wearable) and an optional self-hosted "Brain" that the user runs on their own Mac.
+There is NO account and NO login.
+
+HOW TO REVIEW THE APP WITHOUT ANY HARDWARE — please use Demo Mode:
+  1. Launch the app and tap "Begin" on the welcome screen.
+  2. Step through the short tour to the final "Pair" screen.
+  3. Tap "Explore with sample data".
+     (Alternatively: open the Settings tab -> "Try it" -> turn on "Demo Mode".)
+
+Demo Mode fills every screen with clearly-labeled sample data (a "Sample data -
+Demo Mode" banner is shown at the top), so you can navigate the entire app —
+Now, Memories, People, Messages, Brain, and Settings — with no glasses and no Mac.
+
+NOTES
+  - No demo account is needed; the app has no login or sign-up.
+  - The camera permission is used only to scan a pairing QR code from the Mac
+    "Brain". Nothing is captured, recorded, or uploaded.
+  - All data is stored on-device. Users can delete everything via
+    Settings -> Danger zone -> "Erase all memories".
+  - Cloud AI is OFF by default and strictly opt-in; only when enabled is a
+    request's text sent to the user's chosen provider.
+  - Privacy policy: https://dreamlayer.app/privacy.html
+  - Bluetooth pairing to the glasses is part of the full (pre-release) hardware
+    experience and is NOT required to review the app.
+
+Thank you for reviewing DreamLayer.

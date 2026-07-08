@@ -1,0 +1,5 @@
+# Fill these in (or provide them via the ASC API key / env at runtime).
+app_identifier("com.letsgettoworkbro.dreamlayer")
+# apple_id("your-apple-id@example.com")   # only needed for Apple-ID (non-API-key) auth
+# itc_team_id("REPLACE_WITH_ASC_TEAM_ID")
+# team_id("REPLACE_WITH_DEVELOPER_TEAM_ID")

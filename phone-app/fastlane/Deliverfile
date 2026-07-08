@@ -1,0 +1,19 @@
+# fastlane deliver — pushes the whole App Store listing (metadata + screenshots)
+# for every locale in one command. Metadata lives in fastlane/metadata/<locale>/,
+# screenshots in fastlane/screenshots/<locale>/. Generated from store/listing*.md.
+#
+# Auth: run with an App Store Connect API key (recommended) — see SUBMIT.md.
+
+app_identifier("com.letsgettoworkbro.dreamlayer")
+
+# Upload metadata + screenshots but NOT the binary (the .ipa goes up via
+# `eas submit` / TestFlight). Flip submit_for_review to true when you're ready.
+skip_binary_upload(true)
+submit_for_review(false)
+automatic_release(false)
+force(true)            # don't open the HTML summary / prompt
+precheck_include_in_pending_state(false)
+
+copyright("2026 DreamLayer")
+primary_category("PRODUCTIVITY")
+secondary_category("LIFESTYLE")

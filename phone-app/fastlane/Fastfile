@@ -1,0 +1,30 @@
+# DreamLayer — fastlane lanes for App Store Connect.
+# Authenticate with an App Store Connect API key (see SUBMIT.md):
+#   fastlane metadata api_key_path:./fastlane/asc_key.json
+# The asc_key.json is created once from your ASC API key (.p8 + Key ID + Issuer ID).
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload App Store metadata + screenshots for every locale (no binary)"
+  lane :metadata do |opts|
+    deliver(
+      api_key_path: opts[:api_key_path],
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      force: true
+    )
+  end
+
+  desc "Upload App Store metadata only (skip screenshots)"
+  lane :copy do |opts|
+    deliver(api_key_path: opts[:api_key_path], skip_binary_upload: true,
+            skip_screenshots: true, force: true)
+  end
+
+  desc "Upload App Store screenshots only"
+  lane :shots do |opts|
+    deliver(api_key_path: opts[:api_key_path], skip_binary_upload: true,
+            skip_metadata: true, overwrite_screenshots: true, force: true)
+  end
+end
