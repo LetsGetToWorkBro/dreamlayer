@@ -7,7 +7,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:ios": "eas build --platform ios --profile production",
+    "submit:ios": "eas submit --platform ios --profile production"
   },
   "dependencies": {
     "@expo-google-fonts/space-grotesk": "^0.4.1",
@@ -20,6 +22,7 @@
     "expo-linear-gradient": "^57.0.0",
     "expo-notifications": "~0.32.0",
     "expo-router": "~6.0.0",
+    "expo-splash-screen": "~31.0.13",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.4",

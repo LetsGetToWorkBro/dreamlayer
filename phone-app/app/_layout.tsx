@@ -1,3 +1,4 @@
+import React from "react";
 import { Tabs } from "expo-router";
 import { Platform, View, StyleSheet } from "react-native";
 import { BlurView } from "expo-blur";
@@ -10,6 +11,7 @@ import {
 import { colors } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
 import { TabIcon } from "../src/ui/components/TabIcon";
+import { useBrainStore } from "../src/state/useBrainStore";
 
 /** Frosted glass under the tab bar — a blur on native, a translucent wash on web. */
 function TabBarBackground() {
@@ -31,7 +33,15 @@ export default function Layout() {
     SpaceGrotesk_500Medium,
     SpaceGrotesk_700Bold,
   });
+  const hydrate = useBrainStore((s) => s.hydrate);
+  const hydrated = useBrainStore((s) => s.hydrated);
+  React.useEffect(() => {
+    if (!hydrated) hydrate();
+  }, [hydrated, hydrate]);
   if (!loaded) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+
+  // hide the tab bar on the first-run tour and the boot redirect
+  const noBar = { tabBarStyle: { display: "none" as const } };
 
   return (
     <Tabs
@@ -86,8 +96,8 @@ export default function Layout() {
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="confluence" options={{ href: null }} />
-      <Tabs.Screen name="onboarding" options={{ href: null }} />
-      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="onboarding" options={{ href: null, ...noBar }} />
+      <Tabs.Screen name="index" options={{ href: null, ...noBar }} />
     </Tabs>
   );
 }

@@ -16,7 +16,7 @@ const CATEGORY: { key: SagaAchievement["category"]; label: string; tint: string 
 ];
 
 export default function Saga() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getSaga = useBrainStore((s) => s.getSaga);
   const [saga, setSaga] = React.useState<SagaSnapshot | null>(null);
   const [loaded, setLoaded] = React.useState(false);

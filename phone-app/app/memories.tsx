@@ -39,7 +39,7 @@ function group(memories: Memory[]): { label: string; items: Memory[] }[] {
 export default function Memories() {
   const memories = useMemoryStore((s) => s.memories);
   const refresh = useMemoryStore((s) => s.refresh);
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const ask = useBrainStore((s) => s.ask);
 
   // Pull the Brain's kept memory whenever one is paired.

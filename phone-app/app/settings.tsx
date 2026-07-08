@@ -1,11 +1,12 @@
 import React from "react";
-import { View, Text, Switch, SafeAreaView, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, Switch, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
+import { DemoBanner } from "../src/ui/components/DemoBanner";
 
 function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
   return (
@@ -47,6 +48,9 @@ export default function Settings() {
   const setFactCheck = useBrainStore((s) => s.setFactCheck);
   const answerAhead = useBrainStore((s) => s.answerAhead);
   const setAnswerAhead = useBrainStore((s) => s.setAnswerAhead);
+  const demoMode = useBrainStore((s) => s.demoMode);
+  const enableDemo = useBrainStore((s) => s.enableDemo);
+  const disableDemo = useBrainStore((s) => s.disableDemo);
 
   const confirmPurge = () =>
     Alert.alert("Erase all memories?", "This cannot be undone.", [
@@ -56,7 +60,11 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
       <Text style={[typography.title, s.heading]}>Settings</Text>
+      <View style={{ paddingHorizontal: 24 }}>
+        <DemoBanner />
+      </View>
 
       <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy</Text>
@@ -279,6 +287,25 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Try it</Text>
+        <Row
+          label="Demo Mode"
+          sub="Explore the whole app with labeled sample data — no glasses or Mac needed"
+          right={
+            <Switch
+              value={demoMode}
+              onValueChange={(v) => (v ? enableDemo() : disableDemo())}
+              trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
+              thumbColor={colors.textPrimary}
+            />
+          }
+        />
+        <TouchableOpacity onPress={() => router.push("/onboarding")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Take the tour again →</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Labs</Text>
         <TouchableOpacity onPress={() => router.push("/saga")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Saga — your rank, level & badges →</Text>
@@ -289,14 +316,19 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/rehearsal")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Rehearsal — the Reality Compiler →</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/confluence")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Confluence — two wearers, one sky →</Text>
-        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/plugins")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Plugins — build on the layer →</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.section}>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy & legal</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 8 }]}>
+          On-device by default. No account, no tracking. Cloud AI is opt-in — only then does a request’s text
+          reach the provider you choose.
+        </Text>
+        <TouchableOpacity onPress={() => Linking.openURL("https://dreamlayer.app/privacy.html")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Privacy policy →</Text>
         </TouchableOpacity>
       </View>
 
@@ -306,12 +338,15 @@ export default function Settings() {
           <Text style={[typography.body, { color: colors.accentError }]}>Erase all memories</Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  // room so the last row clears the floating tab bar
+  scrollBody: { paddingBottom: 120 },
   heading: { color: colors.textPrimary, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8 },
   section: { marginHorizontal: 24, marginTop: 32 },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },

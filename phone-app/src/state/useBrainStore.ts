@@ -14,6 +14,7 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decodePairing } from "../services/pairing";
+import * as demo from "../demo/fixtures";
 
 /** A Brain just paired — complete any plugin installs queued while offline.
  *  Lazy require avoids a load-order dependency between the two stores. */
@@ -91,6 +92,9 @@ type BrainState = {
   proactiveAlerts: boolean; // let Oracle speak up: Listen! / Watch out!
   factCheck: boolean; // Veritas: fact-check the conversation as it happens
   answerAhead: boolean; // pre-answer questions the room asks you
+  demoMode: boolean; // labeled sample data so the app is alive with no hardware
+  onboardingSeen: boolean; // first-run tour shown once
+  setOnboardingSeen: (v: boolean) => void;
   hydrated: boolean;
 
   // derived
@@ -107,6 +111,11 @@ type BrainState = {
   setSummarizeEmails: (on: boolean) => void;
   connectGlasses: (id: string) => void;
   disconnectGlasses: () => void;
+
+  // Demo Mode — populate every screen with labeled sample data (no network),
+  // so the app is fully explorable with no glasses and no Mac Brain paired.
+  enableDemo: () => void;
+  disableDemo: () => void;
 
   // pairing + recall
   pairFromCode: (code: string) => { brain: boolean; glasses: boolean };
@@ -170,6 +179,8 @@ function persist(s: BrainState) {
     proactiveAlerts: s.proactiveAlerts,
     factCheck: s.factCheck,
     answerAhead: s.answerAhead,
+    demoMode: s.demoMode,
+    onboardingSeen: s.onboardingSeen,
     longBrief: s.longBrief,
   };
   AsyncStorage.setItem(KEY, JSON.stringify(snap)).catch(() => {});
@@ -228,6 +239,8 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   proactiveAlerts: true,
   factCheck: false,
   answerAhead: false,
+  demoMode: false,
+  onboardingSeen: false,
   longBrief: null,
   hydrated: false,
 
@@ -296,6 +309,26 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     persist(get());
   },
 
+  enableDemo: () => {
+    // mark a demo Halo paired (no network) so device-gated screens light up;
+    // the store getters below serve fixtures whenever demoMode is on.
+    set((s) => ({ demoMode: true, glasses: { connected: true, id: s.glasses.id || "HALO-DEMO" } }));
+    persist(get());
+  },
+
+  disableDemo: () => {
+    set((s) => ({
+      demoMode: false,
+      glasses: s.glasses.id === "HALO-DEMO" ? { connected: false, id: "" } : s.glasses,
+    }));
+    persist(get());
+  },
+
+  setOnboardingSeen: (v) => {
+    set({ onboardingSeen: v });
+    persist(get());
+  },
+
   pairFromCode: (code) => {
     const b = decodePairing(code);
     if (b.brainUrl) {
@@ -312,6 +345,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   ask: async (query) => {
+    if (get().demoMode) return demo.demoAsk(query);
     const m = get().macMini;
     if (!m.connected || !m.url) {
       return {
@@ -374,6 +408,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   sendVoice: async (text) => {
+    if (get().demoMode) return demo.demoVoice(text);
     const m = get().macMini;
     if (!m.connected || !m.url) return { intent: "ask", answer: "" };
     try {
@@ -385,6 +420,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getCalendar: async () => {
+    if (get().demoMode) return demo.demoCalendar;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -396,6 +432,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   addEvent: async (e) => {
+    if (get().demoMode) return demo.demoCalendar;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -407,6 +444,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   removeEvent: async (e) => {
+    if (get().demoMode) return demo.demoCalendar;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -421,6 +459,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   syncCalendar: async () => {
+    if (get().demoMode) return demo.demoCalendar;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -432,6 +471,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getRewind: async () => {
+    if (get().demoMode) return demo.demoRewind;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -443,6 +483,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getSaga: async () => {
+    if (get().demoMode) return demo.demoSaga;
     const m = get().macMini;
     if (!m.connected || !m.url) return null;
     try {
@@ -467,6 +508,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getProfile: async () => {
+    if (get().demoMode) return demo.demoProfile;
     const m = get().macMini;
     if (!m.connected || !m.url) return null;
     try {
@@ -478,6 +520,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getActivity: async () => {
+    if (get().demoMode) return demo.demoActivity;
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {
@@ -489,6 +532,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getBrief: async (agenda = []) => {
+    if (get().demoMode) return demo.demoBrief;
     const m = get().macMini;
     if (!m.connected || !m.url) return null;
     try {
@@ -505,6 +549,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getLatestBrief: async () => {
+    if (get().demoMode) return { text: demo.demoBrief.text, bullets: demo.demoLongBrief.sections.flatMap((x) => x.items).slice(0, 4), ts: 1 };
     const m = get().macMini;
     if (!m.connected || !m.url) return null;
     try {
@@ -518,6 +563,11 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getLongBrief: async (opts = {}) => {
+    if (get().demoMode) {
+      set({ longBrief: demo.demoLongBrief });
+      persist(get());
+      return demo.demoLongBrief;
+    }
     const m = get().macMini;
     if (!m.connected || !m.url) return null;
     try {
@@ -547,6 +597,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   fetchMessages: async () => {
+    if (get().demoMode) return demo.demoMessages;
     const m = get().macMini;
     if (!m.connected || !m.url) return { items: [], enabled: false };
     try {
@@ -559,6 +610,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   sendReply: async (draft) => {
+    if (get().demoMode) return { ok: true };
     const m = get().macMini;
     if (!m.connected || !m.url) return { ok: false, error: "No Brain paired" };
     try {
@@ -575,6 +627,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   },
 
   getReplies: async (text) => {
+    if (get().demoMode) return demo.demoReplies(text);
     const m = get().macMini;
     if (!m.connected || !m.url) return [];
     try {

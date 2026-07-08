@@ -11,6 +11,7 @@
  */
 import { create } from "zustand";
 import { useBrainStore } from "./useBrainStore";
+import { demoPeople } from "../demo/fixtures";
 
 export type Person = {
   contact_id: string;
@@ -95,6 +96,10 @@ export const usePeopleStore = create<PeopleState>((set, get) => ({
   loaded: false,
 
   fetchPeople: async () => {
+    if (useBrainStore.getState().demoMode) {
+      set({ people: demoPeople, paired: true, loaded: true, loading: false });
+      return;
+    }
     const m = target();
     if (!m) {
       set({ paired: false, loaded: true });

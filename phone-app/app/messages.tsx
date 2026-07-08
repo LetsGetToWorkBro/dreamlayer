@@ -18,7 +18,7 @@ import { radius, space } from "../src/ui/theme/spacing";
  * type (or dictate) a reply, and approve — nothing is ever sent silently.
  */
 export default function Messages() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const fetchMessages = useBrainStore((s) => s.fetchMessages);
   const sendReply = useBrainStore((s) => s.sendReply);
   const getReplies = useBrainStore((s) => s.getReplies);

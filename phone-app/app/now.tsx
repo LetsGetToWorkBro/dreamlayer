@@ -19,7 +19,7 @@ import { playListen } from "../src/services/sound";
 export default function Now() {
   const router = useRouter();
   const { paused, connected, togglePause, connect, service } = useHaloStore();
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const brainKind = macConnected ? "Mac mini" : "phone";
   const getBrief = useBrainStore((s) => s.getBrief);
   const getLatestBrief = useBrainStore((s) => s.getLatestBrief);
@@ -74,7 +74,7 @@ export default function Now() {
   };
 
   return (
-    <Screen scroll={false}>
+    <Screen>
       <ScreenHeader title="Now" eyebrow="DreamLayer" right={<StatusPill paused={paused} />} />
 
       <Animated.View style={[s.stage, mirror]}>
@@ -141,7 +141,9 @@ export default function Now() {
 }
 
 const s = StyleSheet.create({
-  stage: { flex: 1, alignItems: "center", justifyContent: "center" },
+  // a generous ambient stage for the mirror; scrolls with the rest so the
+  // brief / voice / actions below never collide with it
+  stage: { minHeight: 300, alignItems: "center", justifyContent: "center", marginBottom: space.lg },
   pairChip: {
     marginTop: space.xl,
     borderWidth: 1,

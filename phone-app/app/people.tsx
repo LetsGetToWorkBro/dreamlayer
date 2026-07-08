@@ -22,7 +22,7 @@ import { useBrainStore } from "../src/state/useBrainStore";
 import { usePeopleStore, Person } from "../src/state/usePeopleStore";
 
 export default function People() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const people = usePeopleStore((s) => s.people);
   const loading = usePeopleStore((s) => s.loading);
   const loaded = usePeopleStore((s) => s.loaded);

@@ -11,6 +11,7 @@ import {
 import { useBrainStore } from "../src/state/useBrainStore";
 import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/components/Connector";
 import { QrScanner } from "../src/ui/components/QrScanner";
+import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
@@ -34,11 +35,11 @@ export default function Brain() {
   const [activity, setActivity] = useState<{ ts: number; kind: string; text?: string; query?: string }[]>([]);
   const [evTitle, setEvTitle] = useState("");
   useEffect(() => {
-    if (b.macMini.connected) {
+    if (b.macMini.connected || b.demoMode) {
       b.getCalendar().then(setEvents);
       b.getActivity().then(setActivity);
     }
-  }, [b.macMini.connected]);
+  }, [b.macMini.connected, b.demoMode]);
 
   const addEvent = async () => {
     if (!evTitle.trim()) return;
@@ -95,13 +96,14 @@ export default function Brain() {
   return (
     <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <DemoBanner />
         {/* header */}
         <Text style={[typography.eyebrow, { color: colors.accentMemory }]}>DreamLayer</Text>
         <Text style={[typography.display, { color: colors.textPrimary }]}>Brain</Text>
         <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
           {brainKind === "mac_mini"
             ? "Your Mac mini is the brain — bigger local model, your files, richest answers."
-            : "Your phone is the brain. Works anywhere, no computer needed."}
+            : "The phone is your hub — pair the Halo glasses to capture, and a Mac mini for a bigger brain over your own files."}
           {cloudOn ? "  Cloud is on for the hardest asks." : "  Cloud is off — everything stays with you."}
         </Text>
 
