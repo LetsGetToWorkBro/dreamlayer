@@ -30,7 +30,7 @@ function stamp(ts: number): string {
  * and kept here so you can read it whenever, even offline.
  */
 export default function Brief() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getLongBrief = useBrainStore((s) => s.getLongBrief);
   const stored = useBrainStore((s) => s.longBrief);
   const memories = useMemoryStore((s) => s.memories);

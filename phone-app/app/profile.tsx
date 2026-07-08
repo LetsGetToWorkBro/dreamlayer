@@ -22,7 +22,7 @@ function Chips({ items, tint }: { items: string[]; tint: string }) {
 }
 
 export default function Profile() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getProfile = useBrainStore((s) => s.getProfile);
   const [p, setP] = React.useState<OracleProfile | null>(null);
   const [loaded, setLoaded] = React.useState(false);

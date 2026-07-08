@@ -29,6 +29,8 @@ export default function Onboarding() {
   const { stepIndex, step, advance, complete } = useOnboardingStore();
   const { connect, connected } = useHaloStore();
   const pairFromCode = useBrainStore((s) => s.pairFromCode);
+  const enableDemo = useBrainStore((s) => s.enableDemo);
+  const setOnboardingSeen = useBrainStore((s) => s.setOnboardingSeen);
   const [scanOpen, setScanOpen] = React.useState(false);
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(18)).current;
@@ -44,7 +46,10 @@ export default function Onboarding() {
   const isPairStep = step.id === "pair";
   const accent = ACCENT_MAP[step.accent] ?? colors.accentMemory;
 
-  const finish = () => { tapSuccess(); complete(); router.replace("/brain"); };
+  const finish = () => { tapSuccess(); complete(); setOnboardingSeen(true); router.replace("/now"); };
+
+  // No glasses, no Mac? Explore the whole app with labeled sample data.
+  const exploreDemo = () => { tapMedium(); enableDemo(); setOnboardingSeen(true); complete(); router.replace("/now"); };
 
   const handleCta = async () => {
     if (isPairStep) {
@@ -66,7 +71,7 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safe}>
       {!isPairStep && (
-        <TouchableOpacity style={styles.skip} onPress={() => { complete(); router.replace("/brain"); }}>
+        <TouchableOpacity style={styles.skip} onPress={() => { complete(); setOnboardingSeen(true); router.replace("/now"); }}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Skip</Text>
         </TouchableOpacity>
       )}
@@ -86,9 +91,16 @@ export default function Onboarding() {
         <OnboardingDots total={ONBOARDING_STEPS.length} current={stepIndex} />
         <PrimaryButton label={step.cta} onPress={handleCta} accent={step.accent} style={{ marginTop: 28, width: SW - 64 }} />
         {isPairStep && (
-          <TouchableOpacity style={styles.scanLink} onPress={() => { tapMedium(); setScanOpen(true); }}>
-            <Text style={[typography.caption, { color: accent }]}>Have a Mac mini? Scan its pairing QR</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.scanLink} onPress={() => { tapMedium(); setScanOpen(true); }}>
+              <Text style={[typography.caption, { color: accent }]}>Have a Mac mini? Scan its pairing QR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.demoLink} onPress={exploreDemo}>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                No glasses yet? <Text style={{ color: accent }}>Explore with sample data</Text>
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
       <QrScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={onScanned} />
@@ -113,6 +125,7 @@ const styles = StyleSheet.create({
   copy:    { alignItems: "center", gap: 4 },
   bottom:  { paddingBottom: 48, alignItems: "center", paddingHorizontal: 32 },
   scanLink: { marginTop: 18, paddingVertical: 6 },
+  demoLink: { marginTop: 4, paddingVertical: 6 },
 });
 const glyphStyles = StyleSheet.create({
   shell:  { width: 120, height: 120, borderRadius: 60, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },

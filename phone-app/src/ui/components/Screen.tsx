@@ -3,6 +3,7 @@ import { View, ScrollView, SafeAreaView, StyleSheet, StyleProp, ViewStyle } from
 import { colors } from "../theme/colors";
 import { gutter, space } from "../theme/spacing";
 import { CineBackdrop } from "./CineBackdrop";
+import { DemoBanner } from "./DemoBanner";
 
 /**
  * Screen — the frame every screen shares: a cinematic backdrop (teal glow +
@@ -31,12 +32,16 @@ export function Screen({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <DemoBanner />
             {children}
           </ScrollView>
         </SafeAreaView>
       ) : (
         <SafeAreaView style={s.safe}>
-          <View style={[s.fixed, pad, contentStyle]}>{children}</View>
+          <View style={[s.fixed, pad, contentStyle]}>
+            <DemoBanner />
+            {children}
+          </View>
         </SafeAreaView>
       )}
     </View>

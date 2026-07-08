@@ -24,7 +24,7 @@ function kindLabel(kind: string): string {
 }
 
 export default function Rewind() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getRewind = useBrainStore((s) => s.getRewind);
   const [blocks, setBlocks] = React.useState<RewindBlock[] | null>(null);
 

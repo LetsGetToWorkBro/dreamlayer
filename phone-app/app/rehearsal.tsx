@@ -37,7 +37,7 @@ function fmtFold(sec: number): string {
 }
 
 export default function Rehearsal() {
-  const macConnected = useBrainStore((s) => s.macMini.connected);
+  const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
 
   const onStage = useRehearsalStore((s) => s.onStage);
   const score = useRehearsalStore((s) => s.score);
