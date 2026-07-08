@@ -67,6 +67,15 @@ Flip `submit_for_review(true)` in `fastlane/Deliverfile` and re-run `fastlane me
 
 ---
 
+### Ship listing updates on push (GitHub Actions)
+`.github/workflows/appstore-metadata.yml` runs `fastlane deliver` (metadata + screenshots only —
+never a binary, never submit-for-review) on manual dispatch, and on pushes to `main` that touch
+`store/listing*.md`, `store/review-notes.txt`, or `fastlane/screenshots/**`. It regenerates the
+metadata tree from the listing sources first (`scripts/build-appstore-metadata.mjs`), so editing the
+copy is enough. Add three repo secrets and it's hands-off:
+`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (paste the whole `.p8`). Without them the job safely
+no-ops. Edit `store/listing.md` → push → the listing updates itself.
+
 ### Why not fully headless here?
 `eas build`/`eas submit` and `fastlane` all authenticate as **you** (Apple ID 2FA or your ASC API
 key) and produce a binary signed with **your** Developer certificate. Those secrets and the paid

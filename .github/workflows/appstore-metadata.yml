@@ -1,0 +1,88 @@
+name: App Store metadata
+
+# Syncs the App Store listing (copy + screenshots, every locale) to App Store
+# Connect via fastlane deliver. Never uploads a binary and never submits for
+# review — it only updates the editable metadata of the app record.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID      – App Store Connect API key ID
+#   ASC_ISSUER_ID   – API key issuer ID
+#   ASC_KEY_P8      – full contents of the AuthKey_XXXX.p8 (paste as-is)
+# Without these the job no-ops (guarded), so forks/PRs don't fail.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "Which fastlane lane to run"
+        type: choice
+        default: metadata
+        options: [metadata, copy, shots]
+  push:
+    branches: [main]
+    paths:
+      - "phone-app/store/listing.md"
+      - "phone-app/store/listing-localized.md"
+      - "phone-app/store/review-notes.txt"
+      - "phone-app/fastlane/screenshots/**"
+
+concurrency:
+  group: appstore-metadata
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: phone-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets present
+        id: gate
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ]; then
+            echo "ASC secrets not set — skipping upload."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ok == 'true'
+        with:
+          node-version: "22"
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.gate.outputs.ok == 'true'
+        with:
+          ruby-version: "3.3"
+
+      - name: Install fastlane
+        if: steps.gate.outputs.ok == 'true'
+        run: gem install fastlane --no-document
+
+      - name: Regenerate metadata tree from listing sources
+        if: steps.gate.outputs.ok == 'true'
+        run: node scripts/build-appstore-metadata.mjs
+
+      - name: Write ASC API key
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          jq -n --arg kid "$ASC_KEY_ID" --arg iss "$ASC_ISSUER_ID" --arg key "$ASC_KEY_P8" \
+            '{key_id:$kid, issuer_id:$iss, key:$key, in_house:false}' > fastlane/asc_key.json
+
+      - name: fastlane deliver
+        if: steps.gate.outputs.ok == 'true'
+        run: fastlane ${{ github.event.inputs.lane || 'metadata' }} api_key_path:./fastlane/asc_key.json
+
+      - name: Clean up key
+        if: always()
+        run: rm -f fastlane/asc_key.json
