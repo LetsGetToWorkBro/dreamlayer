@@ -54,6 +54,10 @@ npm run submit:ios         # eas submit -p ios --profile production  (uploads th
   TestFlight app and run the **pre-flight checklist** (section 9) on real hardware. This device pass
   is the real gate — do it before submitting for review.
 
+> **Ready-made:** the full listing copy (name, subtitle, keywords, description, What's New,
+> URLs, category) is written out in **`store/listing.md`**, and the six upload-ready
+> screenshots are in **`store/screenshots/`** (1290×2796). Sections 5–6 below summarize them.
+
 ## 5. Store listing (App Store tab → the 1.0.0 version)
 - **Subtitle (30 char):** e.g. `Your memory, on your glasses`
 - **Promotional text:** one honest line — companion app for Brilliant Labs Halo + an optional

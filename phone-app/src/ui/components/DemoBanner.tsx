@@ -18,16 +18,19 @@ export function DemoBanner() {
   const demoMode = useBrainStore((s) => s.demoMode);
   if (!demoMode) return null;
   return (
-    <Tappable onPress={() => router.push("/settings")} style={s.wrap}>
-      <View style={s.dot} />
-      <Text style={s.text}>
-        Sample data · Demo Mode — <Text style={s.link}>pair your Brain</Text>
-      </Text>
-    </Tappable>
+    <View nativeID="dl-demo-banner" style={s.hold}>
+      <Tappable onPress={() => router.push("/settings")} style={s.wrap}>
+        <View style={s.dot} />
+        <Text style={s.text}>
+          Sample data · Demo Mode — <Text style={s.link}>pair your Brain</Text>
+        </Text>
+      </Tappable>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
+  hold: { alignSelf: "flex-start" },
   wrap: {
     flexDirection: "row",
     alignItems: "center",
