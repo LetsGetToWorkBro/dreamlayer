@@ -22,6 +22,13 @@ Built for Halo. Coming soon → dreamlayer.app
 Tip: tag the hardware — replace "Halo" with "@brilliantlabsAR Halo" if you want the mention
 (verify the handle first). Pin this post.
 
+## Launch video (from the site's Halo Simulator — the real renderer)
+- `launch-sim.mp4` — full ~35s tour of the simulator (1280×800). Lead media for the launch post.
+- `face-recall.mp4` / `face-recall.gif` — a ~10s cut of the Face Recall beat (learned → glance →
+  the card on the glass). Reply-sized; good for the "how does recognition work?" question.
+  Honesty: the simulator is the real DreamLayer renderer, labeled "Environment illustrative" —
+  it shows the product/UX, not live face-matching on real people (that's the pre-hardware seam).
+
 ## Optional follow-up thread
 ```
 2/ How it stays private: your memory lives on your own devices, not our servers. No account, no tracking. Cloud AI is off by default — on only when you say so. Incognito keeps everything on your local network.
