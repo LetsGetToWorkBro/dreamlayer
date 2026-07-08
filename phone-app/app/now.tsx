@@ -15,6 +15,7 @@ import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { pushLocal } from "../src/services/notify";
 import { playListen } from "../src/services/sound";
+import { t } from "../src/i18n";
 
 export default function Now() {
   const router = useRouter();
@@ -75,13 +76,13 @@ export default function Now() {
 
   return (
     <Screen>
-      <ScreenHeader title="Now" eyebrow="DreamLayer" right={<StatusPill paused={paused} />} />
+      <ScreenHeader title={t("now.title")} eyebrow="DreamLayer" right={<StatusPill paused={paused} />} />
 
       <Animated.View style={[s.stage, mirror]}>
         <HaloMirror card={paused ? null : service.lastCard} />
         {!connected ? (
           <Tappable onPress={connect} style={s.pairChip}>
-            <Text style={[typography.caption, { color: colors.accentMemory }]}>Halo not connected · tap to pair</Text>
+            <Text style={[typography.caption, { color: colors.accentMemory }]}>{t("now.notConnected")}</Text>
           </Tappable>
         ) : (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.lg }]}>
@@ -119,11 +120,11 @@ export default function Now() {
       ) : null}
 
       <View style={s.actions}>
-        <PrimaryButton label="Ask your brain" onPress={() => router.push("/brain")} />
+        <PrimaryButton label={t("now.ask")} onPress={() => router.push("/brain")} />
         <View style={s.actionRow}>
           <Tappable onPress={doBrief} style={[s.action, s.actionGhost, { borderColor: colors.borderSubtle }]}>
             <Text style={[typography.body, { color: colors.accentMemory, fontWeight: "600" }]}>
-              {briefing ? "Thinking…" : brief ? "Refresh brief" : "Morning brief"}
+              {briefing ? "…" : brief ? t("now.refreshBrief") : t("now.morningBrief")}
             </Text>
           </Tappable>
           <Tappable
@@ -131,7 +132,7 @@ export default function Now() {
             style={[s.action, s.actionGhost, { borderColor: paused ? colors.statusPaused : colors.borderSubtle }]}
           >
             <Text style={[typography.body, { color: paused ? colors.statusPaused : colors.textSecondary, fontWeight: "600" }]}>
-              {paused ? "Resume memory" : "Pause capture"}
+              {paused ? t("now.resume") : t("now.pause")}
             </Text>
           </Tappable>
         </View>

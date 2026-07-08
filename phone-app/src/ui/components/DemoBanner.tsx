@@ -6,6 +6,7 @@ import { colors } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { space, radius } from "../theme/spacing";
 import { Tappable } from "./Tappable";
+import { t } from "../../i18n";
 
 /**
  * DemoBanner — an honest, always-visible marker that the screen is showing
@@ -22,7 +23,7 @@ export function DemoBanner() {
       <Tappable onPress={() => router.push("/settings")} style={s.wrap}>
         <View style={s.dot} />
         <Text style={s.text}>
-          Sample data · Demo Mode — <Text style={s.link}>pair your Brain</Text>
+          {t("demo.bannerLabel")} — <Text style={s.link}>{t("demo.pairCta")}</Text>
         </Text>
       </Tappable>
     </View>

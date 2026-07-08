@@ -18,6 +18,7 @@ import { Tappable } from "../src/ui/components/Tappable";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
+import { t } from "../src/i18n";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { usePeopleStore, Person } from "../src/state/usePeopleStore";
 
@@ -43,9 +44,9 @@ export default function People() {
   return (
     <Screen>
       <ScreenHeader
-        title="People"
-        eyebrow="Who you've met"
-        subtitle="Your own contacts — names, notes, and debts, on your device."
+        title={t("people.title")}
+        eyebrow={t("people.eyebrow")}
+        subtitle={t("people.subtitle")}
       />
 
       {!macConnected ? (

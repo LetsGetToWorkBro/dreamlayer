@@ -7,6 +7,7 @@ import { useBrainStore } from "../src/state/useBrainStore";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
+import { t } from "../src/i18n";
 
 function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
   return (
@@ -61,7 +62,7 @@ export default function Settings() {
   return (
     <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
-      <Text style={[typography.title, s.heading]}>Settings</Text>
+      <Text style={[typography.title, s.heading]}>{t("settings.title")}</Text>
       <View style={{ paddingHorizontal: 24 }}>
         <DemoBanner />
       </View>

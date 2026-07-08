@@ -10,6 +10,7 @@ import { EmptyState } from "../src/ui/components/EmptyState";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
+import { t } from "../src/i18n";
 
 const KIND_COLOR: Record<string, string> = {
   Promise: colors.accentAttention,
@@ -70,8 +71,8 @@ export default function Memories() {
   return (
     <Screen>
       <ScreenHeader
-        title="Memories"
-        eyebrow={macConnected ? "Search everything" : "Your recall"}
+        title={t("memories.title")}
+        eyebrow={macConnected ? t("memories.eyebrowConnected") : t("memories.eyebrowIdle")}
         subtitle={
           macConnected
             ? "Kept moments + your files & mail"

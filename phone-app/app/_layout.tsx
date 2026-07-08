@@ -12,6 +12,7 @@ import { colors } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
 import { TabIcon } from "../src/ui/components/TabIcon";
 import { useBrainStore } from "../src/state/useBrainStore";
+import { t } from "../src/i18n";
 
 /** Frosted glass under the tab bar — a blur on native, a translucent wash on web. */
 function TabBarBackground() {
@@ -66,27 +67,27 @@ export default function Layout() {
     >
       <Tabs.Screen
         name="brain"
-        options={{ title: "Brain", tabBarIcon: ({ color }) => <TabIcon name="brain" color={color} /> }}
+        options={{ title: t("tabs.brain"), tabBarIcon: ({ color }) => <TabIcon name="brain" color={color} /> }}
       />
       <Tabs.Screen
         name="now"
-        options={{ title: "Now", tabBarIcon: ({ color }) => <TabIcon name="now" color={color} /> }}
+        options={{ title: t("tabs.now"), tabBarIcon: ({ color }) => <TabIcon name="now" color={color} /> }}
       />
       <Tabs.Screen
         name="messages"
-        options={{ title: "Messages", tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} /> }}
+        options={{ title: t("tabs.messages"), tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} /> }}
       />
       <Tabs.Screen
         name="people"
-        options={{ title: "People", tabBarIcon: ({ color }) => <TabIcon name="people" color={color} /> }}
+        options={{ title: t("tabs.people"), tabBarIcon: ({ color }) => <TabIcon name="people" color={color} /> }}
       />
       <Tabs.Screen
         name="memories"
-        options={{ title: "Memories", tabBarIcon: ({ color }) => <TabIcon name="memories" color={color} /> }}
+        options={{ title: t("tabs.memories"), tabBarIcon: ({ color }) => <TabIcon name="memories" color={color} /> }}
       />
       <Tabs.Screen
         name="settings"
-        options={{ title: "Settings", tabBarIcon: ({ color }) => <TabIcon name="settings" color={color} /> }}
+        options={{ title: t("tabs.settings"), tabBarIcon: ({ color }) => <TabIcon name="settings" color={color} /> }}
       />
       {/* reachable from Settings → Labs, kept out of the bar */}
       <Tabs.Screen name="brief" options={{ href: null }} />

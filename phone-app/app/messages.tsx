@@ -10,6 +10,7 @@ import { pushLocal } from "../src/services/notify";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
+import { t } from "../src/i18n";
 
 /**
  * Messages — read your Messages & Mail hands-free and reply. The Mac mini
@@ -90,7 +91,7 @@ export default function Messages() {
 
   return (
     <Screen>
-      <ScreenHeader title="Messages" eyebrow="Hands-free" />
+      <ScreenHeader title={t("messages.title")} eyebrow={t("messages.eyebrow")} />
 
       {!macConnected ? (
         <EmptyState

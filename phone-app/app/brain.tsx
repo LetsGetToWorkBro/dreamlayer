@@ -13,6 +13,7 @@ import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/componen
 import { QrScanner } from "../src/ui/components/QrScanner";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
+import { t } from "../src/i18n";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 
@@ -99,7 +100,7 @@ export default function Brain() {
         <DemoBanner />
         {/* header */}
         <Text style={[typography.eyebrow, { color: colors.accentMemory }]}>DreamLayer</Text>
-        <Text style={[typography.display, { color: colors.textPrimary }]}>Brain</Text>
+        <Text style={[typography.display, { color: colors.textPrimary }]}>{t("brain.title")}</Text>
         <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
           {brainKind === "mac_mini"
             ? "Your Mac mini is the brain — bigger local model, your files, richest answers."
