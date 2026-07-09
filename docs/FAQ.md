@@ -127,7 +127,9 @@ display never has to show a menu.
 
 ## "Can I build on it? Is it open?"
 
-There's a formal plugin surface (`plugins/base.py`) — third parties can add
+Yes — the code is licensed **Apache-2.0** (see `LICENSE`; the DreamLayer name
+and mark stay reserved, so forks rename). There's a formal plugin surface
+(`plugins/base.py`) — third parties can add
 object providers, new glance candidates, card renderers, and shop/price
 providers through one narrow, capability-gated doorway, without touching core.
 A recent pass also added an optional entry-point/pluggy discovery path so a

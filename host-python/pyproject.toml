@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dreamlayer"
 version = "0.6.1"
 description = "Memory engine for Brilliant Labs Halo glasses"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
     "Pillow>=10",
