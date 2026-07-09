@@ -710,6 +710,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 .drawer a:nth-child(1){transition-delay:.04s}.drawer a:nth-child(2){transition-delay:.09s}
 .drawer a:nth-child(3){transition-delay:.14s}.drawer a:nth-child(4){transition-delay:.19s}
 .drawer a:nth-child(5){transition-delay:.24s}
+.drawer a:nth-child(6){transition-delay:.29s}.drawer a:nth-child(7){transition-delay:.34s}
 .drawer a:hover{color:var(--teal)}
 .drawer a .k{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.14em;
   color:var(--text-3);flex:none;width:24px;text-transform:uppercase}
@@ -780,11 +781,12 @@ body.menu-open{overflow:hidden}
 </button>
 <nav class="drawer" id="drawer" aria-hidden="true">
   <a href="./simulator.html"><span class="k">01</span><span>Simulator<span class="d">Run the whole layer in your browser — no glasses, no install.</span></span></a>
-  <a href="./plugins.html"><span class="k">02</span><span>Plugin store<span class="d">Browse, rate, and install what the community builds.</span></span></a>
-  <a href="./playground.html"><span class="k">03</span><span>Web BLE playground<span class="d">Talk Lua to a real Halo over Bluetooth, from the page.</span></span></a>
-  <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank" rel="noopener"><span class="k">04</span><span>Knowledge base ↗<span class="d">Every card, screen, and panel — the complete reference.</span></span></a>
-  <a href="https://github.com/LetsGetToWorkBro/dreamlayer-releases/releases/latest" target="_blank" rel="noopener"><span class="k">05</span><span>Download for Mac ↗<span class="d">The Brain as a signed, notarized menu-bar app.</span></span></a>
-  <a href="#soon"><span class="k">06</span><span>Get early access<span class="d">One note when the layer wakes. Nothing else.</span></span></a>
+  <a href="#faq"><span class="k">02</span><span>How it works<span class="d">The short answer to “how is this possible on a 256px display?”</span></span></a>
+  <a href="./plugins.html"><span class="k">03</span><span>Plugin store<span class="d">Browse, rate, and install what the community builds.</span></span></a>
+  <a href="./playground.html"><span class="k">04</span><span>Web BLE playground<span class="d">Talk Lua to a real Halo over Bluetooth, from the page.</span></span></a>
+  <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank" rel="noopener"><span class="k">05</span><span>Knowledge base ↗<span class="d">Every card, screen, and panel — the complete reference.</span></span></a>
+  <a href="https://github.com/LetsGetToWorkBro/dreamlayer-releases/releases/latest" target="_blank" rel="noopener"><span class="k">06</span><span>Download for Mac ↗<span class="d">The Brain as a signed, notarized menu-bar app.</span></span></a>
+  <a href="#soon"><span class="k">07</span><span>Get early access<span class="d">One note when the layer wakes. Nothing else.</span></span></a>
   <span class="close-note">Esc or tap ✕ to close</span>
 </nav>
 
@@ -793,6 +795,7 @@ body.menu-open{overflow:hidden}
   <a class="wordmark" href="#top"><span class="ring"></span>DREAMLAYER</a>
   <nav class="barnav">
     <a href="./simulator.html">Simulator</a>
+    <a href="#faq">FAQ</a>
     <a href="./plugins.html">Plugin&nbsp;store</a>
     <a class="pill" href="#soon"><span class="dot"></span>Early&nbsp;access</a>
   </nav>
@@ -1759,7 +1762,7 @@ if(G && ST && !reduced){
   ST.create({ start:function(){ return innerHeight*0.72; }, end:"max",
     onToggle:function(self){ setBar(self.isActive); } });
   ST.create({ trigger:"#veil", start:"top top", end:"bottom bottom", scrub:true,
-    onUpdate:function(){ applyVeil(); } });
+    onUpdate:function(self){ applyVeil(self.progress); } });
   addEventListener("load", function(){ ST.refresh(); });
 }else{
   var ticking=false;
@@ -1851,14 +1854,29 @@ new IntersectionObserver(function(en){
 var veil=document.getElementById("veil"),
     veilWorld=document.getElementById("veilWorld"),
     veilCore=document.getElementById("veilCore");
-function applyVeil(){
-  var r=veil.getBoundingClientRect(), vh=innerHeight;
-  var total=r.height-vh;
-  var p=Math.max(0,Math.min(1,-r.top/total));       // 0 → 1 through the section
+var _veilBlurStep=-1;
+function applyVeil(prog){
+  // Prefer ScrollTrigger's progress (passed in) so the scroll path never reads
+  // layout. Only the non-Lenis fallback / initial call measures the rect.
+  var p=prog;
+  if(p==null){
+    var r=veil.getBoundingClientRect();
+    var total=r.height-innerHeight;
+    p=Math.max(0,Math.min(1,-r.top/total));         // 0 → 1 through the section
+  }
   if(reduced){ veilWorld.style.opacity="0.12"; veilCore.style.opacity="1"; return; }
   var dim=Math.min(1,p/0.42);                       // the hush lands early
   veilWorld.style.opacity=String(0.9*(1-dim)+0.06);
-  veilWorld.style.filter="blur("+(dim*6)+"px) saturate("+(1-dim*0.9)+")";
+  // Animating filter:blur() every scroll frame re-runs a full Gaussian blur and
+  // is the main source of scroll jitter here. Quantize it to 8 steps so the
+  // browser recomputes the blur ~8 times across the whole section, not per
+  // frame — visually identical, an order of magnitude cheaper.
+  var step=Math.round(dim*8);
+  if(step!==_veilBlurStep){
+    _veilBlurStep=step;
+    var q=step/8;
+    veilWorld.style.filter="blur("+(q*6).toFixed(2)+"px) saturate("+(1-q*0.9).toFixed(3)+")";
+  }
   veilWorld.style.transform="scale("+(1-dim*0.05)+")";
   var rise=Math.max(0,Math.min(1,(p-0.22)/0.26));   // veil arrives as the hush begins
   veilCore.style.opacity=String(rise);
