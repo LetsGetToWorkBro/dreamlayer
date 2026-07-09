@@ -295,6 +295,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <main>
   <section>
     <div class="eyebrow">System</div><h2>What's connected</h2>
+    <div id="packNudge" style="display:none"></div>
     <div id="sysrows"></div>
   </section>
 
@@ -531,6 +532,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       click (no uninstall); missing ones show the exact install.
       <a href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/DEPLOYMENT.md" target="_blank">How switching on works ↗</a></p>
     <div class="conn-s" id="capsum" style="margin:0 0 10px">…</div>
+    <div class="xgrid" id="packgrid" style="margin:0 0 8px"></div>
     <div id="caprows"></div>
   </section>
 
@@ -674,7 +676,8 @@ function capRight(it){
   return `<span class="sstate">macOS only</span>`;
 }
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
-  if(!r||!r.items)return; CAPFROZEN=!!r.frozen; renderCaps(r);}
+  if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; renderCaps(r); renderPacks(r.packs);
+  if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
 function renderCaps(r){
   const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
   $("capsum").textContent=order.filter(k=>s[k]).map(k=>`${s[k]} ${k}`).join(" · ")
@@ -686,15 +689,77 @@ function renderCaps(r){
     html+=`<div class="conn" style="padding:8px 0">
       <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${CAPDOT[it.state]||"var(--ghost)"}"></span>
       <div style="flex:1;min-width:0"><div class="conn-t">${esc(it.key)}
-        <span class="conn-s" style="display:inline;margin-left:6px">${esc(it.title)}</span></div></div>
+        <span class="conn-s" style="display:inline;margin-left:6px">${esc(it.title)}</span>
+        ${it.impact?`<span class="tag" style="margin-left:6px">impact ${it.impact}/5</span>`:""}</div>
+        ${it.gain?`<div class="conn-s" style="margin-top:2px">${esc(it.gain)}</div>`:""}</div>
       <div class="row" style="gap:8px;flex:none">${capRight(it)}</div></div>`;
   });
   $("caprows").innerHTML=html;
 }
+/* --- packs: curated upgrades so single capabilities are never overlooked --- */
+const PACKSTATE={installed:"installed",partial:"partially installed",available:""};
+function packCard(p){
+  const job=p.install||null;
+  let cta;
+  if(job&&job.state==="installing") cta=`<span class="sstate">installing… ${esc(job.detail||"")}</span>`;
+  else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
+  else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack('${p.key}')">Retry</button>`;
+  else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
+  else if(CAPFROZEN) cta=`<span class="sstate">runs on a source-install Brain</span>`;
+  else cta=`<button class="sm" onclick="installPack('${p.key}')">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
+  const stars="●".repeat(p.impact)+"○".repeat(5-p.impact);
+  return `<div class="x" style="cursor:default">
+    <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}</div>
+    <div class="x-b">${esc(p.tagline)}</div>
+    <div class="conn-s" style="margin:8px 0 0">impact <span style="color:var(--memory)">${stars}</span> · download ${esc(p.size)} · ${p.caps.length} capabilities</div>
+    <div class="row" style="margin-top:8px">${cta}</div></div>`;
+}
+function renderPacks(packs){
+  const g=$("packgrid"); if(!g)return;
+  g.innerHTML=(packs||[]).map(packCard).join("");
+  renderPackNudge(packs||[]);
+}
+function renderPackNudge(packs){
+  const el=$("packNudge"); if(!el)return;
+  const todo=packs.filter(p=>p.state!=="installed"&&!(p.install&&p.install.state==="done"));
+  if(CAPFROZEN||!todo.length||localStorage.dlPackNudgeDismissed){el.style.display="none";return;}
+  const rec=todo.find(p=>p.recommended)||todo[0];
+  el.style.display="";
+  el.innerHTML=`<div class="conn" style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 12px;gap:12px">
+    <span style="width:8px;height:8px;border-radius:50%;flex:none;background:var(--memory)"></span>
+    <div style="flex:1"><div class="conn-t">Your Brain can do more</div>
+      <div class="conn-s">${todo.length} upgrade pack${todo.length>1?"s":""} available — start with ${esc(rec.name)}: ${esc(rec.tagline)}</div></div>
+    <button class="sm" onclick="showPage('caps')">See packs</button>
+    <button class="ghost sm" onclick="dismissPackNudge()">Later</button></div>`;
+}
+function dismissPackNudge(){localStorage.dlPackNudgeDismissed="1";$("packNudge").style.display="none";}
+async function installPack(key){
+  const p=(LASTCAPS&&LASTCAPS.packs||[]).find(x=>x.key===key); if(!p)return;
+  const warn=`Install the ${p.name} pack?\n\n${p.tagline}\n\n`+
+    `What this does: downloads about ${p.size} of open-source AI libraries onto this Mac `+
+    `(${p.caps.length} capabilities). Everything runs locally — nothing about you is uploaded, `+
+    `and models may fetch extra data on their first use. The Brain stays usable while it installs, `+
+    `and you can switch any capability off afterwards from this page.`;
+  if(!confirm(warn))return;
+  let r;try{r=await api("/dreamlayer/packs",{method:"POST",body:JSON.stringify({pack:key})});}
+  catch(e){toast("Brain offline");return;}
+  if(r&&r.error){toast(r.error);return;}
+  if(r&&r.items){LASTCAPS=r;CAPFROZEN=!!r.frozen;renderCaps(r);renderPacks(r.packs);
+    toast(p.name+" installing — this can take a while");
+    schedulePackPoll();}
+}
+let packPollT=null;
+function schedulePackPoll(){clearTimeout(packPollT);packPollT=setTimeout(async()=>{
+  let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
+  if(r&&r.items){LASTCAPS=r;renderCaps(r);renderPacks(r.packs);
+    if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
+},5000);}
+let LASTCAPS=null;
+
 async function toggleCap(key,disabled){
   let r;try{r=await api("/dreamlayer/capabilities",{method:"POST",
     body:JSON.stringify({key:key,disabled:disabled})});}catch(e){toast("Brain offline");return;}
-  if(r&&r.items){CAPFROZEN=!!r.frozen;renderCaps(r);
+  if(r&&r.items){LASTCAPS=r;CAPFROZEN=!!r.frozen;renderCaps(r);renderPacks(r.packs);
     toast("Capability "+key+(disabled?" off":" on"));}
 }
 function copyCap(cmd){navigator.clipboard&&navigator.clipboard.writeText(cmd);toast("Install command copied");}

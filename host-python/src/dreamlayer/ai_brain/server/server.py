@@ -1365,16 +1365,79 @@ def _capability_payload(brain: Brain) -> dict:
     made durable, since the bundled .app has no env of its own to edit."""
     import os
     import sys
-    from ...capabilities import PROFILES, report, summary
+    from ...capabilities import PROFILES, packs_report, report, summary
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
+    packs = packs_report(env=env)
+    for p in packs:                             # overlay live install progress
+        job = _PACK_JOBS.get(p["key"])
+        if job:
+            p["install"] = dict(job)
     return {"items": report(env=env), "summary": summary(env=env),
             "profiles": {k: list(v) for k, v in PROFILES.items()},
             "disabled": list(brain.config.disabled_caps),
+            "packs": packs,
             # py2app sets sys.frozen — the panel words install hints accordingly
             # (a sealed, signed bundle can't pip-install into itself)
             "frozen": bool(getattr(sys, "frozen", False))}
+
+
+# --- pack installer ----------------------------------------------------------
+# One-click upgrade for SOURCE installs: pip-installs a curated pack's pinned
+# requirements into this very environment, in a background thread, one pack at
+# a time. The frozen .app refuses (a sealed signed bundle can't modify itself)
+# and the panel words that honestly. `_PACK_RUNNER` is injectable for tests.
+
+_PACK_JOBS: dict = {}            # pack key -> {"state","detail","ts"}
+_PACK_LOCK = threading.Lock()
+
+
+def _run_pip(reqs: list) -> tuple:
+    """Default pack runner: pip install into this interpreter's environment.
+    Returns (ok, last_output_lines)."""
+    import subprocess
+    import sys
+    cmd = [sys.executable, "-m", "pip", "install", *reqs]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        tail = (proc.stdout + proc.stderr).strip().splitlines()[-6:]
+        return proc.returncode == 0, "\n".join(tail)
+    except Exception as exc:                     # pip missing, timeout, ...
+        return False, str(exc)
+
+
+_PACK_RUNNER = _run_pip
+
+
+def _install_pack(brain: Brain, pack_key: str) -> dict:
+    """Validate and launch a pack install. Returns the job dict (or an error)."""
+    import sys
+    from ...capabilities import pack_requirements
+    if getattr(sys, "frozen", False):
+        return {"error": "this bundled app can't install into itself — "
+                         "packs install on a source-run Brain"}
+    reqs = pack_requirements(pack_key)
+    if not reqs:
+        return {"error": f"unknown pack: {pack_key}"}
+    with _PACK_LOCK:
+        if any(j.get("state") == "installing" for j in _PACK_JOBS.values()):
+            return {"error": "another pack is already installing"}
+        job = {"state": "installing", "detail": f"{len(reqs)} packages", "ts": time.time()}
+        _PACK_JOBS[pack_key] = job
+
+    def work():
+        ok, detail = _PACK_RUNNER(reqs)
+        job["state"] = "done" if ok else "failed"
+        job["detail"] = ("installed — restart the Brain to light it up"
+                         if ok else detail[-400:])
+        job["ts"] = time.time()
+        brain.activity.add("config", f"Pack {pack_key} install "
+                           + ("finished" if ok else "failed"))
+
+    threading.Thread(target=work, daemon=True).start()
+    brain.activity.add("config", f"Pack {pack_key} install started")
+    return job
 
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
@@ -1639,6 +1702,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 brain.save()
                 brain.activity.add("config", f"Capability {key} "
                                    + ("switched off" if b.get("disabled") else "switched on"))
+                self._json(200, _capability_payload(brain))
+            elif path == "/dreamlayer/packs":
+                # one-click pack install (source installs only; allowlisted —
+                # the client names a curated pack, never a package)
+                b = self._body()
+                job = _install_pack(brain, str(b.get("pack", "")))
+                if "error" in job:
+                    self._json(400, job); return
                 self._json(200, _capability_payload(brain))
             elif path == "/dreamlayer/upload":
                 folder = (qs.get("folder", [""])[0])

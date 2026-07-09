@@ -113,3 +113,133 @@ def test_panel_carries_the_capabilities_view(tmp_path):
             assert marker in html, f"panel missing {marker!r}"
     finally:
         lb.stop()
+
+
+# --- packs: curated one-click upgrades ----------------------------------------
+
+import time
+
+import pytest
+
+from dreamlayer.ai_brain.server import server as _srv
+from dreamlayer.capabilities import PACKS, pack_requirements
+
+
+@pytest.fixture(autouse=True)
+def _clean_pack_jobs():
+    _srv._PACK_JOBS.clear()
+    saved = _srv._PACK_RUNNER
+    yield
+    _srv._PACK_RUNNER = saved
+    _srv._PACK_JOBS.clear()
+
+
+def test_payload_includes_packs_and_gains(tmp_path):
+    lb = _Live(tmp_path)
+    try:
+        _, body = _req(lb.url + "/dreamlayer/capabilities", headers=lb.h)
+        packs = body["packs"]
+        assert [p["key"] for p in packs] == [p.key for p in PACKS]
+        for p in packs:
+            assert {"name", "tagline", "size", "impact", "state", "caps"} <= set(p)
+            assert p["state"] in ("installed", "partial", "available")
+        assert sum(p["recommended"] for p in packs) == 1        # one flagship
+        # every capability row explains itself: what it does + how big a gain
+        for row in body["items"]:
+            assert row["gain"] and 1 <= row["impact"] <= 5
+    finally:
+        lb.stop()
+
+
+def test_pack_requirements_resolve_for_every_pack():
+    for p in PACKS:
+        reqs = pack_requirements(p.key)
+        assert reqs, f"pack {p.key} resolved no requirements"
+        assert all(isinstance(r, str) and r for r in reqs)
+    assert pack_requirements("warp_drive") == []
+
+
+def test_pack_install_lifecycle_with_fake_runner(tmp_path):
+    calls = {}
+
+    def fake_runner(reqs):
+        calls["reqs"] = list(reqs)
+        return True, "ok"
+
+    _srv._PACK_RUNNER = fake_runner
+    lb = _Live(tmp_path)
+    try:
+        status, body = _req(lb.url + "/dreamlayer/packs",
+                            {"pack": "guardian"}, lb.h)
+        assert status == 200
+        for _ in range(50):                      # background thread finishes fast
+            time.sleep(0.02)
+            if _srv._PACK_JOBS["guardian"]["state"] == "done":
+                break
+        assert _srv._PACK_JOBS["guardian"]["state"] == "done"
+        assert "restart the Brain" in _srv._PACK_JOBS["guardian"]["detail"]
+        assert calls["reqs"] == pack_requirements("guardian")   # allowlisted set only
+        # the report now carries the job so the panel can show progress
+        _, body = _req(lb.url + "/dreamlayer/capabilities", headers=lb.h)
+        g = next(p for p in body["packs"] if p["key"] == "guardian")
+        assert g["install"]["state"] == "done"
+    finally:
+        lb.stop()
+
+
+def test_pack_install_failure_reported(tmp_path):
+    _srv._PACK_RUNNER = lambda reqs: (False, "no network")
+    lb = _Live(tmp_path)
+    try:
+        status, _ = _req(lb.url + "/dreamlayer/packs", {"pack": "operator"}, lb.h)
+        assert status == 200
+        for _ in range(50):
+            time.sleep(0.02)
+            if _srv._PACK_JOBS["operator"]["state"] == "failed":
+                break
+        assert _srv._PACK_JOBS["operator"]["state"] == "failed"
+        assert "no network" in _srv._PACK_JOBS["operator"]["detail"]
+    finally:
+        lb.stop()
+
+
+def test_pack_install_rejects_unknown_and_concurrent(tmp_path):
+    _srv._PACK_RUNNER = lambda reqs: (time.sleep(0.3), True) and (True, "ok")
+    lb = _Live(tmp_path)
+    try:
+        status, body = _req(lb.url + "/dreamlayer/packs", {"pack": "nope"}, lb.h)
+        assert status == 400 and "unknown pack" in body["error"]
+        # start a slow install, then a second must be refused
+        status, _ = _req(lb.url + "/dreamlayer/packs", {"pack": "guardian"}, lb.h)
+        assert status == 200
+        status, body = _req(lb.url + "/dreamlayer/packs", {"pack": "operator"}, lb.h)
+        assert status == 400 and "already installing" in body["error"]
+    finally:
+        lb.stop()
+
+
+def test_pack_install_refused_when_frozen(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setattr(sys, "frozen", "macosx_app", raising=False)
+    lb = _Live(tmp_path)
+    try:
+        status, body = _req(lb.url + "/dreamlayer/packs", {"pack": "recall"}, lb.h)
+        assert status == 400 and "can't install into itself" in body["error"]
+        # and the report tells the panel it's a bundled app
+        _, rep = _req(lb.url + "/dreamlayer/capabilities", headers=lb.h)
+        assert rep["frozen"] is True
+    finally:
+        lb.stop()
+
+
+def test_panel_carries_packs_ui(tmp_path):
+    lb = _Live(tmp_path)
+    try:
+        req = urllib.request.Request(lb.url + "/")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=5) as r:
+            html = r.read().decode()
+        for marker in ("packgrid", "installPack", "packNudge", "What this does"):
+            assert marker in html, f"panel missing {marker!r}"
+    finally:
+        lb.stop()

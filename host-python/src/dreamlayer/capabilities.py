@@ -65,6 +65,8 @@ class Cap:
     seam: str                     # the adapter file that consumes it
     kind: str = "python"
     note: str = ""
+    gain: str = ""                # what improves over the built-in baseline, plainly
+    impact: int = 0               # 1..5 — how much better than the fallback this is
 
     @property
     def flag_env(self) -> str:
@@ -82,116 +84,156 @@ CAPABILITIES: Tuple[Cap, ...] = (
     # --- memory ---------------------------------------------------------------
     Cap("vector_search", "Indexed vector recall over memories", "memory",
         ("sqlite_vec", "chromadb", "lancedb", "usearch"), "memory",
-        "memory/vector_store.py (+chroma/lance/usearch siblings)"),
+        "memory/vector_store.py (+chroma/lance/usearch siblings)",
+        gain="baseline scans every memory linearly; this indexes them — recall stays instant at thousands of memories", impact=4),
     Cap("local_embeddings", "Real semantic embeddings, offline", "memory",
-        ("sentence_transformers",), "memory", "memory/embedder_local.py"),
+        ("sentence_transformers",), "memory", "memory/embedder_local.py",
+        gain="baseline embeddings are mock vectors (or cloud); this makes memories truly searchable by meaning, offline", impact=5),
     Cap("memory_dedup", "Dedup + decay over the memory stream", "memory",
-        ("mem0",), "memory", "lucid_recall/mem0_layer.py"),
+        ("mem0",), "memory", "lucid_recall/mem0_layer.py",
+        gain="fallback dedup is exact-match; this merges near-duplicates and decays stale ones", impact=3),
     Cap("typed_docs", "Validated multimodal memory records", "memory",
-        ("docarray",), "memory", "memory/doc_schema.py"),
+        ("docarray",), "memory", "memory/doc_schema.py",
+        gain="baseline records are plain dataclasses; this validates every field", impact=2),
     Cap("social_graph", "Relationship graph algorithms", "memory",
-        ("networkx",), "memory", "social_lens/graph.py"),
+        ("networkx",), "memory", "social_lens/graph.py",
+        gain="baseline graph is a dict of names; this adds paths, mutual friends, communities", impact=3),
 
     # --- voice ------------------------------------------------------------------
     Cap("voice_vad", "Neural speech/noise gating before ASR", "voice",
-        ("silero_vad",), "voice", "orchestrator/vad_gate.py"),
+        ("silero_vad",), "voice", "orchestrator/vad_gate.py",
+        gain="baseline gate is a loudness threshold; this tells speech from noise — fewer false wakes, less battery", impact=4),
     Cap("local_asr", "Local speech-to-text (no cloud audio)", "voice",
-        ("faster_whisper",), "voice", "orchestrator/asr_faster_whisper.py"),
+        ("faster_whisper",), "voice", "orchestrator/asr_faster_whisper.py",
+        gain="baseline has no local transcription at all; this transcribes on-device, audio never uploads", impact=5),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
-        ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py"),
+        ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
+        gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3),
     Cap("diarization", "Live who-is-speaking turns", "voice",
         ("diart",), None, "social_lens/diarize_diart.py", kind="manual",
-        note="pip install diart"),
+        note="pip install diart",
+        gain="baseline can't split speakers live; this tracks who is talking in real time", impact=3),
 
     # --- structured output / llm ------------------------------------------------
     Cap("structured_output", "Schema-constrained LLM intent parsing", "structured",
         ("outlines", "instructor"), "structured",
-        "reality_compiler/intent_parser_llm.py"),
+        "reality_compiler/intent_parser_llm.py",
+        gain="baseline parses intents with regex on fixed phrasings; this understands free-form speech, schema-safe", impact=4),
     Cap("typed_models", "Veil-as-type-invariant memory records", "structured",
-        ("pydantic",), "structured", "memory/models_pydantic.py"),
+        ("pydantic",), "structured", "memory/models_pydantic.py",
+        gain="baseline guard is a runtime check; this makes a veiled memory impossible to even construct", impact=3),
     Cap("typed_pipeline", "Traced RC stage pipeline", "structured",
-        ("pydantic_ai",), "structured", "reality_compiler/pipeline_pydanticai.py"),
+        ("pydantic_ai",), "structured", "reality_compiler/pipeline_pydanticai.py",
+        gain="baseline pipeline has no trace; this records what ran and where it failed", impact=2),
     Cap("llm_router", "One interface over ~100 LLM providers", "structured",
-        ("litellm",), "llm", "ai_brain/litellm_backend.py"),
+        ("litellm",), "llm", "ai_brain/litellm_backend.py",
+        gain="baseline speaks to a few hand-wired providers; this routes across ~100 with fallback", impact=3),
 
     # --- intelligence -------------------------------------------------------------
     Cap("speaker_id", "Real voice fingerprints (ECAPA 192-d)", "intelligence",
-        ("speechbrain",), "intelligence", "orchestrator/speaker_ecapa.py"),
+        ("speechbrain",), "intelligence", "orchestrator/speaker_ecapa.py",
+        gain="baseline voice-print is a hash that can't tell people apart; this gives real 192-d fingerprints", impact=4),
     Cap("nlp", "NER + dependency parse for commitments", "intelligence",
         ("spacy",), "intelligence",
-        "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py"),
+        "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py",
+        gain="baseline pulls names/promises with regex that breaks on real sentences; this parses them properly", impact=5),
     Cap("online_learning", "Per-user adaptation in real time", "intelligence",
         ("river",), "intelligence",
-        "orchestrator/taste_river.py, dream_mode/weather_river.py"),
+        "orchestrator/taste_river.py, dream_mode/weather_river.py",
+        gain="baseline rankings are static; this adapts to your taste as you use it", impact=3),
     Cap("persona_tuning", "Human-in-the-loop persona classifier", "intelligence",
-        ("hulearn",), "intelligence", "orchestrator/persona_humanlearn.py"),
+        ("hulearn",), "intelligence", "orchestrator/persona_humanlearn.py",
+        gain="baseline persona filter is a no-op; this lets you tune it by example", impact=2),
     Cap("object_tracking", "Identity-stable multi-object tracking", "intelligence",
-        ("supervision",), "intelligence", "dream_mode/track_supervision.py"),
+        ("supervision",), "intelligence", "dream_mode/track_supervision.py",
+        gain="baseline tracker loses objects when they overlap; this keeps identity through occlusion", impact=3),
     Cap("facial_aus", "Micro-expression action units", "intelligence",
         ("libreface", "feat", "facetorch"), None, "truth_lens/au_backends.py",
-        kind="manual", note="research installs; see adapter docstring"),
+        kind="manual", note="research installs; see adapter docstring",
+        gain="baseline passes frames through untouched; this reads micro-expressions for the truth lens", impact=4),
 
     # --- vision -------------------------------------------------------------------
     Cap("vision_classify", "Object recognition (CLIP/YOLO/VLM)", "vision",
         ("ultralytics", "open_clip", "moondream"), "vision",
-        "object_lens/classify_backends.py"),
+        "object_lens/classify_backends.py",
+        gain="baseline declines 'what is this?' entirely; this recognizes objects locally", impact=5),
     Cap("coreml_ondevice", "Apple-silicon on-device inference", "vision",
         ("coremltools",), "vision", "object_lens/classify_backends.py",
-        kind="darwin"),
+        kind="darwin",
+        gain="runs recognition on Apple silicon instead of CPU — faster, cooler", impact=2),
 
     # --- causal ---------------------------------------------------------------------
     Cap("causal_fusion", "Causal inference over credibility channels", "causal",
-        ("dowhy",), "causal", "truth_lens/causal_fusion.py"),
+        ("dowhy",), "causal", "truth_lens/causal_fusion.py",
+        gain="baseline fuses credibility channels with fixed weights; this infers causally", impact=2),
 
     # --- infra ------------------------------------------------------------------------
     Cap("dashboard", "Live TUI status dashboard", "infra",
-        ("rich",), "infra", "ai_brain/dashboard_rich.py"),
+        ("rich",), "infra", "ai_brain/dashboard_rich.py",
+        gain="baseline is plain log lines; this is a live status board", impact=2),
     Cap("fs_watch", "Instant reaction to file changes", "infra",
-        ("watchdog",), "infra", "orchestrator/fs_watch.py"),
+        ("watchdog",), "infra", "orchestrator/fs_watch.py",
+        gain="baseline rescans on a timer; this reacts the moment a file changes", impact=2),
     Cap("lan_discovery", "Phone finds the Brain automatically", "infra",
-        ("zeroconf",), "infra", "orchestrator/discovery_zeroconf.py"),
+        ("zeroconf",), "infra", "orchestrator/discovery_zeroconf.py",
+        gain="baseline needs the Brain's IP typed in; this lets the phone find it automatically", impact=3),
     Cap("memory_explorer", "Browsable SQL view of the memory DB", "infra",
-        ("datasette",), "infra", "memory/datasette_app.py"),
+        ("datasette",), "infra", "memory/datasette_app.py",
+        gain="baseline memory DB is a closed file; this makes it browsable for audit", impact=2),
     Cap("spatial_viz", "Spatial/temporal debug visualization", "infra",
-        ("rerun",), "infra", "simulator/rerun_viz.py"),
+        ("rerun",), "infra", "simulator/rerun_viz.py",
+        gain="baseline spatial debugging is print statements; this draws it", impact=2),
 
     # --- privacy ------------------------------------------------------------------------
     Cap("pii_redaction", "ML PII scrubbing before any write", "privacy",
         ("presidio_analyzer",), "privacy", "memory/pii_presidio.py",
-        note="regex fallback is always on"),
+        note="regex fallback is always on",
+        gain="baseline scrubs emails/phones by regex; this catches names, addresses, cards in context", impact=4),
     Cap("asym_signing", "Ed25519 provenance signatures", "privacy",
         ("cryptography",), "privacy", "reality_compiler/sign_crypto.py",
-        note="HMAC fallback is always on"),
+        note="HMAC fallback is always on",
+        gain="baseline HMAC can be forged by anyone holding the key; Ed25519 can't", impact=3),
     Cap("structured_concurrency", "Veil-stop cancels every task", "privacy",
         ("anyio",), "privacy", "orchestrator/concurrency_anyio.py",
-        note="asyncio fallback is always on"),
+        note="asyncio fallback is always on",
+        gain="baseline cancel-all is hand-rolled asyncio; this makes the Veil-stop guarantee structural", impact=2),
 
     # --- platform ----------------------------------------------------------------------
     Cap("plugin_entrypoints", "Plugins distributed as pip packages", "platform",
         ("pluggy",), "platform", "plugins/hookspecs.py",
-        note="stdlib entry-point path works without it"),
+        note="stdlib entry-point path works without it",
+        gain="baseline plugins are wired by hand; this discovers pip-installed ones automatically", impact=3),
     Cap("event_bus", "Decoupled pub/sub over mesh traffic", "platform",
-        ("pyee",), "platform", "confluence/emitter_pyee.py"),
+        ("pyee",), "platform", "confluence/emitter_pyee.py",
+        gain="baseline mesh events go to one listener; this fans them out cleanly", impact=2),
     Cap("offline_translation", "Neural MT with no network", "platform",
-        ("argostranslate",), "platform", "rosetta_argos.py"),
+        ("argostranslate",), "platform", "rosetta_argos.py",
+        gain="baseline 'translation' returns the text unchanged; this actually translates, offline", impact=4),
     Cap("skia_render", "GPU-crisp HUD rasterizing", "platform",
-        ("skia",), "platform", "hud/render_skia.py"),
+        ("skia",), "platform", "hud/render_skia.py",
+        gain="baseline PIL rendering is solid; this adds GPU-crisp strokes if you want them", impact=1),
     Cap("asgi_server", "Async FastAPI mirror of the Brain", "platform",
-        ("fastapi",), "platform", "ai_brain/server_fastapi.py"),
+        ("fastapi",), "platform", "ai_brain/server_fastapi.py",
+        gain="baseline stdlib server works; this adds async handlers + websockets alongside it", impact=2),
     Cap("frame_glasses", "Brilliant Frame as a second display", "platform",
-        ("frame_sdk",), "platform", "bridge/frame_sdk.py"),
+        ("frame_sdk",), "platform", "bridge/frame_sdk.py",
+        gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2),
     Cap("lsl_streams", "Lab Streaming Layer sensor export", "platform",
-        ("pylsl",), "platform", "pipelines/lsl_transport.py"),
+        ("pylsl",), "platform", "pipelines/lsl_transport.py",
+        gain="baseline has no research export; this syncs sensors with lab tooling", impact=1),
     Cap("mlx_train", "Overnight LoRA fine-tune of the local model", "platform",
-        ("mlx",), "platform", "rem/nightly_mlx.py", kind="darwin"),
+        ("mlx",), "platform", "rem/nightly_mlx.py", kind="darwin",
+        gain="baseline model never adapts; this fine-tunes it overnight on your own memories", impact=4),
 
     # --- external runtimes (spoken to over HTTP; nothing to pip-import) -----------------
     Cap("ollama_local", "Local chat/vision/embeddings via Ollama", "services",
         (), None, "ai_brain/server/backends.py, ai_brain/gemma_backend.py",
-        kind="service", note="http://127.0.0.1:11434"),
+        kind="service", note="http://127.0.0.1:11434",
+        gain="without it the Brain leans on keyword search or cloud; with it, real local chat/vision", impact=5),
     Cap("exo_cluster", "One model across your machines via exo", "services",
         (), None, "ai_brain/exo_cluster.py",
-        kind="service", note="http://127.0.0.1:52415"),
+        kind="service", note="http://127.0.0.1:52415",
+        gain="single-machine inference only; this runs one bigger model across your machines", impact=2),
 )
 
 _BY_KEY = {c.key: c for c in CAPABILITIES}
@@ -257,6 +299,7 @@ def report(env: Optional[dict] = None) -> list[dict]:
         "key": c.key, "tier": c.tier, "title": c.title, "state": state(c, env),
         "extra": c.extra, "profiles": list(c.profiles), "modules": list(c.modules),
         "seam": c.seam, "kind": c.kind, "flag": c.flag_env, "note": c.note,
+        "gain": c.gain, "impact": c.impact,
     } for c in CAPABILITIES]
 
 
@@ -266,6 +309,116 @@ def summary(env: Optional[dict] = None) -> dict:
         s = state(c, env)
         counts[s] = counts.get(s, 0) + 1
     return counts
+
+
+# --- packs: curated upgrade bundles the panel offers ------------------------------
+# A pack is a named, human-meaningful bundle of extras groups with an honest
+# download estimate — the unit a person installs, so single capabilities never
+# get overlooked. Order = display order; the first is the flagship.
+
+@dataclass(frozen=True)
+class Pack:
+    key: str
+    name: str
+    tagline: str                  # what it buys you, one sentence
+    extras: Tuple[str, ...]      # pyproject groups it installs
+    size: str                    # honest approximate download
+    impact: int                  # 1..5
+    recommended: bool = False
+
+    def caps(self) -> Tuple[Cap, ...]:
+        return tuple(c for c in CAPABILITIES if c.extra in self.extras)
+
+
+PACKS: Tuple[Pack, ...] = (
+    Pack("recall", "Total Recall",
+         "Semantic memory that actually understands — indexed, deduped, searchable by meaning, fully offline.",
+         ("memory",), "~2–4 GB", 5, recommended=True),
+    Pack("ears", "Sharp Ears",
+         "Local speech: neural voice detection and on-device transcription. Audio never leaves this Mac.",
+         ("voice", "asr-extra"), "~1–2 GB", 4),
+    Pack("eyes", "Clear Eyes",
+         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing.",
+         ("vision", "intelligence", "causal"), "~3–5 GB", 4),
+    Pack("guardian", "Guardian",
+         "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
+         ("privacy", "structured"), "~300 MB", 3),
+    Pack("operator", "Operator",
+         "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins.",
+         ("infra", "llm", "platform"), "~200 MB", 2),
+)
+
+_PACK_BY_KEY = {p.key: p for p in PACKS}
+
+
+def pack_state(pack: Pack, env: Optional[dict] = None) -> str:
+    """installed / partial / available — from the pack's python capabilities."""
+    caps = [c for c in pack.caps() if c.kind in ("python", "darwin") and supported(c)]
+    have = [c for c in caps if installed(c)]
+    if not caps:
+        return "available"
+    if len(have) == len(caps):
+        return "installed"
+    return "partial" if have else "available"
+
+
+def packs_report(env: Optional[dict] = None) -> list[dict]:
+    return [{
+        "key": p.key, "name": p.name, "tagline": p.tagline, "size": p.size,
+        "impact": p.impact, "recommended": p.recommended,
+        "extras": list(p.extras), "state": pack_state(p, env),
+        "caps": [c.key for c in p.caps()],
+    } for p in PACKS]
+
+
+def extras_requirements(extra: str) -> list[str]:
+    """The concrete requirement strings one extras group pins — what an
+    installer actually feeds to pip. `pip install "dreamlayer[memory]"` can't
+    work for a source checkout that isn't on PyPI, so packs install the
+    group's requirements directly.
+
+    Resolution order: the installed distribution's metadata (correct for any
+    real install), falling back to parsing pyproject.toml (source tree, where
+    editable metadata may predate newly added groups). Environment markers are
+    preserved minus the `extra == ...` clause pip's metadata adds."""
+    reqs: list[str] = []
+    try:
+        from importlib.metadata import requires
+        for line in (requires("dreamlayer") or ()):
+            if f'extra == "{extra}"' not in line:
+                continue
+            head, _, marker = line.partition(";")
+            # drop the extra-clause; keep any real platform markers
+            terms = [t.strip() for t in marker.split(" and ")
+                     if t.strip() and "extra ==" not in t]
+            reqs.append(head.strip() + ("; " + " and ".join(terms) if terms else ""))
+    except Exception:
+        pass
+    if reqs:
+        return reqs
+    # source-tree fallback: read the group straight from pyproject.toml
+    try:
+        import tomllib
+        from pathlib import Path
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        with open(pyproject, "rb") as f:
+            deps = tomllib.load(f)["project"]["optional-dependencies"]
+        return list(deps.get(extra, ()))
+    except Exception:
+        return []
+
+
+def pack_requirements(pack_key: str) -> list[str]:
+    """Everything pip needs for one pack. Unknown pack → empty (caller 400s)."""
+    pack = _PACK_BY_KEY.get(pack_key)
+    if pack is None:
+        return []
+    out: list[str] = []
+    for extra in pack.extras:
+        for r in extras_requirements(extra):
+            if r not in out:
+                out.append(r)
+    return out
 
 
 # --- optional live probe for the two external runtimes ---------------------------
