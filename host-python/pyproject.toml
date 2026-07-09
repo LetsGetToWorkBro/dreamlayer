@@ -23,8 +23,12 @@ dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
 #     working fallback, so the core system runs with none of them installed) ---
 memory   = ["sqlite-vec", "chromadb", "sentence-transformers", "mem0ai", "lancedb", "usearch", "docarray", "networkx"]
 voice    = ["silero-vad", "faster-whisper"]
+asr-extra = ["whisperx"]
 structured = ["outlines", "instructor", "pydantic>=2", "pydantic-ai"]
 llm      = ["litellm"]
+intelligence = ["speechbrain", "spacy", "river", "human-learn", "supervision"]
+vision   = ["ultralytics", "moondream", "open-clip-torch", "coremltools; sys_platform=='darwin'"]
+causal   = ["dowhy"]
 
 [tool.setuptools.package-data]
 # ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)
