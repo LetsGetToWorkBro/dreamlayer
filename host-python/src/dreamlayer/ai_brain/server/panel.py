@@ -398,6 +398,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <option value="gemini">Google Gemini</option>
         <option value="openrouter">OpenRouter</option>
         <option value="ollama">Ollama · local (free)</option>
+        <option value="dreamlayer">DreamLayer Cloud</option>
         <option value="custom">Custom (OpenAI-compatible)</option>
       </select></div>
     <div class="row">
@@ -415,10 +416,11 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <p class="lead">DreamLayer runs entirely on your own hardware, on code you can read. Every feature
       here is free — bring your own AI key, or run a model locally with Ollama and pay nothing at all.</p>
     <div class="conn">
-      <div><div class="conn-t">DreamLayer&nbsp;Cloud <span style="color:var(--amber)">· coming soon</span></div>
-        <div class="conn-s">An optional hosted tier: managed AI with no key to wire, cross-device sync,
-          and a private relay for the glasses mesh. The local app always stays free and open.</div></div>
-      <button class="ghost" disabled style="opacity:.55;cursor:default">Notify me</button></div>
+      <div style="flex:1"><div class="conn-t">DreamLayer&nbsp;Cloud <span id="planBadge" style="color:var(--amber)">· coming soon</span></div>
+        <div class="conn-s">An optional hosted tier — everything below is <i>added</i>; the local app
+          never loses a feature and always stays free and open.</div></div>
+      <button class="ghost" id="notifyBtn" onclick="joinWaitlist()">Notify me</button></div>
+    <div id="planRows"></div>
   </section>
 
   <section>
@@ -764,6 +766,31 @@ async function toggleCap(key,disabled){
 }
 function copyCap(cmd){navigator.clipboard&&navigator.clipboard.writeText(cmd);toast("Install command copied");}
 
+/* --- Plan section: cloud entitlements + waitlist ------------------------- */
+const CLOUD_WAITLIST="https://api.dreamlayer.app/api/waitlist";
+function renderPlan(plan){
+  const rows=$("planRows"); if(!rows||!plan)return;
+  const onCloud=plan.plan==="cloud";
+  if(onCloud){$("planBadge").textContent="· active";$("planBadge").style.color="var(--success)";
+    const b=$("notifyBtn"); if(b)b.style.display="none";}
+  rows.innerHTML=(plan.cloud_caps||[]).map(c=>`
+    <div class="conn" style="padding:8px 0">
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${c.active?"var(--success)":"var(--ghost)"}"></span>
+      <div class="conn-s" style="flex:1">${esc(c.info)}</div>
+      <span class="sstate">${c.active?"active":"with Cloud"}</span></div>`).join("");
+}
+async function joinWaitlist(){
+  const email=prompt("DreamLayer Cloud waitlist — we'll email you once, when it opens.\n\nYour email:");
+  if(!email)return;
+  try{
+    const r=await fetch(CLOUD_WAITLIST,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email:email})});
+    const d=await r.json();
+    if(r.ok&&d.joined){toast(d.already?"You're already on the list":"You're on the list — #"+d.count);}
+    else toast(d.error||"That email didn't look right");
+  }catch(e){toast("Couldn't reach the waitlist — try again later");}
+}
+
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
   t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1900);}
 
@@ -799,6 +826,7 @@ async function load(){
   $("msgCard").style.display=c.config.email_enabled?"":"none";
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
+  renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
   loadContactsSync(); loadReminders(); loadCaps();
 }
@@ -1092,6 +1120,7 @@ const CPROV={
   gemini:{base:"https://generativelanguage.googleapis.com",model:"gemini-1.5-flash",key:true},
   openrouter:{base:"https://openrouter.ai/api",model:"openai/gpt-4o-mini",key:true},
   ollama:{base:"http://localhost:11434",model:"llama3.2",key:false},
+  dreamlayer:{base:"https://api.dreamlayer.app",model:"dreamlayer-standard",key:true},
   custom:{base:"",model:"",key:true},
 };
 function provPreset(apply){const p=CPROV[$("cprov").value]||CPROV.custom;

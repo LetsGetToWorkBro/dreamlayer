@@ -42,6 +42,7 @@ class SocialStore:
         self._ratings: dict[str, dict[str, int]] = {}      # name -> user -> stars
         self._downloads: dict[str, int] = {}
         self._comments: dict[str, list] = {}
+        self._waitlist: dict[str, float] = {}              # email -> joined ts
         self._seq = 0
         self._load()
 
@@ -72,6 +73,23 @@ class SocialStore:
         self._comments.setdefault(name, []).append(c)
         self._save()
         return c
+
+    def join_waitlist(self, email: str, ts: float = 0.0) -> Optional[dict]:
+        """DreamLayer Cloud waitlist (docs/CLOUD.md). Deduped by lowercased
+        email; conservative shape check only — the point is a countable list,
+        not identity. Returns {joined, count} or None if the email is junk."""
+        e = (email or "").strip().lower()[:254]
+        if "@" not in e[1:-1] or " " in e or len(e) < 6:
+            return None
+        fresh = e not in self._waitlist
+        if fresh:
+            self._waitlist[e] = float(ts)
+            self._save()
+        return {"joined": True, "already": not fresh,
+                "count": len(self._waitlist)}
+
+    def waitlist_count(self) -> int:
+        return len(self._waitlist)
 
     # -- reads ---------------------------------------------------------------
 
@@ -106,7 +124,8 @@ class SocialStore:
 
     def to_dict(self) -> dict:
         return {"ratings": self._ratings, "downloads": self._downloads,
-                "comments": self._comments, "seq": self._seq}
+                "comments": self._comments, "waitlist": self._waitlist,
+                "seq": self._seq}
 
     def _save(self) -> None:
         if not self.path:
@@ -129,6 +148,8 @@ class SocialStore:
                              for k, v in (d.get("ratings") or {}).items()}
             self._downloads = {str(k): int(v) for k, v in (d.get("downloads") or {}).items()}
             self._comments = {str(k): list(v or []) for k, v in (d.get("comments") or {}).items()}
+            self._waitlist = {str(k): float(v) for k, v
+                              in (d.get("waitlist") or {}).items()}
             self._seq = int(d.get("seq", 0) or 0)
         except Exception:
             pass
@@ -141,6 +162,14 @@ def route(store: SocialStore, method: str, path: str, body: Optional[dict] = Non
     GET /api/plugins fold stats into the catalogue."""
     body = body or {}
     parts = [p for p in (path or "").strip("/").split("/") if p]   # api plugins [name] [action]
+    if parts == ["api", "waitlist"]:
+        # DreamLayer Cloud waitlist — POST {email} joins; GET is the count.
+        if method == "POST":
+            r = store.join_waitlist(str(body.get("email", "")), ts=ts)
+            return (200, r) if r else (400, {"error": "invalid email"})
+        if method == "GET":
+            return 200, {"count": store.waitlist_count()}
+        return 405, {"error": "method not allowed"}
     if parts[:2] != ["api", "plugins"]:
         return 404, {"error": "not found"}
     rest = parts[2:]

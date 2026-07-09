@@ -77,6 +77,32 @@ export default {
       return Response.redirect("https://dreamlayer.app/plugins", 302);
     }
     const parts = url.pathname.split("/").filter(Boolean); // ["api","plugins",name?,action?]
+
+    // DreamLayer Cloud waitlist (docs/CLOUD.md) — POST {email} joins, GET is
+    // the count. Deduped by lowercased email in one KV list. Mirrors the
+    // tested Python reference in host-python plugins/social.py.
+    if (parts[0] === "api" && parts[1] === "waitlist" && parts.length === 2) {
+      if (request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const e = String(body.email || "").trim().toLowerCase().slice(0, 254);
+        if (e.length < 6 || e.includes(" ") || !e.slice(1, -1).includes("@")) {
+          return json({ error: "invalid email" }, 400);
+        }
+        const list = await readJSON(env.SOCIAL, "waitlist:cloud", {});
+        const already = e in list;
+        if (!already) {
+          list[e] = Date.now() / 1000;
+          await env.SOCIAL.put("waitlist:cloud", JSON.stringify(list));
+        }
+        return json({ joined: true, already, count: Object.keys(list).length });
+      }
+      if (request.method === "GET") {
+        const list = await readJSON(env.SOCIAL, "waitlist:cloud", {});
+        return json({ count: Object.keys(list).length });
+      }
+      return json({ error: "method not allowed" }, 405);
+    }
+
     if (parts[0] !== "api" || parts[1] !== "plugins") {
       return json({ error: "not found", store: "https://dreamlayer.app/plugins" }, 404);
     }

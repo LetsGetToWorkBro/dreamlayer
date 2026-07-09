@@ -43,7 +43,19 @@ TOKEN_HEADER = "X-DreamLayer-Token"
 # relay) would list its capabilities here; the base set is never taken away.
 PLAN_CAPS: dict[str, frozenset] = {
     "free": frozenset(),
-    "cloud": frozenset(),   # reserved — hosted capabilities attach here later
+    # The hosted tier (docs/CLOUD.md). Union-only: these are ADDED on top of
+    # the always-free base set — a plan can never remove a capability.
+    #   cloud_ai     managed AI, no key to wire (api.dreamlayer.app proxy)
+    #   cloud_sync   E2E-encrypted cross-device sync + off-site backup
+    #   cloud_relay  hosted mesh relay (GhostMode/Beacon beyond BLE range)
+    "cloud": frozenset({"cloud_ai", "cloud_sync", "cloud_relay"}),
+}
+
+# What each cloud capability means, for the panel's Plan section.
+PLAN_CAP_INFO: dict[str, str] = {
+    "cloud_ai": "Managed AI — answers with no key to wire, billed by us",
+    "cloud_sync": "Encrypted sync — your memory follows you across devices",
+    "cloud_relay": "Private relay — GhostMode and the Beacon work beyond Bluetooth range",
 }
 
 
@@ -187,6 +199,18 @@ class Brain:
         # union so `free` never removes a capability — see BrainConfig.plan.
         caps |= PLAN_CAPS.get(getattr(self.config, "plan", "free"), frozenset())
         return frozenset(caps)
+
+    def plan_summary(self) -> dict:
+        """The Plan section's data: current plan, what Cloud adds (with human
+        meaning), and which of those entitlements are active now. Union-only —
+        the free plan's capabilities are never listed as removable."""
+        plan = getattr(self.config, "plan", "free")
+        cloud_caps = sorted(PLAN_CAPS.get("cloud", frozenset()))
+        return {
+            "plan": plan if plan in PLAN_CAPS else "free",
+            "cloud_caps": [{"key": c, "info": PLAN_CAP_INFO.get(c, c),
+                            "active": plan == "cloud"} for c in cloud_caps],
+        }
 
     def plugins_state(self) -> dict:
         from ...plugins import PluginPackage
@@ -1520,7 +1544,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(401, {"error": "unauthorised"}); return
             if path == "/dreamlayer/config":
                 self._json(200, {"config": brain.config.public(),
-                                 "stats": brain.index.stats()})
+                                 "stats": brain.index.stats(),
+                                 "plan": brain.plan_summary()})
             elif path == "/dreamlayer/status":
                 ago = None
                 if brain._last_phone_ts:

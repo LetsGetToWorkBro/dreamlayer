@@ -38,6 +38,13 @@ PROVIDER_PRESETS: dict[str, dict] = {
     "ollama": {
         "label": "Ollama · local", "base_url": "http://localhost:11434",
         "model": "llama3.2", "needs_key": False, "wire": "openai"},
+    "dreamlayer": {
+        # The hosted tier's managed-AI proxy (docs/CLOUD.md): an OpenAI-
+        # compatible endpoint at api.dreamlayer.app; the "key" is the account
+        # token, so there is no provider key to wire. Rides the same egress
+        # ledger and incognito gate as every other cloud provider.
+        "label": "DreamLayer Cloud", "base_url": "https://api.dreamlayer.app",
+        "model": "dreamlayer-standard", "needs_key": True, "wire": "openai"},
     "custom": {
         "label": "Custom (OpenAI-compatible)", "base_url": "",
         "model": "", "needs_key": True, "wire": "openai"},

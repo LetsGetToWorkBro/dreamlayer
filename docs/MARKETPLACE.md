@@ -102,6 +102,12 @@ counts, star ratings, comments — as a small shared service. Delivered as:
   `SOCIAL_API` base is set, and **fall back to the static `registry/index.json`**
   when it isn't or is unreachable.
 
+**Phase 3 (spec'd): payments.** Paid plugins/lenses with an **85/15**
+creator/DreamLayer split (Stripe fees inside our 15; free plugins stay free
+to publish). Purchases produce signed install grants verified by the same
+validation gate. Sequenced as phase P4 of the hosted tier — full design in
+[`CLOUD.md`](CLOUD.md).
+
 The contract:
 
 ```
