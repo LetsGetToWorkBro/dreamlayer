@@ -40,6 +40,11 @@ ENTRY_RE = re.compile(r"^[A-Za-z_][\w]*:[A-Za-z_][\w]*$")
 KNOWN_CAPABILITIES = frozenset({
     "object_lens", "glance", "perception", "cards", "ring", "vision",
     "mesh", "midi", "network", "fs", "shop",
+    # DreamLayer Cloud entitlements (server.PLAN_CAPS["cloud"], docs/CLOUD.md).
+    # Declarable by any manifest; GRANTED only on a cloud-plan Brain — a plugin
+    # that requires one simply doesn't load on the free plan, the same skip as
+    # any other missing capability. Union-only: free plugins are unaffected.
+    "cloud_ai", "cloud_sync", "cloud_relay",
 })
 
 

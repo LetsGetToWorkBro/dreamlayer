@@ -173,3 +173,45 @@ def test_sync_rejects_weak_passphrase(tmp_path):
         pytest.skip("cryptography not usable here")
     with pytest.raises(ValueError):
         cloud_sync.prepare_sync_blob(_brain(tmp_path), "short")
+
+
+# --- plugin store × cloud entitlements: the full chain -------------------------
+
+from dreamlayer.plugins.base import PluginContext, PluginRegistry, make_plugin
+from dreamlayer.plugins.package import KNOWN_CAPABILITIES, PluginManifest
+
+
+def test_manifest_may_declare_cloud_caps():
+    # the store's manifest gate accepts the cloud entitlements...
+    assert {"cloud_ai", "cloud_sync", "cloud_relay"} <= KNOWN_CAPABILITIES
+    m = PluginManifest(name="far-beacon", version="1.0.0",
+                       entry="far_beacon:make", requires=("mesh", "cloud_relay"),
+                       checksum="sha256:" + "0" * 64)
+    assert not [p for p in m.problems() if "unknown capabilities" in p]
+    # ...and still rejects genuinely unknown ones
+    bad = PluginManifest(name="x", version="1.0.0", entry="x:make",
+                         requires=("warp_drive",), checksum="sha256:" + "0" * 64)
+    assert any("unknown capabilities" in p for p in bad.problems())
+
+
+def test_cloud_plugin_loads_on_cloud_plan_and_skips_on_free(tmp_path):
+    """The whole chain: BrainConfig.plan -> plugin_capabilities() ->
+    PluginContext -> registry load/skip. A relay-needing plugin is a paid-tier
+    plugin purely through the existing capability machinery."""
+    def _registry(plan):
+        brain = _brain(tmp_path, plan)
+        ctx = PluginContext(capabilities=brain.plugin_capabilities())
+        return PluginRegistry(ctx)
+
+    plug = make_plugin("far-beacon", lambda ctx: None,
+                       requires=("mesh", "cloud_relay"))
+
+    free = _registry("free")
+    assert free.load(plug) is False
+    assert any("cloud_relay" in reason for _, reason in free.result.skipped)
+
+    cloud = _registry("cloud")
+    plug2 = make_plugin("far-beacon", lambda ctx: None,
+                        requires=("mesh", "cloud_relay"))
+    assert cloud.load(plug2) is True
+    assert "far-beacon" in cloud.result.loaded
