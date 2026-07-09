@@ -387,7 +387,8 @@
     if (document.hidden) { try { _lensFront.pause(); } catch(_){} }
     else if (!RM) { try { _lensFront.play().catch(function(){}); } catch(_){} }
   });
-  addEventListener("resize", function(){ glass.resize(); }, {passive:true});
+  var _gw=innerWidth;
+  addEventListener("resize", function(){ if(innerWidth===_gw) return; _gw=innerWidth; glass.resize(); }, {passive:true});
   // pause the RAF loop when the tab is hidden (battery)
   document.addEventListener("visibilitychange", function(){
     if (document.hidden) glass.stop(); else { glass._on = true; glass.start(); }
