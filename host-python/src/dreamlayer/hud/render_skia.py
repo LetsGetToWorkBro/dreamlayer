@@ -26,8 +26,8 @@ except ImportError:
 
 available = _HAS_SKIA
 
-# Halo canvas is monochrome-green on black, 640x400 by convention.
-_DEFAULT_SIZE: Tuple[int, int] = (640, 400)
+# Halo's HUD render target is 256x256 (see hud/renderer.py, SIZE = 256).
+_DEFAULT_SIZE: Tuple[int, int] = (256, 256)
 
 
 def _skia_blank(card: dict, size: Tuple[int, int]):
