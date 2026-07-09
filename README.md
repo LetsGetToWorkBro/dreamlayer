@@ -225,6 +225,16 @@ a second wearer or an on-glass display (Confluence, live Reality Compiler
 deploys) render demo state until the transport is attached. The full seam matrix
 is in [`docs/gitbook/hardware-seams.md`](docs/gitbook/hardware-seams.md).
 
+## License
+
+DreamLayer is open source under the [Apache License 2.0](LICENSE) — the whole
+repository, engine and lenses alike, with an explicit patent grant. The
+"DreamLayer" name and mark are reserved (see [NOTICE](NOTICE)); forks must use
+their own. Contributions are welcome under the DCO — start with
+[CONTRIBUTING.md](CONTRIBUTING.md), and see
+[docs/OPEN_SOURCE.md](docs/OPEN_SOURCE.md) for governance and the project's
+open-source posture.
+
 ---
 
 *Built for Brilliant Labs Halo. Yours to run, yours to keep.*
