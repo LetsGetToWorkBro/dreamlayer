@@ -29,7 +29,12 @@ OPTIONS = {
     # reached by codesign (so notarization rejects them as unsigned) and can't be
     # dlopen'd at runtime. Listed as packages, py2app copies them unzipped onto
     # disk, where the CI signing loop signs each dylib with a secure timestamp.
-    "packages": ["dreamlayer", "rumps", "PIL", "numpy"],
+    # zeroconf + cryptography are the starter capabilities baked into the DMG
+    # (LAN discovery of the Brain; Ed25519 signing). Both carry native code,
+    # so — like PIL/numpy — they must live in `packages` (unzipped, signable),
+    # never `includes`. ifaddr is zeroconf's pure-python companion.
+    "packages": ["dreamlayer", "rumps", "PIL", "numpy",
+                 "zeroconf", "ifaddr", "cryptography"],
     # transitive imports py2app's static analysis tends to miss
     "includes": ["pydantic", "pydantic_core", "openai", "httpx", "httpcore",
                  "certifi", "WebKit"],   # WebKit → the native panel window

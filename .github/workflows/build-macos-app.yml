@@ -47,6 +47,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel
           pip install ./host-python          # dreamlayer + Pillow/numpy/openai
+          # Starter capabilities baked into the DMG (small wheels, no models):
+          # zeroconf -> the phone finds the Brain on the LAN automatically;
+          # cryptography -> Ed25519 provenance signatures. The panel's
+          # Capabilities view shows both as active in the shipped app.
+          pip install zeroconf cryptography
           pip install py2app rumps            # rumps pulls in pyobjc-core + Cocoa
           pip install pyobjc-framework-WebKit # WKWebView for the native window
           brew install create-dmg

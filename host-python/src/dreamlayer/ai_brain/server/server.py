@@ -1358,6 +1358,25 @@ class Brain:
                 "missed": {"texts": len(texts), "emails": len(emails)}}
 
 
+def _capability_payload(brain: Brain) -> dict:
+    """Live optional-capability report for the panel (dreamlayer/capabilities.py)
+    with the panel's own persisted off-switches applied. Env DL_DISABLE_* still
+    works as the ops-level override; `config.disabled_caps` is the same switch
+    made durable, since the bundled .app has no env of its own to edit."""
+    import os
+    import sys
+    from ...capabilities import PROFILES, report, summary
+    env = dict(os.environ)
+    for key in brain.config.disabled_caps:
+        env.setdefault("DL_DISABLE_" + key.upper(), "1")
+    return {"items": report(env=env), "summary": summary(env=env),
+            "profiles": {k: list(v) for k, v in PROFILES.items()},
+            "disabled": list(brain.config.disabled_caps),
+            # py2app sets sys.frozen — the panel words install hints accordingly
+            # (a sealed, signed bundle can't pip-install into itself)
+            "frozen": bool(getattr(sys, "frozen", False))}
+
+
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                       port: int = 7777) -> ThreadingHTTPServer:
     token = brain.config.token
@@ -1481,6 +1500,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"version": _version(), "disk_kb": du // 1000,
                                  "ollama_ms": oms,
                                  "uptime_s": int(time.time() - brain._started_ts)})
+            elif path == "/dreamlayer/capabilities":
+                self._json(200, _capability_payload(brain))
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/calendar":
@@ -1604,6 +1625,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 if "email_enabled" in body and brain.config.email_enabled != before[3]:
                     brain.activity.add("config", "Email & iMessage " + ("on" if brain.config.email_enabled else "off"))
                 self._json(200, {"config": brain.config.public()})
+            elif path == "/dreamlayer/capabilities":
+                # one-click on/off for an INSTALLED optional capability — the
+                # persisted twin of DL_DISABLE_<KEY>. Never installs anything.
+                from ...capabilities import CAPABILITIES
+                b = self._body()
+                key = str(b.get("key", ""))
+                if key not in {c.key for c in CAPABILITIES}:
+                    self._json(400, {"error": f"unknown capability: {key}"}); return
+                off = set(brain.config.disabled_caps)
+                (off.add if b.get("disabled") else off.discard)(key)
+                brain.config.disabled_caps = sorted(off)
+                brain.save()
+                brain.activity.add("config", f"Capability {key} "
+                                   + ("switched off" if b.get("disabled") else "switched on"))
+                self._json(200, _capability_payload(brain))
             elif path == "/dreamlayer/upload":
                 folder = (qs.get("folder", [""])[0])
                 name = Path(qs.get("name", ["dropped.txt"])[0]).name

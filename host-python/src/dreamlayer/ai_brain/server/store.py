@@ -62,6 +62,10 @@ class BrainConfig:
     contacts_sync: bool = False     # pull Contacts.app into the People registry
     reminders_sync: bool = False    # pull open Reminders.app to-dos
     reminder_lists: list[str] = field(default_factory=list)  # [] = all lists
+    # -- optional capabilities (dreamlayer/capabilities.py) --------------
+    # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
+    # so the bundled app remembers the choice across restarts
+    disabled_caps: list[str] = field(default_factory=list)
 
     @property
     def lan_only(self) -> bool:

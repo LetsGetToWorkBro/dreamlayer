@@ -525,6 +525,16 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">System</div><h2>Capabilities</h2>
+    <p class="lead">The Brain's optional powers — each runs a graceful fallback until its
+      library is present, so nothing here is ever required. Installed ones switch off with one
+      click (no uninstall); missing ones show the exact install.
+      <a href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/DEPLOYMENT.md" target="_blank">How switching on works ↗</a></p>
+    <div class="conn-s" id="capsum" style="margin:0 0 10px">…</div>
+    <div id="caprows"></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Log</div><h2>Activity</h2>
     <ul id="history" class="feed"></ul>
   </section>
@@ -606,6 +616,7 @@ const PAGES=[
   {id:"reach",label:"Connections",sub:"Pair your phone and glasses, and decide how far the Brain reaches.",match:["Reach","On your glasses"]},
   {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, and the controls that keep it yours.",match:["Privacy controls"]},
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
+  {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
   {id:"advanced",label:"Advanced",sub:"Activity, health, schedules, and maintenance.",match:["Activity","Health"]},
 ];
@@ -623,6 +634,7 @@ const ICONS={
   reach:_sv+'<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
   privacy:_sv+'<path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>',
   plugins:_sv+'<rect x="3" y="3" width="8" height="8" rx="1.4"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
+  caps:_sv+'<circle cx="8" cy="12" r="5"/><path d="M8 7h8a5 5 0 0 1 0 10H8"/></svg>',
   learn:_sv+'<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M18 3v18"/></svg>',
   advanced:_sv+'<path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>',
 };
@@ -640,6 +652,52 @@ function showPage(id){curPage=id;
   if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
   const c=document.querySelector(".content"); if(c)c.scrollTop=0;
 }
+
+/* --- optional capabilities: live report + one-click on/off ---------------
+   States come from /dreamlayer/capabilities (dreamlayer/capabilities.py):
+   active = real path runs · off = installed, switched off here · missing =
+   fallback runs · unsupported = wrong platform · external = a service. */
+const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
+              unsupported:"var(--ghost)",external:"var(--memory)"};
+let CAPFROZEN=false;
+function capRight(it){
+  if(it.state==="active"||it.state==="off"){
+    const off=it.state==="off";
+    return `<button class="ghost sm" onclick="toggleCap('${esc(it.key)}',${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+  }
+  if(it.state==="missing"){
+    const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
+    if(CAPFROZEN) return `<span class="sstate">not in this build — runs on a source install</span>`;
+    return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap('${esc(cmd)}')">Copy</button>`;
+  }
+  if(it.state==="external") return `<span class="sstate">${esc(it.note||"external service")}</span>`;
+  return `<span class="sstate">macOS only</span>`;
+}
+async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
+  if(!r||!r.items)return; CAPFROZEN=!!r.frozen; renderCaps(r);}
+function renderCaps(r){
+  const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
+  $("capsum").textContent=order.filter(k=>s[k]).map(k=>`${s[k]} ${k}`).join(" · ")
+    +(r.frozen?"  ·  bundled app (fixed set)":"");
+  let tier="",html="";
+  r.items.forEach(it=>{
+    if(it.tier!==tier){tier=it.tier;
+      html+=`<div class="navlabel" style="padding:12px 0 4px">${esc(tier)}</div>`;}
+    html+=`<div class="conn" style="padding:8px 0">
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${CAPDOT[it.state]||"var(--ghost)"}"></span>
+      <div style="flex:1;min-width:0"><div class="conn-t">${esc(it.key)}
+        <span class="conn-s" style="display:inline;margin-left:6px">${esc(it.title)}</span></div></div>
+      <div class="row" style="gap:8px;flex:none">${capRight(it)}</div></div>`;
+  });
+  $("caprows").innerHTML=html;
+}
+async function toggleCap(key,disabled){
+  let r;try{r=await api("/dreamlayer/capabilities",{method:"POST",
+    body:JSON.stringify({key:key,disabled:disabled})});}catch(e){toast("Brain offline");return;}
+  if(r&&r.items){CAPFROZEN=!!r.frozen;renderCaps(r);
+    toast("Capability "+key+(disabled?" off":" on"));}
+}
+function copyCap(cmd){navigator.clipboard&&navigator.clipboard.writeText(cmd);toast("Install command copied");}
 
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
   t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1900);}
@@ -677,7 +735,7 @@ async function load(){
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
-  loadContactsSync(); loadReminders();
+  loadContactsSync(); loadReminders(); loadCaps();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
