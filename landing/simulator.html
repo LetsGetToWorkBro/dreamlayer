@@ -397,10 +397,14 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); };
 
   var listening = false;
+  function nowS(){ return (performance && performance.now ? performance.now() : Date.now()) / 1000; }
+  function cardFresh(){ return sim.card && sim.card.shownAt != null && (nowS() - sim.card.shownAt) < 5; }
   function stateName(){
     if (veiled) return "veiled";
     if (listening) return "listening";
-    if (sim.figment && !sim.figment.done) return sim.figment.kind;   // timer/interval/clock
+    // mirror the glass renderer's precedence: a freshly-triggered card briefly
+    // interrupts a running figment, so the status line agrees with the lens
+    if (sim.figment && !sim.figment.done && !cardFresh()) return sim.figment.kind;   // timer/interval/clock
     if (sim.card && sim.card.type === "recall") return "recall";
     if (sim.card && sim.card.type === "answer") return "answer";
     if (sim.card && sim.card.type === "fact")   return "fact";
@@ -430,6 +434,10 @@
   }
   var _lastReveal = "";
   setInterval(paint, 200); paint();
+
+  // the interactive panel: open by default where there's room (the whole
+  // point of the page is trying it); collapsed on phones to protect the fold
+  if (matchMedia("(min-width: 760px)").matches) $("tryself").open = true;
 
   $("sayform").addEventListener("submit", function(e){
     e.preventDefault();
