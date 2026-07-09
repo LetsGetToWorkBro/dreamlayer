@@ -15,9 +15,16 @@ dependencies = [
 
 [project.optional-dependencies]
 # lupa runs the halo-lua test suites (pinned to lupa.lua53 = device Lua)
-dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0"]
+dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6"]
 hardware = ["brilliant-ble", "brilliant-msg"]
 dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
+
+# --- Optional integration groups (adapters lazy-import these; every one has a
+#     working fallback, so the core system runs with none of them installed) ---
+memory   = ["sqlite-vec", "chromadb", "sentence-transformers", "mem0ai", "lancedb", "usearch", "docarray", "networkx"]
+voice    = ["silero-vad", "faster-whisper"]
+structured = ["outlines", "instructor", "pydantic>=2", "pydantic-ai"]
+llm      = ["litellm"]
 
 [tool.setuptools.package-data]
 # ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)
@@ -30,3 +37,7 @@ dreamlayer = [
 
 [tool.pytest.ini_options]
 testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]
+markers = [
+    "hardware: needs a real Halo device / hardware deps (deselected in CI)",
+    "benchmark: latency-budget test via pytest-benchmark (deselected in CI)",
+]

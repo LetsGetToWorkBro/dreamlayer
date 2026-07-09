@@ -29,4 +29,5 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run pytest
-        run: pytest --tb=short
+        # hardware/benchmark tests need a device or run only on demand
+        run: pytest --tb=short -m "not hardware and not benchmark"
