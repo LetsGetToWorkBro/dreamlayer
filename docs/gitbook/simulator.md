@@ -45,10 +45,27 @@ browser-microphone voice input, and look-at face chips.
 
 ![The live fact-check scene: Veritas catches the Great Wall myth on the glass](assets/simulator/browser_sim.png)
 
+Below the scenes sits the interactive **"Try it yourself"** panel — the
+free-typing box, gestures, look chips, and example asks. On a desktop it
+opens itself (the whole point of the page is trying it); on a phone it
+stays collapsed to protect the fold, one tap away.
+
 The page is honest about its own construction, on the page: the scenery
 behind the lens is illustrative, and every pixel *on* the lens is the real
 renderer's output. It runs with no backend at all — nothing typed into it
 leaves the browser.
+
+And it is held to product standards, not demo standards: a **42-check
+Playwright QA** drives every control end to end on desktop and mobile —
+all six scenes, the guided tour and its any-touch abort, every intent
+family in the ask box, introduce-then-glance recall, waypath stash and
+recall, all three gestures, and the full Privacy Veil contract (writes
+refused, recall blind, clean lift) — with zero JavaScript errors on both
+viewports. One agreement bug that pass caught is worth recording: the
+status line used to say `timer` while a freshly-triggered card was
+interrupting the countdown on the glass; the status read now mirrors the
+renderer's own precedence, so the text and the lens can no longer
+disagree.
 
 ## Why two
 
