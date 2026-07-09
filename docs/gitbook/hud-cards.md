@@ -4,10 +4,12 @@ Every card DreamLayer can put on the glass, rendered by the product's own
 renderer. Card payloads are plain dicts built by
 `host-python/src/dreamlayer/hud/cards.py`; the device draws them with
 `halo-lua/display/renderer.lua`, and a pixel-mirrored Python renderer
-(`hud/renderer.py`) drives these stills and the demo pipeline. Twenty-three
-card types are rendered on-device today; four (marked **host-mirror**) exist
-in the Python mirror and the phone and are queued for the device renderer —
-new cards are device-Lua-first as of the O3 pass.
+(`hud/renderer.py`) drives these stills and the demo pipeline.
+**Thirty-three card types have bespoke device-Lua renderers today**, and a
+structural safety net guarantees the rest: any card type without a bespoke
+draw routes through its layout table or a minimal titled fallback — no
+card, present or future, can ever render a black frame on the glass. No
+card is mirror-only anymore.
 
 Each entry lists: when the card appears, what it shows, its materials
 ([Solid](meridian.md#solid--the-material-system)) and motion
@@ -37,7 +39,7 @@ Each entry lists: when the card appears, what it shows, its materials
   waveform self-runs exactly as before.
 - **Dismiss:** on result.
 
-### ListeningCard — host-mirror
+### ListeningCard
 
 ![ListeningCard](assets/cards/listening.png)
 
@@ -165,7 +167,7 @@ Each entry lists: when the card appears, what it shows, its materials
   **Seam:** the twist/tap gesture that drives `scrub("back"|"forward")`.
 - **Dismiss:** 0 — you are driving.
 
-### MorningBriefCard — host-mirror
+### MorningBriefCard
 
 ![MorningBriefCard](assets/cards/morning_brief.png)
 
@@ -194,7 +196,7 @@ centerpiece:
 
 ![PersonContextCard v2](assets/cards/person_context_v2.png)
 
-### PersonDossierCard — host-mirror
+### PersonDossierCard
 
 ![PersonDossierCard](assets/cards/person_dossier.png)
 
@@ -206,7 +208,7 @@ centerpiece:
 
 ## Conversation and truth
 
-### SpokenCaptionCard — host-mirror
+### SpokenCaptionCard
 
 ![SpokenCaptionCard](assets/cards/spoken_caption.png)
 
@@ -359,13 +361,13 @@ The v2 form adds a dominant color and a gestural three-shape sprite:
 
 ![SynesthesiaCard v2](assets/cards/synesthesia_v2.png)
 
-## Cards without a renderer (payload-only)
+## The once-missing frames
 
-Three constructors exist for the phone/hub surface and have no glass renderer
-yet: **UpcomingCard** ("leave in 8 min", dismiss 6000), **HereCard** ("your
-bike is here", 5000), and **MessageCard** (an incoming text or email with
-reply/dismiss actions, 6000) — the anticipation and message-pop-up engines
-emit them today and the phone presents their content. **PaletteShiftCard** is
+**UpcomingCard** ("leave in 8 min", dismiss 6000 — warms to amber inside
+five minutes), **HereCard** ("your bike is here", 5000), and **MessageCard**
+(an incoming text or email, 6000) gained bespoke device renderers in the
+missing-frames pass, so the anticipation and message engines now land on
+the glass as designed. **PaletteShiftCard** is
 not a card at all on the wire: the device consumes it as a palette command
 (mood tint), which is why it is deliberately absent from the sample gallery.
 Other modules carry their own cards (QuestCard and QuestRewardCard from the

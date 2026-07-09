@@ -68,6 +68,13 @@ only what it can and will — `fs` and `subprocess` are withheld by default,
 `network` is revoked while the Veil is down, and a plugin requiring a
 capability the device cannot grant is refused at install. A throwing
 plugin is isolated; the registry records loaded / skipped / failed.
+There is also a **plan seam** on top: a paid plan can grant extra
+capabilities beyond the free set, though today the free plan grants
+everything — the honest state of that seam is in
+[DreamLayer Cloud](cloud.md).
+
+Want to write one? The ten-minute tutorial plugin, `examples/hello-lens/`,
+is CI-tested and walked through in [Open source](open-source.md).
 
 ## Pillar 4 — TasteLens
 
@@ -121,17 +128,24 @@ path.
   rating, and a copy-install action.
 - **The phone** — the Plugins screen (Settings, "Build on the layer"):
   same catalog, install/remove, one-tap rating, and a permissions alert
-  before any install ("This plugin will be able to use: ..."). The phone
-  never runs plugin code — it posts intent to the paired Brain.
+  before any install ("This plugin will be able to use: ..."). Installs
+  work in production now: the store's catalog is bundled with the deployed
+  site, the phone fetches the package and **sideloads** it to the paired
+  Brain, and the Brain's real validation verdict is what the user sees.
+  The phone never runs plugin code; with no Brain paired, the install
+  queues locally and is delivered the moment one pairs.
 - **The Mac panel** — the Plugins card: what is installed, what this Brain
   can grant, per-plugin remove, and a sideload box that passes the same
   gate:
 
-![The panel's Plugins card — two real installs; hud-reactions was refused because this Brain cannot grant mesh](assets/panel/plugins.png)
+![The panel's Plugins card — two real installs; hud-reactions was refused because that Brain could not grant mesh](assets/panel/plugins.png)
 
-*A real session: two registry plugins installed; a third (hud-reactions)
-was refused at the gate because this machine could not grant the `mesh`
-capability it requires.*
+*A real session demonstrating the gate: two registry plugins installed; a
+third (hud-reactions) refused because that machine could not grant the
+`mesh` capability it requires. Since then the Brain has learned to grant
+`mesh` and `shop` (pinned by `test_plugin_install_real.py`), so today
+every plugin in the registry — hud-reactions included — installs; the
+refusal path still fires for a capability the host genuinely lacks.*
 
 ![The phone's plugin store](assets/phone/plugins.png)
 

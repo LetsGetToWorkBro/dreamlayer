@@ -16,13 +16,28 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   cloud. [AI Brain](ai-brain.md)
 - **Candor** — the on-device self-consistency check; Veritas reuses its
   contradiction predicate.
+- **Capability** — one of the 58 named optional integrations a machine may
+  or may not have, each with an honest status and a one-line way to get it.
+  [Integrations](integrations.md)
+- **Capability pack** — a one-click bundle of capabilities (Total Recall,
+  Sharp Ears, Clear Eyes, Guardian, Operator) with its download size stated
+  up front. [Integrations](integrations.md)
 - **Confluence** — two wearers, one sky: bonds, TinCan pings, weather gifts.
   [Lenses](lenses.md)
 - **Commitment Drift** — promises as physics: blooming, healthy, drifting,
   cracking, shattered.
+- **Demo Mode** — the phone app's labeled sample data: every screen alive
+  with fixtures, a banner always visible, one tap to exit.
+  [Phone app](phone-app.md)
+- **Deployment profile** — a pip extra (`profile-halo` / `profile-phone` /
+  `profile-mac` / `profile-cloud`) installing the right optional deps for a
+  machine's role. [Integrations](integrations.md)
 - **Discernment** — the fusion of Veritas content, Truth Lens delivery, and
   speaker history into one stance (trust / note / caution / flag).
   [Truth](truth.md)
+- **DreamLayer Cloud** — the optional paid relay/sync service: union-only
+  entitlements, ciphertext sync, a blind relay; client seams built, service
+  ahead. [Cloud](cloud.md)
 - **Dossier** — what the ledger knows about a person: last seen, shared
   topics, last line.
 - **Dream Mode** — the double-tap world: Ghost Layer echoes and Synesthesia.
@@ -43,6 +58,9 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   on the rim, never coordinates. [Platform](platform.md)
 - **Ghost Layer** — Dream Mode's world-anchored memory echoes.
 - **Halo** — Brilliant Labs' glasses; DreamLayer's launch device.
+- **hello-lens** — the ten-minute tutorial plugin (`examples/hello-lens/`),
+  CI-tested, the template for a first contribution.
+  [Open source](open-source.md)
 - **Hark** — the spoken tap on the shoulder: "Listen!" or the urgent
   "Watch out!". [Attention and focus](attention-focus.md)
 - **Horizon** — the resting-state day ring; the display's home.
@@ -81,6 +99,9 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   [World lenses](world-lenses.md)
 - **Seam** — a named point where tested software meets physical hardware.
   [Hardware and seams](hardware-seams.md)
+- **Simulator (Halo)** — the product with no glasses: the browser simulator
+  on the website, and the Python simulator that runs the real stack.
+  [The Halo Simulator](simulator.md)
 - **Social Lens** — recognizing your own people, consent-first; never
   strangers.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
@@ -100,6 +121,7 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   never authored, by the Brain. [Oracle](oracle.md)
 - **Veritas** — the live fact-checker: offline self-contradiction plus the
   tiered world check. [Truth](truth.md)
-- **Waypath** — point-me-to-my-things: a bearing card to a remembered
-  object.
+- **Waypath** — point-me-to-my-things: "I left my bike at the north rack"
+  drops an anchor; "where's my bike?" answers from it.
+  [Perception and memory](perception-memory.md#stashes-and-the-waypath)
 - **Yesterlight** — yesterday's light folded into today's ring.

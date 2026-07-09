@@ -94,11 +94,14 @@ system proxy. What uses the LLM, and what each falls back to without one:
 (matching by base name); `pull_model` blocks on Ollama's own pull API and
 re-wires the index on success.
 
-## The cloud tier
+## The cloud tier — now multi-provider
 
-An OpenAI-compatible `/v1/chat/completions` client, configured entirely in
-the panel (base URL, key, model — defaults point at `api.openai.com` with
-`gpt-4o-mini`). Reached **only** when the local tiers come up empty *and*
+The cloud tier speaks seven provider presets across three wire formats —
+OpenAI, Anthropic, Gemini, OpenRouter, Ollama-local (key-free), the
+DreamLayer Cloud preset, and Custom for any OpenAI-compatible endpoint
+(LM Studio, llama.cpp) — all hand-rolled request builders, no SDKs
+(`backends.py: PROVIDER_PRESETS`, `_build_cloud_request`). Whatever the
+provider, it is reached **only** when the local tiers come up empty *and*
 `cloud_ready()` holds:
 
 ```

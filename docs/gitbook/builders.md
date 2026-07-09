@@ -21,16 +21,20 @@ dreamlayer/
 │       ├── hud/           Python mirror renderer, cards, goldens, motion math
 │       ├── bridge/        BLE bridge + the Lua raster harness
 │       ├── demo/          the emissive overlay / film pipeline
-│       └── tests/         the whole suite lives here
 │       ├── plugins/       the plugin API, validation gate, store client,
 │       │                  and the first-party plugins
-│       └── reality_compiler/  v2: rehearsal, figments, native timers
-├── phone-app/           Expo / React Native
+│       ├── reality_compiler/  v2: rehearsal, figments, native timers
+│       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
+│       ├── capabilities.py  the 58-seam capability report
+│       └── tests/         the whole suite lives here
+│   └── packaging/       the macOS .dmg app (py2app, entitlements, launch shim)
+├── phone-app/           Expo / React Native (plus the App Store kit: fastlane, i18n)
 ├── laptop-companion/    the minimal context agent + macOS installer
+├── examples/            hello-lens — the ten-minute plugin tutorial, CI-tested
 ├── registry/            the plugin marketplace catalog (index + packages)
 ├── registry-api/        the social-layer Cloudflare Worker (api.dreamlayer.app)
-├── landing/             the website (dreamlayer.app: home, plugins store, playground)
-├── web/                 the WebBLE playground dev surface
+├── landing/             the deployed site (dreamlayer.app: home, simulator, store, playground)
+├── web/                 the Vite/TS site rebuild + the WebBLE playground
 ├── docs/                specs; docs/gitbook/ is this book
 └── scripts/             demos, exporters, the Halo lab
 ```
@@ -38,11 +42,18 @@ dreamlayer/
 ## Running each runtime
 
 ```bash
-# The Python engine (hub + Brain + HUD mirror)
-pip install -e ./host-python
+# The Python engine (hub + Brain + HUD mirror); profiles pull optional extras
+pip install -e ./host-python                     # core, zero optional deps
+pip install -e "./host-python[profile-mac]"      # the full Brain
 
 # The Mac Brain server + control panel
 python -m dreamlayer.ai_brain.server --token <token>     # port 7777
+
+# The Halo Simulator — the whole product, no glasses
+python -m dreamlayer.simulator                            # cockpit on :8765
+
+# What is switched on, per machine
+python -m dreamlayer.capabilities                         # the live report
 
 # The phone app
 cd phone-app && npm install && npx expo start             # Expo Go on your phone
@@ -53,7 +64,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 1,606 passing at time of writing
+cd host-python && python -m pytest -q     # 1,803 passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain
@@ -156,4 +167,11 @@ Everything under `docs/gitbook/assets/` is reproducible from the repo:
 - **A new brain tier or provider** implements the two-method `VisionBrain` /
   `KnowledgeBrain` protocols and registers with the router.
 - **A new device** implements the BLE framing and the `frame` adapter
-  surface; everything above the seam is unchanged.
+  surface; everything above the seam is unchanged (a Brilliant Frame
+  adapter already exists behind the `frame-sdk` capability).
+- **A first plugin** takes ten minutes: `examples/hello-lens/` is the
+  tested tutorial, and [Open source](open-source.md) covers the DCO,
+  policies, and the one command that must stay green.
+- **An optional integration** follows the add-alongside convention in
+  CONTRIBUTING.md — a sibling adapter file, a try-import, a fallback to the
+  built-in, and an entry in the capability catalog.

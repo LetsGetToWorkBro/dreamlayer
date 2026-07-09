@@ -8,11 +8,22 @@ plus hidden screens reached from Settings and Now (Brief, Plugins, Rewind,
 Saga, Profile, Rehearsal, Confluence) and a five-step onboarding.
 
 *Every screenshot in this chapter is the real app: the repository's code
-exported to web (`npx expo export --platform web`) and captured headlessly at
-phone size. Screens that need a paired Mac mini are shown in their honest
-unpaired state — empty states are part of the design. The web export renders
-the tab bar's default markers where native builds show icons; no `tabBarIcon`
-is configured yet.*
+exported to web (`npx expo export --platform web`) and captured headlessly
+at phone size, running in **Demo Mode** — the app's own labeled sample data
+(see below), which is exactly what a new user sees when they tap "Explore
+with sample data". Nothing is mocked up; the fixtures ship in the app.*
+
+## Demo Mode — alive with no hardware
+
+`enableDemo()` in the brain store flips one flag and the whole app fills:
+every store getter serves labeled fixtures (`src/demo/fixtures.ts` — a
+plausible day of briefs, people, memories, messages, saga progress, rewind
+blocks) whenever `demoMode` is on, the glasses card shows a connected
+`HALO-DEMO`, and a persistent **DemoBanner** sits at the top of every
+screen with a one-tap exit, so sample data can never be mistaken for your
+life. Fixtures use fixed timestamps — nothing is generated, nothing is
+fetched. Exiting demo restores the honest empty states. It is reachable
+from onboarding and from Settings.
 
 ## State: one store
 
@@ -96,8 +107,11 @@ lookup.
 ![Memories tab](assets/phone/memories.png)
 
 Today / Yesterday / Earlier groups, kind-colored (promise, person, object,
-place, note), with local search. With a Mac connected the search box gains a
-second stage: ask your files and mail, rendered as a "From your Brain" card
+place, note), with local search — and now backed by the real thing: with a
+Mac connected it pulls `GET /dreamlayer/memories`, the Brain's assembled
+recall (saved places from Waypath, people met, owed favors, dated
+reminders), merged with the local store. The search box gains a second
+stage too: ask your files and mail, rendered as a "From your Brain" card
 with sources.
 
 ## Settings — every toggle
@@ -114,8 +128,13 @@ with sources.
   raise), and listening feedback (visual, audio, haptic).
 - **Devices and brain:** glasses status and the link to the Brain tab.
 - **Labs:** Saga, Profile, Rewind, Rehearsal, Confluence.
-- **Danger zone:** Erase all memories (confirmed, clears the local memory
-  store).
+- **Explore:** the Demo Mode switch ("Explore the whole app with labeled
+  sample data — no glasses or Mac needed").
+- **Danger zone:** Erase all memories (confirmed) — it clears the local
+  memory store *and* reaches the paired Brain
+  (`POST /dreamlayer/memories/purge`), which drops every saved place while
+  deliberately leaving people and reminders (they are mirrors of their own
+  surfaces with their own remove controls).
 
 The full toggle-to-effect table, with defaults and the endpoints each drives,
 is in [Settings and modes](reference/settings.md).
@@ -152,7 +171,11 @@ is in [Settings and modes](reference/settings.md).
 
 - **Plugins** — the store: browse and search the registry, Featured / Top
   rated / Downloads tabs, one-tap star ratings, and a permissions alert
-  before any install. See [The platform](platform.md#the-store-in-three-places).
+  before any install. Installs are real now: the phone fetches the package
+  and **sideloads** it to the paired Brain, surfacing the Brain's actual
+  validation verdict; with no Brain paired the install queues locally and
+  `flushPending` delivers it the moment one pairs. See
+  [The platform](platform.md#the-store-in-three-places).
 - **Confluence** — the bond lifecycle (propose, accept, live), togetherness,
   TinCan pings, weather gifts. Presentational until live bond streaming
   lands.
@@ -186,11 +209,39 @@ black, surface `#0E1416`, memory teal `#2FD4C4`, attention coral, one accent
 per surface), an 8 pt spacing grid, a five-level type scale with an eyebrow
 style, and motion tokens (180/240/400 ms, one standard ease) with
 `useEntrance` fade-and-rise and `usePressScale` spring on every touchable.
+
+The recent material overhaul raised the finish without touching the
+doctrine: the whole app now sets in **Space Grotesk** (the brand face,
+shared with the landing page; loaded via `@expo-google-fonts/space-grotesk`
+with the weights mapped explicitly in `src/ui/theme/fonts.ts`, since custom
+RN fonts ignore `fontWeight`), surfaces gained real depth through
+`expo-blur` and `expo-linear-gradient` (the `CineBackdrop` ambient
+gradient behind every screen), and the tab bar draws its own `TabIcon`
+set instead of the platform defaults.
+
 Primitives: `Screen`, `ScreenHeader`, `Card`, `Section`, `Tappable`,
 `EmptyState`, `StatusPill`, `PillButton`, `ConnectorCard` with `SwitchRow`
-and `Bullet`, `QrScanner`, `PrimaryButton`, plus the HUD-mirror components
-(`HaloMirror`, `CardPreview`, `DreamCanvas`, `HorizonPreview`) that reuse the
-glasses' exact palette as QA truth.
+and `Bullet`, `QrScanner`, `PrimaryButton`, `DemoBanner`, plus the
+HUD-mirror components (`HaloMirror`, `CardPreview`, `DreamCanvas`,
+`HorizonPreview`) that reuse the glasses' exact palette as QA truth.
+
+## The App Store kit
+
+The package now carries everything a store submission needs, checked into
+the repo rather than living in someone's browser session:
+
+- **fastlane** (`phone-app/fastlane/`): Appfile, Fastfile, and a
+  Deliverfile driving `deliver`, with full metadata (name, subtitle,
+  description, keywords, categories, review notes) under
+  `fastlane/metadata/` in **nine locales** — en-US, de-DE, es-ES, fr-FR,
+  it, ja, ko, pt-BR, zh-Hans — plus a screenshots directory in the layout
+  `deliver` expects.
+- **In-app i18n** (`src/i18n/`): the same nine languages for the UI
+  strings, with English as the fallback for any missing key; tab titles
+  and screens read through `t()`.
+- **Privacy:** every locale's `privacy_url.txt` points at the real policy,
+  `https://dreamlayer.app/privacy.html`, served from the landing site in
+  this repository.
 
 ## Running it
 

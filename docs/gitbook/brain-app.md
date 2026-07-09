@@ -1,174 +1,122 @@
 # The desktop Brain app
 
-The Brain (`host-python/src/dreamlayer/ai_brain/server/`) turns an always-on
-Mac — a Mac mini is the reference — into your private knowledge node. It is
-a single Python server: the index, the API, the scheduler, and a complete
-control panel served as one self-contained HTML page (no build step, no
-external requests). It runs anywhere Python runs; the macOS-specific readers
-degrade to empty lists elsewhere.
+The Brain is now a real Mac app: a signed, notarized **DreamLayer.dmg** you
+double-click, living in the menu bar, serving a cinematic control panel in
+its own native window. Underneath it is the same open Python server
+(`host-python/src/dreamlayer/ai_brain/`) — anything in this chapter also
+works from a plain `python -m dreamlayer.ai_brain.server` on any OS, in any
+browser.
+
+*Every screenshot below is the actual panel, booted from this repository
+and captured headlessly with a seeded index.*
+
+## Getting it
+
+- **Download:** the site's "Download for Mac" buttons point at the latest
+  notarized dmg in the public `dreamlayer-releases` repository. CI builds
+  it on every version tag: py2app bundle, every nested library signed,
+  hardened runtime, Apple notarization, stapled.
+- On first launch it mints a pairing token, starts the server on port 7777,
+  begins the folder watcher, brief scheduler, and calendar sync, and sits
+  in the menu bar (no Dock icon): a status dot, **Open panel**, **Sync
+  now**, and **Incognito**. State lives in `~/.dreamlayer`; the app never
+  writes inside its own bundle. A login LaunchAgent is one flag away.
+- **Open panel** opens a native window (a WebKit view onto the same
+  localhost page); off macOS, or if WebKit is unavailable, it falls back to
+  your browser. Same HTML either way.
+
+## The app layout — nine views
+
+The panel is now a real application layout: a left sidebar, one view at a
+time.
+
+### Home
+
+![Home — status, the pack nudge, and the plan](assets/panel/view_home.png)
+
+What's connected (Brain, model, cloud, incognito, phone, index) polled
+live, a first-run nudge when upgrade packs are available, and the **Plan**
+card: "Free - local & open" — with the honest framing that every feature in
+the app is free, and a working notify-me waitlist for
+[DreamLayer Cloud](cloud.md).
+
+### Your day
+
+![Your day](assets/panel/view_day.png)
+
+The morning brief (compose on demand; the extended **long brief** adds
+sections — Today, Due, Waiting on you, Messages spelled out, Yesterday —
+cached at `GET /dreamlayer/brief/long/latest` and rendered by the phone's
+Brief screen), the agenda with macOS Calendar sync, the unified people list
+(the dossier registry merged by name with the glasses' social memory —
+relationship, notes, owed-favor chips, a "met on Halo" badge), and
+Reminders.
+
+### Intelligence
+
+![Intelligence](assets/panel/view_mind.png)
+
+Folders it reads (server-side browser, drag-and-drop, filters, reindex),
+Ask your stuff, and the **Model** card — now multi-provider: the local
+model is Ollama with per-model status and one-click pulls, and the cloud
+tier speaks **seven provider presets across three wire formats** — OpenAI,
+Anthropic, Gemini, OpenRouter, Ollama-local (key-free), the DreamLayer
+Cloud preset, and Custom for any OpenAI-compatible endpoint (LM Studio,
+llama.cpp, and friends).
+
+### Connections, Privacy
+
+![Connections](assets/panel/view_reach.png)
+
+Pairing (one QR), the cloud and incognito switches, and message relay. The
+Privacy view keeps the token, the egress counter, backup/restore, and
+erase — plus the purge contract: the phone's "Erase all memories" now
+reaches all the way here (`POST /dreamlayer/memories/purge`), dropping
+every saved place while deliberately leaving people and reminders, which
+are mirrors of their own surfaces.
+
+### Plugins
+
+![Plugins view](assets/panel/view_plugins.png)
+
+Installed plugins with their permissions, what this Brain can grant,
+per-plugin remove, and sideloading through the same validation gate. Phone
+installs are real now too: the phone fetches the package from the registry
+and sideloads it here, surfacing this Brain's actual verdict.
+
+### Capabilities
+
+![Capabilities view](assets/panel/view_caps.png)
+
+The live [capability report](integrations.md): all 58 optional
+integrations grouped by tier, each with a status dot (active / off /
+missing / unsupported / external), an impact rating, and either a one-click
+**Turn on / Turn off** or the exact `pip install` to get it — plus the five
+**capability packs** (Total Recall, Sharp Ears, Clear Eyes, Guardian,
+Operator) with honest download sizes and one-click install on a source-run
+Brain. The sealed .dmg ships two starters baked in: LAN auto-discovery
+(zeroconf) and Ed25519 signing (cryptography); it cannot pip-install into
+itself and says so.
+
+### Learn, Advanced
+
+![Learn — in-app explainers](assets/panel/view_learn.png)
+
+Learn is the in-app explainer gallery — eight real HUD cards (Oracle,
+brief, truth gauge, face recall, object recall, proactive memory, caption,
+veil) as tappable chips. Advanced holds the activity feed and Health &
+schedule (quiet hours, brief hour, retention).
+
+![Advanced](assets/panel/view_advanced.png)
+
+## Running it from source
 
 ```bash
-pip install -e ./host-python
-python -m dreamlayer.ai_brain.server --token <your-token>
-# panel at http://<mac>:7777/  (token auto-injected when opened on the Mac itself)
+pip install -e "./host-python[profile-mac]"   # or plain -e ./host-python
+python -m dreamlayer.ai_brain.server --token <token>   # port 7777, any OS
 ```
 
-*Every screenshot below is the actual panel, booted from this repository and
-captured headlessly with a seeded index (three notes, two people, two
-events).*
-
-## What's connected — the system card
-
-![Status](assets/panel/status.png)
-
-Live status, polled every four seconds: Brain online, active model, cloud
-state ("On - not configured" until you wire a key), incognito, whether a
-phone has checked in, and the index size. Missing watched folders surface
-here too.
-
-## Morning brief and agenda
-
-![Agenda](assets/panel/agenda.png)
-
-The agenda merges hand-added events with macOS Calendar when sync is on
-(**Seam:** the AppleScript reader; per-calendar picker, 14-day horizon,
-15-minute background sync). "Brief me" composes the morning brief on demand;
-the Ops card schedules it daily. Add and remove events inline.
-
-The brief comes at two depths (`POST /dreamlayer/brief` with `depth`):
-
-- **`short`** (default) — the one-glance version the glasses wake to: today's
-  agenda plus what's new, turned into a warm couple of sentences.
-- **`long`** — the extended brief, walked in sections: **Today** (agenda),
-  **Due** (reminders), **Waiting on you** (open commitments the phone passes),
-  **Messages** (each new text and email spelled out, not just counted), and
-  **Yesterday** (kept moments the phone passes). The model writes a few
-  skimmable paragraphs; the structured `sections` ride alongside. The last
-  long brief is kept at `GET /dreamlayer/brief/long/latest`, and the phone's
-  **Brief** screen composes it on demand and stores it to read anytime — even
-  back offline.
-
-## People and reminders
-
-![People](assets/panel/people.png)
-
-The dossier registry — everyone you have introduced, with notes and tags —
-fed by hand, by Contacts sync (**seam**), or by the glasses' consented name
-capture via the API. Reminders mirrors open Reminders.app to-dos with a
-per-list picker (**seam**).
-
-## Reach and devices — pairing and the switches
-
-![Pairing](assets/panel/reach_pairing.png)
-
-The Cloud and Incognito switches (identical semantics to the phone — see
-[Privacy](privacy.md#the-three-brain-switches)), and **Pair a phone**: one
-QR / one `dreamlayer:` code carrying the LAN URL and token. Local-only — the
-pairing code is never served off-box.
-
-## The cloud tier
-
-![Cloud config](assets/panel/cloud.png)
-
-Any OpenAI-compatible provider: base URL, key (stored, never re-displayed —
-`GET /config` masks it to "set"), model name, and **Test connection** for a
-one-word round trip. The cloud is only ever a fallback tier; every use is
-counted and logged.
-
-## Folders it reads
-
-![Folders](assets/panel/folders.png)
-
-The knowledge base is folders you choose: add by server-side browser (modal,
-local-only) or pasted path, drop files straight onto the page into a chosen
-folder, re-index on demand — plus auto-reindex whenever a watched folder's
-modification signature changes (3-second poll). Advanced filters: semantic
-search on/off, an extension whitelist (defaults cover text, markdown, csv,
-json, code and more), a per-file size cap (2 MB default), and exclude globs.
-
-![Folder browser](assets/panel/folder_browser.png)
-
-## Ask your stuff
-
-![Ask](assets/panel/ask.png)
-
-The same `POST /dreamlayer/brain/ask` the glasses and phone use. Here it has
-found the answer in a seeded note — tier `laptop`, source shown. With the
-keyword model the answer is the best passage; with Ollama it is synthesized
-prose.
-
-## Model — keyword or Ollama
-
-![Model](assets/panel/model.png)
-
-Two modes, honestly framed:
-
-- **Keyword** — zero setup, token-overlap retrieval. Works today, offline.
-- **Ollama** — a local LLM upgrade: chat model (default `llama3.2`), vision
-  model (`llama3.2-vision`), embedding model (`nomic-embed-text`) for
-  semantic search. The status card probes Ollama live, lists which
-  configured models are pulled, and offers a one-click **Pull** per missing
-  model (local-only, drives Ollama's own API). "Read email and iMessage"
-  folds Messages and Mail into the index (**seam:** the chat.db / .emlx
-  readers).
-
-## Privacy controls
-
-![Privacy](assets/panel/privacy.png)
-
-The pairing token (show / rotate — rotating de-pairs every device), the
-lifetime **cloud egress counter**, backup (full restorable snapshot,
-local-only) and restore, and selective erase: questions, activity, or
-folders.
-
-## Plugins — extend the Brain
-
-![Plugins](assets/panel/plugins.png)
-
-Community plugins this Brain runs, each validated on the way in (integrity
-checksum, a static capability scan, a smoke load) — the shot above is a
-real session where two registry plugins installed and a third was refused
-because this machine could not grant the `mesh` capability it requires. The
-card lists what this Brain can grant, links to the store at
-[dreamlayer.app/plugins](https://dreamlayer.app/plugins.html), and takes a
-pasted package for sideloading through the same gate. The full platform
-story — the API, the marketplace, the live social layer at
-api.dreamlayer.app — is in [The platform](platform.md).
-
-## Messages, activity, health
-
-![Activity](assets/panel/activity.png)
-
-The unified activity feed: asks with their tier, folder changes, uploads,
-sync runs, pairing, cloud egress — the audit trail of the whole node. The
-Messages card (hidden until email is enabled) shows the recent feed with the
-"summarize long emails" toggle.
-
-![Ops](assets/panel/ops.png)
-
-Health and schedule: version, index disk size, Ollama latency, uptime;
-**quiet hours** (scheduled incognito), the **morning brief hour**, and
-**retention days** for history pruning.
-
-## The Mac appliance pieces
-
-- **Menu-bar app** — `python -m dreamlayer.ai_brain.menubar` (rumps, macOS):
-  a status dot (online / cloud-unconfigured / incognito / offline), Open
-  panel, one-click Sync now (calendar + contacts + reminders), and an
-  Incognito toggle. Its pure core (status mapping, plist generation) is
-  tested cross-platform.
-- **Launch at login** — `python -m dreamlayer.ai_brain.menubar
-  --install-login` writes `~/Library/LaunchAgents/vision.dreamlayer.brain.plist`
-  (RunAtLoad + KeepAlive).
-- **Installer** — `laptop-companion/install-macos.sh` installs Ollama, pulls
-  the three default models, seeds the config with `model: "ollama"`, and
-  installs the launch agent in one run.
-- **The companion agent** — `laptop-companion/dreamlayer_companion.py` is a
-  separate, minimal, stdlib-only agent for *any* laptop: one endpoint
-  (`GET /dreamlayer/context` — recent file names, hostname, battery), the
-  same token header, and a refusal to serve on the LAN without a token. It
-  feeds the Object Lens's "your laptop" panel; it is not the Brain.
-
-## The full panel
-
-![The whole panel](assets/panel/panel_full.png)
+The dmg packaging lives in `host-python/packaging/` (py2app setup, launch
+shim, entitlements) and `.github/workflows/build-macos-app.yml`; the
+menu-bar app and native window are `ai_brain/menubar.py` and
+`webview_window.py`, both cleanly absent off macOS.

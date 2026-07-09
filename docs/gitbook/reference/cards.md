@@ -2,7 +2,7 @@
 
 Every card constructor in `host-python/src/dreamlayer/hud/cards.py`, plus
 the cards other modules construct. "Renderer" says where it draws today:
-**device** (`halo-lua/display/renderer.lua`, 23 types), **dream** (the
+**device** (`halo-lua/display/renderer.lua`, 33 bespoke types plus a never-black layout/titled fallback), **dream** (the
 device's dream path), **mirror** (the Python mirror / phone only), or
 **payload** (no glass renderer yet). Dismiss is milliseconds (0 = sticky).
 Full visual treatment per card: [the gallery](../hud-cards.md).
@@ -12,7 +12,7 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | ReadyCard | boot, resume, connect | device | — | — |
 | SavedMemoryCard | scene/conversation kept, nod-to-save | device | 1200 | chime visual, burst |
 | QueryListeningCard | single click / ask | device | on result | live amp waveform |
-| ListeningCard | Oracle wake (any source) | mirror | 0 | earcon `wake`, haptic tick |
+| ListeningCard | Oracle wake (any source) | device | 0 | earcon `wake`, haptic tick |
 | LoadingCard | a tier thinking | device | on result | — |
 | OracleReplyCard | Oracle answer/action | device | 6000 | — |
 | ObjectRecallCard | object recall | device | 3500 | conduct flair |
@@ -20,10 +20,10 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | CommitmentDriftCard | `tick_drift` slippage | device | 4500 | — |
 | ProactiveMemoryCard | arriving at a memory place | device | 3500 | — |
 | PersonContextCard | person cue (anticipation) | device | 3500 | chord arpeggio |
-| PersonDossierCard | greet / look at a known person | mirror | 5000 | earcon `look` |
-| SpokenCaptionCard | each caption line | mirror | rolling | — |
+| PersonDossierCard | greet / look at a known person | device | 5000 | earcon `look` |
+| SpokenCaptionCard | each caption line | device | rolling | — |
 | LiveCaptionCard | Puente / Rosetta translation | device | rolling | — |
-| MorningBriefCard | wake with a brief waiting | mirror | 8000 | — |
+| MorningBriefCard | wake with a brief waiting | device | 8000 | — |
 | FactCheckCard | Veritas verdict | device | 7000 | chime / hark / hark_urgent by verdict; double haptic + flash on flags |
 | AnswerAheadCard | copilot pre-answer | device | 8000 | **silent**; tick haptic |
 | HarkCard | attention policy | device | 6500 (9000 urgent) | `hark` / `hark_urgent`; tick / double; flash urgent |
@@ -39,17 +39,17 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | WorldAnchorCard | Ghost Layer echo | dream | 8000 | — |
 | SynesthesiaCard (v1/v2) | Dream Mode sense read | dream | 4000 | — |
 | PaletteShiftCard | mood tint | consumed as a palette command | 0 | — |
-| UpcomingCard | event cue ("leave in 8 min") | payload | 6000 | — |
-| HereCard | place cue ("your bike is here") | payload | 5000 | — |
-| MessageCard | message pop-up | payload | 6000 | — |
+| UpcomingCard | event cue ("leave in 8 min") | device (warms to amber inside 5 min) | 6000 | — |
+| HereCard | place cue ("your bike is here") | device | 5000 | — |
+| MessageCard | message pop-up | device | 6000 | — |
 
 From other modules:
 
 | Card | Module | Purpose |
 |---|---|---|
-| ScholarCard | `hud/cards.py: scholar` | answer / form help / plain words (mirror renderer; dismiss 9000) — [chapter](../world-lenses.md) |
-| GlanceChoiceCard | `hud/cards.py: glance_choice` | the arbiter's one-tap chooser, up to 3 options (mirror; dismiss 6000) |
-| TasteCard | `hud/cards.py: taste` | the shelf/menu pick with reasons; vetoed items flagged, never dropped (mirror) |
+| ScholarCard | `hud/cards.py: scholar` | answer / form help / plain words (device; dismiss 9000) — [chapter](../world-lenses.md) |
+| GlanceChoiceCard | `hud/cards.py: glance_choice` | the arbiter's one-tap chooser, up to 3 options (device, circular-native; dismiss 6000) |
+| TasteCard | `hud/cards.py: taste` | the shelf/menu pick with reasons; vetoed items flagged, never dropped (device; dismiss 9000) |
 | BeaconCard | `confluence/beacon.py` | your GhostMode circle by bearing and band ("Maya - close, ahead-left") |
 | ReactionCard / FillerCard / AirDrumCard / FaceSynthCard | registry plugins | plugin-registered renderers via `add_card_renderer` |
 | QuestCard / QuestRewardCard | `orchestrator/quest.py` | quests and QUEST COMPLETE / LEVEL UP / RANK UP rewards |

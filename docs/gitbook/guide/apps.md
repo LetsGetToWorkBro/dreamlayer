@@ -6,7 +6,10 @@ the first and almost none in the second once it is set up.
 
 ## The phone app
 
-Six tabs along the bottom:
+Six tabs along the bottom. (Every screen also works in **Demo Mode** —
+labeled sample data with a banner that never leaves the screen — so you can
+explore the whole app before owning any hardware; that is exactly how the
+screenshots in this book were taken.)
 
 **Brain** — the home tab. Pairing, the three switches (Mac, Cloud,
 Incognito), and a box to ask your brain anything from your pocket.
@@ -31,8 +34,10 @@ hand.
 
 ![People tab](../assets/phone/people.png)
 
-**Memories** — everything remembered, grouped by day and searchable. With a
-Mac connected, the same search box also asks your files and mail.
+**Memories** — everything remembered, grouped by day and searchable: the
+places you told it about ("I left my bike at the north rack"), people you
+met, favors owed, reminders. With a Mac connected, the same search box also
+asks your files and mail.
 
 ![Memories tab](../assets/phone/memories.png)
 
@@ -45,7 +50,8 @@ Labs screens:
   on you, Messages, Yesterday. Composed on demand and saved to read offline.
 - **Plugins** — the community plugin store: browse, see exactly what each
   plugin is allowed to do (in plain English, before you install), rate with
-  one tap. The store also lives on the web at
+  one tap. Installing really installs it — onto your Mac, after its safety
+  check, never onto the phone. The store also lives on the web at
   [dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
 - **Rehearsal** — teach the glasses a routine by performing it: tap out the
   beats ("Tap - Tap - Hold"), watch it learn live, keep it, and put it on
@@ -58,34 +64,34 @@ Labs screens:
 |---|---|
 | ![Settings](../assets/phone/settings_oracle.png) | ![Saga](../assets/phone/saga.png) |
 
-## The Mac's control panel
+## The Mac app
 
-One page in your browser, organized top to bottom. You will recognize
-everything from setup:
+A normal Mac app: download it, drag it to Applications, double-click. It
+lives in your **menu bar** (a small dot — green means running; one click
+for sync or incognito) so you never need to think about it day to day. Its
+control panel opens in its own window, organized as nine views down a left
+sidebar:
 
-- **What's connected** — is everything green?
-- **Morning brief and Agenda** — your events; syncs from the Mac's Calendar
-  if you allow it.
-- **Who you've met** — the people it can remind you about, with your notes.
-- **Reach and devices** — cloud and incognito switches, and phone pairing.
-- **Folders it reads** — the heart of it: which folders it may know. Drag
-  files straight onto the page to add them.
+- **Home** — is everything green? Plus your plan (free, local and open).
+- **Your day** — the morning brief, your agenda (syncs from the Mac's
+  Calendar if you allow it), who you've met, and reminders.
+- **Intelligence** — the heart of it: which folders it may know (drag
+  files straight onto the page), a box to ask your own stuff, and the
+  model picker — instant keyword search out of the box, or a local AI
+  model with one click, still entirely on your Mac.
 
-![Folders it reads](../assets/panel/folders.png)
+![Intelligence — folders, ask your stuff, and the model](../assets/panel/view_mind.png)
 
-- **Ask your stuff** — try a question against your own files, right in the
-  panel:
-
-![Ask your stuff — answered from a real file](../assets/panel/ask.png)
-
-- **Model** — keyword search (instant, zero setup) or a local AI model
-  (better answers, one-click install, still entirely on your Mac).
-- **Privacy controls** — the pairing key, the cloud egress counter, backup
-  and restore, and erase buttons.
+- **Connections** — cloud and incognito switches, and phone pairing.
+- **Privacy** — the pairing key, the cloud egress counter, backup and
+  restore, and erase buttons.
 - **Plugins** — what is installed, what this Mac is willing to grant each
   plugin, and a remove button per plugin. Every install passes a safety
   gate; one that asks for more than your Mac allows is refused outright.
-- **Activity** — a complete, honest log of everything the Brain has done.
-
-There is also a menu-bar dot for the Mac (green means running; one click for
-sync or incognito) so you never need to think about the panel day to day.
+- **Capabilities** — everything optional this Mac could do, each with an
+  honest status light and either an on/off switch or the exact way to get
+  it — including five one-click **upgrade packs** (better recall, better
+  hearing, better eyes) with their real download sizes stated up front.
+- **Learn** — an in-app gallery of what the glasses' cards look like.
+- **Advanced** — a complete, honest log of everything the Brain has done,
+  plus quiet hours and schedules.

@@ -101,9 +101,20 @@ The arbiter's TasteLens candidate bids 0.88 on a `shelf` or `menu` scene
 unavailable state when nothing reads. Tests: `test_taste.py` and
 `test_taste_connector.py`.
 
-## Rendering status
+## On the glass
 
-ScholarCard, GlanceChoiceCard, and TasteCard render through the Python
-mirror's shared World-lens material family today (every image above is that
-renderer's real output); their device-Lua renderers are the next O3-style
-pass — the same path FactCheck and Hark took from mirror to glass.
+All three now render on the device itself: Scholar and Taste share the
+World-lens bed (glass pane, bloomed spring-in cue dot, gradient separator,
+stacked info rows with vetoes cooled to the attention-dim twin), and the
+Glance chooser is circular-native — its options are bloomed nodes on an
+upper arc that spring in staggered, labels appearing inside the ring as
+each lands. Their settled holds are part of the device golden contract.
+
+| Scholar on the device Lua | TasteLens on the device Lua | The chooser on the device Lua |
+|---|---|---|
+| ![Scholar device](assets/device/scholar_device.png) | ![Taste device](assets/device/taste_device.png) | ![Chooser device](assets/device/glance_choice_device.png) |
+
+The honest no-Brain state renders on-glass too — "Connect a Brain" in ghost
+ink rather than a guess:
+
+![The unavailable state, device-rendered](assets/device/scholar_unavailable_device.png)

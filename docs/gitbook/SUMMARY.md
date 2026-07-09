@@ -18,6 +18,7 @@
 
 - [Ecosystem architecture](architecture.md)
 - [The glasses experience](glasses-experience.md)
+- [The Halo Simulator](simulator.md)
 - [HUD cards — the full gallery](hud-cards.md)
 - [Meridian — the design language](meridian.md)
 - [The Oracle](oracle.md)
@@ -31,7 +32,9 @@
 - [The phone app](phone-app.md)
 - [The desktop Brain app](brain-app.md)
 - [The AI Brain deep dive](ai-brain.md)
+- [Integrations and capabilities](integrations.md)
 - [The platform — plugins, the mesh, and the store](platform.md)
+- [DreamLayer Cloud](cloud.md)
 
 ## Reference
 
@@ -44,4 +47,5 @@
 
 - [Hardware and seams](hardware-seams.md)
 - [For builders](builders.md)
+- [Open source](open-source.md)
 - [Glossary](glossary.md)

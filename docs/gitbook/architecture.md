@@ -48,10 +48,13 @@ exposes secrets, the filesystem, or outbound sends is additionally
 
 ### 4. The phone app — `phone-app/`
 
-Expo / React Native. Five tabs (Brain, Now, Messages, Memories, Settings) plus
-Labs screens (Rewind, Saga, Profile, Rehearsal, Confluence) and onboarding. It
-is the remote control: pairing, the three brain switches, every Oracle and
-privacy toggle, message approval, and read-outs of everything the Brain knows.
+Expo / React Native. Six tabs (Brain, Now, Messages, People, Memories,
+Settings) plus hidden screens (Brief, Plugins, Rewind, Saga, Profile,
+Rehearsal, Confluence) and onboarding. It is the remote control: pairing, the
+three brain switches, every Oracle and privacy toggle, message approval, and
+read-outs of everything the Brain knows — and it carries a Demo Mode that
+fills every screen with labeled sample data so the app is alive before any
+hardware is.
 
 A fifth, smaller piece — `laptop-companion/` — is a stdlib-only agent serving
 one endpoint (`GET /dreamlayer/context`: recent file names, hostname, battery)
@@ -147,13 +150,21 @@ dreamlayer/
 │       ├── hud/           Python mirror renderer, cards, goldens, audio map
 │       ├── demo/          the emissive-overlay demo/film pipeline
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
+│       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         1,606 collected tests
-├── phone-app/             Expo / React Native app
+│       └── tests/         1,803 collected tests
+│   └── packaging/         the macOS .dmg app (py2app, entitlements)
+├── phone-app/             Expo / React Native app + the App Store kit
 ├── laptop-companion/      minimal context agent + macOS Brain installer
+├── examples/              hello-lens, the CI-tested plugin tutorial
 ├── registry/              the plugin marketplace catalog
 ├── registry-api/          the social API worker (api.dreamlayer.app)
-├── landing/  web/         the website (dreamlayer.app) + WebBLE playground
+├── landing/  web/         the website (dreamlayer.app: home, simulator, store,
+│                          playground) + the Vite/TS rebuild
 ├── docs/                  design specs, integration map, this book (gitbook/)
 └── scripts/               demos, exporters, the Lua lab
 ```
+
+Want to hold the product before hardware exists? Two full simulators —
+one in the browser on the landing site, one running the real Python stack —
+are covered in [The Halo Simulators](simulator.md).

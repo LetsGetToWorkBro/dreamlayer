@@ -18,7 +18,7 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 |---|---|---|
 | `/` | none | the control panel (HTML; token injected only on localhost) |
 | `/dreamlayer/status` | token | live state: model, cloud, cloud_ready, cloud_calls, incognito, quiet, phone_ago, index_ago, missing folders, index stats |
-| `/dreamlayer/config` | token | full config (token and cloud key masked) plus index stats |
+| `/dreamlayer/config` | token | full config (token and cloud key masked) plus index stats and the `plan` summary |
 | `/dreamlayer/health` | token | version, index disk size, Ollama latency, uptime |
 | `/dreamlayer/history` | token | unified activity feed (asks plus folder / upload / cloud / pair events) |
 | `/dreamlayer/messages/recent` | token | recent Messages + Mail `{items, enabled, summarize_emails}` — **seam:** macOS readers |
@@ -34,6 +34,9 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/brief/long/latest` | token | the last extended (long) brief (or `{}`) |
 | `/dreamlayer/social/people` | token | the mirrored social memory: people with relations, notes, debts, topics |
 | `/dreamlayer/plugins` | token | installed plugins + the capabilities this Brain can grant |
+| `/dreamlayer/capabilities` | token | the live capability report `{items, summary, profiles, disabled, packs, frozen}` |
+| `/dreamlayer/memories` | token | assembled kept memory: saved places, people met, owed favors, dated reminders |
+| `/panel-assets/<name>` | none | bundled panel imagery (cinematic stills, explainer cards) |
 | `/dreamlayer/rc/repertoire` | token | kept Reality Compiler figments `{items, active}` |
 | `/dreamlayer/model/status` | token | Ollama reachability + which configured models are pulled |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the panel's folder picker) |
@@ -47,7 +50,7 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 |---|---|---|
 | `/dreamlayer/brain/ask` | token | `{query}` → `Answer {text, tier, sources, confidence}`; logged; may cross to cloud under the gate |
 | `/dreamlayer/brain/explain` | token | `{label, image?, want?}` → object `Answer` |
-| `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall/brief answered inline; timers/intervals/clock compiled and deployed (`rc_native`); notes/meet/debts/settle applied to the people mirror (`voice_social`); others returned as `{intent, ...args}` |
+| `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall/brief answered inline; timers/intervals/clock compiled and deployed (`rc_native`); notes/meet/debts/settle applied to the people mirror (`voice_social`); locate/stash answered from Waypath; missed and reply handled in place; others returned as `{intent, ...args}` |
 | `/dreamlayer/brief` | token | `{agenda?, since?, depth?, commitments?, memories?}` → `{text, bullets, missed}`; `depth: "long"` adds `sections` and is cached for `brief/long/latest` |
 | `/dreamlayer/replies` | token | `{text}` → `{replies: [three short replies]}` |
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → save + reindex |
@@ -69,6 +72,9 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/rc/revoke` | token | `{figment_id}` → pull it from the stage/vault |
 | `/dreamlayer/plugins/install` | token | `{name}` from the registry or a sideloaded `{manifest, source}` → validated install `{ok, errors, warnings, state}` |
 | `/dreamlayer/plugins/remove` | token | `{name}` → uninstall |
+| `/dreamlayer/capabilities` | token | `{key, disabled}` → one-click capability on/off (persisted as `disabled_caps`) |
+| `/dreamlayer/packs` | token | `{pack}` → background pip-install of a capability pack (refused in the sealed app) |
+| `/dreamlayer/memories/purge` | token | `{}` → drop every saved place (people and reminders deliberately survive) |
 | `/dreamlayer/message/draft` | token | `{channel, to, subject?, text}` → `{script}` — preview only, nothing sent |
 | `/dreamlayer/message/send` | **local** | same + `approved: true` → osascript send — **seam**; refused without approval |
 | `/dreamlayer/model/pull` | **local** | `{model}` → blocking `ollama pull` `{ok, status, model}` |

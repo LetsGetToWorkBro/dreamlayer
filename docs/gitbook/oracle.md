@@ -110,17 +110,39 @@ the [Scholar lens](world-lenses.md) — and saying one arms the next look for
 6 seconds, so "explain this" followed by a glance at the page goes straight
 to plain words with no chooser.
 
-### 6. Knowledge intents
+### 6. Things, stashed and found
 
-Anything else runs through `parse_intent` (`voice.py`) and `handle_voice`:
+Tell the Oracle where you left something, then ask later — answered
+entirely from your own **Waypath anchors**, no Brain required:
+
+| Say | Intent | What happens |
+|---|---|---|
+| "I left my bike at the north rack" / "my car's in the garage" / "I'm parked on level 3" | `stash` | drops a Waypath anchor — "Got it — your bike is at the north rack." |
+| "where's my bike?" / "where did I park?" | `locate` | answers from that anchor and draws the direction/place card on the glass |
+
+The stash grammar (`voice.py: _parse_stash`) is deliberately past-tense
+and thing-shaped: only *left / put / stashed / dropped / stowed / set*
+(plus the parked forms) parse, and person, event, time, and idiom subjects
+are refused — so "I'm leaving at nine" and "my mom is in the hospital"
+degrade safely to a plain ask instead of becoming a bogus anchor. Both
+halves respect the Veil: incognito refuses the write ("Not while you're
+incognito.") and holds the on-glass answer too. A thing you never stashed
+gets the honest miss: "I don't have a spot saved for your bike yet."
+More on the anchors themselves in
+[Perception and memory](perception-memory.md#stashes-and-the-waypath).
+
+### 7. Knowledge intents
+
+Anything else runs through `parse_intent` (`voice.py`) and `handle_voice` —
+and since the wiring pass, every one of these completes end to end instead
+of returning a bare intent:
 
 | Intent | Example | What happens |
 |---|---|---|
-| `locate` | "where did I leave my bike?" | object recall from memory |
 | `recall` | "what did Marcus say he needs?" | routed through the brain (`ask_brain`) |
-| `reply` | "reply to Priya saying on my way" | structured `{to, text}`; the phone/Brain complete the approved send |
+| `reply` | "reply to Priya saying on my way" | the Brain stages the reply — drafting a line if you gave none — and the send still requires explicit approval |
 | `brief` | "brief me" / "what's my day" | pulls the morning brief |
-| `missed` | "what did I miss?" | the missed-items digest |
+| `missed` | "what did I miss?" | the Brain counts genuinely missed texts and emails and says so ("You missed 2 texts and 1 email.") |
 | `ask` | anything else | the tiered brain — device, then Mac mini, then cloud if enabled |
 
 Answers come back framed by the persona; when nothing is known the Oracle

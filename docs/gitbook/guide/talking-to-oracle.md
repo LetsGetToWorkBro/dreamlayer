@@ -23,12 +23,17 @@ twenty seconds, so follow-up questions need no wake word. Just keep talking.
 
 ### Find and remember
 
-> "Where did I leave my keys?"
-> "Where's the bike?"
+> "I left my bike at the north rack." — tell it where things are...
+> "I'm parked on level 3." / "My car's in the garage."
+> "Where's my bike?" / "Where did I park?" — ...and it hands the spot back.
 > "What did Marcus say he needed?"
-> "What did I miss?"
+> "What did I miss?" — "You missed 2 texts and 1 email."
 > "Brief me."
 > "Remind me to call the plumber tomorrow."
+
+Telling it where you left something works in the past tense — "I *left* my
+bike", "I'm *parked* on level 3" — so ordinary talk like "I'm leaving at
+nine" never becomes a phantom saved place.
 
 ### People
 

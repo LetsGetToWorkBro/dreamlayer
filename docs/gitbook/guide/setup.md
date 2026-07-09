@@ -15,6 +15,11 @@ If you are skipping the Mac for now, you are already done: the phone is the
 brain, and the glasses pair from this same screen. Everything core — memory,
 people, promises, the Oracle — works right now.
 
+**No hardware at all yet?** Tap **"Explore with sample data"** at the end of
+the welcome. The whole app fills with clearly-labeled sample data — a
+banner stays on screen the whole time so you can never mistake it for your
+own life — and one tap exits.
+
 ## 2. The Mac (optional, recommended)
 
 Adding an always-on Mac upgrades the brain: it can index folders you choose
@@ -22,10 +27,12 @@ Adding an always-on Mac upgrades the brain: it can index folders you choose
 you allow it, and answer questions from *your own stuff* — "what's the rent
 on the lease?" gets answered from the actual lease file, on your own machine.
 
-On the Mac, install DreamLayer's Brain and open its control panel in a
-browser. The panel walks you through everything visually:
+On the Mac, download the **DreamLayer app** (a normal Mac download — drag
+it to Applications, double-click) from the site's Download for Mac button.
+It lives quietly in your menu bar and opens its control panel in its own
+window:
 
-![What's connected — the Brain's status card](../assets/panel/status.png)
+![Home — what's connected, at a glance](../assets/panel/view_home.png)
 
 Three things worth doing on day one:
 
@@ -39,9 +46,10 @@ Three things worth doing on day one:
 
 ## 3. Pair everything with one code
 
-In the Mac panel, press **Pair a phone**. A QR code appears:
+In the Mac panel's **Connections** view, press **Pair a phone** and a QR
+code appears:
 
-![One code wires the phone, the Brain, and the glasses together](../assets/panel/reach_pairing.png)
+![Connections — pairing and the reach switches live here](../assets/panel/view_reach.png)
 
 In the phone app: **Brain tab, Pair a device, scan**. That single code
 connects your phone to your Mac and registers your glasses — one scan, done.

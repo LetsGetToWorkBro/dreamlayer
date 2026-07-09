@@ -115,6 +115,24 @@ Horizon. Below threshold, DreamLayer says "Not sure" rather than guessing.
 
 ![Where you left it](assets/demo/catalog/features/object/preview.gif)
 
+## Stashes and the Waypath
+
+The spoken half of "where did I leave it" is the **Waypath Lens**
+(`orchestrator/waypath.py`): say *"I left my bike at the north rack"* or
+*"I'm parked on level 3"* and DreamLayer drops an **anchor** — a subject
+plus a plain-words place — that a later *"where's my bike?"* answers from,
+drawing the direction/place card on the glass. The grammar and its
+deliberate refusals (past-tense verbs only, no person/event/idiom
+subjects) are in [the Oracle chapter](oracle.md#6-things-stashed-and-found).
+
+An anchor can also carry a bearing and distance ("12m to your left"),
+turned into one of eight human directions given your current heading —
+but the IMU heading and drop-distance that feed it are a **seam** today,
+so place-worded anchors ("at the north rack") are the real product and
+bearing-worded ones light up with hardware. Anchors are yours alone: a
+thing you never stashed has no waypath, and both stashing and locating
+hold while incognito.
+
 Scenes are kept through `ingest_scene` (object, place, time; embedded and
 stored in the vault), conversations through `ingest_conversation`; both
 confirm with the SavedMemoryCard. A passive ring buffer (`SilentCapture` +
@@ -181,5 +199,16 @@ Saving is celebrated once (SavedMemoryCard, the system's only particle
 burst); forgetting is instant and confirmed (**ForgetLastCard**). Deeper
 retention — what consolidates overnight, what fades — belongs to REM and the
 memory vault, covered in [the wider lens set](lenses.md).
+
+Everything kept is also inspectable in one place:
+`GET /dreamlayer/memories` assembles the saved places (Waypath anchors),
+people met, owed favors, and dated reminders into a single feed — the
+phone's Memories tab renders exactly this. And erasure has a precise,
+tested scope: the phone's "Erase all memories" reaches the Brain
+(`POST /dreamlayer/memories/purge`) and drops **every saved place**, while
+people and reminders deliberately survive — they are mirrors of their own
+surfaces (the People tab and Reminders), each with its own remove control,
+and a place-purge silently deleting your contacts would be the wrong kind
+of surprise.
 
 ![Keep a moment](assets/demo/catalog/features/saved/preview.gif)

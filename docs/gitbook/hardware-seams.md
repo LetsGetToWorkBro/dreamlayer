@@ -1,7 +1,7 @@
 # Hardware and seams
 
 DreamLayer is a **pre-hardware build**: the intelligence stack is complete
-and tested (1,606 passing tests), and the handful of places where physical
+and tested (1,803 passing tests), and the handful of places where physical
 hardware plugs in are explicit, narrow, and documented. This chapter is the
 honest matrix.
 
@@ -34,7 +34,8 @@ display runtime, BLE, and the basic sensors could host the same experience.
 
 ### Implemented and tested (no hardware required)
 
-- All 23 device card renderers, the Horizon, Dream rendering, materials,
+- All 33 bespoke device card renderers plus the never-black fallback, the
+  Horizon, Dream rendering, materials,
   motion, palettes, budgets — exercised through the real device Lua in the
   raster harness.
 - The entire orchestrator: Oracle grammar and persona, user model, Veritas,
@@ -70,7 +71,6 @@ display runtime, BLE, and the basic sensors could host the same experience.
 | Tier-0 NPU perception | `ai_brain/perception.py: NpuPerceptor` | a Vela-compiled model for the Halo's Ethos-U55; the heuristic tier answers until then |
 | GhostMode radio | `confluence/mesh.py: MeshTransport` | the LE Coded PHY group transport; an in-memory bus stands in today |
 | MIDI bridge | plugin `midi_out` seams (Face Synth, Air Drums) | python-rtmidi or an OSC bridge; plugins stay dormant without one |
-| Scholar / Glance / Taste on glass | `hud/renderer.py: _scholar` family | device-Lua renderers for the three World-lens cards (mirror-rendered today) |
 
 ### Pre-hardware (interaction model built; live cross-device streaming pending)
 
