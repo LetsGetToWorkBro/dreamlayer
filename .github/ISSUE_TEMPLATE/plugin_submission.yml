@@ -1,0 +1,30 @@
+name: Plugin submission
+description: Submit a plugin/lens to the store registry.
+labels: ["plugin"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Plugin name
+      placeholder: my-lens (lowercase, digits, hyphens)
+    validations: { required: true }
+  - type: textarea
+    id: pitch
+    attributes:
+      label: What it does
+    validations: { required: true }
+  - type: input
+    id: caps
+    attributes:
+      label: Capabilities it requires
+      placeholder: cards, mesh
+    validations: { required: true }
+  - type: textarea
+    id: package
+    attributes:
+      label: Package or repo link
+      description: >
+        The package JSON (manifest + source), or a repo link. It must pass the
+        validation gate — run test_hello_lens_example.py's pattern on your
+        folder first (see examples/hello-lens/README.md).
+    validations: { required: true }

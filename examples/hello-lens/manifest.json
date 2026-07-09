@@ -1,0 +1,18 @@
+{
+  "name": "hello-lens",
+  "version": "1.0.0",
+  "entry": "hello_lens:make",
+  "author": "you",
+  "description": "Your first lens: one custom card on the glass.",
+  "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/examples/hello-lens",
+  "requires": [
+    "cards"
+  ],
+  "api": "1",
+  "checksum": "sha256:dd7168b1a57db4432a8ae18ee6885c93247cef94c696617896f54fc8ebfa314b",
+  "long": [
+    "A complete, store-valid DreamLayer plugin in ~25 lines.",
+    "Copy this folder, rename everything, and you have a lens."
+  ],
+  "forwho": "anyone writing their first lens"
+}

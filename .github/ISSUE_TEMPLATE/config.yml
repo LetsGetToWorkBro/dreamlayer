@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & ideas
+    url: https://github.com/LetsGetToWorkBro/dreamlayer/discussions
+    about: How-it-works questions, lens ideas, show-and-tell.
+  - name: How the layer works (FAQ)
+    url: https://dreamlayer.app/#faq
+    about: The 256px question and friends, answered.
+  - name: Security issues
+    url: https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately — not as public issues.

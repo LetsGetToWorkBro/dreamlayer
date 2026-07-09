@@ -42,15 +42,17 @@ tests are marked `hardware`; latency budgets are marked `benchmark`.
 
 ## Good first contributions
 
-- A new **lens or plugin** through `plugins/base.py` (see the store format in
-  `plugins/package.py` and the validation gate in `plugins/validate.py`).
+- A new **lens or plugin** — start from the ten-minute tutorial in
+  [`examples/hello-lens/`](examples/hello-lens/) (a complete, store-valid
+  plugin CI keeps honest), then see `plugins/package.py` and the validation
+  gate in `plugins/validate.py`.
 - A real-path adapter test for an optional integration you actually have
   installed.
 - Docs: anything in `docs/` that confused you is a bug.
 
 ## Process
 
-Open an issue before large changes (architecture, new subsystems) so design
+We follow the [Code of Conduct](CODE_OF_CONDUCT.md). Open an issue before large changes (architecture, new subsystems) so design
 is agreed before code. Small fixes: just send the PR. Maintainers make final
 product calls — see [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md) for
 governance.

@@ -70,11 +70,21 @@ true takes one pass through this list:
    check), enable Discussions, add topics (`smart-glasses`, `ar`,
    `brilliant-labs`, `memory`, `python`), set the repo description and
    website to dreamlayer.app.
-5. **Flip visibility** — Settings → Danger Zone → Change visibility →
+5. **DCO enforcement** — install the DCO GitHub App
+   (github.com/apps/dco) so the sign-off rule in CONTRIBUTING.md is checked
+   automatically on external PRs (kept out of our own CI so maintainer
+   automation isn't blocked).
+6. **Enroll GitHub Sponsors** (github.com/sponsors) so `.github/FUNDING.yml`
+   lights up the Sponsor button; set `conduct@` and `security@` aliases in
+   Cloudflare Email Routing.
+7. **Keep 3–5 `good first issue`s open at all times** — they are the front
+   door for new contributors; the plugin-submission and lens-idea templates
+   feed the pipeline.
+8. **Flip visibility** — Settings → Danger Zone → Change visibility →
    Public.
-6. **Verify the claims** — the landing page's "open source — Apache-2.0"
+9. **Verify the claims** — the landing page's "open source — Apache-2.0"
    line, the panel's "code you can read", and the FAQ all become literally
-   true the moment step 5 completes. Check the LICENSE renders on the repo
+   true the moment step 8 completes. Check the LICENSE renders on the repo
    front page.
 
 ## What stays outside the license

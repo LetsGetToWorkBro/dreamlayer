@@ -1,0 +1,18 @@
+name: Feature / lens idea
+description: A new lens, capability, or improvement to the layer.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should the wearer be able to do? One glanceable moment beats a spec.
+    validations: { required: true }
+  - type: textarea
+    id: fit
+    attributes:
+      label: How it fits
+      description: >
+        Does it respect the privacy contract (capture guards, the Veil, no
+        stranger identification)? Could it be a plugin (see examples/hello-lens)
+        instead of a core change?

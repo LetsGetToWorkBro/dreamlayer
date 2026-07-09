@@ -225,6 +225,21 @@ a second wearer or an on-glass display (Confluence, live Reality Compiler
 deploys) render demo state until the transport is attached. The full seam matrix
 is in [`docs/gitbook/hardware-seams.md`](docs/gitbook/hardware-seams.md).
 
+## Build on DreamLayer
+
+Three doors in, shallowest first:
+
+1. **Write a lens in ten minutes** — [`examples/hello-lens/`](examples/hello-lens/)
+   is a complete, store-valid plugin (~25 lines) with the full tutorial: the
+   capability model, local testing through the real validation gate, packaging,
+   and shipping to the store. CI runs the example itself, so it can't rot.
+2. **Run the whole layer with no hardware** — the [simulator](https://dreamlayer.app/simulator.html)
+   in your browser, or `pip install -e "host-python[dev]"` and the test suite.
+3. **Extend the engine** — optional capabilities follow one seam pattern
+   ([`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)); platform surfaces are in
+   [`docs/PLATFORM.md`](docs/PLATFORM.md); [`CONTRIBUTING.md`](CONTRIBUTING.md)
+   has the ground rules (DCO, one green command, privacy contract).
+
 ## License
 
 DreamLayer is open source under the [Apache License 2.0](LICENSE) — the whole

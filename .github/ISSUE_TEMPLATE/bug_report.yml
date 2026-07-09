@@ -1,0 +1,28 @@
+name: Bug report
+description: Something behaves wrong in the host, apps, simulator, or sites.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations: { required: true }
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      placeholder: host-python / Mac app / phone app / simulator / landing / worker
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: OS, Python version, `python -m dreamlayer.capabilities` summary line
