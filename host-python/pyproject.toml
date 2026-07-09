@@ -30,6 +30,7 @@ intelligence = ["speechbrain", "spacy", "river", "human-learn", "supervision"]
 vision   = ["ultralytics", "moondream", "open-clip-torch", "coremltools; sys_platform=='darwin'"]
 causal   = ["dowhy"]
 infra    = ["rich", "watchdog", "zeroconf", "datasette", "rerun-sdk"]
+privacy  = ["cryptography", "presidio-analyzer", "presidio-anonymizer", "anyio"]
 
 [tool.setuptools.package-data]
 # ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)

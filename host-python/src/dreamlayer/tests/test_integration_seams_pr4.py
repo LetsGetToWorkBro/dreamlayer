@@ -1,0 +1,118 @@
+"""PR4 privacy/security/reliability seam tests — fallback paths + property and
+benchmark checks. Optional deps are absent in CI; markers deselected there.
+"""
+from __future__ import annotations
+import asyncio
+
+import pytest
+
+
+# --- privacy: PII redaction (regex fallback) + capture guard -----------------
+def test_pii_redactor_fallback():
+    from dreamlayer.memory.pii_presidio import PiiRedactor
+
+    class _Veil:
+        def __init__(self, on): self._on = on
+        def allow_capture(self): return self._on
+
+    r = PiiRedactor()
+    red = r.redact("email me at a@b.com or call 555-123-4567 pin 998877")
+    assert "<EMAIL>" in red and "<PHONE>" in red and "<NUM>" in red
+    assert r.redact_for_write("secret 1234567", privacy=_Veil(True)) is not None
+    assert r.redact_for_write("secret", privacy=_Veil(False)) is None   # veil down
+
+
+# --- privacy: MemoryEvent makes a veiled write impossible at construction ----
+def test_memory_event_type_invariant():
+    from dreamlayer.memory.models_pydantic import MemoryEvent, PrivacyViolation
+    ok = MemoryEvent(kind="Promise", summary="lease", allowed=True)
+    assert ok.summary == "lease"
+    with pytest.raises(PrivacyViolation):
+        MemoryEvent(kind="Promise", summary="lease", allowed=False)
+
+
+# --- security: signer round-trips + rejects tampering (HMAC fallback) --------
+def test_signer_roundtrip_and_tamper():
+    from dreamlayer.reality_compiler.sign_crypto import Signer, SigningError, content_hash
+    s = Signer(key=b"x" * 32)
+    payload = {"figment": "round-timer", "run_sec": 180}
+    sig = s.sign(payload)
+    assert s.verify(payload, sig) is True
+    assert s.verify({"figment": "round-timer", "run_sec": 181}, sig) is False
+    with pytest.raises(SigningError):
+        s.verify_or_raise(payload, "deadbeef")
+    assert len(content_hash(payload)) == 16
+
+
+# --- reliability: anyio veil scope cancels all tasks on stop (asyncio path) ---
+def test_concurrency_veil_stop():
+    from dreamlayer.orchestrator.concurrency_anyio import run_until_veil
+
+    async def _main():
+        stop = asyncio.Event()
+        ran = {"n": 0}
+
+        async def worker():
+            try:
+                while True:
+                    ran["n"] += 1
+                    await asyncio.sleep(0.005)
+            except asyncio.CancelledError:
+                raise
+
+        async def dropper():
+            await asyncio.sleep(0.03)
+            stop.set()
+
+        await asyncio.gather(
+            run_until_veil([worker], stop),
+            dropper(),
+        )
+        return ran["n"]
+
+    n = asyncio.run(_main())
+    assert n > 0   # worker ran, then the veil cancelled it (no hang)
+
+
+# --- reliability: typed pipeline threads stages and stops on failure ---------
+def test_stage_pipeline():
+    from dreamlayer.reality_compiler.pipeline_pydanticai import StagePipeline
+    good = StagePipeline([("double", lambda v: v * 2), ("inc", lambda v: v + 1)])
+    r = good.run(3)
+    assert r.ok and r.value == 7 and r.trace == ["double", "inc"]
+
+    def _boom(v): raise ValueError("nope")
+    bad = StagePipeline([("double", lambda v: v * 2), ("boom", _boom)])
+    r2 = bad.run(3)
+    assert not r2.ok and r2.failed_at == "boom" and r2.trace == ["double"]
+
+
+# --- property-based (hypothesis): signer verifies its own signatures ----------
+try:
+    from hypothesis import given, strategies as st
+    _HAS_HYP = True
+except ImportError:
+    _HAS_HYP = False
+
+
+if _HAS_HYP:
+    @given(st.text(min_size=0, max_size=200))
+    def test_signer_property(text):
+        from dreamlayer.reality_compiler.sign_crypto import Signer
+        s = Signer(key=b"k" * 32)
+        payload = {"t": text}
+        assert s.verify(payload, s.sign(payload)) is True
+
+
+# --- benchmark: signing stays well under budget (deselected in CI) -----------
+@pytest.mark.benchmark
+def test_sign_latency_budget():
+    import time
+    from dreamlayer.reality_compiler.sign_crypto import Signer
+    s = Signer(key=b"z" * 32)
+    payload = {"figment": "x" * 200}
+    t0 = time.perf_counter()
+    for _ in range(50):
+        s.verify(payload, s.sign(payload))
+    dur = (time.perf_counter() - t0) / 50
+    assert dur < 0.010   # 10ms budget per sign+verify
