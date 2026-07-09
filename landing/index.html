@@ -1503,6 +1503,48 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
   </div>
 </section>
 
+<!-- ======================= faq ======================= -->
+<section class="section-pad" id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow arrive">The question everyone asks</span>
+      <h2 class="headline arrive" style="--d:80ms">How is this even possible?</h2>
+      <p class="body arrive" style="--d:160ms">The display is only 256&nbsp;px, and that throws people.
+        So here is the short version: the display is not the computer. It is just the window one
+        glanceable answer comes out of.</p>
+    </div>
+    <div class="can-grid">
+      <div class="can arrive" style="--d:0ms"><b>“The display is only 256&times;256.”</b><span>Its whole
+        job is to show a single card: a name, a fact-check, one translated line, an arrow toward a friend
+        in a crowd. You are not reading a webpage in your eye. You are catching a one-second cue and
+        looking back at the world. 256&nbsp;px is plenty for a few lines of crisp text and a glyph.</span></div>
+      <div class="can arrive" style="--d:60ms"><b>So where does the AI run?</b><span>Off the glasses.
+        Perception, memory, and the models live on your phone or a home Brain (Mac or PC), local-first,
+        cloud optional. The glasses capture what you see and draw the finished card back over Bluetooth.
+        Heavy compute to the host, glanceable pixels to the device.</span></div>
+      <div class="can arrive" style="--d:120ms"><b>Isn’t a face camera a privacy problem?</b><span>It
+        stores structured meaning, never raw photos or audio. One gesture, the Veil, visibly stops all
+        capture, and a memory cannot be written while it is down. Personal details are redacted before
+        anything is saved.</span></div>
+      <div class="can arrive" style="--d:0ms"><b>Is it real, or a render?</b><span>Every HUD pixel in
+        the demos is genuine output of the shipping renderer at the real 256&nbsp;px, not a mockup. The
+        whole flow runs and is tested against an emulator today. Pre-hardware, no ship date, early
+        access only.</span></div>
+      <div class="can arrive" style="--d:60ms"><b>Can I build on it?</b><span>Yes. It is an open
+        platform, not a closed app. Every feature is a lens running through one plugin API, and you can
+        write your own without touching the core. A plugin only gets the capabilities it asks for, and
+        shared plugins pass a validation gate first.</span></div>
+      <div class="can arrive" style="--d:120ms"><b>Which glasses? Only Halo?</b><span>Halo is the first
+        target because that is the hardware this build is written against. But the device sits behind a
+        thin, typed bridge, so any capable glasses are a future target. The intelligence layer does not
+        care what is drawing the pixels.</span></div>
+    </div>
+    <div class="cta-row arrive" style="--d:200ms;margin-top:36px">
+      <a class="btn primary" href="./simulator.html">See it run in your browser →</a>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= coming soon ======================= -->
 <section class="soon has-cine" id="soon">
   <div class="section-bg" data-cine aria-hidden="true">
