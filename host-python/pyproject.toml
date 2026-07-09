@@ -33,6 +33,16 @@ infra    = ["rich", "watchdog", "zeroconf", "datasette", "rerun-sdk"]
 privacy  = ["cryptography", "presidio-analyzer", "presidio-anonymizer", "anyio"]
 platform = ["pluggy", "pyee", "argostranslate", "skia-python", "fastapi", "uvicorn", "frame-sdk", "pylsl", "mlx; sys_platform=='darwin'", "mlx-lm; sys_platform=='darwin'"]
 
+# --- Deployment profiles: one install per target, composed from the groups
+#     above via self-referential extras. Pick ONE per machine:
+#       pip install -e ".[profile-mac]"        (or: uv sync --extra profile-mac)
+#     `python -m dreamlayer.capabilities` then reports what switched on.
+#     tests/test_capabilities.py asserts these stay in sync with capabilities.py. ---
+profile-halo  = ["dreamlayer[hardware]"]                       # bridge host next to the glasses: BLE only
+profile-phone = ["dreamlayer[memory,voice,structured,llm]"]    # pocket hub: local recall + STT, no heavy vision
+profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,causal,infra,privacy,platform]"]  # the full Brain
+profile-cloud = ["dreamlayer[structured,llm,intelligence,causal,privacy]"]  # remote runner: reasoning, no device/local-model stack
+
 [tool.setuptools.package-data]
 # ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)
 # so it's installed with the package and lands in the py2app .dmg bundle.

@@ -26,6 +26,13 @@ Optional groups are declared in `host-python/pyproject.toml`
 `causal`, `infra`, `privacy`, `platform`). Install a group with, e.g.,
 `pip install -e "host-python[memory]"`.
 
+**Switching capabilities on:** don't install groups piecemeal per machine —
+pick a *deployment profile* (`profile-halo` / `profile-phone` / `profile-mac` /
+`profile-cloud`) and check the result with `python -m dreamlayer.capabilities`,
+which reports every capability as active / off / missing / unsupported /
+external, with the exact install command per row. The operator's guide is
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ---
 
 ## PR1 — Memory, Voice, Structured output, LLM
