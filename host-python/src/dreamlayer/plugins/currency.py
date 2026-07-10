@@ -14,8 +14,7 @@ import json
 import urllib.request
 from typing import Callable, Optional
 
-from dreamlayer.object_lens.providers import PanelProvider
-from dreamlayer.object_lens.schema import PanelRow
+from dreamlayer.sdk import PanelProvider, PanelRow
 
 _SYMBOL = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "AUD": "A$",
            "CAD": "C$", "CHF": "CHF ", "CNY": "¥", "INR": "₹", "MXN": "MX$"}

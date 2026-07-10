@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from dreamlayer.ai_brain.perception import AudioPercept
+from dreamlayer.sdk import AudioPercept
 
 # multi-word fillers first so they win over their own words ("you know" before
 # a bare "know" — which isn't a filler anyway)
