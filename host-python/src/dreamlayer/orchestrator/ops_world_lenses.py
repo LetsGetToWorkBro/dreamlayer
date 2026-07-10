@@ -295,6 +295,26 @@ class WorldLensOps:
         self.bridge.send_card(card, event="caption")
         return card
 
+    def docent(self, query: str, client=None, synth=None):
+        """Docent Lens (INNOVATION_SESSION 4.5): a venue's place-keyed knowledge
+        layer. Given a caption/query and a venue's LocalRecall collection
+        (``client``), retrieve the venue's *own* passages and compose a short,
+        grounded answer — cited from their docs, not a hallucination, and it
+        works offline because the collection synced when you arrived. Veil-gated.
+        ``synth(query, passages)->str`` is optional (e.g. make_synthesizer over a
+        Brain); without it, the top passages are summarized directly. Returns the
+        card, or None (incognito / no venue collection / nothing found)."""
+        if not self.privacy.allow_capture() or client is None or not query.strip():
+            return None
+        hits = client.search(query, top_k=3)
+        passages = [h.get("text", "").strip() for h in hits if h.get("text")]
+        if not passages:
+            return None
+        answer = synth(query, passages) if synth else " ".join(passages[:2])
+        card = cards.scholar(mode="answer", primary=(answer or "").strip()[:96])
+        self.bridge.send_card(card, event="docent")
+        return card
+
 
     def greet(self, person: str, now: float | None = None):
         """Surface a dossier the moment you greet someone the ledger knows.

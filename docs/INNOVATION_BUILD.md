@@ -31,7 +31,7 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | B11 | Device Vitals surface — TEL has an audience (C8#5) | BUILD | phone settings screen + `HaloBridge` TEL callback | queued (phone) |
 | B12 | Retrace — ambient-sighting recall (2.6) | **DONE** | `orchestrator/ops_commitments.py` | ✅ `retrace(subject)` — recency-blended, place+time ("kitchen counter, 8:40am"), veil-gated, draws ObjectRecallCard; `_locate` falls back to it when no anchor; 6 tests |
 | B13 | Rosetta Live offline captions (4.6) | **DONE** | `orchestrator/orchestrator.py` + `ops_world_lenses.py` | ✅ wired the offline Argos backend into `self.rosetta` (identity when absent); `translate_heard()` — the ear, one subtitle card/utterance, veil-gated; 4 tests |
-| B14 | Docent Lens — venue RAG plugin (4.5) | BUILD | wire `memory/localrecall_api.py` | queued |
+| B14 | Docent Lens — venue RAG plugin (4.5) | **DONE** | `orchestrator/ops_world_lenses.py` (wires `localrecall_api`) | ✅ `docent(query, client, synth)` — grounded answer from a venue's LocalRecall collection, optional synthesizer, veil-gated, ScholarCard; 5 tests |
 | B15 | Heirloom figments — `meta.dedication` + Inherited vault view (5.5) | **DONE** | `reality_compiler/v2/figment.py` + `vault.py` | ✅ `fig.dedicate()`/`dedication()` (signed), `Vault.inherited()`; roundtrip test; 3 tests |
 | B16 | "What the cloud can see" panel (C6) | BUILD | phone/panel + `cloud_sync.py` byte-shapes | queued |
 | D1 | LLM intent parser: keep-as-suggestion-layer vs delete (C8#4) | **DONE** | `reality_compiler/intent_parser_llm.py` | ✅ owner chose KEEP; docstring reframed as suggestion-layer, grammar-escape test added, doc #4 reconciled |
