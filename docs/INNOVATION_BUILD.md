@@ -48,7 +48,15 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | L1 | Thread Lens — steal color from the world (4.1) | **DONE** | `object_lens/palette_extract.py` + `ops_world_lenses.thread()` | ✅ extract k-swatch palette from a snapshot → `taught` memory (image not stored), veil-gated; 5 tests |
 | L2 | Ember Lens — the anniversary layer (4.9) | **DONE** | `ops_world_lenses.ember()` | ✅ one pinned, year-ago memory surfaces; storm-suppressed, veil-gated, opt-in via pinning; 5 tests |
 
-Remaining Category-4 lenses are **device/figment-shaped**, not host builds: Sous & Session (4.2) and Kiln (4.3) are figment templates (example content); Waypath (4.7) is GPS/on-glass. Docent (B14) and Rosetta Live (B13) already shipped.
+| L3 | Waypath Lens — the dot, no maps app (4.7) | **DONE (geometry)** | phone `src/nav/waypath.ts` | ✅ bearing/haversine/relative-angle/next-waypoint/`dotFor`; GPS (expo-location) + routing API are injected seams (not Apple/Google Maps); 9 tests |
+| L4 | Sous & Kiln — example figments (4.2, 4.3) | **DONE** | `reality_compiler/v2/recipes.py` + `examples/figments/*.json` | ✅ budget-verified builders + committed JSON; double-nod advance, battery-low escape, print counter; 6 tests |
+
+Docent (B14) and Rosetta Live (B13) already shipped as host lenses; Thread (L1) and Ember (L2) too.
+
+### Less-CLI surfacing (Mac panel / website)
+| S1 | Memory Grep in the Mac panel | **DONE** | `server.py` + `panel.py` | ✅ "your memory is a file" — browse (Datasette) / export, 3 endpoints; 6 tests |
+| S2 | "What the cloud can see" in the panel | **DONE** | `panel.py` (reads `/dreamlayer/cloud`) | ✅ opaque-shapes + can't-see readout in the cloud section |
+| S3 | Proof-carrying safety card on the website | **DONE** | `landing/plugins.html` | ✅ trust section showing the real "this behavior CANNOT…" card; 1 test |
 
 ---
 

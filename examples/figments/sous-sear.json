@@ -1,0 +1,79 @@
+{
+  "id": "sous-sear-000",
+  "name": "Sear",
+  "version": 2,
+  "initial": "sear",
+  "scenes": {
+    "rest": {
+      "id": "rest",
+      "lines": [
+        {
+          "content": "FLIP \u00b7 REST",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_memory"
+        },
+        {
+          "content": "{remaining}",
+          "row": 1,
+          "size": "lg",
+          "color": "text_primary"
+        }
+      ],
+      "duration_sec": 30.0,
+      "tick": "countdown",
+      "on_timeout": [
+        {
+          "target": "@end"
+        }
+      ],
+      "on": {
+        "long": {
+          "target": "@end"
+        }
+      },
+      "pulse": {
+        "window_sec": 5.0,
+        "color": "accent_attention",
+        "rate_hz": 2.0
+      }
+    },
+    "sear": {
+      "id": "sear",
+      "lines": [
+        {
+          "content": "SEAR",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_attention"
+        },
+        {
+          "content": "{remaining}",
+          "row": 1,
+          "size": "lg",
+          "color": "text_primary"
+        }
+      ],
+      "duration_sec": 240.0,
+      "tick": "countdown",
+      "on_timeout": [
+        {
+          "target": "rest"
+        }
+      ],
+      "on": {
+        "imu:double_nod": {
+          "target": "rest"
+        },
+        "long": {
+          "target": "@end"
+        }
+      },
+      "pulse": {
+        "window_sec": 5.0,
+        "color": "accent_attention",
+        "rate_hz": 2.0
+      }
+    }
+  }
+}

@@ -1,0 +1,177 @@
+{
+  "id": "kiln-dark-0000",
+  "name": "Darkroom",
+  "version": 2,
+  "initial": "stop",
+  "scenes": {
+    "fix": {
+      "id": "fix",
+      "lines": [
+        {
+          "content": "FIX",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_attention"
+        },
+        {
+          "content": "{remaining}",
+          "row": 1,
+          "size": "lg",
+          "color": "text_primary"
+        },
+        {
+          "content": "#{count:print}",
+          "row": 3,
+          "size": "sm",
+          "color": "text_secondary"
+        }
+      ],
+      "duration_sec": 300.0,
+      "tick": "countdown",
+      "on_timeout": [
+        {
+          "target": "wash"
+        }
+      ],
+      "on": {
+        "battery_low": {
+          "target": "low"
+        },
+        "imu:double_nod": {
+          "target": "wash"
+        },
+        "long": {
+          "target": "@end"
+        }
+      }
+    },
+    "low": {
+      "id": "low",
+      "lines": [
+        {
+          "content": "LOW BATTERY",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_attention"
+        },
+        {
+          "content": "plug in",
+          "row": 1,
+          "size": "md",
+          "color": "text_primary"
+        }
+      ],
+      "duration_sec": 5.0,
+      "on_timeout": [
+        {
+          "target": "@end"
+        }
+      ]
+    },
+    "stop": {
+      "id": "stop",
+      "lines": [
+        {
+          "content": "STOP-BATH",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_attention"
+        },
+        {
+          "content": "{remaining}",
+          "row": 1,
+          "size": "lg",
+          "color": "text_primary"
+        },
+        {
+          "content": "#{count:print}",
+          "row": 3,
+          "size": "sm",
+          "color": "text_secondary"
+        }
+      ],
+      "duration_sec": 30.0,
+      "tick": "countdown",
+      "on_timeout": [
+        {
+          "target": "fix"
+        }
+      ],
+      "on": {
+        "battery_low": {
+          "target": "low"
+        },
+        "imu:double_nod": {
+          "target": "fix"
+        },
+        "long": {
+          "target": "@end"
+        }
+      }
+    },
+    "wash": {
+      "id": "wash",
+      "lines": [
+        {
+          "content": "WASH",
+          "row": 0,
+          "size": "sm",
+          "color": "accent_attention"
+        },
+        {
+          "content": "{remaining}",
+          "row": 1,
+          "size": "lg",
+          "color": "text_primary"
+        },
+        {
+          "content": "#{count:print}",
+          "row": 3,
+          "size": "sm",
+          "color": "text_secondary"
+        }
+      ],
+      "duration_sec": 600.0,
+      "tick": "countdown",
+      "on_timeout": [
+        {
+          "target": "@end",
+          "counter_ops": [
+            {
+              "counter": "print",
+              "op": "inc",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "on": {
+        "battery_low": {
+          "target": "low"
+        },
+        "imu:double_nod": {
+          "target": "@end",
+          "counter_ops": [
+            {
+              "counter": "print",
+              "op": "inc",
+              "amount": 1
+            }
+          ]
+        },
+        "long": {
+          "target": "@end"
+        }
+      }
+    }
+  },
+  "counters": {
+    "print": {
+      "name": "print",
+      "start": 1,
+      "lo": 1,
+      "hi": 9999
+    }
+  },
+  "battery_below": 15
+}
