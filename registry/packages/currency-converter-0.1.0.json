@@ -3,14 +3,15 @@
     "name": "currency-converter",
     "version": "0.1.0",
     "entry": "plugin:plugin",
-    "author": "dreamlayer",
+    "author": "DreamLayer Team",
+    "official": true,
     "description": "Look at a foreign price tag and see it in your own money — live rates, right on the panel.",
     "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
     "requires": [
       "object_lens",
       "network"
     ],
-    "api": "1",
+    "api": "2",
     "checksum": "sha256:0c36ad8bf1aed59b378f9cd6c71dc0744fd0c0a30be09fdaf0e35ac4f469052d",
     "signature": "",
     "forwho": "For travellers and anyone shopping across currencies.",
@@ -19,7 +20,10 @@
       "Abroad, prices stop being abstract. Look at a tag or a menu and the look-at-a-thing panel shows the amount in your home currency, inline — no phone, no mental math.",
       "It converts with live exchange rates (free, no account) and shows the rate it used, so you always know what you’re really paying.",
       "Private by design: only the number and its currency are looked up — never where you are or what you bought."
-    ]
+    ],
+    "pricing": {
+      "model": "free"
+    }
   },
   "source": "from dreamlayer.plugins.currency import currency_plugin\n\ndef plugin():\n    return currency_plugin()\n"
 }

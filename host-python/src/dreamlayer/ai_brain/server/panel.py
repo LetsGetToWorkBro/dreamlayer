@@ -1253,14 +1253,14 @@ const CAP_HELP={midi:"Send MIDI notes to music apps on your Mac (e.g. Ableton, V
   cards:"Draw its own card on the HUD.",perception:"Use the fast on-glass perception tier.",
   ring:"Read your kept-memory ledger.",shop:"Feed prices/reviews into TasteLens."};
 let pluginsById={};
-async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch(e){return;}
+async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch(e){const ul=$("plugins");if(ul){ul.innerHTML='<li class="conn-s" style="margin:0">Couldn’t reach the Brain — plugins unavailable.</li>';}return;}
   $("plugCaps").textContent=(r.capabilities||[]).join(", ")||"the basics";
   pluginsById={};(r.installed||[]).forEach(p=>{pluginsById[p.name]=p;});
   const ul=$("plugins");
   if(!(r.installed||[]).length){ul.innerHTML='<li class="conn-s" style="margin:0">No plugins installed yet — browse the store.</li>';return;}
   ul.innerHTML=(r.installed||[]).map(p=>{
     const perms=(p.requires||[]).length?(p.requires||[]).map(x=>"needs "+esc(x)).join(" · "):"no special access";
-    return '<li class="conn"><div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span></div>'+
+    return '<li class="conn"><div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
       '<div class="conn-s">'+perms+' · <span style="color:var(--memory)">See what it does →</span></div></div>'+
       '<button class="sm ghost" onclick="removePlugin(\''+esc(p.name)+'\')">Remove</button></li>';
   }).join("");}
@@ -1271,7 +1271,7 @@ function openPluginDetail(name){const p=pluginsById[name];if(!p)return;
     ?(p.requires||[]).map(x=>'<div class="permr"><b>'+esc(x)+'</b><span>'+esc(CAP_HELP[x]||"a capability it requested")+'</span></div>').join("")
     :'<div class="permr"><span>No special access — it only extends the layer’s own surfaces.</span></div>';
   $("pdinner").innerHTML=shot+'<div class="pdbody">'+
-    '<h3>'+esc(p.name)+'</h3><div class="pdby">v'+esc(p.version||"")+' · '+esc(p.author||"community")+'</div>'+
+    '<h3>'+esc(p.name)+'</h3><div class="pdby">v'+esc(p.version||"")+' · '+esc(p.author||"community")+(p.official?' · <span style="color:var(--memory)">✓ Official · built by the DreamLayer team</span>':'')+'</div>'+
     '<div class="pdlong">'+long+'</div>'+
     (p.forwho?'<div class="pdsec">Who it’s for</div><p style="color:var(--muted2,#b9c8c5);margin:0">'+esc(p.forwho)+'</p>':"")+
     '<div class="pdsec">Permissions it asks for</div>'+perms+
@@ -1286,7 +1286,7 @@ async function installPlugin(){const raw=$("plugPkg").value.trim();if(!raw){retu
   let body;try{body=JSON.parse(raw);}catch(e){$("plugStatus").textContent="not valid JSON";return;}
   $("plugStatus").textContent="Validating…";
   const r=await api("/dreamlayer/plugins/install",{method:"POST",body:JSON.stringify(body)});
-  if(r.ok){$("plugPkg").value="";$("plugStatus").textContent="";toast("Installed");loadPlugins();}
+  if(r.ok){$("plugPkg").value="";const w=(r.warnings||[]).length?" — note: "+(r.warnings||[]).join("; "):"";$("plugStatus").textContent=w;toast("Installed");loadPlugins();}
   else{$("plugStatus").textContent=(r.errors||["failed"]).join("; ");}}
 window.removePlugin=removePlugin;
 

@@ -1,12 +1,13 @@
 {
   "schema": "1",
-  "updated": "2026-07-04",
-  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. Each plugin ships its own detail copy (long, forwho) and a screenshot URL; social numbers (downloads/rating/comments) come from the social API when configured.",
+  "updated": "2026-07-10",
+  "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. First-party plugins are published by the DreamLayer team (author \"DreamLayer Team\", official=true). Every plugin declares an api version and a pricing model (all free today; the paid seam is reserved). Each plugin ships its own detail copy (long, forwho) and a screenshot URL; social numbers (downloads/rating/comments) come from the social API when configured.",
   "plugins": [
     {
       "name": "face-synth",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "Your head is a MIDI controller \u2014 yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "url": "registry/packages/face-synth-0.1.0.json",
@@ -30,12 +31,17 @@
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,
-      "comments_count": 0
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     },
     {
       "name": "open-food-facts",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "Rank a shelf by Open Food Facts \u2014 Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
       "url": "registry/packages/open-food-facts-0.1.0.json",
@@ -60,12 +66,17 @@
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,
-      "comments_count": 0
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     },
     {
       "name": "currency-converter",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "Look at a foreign price tag and see it in your own money \u2014 live rates, right on the panel.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
       "url": "registry/packages/currency-converter-0.1.0.json",
@@ -90,12 +101,17 @@
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,
-      "comments_count": 0
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     },
     {
       "name": "hud-reactions",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "Throw \ud83c\udf89 \ud83d\udc4f \u2764\ufe0f \ud83d\udd25 onto your HUD \u2014 and everyone in your GhostMode circle sees it too.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
       "url": "registry/packages/hud-reactions-0.1.0.json",
@@ -120,12 +136,16 @@
       "rating": 0,
       "ratings_count": 0,
       "comments_count": 0,
-      "api": "2"
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     },
     {
       "name": "filler-word-counter",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "A quiet coach that tallies your \u201cum / like / you know\u201d as you speak.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
       "url": "registry/packages/filler-word-counter-0.1.0.json",
@@ -150,12 +170,16 @@
       "rating": 0,
       "ratings_count": 0,
       "comments_count": 0,
-      "api": "2"
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     },
     {
       "name": "air-drums",
       "version": "0.1.0",
-      "author": "dreamlayer",
+      "author": "DreamLayer Team",
+      "official": true,
       "description": "Play a drum kit in the air \u2014 head-nods and taps fire real MIDI drums.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
       "url": "registry/packages/air-drums-0.1.0.json",
@@ -178,7 +202,11 @@
       "downloads": 0,
       "rating": 0,
       "ratings_count": 0,
-      "comments_count": 0
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
     }
   ]
 }

@@ -5,7 +5,8 @@ look-at-a-thing panel. A vision/OCR upstream tags a sighting with an `amount`
 and a `currency`; this provider converts it to your home currency using live
 rates (a `network` fetch behind a seam, so it tests offline).
 
-Demonstrates: an object-lens `PanelProvider` + the `network` capability.
+Demonstrates: an object-lens `PanelProvider` + the `network` capability, and
+(API v2) a persisted `home` currency the wearer can set once and keep.
 """
 from __future__ import annotations
 
@@ -15,7 +16,6 @@ from typing import Callable, Optional
 
 from dreamlayer.object_lens.providers import PanelProvider
 from dreamlayer.object_lens.schema import PanelRow
-from dreamlayer.plugins import make_plugin
 
 _SYMBOL = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "AUD": "A$",
            "CAD": "C$", "CHF": "CHF ", "CNY": "¥", "INR": "₹", "MXN": "MX$"}
@@ -77,9 +77,49 @@ class CurrencyProvider(PanelProvider):
             kind="stat", value=home_amount, source="currency")]
 
 
+class CurrencyPlugin:
+    """API v2 plugin (lifecycle + settings). register() wires the converter
+    exactly as v1; start() restores the wearer's chosen home currency from
+    ctx.settings, and set_home() persists a new one — so "your money" follows
+    you across sessions. Dogfoods per-plugin settings first-party."""
+    name = "currency-converter"
+    version = "0.1.0"
+    requires = ("object_lens", "network")
+
+    def __init__(self, home: str = "USD", rates_fetch=None):
+        self._default_home = home.upper()
+        self._rates_fetch = rates_fetch
+        self.provider: Optional[CurrencyProvider] = None
+        self._settings = None            # name-bound settings (captured in register)
+
+    def register(self, ctx):
+        # ctx.settings is scoped to this plugin during load; capture the bound
+        # handle so setters called later (by the host, outside a lifecycle
+        # callback) still write to *this* plugin's bucket.
+        self._settings = ctx.settings
+        self.provider = CurrencyProvider(home=self._default_home,
+                                         rates_fetch=self._rates_fetch)
+        ctx.add_object_provider(self.provider)
+
+    def start(self, ctx):
+        # restore the wearer's saved home currency (falls back to the default)
+        home = str(self._get("home", self._default_home)).upper()
+        if self.provider is not None:
+            self.provider.home = home
+
+    def _get(self, key, default):
+        return self._settings.get(key, default) if self._settings else default
+
+    def set_home(self, code: str) -> None:
+        """Set (and persist) the home currency the panel converts to."""
+        code = str(code).upper()
+        if self.provider is not None:
+            self.provider.home = code
+        if self._settings is not None:
+            self._settings.set("home", code)
+
+
 def currency_plugin(home: str = "USD", rates_fetch=None):
-    """Register the converter. requires=('object_lens','network')."""
-    def register(ctx):
-        ctx.add_object_provider(CurrencyProvider(home=home, rates_fetch=rates_fetch))
-    return make_plugin("currency-converter", register,
-                       requires=("object_lens", "network"), version="0.1.0")
+    """The Currency Converter as an API v2 plugin (lifecycle + settings).
+    requires=('object_lens','network')."""
+    return CurrencyPlugin(home=home, rates_fetch=rates_fetch)

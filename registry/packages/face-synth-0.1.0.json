@@ -3,13 +3,14 @@
     "name": "face-synth",
     "version": "0.1.0",
     "entry": "plugin:plugin",
-    "author": "dreamlayer",
-    "description": "Your head is a MIDI controller.",
-    "homepage": "",
+    "author": "DreamLayer Team",
+    "official": true,
+    "description": "Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
     "requires": [
       "midi"
     ],
-    "api": "1",
+    "api": "2",
     "checksum": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
     "signature": "",
     "forwho": "For musicians, performers, and tinkerers who want to play the world.",
@@ -18,7 +19,10 @@
       "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
       "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
       "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."
-    ]
+    ],
+    "pricing": {
+      "model": "free"
+    }
   },
   "source": "from dreamlayer.plugins.face_synth import face_synth_plugin\n\ndef plugin():\n    return face_synth_plugin()\n"
 }

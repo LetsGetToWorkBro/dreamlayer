@@ -105,9 +105,37 @@ A plugin declaring `"api": "2"` gets, in addition to `register(ctx)`:
   requires the matching capability to subscribe.
 - **Settings** — `ctx.settings`, a per-plugin persisted dict.
 
-v1 plugins keep loading unchanged. Both surfaces are dogfooded first-party:
-`filler` uses lifecycle + settings (a persisted lifetime tally, a tunable
-threshold); `reactions` uses lifecycle + `on_event("mesh", …)`.
+v1 plugins keep loading unchanged, but the **entire first-party catalogue is
+now v2**, so every surface is dogfooded: `filler` (persisted lifetime tally +
+tunable threshold), `reactions` (`on_event("mesh", …)`), `currency-converter`
+(a persisted **home currency**), `face-synth` (a persisted **scale**),
+`air-drums` (a persisted **sensitivity** that scales hit velocity), and
+`open-food-facts` (a persisted cache **TTL**). Each setting is written to the
+plugin's own bucket via a name-bound `ctx.settings` handle captured at
+`register()`, so a host-invoked setter persists correctly even outside a
+lifecycle callback.
+
+### Official publisher and the pricing seam
+
+First-party plugins are published as the **DreamLayer team**: every manifest and
+index entry carries `"author": "DreamLayer Team"` and `"official": true`, and the
+clients render a **✓ Official** badge (phone list + detail, Mac panel). Today the
+official catalogue rides the same curated-registry trust as everything else;
+*cryptographic* signing under a `DreamLayer Team` key is an owner action (see
+`registry/keys.json` — generate the keypair off-repo, register only the public
+key, never commit the private one).
+
+Every manifest and index entry also declares an `"api"` version and a
+`"pricing"` object. **Everything ships `{"model": "free"}` today** — the field is
+a reserved, forward-compatible seam for the Phase-3 paid marketplace below. No
+payment code runs against it yet; a missing `pricing` reads as free.
+
+> **Scan caveat for first-party bundles.** The six shipped packages are thin
+> re-export shims (`from dreamlayer.plugins.currency import currency_plugin`), so
+> the static scan sees the shim, not the `urllib`/`socket` code in the imported
+> module — their declared capabilities rest on review, not the scan. This is
+> fine *because* they're first-party and reviewed; third-party packages ship
+> their real source inline, which the scan does see.
 
 ---
 

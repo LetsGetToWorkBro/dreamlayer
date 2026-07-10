@@ -16,8 +16,12 @@ lines of defence, cheapest first:
      ctypes, dynamic import…). Each is allowed *only* if the manifest declared
      the matching capability — no undeclared reach. Nothing is executed.
   4. **Smoke load** — the module is imported in a fresh namespace and its
-     factory is registered against a *mock* context. If it throws, or touches
-     an extension point it didn't ask for, it fails here — not on your glasses.
+     factory is built and registered against a *mock* context. If it fails to
+     import, its entry factory is missing, or `register()` raises, it fails
+     here — not on your glasses. (The mock grants only the declared capabilities
+     plus the always-open extension surfaces, so a plugin that reaches for a
+     host capability it didn't declare has already been caught by the static
+     scan in step 3.)
 
 Honest limit: in-process Python cannot be *fully* sandboxed — a determined
 author can hide intent from a static scan. This gate is defence-in-depth
@@ -97,6 +101,14 @@ class _DangerScanner(ast.NodeVisitor):
         top = (node.module or "").split(".")[0]
         if top in _DANGER_IMPORTS:
             self._need(_DANGER_IMPORTS[top], f"from {top} import …")
+        # `from os import system` / `from shutil import rmtree` / `from
+        # subprocess import run` bind a dangerous callable under a bare name the
+        # attribute scan (os.system(…)) would never see — screen the imported
+        # names against the same call table.
+        for a in node.names:
+            cap = _DANGER_CALLS.get((top, a.name)) or _DANGER_CALLS.get((top, "*"))
+            if cap is not None or (top, a.name) in _DANGER_CALLS:
+                self._need(cap, f"from {top} import {a.name}")
         self.generic_visit(node)
 
     def visit_Call(self, node):

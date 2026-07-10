@@ -18,8 +18,6 @@ import json
 import urllib.parse
 from typing import Callable, Optional
 
-from .base import make_plugin
-
 # Nutri-Score grade → a 0–5 rating TasteLens can rank on (A is best).
 NUTRISCORE_RATING = {"a": 4.8, "b": 4.0, "c": 3.0, "d": 2.0, "e": 1.0}
 
@@ -113,10 +111,24 @@ def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
     raise last
 
 
+class OpenFoodFactsPlugin:
+    """API v2 plugin (settings). register() adds the Open Food Facts shop
+    provider into TasteLens exactly as v1, reading a persisted per-label cache
+    TTL from ctx.settings (settings are scoped to this plugin during load), so a
+    wearer can trade freshness for fewer API hits. requires=('network',); loaded
+    from a package it uses urllib."""
+    name = "open-food-facts"
+    version = "0.1.0"
+    requires = ("network",)
+
+    def __init__(self, fetch_fn: Optional[Callable[[str], object]] = None):
+        self._fetch = fetch_fn
+
+    def register(self, ctx):
+        ttl = float(ctx.settings.get("cache_ttl", 300.0))
+        ctx.add_shop_provider(off_shop_fn(self._fetch or _default_fetch, ttl=ttl))
+
+
 def openfoodfacts_plugin(fetch_fn: Optional[Callable[[str], object]] = None):
-    """The plugin. Registers the Open Food Facts shop provider into TasteLens.
-    Declares requires=('network',); loaded from a package, it uses urllib."""
-    def register(ctx):
-        ctx.add_shop_provider(off_shop_fn(fetch_fn or _default_fetch))
-    return make_plugin("open-food-facts", register, requires=("network",),
-                       version="0.1.0")
+    """Open Food Facts connector as an API v2 plugin. requires=('network',)."""
+    return OpenFoodFactsPlugin(fetch_fn=fetch_fn)

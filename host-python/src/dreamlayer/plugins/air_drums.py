@@ -12,8 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from dreamlayer.plugins import make_plugin
-
 DRUM_CHANNEL = 9                 # 0-based MIDI channel 10 — the GM drum channel
 
 # zone → (General MIDI drum note, label)
@@ -51,14 +49,17 @@ def hit_for(zone: str, intensity: float = 0.8) -> Optional[DrumHit]:
 
 class AirDrums:
     """Live worker stashed on ctx.config. `strike(zone, intensity)` returns the
-    DrumHit and, when a MIDI sink is wired, sends it."""
+    DrumHit and, when a MIDI sink is wired, sends it. `sensitivity` scales how
+    hard a given gesture hits (a persisted v2 setting; 1.0 = as-played)."""
 
-    def __init__(self, midi_out: Optional[Callable[[tuple], None]] = None):
+    def __init__(self, midi_out: Optional[Callable[[tuple], None]] = None,
+                 sensitivity: float = 1.0):
         self._midi_out = midi_out
+        self.sensitivity = sensitivity
         self.last: Optional[DrumHit] = None
 
     def strike(self, zone: str, intensity: float = 0.8) -> Optional[DrumHit]:
-        hit = hit_for(zone, intensity)
+        hit = hit_for(zone, intensity * self.sensitivity)
         if hit is None:
             return None
         self.last = hit
@@ -79,10 +80,38 @@ def _draw_air_drum_card(draw, card) -> None:
         pass
 
 
-def air_drums_plugin(midi_out: Optional[Callable] = None):
-    """Register the kit + its card. requires=('midi',) — dormant until a MIDI
-    bridge is present."""
-    def register(ctx):
-        ctx.config["air_drums"] = AirDrums(midi_out=midi_out)
+class AirDrumsPlugin:
+    """API v2 plugin (lifecycle + settings). register() wires the kit + card as
+    v1; start() restores the wearer's persisted `sensitivity`, and set_sensitivity()
+    saves a new one. requires=('midi',) — dormant until a MIDI bridge is present."""
+    name = "air-drums"
+    version = "0.1.0"
+    requires = ("midi",)
+
+    def __init__(self, midi_out: Optional[Callable] = None):
+        self._midi_out = midi_out
+        self.kit: Optional[AirDrums] = None
+        self._settings = None            # name-bound settings (captured in register)
+
+    def register(self, ctx):
+        self._settings = ctx.settings    # scoped to this plugin during load
+        self.kit = AirDrums(midi_out=self._midi_out)
+        ctx.config["air_drums"] = self.kit
         ctx.add_card_renderer("AirDrumCard", _draw_air_drum_card)
-    return make_plugin("air-drums", register, requires=("midi",), version="0.1.0")
+
+    def start(self, ctx):
+        if self.kit is not None and self._settings is not None:
+            self.kit.sensitivity = float(self._settings.get("sensitivity", 1.0))
+
+    def set_sensitivity(self, value: float) -> None:
+        """Set (and persist) how hard gestures hit (0..~2, 1.0 = as-played)."""
+        value = max(0.1, min(2.0, float(value)))
+        if self.kit is not None:
+            self.kit.sensitivity = value
+        if self._settings is not None:
+            self._settings.set("sensitivity", value)
+
+
+def air_drums_plugin(midi_out: Optional[Callable] = None):
+    """Air Drums as an API v2 plugin (lifecycle + settings). requires=('midi',)."""
+    return AirDrumsPlugin(midi_out=midi_out)

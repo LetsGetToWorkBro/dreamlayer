@@ -21,8 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from .base import make_plugin
-
 # a few scales as semitone offsets from the root
 SCALES = {
     "major":      (0, 2, 4, 5, 7, 9, 11),
@@ -142,16 +140,45 @@ class FaceSynthBand:
         return out
 
 
-def face_synth_plugin(midi_out: Optional[Callable] = None, scale: str = "major"):
-    """The plugin: registers a FaceSynthCard renderer (the note you're playing)
-    and stashes a live FaceSynth on the context config for the host to drive
-    from IMU/tap/mic. Declares requires=('midi',) so it stays dormant until a
-    MIDI bridge is available."""
-    def register(ctx):
-        synth = FaceSynth(scale=scale, midi_out=midi_out)
-        ctx.config["face_synth"] = synth
+class FaceSynthPlugin:
+    """API v2 plugin (lifecycle + settings). register() stashes a live FaceSynth
+    on ctx.config and registers the FaceSynthCard renderer, exactly as v1;
+    start() restores the wearer's chosen scale from ctx.settings, and set_scale()
+    persists a new one. requires=('midi',) so it stays dormant until a MIDI
+    bridge is available."""
+    name = "face-synth"
+    version = "0.1.0"
+    requires = ("midi",)
+
+    def __init__(self, midi_out: Optional[Callable] = None, scale: str = "major"):
+        self._midi_out = midi_out
+        self._default_scale = scale
+        self.synth: Optional[FaceSynth] = None
+        self._settings = None            # name-bound settings (captured in register)
+
+    def register(self, ctx):
+        self._settings = ctx.settings    # scoped to this plugin during load
+        self.synth = FaceSynth(scale=self._default_scale, midi_out=self._midi_out)
+        ctx.config["face_synth"] = self.synth
         ctx.add_card_renderer("FaceSynthCard", _draw_face_synth_card)
-    return make_plugin("face-synth", register, requires=("midi",), version="0.1.0")
+
+    def start(self, ctx):
+        name = str(self._settings.get("scale", self._default_scale)
+                   if self._settings else self._default_scale)
+        if self.synth is not None:
+            self.synth.scale = SCALES.get(name, SCALES["major"])
+
+    def set_scale(self, name: str) -> None:
+        """Set (and persist) the scale every note is locked to."""
+        if self.synth is not None:
+            self.synth.scale = SCALES.get(name, SCALES["major"])
+        if self._settings is not None:
+            self._settings.set("scale", name)
+
+
+def face_synth_plugin(midi_out: Optional[Callable] = None, scale: str = "major"):
+    """Face Synth as an API v2 plugin (lifecycle + settings). requires=('midi',)."""
+    return FaceSynthPlugin(midi_out=midi_out, scale=scale)
 
 
 def _draw_face_synth_card(draw, card) -> None:

@@ -48,6 +48,7 @@ const CAP_HELP: Record<string, string> = {
 export default function Plugins() {
   const index = usePluginStore((s) => s.index);
   const loading = usePluginStore((s) => s.loading);
+  const offline = usePluginStore((s) => s.offline);
   const installedMap = usePluginStore((s) => s.installed);
   const searchFn = usePluginStore((s) => s.search);
   const hydrate = usePluginStore((s) => s.hydrate);
@@ -68,10 +69,13 @@ export default function Plugins() {
   const macTarget = mac.connected ? { url: mac.url, token: mac.token } : null;
 
   const onInstall = (p: PluginEntry) => {
-    const perms = p.requires.length ? p.requires.join(", ") : "no special access";
+    const perms = p.requires.length
+      ? p.requires.map((r) => `•  ${r} — ${CAP_HELP[r] || "a capability it requested"}`).join("\n")
+      : "No special access — it only extends the layer's own surfaces.";
     Alert.alert(
       `Install ${p.name}?`,
-      `This plugin will be able to use: ${perms}.\n\n` +
+      `${p.official ? "Official — built by the DreamLayer team.\n\n" : ""}` +
+        `This plugin will be able to:\n${perms}\n\n` +
         (macTarget
           ? "It's validated on your Mac (integrity + capability scan + smoke test) before it runs."
           : "Queued — it installs and is validated on your hub the next time one is paired."),
@@ -126,6 +130,12 @@ export default function Plugins() {
         ))}
       </View>
 
+      {loading ? (
+        <Text style={st.refreshing}>Refreshing the store…</Text>
+      ) : offline ? (
+        <Text style={st.refreshing}>Showing the bundled list — couldn't reach the store.</Text>
+      ) : null}
+
       {list.length === 0 ? (
         <EmptyState
           title={loading ? "Loading the store…" : "No plugins match"}
@@ -150,6 +160,7 @@ export default function Plugins() {
                   </Text>
                   <Text style={st.by}>
                     v{p.version} · {p.author}
+                    {p.official ? <Text style={st.verified}>{"  ✓ Official"}</Text> : null}
                   </Text>
                 </View>
               </View>
@@ -254,7 +265,13 @@ function PluginDetail({
                     <Text style={[typography.headline, { color: colors.textPrimary }]}>{p.name}</Text>
                     <Text style={st.by}>
                       v{p.version} · {p.author}
+                      {p.official ? <Text style={st.verified}>{"  ✓ Official"}</Text> : null}
                     </Text>
+                    {p.official ? (
+                      <Text style={st.officialNote}>
+                        Built and maintained by the DreamLayer team.
+                      </Text>
+                    ) : null}
                   </View>
                   <Pressable onPress={onClose} hitSlop={8} style={st.x}>
                     <Text style={{ color: colors.textPrimary, fontSize: 16 }}>✕</Text>
@@ -367,6 +384,9 @@ const st = StyleSheet.create({
   },
   iconText: { color: colors.accentMemory, fontWeight: "800", fontSize: 18 },
   by: { color: colors.statusPaused, fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
+  verified: { color: colors.accentMemory, fontSize: 12, fontWeight: "700" },
+  officialNote: { color: colors.textSecondary, fontSize: 11.5, marginTop: 2, fontStyle: "italic" },
+  refreshing: { color: colors.textSecondary, fontSize: 12, marginBottom: space.sm },
   meta: { flexDirection: "row", alignItems: "center", gap: space.lg, marginTop: space.md },
   metaText: { color: colors.textSecondary, fontSize: 13 },
   stars: { flexDirection: "row", alignItems: "center", gap: 2 },

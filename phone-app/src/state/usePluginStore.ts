@@ -44,6 +44,12 @@ export type PluginEntry = {
   name: string;
   version: string;
   author: string;
+  /** First-party plugin, published and maintained by the DreamLayer team. */
+  official?: boolean;
+  /** Plugin API version the manifest targets ("1" | "2"). */
+  api?: string;
+  /** Reserved pricing seam — every plugin is free today ({ model: "free" }). */
+  pricing?: { model: string; [k: string]: unknown };
   description: string;
   homepage?: string;
   requires: string[];
@@ -72,7 +78,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "face-synth",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description:
       "Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
     homepage:
@@ -94,7 +101,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "open-food-facts",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description:
       "Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
     homepage:
@@ -116,7 +124,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "currency-converter",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description: "Look at a foreign price tag and see it in your own money — live rates, right on the panel.",
     homepage: "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
     requires: ["object_lens", "network"],
@@ -136,7 +145,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "hud-reactions",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description: "Throw 🎉 👏 ❤️ 🔥 onto your HUD — and everyone in your GhostMode circle sees it too.",
     homepage: "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
     requires: ["cards", "mesh"],
@@ -156,7 +166,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "filler-word-counter",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description: "A quiet coach that tallies your “um / like / you know” as you speak.",
     homepage: "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
     requires: ["perception", "cards"],
@@ -176,7 +187,8 @@ const SNAPSHOT: PluginEntry[] = [
   {
     name: "air-drums",
     version: "0.1.0",
-    author: "dreamlayer",
+    author: "DreamLayer Team",
+    official: true,
     description: "Play a drum kit in the air — head-nods and taps fire real MIDI drums.",
     homepage: "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
     requires: ["midi"],
@@ -200,6 +212,10 @@ function normalize(p: any): PluginEntry {
     name: String(p?.name ?? ""),
     version: String(p?.version ?? ""),
     author: String(p?.author ?? "community"),
+    official: Boolean(p?.official),
+    api: String(p?.api ?? "1"),
+    pricing:
+      p?.pricing && typeof p.pricing === "object" ? p.pricing : { model: "free" },
     description: String(p?.description ?? ""),
     homepage: p?.homepage ? String(p.homepage) : undefined,
     requires: Array.isArray(p?.requires) ? p.requires.map(String) : [],
@@ -223,6 +239,8 @@ type PluginState = {
   installed: Record<string, InstalledPlugin>;
   loading: boolean;
   loaded: boolean;
+  /** True when no live registry mirror answered and we're showing the bundled snapshot. */
+  offline: boolean;
   hydrate: () => Promise<void>;
   fetchIndex: () => Promise<void>;
   search: (query: string, sort: SortKey) => PluginEntry[];
@@ -327,6 +345,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   installed: {},
   loading: false,
   loaded: false,
+  offline: false,
 
   hydrate: async () => {
     try {
@@ -344,6 +363,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     // snapshot, overlaid by the live git index if public, then by live social
     // stats merged by name. Any step failing just leaves the prior data.
     let base: PluginEntry[] = SNAPSHOT.slice();
+    let live = false;
     for (const url of INDEX_URLS) {
       try {
         const res = await fetch(url, { cache: "no-store" } as any);
@@ -352,6 +372,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         const list = Array.isArray(data?.plugins) ? data.plugins.map(normalize) : [];
         if (list.length) {
           base = list;
+          live = true;
           break;
         }
       } catch {
@@ -369,7 +390,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         /* keep base without live stats */
       }
     }
-    set({ index: base, loading: false, loaded: true });
+    set({ index: base, loading: false, loaded: true, offline: !live });
   },
 
   search: (query, sort) => {

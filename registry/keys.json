@@ -1,4 +1,5 @@
 {
   "_doc": "Trusted publisher registry: publisher name -> Ed25519 public key (hex). A SIGNED package must be signed by a key registered here to install on clients that load this file; unsigned packages remain installable under the curated-registry (reviewed-PR) trust model, surfaced with a warning. Add a key by PR: the same review gate that admits a plugin admits its author's key.",
+  "_official_publisher": "The first-party catalogue is published as \"DreamLayer Team\" (author + official=true in every manifest/index entry) and today rides the curated-registry trust model. Cryptographic signing under a \"DreamLayer Team\" key is an owner action: generate the team's Ed25519 keypair off-repo, register ONLY the public key below, sign the six packages, and never commit the private key. Until then this stays empty by design.",
   "publishers": {}
 }

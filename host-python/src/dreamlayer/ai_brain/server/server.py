@@ -223,7 +223,8 @@ class Brain:
                 pkg = PluginPackage.load(self.plugins.dir / name)
                 m = pkg.manifest
                 installed.append({"name": m.name, "version": m.version,
-                                  "author": m.author, "requires": list(m.requires),
+                                  "author": m.author, "official": m.official,
+                                  "api": m.api, "requires": list(m.requires),
                                   "description": m.description, "long": list(m.long),
                                   "forwho": m.forwho, "screenshot": m.screenshot})
             except Exception:

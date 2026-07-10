@@ -28,6 +28,8 @@ class StoreEntry:
     name: str
     version: str
     author: str = ""
+    official: bool = False          # published by the DreamLayer team
+    api: str = "1"                  # plugin API version the manifest targets
     description: str = ""
     homepage: str = ""
     url: str = ""                    # where the package is fetched from
@@ -38,6 +40,9 @@ class StoreEntry:
     rating: float = 0.0             # 0..5, community average
     ratings_count: int = 0
     comments_count: int = 0
+    # pricing: a reserved, forward-compatible seam. Everything ships free today
+    # ({"model":"free"}); a paid marketplace fills in model/price later.
+    pricing: dict = field(default_factory=lambda: {"model": "free"})
     # store display (the author's own detail page)
     long: tuple = ()                # paragraphs: how it helps you
     forwho: str = ""
@@ -53,9 +58,12 @@ class StoreEntry:
     @classmethod
     def from_dict(cls, d: dict) -> "StoreEntry":
         d = dict(d or {})
+        pricing = d.get("pricing")
         return cls(
             name=str(d.get("name", "")), version=str(d.get("version", "")),
-            author=str(d.get("author", "")), description=str(d.get("description", "")),
+            author=str(d.get("author", "")), official=bool(d.get("official", False)),
+            api=str(d.get("api", "1") or "1"),
+            description=str(d.get("description", "")),
             homepage=str(d.get("homepage", "")), url=str(d.get("url", "")),
             checksum=str(d.get("checksum", "")),
             requires=tuple(d.get("requires") or ()), tags=tuple(d.get("tags") or ()),
@@ -63,6 +71,7 @@ class StoreEntry:
             rating=float(d.get("rating", 0.0) or 0.0),
             ratings_count=int(d.get("ratings_count", 0) or 0),
             comments_count=int(d.get("comments_count", 0) or 0),
+            pricing=dict(pricing) if isinstance(pricing, dict) else {"model": "free"},
             long=tuple(d.get("long") or ()), forwho=str(d.get("forwho", "")),
             screenshot=str(d.get("screenshot", "")))
 

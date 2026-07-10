@@ -163,18 +163,21 @@ class _ProxyProvider:
                 "attributes": dict(getattr(sighting, "attributes", {}) or {})}
 
     def matches(self, sighting) -> bool:
-        # matches+build are one round-trip; we cache the last build so the
-        # registry's matches()→build() sequence costs one RPC, not two.
-        resp = self._host._rpc({"op": "build", "idx": self._idx,
-                                "sighting": self._sighting_dict(sighting)})
-        self._last = resp
+        # matches+build are one round-trip; we cache the last build *keyed by
+        # the sighting* so the registry's matches()→build() sequence costs one
+        # RPC, not two — but a build() for a different sighting never reuses it.
+        sd = self._sighting_dict(sighting)
+        resp = self._host._rpc({"op": "build", "idx": self._idx, "sighting": sd})
+        self._last = (sd, resp)
         return bool(resp and resp.get("ok") and resp.get("rows"))
 
     def build(self, sighting, now=None) -> list:
-        resp = getattr(self, "_last", None)
+        sd = self._sighting_dict(sighting)
+        cached = getattr(self, "_last", None)
+        resp = cached[1] if (cached and cached[0] == sd) else None
+        self._last = None                     # consume — never serve twice
         if not (resp and resp.get("ok")):
-            resp = self._host._rpc({"op": "build", "idx": self._idx,
-                                    "sighting": self._sighting_dict(sighting)})
+            resp = self._host._rpc({"op": "build", "idx": self._idx, "sighting": sd})
         if not (resp and resp.get("ok")):
             return []
         return [PanelRow(label=r.get("label", ""), detail=r.get("detail", ""),

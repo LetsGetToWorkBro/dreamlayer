@@ -59,10 +59,15 @@ class PluginManifest:
     version: str
     entry: str                       # "module:factory"
     author: str = ""
+    official: bool = False           # published by the DreamLayer team
     description: str = ""             # one-line summary
     homepage: str = ""
     requires: tuple = ()             # capability names
     api: str = API_VERSION
+    # pricing: a reserved, forward-compatible seam. Free today ({"model":"free"});
+    # a paid marketplace fills in model/price/currency later. No payment code
+    # ships against it yet.
+    pricing: dict = field(default_factory=lambda: {"model": "free"})
     checksum: str = ""               # sha256 of the code payload
     signature: str = ""              # Ed25519 author signature over the code payload
     pubkey: str = ""                 # author's Ed25519 public key, hex
@@ -88,10 +93,13 @@ class PluginManifest:
             version=str(d.get("version", "")),
             entry=str(d.get("entry", "")),
             author=str(d.get("author", "")),
+            official=bool(d.get("official", False)),
             description=str(d.get("description", "")),
             homepage=str(d.get("homepage", "")),
             requires=tuple(d.get("requires") or ()),
             api=str(d.get("api", API_VERSION)),
+            pricing=(dict(d["pricing"]) if isinstance(d.get("pricing"), dict)
+                     else {"model": "free"}),
             checksum=str(d.get("checksum", "")),
             signature=str(d.get("signature", "")),
             pubkey=str(d.get("pubkey", "")),
