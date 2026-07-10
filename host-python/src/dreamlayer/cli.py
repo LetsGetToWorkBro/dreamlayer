@@ -650,6 +650,27 @@ def cmd_figment_safety(args) -> int:
     return 0 if card["ok"] else 1
 
 
+def cmd_bench_perception(args) -> int:
+    """The 350ms Club (INNOVATION 1.4): race a perceptor to name what it's
+    looking at inside the Tier-0 glance budget. The deadline runner drops any
+    answer over budget, so the score rewards being right *and* fast."""
+    from dreamlayer.object_lens import bench
+    if not bench.available():
+        _err(f"{BAD} the perception bench needs numpy — install the 'perception' extra")
+        return 2
+    res = bench.run_perception_bench(deadline_ms=args.deadline)
+    if getattr(args, "json", False):
+        _p(json.dumps(res.as_dict(), indent=2))
+        return 0
+    _p(f"350ms Club — perception bench (budget {args.deadline:g}ms)")
+    _p(f"  images     {res.n}")
+    _p(f"  correct    {res.correct}/{res.n}  ({res.accuracy*100:.1f}%)")
+    _p(f"  over budget {res.dropped}  (dropped, counted wrong)")
+    _p(f"  latency    mean {res.mean_ms:.2f}ms · p95 {res.p95_ms:.2f}ms")
+    _p(f"  {OK} score  {res.score:.4f}   (accuracy × how far under budget)")
+    return 0
+
+
 # --- parser ------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -765,6 +786,15 @@ def build_parser() -> argparse.ArgumentParser:
     pv = psub.add_parser("validate", help="run the sensory gate on a pack .json")
     pv.add_argument("path", help="a pack .json (name + haptics + earcons)")
     pv.set_defaults(func=cmd_pack_validate)
+
+    # bench — race a perceptor inside the glance budget (the 350ms Club)
+    bench = groups.add_parser("bench", help="benchmark perception against the glance budget")
+    bsub = bench.add_subparsers(dest="cmd")
+    bp = bsub.add_parser("perception", help="accuracy × latency under the 350ms glance deadline")
+    bp.add_argument("--deadline", type=float, default=350.0,
+                    help="glance budget in ms (default: 350)")
+    bp.add_argument("--json", action="store_true", help="machine-readable output")
+    bp.set_defaults(func=cmd_bench_perception)
 
     return parser
 
