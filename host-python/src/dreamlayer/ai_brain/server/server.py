@@ -348,6 +348,22 @@ class Brain:
         return {"ok": record.success, "message": record.message,
                 "active": self._rc_active, **self.rc_repertoire()}
 
+    def rc_event(self, name: str) -> dict:
+        """Forward a physical-world signal to the figment on stage (the $6
+        ESP32 kit path, INNOVATION 1.6): a reed switch / thermistor / button
+        out in the world POSTs here, and the named event ("ble:3", "mail")
+        reaches the running figment's scene grammar. Refused when no figment
+        is armed — an event with nothing listening is a no-op, not a wake."""
+        name = str(name or "")[:32]
+        if not name:
+            return {"ok": False, "error": "empty event name"}
+        if self._rc_active is None:
+            return {"ok": False, "error": "no figment on stage to receive the event"}
+        record = self.rc.deployer.push_event(name)
+        self.activity.add("rc", f"Event {name!r} → figment {self._rc_active}")
+        return {"ok": record.success, "name": name, "active": self._rc_active,
+                "mode": record.mode}
+
     # -- native behaviors Oracle builds (timers, intervals, clock) -----------
 
     def rc_native(self, intent: str, args: dict) -> dict:
@@ -1867,6 +1883,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rc_deploy(self._body().get("figment_id", "")))
             elif path == "/dreamlayer/rc/revoke":
                 self._json(200, brain.rc_revoke(self._body().get("figment_id", "")))
+            elif path.startswith("/dreamlayer/event/"):
+                # the $6 physical-events kit (INNOVATION 1.6): a sensor out in
+                # the world POSTs a named signal to the figment on stage.
+                #   /dreamlayer/event/ble/3  → "ble:3"   (numeric code channel)
+                #   /dreamlayer/event/mail   → "mail"    (named)
+                rest = path[len("/dreamlayer/event/"):].strip("/")
+                parts = rest.split("/")
+                if parts[0] == "ble" and len(parts) == 2 and parts[1].isdigit():
+                    name = f"ble:{parts[1]}"
+                else:
+                    name = parts[0]
+                self._json(200, brain.rc_event(name))
             elif path == "/dreamlayer/social/people":
                 # the hub pushes its social-memory snapshot here
                 self._json(200, brain.receive_people(self._body()))

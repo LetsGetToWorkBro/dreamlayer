@@ -10,6 +10,9 @@ message_types.lua — keep both files in sync):
     figment_swap    {t, id}                   hot-swap between ticks
     figment_revoke  {t, id}                   stop + clear, go ambient
     figment_text    {t, id, text}             push into the text slot
+    event           {t, name}                 a physical-world signal (e.g.
+                                              "ble:3") delivered to the running
+                                              figment's scene grammar
 
   Halo → host
     figment_ack     {t, id, ok, hash}         put/swap/revoke result
@@ -30,6 +33,7 @@ FIGMENT_REVOKE = "figment_revoke"
 FIGMENT_TEXT   = "figment_text"
 FIGMENT_ACK    = "figment_ack"
 FIGMENT_EVENT  = "figment_event"
+EVENT          = "event"           # host → Halo: a generic named world signal
 
 
 def put_envelope(fig: Figment) -> dict:
@@ -47,6 +51,14 @@ def revoke_envelope(figment_id: str) -> dict:
 
 def text_envelope(figment_id: str, text: str) -> dict:
     return {"t": FIGMENT_TEXT, "id": figment_id, "text": text[:64]}
+
+
+def event_envelope(name: str) -> dict:
+    """A physical-world signal for the *running* figment (whichever it is) —
+    e.g. a reed switch closing becomes `event {name:"ble:3"}`, which the
+    scene grammar can list as an exit. Names are clamped: the device only
+    ever acts on names its active figment's scenes actually listen for."""
+    return {"t": EVENT, "name": str(name)[:32]}
 
 
 def frame(envelope: dict) -> bytes:

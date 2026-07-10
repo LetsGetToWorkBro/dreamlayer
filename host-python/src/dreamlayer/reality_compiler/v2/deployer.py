@@ -119,6 +119,17 @@ class StageDeployer:
         self._send(envelopes)
         return DeployRecord(True, self._mode(), "text", "", envelopes)
 
+    def push_event(self, name: str) -> DeployRecord:
+        """Deliver a physical-world signal (e.g. "ble:3") to the running
+        figment. Unlike put/swap/revoke it carries no figment id — it's a
+        transient scene signal, acted on only if the active figment's grammar
+        lists that name; the device ignores it otherwise. No signing gate: an
+        event grants no authority, it can only *advance* a machine you already
+        installed and proved, within that machine's own rate limits."""
+        envelopes = [transport.event_envelope(name)]
+        self._send(envelopes)
+        return DeployRecord(True, self._mode(), "event", "", envelopes)
+
     # ------------------------------------------------------------------
 
     def _refuse(self, action: str, why: str) -> DeployRecord:

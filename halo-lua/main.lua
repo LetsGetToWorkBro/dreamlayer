@@ -152,6 +152,15 @@ local function process_inbound(msg)
       Figment.on_event(ev)
     end
 
+  elseif t == "event" then
+    -- a named physical-world signal from the host ($6 ESP32 kit, 1.6):
+    -- deliver it to the running figment's scene grammar. Harmless if no
+    -- figment is up or its scenes don't listen for msg.name — on_event is a
+    -- no-op then, and the figment's own emit/scene budgets still bound it.
+    if Figment.is_running() and msg.name then
+      Figment.on_event(msg.name)
+    end
+
   elseif t == "double_tap" then
     -- Host sends t="double_tap" to mirror the gesture back for Lua FSM;
     -- actual dream enter/exit is handled in host_comm_dream via dream_enter/exit.
