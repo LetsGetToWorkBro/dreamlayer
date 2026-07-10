@@ -1388,6 +1388,61 @@ class Brain:
                 "missed": {"texts": len(texts), "emails": len(emails)}}
 
 
+def _memory_db_path(brain: Brain) -> Path:
+    """Where the orchestrator's memory SQLite lives — the same file the CLI's
+    `dreamlayer memories` resolves ($DREAMLAYER_DB, else <cfg_dir>/dreamlayer.db)."""
+    import os
+    raw = os.environ.get("DREAMLAYER_DB") or str(Path(brain.cfg_dir) / "dreamlayer.db")
+    return Path(raw).expanduser()
+
+
+def _memory_file(brain: Brain) -> dict:
+    """Panel readout for 'your memory is a file' — no CLI needed."""
+    from ...memory.datasette_app import MemoryExplorer
+    p = _memory_db_path(brain)
+    return {
+        "path": str(p),
+        "exists": p.exists(),
+        "bytes": p.stat().st_size if p.exists() else 0,
+        "datasette": MemoryExplorer.available,
+        "browse_cmd": MemoryExplorer(str(p)).command(port=8001),
+    }
+
+
+def _memory_browse(brain: Brain) -> dict:
+    """Launch the read-only Datasette browser over the memory file (local-only).
+    Returns a URL when datasette is installed, else the command to run."""
+    from ...memory.datasette_app import MemoryExplorer
+    info = _memory_file(brain)
+    if not info["exists"]:
+        return {"available": False, "error": "no memory file yet", "command": info["browse_cmd"]}
+    ex = MemoryExplorer(info["path"])
+    if not MemoryExplorer.available:
+        return {"available": False, "command": ex.command(port=8001)}
+    import shlex
+    import subprocess
+    try:
+        meta = ex.write_metadata()
+        subprocess.Popen(shlex.split(ex.command(port=8001, metadata_path=meta)))
+        return {"available": True, "url": "http://127.0.0.1:8001"}
+    except Exception as exc:
+        return {"available": False, "error": str(exc), "command": ex.command(port=8001)}
+
+
+def _memory_export(brain: Brain, dest: str) -> dict:
+    """Copy the memory file somewhere (local-only). It's the user's data."""
+    import shutil
+    info = _memory_file(brain)
+    if not info["exists"]:
+        return {"ok": False, "error": "no memory file to export"}
+    if not (dest or "").strip():
+        return {"ok": False, "error": "no destination given"}
+    d = Path(dest).expanduser()
+    d.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(info["path"], d)
+    return {"ok": True, "dest": str(d), "bytes": d.stat().st_size}
+
+
 def _cloud_view_payload(brain: Brain) -> dict:
     """What DreamLayer Cloud can see — the opaque byte-shapes only, never content
     (INNOVATION_SESSION Category 6 / B16). The trust centerpiece: render the
@@ -1628,6 +1683,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, _capability_payload(brain))
             elif path == "/dreamlayer/cloud":
                 self._json(200, _cloud_view_payload(brain))
+            elif path == "/dreamlayer/memory/file":
+                self._json(200, _memory_file(brain))
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/calendar":
@@ -1723,6 +1780,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             path, qs = parsed.path, urllib.parse.parse_qs(parsed.query)
             if not self._authed():
                 self._json(401, {"error": "unauthorised"}); return
+            if path == "/dreamlayer/memory/browse":
+                if not self._from_localhost():
+                    self._json(403, {"error": "browsing memory is local-only"}); return
+                self._json(200, _memory_browse(brain))
+                return
+            if path == "/dreamlayer/memory/export":
+                if not self._from_localhost():
+                    self._json(403, {"error": "export is local-only"}); return
+                self._json(200, _memory_export(brain, self._body().get("dest", "")))
+                return
             if path == "/dreamlayer/folders":
                 b = self._body()
                 p = b.get("path", "")

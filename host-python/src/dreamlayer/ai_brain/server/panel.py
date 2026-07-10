@@ -424,6 +424,16 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Your data</div><h2>Your memory is a file</h2>
+    <p class="lead">Everything the Oracle remembers is one local SQLite file — browse it read-only, or take a copy. No cloud, no command line.</p>
+    <div class="row" style="margin-top:6px"><span id="memfile" class="conn-s" style="margin:0">…</span></div>
+    <div class="row" style="margin-top:14px">
+      <button onclick="browseMemory()">Browse (read-only)</button>
+      <button class="ghost" onclick="exportMemory()">Export a copy…</button>
+    </div>
+  </section>
+
+  <section>
     <div class="eyebrow">Knowledge</div><h2>Folders it reads</h2>
     <p class="lead">Everything in these folders is searchable — notes, PDFs, mail exports. Files never leave your Mac mini.</p>
     <ul id="folders"></ul>
@@ -794,7 +804,23 @@ async function joinWaitlist(){
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
   t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1900);}
 
+async function loadMemFile(){
+  let r; try{r=await api("/dreamlayer/memory/file");}catch(e){return;}
+  const el=$("memfile"); if(!el)return;
+  el.textContent=r.exists?`${r.path}  (${Math.round(r.bytes/1024)} KB)`:"no memory file yet — it's created on your first memory";
+}
+async function browseMemory(){
+  let r; try{r=await api("/dreamlayer/memory/browse",{method:"POST"});}catch(e){return;}
+  if(r.url){window.open(r.url,"_blank");}
+  else{alert("Datasette isn't installed. Run:\n\n"+(r.command||"pip install 'dreamlayer[infra]'"));}
+}
+async function exportMemory(){
+  const dest=prompt("Export a copy of your memory to which path?"); if(!dest)return;
+  let r; try{r=await api("/dreamlayer/memory/export",{method:"POST",body:JSON.stringify({dest})});}catch(e){return;}
+  alert(r.ok?`Exported → ${r.dest} (${Math.round(r.bytes/1024)} KB)`:`Export failed: ${r.error||"unknown"}`);
+}
 async function load(){
+  loadMemFile();
   let c; try{c=await api("/dreamlayer/config");}catch(e){$("livetext").textContent="offline";return;}
   if(c.error){$("livetext").textContent="token needed";return;}
   const incog=c.config.network_mode==="lan_only";
