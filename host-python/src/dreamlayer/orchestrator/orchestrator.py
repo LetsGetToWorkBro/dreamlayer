@@ -17,6 +17,7 @@ from .horizon_composer import HorizonComposer
 from .time_scrub import TimeScrubSession
 from .tell import TellEngine
 from .consistency import ConsistencyEngine
+from .candor import CandorMirror
 from .provenance import ProvenanceLens
 from .quest import QuestLog
 from .waypath import WaypathLens
@@ -130,6 +131,10 @@ class Orchestrator(
         # On-device fact consistency (Candor) + belief genealogy (Provenance).
         self.consistency = ConsistencyEngine(self.ring)
         self.provenance = ProvenanceLens(self.ring)
+        # Candor Mirror (2.7): the inward self-coach — your own pace + fillers,
+        # a live arc and an after-the-fact debrief. Veil-gated, self-only.
+        self.candor = CandorMirror(privacy=self.privacy)
+        self._candor_drift: str | None = None    # drift line captured for the debrief
         # AI brain (docs/AI_BRAIN.md): three independent switches, not one dial.
         #   • the phone is the brain by default (on-device, works anywhere);
         #     connect_mac_mini() upgrades it with a bigger local brain + your
