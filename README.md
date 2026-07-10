@@ -4,12 +4,25 @@
 > Your glasses see what you see. DreamLayer remembers it, understands it, and
 > hands it back the instant you need it — privately, on your own hardware.
 
+**Try it right now, in your browser, no hardware, no install:**
+**[the DreamLayer simulator →](https://dreamlayer.app/simulator.html)** —
+the real renderer, the real orchestrator behavior, ten seconds to your first
+card.
+
 DreamLayer is the software stack for [Brilliant Labs](https://brilliant.xyz/)
 **Halo** smart glasses. It turns a heads-up display into an ambient second
 memory: it quietly keeps what matters — objects, people you were introduced to,
 promises you made, where you left things — and surfaces it as a glance-able card
 the moment it's useful. Everything runs on your own devices by default; the
 cloud is a switch you own, not a default you accept.
+
+**And the difference is checkable.** Every closed platform asks you to trust
+it; DreamLayer's whole claim is auditable in this repository — capture is
+veil-gated in code you can grep, the cloud is provably ciphertext-blind
+([`docs/CLOUD.md`](docs/CLOUD.md)), and user-programmed behaviors ship as
+statically-proven, signed *data* to a fixed on-glass interpreter, never as
+code (the [Reality Compiler](docs/LENSES.md)). "Your glasses can't betray
+you" is not a promise here; it's a property you can verify.
 
 ---
 
@@ -104,8 +117,11 @@ Privacy isn't a setting here; it's the architecture.
   from a closed, offline grammar of self-introductions ("Hi, I'm Maya"), so
   only people who chose to give you their name are ever remembered. The Veil
   silences it like everything else, and "forget that" erases it.
-- **Structured memory, never raw.** Audio, video, and embeddings are not stored
-  or transmitted — DreamLayer keeps meaning, not recordings.
+- **Structured memory, never raw.** Audio and video are never stored or
+  transmitted — DreamLayer keeps meaning, not recordings. (The local index
+  keeps embeddings of *your own kept memories and contacts* on your device;
+  they expire on the retention lifecycle and die with "forget that." See
+  [`docs/PRIVACY_MODEL.md`](docs/PRIVACY_MODEL.md).)
 - **One gate, honored everywhere.** `allow_capture()` / the Privacy Veil is
   respected across every lens.
 
@@ -200,7 +216,7 @@ kept   = social_lens.offer_introduction("hi, I'm Maya", frame=camera_frame)
 ```
 
 ```bash
-cd host-python && python -m pytest -q        # the full host suite (1,803 tests)
+cd host-python && python -m pytest -q        # the full host suite (1,857 tests)
 ```
 
 **Knowledge base — the complete reference with real renders of every card,
@@ -229,12 +245,15 @@ is in [`docs/gitbook/hardware-seams.md`](docs/gitbook/hardware-seams.md).
 
 Three doors in, shallowest first:
 
-1. **Write a lens in ten minutes** — [`examples/hello-lens/`](examples/hello-lens/)
+1. **Run the whole layer with no hardware** — the [simulator](https://dreamlayer.app/simulator.html)
+   in your browser (ten seconds, zero install), or
+   `pip install -e "host-python[dev]"` and the test suite. The phone app's
+   Explore mode is the same idea on your handset — a labeled sample-data
+   *tour*, so every screen is alive before anything is paired.
+2. **Write a lens in ten minutes** — [`examples/hello-lens/`](examples/hello-lens/)
    is a complete, store-valid plugin (~25 lines) with the full tutorial: the
    capability model, local testing through the real validation gate, packaging,
    and shipping to the store. CI runs the example itself, so it can't rot.
-2. **Run the whole layer with no hardware** — the [simulator](https://dreamlayer.app/simulator.html)
-   in your browser, or `pip install -e "host-python[dev]"` and the test suite.
 3. **Extend the engine** — optional capabilities follow one seam pattern
    ([`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)); platform surfaces are in
    [`docs/PLATFORM.md`](docs/PLATFORM.md); [`CONTRIBUTING.md`](CONTRIBUTING.md)

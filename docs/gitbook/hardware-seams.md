@@ -1,7 +1,7 @@
 # Hardware and seams
 
 DreamLayer is a **pre-hardware build**: the intelligence stack is complete
-and tested (1,803 passing tests), and the handful of places where physical
+and tested (1,857 passing tests), and the handful of places where physical
 hardware plugs in are explicit, narrow, and documented. This chapter is the
 honest matrix.
 
@@ -83,6 +83,48 @@ display runtime, BLE, and the basic sensors could host the same experience.
 - **On-glass calibration** — pane luma, aurora amplitude, `DEVICE_FONT`
   metrics, and IMU gain are single-table constants explicitly flagged for
   tuning on real glass.
+
+## The transport budget (the physics the lenses live under)
+
+BLE 5.3's headline 2 Mbps is not what the stack gets: frames travel as
+128-byte chunks under a mandatory 4-byte length header
+(`bridge/real_bridge.py` ↔ `ble/protocol.lua`, loopback-tested in
+`test_ble_loopback.py`), and effective sustained throughput lands in the
+low tens of KB/s. What that means, concretely:
+
+| Signal | Honest budget |
+|---|---|
+| Card / figment / horizon frames | effectively free (≤ a few KB) |
+| Camera snapshot (VGA JPEG, 20–40 KB) | a **multi-second event** — one per deliberate look; ambient snapshots duty-cycled by `capture_interval_ms` (enforced in `orchestrator/frame_budget.py`) |
+| Live video | does not exist on this wire, by design |
+| Continuous audio | **only compressed** — 16 kHz PCM (256 kbps) will not survive this framing; an Opus-class codec at 16–24 kbps fits comfortably |
+
+**The open firmware question (load-bearing, unresolved):** roughly half the
+lens catalogue — Oracle voice, Veritas, live captions, Name Capture, Timbre,
+Puente — consumes *transcribed speech*, which requires continuous audio off
+the glasses. Whether Halo's firmware exposes the microphone with an
+on-glass codec (or a raw stream the phone can encode) is a question for
+Brilliant Labs that no amount of host-side code can answer. Until it is
+answered, every voice surface is exactly as real as this seam.
+
+## The device contract (portability HAL)
+
+Nothing in the stack calls `frame.*` directly except
+`compat/frame_adapter.lua` — it is the hardware-abstraction layer, and the
+contract any other glasses would have to meet to host DreamLayer:
+
+- a **256×256 additive display** (circular safe radius 112) with
+  `clear/show/text/line/rect/circle/set_pixel/bitmap` — every richer shape
+  is synthesized from these primitives in the adapter;
+- **BLE** send + receive-callback (length-prefixed framing lives above it);
+- a **button** (single/double/long callbacks) and an **IMU** (`imu_data()`
+  polls; tap callback);
+- a **snapshot camera** (callback-style capture — never a stream) and a
+  battery level read.
+
+Porting = a new adapter + recalibrating the single-table constants
+(fonts, pane luma, IMU gain). The simulator remains the first-class
+"device" either way — the project runs whole without silicon.
 
 ## Things people ask about that are not in the codebase
 

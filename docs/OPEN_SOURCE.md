@@ -40,12 +40,16 @@ Contributors sign commits (`git commit -s`) under the
 inbound = outbound Apache-2.0. A CLA was considered and rejected: it adds
 signup friction and asymmetric rights for little benefit at this stage.
 
-**Relicensing note (important):** while all code is written by the copyright
-holder, relicensing (e.g., to AGPL, or dual-licensing a commercial edition)
-is trivially possible. Once outside contributions land under DCO/Apache,
-that window narrows — their code stays Apache and would need rewriting or
-consent to move. If a future dual-license business is a serious option,
-decide **before** merging significant external work.
+**Relicensing: decided, closed.** DreamLayer's business is services, not
+code (DreamLayer Cloud sells hosting, inference, sync, and relay —
+docs/CLOUD.md); a dual-licensed "commercial edition" has no place in that
+model, and the option's mere existence chills serious contributors. So the
+commitment is explicit: **this project will not relicense away from
+Apache-2.0, and will not adopt a CLA to preserve that option.** Outside
+contributions under DCO/Apache close the door structurally — by design,
+not by accident. (Historical context: relicensing was trivially possible
+while every line was the copyright holder's; the trade was considered and
+declined before significant external work landed.)
 
 ## The go-public checklist
 

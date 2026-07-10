@@ -152,7 +152,7 @@ dreamlayer/
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
 │       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         1,803 collected tests
+│       └── tests/         1,857 collected tests
 │   └── packaging/         the macOS .dmg app (py2app, entitlements)
 ├── phone-app/             Expo / React Native app + the App Store kit
 ├── laptop-companion/      minimal context agent + macOS Brain installer
