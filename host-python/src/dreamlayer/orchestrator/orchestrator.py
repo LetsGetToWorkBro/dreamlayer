@@ -5,7 +5,6 @@ from ..memory.db import MemoryDB
 from ..memory.retrieval import Retriever
 from ..memory.proactive import ProactiveEngine
 from ..memory.privacy import PrivacyGate
-from ..memory.embeddings import MockEmbeddingProvider, OpenAIEmbeddingProvider
 from ..memory.ring_buffer import SemanticRingBuffer
 from ..pipelines import vision, speech
 from ..pipelines.ingest import IngestPipeline
@@ -30,6 +29,7 @@ from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
 from ..rem import RetrievalBias
+from ..rem.bias import event_key
 from ..rem.nightly import NightWatch
 from ..confluence.taps import TapCollector
 from . import intents, answer_builder
@@ -129,14 +129,24 @@ class Orchestrator:
         self.config = cfg
         self.state = HostState()
 
-        if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
-            self.embedder = OpenAIEmbeddingProvider(cfg)
-        else:
-            self.embedder = MockEmbeddingProvider()
+        # Embedder ladder: local MiniLM → OpenAI (key) → mock, first available
+        # (memory.embeddings.default_embedder). 32-d hash vectors are the
+        # fixture of last resort, not a tier.
+        from ..memory.embeddings import default_embedder
+        self.embedder = default_embedder(cfg)
 
-        self.retriever = Retriever(self.db, self.embedder)
+        self.retriever = Retriever(self.db, self.embedder,
+                                   ann=self._build_ann(db_path))
         self.privacy   = PrivacyGate()
         self.proactive = ProactiveEngine(self.db, privacy=self.privacy)
+
+        # Cold-start arc: a real install (persistent DB) earns proactive
+        # output in stages (OBSERVER → APPRENTICE → RESIDENT); ephemeral
+        # sessions (demos, tests, the simulator) skip the arc.
+        from .maturity import MaturityGate, ResidentGate
+        self.maturity = (MaturityGate(self.db) if db_path != ":memory:"
+                         else ResidentGate())
+        self.last_retention = None      # last nightly RetentionReport
 
         if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
             self.pipeline = IngestPipeline.with_llm(self.db, cfg)
@@ -419,6 +429,31 @@ class Orchestrator:
     # Ingest
     # ------------------------------------------------------------------
 
+    def _build_ann(self, db_path):
+        """Persistent HNSW index beside a persistent DB (None for :memory: or
+        when usearch isn't installed — the Retriever's exact linear scan is
+        the fallback either way). An embedder change rebuilds the index:
+        vectors from different embedding spaces never share one."""
+        from ..memory.ann_index import PersistentAnnIndex
+        from ..memory.embeddings import embedder_signature
+        if db_path == ":memory:" or not PersistentAnnIndex.available:
+            return None
+        sig = embedder_signature(self.embedder)
+        stored_sig = self.db.get_setting("embedder_signature")
+        stored_dim = self.db.get_setting("embedder_dim")
+        if stored_sig == sig and stored_dim:
+            dim = int(stored_dim)
+        else:
+            dim = len(self.embedder.embed("dreamlayer"))
+        ann = PersistentAnnIndex(str(db_path) + ".usearch", dim)
+        if not ann.live:
+            return None
+        if stored_sig != sig or (stored_dim and int(stored_dim) != dim):
+            ann.rebuild(self.db)
+            self.db.set_setting("embedder_signature", sig)
+            self.db.set_setting("embedder_dim", str(dim))
+        return ann
+
     def ingest_scene(self, scene):
         if not self.privacy.allow_capture():
             return None
@@ -431,6 +466,7 @@ class Orchestrator:
             confidence=mem["confidence"],
             meta=mem,
         )
+        self.retriever.index_memory(mid, emb)
         self.bridge.send_card(cards.saved_memory(mem["object"]), event="memory_saved")
         return mid
 
@@ -454,6 +490,7 @@ class Orchestrator:
                 meta={"person": parsed["participants"][-1] if parsed.get("participants") else None},
             )
             db_ids.append(conv_mid)
+            self.retriever.index_memory(conv_mid, emb)
             for c in extract_commitments(conv):
                 cid = self.db.add_commitment(c["person"], c["task"], c["due"], conv_mid, c["confidence"])
                 db_ids.append(cid)
@@ -574,7 +611,10 @@ class Orchestrator:
 
     def maybe_dream_tonight(self, charging: bool):
         """The NightWatch gate: run REM when charging at night, apply the
-        verdicts to the durable bias the Horizon already reads."""
+        verdicts to the durable bias the Horizon already reads. After a
+        night runs, the retention lifecycle turns over: the hot ring is
+        purged past its window and the warm store is swept — REM promotion
+        is the only road from hot to lasting (memory/retention.py)."""
         if self.nightwatch is None:
             return None
         reel = self.nightwatch.maybe_run(charging, self.ring,
@@ -583,7 +623,57 @@ class Orchestrator:
         if reel is not None:
             self.rem_bias = RetrievalBias.load(self.nightwatch.vault_dir)
             self.horizon._rem = self.rem_bias
+            from ..memory.retention import RetentionPolicy, RetentionSweep
+            policy = RetentionPolicy(
+                hot_hours=getattr(self.config, "retention_hot_hours", 24.0),
+                warm_days=getattr(self.config, "retention_warm_days", 90.0))
+            sweep = RetentionSweep(self.db, policy, bias=self.rem_bias)
+            self.last_retention = sweep.sweep()
+            sweep.purge_hot(self.ring)
         return reel
+
+    def rem_feedback(self, kind: str, summary: str, keep: bool) -> float:
+        """Morning-reel keep/fade: one gesture per reel item feeds the bias
+        directly (+keep / −fade), persisted to the vault the Horizon reads.
+        Returns the item's new bias."""
+        from .. import rem as _rem  # noqa: F401  (namespace clarity)
+        key = event_key(kind, summary)
+        self.rem_bias.apply({key: 0.15 if keep else -0.15})
+        if self.nightwatch is not None:
+            self.rem_bias.save(self.nightwatch.vault_dir)
+        return self.rem_bias.get(key)
+
+    def never_dream_about(self, topic: str, top_k: int = 5) -> int:
+        """"Don't dream about that": tag the memories matching `topic` with
+        meta.no_dream so consolidation never touches them again. They stay
+        fully retrievable — this gates the night, not the memory. Returns
+        how many memories were tagged."""
+        import json as _json
+        tagged = 0
+        for _score, m in self.retriever.search(topic, top_k=top_k):
+            try:
+                meta = _json.loads(m.get("meta") or "{}")
+            except (TypeError, ValueError):
+                meta = {}
+            if meta.get("no_dream"):
+                continue
+            meta["no_dream"] = True
+            self.db.conn.execute("UPDATE memories SET meta=? WHERE id=?",
+                                 (_json.dumps(meta), m["id"]))
+            self.db.conn.commit()
+            tagged += 1
+        # the live ring too — tonight's dream draws from it directly
+        words = {w.lower() for w in topic.split() if len(w) > 2}
+        for buffered in self.ring.since(0.0):
+            ev = buffered.event
+            summary_words = {w.lower()
+                             for w in (getattr(ev, "summary", "") or "").split()}
+            if words & summary_words:
+                meta = getattr(ev, "meta", None)
+                if isinstance(meta, dict):
+                    meta["no_dream"] = True
+                    tagged += 1
+        return tagged
 
     def tick_horizon(self, now: float | None = None) -> dict | None:
         """Compose and send the day-ring when due or changed. While
@@ -1309,7 +1399,8 @@ class Orchestrator:
         if (not self.anticipation_on or not self.privacy.allow_capture()
                 or self.focus_active()):
             return []
-        cues = self.anticipation.tick(context)
+        cues = [c for c in self.anticipation.tick(context)
+                if self.maturity.allows_proactive(kind=c.kind)]
         for c in cues:
             self.bridge.send_card(c.card, event="anticipate")
         return cues
@@ -1855,6 +1946,9 @@ class Orchestrator:
         import time
         now = getattr(context, "now", None)
         now = now if now is not None else time.time()
+        # audible interruptions are the LAST privilege the system earns
+        if not self.maturity.allows_hark(now):
+            return None
         for a in self.attention.evaluate(context, commitments):
             importance = "urgent" if a.level == "watchout" else "normal"
             card = self.hark(a.clue, a.detail, importance, now=now)
@@ -2115,6 +2209,12 @@ class Orchestrator:
             self.dream.feed_place(signature, anchors)
             return None
 
+        # a proactive place card is an interruption — the maturity arc gates
+        # it (the ambient dream ghost-layer above is not, and never is)
+        conf = float((p or {}).get("confidence") or 1.0) if p else 1.0
+        if p and not self.maturity.allows_proactive(kind="place",
+                                                    confidence=conf):
+            return None
         card = answer_builder.build_proactive(p)
         if card:
             self.bridge.send_card(card, event="proactive_trigger")
@@ -2139,6 +2239,14 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def _on_event(self, name, payload):
+        # device telemetry: card dismissals feed the maturity arc (a "tap"
+        # is the wearer swatting a card away — the trust signal that decides
+        # how much proactive output the system has earned)
+        if name == "TEL":
+            p = payload or {}
+            if p.get("event") == "CARD_DISMISSED":
+                self.maturity.observe_card(dismissed=p.get("method") == "tap")
+            return
         # the wearer banished a figment on-glass — honor it durably: never
         # re-deploy it, and revoke it in the vault when a deployer is wired
         if name == "figment_event" and (payload or {}).get("tag") == "banished":

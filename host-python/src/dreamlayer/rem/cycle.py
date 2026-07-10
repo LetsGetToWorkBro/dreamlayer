@@ -106,7 +106,10 @@ class _Dreamable:
 
 def _is_private(event) -> bool:
     meta = getattr(event, "meta", None) or {}
-    return bool(meta.get("private")) or \
+    # no_dream: the wearer said "don't dream about that" — the memory stays
+    # retrievable, but the night never touches it (the Veil gates capture;
+    # this gates consolidation *aesthetics*).
+    return bool(meta.get("private")) or bool(meta.get("no_dream")) or \
         getattr(event, "source", "") == "veiled"
 
 

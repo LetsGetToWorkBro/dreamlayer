@@ -11,9 +11,21 @@ class MemoryDB:
         self.conn.commit()
     def _now(self): return datetime.now(UTC).isoformat()
     def add_memory(self, kind, summary, embedding=None, confidence=0.5, place_id=None, meta=None) -> int:
+        # embeddings persist as packed float32 BLOBs (embeddings.pack_embedding);
+        # readers accept legacy JSON-text rows too, so no migration pass is needed
+        from .embeddings import pack_embedding
         c = self.conn.execute("INSERT INTO memories(kind,summary,embedding,confidence,place_id,created_at,meta) VALUES (?,?,?,?,?,?,?)",
-            (kind, summary, json.dumps(embedding) if embedding else None, confidence, place_id, self._now(), json.dumps(meta or {})))
+            (kind, summary, pack_embedding(embedding) if embedding else None, confidence, place_id, self._now(), json.dumps(meta or {})))
         self.conn.commit(); return c.lastrowid
+    def memory(self, memory_id: int):
+        r = self.conn.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
+        return dict(r) if r else None
+    def get_setting(self, key: str, default=None):
+        r = self.conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return r["value"] if r else default
+    def set_setting(self, key: str, value: str):
+        self.conn.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+        self.conn.commit()
     def add_commitment(self, person, task, due=None, source_memory_id=None, confidence=0.5) -> int:
         c = self.conn.execute("INSERT INTO commitments(person,task,due,source_memory_id,confidence,created_at) VALUES (?,?,?,?,?,?)",
             (person, task, due, source_memory_id, confidence, self._now()))

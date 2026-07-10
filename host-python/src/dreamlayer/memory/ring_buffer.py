@@ -53,5 +53,14 @@ class SemanticRingBuffer:
             out = [b for b in out if b.event.kind == kind]
         return out
 
+    def purge_before(self, cutoff_ts: float) -> int:
+        """Drop events older than cutoff_ts — the hot-store retention window.
+        Capacity eviction bounds SIZE; this bounds AGE. Returns count purged."""
+        kept = [b for b in self._buf if b.ts >= cutoff_ts]
+        purged = len(self._buf) - len(kept)
+        if purged:
+            self._buf = deque(kept, maxlen=self.capacity)
+        return purged
+
     def __len__(self) -> int:
         return len(self._buf)

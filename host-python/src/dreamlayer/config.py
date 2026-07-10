@@ -32,5 +32,10 @@ class Config:
     passive_min_confidence:     float = 0.55
     passive_tick_interval_ms:   int   = 250
 
+    # Retention lifecycle (memory/retention.py): hot ring → warm store →
+    # cold entities. REM promotion is the only road from hot to lasting.
+    retention_hot_hours:        float = 24.0
+    retention_warm_days:        float = 90.0
+
 
 CONFIG = Config()

@@ -18,10 +18,23 @@ except ImportError:
     _HAS_FW = False
 
 
+# Per-profile model choices. tiny.en is a battery choice, not a quality
+# choice: Name Capture, spoken commitments, and Veritas all die at the WER a
+# glasses-frame mic gives tiny.en (~15-25% in the wild). base.en is the
+# floor; the Mac Brain can afford small.en. Front with the silero-VAD gate
+# (vad_gate.py) so ASR runs on speech, not on silence.
+PROFILE_MODELS = {
+    "phone": "base.en",       # pocket hub: quality floor, VAD-gated
+    "mac":   "small.en",      # the Brain: accuracy over battery
+    "min":   "tiny.en",       # explicit low-power opt-in only
+}
+DEFAULT_MODEL = PROFILE_MODELS["phone"]
+
+
 class FasterWhisperASR:
     available = _HAS_FW
 
-    def __init__(self, model_size: str = "tiny.en", device: str = "auto", compute_type: str = "int8"):
+    def __init__(self, model_size: str = DEFAULT_MODEL, device: str = "auto", compute_type: str = "int8"):
         self._model = None
         if _HAS_FW:
             try:

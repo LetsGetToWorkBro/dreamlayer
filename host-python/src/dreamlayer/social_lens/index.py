@@ -18,6 +18,15 @@ from .embedder import cosine_similarity
 
 DEFAULT_THRESHOLD = 0.65      # minimum cosine similarity for a match
 
+# Top-2 margin: when the best and second-best contacts score this close,
+# the read is ambiguous — say "not sure" instead of naming the wrong
+# person. Misidentifying a stranger AS a contact is this lens's one
+# catastrophic error; an absolute threshold alone can't catch two
+# near-identical scores. Both constants are placeholders until the real
+# embedder is calibrated on-device (Rig 3 perception bench: set them from
+# an ROC over genuine/impostor pairs, not from a stub).
+DEFAULT_MARGIN = 0.08
+
 
 class ContactIndex:
     """Vector index over personal contact face embeddings.
@@ -26,10 +35,15 @@ class ContactIndex:
     ----------
     threshold : float
         Minimum cosine similarity to accept as a match (default 0.65).
+    margin : float
+        Minimum lead of the best score over the runner-up (default 0.08);
+        a closer race returns no match rather than a guess.
     """
 
-    def __init__(self, threshold: float = DEFAULT_THRESHOLD):
+    def __init__(self, threshold: float = DEFAULT_THRESHOLD,
+                 margin: float = DEFAULT_MARGIN):
         self.threshold = threshold
+        self.margin = margin
         self._contacts: dict[str, ContactRecord] = {}
 
     # ------------------------------------------------------------------
@@ -79,21 +93,29 @@ class ContactIndex:
     # ------------------------------------------------------------------
 
     def search(self, embedding: list[float]) -> Optional[MatchResult]:
-        """Return the best-matching contact, or None if below threshold."""
+        """Return the best-matching contact, or None when below threshold
+        OR when the race is too close to call (top-2 margin)."""
         if not self._contacts or not embedding:
             return None
 
         best_id: Optional[str] = None
         best_score: float = 0.0
+        second_score: float = 0.0
 
         for cid, contact in self._contacts.items():
             score = cosine_similarity(embedding, contact.embedding)
             if score > best_score:
+                second_score = best_score
                 best_score = score
                 best_id = cid
+            elif score > second_score:
+                second_score = score
 
         if best_id is None or best_score < self.threshold:
             return None
+        if len(self._contacts) > 1 and \
+                (best_score - second_score) < self.margin:
+            return None      # ambiguous — never name the wrong person
 
         return MatchResult(
             contact=self._contacts[best_id],

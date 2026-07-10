@@ -330,7 +330,11 @@ class RealBridge(BridgeBase):
         try:
             obj = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
             name    = obj.get("name") or obj.get("t", "unknown")
-            payload = obj.get("payload", {})
+            # telemetry (t="TEL") and figment events carry their fields at
+            # the top level, not under "payload" — pass them through so the
+            # orchestrator sees event/method/id/tag
+            payload = obj.get("payload") or \
+                {k: v for k, v in obj.items() if k not in ("name", "t")}
             # Update privacy gate — thread-safe
             if name == "privacy_pause":
                 with self._paused_lock:
