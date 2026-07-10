@@ -687,7 +687,7 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
   .hud-card,.tier .rail i::after{transition:none}
 }
 /* ===== v2: hamburger, uniform hero buttons, live glass ===== */
-.menu-btn{position:fixed;top:14px;right:max(14px,env(safe-area-inset-right));z-index:120;
+.menu-btn{position:fixed;top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));z-index:120;
   width:46px;height:46px;border-radius:14px;border:1px solid var(--border);
   background:rgba(10,16,17,.66);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
   display:grid;place-items:center;cursor:pointer;transition:border-color var(--base) var(--ease)}
@@ -700,8 +700,11 @@ footer{border-top:1px solid var(--border);padding:44px 0 max(44px,env(safe-area-
 .menu-open .menu-btn span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 .drawer{position:fixed;inset:0;z-index:110;background:rgba(0,0,0,.9);
   -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
-  display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 32px;
+  display:flex;flex-direction:column;gap:6px;overflow-y:auto;
+  padding:max(24px,env(safe-area-inset-top)) 32px max(24px,env(safe-area-inset-bottom));
   opacity:0;pointer-events:none;transition:opacity var(--base) var(--ease)}
+.drawer>a:first-of-type{margin-top:auto}
+.drawer .close-note{margin-bottom:auto}
 .menu-open .drawer{opacity:1;pointer-events:auto}
 .drawer a{display:flex;align-items:baseline;gap:16px;max-width:520px;margin:0 auto;width:100%;
   padding:20px 8px;border-bottom:1px solid var(--border);color:var(--text);
@@ -1628,28 +1631,73 @@ function hydrate(p){
 //  - playIO starts/stops playback at true visibility; pausing at 15% (not 200px
 //    past) means the hero's video and the next section's never decode together
 //    at the boundary — that overlap was the last source of the scroll hitch.
+// hydrate + play stay TOGETHER at true visibility — the exact path iOS/WebKit
+// autoplay policies provably allow (a video load()ed while offscreen gets
+// suspended there, and a later bare play() silently rejects — Brave/Safari on
+// iPhone showed posters forever). If play() still rejects for any reason,
+// retry once through load(): recovers a suspended element instead of giving up.
 var playIO = new IntersectionObserver(function(entries){
   entries.forEach(function(e){
     var p = e.target, v = p.querySelector("video");
     if(e.isIntersecting){
       p.classList.add("in");
       if(!reduced && v){
-        hydrate(p);                                  // safety if warm hasn't run
+        hydrate(p);
+        v.muted = true;                              // WebKit: property, not just attribute
         var pr = v.play();
-        if(pr && pr.catch) pr.catch(function(){});
+        if(pr && pr.catch) pr.catch(function(){
+          try { v.load(); var p2 = v.play();
+            if(p2 && p2.catch) p2.catch(function(){ needsGesture = true; });
+          } catch(_){ needsGesture = true; }
+        });
       }
     } else if(v && !v.paused){
-      v.pause();
+      v.pause();                                     // never two decoders at the boundary
     }
   });
 }, {threshold:0.15});
 plates.forEach(function(p){ playIO.observe(p); });
+// iOS Low Power Mode refuses every autoplay (even muted+inline) — but allows
+// play() inside a user gesture. First touch after a refusal resumes whatever
+// plate is on screen, so LPM shows posters until the visitor touches, then lives.
+var needsGesture = false;
+["touchstart","pointerdown"].forEach(function(ev){
+  addEventListener(ev, function(){
+    if(!needsGesture || reduced) return;
+    needsGesture = false;
+    plates.forEach(function(p){
+      var v = p.querySelector("video");
+      if(!v || !v.paused) return;
+      var r = p.getBoundingClientRect();
+      if(r.bottom < 0 || r.top > innerHeight) return;
+      hydrate(p); v.muted = true;
+      var pr = v.play(); if(pr && pr.catch) pr.catch(function(){});
+    });
+  }, {passive:true});
+});
+// Pre-warming is now a plain fetch that primes the HTTP cache a screen early,
+// after load + idle. It never touches the media element, so there is no
+// suspended-state to trip over — when hydrate() runs at the boundary, the
+// bytes are (at least partly) local and the spike stays off the scroll.
 if(!reduced){
+  var probe = document.createElement("video");
+  function warmFetch(p){
+    if(p.dataset.warmed) return;
+    p.dataset.warmed = "1";
+    var srcs = p.querySelectorAll("video source[data-src]");
+    for (var i = 0; i < srcs.length; i++){
+      var s = srcs[i];
+      if(probe.canPlayType(s.getAttribute("type") || "")){
+        try { fetch(s.getAttribute("data-src"), {mode:"same-origin"}).catch(function(){}); } catch(_){}
+        return;
+      }
+    }
+  }
   var warm = function(){
     var warmIO = new IntersectionObserver(function(entries){
       entries.forEach(function(e){
         if(!e.isIntersecting) return;
-        hydrate(e.target); warmIO.unobserve(e.target);
+        warmFetch(e.target); warmIO.unobserve(e.target);
       });
     }, {rootMargin:"1200px 0px"});
     plates.forEach(function(p){ warmIO.observe(p); });
