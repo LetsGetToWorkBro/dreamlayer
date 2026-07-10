@@ -37,7 +37,7 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | D1 | LLM intent parser: keep-as-suggestion-layer vs delete (C8#4) | **DONE** | `reality_compiler/intent_parser_llm.py` | ✅ owner chose KEEP; docstring reframed as suggestion-layer, grammar-escape test added, doc #4 reconciled |
 | D2 | Nod to Remember: wire host + sim, boot flag OFF (2.1) | **DONE** | `halo-lua/main.lua` + `orchestrator/ops_ingest.py` + `reality_compiler/v2/figment.py` | ✅ D2a host pin path + `imu:<gesture>` grammar; ✅ D2b main.lua boot-flag classifier (default OFF) + accel feed, lupa device test injects a synthetic nod → `imu_gesture` envelope. 8 gesture tests; full suite 1982 green |
 | D3 | **Answer-ahead default** — flip `copilot_on`? (2.5) | DECIDE | `orchestrator/answer_ahead.py` | stays off by default unless told |
-| D4 | Overnight Self nightly LoRA (2.2) | DECIDE→BUILD | `rem/nightly_mlx.py` | build the eval gate FIRST (see 2.2 caution) |
+| D4 | Overnight Self — the eval gate (2.2) | **DONE (gate)** | `rem/adapter_gate.py` | ✅ no-regression acceptance over a versioned eval set + one-tap rollback (`AdapterGate`/`AdapterRegistry`/`gate_nightly`), model-agnostic; 7 tests. Follow-on: wire into `MlxNightlyTrainer` when MLX is real |
 | O1 | NPU: `.tflite` + Vela recipe + candidate zoo (C8#3, 1.4 tail) | **REGISTERED** | new `models/` + `AUDIT_ACTIONS.md` | register recipe, no silicon |
 | O2 | Live WASM e2e (needs wasmtime + python.wasm) (3.4) | **REGISTERED** | `plugins/wasm_host.py` | seam done; runtime is operator's |
 | O3 | Custom wake-word model for the chosen brand phrase (C8#8) | **REGISTERED** | `orchestrator/wakeword.py` | brand decision + training run |
