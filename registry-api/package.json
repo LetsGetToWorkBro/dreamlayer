@@ -1,0 +1,9 @@
+{
+  "name": "dreamlayer-registry-api",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker for the DreamLayer plugin/figment registry.",
+  "scripts": {
+    "test": "node worker.figments.test.mjs"
+  }
+}

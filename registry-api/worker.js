@@ -63,6 +63,23 @@ async function allowed(env, request, action, max, windowS = 3600) {
 
 const rateLimited = () => json({ error: "rate limited — try later" }, 429);
 
+// Shape-check a figment listing from the builder. Returns an error string, or
+// null when it's well-formed. The heavy proof (budgets) is re-run at review by
+// the Python gate; this just rejects junk before it queues.
+function validateListing(b) {
+  if (!b || b.kind !== "figment-listing") return "not a figment listing";
+  if (!b.figment || typeof b.figment !== "object") return "missing figment";
+  const scenes = b.figment.scenes;
+  if (!scenes || typeof scenes !== "object" || Object.keys(scenes).length === 0) return "figment has no scenes";
+  if (Object.keys(scenes).length > 32) return "too many scenes";
+  if (!b.name || String(b.name).length > 40) return "name is required (≤40 chars)";
+  if (!b.author || String(b.author).length > 40) return "author is required (≤40 chars)";
+  if (b.description && String(b.description).length > 240) return "description too long";
+  const size = JSON.stringify(b.figment).length;
+  if (size > 64 * 1024) return "figment too large";
+  return null;
+}
+
 // The registry can be private, so the *catalogue* lives with the clients — this
 // service owns only the numbers. We remember every plugin name we've seen
 // activity on, so GET /api/plugins can return their stats for the client to
@@ -120,6 +137,42 @@ export default {
       if (request.method === "GET") {
         const list = await readJSON(env.SOCIAL, "waitlist:cloud", {});
         return json({ count: Object.keys(list).length });
+      }
+      return json({ error: "method not allowed" }, 405);
+    }
+
+    // Figment listings from the no-code browser builder (INNOVATION 5.2).
+    // POST a listing → it's shape-checked, rate-limited, and queued for a
+    // maintainer to review + sign into the catalogue. GET → the queue depth.
+    // The registry re-checks the budget proof at review time; a submission is
+    // a request, never a publish.
+    if (parts[0] === "api" && parts[1] === "figments") {
+      if (request.method === "POST" && parts[2] === "submit") {
+        if (!(await allowed(env, request, "figment_submit", 10))) return rateLimited();
+        const body = await request.json().catch(() => ({}));
+        const bad = validateListing(body);
+        if (bad) return json({ error: bad }, 400);
+        // Small index of pending submissions; the full (up to 64 KiB) listing
+        // lives under its own key so the index can never exceed KV's per-value
+        // limit, however long the queue grows.
+        const queue = await readJSON(env.SOCIAL, "figments:queue", []);
+        if (queue.length >= 500) return json({ error: "queue full — try later" }, 503);
+        const id = "fig_" + Date.now() + "_" + Math.floor((queue.length + 1));
+        await env.SOCIAL.put("figment:sub:" + id, JSON.stringify(body));
+        queue.push({
+          id,
+          name: String(body.name || "Untitled").slice(0, 40),
+          author: String(body.author || "").slice(0, 40),
+          scenes: Object.keys(body.figment.scenes || {}).length,
+          at: Date.now() / 1000,
+        });
+        await env.SOCIAL.put("figments:queue", JSON.stringify(queue));
+        return json({ status: "queued", id, place: queue.length,
+                      note: "queued for maintainer review — the proof is re-checked before it lists" });
+      }
+      if (request.method === "GET" && !parts[2]) {
+        const queue = await readJSON(env.SOCIAL, "figments:queue", []);
+        return json({ pending: queue.length });
       }
       return json({ error: "method not allowed" }, 405);
     }

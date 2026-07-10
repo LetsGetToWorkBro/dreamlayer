@@ -675,7 +675,21 @@ def cmd_bench_perception(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dreamlayer", description="Build and ship DreamLayer plugins.")
+        prog="dreamlayer",
+        description="Build on DreamLayer — plugins (code), figments (data), "
+                    "and your own memory.",
+        epilog=(
+            "groups:\n"
+            "  plugins   scaffold, validate, preview, and ship a code plugin\n"
+            "  figment   a behavior is data — see the safety proof (what it CANNOT do)\n"
+            "  golf      score a figment's expressiveness per byte\n"
+            "  packs     validate an earcon/haptic pack against the sensory gate\n"
+            "  bench     race a perceptor inside the 350ms glance budget\n"
+            "  memories  browse/export your memory (it's just a file)\n"
+            "\nno code? build a figment in the browser: landing/lens-builder.html"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--version", action="store_true", help="print the SDK version and exit")
     groups = parser.add_subparsers(dest="group")
 

@@ -295,6 +295,33 @@ class WorldLensOps:
         self.bridge.send_card(card, event="caption")
         return card
 
+    def candor_hear(self, text: str, now: float | None = None) -> dict | None:
+        """Candor Mirror (2.7): feed one of *your own* spoken lines to the self-
+        coach — pace + fillers for the live arc, and, via the consistency engine,
+        capture any narrative drift for the debrief ("you told it differently
+        before"). Veil-gated inside candor. Returns the live arc frame, or None
+        while incognito."""
+        self.candor.observe(text, now=now)
+        try:
+            res = self.consistency.check(text, now=now)
+            if res.fired:
+                self._candor_drift = res.detail or "you told it differently before"
+        except Exception:
+            pass                        # the coach never breaks on a drift check
+        return self.candor.live_frame(now=now)
+
+    def candor_debrief(self) -> dict | None:
+        """The after-the-fact card (never live): your pace with a trend arrow,
+        your top fillers, and any drift Candor caught. Ends the conversation
+        session (the cross-session pace history is kept). None while veiled or
+        with nothing heard."""
+        card = self.candor.post_mortem(drift=self._candor_drift)
+        self._candor_drift = None
+        self.candor.reset()
+        if card is not None:
+            self.bridge.send_card(card, event="candor")
+        return card
+
     def thread(self, image: bytes, place: str = "", k: int = 6) -> dict:
         """Thread Lens (INNOVATION_SESSION 4.1): steal color from the world.
         Extract a k-swatch palette from a deliberate snapshot, save it as a

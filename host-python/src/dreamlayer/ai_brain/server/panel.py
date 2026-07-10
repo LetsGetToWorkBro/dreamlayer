@@ -531,7 +531,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Extend</div><h2>Plugins</h2>
     <p class="lead">Community plugins your Brain runs. Every one is validated —
       integrity, a capability scan, and a smoke test — before it's installed.
-      <a href="https://dreamlayer.app/plugins.html" target="_blank">Browse the store ↗</a></p>
+      <a href="https://dreamlayer.app/plugins.html" target="_blank">Browse the store ↗</a>
+      &nbsp;·&nbsp; No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
     <div class="conn-s" style="margin:0 0 8px">This Brain can grant:
       <span id="plugCaps">…</span></div>
     <ul id="plugins" class="feed"></ul>

@@ -36,6 +36,13 @@ local EMIT_BURST     = 5
 local EMIT_REFILL    = 1.0
 local BATTERY_COOLDOWN_SEC = 60.0
 
+-- Provenance mark (INNOVATION_SESSION 5.4): a figment that came from someone
+-- else (meta.origin == "shared") wears a small shield at the top of the ring,
+-- so third-party content can never be mistaken for the system's own voice.
+-- The sandbox proves physics; this proves voice. Rendered in an unobtrusive
+-- ghost hue, in a reserved corner a scene's own lines never occupy.
+M.PROVENANCE_GLYPH = "\xE2\x9B\xA8"    -- U+26E8 shield
+
 -- Bound device APIs (main.lua calls M.bind before the tick loop)
 local _display = nil   -- { text=fn(str,x,y,opts), clear=fn(), show=fn() }
 local _send    = nil   -- fn(envelope_table) -> host
@@ -250,7 +257,23 @@ local function _render()
       pulse = pulse_color,
     })
   end
+
+  -- provenance: a shared figment wears a shield at the top of the ring (5.4b),
+  -- above the first line's row, in a ghost hue — third-party content is always
+  -- marked as such. Drawn last so it's never clobbered by a scene's own lines.
+  if M.is_shared() then
+    _display.text(M.PROVENANCE_GLYPH, 120, 12, { size = "sm", color = "text_ghost" })
+  end
+
   _display.show()
+end
+
+--- True when the running figment came from someone else (meta.origin=="shared")
+--- — the deployer already requires an author signature for it. Drives the
+--- provenance shield.
+function M.is_shared()
+  return _active ~= nil and type(_active.meta) == "table"
+     and _active.meta.origin == "shared"
 end
 
 -- Advance dt seconds. Called from main.lua's tick loop; rendering is

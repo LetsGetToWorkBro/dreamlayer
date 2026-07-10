@@ -374,6 +374,36 @@ class Brain:
             self._rc_active = None
         return {"ok": True, **self.rc_repertoire()}
 
+    def rc_import(self, data: dict) -> dict:
+        """Import a figment authored elsewhere — the no-code browser builder's
+        "Deploy to my Brain" (INNOVATION_SESSION Category 1). The proof is
+        re-checked *here*: the Brain budget-verifies and re-signs it before it
+        can run — it never trusts the author. On success it's on stage."""
+        import uuid
+        from ...reality_compiler.v2.figment import Figment
+        from ...reality_compiler.v2 import safety
+        try:
+            fig = Figment.from_dict(data or {})
+        except Exception as e:
+            return {"ok": False, "error": f"not a figment: {e}"}
+        # the browser builder ships id="" (it doesn't own identity); mint a fresh
+        # one so two imported lenses can't collide/overwrite in the vault.
+        if not fig.id:
+            fig.id = uuid.uuid4().hex[:12]
+        card = safety.safety_card(fig)
+        if not card["ok"]:
+            return {"ok": False, "error": "fails the sandbox", "safety": card}
+        try:
+            self.rc.keep(fig)               # re-verifies budgets + signs
+        except Exception as e:
+            return {"ok": False, "error": f"rejected: {e}", "safety": card}
+        record = self.rc.deploy(fig.id)
+        if record.success:
+            self._rc_active = fig.id
+            self.activity.add("rc", f"Imported lens {fig.name!r} from the builder")
+        return {"ok": record.success, "id": fig.id, "safety": card,
+                **self.rc_repertoire()}
+
     def rc_refine_suggestion(self, figment_id: str) -> dict:
         """If you keep quitting this figment at the same scene, the compiler's
         proposed edit — "you end this around 20:00 of 25:00, shorten it?" (5.3).
@@ -1533,6 +1563,41 @@ def _cloud_view_payload(brain: Brain) -> dict:
     }
 
 
+def _builder_dir() -> "Optional[Path]":
+    """Where the browser lens-builder assets live. Prefers a copy bundled into
+    the package (an installed/notarized app), falls back to the repo's landing/
+    (running from source, as here). None if neither is present."""
+    here = Path(__file__).resolve()
+    for cand in (here.parent / "assets" / "build",
+                 here.parents[5] / "landing"):
+        if (cand / "lens-builder.html").exists():
+            return cand
+    return None
+
+
+def _builder_asset(name: str) -> "Optional[str]":
+    d = _builder_dir()
+    if d is None or "/" in name or ".." in name:
+        return None
+    fp = d / "assets" / "lens" / name
+    return fp.read_text(encoding="utf-8") if fp.is_file() else None
+
+
+def _builder_page(token: str) -> "Optional[str]":
+    """The builder HTML, rewritten to load figment.js from the Brain and told
+    it's same-origin (so it hides the URL/token inputs and deploys relatively).
+    The token rides in only for a localhost request — exactly like the panel."""
+    d = _builder_dir()
+    if d is None:
+        return None
+    html = (d / "lens-builder.html").read_text(encoding="utf-8")
+    html = html.replace("./assets/lens/figment.js", "/dreamlayer/build/figment.js")
+    inject = ("<script>window.__DL_BUILD__="
+              + json.dumps({"token": token, "sameOrigin": True})
+              + ";</script>")
+    return html.replace("</head>", inject + "</head>", 1)
+
+
 def _brain_view_payload(brain: Brain) -> dict:
     """The Brain as a cartridge (INNOVATION_SESSION 3.1): the live tier ladder —
     on-device → Mac mini → cloud — each with the round-trip latency the router
@@ -1670,6 +1735,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         # -- helpers ----------------------------------------------------
         def _json(self, code, obj):
+            # Deliberately NO CORS headers. The Brain is a local API that can hold
+            # secrets (backup, token, memory) and its default token is empty, so
+            # cross-origin *reads* must stay blocked — a drive-by page a wearer
+            # visits connects from loopback and would otherwise pass the local
+            # gates. One-click "Deploy to my Brain" works because the builder is
+            # served *same-origin* at /dreamlayer/build; the phone uses native
+            # networking (not subject to CORS). A cross-origin web tool cannot
+            # reach this API, by design.
             body = json.dumps(obj).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -1710,6 +1783,37 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 body = html.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == "/dreamlayer/build":
+                # serve the no-code lens builder same-origin (INNOVATION 5,
+                # Category 1) so "Deploy to my Brain" needs no CORS and no
+                # pasted token. Same posture as the panel: the token is injected
+                # only for a localhost request.
+                # NB: no CORS header here on purpose. This HTML carries the
+                # injected Brain token (localhost only), so it must stay
+                # same-origin — a page on another site must not be able to
+                # fetch() and read it. It's loaded by navigation, never fetch.
+                html = _builder_page(brain.config.token if self._from_localhost() else "")
+                if html is None:
+                    self._json(404, {"error": "builder assets not found"}); return
+                body = html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == "/dreamlayer/build/figment.js":
+                # same-origin asset for the served page — no CORS needed
+                js = _builder_asset("figment.js")
+                if js is None:
+                    self._json(404, {"error": "not found"}); return
+                body = js.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -1976,6 +2080,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rc_deploy(self._body().get("figment_id", "")))
             elif path == "/dreamlayer/rc/revoke":
                 self._json(200, brain.rc_revoke(self._body().get("figment_id", "")))
+            elif path == "/dreamlayer/rc/import":
+                # the no-code browser builder's "Deploy to my Brain"
+                self._json(200, brain.rc_import(self._body().get("figment") or self._body()))
             elif path.startswith("/dreamlayer/event/"):
                 # the $6 physical-events kit (INNOVATION 1.6): a sensor out in
                 # the world POSTs a named signal to the figment on stage.

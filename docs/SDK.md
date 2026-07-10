@@ -9,6 +9,13 @@ A plugin extends the layer without touching core: a new **card** on the HUD, a
 plugin passes the same safety gate — integrity check, capability scan, smoke
 test — before it runs on anyone's glasses.
 
+> **Two ways to build.** A **plugin** is *code* (this guide). A **figment** is
+> *data* — a signed, budget-proven scene machine you can author with **no code
+> at all**: in the phone's rehearsal flow, in the browser builder
+> (`landing/lens-builder.html`), or as JSON checked by `dreamlayer figment` /
+> `golf`. Same platform, same proofs; jump to [Figments](#figments--behaviors-as-data-no-code)
+> if you don't want to write Python.
+
 > **Stability contract.** Import only from `dreamlayer.sdk`. Everything under it
 > (`dreamlayer.orchestrator.*`, `dreamlayer.object_lens.*`, …) is internal and
 > will move. The SDK surface is versioned (`dreamlayer.sdk.__version__`) and
@@ -204,6 +211,37 @@ declaring `network`/`fs` fails validation. Known capabilities: `cards`,
   tier. The capability→grant mapping and tier selection are tested; end-to-end
   execution is gated on that operator-provided runtime.
 
+## Figments — behaviors as data (no code)
+
+A **figment** is a behavior expressed as *data*: scenes, timed/event
+transitions, pulses, bounded counters — signed and **statically proven safe
+before it ever runs**. No Python, no build step. This is what makes a behavior
+marketplace possible: the installer re-checks the proof; it doesn't trust the
+author.
+
+Three ways to author one, easiest first:
+
+- **The browser builder** — `landing/lens-builder.html`. Pick a recipe (interval
+  timer, checklist ritual, countdown, box-breathing), customize it, watch it run
+  on a live ring preview, read the safety card, then **Deploy to your Brain** or
+  download the JSON. Zero install, zero code.
+- **The phone** — rehearse it by performing it (tap, speak the beats, keep), in
+  the app's rehearsal flow.
+- **JSON + the CLI** — hand-write or generate the figment and check it:
+
+```bash
+dreamlayer figment safety my-lens.json      # the proof: what this behavior CANNOT do
+dreamlayer golf verify my-lens.json          # score expressiveness per byte
+```
+
+`figment safety` prints the machine-verified upper bound — "cannot pulse faster
+than 2 Hz, cannot outlive 40 minutes, cannot swallow your kill switch" — plus,
+for a **shared** figment, a **voice** disclosure: whether its text imitates
+system/power/security chrome (the "BATTERY CRITICAL — REMOVE GLASSES" attack).
+*The sandbox proves physics; provenance proves voice.* Worked examples live in
+[`examples/figments/`](../examples/figments/) (`sous-sear.json`,
+`kiln-darkroom.json`).
+
 ## Publishing
 
 Open a pull request that adds your packaged `.json` under `registry/packages/`
@@ -218,8 +256,15 @@ the code. Free plugins stay free to publish and install; a paid tier
   and the pricing model.
 - [`PLATFORM.md`](PLATFORM.md) — where the Plugin API sits among the five
   platform pillars.
-- `dreamlayer plugins --help` — every command and flag (`new`, `validate`,
-  `pack`, `install`, `list`, `info`, `preview`, `dev`).
+- `dreamlayer --help` — the full surface: `plugins` (`new`/`validate`/`pack`/
+  `install`/`list`/`info`/`preview`/`dev`), `figment safety`, `golf verify`,
+  `packs validate`, `bench perception`, `memories` (`path`/`browse`/`export`/
+  `import`/`burn`).
+- **Themes** — the in-eye design language is data too: a theme table restyles
+  the palette, type scale, and motion (`halo-lua/display/theme.lua`, refs in
+  `display/themes/`), validated against the skin budget.
+- **Physical events** — any sensor can transition a figment via
+  `POST /dreamlayer/event/ble/<n>`; see [`examples/esp32/`](../examples/esp32/).
 - [`adr/0001-plugin-extension-model.md`](adr/0001-plugin-extension-model.md) —
   why the extension model is `register(ctx)` + capabilities, not pluggy.
   `dreamlayer plugins info` (and `sdk.contributions()`) shows what a plugin adds.

@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DreamLayer · Lens Builder</title>
+<meta name="description" content="Build a DreamLayer lens in your browser — no code. Pick a recipe or wire a scene graph, watch it run on a live ring, see the safety proof, deploy to your glasses, publish to the store." />
+<style>
+  :root{
+    --bg:#07100f; --surface:#0e1a18; --surface2:#12211f; --border:#1c2e2b;
+    --text:#eaf3f1; --text2:#8aa5a0; --teal:#2fd4c4; --amber:#e0b54a;
+    --red:#e06b52; --green:#56d364;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--teal)}
+  header{padding:20px 26px;border-bottom:1px solid var(--border);display:flex;
+    align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;font-weight:650}
+  header .tag{color:var(--text2);font-size:13.5px;max-width:640px}
+  header .home{margin-left:auto;font-size:13.5px}
+  .wrap{display:grid;grid-template-columns:290px 1fr 330px;min-height:calc(100vh - 62px)}
+  @media(max-width:1080px){.wrap{grid-template-columns:1fr}}
+  .col{padding:20px;overflow-y:auto}
+  .col.left{border-right:1px solid var(--border)}
+  .col.right{border-left:1px solid var(--border);background:var(--surface)}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 12px}
+  .recipe{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:13px 15px;margin-bottom:9px;cursor:pointer;color:inherit;transition:.15s}
+  .recipe:hover{border-color:var(--teal)}
+  .recipe.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
+  .recipe b{display:block;font-size:15px;margin-bottom:2px}
+  .recipe span{color:var(--text2);font-size:12.5px}
+  .modeswitch{display:flex;gap:0;margin:18px 0 6px;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+  .modeswitch button{flex:1;font:inherit;background:transparent;color:var(--text2);border:0;padding:8px;cursor:pointer;font-size:13.5px}
+  .modeswitch button.on{background:var(--teal);color:#00201c;font-weight:650}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .ringwrap{position:relative;width:300px;height:300px;margin-top:4px}
+  canvas#ring{width:300px;height:300px;border-radius:50%;background:#000;
+    box-shadow:0 0 60px rgba(47,212,196,.10)}
+  .controls{display:flex;gap:10px}
+  button.btn{font:inherit;background:var(--teal);color:#00201c;border:0;border-radius:999px;
+    padding:9px 18px;font-weight:650;cursor:pointer}
+  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  button.btn.sm{padding:6px 12px;font-size:13px}
+  button.btn:disabled{opacity:.45;cursor:default}
+  input,select,textarea{font:inherit;background:var(--surface2);color:var(--text);
+    border:1px solid var(--border);border-radius:9px;padding:7px 9px;width:100%}
+  textarea{resize:vertical;min-height:52px}
+  label.f{display:block;font-size:12px;color:var(--text2);margin:11px 0 4px}
+  .name-row input{font-size:17px;font-weight:600}
+  .scene{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:10px}
+  .scene.active{border-color:var(--teal)}
+  .scene .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .scene .hd .sid{font-size:12px;color:var(--teal);font-weight:650}
+  .scene .hd input.rename{width:96px;font-size:12px;padding:4px 6px}
+  .scene .hd .start{margin-left:auto;font-size:11.5px;color:var(--text2);display:flex;gap:5px;align-items:center;cursor:pointer}
+  .scene .hd .del{color:var(--text2);cursor:pointer;background:none;border:0;font-size:15px}
+  .lines .ln{display:grid;grid-template-columns:1fr 54px 62px 1fr 22px;gap:6px;margin-bottom:6px;align-items:center}
+  .lines .ln .x{color:var(--text2);cursor:pointer;text-align:center}
+  .sub{font-size:11.5px;color:var(--text2);margin:8px 0 4px;letter-spacing:.06em;text-transform:uppercase}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .trans .t{display:grid;grid-template-columns:1fr 14px 1fr 22px;gap:6px;align-items:center;margin-bottom:6px}
+  .trans .t .arr{color:var(--text2);text-align:center}
+  .flags{display:flex;gap:14px;align-items:center;margin-top:8px;color:var(--text2);font-size:13px;flex-wrap:wrap}
+  .flags label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  .muted{color:var(--text2);font-size:12.5px}
+  .graph{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px;margin-top:14px}
+  .graph svg{width:100%;height:auto;display:block}
+  .proof{border-radius:14px;padding:15px;border:1px solid var(--border);background:var(--surface2)}
+  .proof.ok{border-color:rgba(86,211,100,.4)} .proof.bad{border-color:rgba(224,107,82,.5)}
+  .proof h3{margin:0 0 8px;font-size:14px}
+  .proof ul{margin:6px 0 0;padding-left:18px}
+  .proof li{margin:3px 0;font-size:12.5px;color:var(--text2)} .proof .cannot li{color:var(--text)}
+  .viol{color:var(--red);font-size:12.5px;margin:4px 0}
+  .toast{margin-top:9px;font-size:13px;min-height:18px} .ok-t{color:var(--green)} .bad-t{color:var(--red)}
+  .panel{border-top:1px solid var(--border);margin-top:18px;padding-top:16px}
+  details summary{cursor:pointer;color:var(--teal);font-size:13.5px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lens Builder</h1>
+  <span class="tag">A behavior is <b>data</b>, not code. Build one here — no coding — watch your device re-prove it's safe, deploy it, share it.</span>
+  <a class="home" href="./index.html">← dreamlayer</a>
+</header>
+
+<div class="wrap">
+  <div class="col left">
+    <p class="eyebrow">Start from a recipe</p>
+    <div id="recipes"></div>
+    <button class="recipe" id="blank" data-id="blank"><b>Start blank</b><span>An empty scene to wire up yourself.</span></button>
+    <div class="modeswitch" id="modeswitch">
+      <button data-mode="simple" class="on">Simple</button>
+      <button data-mode="advanced">Advanced</button>
+    </div>
+    <p class="muted" id="modehint">Tweak the recipe's knobs. Switch to <b>Advanced</b> to wire scenes and transitions yourself.</p>
+  </div>
+
+  <div class="col mid">
+    <div class="stage">
+      <div class="ringwrap"><canvas id="ring" width="600" height="600"></canvas></div>
+      <div class="controls">
+        <button class="btn" id="play">▶ Play</button>
+        <button class="btn ghost" id="restart">↺ Restart</button>
+      </div>
+      <p class="muted" id="scenelabel">—</p>
+    </div>
+    <div style="max-width:540px;margin:20px auto 0">
+      <p class="eyebrow">Edit</p>
+      <div class="name-row"><label class="f">Lens name</label><input id="fname" maxlength="40" /></div>
+      <div id="editorSimple"></div>
+      <div id="editorAdvanced" style="display:none"></div>
+      <button class="btn ghost sm" id="addstep" style="margin-top:6px;display:none">+ Add a step</button>
+      <button class="btn ghost sm" id="addscene" style="margin-top:6px;display:none">+ Add a scene</button>
+      <div class="graph" id="graph" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="col right">
+    <p class="eyebrow">The proof</p>
+    <div class="proof" id="proof"><h3>—</h3></div>
+
+    <div class="panel">
+      <p class="eyebrow">Ship it</p>
+      <button class="btn" id="download" style="width:100%;margin-bottom:10px">↓ Download lens (.json)</button>
+      <div id="deployBox">
+        <label class="f" id="deployLabel">Deploy to this Brain</label>
+        <input id="braintoken" placeholder="Brain token (Settings → pairing)" style="display:none" />
+        <button class="btn ghost" id="deploy" style="width:100%;margin-top:8px">⚡ Deploy to this Brain</button>
+        <div class="toast" id="toast"></div>
+      </div>
+      <div id="deployGuide" style="display:none">
+        <p class="muted">To put this on your glasses, open the builder <b>from your Brain</b> — the Mac panel → Plugins → “Build a lens” — for one-click deploy. Or <b>Download</b> above and run <code>dreamlayer figment safety my-lens.json</code>.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow">Share it</p>
+      <details id="publishDetails">
+        <summary>Publish to the store →</summary>
+        <label class="f">Your name / handle</label>
+        <input id="pubauthor" maxlength="40" placeholder="ada_lovelace" />
+        <label class="f">One line — what is it?</label>
+        <input id="pubdesc" maxlength="120" placeholder="A 25/5 focus timer that breathes." />
+        <label class="f">Who's it for? (optional)</label>
+        <input id="pubforwho" maxlength="120" placeholder="Deep-work sessions." />
+        <button class="btn" id="publish" style="width:100%;margin-top:12px">Submit for review</button>
+        <div class="toast" id="pubtoast"></div>
+        <p class="muted" style="margin-top:8px">Free to publish. The registry re-checks the proof and a maintainer signs it in — your listing's claims are recomputed, never trusted. A submission is a request, not a publish.</p>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script src="./assets/lens/figment.js"></script>
+<script>
+(function(){
+  "use strict";
+  var K = window.LensKit;
+  var SO = window.__DL_BUILD__ || null;          // set when the Brain serves this page
+  var REGISTRY = "https://api.dreamlayer.app";
+  var fig = null, mode = "simple", editKind = "template";
+
+  // -- recipes ---------------------------------------------------------------
+  var recWrap = document.getElementById("recipes");
+  K.TEMPLATES.forEach(function(t){
+    var b = document.createElement("button");
+    b.className = "recipe"; b.dataset.id = t.id;
+    b.innerHTML = "<b>"+t.name+"</b><span>"+t.blurb+"</span>";
+    b.onclick = function(){ loadTemplate(t); };
+    recWrap.appendChild(b);
+  });
+  document.getElementById("blank").onclick = function(){ loadBlank(); };
+  function markRecipe(id){ [].forEach.call(document.querySelectorAll(".recipe"), function(c){ c.classList.toggle("on", c.dataset.id===id); }); }
+
+  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id); boot(); }
+  function loadBlank(){ fig = K.emptyFigment(); editKind = "blank"; markRecipe("blank"); setMode("advanced"); boot(); }
+  function boot(){
+    document.getElementById("fname").value = fig.name;
+    buildEditors(); refresh(); restart();
+  }
+
+  // -- mode toggle -----------------------------------------------------------
+  document.querySelectorAll("#modeswitch button").forEach(function(b){
+    b.onclick = function(){ setMode(b.dataset.mode); };
+  });
+  function setMode(m){
+    mode = m;
+    document.querySelectorAll("#modeswitch button").forEach(function(b){ b.classList.toggle("on", b.dataset.mode===m); });
+    var adv = m === "advanced";
+    document.getElementById("editorSimple").style.display = adv ? "none" : "";
+    document.getElementById("editorAdvanced").style.display = adv ? "" : "none";
+    document.getElementById("graph").style.display = adv ? "" : "none";
+    document.getElementById("addstep").style.display = (!adv && editKind==="checklist") ? "" : "none";
+    document.getElementById("addscene").style.display = adv ? "" : "none";
+    document.getElementById("modehint").innerHTML = adv
+      ? "Wire scenes and transitions freely. The proof still holds — you can't build something unsafe."
+      : "Tweak the recipe's knobs. Switch to <b>Advanced</b> to wire scenes and transitions yourself.";
+    if(fig) buildEditors();
+  }
+
+  document.getElementById("fname").oninput = function(e){ fig.name = e.target.value.slice(0,40); refresh(); };
+  function buildEditors(){ buildSimple(); buildAdvanced(); drawGraph(); }
+
+  // -- SIMPLE editor (recipe knobs) -----------------------------------------
+  function buildSimple(){
+    var ed = document.getElementById("editorSimple"); ed.innerHTML = "";
+    Object.keys(fig.scenes).forEach(function(sid){
+      var s = fig.scenes[sid], timed = s.duration_sec != null;
+      var label = (s.lines[0] && s.lines[0].content) || sid;
+      var el = document.createElement("div"); el.className = "scene";
+      el.innerHTML = '<div class="hd"><span class="sid">'+sid+'</span>'+
+        (editKind==="checklist" ? '<button class="del" title="remove">✕</button>' : '')+'</div>'+
+        '<div class="grid2"><input class="lbl" maxlength="24" value="'+esc(label)+'" placeholder="what it says"/>'+
+        (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" title="seconds"/>' : '<span class="muted" style="align-self:center">step</span>')+'</div>'+
+        (timed ? '<div class="flags"><label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> pulse near the end</label></div>' : '');
+      wireSimple(el, s, sid);
+      ed.appendChild(el);
+    });
+  }
+  function wireSimple(el, s, sid){
+    var lbl=el.querySelector(".lbl"); if(lbl) lbl.oninput=function(){ setLine0(s, lbl.value); refresh(); };
+    var dur=el.querySelector(".dur"); if(dur) dur.oninput=function(){ var v=parseFloat(dur.value); if(!isNaN(v)){ s.duration_sec=v; if(s.pulse) s.pulse.window_sec=Math.min(s.pulse.window_sec,v); refresh(); } };
+    var pl=el.querySelector(".pulse"); if(pl) pl.onchange=function(){ if(pl.checked) s.pulse={window_sec:Math.min(10,s.duration_sec),rate_hz:2.0,color:"accent_attention"}; else delete s.pulse; refresh(); };
+    var del=el.querySelector(".del"); if(del) del.onclick=function(){ removeChecklistStep(sid); };
+  }
+  function setLine0(s,v){ if(!s.lines[0]) s.lines[0]={row:0,size:"md",color:"text_primary"}; s.lines[0].content=v.slice(0,24); }
+
+  // checklist add/remove (simple mode)
+  document.getElementById("addstep").onclick = function(){
+    var nid = K.newSceneId(fig);
+    fig.scenes[nid] = K.scene(nid, { lines:[K.line("New step"), K.line("nod / double-tap →",{row:2,size:"sm",color:"text_secondary"})], on:{} });
+    relinkChecklist(); buildEditors(); refresh(); restart();
+  };
+  function removeChecklistStep(sid){ if(Object.keys(fig.scenes).length<=1) return; K.deleteScene(fig,sid); relinkChecklist(); buildEditors(); refresh(); restart(); }
+  function relinkChecklist(){
+    var ids=Object.keys(fig.scenes); fig.initial=ids[0];
+    ids.forEach(function(id,i){ var nxt=i+1<ids.length?ids[i+1]:K.END; fig.scenes[id].on={double:{target:nxt},"imu:nod":{target:nxt}}; });
+  }
+
+  // -- ADVANCED editor (full scene graph) -----------------------------------
+  function targetOpts(sel){
+    var opts = Object.keys(fig.scenes).map(function(id){ return '<option value="'+esc(id)+'"'+(sel===id?" selected":"")+'>→ '+esc(id)+'</option>'; });
+    opts.push('<option value="'+K.END+'"'+(sel===K.END?" selected":"")+'>→ End (banish)</option>');
+    opts.push('<option value="'+K.SELF+'"'+(sel===K.SELF?" selected":"")+'>→ Restart this scene</option>');
+    return opts.join("");
+  }
+  function buildAdvanced(){
+    var ed = document.getElementById("editorAdvanced"); ed.innerHTML = "";
+    Object.keys(fig.scenes).forEach(function(sid){
+      var s = fig.scenes[sid], timed = s.duration_sec != null;
+      var el = document.createElement("div"); el.className = "scene" + (sid===activeScene?" active":"");
+      // header
+      var h = '<div class="hd"><span class="sid">scene</span>'+
+        '<input class="rename" value="'+esc(sid)+'" maxlength="12"/>'+
+        '<label class="start"><input type="radio" name="startscene" '+(fig.initial===sid?"checked":"")+'/> start</label>'+
+        '<button class="del" title="delete scene">🗑</button></div>';
+      // lines
+      var lines = '<div class="sub">Text</div><div class="lines">' + (s.lines||[]).map(function(ln,i){
+        return '<div class="ln" data-i="'+i+'"><input class="lc" maxlength="24" value="'+esc(ln.content)+'"/>'+
+          '<select class="lr">'+[0,1,2,3,4].map(function(r){return '<option'+(ln.row===r?" selected":"")+'>'+r+'</option>';}).join("")+'</select>'+
+          '<select class="ls">'+K.SIZES.map(function(z){return '<option'+(ln.size===z?" selected":"")+'>'+z+'</option>';}).join("")+'</select>'+
+          '<select class="lco">'+K.COLORS.map(function(c){return '<option'+(ln.color===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
+          '<span class="x" title="remove line">✕</span></div>';
+      }).join("") + '</div><button class="btn ghost sm addline">+ line</button>';
+      // timing
+      var timing = '<div class="sub">Timing</div><div class="flags">'+
+        '<label><input type="checkbox" class="timed" '+(timed?"checked":"")+'/> timed</label>'+
+        (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" style="width:90px"/> <span>sec</span>' : '<span class="muted">advances on a gesture below</span>')+
+        (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> pulse</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>';
+      // transitions
+      var trans = '<div class="sub">Transitions</div><div class="trans">' + K.listTransitions(s).map(function(t){
+        return '<div class="t" data-trig="'+t.trigger+'"><select class="tt">'+K.TRIGGERS.map(function(tr){return '<option value="'+tr.key+'"'+(tr.key===t.trigger?" selected":"")+'>'+tr.label+'</option>';}).join("")+'</select>'+
+          '<span class="arr">→</span><select class="tg">'+targetOpts(t.target)+'</select><span class="x" title="remove">✕</span></div>';
+      }).join("") + '</div><button class="btn ghost sm addtrans">+ transition</button>';
+      el.innerHTML = h + lines + timing + trans;
+      wireAdvanced(el, s, sid);
+      ed.appendChild(el);
+    });
+  }
+  function wireAdvanced(el, s, sid){
+    el.querySelector(".rename").onchange = function(e){ renameScene(sid, e.target.value.trim()); };
+    el.querySelector(".start input").onchange = function(){ fig.initial = sid; buildEditors(); refresh(); restart(); };
+    el.querySelector(".del").onclick = function(){ if(Object.keys(fig.scenes).length<=1) return; K.deleteScene(fig, sid); buildEditors(); refresh(); restart(); };
+    el.querySelectorAll(".ln").forEach(function(row){
+      var i = +row.dataset.i, ln = s.lines[i];
+      row.querySelector(".lc").oninput = function(e){ ln.content = e.target.value.slice(0,24); refresh(); };
+      row.querySelector(".lr").onchange = function(e){ ln.row = +e.target.value; refresh(); };
+      row.querySelector(".ls").onchange = function(e){ ln.size = e.target.value; refresh(); };
+      row.querySelector(".lco").onchange = function(e){ ln.color = e.target.value; refresh(); };
+      row.querySelector(".x").onclick = function(){ s.lines.splice(i,1); buildEditors(); refresh(); };
+    });
+    el.querySelector(".addline").onclick = function(){ (s.lines=s.lines||[]).push(K.line("text")); buildEditors(); refresh(); };
+    el.querySelector(".timed").onchange = function(e){
+      if(e.target.checked){ s.duration_sec = 10; if(!s.on_timeout) s.on_timeout=[{target:K.END}]; }
+      else { delete s.duration_sec; delete s.on_timeout; delete s.pulse; delete s.tick; }  // drop the countdown too
+      buildEditors(); refresh(); restart();
+    };
+    var dur = el.querySelector(".dur"); if(dur) dur.oninput=function(){ var v=parseFloat(dur.value); if(!isNaN(v)){ s.duration_sec=Math.max(K.BUDGETS.MIN_SCENE_SEC, v); if(s.pulse) s.pulse.window_sec=Math.min(s.pulse.window_sec,s.duration_sec); refresh(); } };
+    var pl = el.querySelector(".pulse"); if(pl) pl.onchange=function(){ if(pl.checked) s.pulse={window_sec:Math.min(10,s.duration_sec||10),rate_hz:2.0,color:"accent_attention"}; else delete s.pulse; buildEditors(); refresh(); };
+    var pr = el.querySelector(".prate"); if(pr) pr.oninput=function(){ var v=parseFloat(pr.value); if(!isNaN(v)&&s.pulse){ s.pulse.rate_hz=v; refresh(); } };
+    el.querySelectorAll(".trans .t").forEach(function(row){
+      var trig = row.dataset.trig;
+      row.querySelector(".tt").onchange = function(e){
+        var nt=e.target.value;
+        // don't clobber a trigger another row already owns — revert instead
+        if(nt!==trig && K.listTransitions(s).some(function(t){return t.trigger===nt;})){ buildEditors(); return; }
+        K.removeTransition(s,trig); K.setTransition(s,nt, row.querySelector(".tg").value);
+        if(nt==="timeout" && s.duration_sec==null){ s.duration_sec=10; }
+        buildEditors(); refresh();
+      };
+      row.querySelector(".tg").onchange = function(e){ K.setTransition(s, row.querySelector(".tt").value, e.target.value); refresh(); drawGraph(); };
+      row.querySelector(".x").onclick = function(){ K.removeTransition(s, row.querySelector(".tt").value); buildEditors(); refresh(); };
+    });
+    el.querySelector(".addtrans").onclick = function(){
+      var used = K.listTransitions(s).map(function(t){return t.trigger;});
+      var free = K.TRIGGERS.map(function(t){return t.key;}).filter(function(k){return used.indexOf(k)<0;});
+      if(!free.length){ return; }                       // every trigger already wired — nothing to add
+      K.setTransition(s, free[0], Object.keys(fig.scenes)[0] || K.END);
+      if(free[0]==="timeout" && s.duration_sec==null){ s.duration_sec=10; }
+      buildEditors(); refresh();
+    };
+  }
+  function renameScene(oldId, nid){
+    nid = String(nid||"").toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);  // safe id charset
+    if(!nid || nid===oldId || fig.scenes[nid]) { buildEditors(); return; }
+    var order = Object.keys(fig.scenes), rebuilt = {};
+    order.forEach(function(id){ rebuilt[id===oldId?nid:id] = fig.scenes[id]; });
+    fig.scenes = rebuilt; fig.scenes[nid].id = nid;
+    if(fig.initial===oldId) fig.initial = nid;
+    Object.keys(fig.scenes).forEach(function(id){ var s=fig.scenes[id];
+      (s.on_timeout||[]).forEach(function(t){ if(t.target===oldId) t.target=nid; });
+      if(s.on) Object.keys(s.on).forEach(function(k){ if(s.on[k].target===oldId) s.on[k].target=nid; });
+    });
+    buildEditors(); refresh(); restart();
+  }
+  document.getElementById("addscene").onclick = function(){ K.addBlankScene(fig); buildEditors(); refresh(); };
+
+  // -- graph diagram ---------------------------------------------------------
+  var TRIGLABEL = {}; K.TRIGGERS.forEach(function(t){ TRIGLABEL[t.key]=t.label; });
+  function drawGraph(){
+    if(mode!=="advanced") return;
+    var ids = Object.keys(fig.scenes), edges = K.graphEdges(fig);
+    var COLW=150, ROWH=74, PADX=16, PADY=16, NW=110, NH=40, cols=Math.min(3, Math.max(1, ids.length));
+    var pos={}; ids.forEach(function(id,i){ pos[id]={c:i%cols, r:Math.floor(i/cols)}; });
+    var rows=Math.ceil(ids.length/cols);
+    var W=PADX*2+cols*COLW, H=PADY*2+rows*ROWH+20;
+    function cx(id){ return PADX+pos[id].c*COLW+NW/2; }
+    function cy(id){ return PADY+pos[id].r*ROWH+NH/2; }
+    var svg='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">';
+    svg+='<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8aa5a0"/></marker></defs>';
+    edges.forEach(function(e){
+      var x1=cx(e.from),y1=cy(e.from),ex,ey;
+      if(e.to==="@end"){ ex=x1; ey=y1+34; svg+='<line x1="'+x1+'" y1="'+y1+'" x2="'+ex+'" y2="'+ey+'" stroke="#e06b52" stroke-dasharray="3,3" marker-end="url(#ah)"/><text x="'+ex+'" y="'+(ey+11)+'" fill="#e06b52" font-size="9" text-anchor="middle">end</text>'; return; }
+      if(e.to==="@self"||!pos[e.to]){ svg+='<text x="'+x1+'" y="'+(y1+30)+'" fill="#8aa5a0" font-size="9" text-anchor="middle">↺ '+esc(TRIGLABEL[e.trigger]||e.trigger)+'</text>'; return; }
+      var x2=cx(e.to),y2=cy(e.to);
+      svg+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#2a3c44" marker-end="url(#ah)"/>';
+      svg+='<text x="'+((x1+x2)/2)+'" y="'+((y1+y2)/2-4)+'" fill="#8aa5a0" font-size="9" text-anchor="middle">'+esc(TRIGLABEL[e.trigger]||e.trigger)+'</text>';
+    });
+    ids.forEach(function(id){
+      var x=PADX+pos[id].c*COLW, y=PADY+pos[id].r*ROWH, on=id===activeScene, start=id===fig.initial;
+      svg+='<rect x="'+x+'" y="'+y+'" rx="9" width="'+NW+'" height="'+NH+'" fill="'+(on?"#12312c":"#0e1a18")+'" stroke="'+(on?"#2fd4c4":(start?"#e0b54a":"#1c2e2b"))+'"/>';
+      svg+='<text x="'+(x+NW/2)+'" y="'+(y+NH/2+4)+'" fill="'+(on?"#eaf3f1":"#8aa5a0")+'" font-size="12" text-anchor="middle">'+esc(id)+(start?' ▸':'')+'</text>';
+    });
+    svg+='</svg>';
+    document.getElementById("graph").innerHTML = svg;
+  }
+
+  // -- proof -----------------------------------------------------------------
+  function refresh(){
+    var card = K.safetyCard(fig);
+    var p = document.getElementById("proof"); p.className = "proof " + (card.ok ? "ok" : "bad");
+    var h = "<h3>"+(card.ok ? "✓ Safe to wear" : "✕ Not yet valid")+"</h3>";
+    if(!card.ok){ h += card.violations.map(function(v){ return '<div class="viol">• '+esc(v.msg)+(v.scene?" ("+v.scene+")":"")+'</div>'; }).join(""); }
+    else { h += '<div class="muted">This behavior <b>CANNOT</b>:</div><ul class="cannot">'+card.cannot.map(function(c){return "<li>"+esc(c)+"</li>";}).join("")+'</ul><div class="muted" style="margin-top:8px">Your device re-checks this — it is not a promise.</div>'; }
+    p.innerHTML = h;
+    var ok = card.ok;
+    document.getElementById("download").disabled = !ok;
+    document.getElementById("deploy").disabled = !ok;
+    document.getElementById("publish").disabled = !ok;
+    if(mode==="advanced") drawGraph();
+  }
+
+  // -- live ring preview -----------------------------------------------------
+  var cv=document.getElementById("ring"), ctx=cv.getContext("2d");
+  var play=true, activeScene=null, t0=0, raf=null, SZ={sm:20,md:32,lg:44};
+  function nowms(){ return (typeof performance!=="undefined"&&performance.now)?performance.now():0; }
+  function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
+  document.getElementById("restart").onclick = restart;
+  document.getElementById("play").onclick = function(){ play=!play; this.textContent=play?"▶ Play":"⏸ Pause"; if(play&&!raf) tick(); };
+  function advance(s){ if(s.duration_sec!=null&&s.on_timeout&&s.on_timeout.length) return s.on_timeout[s.on_timeout.length-1].target;
+    if(s.on){ if(s.on["imu:nod"]) return s.on["imu:nod"].target; if(s.on.double) return s.on.double.target; var k=Object.keys(s.on)[0]; if(k) return s.on[k].target; } return "@end"; }
+  function dwell(s){ return s.duration_sec!=null ? s.duration_sec : 2.4; }
+  function tick(){
+    raf=null;
+    if(fig&&activeScene){
+      var s=fig.scenes[activeScene];
+      if(s){ var el=(nowms()-t0)/1000;
+        if(play&&el>=dwell(s)){ var n=advance(s); activeScene=(n==="@end"||n==="@self"||!fig.scenes[n])?fig.initial:n; t0=nowms(); el=0; if(mode==="advanced") drawGraph(); }
+        draw(s, el, dwell(s));
+      }
+    }
+    raf = play ? requestAnimationFrame(tick) : null;
+  }
+  function draw(s, el, dur){
+    var W=cv.width, C=W/2; ctx.clearRect(0,0,W,W);
+    ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(C,C,C-2,0,7); ctx.fill();
+    ctx.strokeStyle="rgba(140,190,190,.12)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(C,C,C*0.875,0,7); ctx.stroke();
+    if(s.duration_sec!=null){ var f=Math.max(0,1-el/dur); ctx.strokeStyle=K.HEX.accent_memory; ctx.lineWidth=6;
+      ctx.beginPath(); ctx.arc(C,C,C*0.93,-Math.PI/2,-Math.PI/2+f*2*Math.PI); ctx.stroke(); }
+    var pulseOn=false; if(s.pulse&&s.duration_sec!=null&&(dur-el)<=s.pulse.window_sec) pulseOn=(Math.floor(el*s.pulse.rate_hz*2)%2===0);
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    (s.lines||[]).forEach(function(ln){ var y=C-84+(ln.row||0)*64;
+      ctx.fillStyle = pulseOn?K.HEX[s.pulse.color]:(K.HEX[ln.color]||K.HEX.text_primary);
+      ctx.font=(SZ[ln.size]||32)+"px -apple-system,Segoe UI,Roboto,sans-serif";
+      ctx.fillText(ln.content||"", C, y); });
+    if(s.duration_sec!=null){ var rem=Math.max(0,Math.ceil(dur-el)); ctx.fillStyle=K.HEX.text_secondary;
+      ctx.font="26px -apple-system,Segoe UI,Roboto"; ctx.fillText(mmss(rem), C, C+66); }
+    document.getElementById("scenelabel").textContent = "scene: "+activeScene;
+  }
+  function mmss(s){ var m=Math.floor(s/60); return m+":"+("0"+(s%60)).slice(-2); }
+
+  // -- ship: download / deploy ----------------------------------------------
+  document.getElementById("download").onclick = function(){
+    var blob=new Blob([JSON.stringify(fig,null,2)],{type:"application/json"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=(fig.name||"lens").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json"; a.click();
+  };
+  // One-click deploy only exists same-origin (the Brain served this page): a
+  // cross-origin page can't reach the local token-authed API — by design, so a
+  // drive-by site can't touch your Brain. The static builder shows guidance.
+  if(SO){
+    // the token is injected for a localhost request; on a LAN client it's empty,
+    // so expose a field to paste it rather than 401 silently.
+    if(!SO.token) document.getElementById("braintoken").style.display="";
+  } else {
+    document.getElementById("deployBox").style.display="none";
+    document.getElementById("deployGuide").style.display="";
+  }
+  document.getElementById("deploy").onclick = function(){
+    var toast=document.getElementById("toast"), h={"Content-Type":"application/json"};
+    var tok = (SO && SO.token) || (document.getElementById("braintoken").value||"");
+    if(tok) h["X-DreamLayer-Token"]=tok;
+    toast.className="toast"; toast.textContent="Deploying…";
+    fetch("/dreamlayer/rc/import",{method:"POST",headers:h,body:JSON.stringify({figment:fig})})   // same-origin, relative
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d&&d.ok){ toast.className="toast ok-t"; toast.textContent="✓ On your glasses — "+(fig.name||"lens")+" is on stage."; }
+        else { toast.className="toast bad-t"; toast.textContent="Brain refused it: "+((d&&d.error)||"unknown")+(d&&d.error==="unauthorised"?" — paste your Brain token above.":""); } })
+      .catch(function(){ toast.className="toast bad-t"; toast.textContent="Couldn't reach the Brain. Download the lens and use `dreamlayer figment safety`."; });
+  };
+
+  // -- share: publish to the store ------------------------------------------
+  document.getElementById("publish").onclick = function(){
+    var toast=document.getElementById("pubtoast");
+    var author=document.getElementById("pubauthor").value.trim();
+    if(!author){ toast.className="toast bad-t"; toast.textContent="Add a name or handle so people know it's yours."; return; }
+    var L=K.listing(fig,{ author:author, description:document.getElementById("pubdesc").value.trim(), forwho:document.getElementById("pubforwho").value.trim() });
+    toast.className="toast"; toast.textContent="Submitting…";
+    fetch(REGISTRY+"/api/figments/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(L)})
+      .then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});})
+      .then(function(x){ if(x.s===200&&x.d.status==="queued"){ toast.className="toast ok-t"; toast.textContent="✓ Submitted for review — you're #"+x.d.place+" in the queue."; }
+        else { toast.className="toast bad-t"; toast.textContent=(x.d&&x.d.error)||"Submission failed."; downloadListing(L); } })
+      .catch(function(){ toast.className="toast bad-t"; toast.textContent="Store unreachable — downloaded your listing instead. Open a PR to add it to registry/."; downloadListing(L); });
+  };
+  function downloadListing(L){
+    var blob=new Blob([JSON.stringify(L,null,2)],{type:"application/json"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=(L.name||"lens").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".listing.json"; a.click();
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+
+  // boot
+  loadTemplate(K.TEMPLATES[0]);
+  tick();
+})();
+</script>
+</body>
+</html>
