@@ -75,6 +75,13 @@ class Vault:
                 entries.append(entry)
         return entries
 
+    def inherited(self) -> list[VaultEntry]:
+        """The *Inherited* section: kept figments carrying a dedication
+        (`meta.dedication`) — an author's rhythm, signed and provably theirs,
+        that outlives every device (INNOVATION_SESSION 5.5). Newest first."""
+        heirlooms = [e for e in self.list() if e.figment.dedication()]
+        return sorted(heirlooms, key=lambda e: e.kept_at, reverse=True)
+
     # ------------------------------------------------------------------
     # Revocation
     # ------------------------------------------------------------------

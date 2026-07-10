@@ -318,6 +318,21 @@ class Figment:
         return json.dumps(self.to_dict(), sort_keys=True,
                           separators=(",", ":"), ensure_ascii=True)
 
+    # -- heirloom (INNOVATION_SESSION 5.5) ---------------------------------
+
+    def dedicate(self, to: str) -> "Figment":
+        """Mark this figment an heirloom — a dedication that rides in `meta`, and
+        therefore in the signed canonical JSON, so it's provably the author's.
+        Set it *before* keep()/sign() (it changes the signature). Tiny, signed,
+        and executable on any future device that speaks the grammar."""
+        self.meta = dict(self.meta or {})
+        self.meta["dedication"] = to
+        return self
+
+    def dedication(self) -> Optional[str]:
+        """The dedication, if this figment is an heirloom; else None."""
+        return (self.meta or {}).get("dedication")
+
     # -- inspection --------------------------------------------------------
 
     def describe(self) -> str:
