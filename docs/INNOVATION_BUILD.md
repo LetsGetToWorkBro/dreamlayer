@@ -29,7 +29,7 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | B9 | Proof-carrying install safety card (3.2) | BUILD | `reality_compiler/v2/budgets.py` report → render | queued |
 | B10 | Figment grammar: gesture/place/presence/cadence/ledger/slot events (5.1) | partial | `reality_compiler/v2/figment.py` grammar + `budgets.py` | ✅ 5.1 #1 gesture events (`imu:<g>`) shipped with D2; place/presence/cadence/ledger/slot still queued |
 | B11 | Device Vitals surface — TEL has an audience (C8#5) | BUILD | phone settings screen + `HaloBridge` TEL callback | queued (phone) |
-| B12 | Retrace — `locate` recall card (2.6) | BUILD | `orchestrator/ops_*` + voice grammar | queued |
+| B12 | Retrace — ambient-sighting recall (2.6) | **DONE** | `orchestrator/ops_commitments.py` | ✅ `retrace(subject)` — recency-blended, place+time ("kitchen counter, 8:40am"), veil-gated, draws ObjectRecallCard; `_locate` falls back to it when no anchor; 6 tests |
 | B13 | Rosetta Live offline captions (4.6) | BUILD | wire `social_lens/rosetta_argos.py` | queued |
 | B14 | Docent Lens — venue RAG plugin (4.5) | BUILD | wire `memory/localrecall_api.py` | queued |
 | B15 | Heirloom figments — `meta.dedication` + Inherited vault view (5.5) | **DONE** | `reality_compiler/v2/figment.py` + `vault.py` | ✅ `fig.dedicate()`/`dedication()` (signed), `Vault.inherited()`; roundtrip test; 3 tests |

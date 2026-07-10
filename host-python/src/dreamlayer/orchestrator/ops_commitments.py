@@ -86,11 +86,72 @@ class CommitmentRecallOps:
             return {"intent": "locate", "ok": False,
                     "say": "Not while you're incognito."}
         if not cue.found:
+            # no dropped Waypath anchor — retrace from ambient sightings instead
+            rt = self.retrace(subject)
+            if rt.get("found"):
+                return rt
             return {"intent": "locate", "ok": False, "found": False,
                     "say": f"I don't have a spot saved for your {subject} yet."}
         return {"intent": "locate", "ok": True, "found": True,
                 "subject": cue.subject, "place": cue.place, "detail": cue.text,
                 "say": f"Your {cue.subject} — {cue.text}."}
+
+    def retrace(self, subject: str) -> dict:
+        """Where did I last *see* it? — ambient-sighting recall (INNOVATION 2.6).
+        Unlike _locate (a Waypath anchor you dropped), this answers from the
+        passive sightings the ambient pipeline understood: Retriever.search
+        blended with recency, joined to place + time. No image is stored — the
+        sighting is a single row, findable *and* forgettable."""
+        from ..config import CONFIG
+        subject = (subject or "").strip()
+        if not subject:
+            return {"intent": "retrace", "ok": False, "found": False, "say": "Find what?"}
+        if not self.privacy.allow_capture():
+            return {"intent": "retrace", "ok": False, "found": False,
+                    "say": "Not while you're incognito."}
+        scored = self.retriever.search(subject, kind="object", top_k=5)
+        strong = [(s, m) for s, m in scored if s >= CONFIG.recall_min_confidence]
+        if not strong:
+            return {"intent": "retrace", "ok": False, "found": False,
+                    "say": f"I haven't understood your {subject} anywhere yet."}
+        # recency blend: among the confident sightings, the *last* place it was
+        # understood is what a "where is it" question is actually asking for
+        score, mem = max(strong, key=lambda sm: self._source_ts(sm[1]) or 0.0)
+        meta = json.loads(mem.get("meta") or "{}")
+        place = meta.get("place") or meta.get("location") or ""
+        when = self._human_when(mem.get("created_at"))
+        obj = meta.get("object") or mem.get("summary", subject)
+        card = cards.object_recall({"object": obj, "place": place, "detail": when,
+                                    "last_seen": when, "confidence": round(score, 2)})
+        self.bridge.send_card(card)
+        say = (f"Your {subject} — {place}, {when}." if place
+               else f"Your {subject} — {when}.")
+        return {"intent": "retrace", "ok": True, "found": True, "subject": subject,
+                "place": place, "when": when, "say": say}
+
+    @staticmethod
+    def _human_when(created_at, now=None) -> str:
+        """A glanceable time phrase from an ISO ``created_at``: '8:40am',
+        '8:40am yesterday', or '8:40am on Jul 03'. ``now`` is injectable for tests."""
+        if not created_at:
+            return ""
+        from datetime import datetime
+        try:
+            dt = datetime.fromisoformat(str(created_at))
+        except (TypeError, ValueError):
+            return ""
+        h = dt.hour % 12 or 12
+        t = f"{h}:{dt.minute:02d}{'am' if dt.hour < 12 else 'pm'}"
+        now = now or datetime.now(dt.tzinfo)
+        try:
+            days = (now.date() - dt.date()).days
+        except (TypeError, ValueError, AttributeError):
+            return t
+        if days <= 0:
+            return t
+        if days == 1:
+            return f"{t} yesterday"
+        return f"{t} on {dt.strftime('%b %d')}"
 
 
     def _debt(self, who: str | None, direction: str, what: str,
