@@ -79,6 +79,19 @@ def test_list_registry_catalogue(tmp_path, capsys):
     assert rc == 0 and "face-synth" in out and "[free]" in out and "official" in out
 
 
+def test_dev_once_validates_the_scaffold(tmp_path, capsys):
+    _, d = _new(tmp_path)
+    rc = cli.main(["plugins", "dev", str(d), "--once"])
+    out = capsys.readouterr().out
+    assert rc == 0 and "gate green" in out
+
+
+def test_list_entry_points_runs(capsys):
+    # no dreamlayer.plugins entry points in the test env → friendly note, exit 0
+    rc = cli.main(["plugins", "list", "--entry-points"])
+    assert rc == 0
+
+
 def test_version_flag(capsys):
     assert cli.main(["--version"]) == 0
     assert "dreamlayer sdk" in capsys.readouterr().out

@@ -191,7 +191,7 @@ def check_signature(package: PluginPackage,
             "unsigned package — trust rests on the curated registry alone")
         return False, "", errors, warnings
 
-    verdict = verify_detached(package.source, m.signature, m.pubkey)
+    verdict = verify_detached(package.signing_payload(), m.signature, m.pubkey)
     if verdict is None:
         warnings.append(
             "author signature present but the 'cryptography' extra is not "
@@ -226,6 +226,11 @@ def validate(package: PluginPackage, host_capabilities=frozenset(),
 
     for p in m.problems():                       # 1. manifest shape
         report.add_error(p)
+
+    from .package import sdk_supports, SDK_VERSION   # 1b. SDK compat
+    if not sdk_supports(m.min_sdk):
+        report.add_error(
+            f"needs SDK >= {m.min_sdk}; this host provides {SDK_VERSION}")
 
     if not package.checksum_ok():                # 2. integrity
         report.add_error("checksum mismatch — the code does not match the manifest")

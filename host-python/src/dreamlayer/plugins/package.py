@@ -32,6 +32,29 @@ from typing import Optional
 
 API_VERSION = "1"                    # default a manifest gets if it omits `api`
 SUPPORTED_API = frozenset({"1", "2"})  # v1 (register-only) and v2 (lifecycle+events)
+# The SDK contract version this host implements (dreamlayer.sdk.__version__ reads
+# it). A manifest may declare `min_sdk`; a plugin needing a newer SDK than the
+# host provides is refused early with a clear message (see validate.sdk_supports).
+SDK_VERSION = "1.0.0"
+
+
+def _semver(v: str) -> tuple:
+    """(major, minor, patch) ints from 'x.y.z' (pre-release/build ignored);
+    a malformed version sorts as (0, 0, 0)."""
+    core = re.split(r"[-+]", str(v or ""), 1)[0]
+    parts = (core.split(".") + ["0", "0", "0"])[:3]
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return (0, 0, 0)
+
+
+def sdk_supports(min_sdk: str, host_sdk: str = SDK_VERSION) -> bool:
+    """True if a host at `host_sdk` satisfies a plugin's `min_sdk` requirement.
+    An empty/absent requirement is always satisfied."""
+    if not min_sdk:
+        return True
+    return _semver(host_sdk) >= _semver(min_sdk)
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,48}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+([\-+][0-9A-Za-z.\-]+)?$")
 ENTRY_RE = re.compile(r"^[A-Za-z_][\w]*:[A-Za-z_][\w]*$")
@@ -64,6 +87,7 @@ class PluginManifest:
     homepage: str = ""
     requires: tuple = ()             # capability names
     api: str = API_VERSION
+    min_sdk: str = ""                # lowest dreamlayer.sdk version this needs
     # pricing: a reserved, forward-compatible seam. Free today ({"model":"free"});
     # a paid marketplace fills in model/price/currency later. No payment code
     # ships against it yet.
@@ -98,6 +122,7 @@ class PluginManifest:
             homepage=str(d.get("homepage", "")),
             requires=tuple(d.get("requires") or ()),
             api=str(d.get("api", API_VERSION)),
+            min_sdk=str(d.get("min_sdk", "")),
             pricing=(dict(d["pricing"]) if isinstance(d.get("pricing"), dict)
                      else {"model": "free"}),
             checksum=str(d.get("checksum", "")),
@@ -157,19 +182,37 @@ class PluginPackage:
     def signed(self) -> bool:
         return bool(self.manifest.signature and self.manifest.pubkey)
 
+    def signing_payload(self) -> dict:
+        """The canonical bytes the author signature covers. It binds the code
+        (via its sha256) *and* the security-relevant manifest fields — so an
+        attacker who takes a signed package and widens its ``requires`` or
+        redirects its ``entry`` invalidates the signature, not just one who
+        edits the code. Store-detail copy (long/forwho/screenshot/description)
+        is deliberately excluded, so authors can revise their write-up without
+        re-signing."""
+        m = self.manifest
+        return {
+            "name": m.name,
+            "version": m.version,
+            "entry": m.entry,
+            "api": m.api,
+            "min_sdk": m.min_sdk,
+            "requires": sorted(m.requires),
+            "source_sha256": sha256_of(self.source),
+        }
+
     def sign_with(self, signer) -> "PluginPackage":
-        """Stamp the author's Ed25519 signature + public key. The signature
-        covers exactly what the checksum covers — the code payload — so the
-        store-detail fields stay freely editable. `signer` is a
-        reality_compiler.sign_crypto.Signer holding the author's seed; it
-        must have a real keypair (the HMAC fallback has no public half and
-        would produce an unverifiable package)."""
+        """Stamp the author's Ed25519 signature + public key over
+        ``signing_payload()`` (the code hash + the security-relevant manifest
+        fields). `signer` is a reality_compiler.sign_crypto.Signer holding the
+        author's seed; it must have a real keypair (the HMAC fallback has no
+        public half and would produce an unverifiable package)."""
         pub = getattr(signer, "public_key_hex", "")
         if not pub:
             raise ValueError(
                 "author signing needs Ed25519 (install the 'privacy' extra); "
                 "the HMAC fallback cannot produce a publishable public key")
-        self.manifest.signature = signer.sign(self.source)
+        self.manifest.signature = signer.sign(self.signing_payload())
         self.manifest.pubkey = pub
         return self
 

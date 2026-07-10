@@ -66,6 +66,23 @@ class TestPluginGateAuthenticity:
         assert any("INVALID" in e for e in report.errors)
 
     @pytest.mark.skipif(not HAS_CRYPTO, reason="cryptography not installed")
+    def test_widened_requires_fails_hard(self):
+        # the whole point of signing the manifest, not just the code: an
+        # attacker who takes a signed package and widens its capabilities
+        # invalidates the signature.
+        pkg = build().sign_with(Signer(b"\x21" * 32))
+        pkg.manifest.requires = ("network", "fs")
+        report = validate(pkg, host_capabilities=frozenset({"network", "fs"}))
+        assert not report.ok and any("INVALID" in e for e in report.errors)
+
+    @pytest.mark.skipif(not HAS_CRYPTO, reason="cryptography not installed")
+    def test_redirected_entry_fails_hard(self):
+        pkg = build().sign_with(Signer(b"\x21" * 32))
+        pkg.manifest.entry = "plugin:evil"      # redirect the load target
+        report = validate(pkg, host_capabilities=frozenset())
+        assert not report.ok and any("INVALID" in e for e in report.errors)
+
+    @pytest.mark.skipif(not HAS_CRYPTO, reason="cryptography not installed")
     def test_trusted_registry_rejects_unknown_key(self):
         pkg = build().sign_with(Signer(b"\x21" * 32))
         other = Signer(b"\x42" * 32)

@@ -46,6 +46,7 @@ class SubprocessPluginHost:
         self.shop_count = 0
         self.rejected: list = []
         self._dead = False
+        self.sandbox: Optional[str] = None  # which OS sandbox wrapped the child
 
     # ------------------------------------------------------------------
 
@@ -59,10 +60,14 @@ class SubprocessPluginHost:
     def start(self) -> bool:
         """Launch the child and read its registration manifest. Returns whether
         the plugin registered any proxyable extension point."""
+        from . import os_sandbox
+        prefix = os_sandbox.wrapper(self.capabilities, self.package_dir)
+        self.sandbox = os_sandbox.available() if prefix else None
+        child = [sys.executable, "-m", "dreamlayer.plugins.sandbox_child",
+                 str(self.package_dir), json.dumps(self.capabilities)]
         try:
             self._proc = subprocess.Popen(
-                [sys.executable, "-m", "dreamlayer.plugins.sandbox_child",
-                 str(self.package_dir), json.dumps(self.capabilities)],
+                prefix + child,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, text=True, bufsize=1)
         except Exception as exc:

@@ -77,6 +77,57 @@ and per-plugin persisted settings (`ctx.settings`). Capture a name-bound
 settings handle in `register()` (`self._settings = ctx.settings`) so host-invoked
 setters persist to *your* bucket even outside a lifecycle callback.
 
+**Typed** — the SDK ships `py.typed`, so your editor and `mypy`/`pyright` see
+its types. Annotate against the structural `PluginContextProtocol` and type your
+manifest with `ManifestDict`:
+
+```python
+from dreamlayer.sdk import PluginContextProtocol
+
+def register(ctx: PluginContextProtocol) -> None:
+    ctx.add_card_renderer("HelloCard", draw_hello)   # autocompleted
+```
+
+## Compatibility (`min_sdk`)
+
+Declare the lowest SDK your plugin needs in the manifest; a host running an older
+SDK refuses it *at the gate* with a clear message instead of failing at runtime:
+
+```json
+{ "name": "hello", "version": "0.1.0", "entry": "plugin:plugin",
+  "min_sdk": "1.0.0" }
+```
+
+`dreamlayer plugins new` fills in the current `min_sdk` for you.
+
+## Iterate fast: `plugins dev`
+
+```bash
+dreamlayer plugins dev .                       # re-run the gate on every save
+dreamlayer plugins dev . --brain http://localhost:8765   # + hot-reload to a Brain
+```
+
+It watches `plugin.py`/`plugin.json` and re-validates (and reinstalls, with
+`--brain`) each time you save — an instant inner loop. `--once` runs a single
+pass (handy in CI).
+
+## Two ways a host finds a plugin
+
+- **The registry** (this repo's `registry/`) — the curated, reviewed store the
+  clients read. This is how end users install.
+- **Entry points** — a `pip`/`uv`-installed plugin package advertises itself so a
+  host discovers it locally, great for development and private plugins:
+
+  ```toml
+  # in your plugin's pyproject.toml
+  [project.entry-points."dreamlayer.plugins"]
+  my-plugin = "my_pkg.plugin:plugin"
+  ```
+
+  `dreamlayer plugins list --entry-points` shows what's discoverable. Discovery
+  answers *where a plugin loads from*; the **manifest still governs *what it may
+  do*** — the capability gate runs either way.
+
 ## Capabilities
 
 Declare in `requires` only what you use. The host grants a capability if it can,
@@ -85,6 +136,23 @@ undeclared reach** — a plugin that imports `socket` or writes files without
 declaring `network`/`fs` fails validation. Known capabilities: `cards`,
 `object_lens`, `glance`, `shop`, `perception`, `vision`, `ring`, `mesh`, `midi`,
 `network`, `fs`.
+
+## Trust, signing & isolation
+
+- **Signing** — an author signature (Ed25519) covers the code hash **and the
+  security-relevant manifest fields** (`name`, `version`, `entry`, `api`,
+  `min_sdk`, `requires`), so an attacker can't take a signed package and quietly
+  widen its capabilities or redirect its entry point. Store-detail copy stays
+  free to edit without re-signing. Unsigned packages remain installable under the
+  curated-registry trust model (surfaced with a warning).
+- **Isolation tiers** — reviewed first-party plugins run in-process. *Untrusted*
+  plugins run in a capability-mediated subprocess jail; where `bwrap`/`nsjail`
+  are present, that child is additionally wrapped in an **OS sandbox** — no
+  `network` capability means no network namespace, the filesystem is read-only
+  except a private scratch, PID/IPC unshared. Control with `DL_SANDBOX`
+  (`auto` | `bwrap` | `nsjail` | `none`); it degrades cleanly to a plain
+  subprocess where the tools aren't usable. A WASM tier (wasmtime/Pyodide, where
+  a denied capability is a WASI import the host never provides) is the roadmap.
 
 ## Publishing
 

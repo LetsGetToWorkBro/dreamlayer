@@ -83,6 +83,31 @@ def plugin():
 '''
 
 
+def test_context_protocol_and_manifest_typeddict():
+    from dreamlayer.sdk import PluginContextProtocol
+    from dreamlayer.plugins.base import PluginContext
+    assert isinstance(PluginContext(), PluginContextProtocol)   # structural conformance
+    m: sdk.ManifestDict = {"name": "x", "version": "1.0.0", "entry": "p:f"}
+    assert sdk.PluginManifest.from_dict(m).name == "x"
+
+
+def test_min_sdk_gate():
+    from dreamlayer.sdk import sdk_supports, SDK_VERSION
+    assert sdk_supports("") and sdk_supports("1.0.0") and sdk_supports(SDK_VERSION)
+    assert not sdk_supports("99.0.0")
+    pkg = sdk.PluginPackage.build(name="future", version="1.0.0",
+                                  entry="plugin:plugin", source=SDK_ONLY_SRC,
+                                  requires=("glance",))
+    pkg.manifest.min_sdk = "99.0.0"             # needs a newer SDK than the host
+    r = sdk.validate(pkg, host_capabilities=frozenset({"glance"}))
+    assert not r.ok and any("SDK >=" in e for e in r.errors)
+
+
+def test_discover_returns_a_list():
+    # no dreamlayer.plugins entry points are declared in the test env → []
+    assert isinstance(sdk.discover(), list)
+
+
 def test_package_from_dir_builds_a_valid_package(tmp_path):
     # the helper the CLI and every scaffold test use
     (tmp_path / "plugin.py").write_text(SDK_ONLY_SRC, encoding="utf-8")

@@ -72,8 +72,16 @@ from ..plugins.package import (
     KNOWN_CAPABILITIES,
     API_VERSION,
     SUPPORTED_API,
+    SDK_VERSION,
+    sdk_supports,
 )
 from ..plugins.validate import validate, scan_source, ValidationReport
+
+# --- typed contracts (editor autocomplete / type-checking) -------------------
+from .protocols import PluginContextProtocol, SettingsProtocol, ManifestDict
+
+# --- entry-point discovery (pip/uv-native, layered under the manifest) -------
+from .discovery import discover, load_discovered, DiscoveredPlugin, ENTRY_GROUP
 
 
 def package_from_dir(path):
@@ -99,10 +107,11 @@ def package_from_dir(path):
     meta.setdefault("entry", "plugin:plugin")
     return PluginPackage(manifest=PluginManifest.from_dict(meta), source=source)
 
-# SDK contract version. Independent of the host package version: it bumps only
-# when this surface changes in a way a plugin author would notice. A future
-# standalone ``dreamlayer-sdk`` distribution inherits this number.
-__version__ = "1.0.0"
+# SDK contract version (single source of truth in plugins.package.SDK_VERSION).
+# Independent of the host package version: it bumps only when this surface
+# changes in a way a plugin author would notice. A plugin may declare `min_sdk`
+# in its manifest; the gate refuses it on a host whose SDK is older.
+__version__ = SDK_VERSION
 
 # The latest plugin API level this SDK speaks (SUPPORTED_API is the full set a
 # host accepts; API_VERSION is the manifest default). Modern plugins target this.
@@ -111,15 +120,20 @@ API = max(SUPPORTED_API, key=int)
 __all__ = [
     # authoring
     "make_plugin", "SimplePlugin", "Plugin", "PluginContext", "PluginSettings",
+    # typed contracts (for annotations)
+    "PluginContextProtocol", "SettingsProtocol", "ManifestDict",
     # extension base classes
     "PanelProvider", "PanelRow", "ObjectSighting", "ObjectPanel",
     "LensCandidate", "LensBid", "GlanceReading", "AudioPercept",
     # events
     "PluginEventBus", "EVENT_KINDS",
+    # discovery (entry points)
+    "discover", "load_discovered", "DiscoveredPlugin", "ENTRY_GROUP",
     # packaging + validation
     "PluginManifest", "PluginPackage", "sha256_of", "package_from_dir",
     "validate", "scan_source", "ValidationReport",
     "KNOWN_CAPABILITIES", "API_VERSION", "SUPPORTED_API",
+    "SDK_VERSION", "sdk_supports",
     # version
     "__version__", "API",
 ]

@@ -144,11 +144,13 @@ def plugin():
     """Entry factory. plugin.json's `entry` ("plugin:plugin") points here."""
     return {cls}()
 '''
+    from dreamlayer.sdk import SDK_VERSION
     plugin_json = json.dumps({
         "name": name,
         "version": "0.1.0",
         "entry": "plugin:plugin",
         "api": "2",
+        "min_sdk": SDK_VERSION,
         "author": author,
         "description": f"A one-line summary of what {name} does.",
         "requires": ["cards"],
@@ -290,7 +292,76 @@ def cmd_install(args) -> int:
     return 1
 
 
+def _watch_sig(d: Path):
+    sig = []
+    for f in ("plugin.py", "plugin.json"):
+        p = d / f
+        sig.append(p.stat().st_mtime if p.exists() else 0.0)
+    return tuple(sig)
+
+
+def _dev_pass(path: str, brain_url: str, tok: str) -> None:
+    from dreamlayer.sdk import validate, KNOWN_CAPABILITIES
+    try:
+        pkg = _load_package(path)
+    except Exception as e:
+        _p(f"  {BAD} {e}")
+        return
+    report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES))
+    if not report.ok:
+        for e in report.errors:
+            _p(f"  {BAD} {e}")
+        return
+    _p(f"  {OK} {pkg.manifest.name} v{pkg.manifest.version} — gate green"
+       + (f" ({len(report.warnings)} warning(s))" if report.warnings else ""))
+    if brain_url:
+        body = {"manifest": pkg.manifest.to_dict(), "source": pkg.source,
+                "grant": list(pkg.manifest.requires)}
+        resp = _request(brain_url + "/dreamlayer/plugins/install", tok, body)
+        if resp.get("ok"):
+            _p(f"  {OK} reloaded on {brain_url}")
+        else:
+            why = resp.get("error") or (resp.get("errors") or ["reload failed"])[0]
+            _p(f"  {BAD} reload failed: {why}")
+
+
+def cmd_dev(args) -> int:
+    d = Path(args.path)
+    if not d.is_dir():
+        _err(f"{BAD} dev watches a plugin directory: {args.path}")
+        return 2
+    url, tok = _brain(args)
+    dest = f" → {url}" if url else ""
+    _p(f"{ARROW} watching {d}{dest} — edit plugin.py / plugin.json (Ctrl-C to stop)")
+    _dev_pass(str(d), url, tok)               # initial pass
+    if args.once:
+        return 0
+    import time
+    last = _watch_sig(d)
+    try:
+        while True:
+            time.sleep(max(0.2, args.interval))
+            sig = _watch_sig(d)
+            if sig != last:
+                last = sig
+                _p(f"{ARROW} change detected — re-checking")
+                _dev_pass(str(d), url, tok)
+    except KeyboardInterrupt:
+        _p("\nstopped.")
+    return 0
+
+
 def cmd_list(args) -> int:
+    if getattr(args, "entry_points", False):
+        from dreamlayer.sdk import discover
+        found = discover()
+        if not found:
+            _p(f"no entry-point plugins found (declare "
+               f'[project.entry-points."dreamlayer.plugins"] in a plugin package)')
+            return 0
+        for d in found:
+            _p(f"  {d.name}  → {d.value}" + (f"  ({d.dist} {d.version})" if d.dist else ""))
+        return 0
     url, tok = _brain(args)
     if args.installed and not url:
         _err(f"{BAD} --installed needs a Brain — pass --brain URL or set DREAMLAYER_BRAIN")
@@ -350,8 +421,18 @@ def build_parser() -> argparse.ArgumentParser:
     inst.add_argument("--token", help="Brain token (or set DREAMLAYER_TOKEN)")
     inst.set_defaults(func=cmd_install)
 
+    dev = sub.add_parser("dev", help="watch a plugin and re-check (+ reload) on every save")
+    dev.add_argument("path", nargs="?", default=".", help="plugin directory (default: .)")
+    dev.add_argument("--brain", help="reinstall to this Brain on each change")
+    dev.add_argument("--token", help="Brain token (or set DREAMLAYER_TOKEN)")
+    dev.add_argument("--interval", type=float, default=1.0, help="poll seconds (default: 1.0)")
+    dev.add_argument("--once", action="store_true", help="run a single pass and exit")
+    dev.set_defaults(func=cmd_dev)
+
     ls = sub.add_parser("list", help="list the registry catalogue or a Brain's installed plugins")
     ls.add_argument("--installed", action="store_true", help="list what a Brain is running")
+    ls.add_argument("--entry-points", dest="entry_points", action="store_true",
+                    help="list plugins advertised via importlib entry points")
     ls.add_argument("--brain", help="Brain base URL (or set DREAMLAYER_BRAIN)")
     ls.add_argument("--token", help="Brain token (or set DREAMLAYER_TOKEN)")
     ls.add_argument("--registry", help="path to a registry index.json")
