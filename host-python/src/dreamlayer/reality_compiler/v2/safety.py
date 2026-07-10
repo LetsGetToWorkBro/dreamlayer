@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from .budgets import verify
 from .figment import (EMIT_REFILL_PER_S, MAX_LINES, MAX_PULSE_HZ, Figment)
+from .impersonation import voice_report
 
 
 def safety_card(fig: Figment) -> dict:
@@ -26,11 +27,15 @@ def safety_card(fig: Figment) -> dict:
         "figment",
     ]
     will = [f"run {rep.scene_count} scene(s), each held at least half a second"]
+    # voice: the sandbox bounds physics, not meaning. Disclose whether this is
+    # third-party content and whether its text borrows system/safety authority.
+    voice = voice_report(fig)
     return {
         "ok": rep.ok,
         "violations": [str(v) for v in rep.violations],
         "cannot": cannot,
         "will": will,
+        "voice": voice,
         "proof": {
             "scenes": rep.scene_count,
             "worst_display_hz": rep.worst_display_hz,
@@ -49,5 +54,13 @@ def render_text(card: dict) -> str:
     out += [f"    • {c}" for c in card["cannot"]]
     out.append("This behavior WILL:")
     out += [f"    • {w}" for w in card["will"]]
+    voice = card.get("voice") or {}
+    if voice.get("shared"):
+        out.append("Voice: third-party content, marked with a provenance glyph "
+                   "(the sandbox proves physics; provenance proves voice).")
+    if voice.get("flagged"):
+        out.append("⚠ Its text imitates system messages "
+                   f"({', '.join(voice['categories'])}) — this is NOT the system:")
+        out += [f"    ! {f}" for f in voice["impersonation"]]
     out.append("(Your device re-checked this proof — it is not a promise.)")
     return "\n".join(out)
