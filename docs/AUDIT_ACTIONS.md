@@ -94,3 +94,51 @@ needs the physical embedder:
 - [ ] with the real on-device face embedder: ROC over genuine/impostor
       pairs, set the Social-Lens threshold + margin from data, and add the
       fixed-photo-set recognition regression to CI
+
+## 8. Innovation-program owner actions (INNOVATION_SESSION.md)
+
+The 2026-07 innovation pass shipped every code-reachable idea (tracked in
+`INNOVATION_BUILD.md`). These five are the residue — genuinely blocked on
+hardware, a training run, an account, or a decision a terminal can't make.
+Each notes the code half already in the tree.
+
+### 8.1 NPU: a day-one model for the Ethos-U55 (Cat 8 #3, 1.4)
+The 46-GOPS NPU is at 0% utilization; `ai_brain/perception.py: NpuPerceptor`
+answers with heuristics, and there is no `.tflite`, no Vela pipeline, no
+candidate zoo. The software perception bench (`test_perception_bench.py`) and
+the "350ms Club" seam ship; the model does not.
+- [ ] commit a `models/` directory with a quantization recipe and one
+      candidate model, so day-one silicon has a day-one model
+- [ ] wire the Vela compile step (needs the vendor toolchain + real silicon)
+
+### 8.2 WASM tier: an operator-provided runtime (3.4)
+`plugins/wasm_host.py` is wired as the strongest jail — capability→WASI grant
+mapping and tier selection are tested; the store falls back to the OS-sandboxed
+subprocess tier until a runtime exists. End-to-end WASM execution is blocked on:
+- [ ] an operator-provided `wasmtime` + a `python.wasm` guest with dreamlayer
+      bundled (not shippable from this container)
+
+### 8.3 Wake word: brand + a trained model (Cat 8 #8)
+Docs/pitch and `orchestrator/wakeword.py` (openWakeWord) must agree on the
+phrase. The engine + text-level fallback ship; the custom acoustic model does
+not.
+- [ ] decide the brand wake phrase
+- [ ] train a custom openWakeWord model (synthetic-TTS positives + community
+      recordings) — a weekend of compute, not a rewrite
+
+### 8.4 GhostMode: publish the mesh protocol spec (the coda)
+Pillar 2 (`docs/PLATFORM.md`: LE Coded PHY, S=8, ~125 kbps, the Beacon). The
+`MeshManager`/`Beacon` seams sit in Confluence and the figment `bond:` events
+now exist (B10), but a radio mesh cannot be demoed in a rasterizer.
+- [ ] write and publish the mesh transport spec *now* — as openly as the
+      figment grammar (buildable today; the doc is the deliverable)
+- [ ] the mesh itself lights up only with silicon on the desk
+
+### 8.5 ESP32 physical-events kit (1.6)
+The figment event grammar accepts `ble:<n>` exits; a `$6 reed switch → your
+retina` demo needs the two physical halves. The host injection route is a small
+code addition (a follow-on, not blocked); the rest is hardware.
+- [ ] a 30-line MicroPython sketch (ESP32 + reed switch/thermistor) under
+      `examples/esp32/`
+- [ ] (code-half, optional) a `POST /dreamlayer/event/ble/<n>` Brain route that
+      forwards to the active figment — buildable now if wanted

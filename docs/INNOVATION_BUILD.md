@@ -38,11 +38,11 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | D2 | Nod to Remember: wire host + sim, boot flag OFF (2.1) | **DONE** | `halo-lua/main.lua` + `orchestrator/ops_ingest.py` + `reality_compiler/v2/figment.py` | ✅ D2a host pin path + `imu:<gesture>` grammar; ✅ D2b main.lua boot-flag classifier (default OFF) + accel feed, lupa device test injects a synthetic nod → `imu_gesture` envelope. 8 gesture tests; full suite 1982 green |
 | D3 | **Answer-ahead default** — flip `copilot_on`? (2.5) | DECIDE | `orchestrator/answer_ahead.py` | stays off by default unless told |
 | D4 | Overnight Self nightly LoRA (2.2) | DECIDE→BUILD | `rem/nightly_mlx.py` | build the eval gate FIRST (see 2.2 caution) |
-| O1 | NPU: `.tflite` + Vela recipe + candidate zoo (C8#3, 1.4 tail) | OWNER | new `models/` + `AUDIT_ACTIONS.md` | register recipe, no silicon |
-| O2 | Live WASM e2e (needs wasmtime + python.wasm) (3.4) | OWNER | `plugins/wasm_host.py` | seam done; runtime is operator's |
-| O3 | Custom wake-word model for the chosen brand phrase (C8#8) | OWNER | `orchestrator/wakeword.py` | brand decision + training run |
-| O4 | GhostMode radio mesh (coda) | OWNER | publish protocol spec now; build on silicon | spec is the buildable half |
-| O5 | ESP32 physical-events kit sketch (1.6) | OWNER-ish | `examples/esp32/` sketch + one host route | sketch is owner hardware; host route is BUILD |
+| O1 | NPU: `.tflite` + Vela recipe + candidate zoo (C8#3, 1.4 tail) | **REGISTERED** | new `models/` + `AUDIT_ACTIONS.md` | register recipe, no silicon |
+| O2 | Live WASM e2e (needs wasmtime + python.wasm) (3.4) | **REGISTERED** | `plugins/wasm_host.py` | seam done; runtime is operator's |
+| O3 | Custom wake-word model for the chosen brand phrase (C8#8) | **REGISTERED** | `orchestrator/wakeword.py` | brand decision + training run |
+| O4 | GhostMode radio mesh (coda) | **REGISTERED** | publish protocol spec now; build on silicon | spec is the buildable half |
+| O5 | ESP32 physical-events kit sketch (1.6) | **REGISTERED** | `examples/esp32/` sketch + one host route | sketch is owner hardware; host route is BUILD |
 | V1 | Proof-carrying / signing / isolation tiers (3.2, 3.4) | DONE | `plugins/*`, this session's SDK arc | verify only |
 
 Categories 4 (lenses), 7 (demos), and the Top-5 are **specs/narratives**, not build items — they compose the BUILD rows above. They stay in `INNOVATION_SESSION.md` as the design source.
