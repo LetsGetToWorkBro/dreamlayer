@@ -12,7 +12,7 @@ It runs on your own devices, works without the internet, and goes fully deaf
 and blind with one press of a button. Privacy is not a setting here; it is
 how the thing is built.
 
-![The whole product in ninety seconds — real footage of the actual interface](assets/demo/catalog/master/preview.gif)
+![The whole product in ninety seconds — the real interface, over an illustrative world](assets/demo/catalog/master/preview.gif)
 
 ## Read this book two ways
 
@@ -39,9 +39,12 @@ all four runtimes. Start at [Ecosystem architecture](architecture.md).
 This book holds itself to the product's own standard — its flagship feature
 is a fact-checker, after all:
 
-1. **Everything shown is real.** Every image and animation was produced by
-   the product's own software — the actual renderer, the actual apps.
-   Nothing is a mockup.
+1. **The interface is always real.** Every HUD card, overlay, and app screen
+   is produced by the product's own software — the actual renderer, the actual
+   apps; nothing about the interface is a mockup. The dim, blurred environments
+   now shown *behind* the glass are illustrative — the kind of moment a card
+   appears in — exactly as on the website and simulator, where the interface is
+   real and the world behind it is a stand-in.
 2. **Built versus pending is always labeled.** DreamLayer is pre-hardware:
    the software is complete and tested (1,909 passing tests), and the places
    where physical hardware plugs in are called out honestly wherever they
