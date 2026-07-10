@@ -198,6 +198,9 @@ class Transition:
     counter_ops: list[CounterOp] = field(default_factory=list)
     emit: Optional[str] = None                   # short tag sent to host
     when: Optional[Guard] = None                 # only for timeout branches
+    record: bool = False                         # 5.1 #5: also log this emit to
+                                                 # the Vault performance log — data
+                                                 # you keep (batch/rep/med logs)
 
     def to_dict(self) -> dict:
         d: dict = {"target": self.target}
@@ -205,6 +208,8 @@ class Transition:
             d["counter_ops"] = [o.to_dict() for o in self.counter_ops]
         if self.emit is not None:
             d["emit"] = self.emit
+        if self.record:
+            d["record"] = True
         if self.when is not None:
             d["when"] = self.when.to_dict()
         return d
@@ -216,6 +221,7 @@ class Transition:
             [CounterOp.from_dict(o) for o in d.get("counter_ops", [])],
             d.get("emit"),
             Guard.from_dict(d["when"]) if d.get("when") else None,
+            record=bool(d.get("record", False)),
         )
 
 

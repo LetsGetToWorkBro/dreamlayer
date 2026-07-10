@@ -63,6 +63,7 @@ class Stage:
             n: c.start for n, c in fig.counters.items()}
         self.slot: str = ""              # host-pushed text ("text" event)
         self.emits: list[tuple[float, str]] = []   # (t, tag) delivered
+        self.recorded: list[tuple[float, str]] = []  # (t, tag) flagged record=True
         self.dropped_emits: int = 0      # clamped by token bucket
         self.ended = False
         self.clock = 0.0
@@ -157,6 +158,10 @@ class Stage:
             if self._tokens >= 1.0:
                 self._tokens -= 1.0
                 self.emits.append((self.clock, t.emit))
+                # 5.1 #5 ledger emits: a recorded emit is data you keep — the
+                # deployer drains `recorded` into the Vault performance log.
+                if t.record:
+                    self.recorded.append((self.clock, t.emit))
             else:
                 self.dropped_emits += 1
         if t.target == END:
@@ -241,3 +246,15 @@ class Stage:
     def revoke(self) -> None:
         """Stop and clear; the stage returns to ambient ready."""
         self.ended = True
+
+
+def log_recorded(stage: "Stage", vault, figment_id: str) -> int:
+    """Drain a stage's recorded emits (transitions flagged ``record: true``, 5.1
+    #5) into the Vault performance log — turning a figment into an instrument that
+    produces *data you keep* (batch logs, rep history, medication-taken marks).
+    Returns how many lines were written; leaves the stage's buffer empty."""
+    for ts, tag in stage.recorded:
+        vault.record_performance(figment_id, {"emit": tag, "at": ts})
+    n = len(stage.recorded)
+    stage.recorded = []
+    return n
