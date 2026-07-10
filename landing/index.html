@@ -232,6 +232,7 @@ section{position:relative}
 .bar{position:fixed;inset:0 0 auto 0;z-index:50;display:flex;align-items:center;
   justify-content:space-between;padding:14px var(--gutter);
   opacity:0;transform:translateY(-10px);pointer-events:none;
+  will-change:opacity,transform;
   transition:opacity var(--base) var(--ease),transform var(--base) var(--ease)}
 .bar.on{opacity:1;transform:none;pointer-events:auto}
 .bar::before{content:"";position:absolute;inset:0;z-index:-1;
@@ -1620,13 +1621,20 @@ function hydrate(p){
   });
   v.load();
 }
-var io = new IntersectionObserver(function(entries){
+// Two observers instead of one, so the expensive half never lands mid-scroll:
+//  - warmIO hydrates (fetch + load + decoder init) a full screen early, and only
+//    after the page has loaded and gone idle — the first below-fold plate warms
+//    while the visitor is still reading the hero, not while they scroll past it.
+//  - playIO starts/stops playback at true visibility; pausing at 15% (not 200px
+//    past) means the hero's video and the next section's never decode together
+//    at the boundary — that overlap was the last source of the scroll hitch.
+var playIO = new IntersectionObserver(function(entries){
   entries.forEach(function(e){
     var p = e.target, v = p.querySelector("video");
     if(e.isIntersecting){
       p.classList.add("in");
       if(!reduced && v){
-        hydrate(p);
+        hydrate(p);                                  // safety if warm hasn't run
         var pr = v.play();
         if(pr && pr.catch) pr.catch(function(){});
       }
@@ -1634,8 +1642,22 @@ var io = new IntersectionObserver(function(entries){
       v.pause();
     }
   });
-}, {rootMargin:"200px 0px", threshold:0.01});
-plates.forEach(function(p){ io.observe(p); });
+}, {threshold:0.15});
+plates.forEach(function(p){ playIO.observe(p); });
+if(!reduced){
+  var warm = function(){
+    var warmIO = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(!e.isIntersecting) return;
+        hydrate(e.target); warmIO.unobserve(e.target);
+      });
+    }, {rootMargin:"1200px 0px"});
+    plates.forEach(function(p){ warmIO.observe(p); });
+  };
+  var idle = window.requestIdleCallback || function(f){ setTimeout(f, 350); };
+  if(document.readyState === "complete") idle(warm);
+  else addEventListener("load", function(){ idle(warm); }, {once:true});
+}
 })();
 </script>
 <script>
