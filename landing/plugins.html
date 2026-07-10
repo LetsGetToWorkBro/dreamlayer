@@ -66,6 +66,8 @@
   .card h3{margin:0;font-size:18px;letter-spacing:-.01em}
   .card .by{color:var(--text-3);font-size:13px;font-family:var(--mono)}
   .featured-dot{margin-left:6px;color:var(--teal);font-size:11px;vertical-align:middle}
+  .official-badge{margin-left:6px;color:var(--teal);font-size:11px;font-weight:700;vertical-align:middle}
+  .official-note{color:var(--text-3);font-size:12px;font-style:italic;margin-top:2px}
   .card .desc{color:var(--text-2);font-size:14.5px;margin:14px 0 16px;flex:1}
   .meta{display:flex;gap:16px;align-items:center;color:var(--text-2);font-size:13px;font-family:var(--mono)}
   .meta .stars{color:var(--teal)}
@@ -170,7 +172,7 @@
 // snapshot and refreshes from the live index when reachable.
 const SNAPSHOT = {
   "plugins": [
-    { "name":"face-synth","version":"0.1.0","author":"dreamlayer",
+    { "name":"face-synth","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "requires":["midi"],"tags":["music","creative","mesh","featured"],
@@ -181,7 +183,7 @@ const SNAPSHOT = {
         "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
         "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
-    { "name":"open-food-facts","version":"0.1.0","author":"dreamlayer",
+    { "name":"open-food-facts","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
       "requires":["network"],"tags":["shopping","food","connector","tastelens","featured"],
@@ -192,7 +194,7 @@ const SNAPSHOT = {
         "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
         "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
-    { "name":"currency-converter","version":"0.1.0","author":"dreamlayer",
+    { "name":"currency-converter","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"Look at a foreign price tag and see it in your own money — live rates, right on the panel.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
       "requires":["object_lens","network"],"tags":["travel","shopping","utility","connector"],
@@ -203,7 +205,7 @@ const SNAPSHOT = {
         "It converts with live exchange rates (free, no account) and shows the rate it used, so you always know what you’re really paying.",
         "Private by design: only the number and its currency are looked up — never where you are or what you bought."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
-    { "name":"hud-reactions","version":"0.1.0","author":"dreamlayer",
+    { "name":"hud-reactions","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"Throw 🎉 👏 ❤️ 🔥 onto your HUD — and everyone in your GhostMode circle sees it too.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
       "requires":["cards","mesh"],"tags":["social","fun","mesh"],
@@ -214,7 +216,7 @@ const SNAPSHOT = {
         "Only the tiny symbol crosses the mesh, signed and small — never who you are or where you’re standing. It rides the same “only feeling travels” rule as the rest of GhostMode.",
         "Great for concerts, watch parties, and inside jokes with the people next to you."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
-    { "name":"filler-word-counter","version":"0.1.0","author":"dreamlayer",
+    { "name":"filler-word-counter","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"A quiet coach that tallies your “um / like / you know” as you speak.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
       "requires":["perception","cards"],"tags":["coaching","speaking","productivity"],
@@ -225,7 +227,7 @@ const SNAPSHOT = {
         "It knows the usual suspects — um, uh, like, you know, basically — and tracks a rough per-sentence rate as you go.",
         "Nothing is recorded or sent anywhere; the tally lives on your glasses and resets when you’re done."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
-    { "name":"air-drums","version":"0.1.0","author":"dreamlayer",
+    { "name":"air-drums","version":"0.1.0","author":"DreamLayer Team","official":true,
       "description":"Play a drum kit in the air — head-nods and taps fire real MIDI drums.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
       "requires":["midi"],"tags":["music","creative","midi"],
@@ -287,7 +289,7 @@ function render(){
     return `<div class="card" data-name="${esc(p.name)}">
       <div class="top">
         <div class="icon">${esc(initial)}</div>
-        <div><h3>${esc(p.name)}${feat}</h3><div class="by">v${esc(p.version)} · ${esc(p.author||"community")}</div></div>
+        <div><h3>${esc(p.name)}${feat}</h3><div class="by">v${esc(p.version)} · ${esc(p.author||"community")}${p.official?'<span class="official-badge">✓ Official</span>':""}</div></div>
       </div>
       <div class="desc">${esc(p.description)}</div>
       <div class="meta"><span>${dl}</span><span>${rating}</span></div>
@@ -350,7 +352,8 @@ function openDetail(name){
     ${shot}
     <div class="modal-body">
       <h2>${esc(p.name)}</h2>
-      <div class="mby">v${esc(p.version)} · ${esc(p.author||"community")}</div>
+      <div class="mby">v${esc(p.version)} · ${esc(p.author||"community")}${p.official?'<span class="official-badge">✓ Official</span>':""}</div>
+      ${p.official?'<div class="official-note">Built and maintained by the DreamLayer team.</div>':""}
       <div class="mlong">${long}</div>
       ${p.forwho?`<div class="msec">Who it’s for</div><p class="forwho">${esc(p.forwho)}</p>`:""}
       <div class="msec">Permissions it asks for</div>${permHtml}
