@@ -66,9 +66,38 @@ Every screen composes from a shared primitive layer (`Screen`, `Card`,
 `Tappable`, motion hooks). Read **[DESIGN.md](DESIGN.md)** before adding UI so
 the app stays one cohesive, tactile surface.
 
-## Type-check
+## Type-check & test
 
 ```bash
 npm install
 npx tsc --noEmit
+npm test            # two jest projects: "logic" (ts-jest) + "component" (jest-expo/RNTL)
 ```
+
+## The glasses BLE link (dev build only)
+
+The whole BLE stack — framing (`src/ble/framing.ts`, byte-parity with the
+Python wire protocol), the reconnecting `HaloBridge` (`src/ble/bridge.ts`), and
+`useGlassesStore` — is pure TypeScript over an injected transport, so it
+unit-tests today and **Expo Go keeps working** (no transport attached → the demo
+Halo pairs as before).
+
+To drive a real Halo you need a native module, which means leaving Expo Go:
+
+```bash
+npx expo install react-native-ble-plx
+# add to app.json:  "plugins": [["react-native-ble-plx", { "isBackgroundEnabled": true }]]
+eas build --profile development --platform ios   # a dev client; Expo Go can't load native modules
+```
+
+Then attach the transport once at startup:
+
+```ts
+import { makeBlePlxTransport } from "./src/ble/transport.blePlx";
+import { useGlassesStore } from "./src/state/useGlassesStore";
+useGlassesStore.getState().attachTransport(makeBlePlxTransport());
+```
+
+The service/characteristic UUIDs in `transport.blePlx.ts` are placeholders —
+fill them from the first bench-Halo session (the one thing that can't be known
+without the device on a desk).

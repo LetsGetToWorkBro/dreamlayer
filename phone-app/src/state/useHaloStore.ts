@@ -9,6 +9,7 @@
  */
 import { useBrainStore } from "./useBrainStore";
 import { useMemoryStore } from "./useMemoryStore";
+import { useGlassesStore } from "./useGlassesStore";
 
 export function useHaloStore() {
   const glasses = useBrainStore((s) => s.glasses);
@@ -23,8 +24,13 @@ export function useHaloStore() {
     service,
     togglePause: () => setCapturePaused(!capturePaused),
     connect: async () => {
-      // real build: scan + BLE handshake. Here we mark the demo Halo paired.
-      connectGlasses(glasses.id || "HALO-DEMO");
+      // A dev build attaches a real BLE transport to useGlassesStore; when one
+      // exists we scan + handshake over it and record the real device id.
+      // Without a transport (Expo Go / tests) we mark the demo Halo paired, so
+      // every existing flow is unchanged.
+      const gs = useGlassesStore.getState();
+      const id = gs.bridge ? await gs.connect() : null;
+      connectGlasses(id || glasses.id || "HALO-DEMO");
     },
   };
 }

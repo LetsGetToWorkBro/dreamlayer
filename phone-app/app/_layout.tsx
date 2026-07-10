@@ -81,6 +81,10 @@ export default function Layout() {
         options={{ title: t("tabs.now"), tabBarIcon: ({ color }) => <TabIcon name="now" color={color} /> }}
       />
       <Tabs.Screen
+        name="look"
+        options={{ title: t("tabs.look"), tabBarIcon: ({ color }) => <TabIcon name="look" color={color} /> }}
+      />
+      <Tabs.Screen
         name="messages"
         options={{ title: t("tabs.messages"), tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} /> }}
       />
@@ -104,7 +108,6 @@ export default function Layout() {
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="confluence" options={{ href: null }} />
-      <Tabs.Screen name="look" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null, ...noBar }} />
       <Tabs.Screen name="index" options={{ href: null, ...noBar }} />
     </Tabs>

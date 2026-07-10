@@ -37,6 +37,12 @@ export function TabIcon({ name, color, size = 23 }: { name: string; color: strin
           <Circle cx={9} cy={16} r={2.3} {...p} />
         </>
       )}
+      {name === "look" && (
+        <>
+          <Circle cx={12} cy={12} r={3.2} {...p} />
+          <Path d="M3 12a9 6 0 0 1 18 0a9 6 0 0 1-18 0z" {...p} />
+        </>
+      )}
     </Svg>
   );
 }
