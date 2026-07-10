@@ -1,6 +1,6 @@
 """test_social_note.py — "jot a note about a person, on the spot."
 
-    "Oracle, remember Maya's into rock climbing"
+    "Juno, remember Maya's into rock climbing"
         → appended to Maya's contact → shown the next time you see her.
 
 Covers the grammar (note_person intent), the note store (append/dedupe/cap +
@@ -36,7 +36,7 @@ def _contact(cid="maya", name="Maya", v=0.8, **kw):
 # -- grammar ------------------------------------------------------------------
 
 def test_note_by_name():
-    it = parse_intent("Hey Oracle, remember Maya's into rock climbing")
+    it = parse_intent("Hey Juno, remember Maya's into rock climbing")
     assert it.kind == "note_person"
     assert it.args["who"] == "Maya" and it.args["note"] == "into rock climbing"
 
@@ -133,7 +133,7 @@ def _orc_with_maya():
 
 def test_orchestrator_note_by_name():
     orc = _orc_with_maya()
-    r = orc.handle_voice("Hey Oracle, remember Maya loves oat milk")
+    r = orc.handle_voice("Hey Juno, remember Maya loves oat milk")
     assert r["intent"] == "note_person" and r["ok"] is True
     assert r["who"] == "Maya" and "oat milk" in orc.social._enricher.get_notes("maya")
 
@@ -192,7 +192,7 @@ def test_third_party_intro_creates_contact_with_relationship_note():
 # -- meet someone on the spot -------------------------------------------------
 
 def test_meet_person_grammar():
-    it = parse_intent("Hey Oracle, this is my colleague Sarah, she runs marketing")
+    it = parse_intent("Hey Juno, this is my colleague Sarah, she runs marketing")
     assert it.kind == "meet_person"
     assert it.args["who"] == "Sarah" and it.args["relation"] == "colleague"
     assert it.args["note"] == "she runs marketing"

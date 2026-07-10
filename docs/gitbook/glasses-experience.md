@@ -96,7 +96,7 @@ repo they are exercised by tests feeding synthetic accelerometer traces.
 ## Sound and touch
 
 Every significant moment has a matched earcon and haptic, chosen host-side and
-carried on the card payload: the wake chirp when Oracle starts listening, the
+carried on the card payload: the wake chirp when Juno starts listening, the
 "Listen!" and "Watch out!" hark tones, the look cue when a dossier surfaces,
 the neutral chime on a verified claim. Answer-ahead is deliberately silent —
 its whole point is not to interrupt. The full map, including the audio files

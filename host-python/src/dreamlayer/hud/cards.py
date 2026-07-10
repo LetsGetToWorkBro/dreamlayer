@@ -380,7 +380,7 @@ def spoken_caption(speaker: str = "", text: str = "") -> dict:
 
 
 def hark(clue: str = "", detail: str = "", importance: str = "normal") -> dict:
-    """Oracle taps you on the shoulder — Navi's "Listen!" A short, distinct
+    """Juno taps you on the shoulder — Navi's "Listen!" A short, distinct
     attention cue (its own earcon, a flashing ring) followed by the one thing
     it wants you to hear. `importance="urgent"` pierces Focus mode. Fades on its
     own so it never blocks the view."""
@@ -412,23 +412,23 @@ def hark(clue: str = "", detail: str = "", importance: str = "normal") -> dict:
 
 
 def listening(source: str = "voice", earcon: bool = True, haptic: bool = True) -> dict:
-    """Oracle is listening — the reassurance cue the moment it wakes. A soft
+    """Juno is listening — the reassurance cue the moment it wakes. A soft
     ring/glow in the display, plus (device seams) a short earcon and a haptic
     tick so you know it heard you without staring at the HUD. Stays until the
     command lands (dismiss_ms=0)."""
-    how = {"voice": "Hey Oracle", "tap": "tap", "gaze": "look",
+    how = {"voice": "Hey Juno", "tap": "tap", "gaze": "look",
            "raise": "raise", "gesture": "gesture"}.get(source, source)
     return {
         "type":       "ListeningCard",
         "dismiss_ms": 0,
         "primary":    "Listening…",
-        "eyebrow":    "ORACLE",
+        "eyebrow":    "JUNO",
         "detail":     f"woke by {how}",
         "source":     source,
         "earcon":     "wake" if earcon else "",     # runtime plays a chime
         "haptic":     "tick" if haptic else "",     # runtime buzzes once
         "pulse":      True,                          # renderer animates the ring
-        "lines":      ["ORACLE", "Listening…"],
+        "lines":      ["JUNO", "Listening…"],
         "layout": {
             "ring":      {"x": 128, "y": 110, "r": 30, "color": T.ACCENT_MEMORY, "pulse": True},
             "eyebrow":   {"x": 128, "y": 156, "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
@@ -438,17 +438,17 @@ def listening(source: str = "voice", earcon: bool = True, haptic: bool = True) -
     }
 
 
-def oracle_reply(text: str = "", kind: str = "answer") -> dict:
-    """Oracle's response, as text on the glasses (a real voice is a later seam).
+def juno_reply(text: str = "", kind: str = "answer") -> dict:
+    """Juno's response, as text on the glasses (a real voice is a later seam).
     Used for both answers and the little confirmations when it does something."""
     body = (text or "").strip()
     return {
-        "type":       "OracleReplyCard",
+        "type":       "JunoReplyCard",
         "dismiss_ms": 6000,
         "kind":       kind,               # "answer" | "action"
         "primary":    body,
-        "eyebrow":    "ORACLE",
-        "lines":      ["ORACLE", body],
+        "eyebrow":    "JUNO",
+        "lines":      ["JUNO", body],
         "layout": {
             "eyebrow":   {"x": 128, "y": 66,  "size": "sm", "color": T.ACCENT_MEMORY, "tracking": 3},
             "separator": {"x1": 48, "x2": 208, "y": 82},
@@ -1045,7 +1045,7 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
-    "oracle_reply":        oracle_reply("The lease is in your Documents — due Friday.", "answer"),
+    "juno_reply":        juno_reply("The lease is in your Documents — due Friday.", "answer"),
     "hark":                hark(clue="Marcus is 2 min away — you owe him the lease.",
                                 detail="from your last chat"),
     "listening":           listening(source="voice"),

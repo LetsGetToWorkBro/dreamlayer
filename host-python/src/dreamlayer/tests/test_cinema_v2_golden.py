@@ -74,7 +74,7 @@ DETERMINISTIC = [
     # O3 conversation cards (standards pass on #86)
     "solid/fact_check_hold.png",
     "solid/answer_ahead_hold.png",
-    "solid/oracle_reply_hold.png",
+    "solid/juno_reply_hold.png",
     "solid/hark_hold.png",
     # World lenses (standards pass on #106/#108/#116)
     "solid/scholar_answer_hold.png",

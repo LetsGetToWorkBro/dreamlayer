@@ -22,7 +22,7 @@ at 300, and so on) up to **level 30**. Seven ranks mark the arc:
 | 3 | Dreamer |
 | 6 | Lucid |
 | 10 | Seer |
-| 15 | Oracle |
+| 15 | Juno |
 | 21 | Luminary |
 | 28 | Architect of Memory |
 
@@ -34,7 +34,7 @@ level milestones.
 
 ### Milestones — reaching a level
 
-First Light (2), Waking (5), Lucid (10), Farsight (15), Oracle's Eye (20),
+First Light (2), Waking (5), Lucid (10), Farsight (15), Juno's Eye (20),
 Luminous (25), Architect of Memory (30).
 
 ### Quests — the Commitment Drift game
@@ -55,7 +55,7 @@ Badges: **Keeper** (first quest, 80 XP), **From the Brink** (first rescue,
 | Second Mind | connecting a Mac mini | `mac` |
 | Reach Beyond | first cloud answer | `cloud` |
 | Veiled | first incognito session | `incognito` |
-| Hey Oracle | first voice wake | `oracle_wake` |
+| Hey Juno | first voice wake | `juno_wake` |
 | Face to Name | first dossier | `dossier` |
 | Total Recall | first recall answered | `recall` |
 | Dawn | first morning brief | `brief` |

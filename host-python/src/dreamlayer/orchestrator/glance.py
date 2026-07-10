@@ -79,7 +79,7 @@ class GlanceContext:
 @dataclass
 class LensBid:
     """A candidate lens's bid to own this glance."""
-    lens: str                        # stable key: "scholar_answer", "oracle"…
+    lens: str                        # stable key: "scholar_answer", "juno"…
     label: str                       # human, for the chooser ("Answer this")
     salience: float                  # 0–1, how strongly it applies
     action: str                      # action key the hub maps to a method
@@ -167,16 +167,16 @@ class RosettaCandidate(LensCandidate):
         return None
 
 
-class OracleCandidate(LensCandidate):
-    lens, label = "oracle", "Identify"
+class JunoCandidate(LensCandidate):
+    lens, label = "juno", "Identify"
 
     def bid(self, reading, ctx):
         if reading.scene == "object":
-            return LensBid(self.lens, self.label, 0.75, "oracle",
+            return LensBid(self.lens, self.label, 0.75, "juno",
                            reason="an object is in view")
         if reading.scene in ("text", "screen") and not _q(reading):
             # a weak default so a bare look at text still has a fallback owner
-            return LensBid(self.lens, self.label, 0.32, "oracle",
+            return LensBid(self.lens, self.label, 0.32, "juno",
                            reason="fallback: name what's here")
         return None
 
@@ -206,14 +206,14 @@ class TasteLensCandidate(LensCandidate):
 DEFAULT_CANDIDATES = [
     PersonCandidate(), TasteLensCandidate(), ScholarFormCandidate(),
     ScholarAnswerCandidate(), RosettaCandidate(), ScholarExplainCandidate(),
-    OracleCandidate(),
+    JunoCandidate(),
 ]
 
 # spoken lens hints → the lens key they favour
 INTENT_LENS = {
     "answer": "scholar_answer", "form": "scholar_form",
     "explain": "scholar_explain", "translate": "rosetta",
-    "object": "oracle", "person": "person", "compare": "taste",
+    "object": "juno", "person": "person", "compare": "taste",
 }
 
 

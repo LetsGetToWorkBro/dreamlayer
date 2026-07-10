@@ -1,4 +1,4 @@
-"""test_native_timers.py — the native timer/interval/clock Oracle builds.
+"""test_native_timers.py — the native timer/interval/clock Juno builds.
 
 Two layers: the voice grammar (parse_intent → timer/interval/clock), the
 figment builders (bounded + verified), and the Brain path that turns a spoken
@@ -16,7 +16,7 @@ from dreamlayer.ai_brain.server import Brain
 
 def test_plain_timer_phrasings():
     for text, secs in [
-        ("Hey Oracle, set a timer for five minutes", 300),
+        ("Hey Juno, set a timer for five minutes", 300),
         ("set a timer for 90 seconds", 90),
         ("timer for 2 minutes", 120),
         ("start a 3 minute timer", 180),

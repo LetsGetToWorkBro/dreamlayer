@@ -125,7 +125,7 @@ the reduce frame keeps ≥80% of the full frame's light).
 - 2026-07-03 — Initial Solid pass (typography, materials, five
   recompositions, material pass, richness/stillness contracts).
 - 2026-07-03 — O3 conversation cards (FactCheck / AnswerAhead /
-  OracleReply / Hark) brought onto the device: renderer.lua draw fns with
+  JunoReply / Hark) brought onto the device: renderer.lua draw fns with
   the material bed (glass pane, gradient separators, bloomed status cue),
   hero-class wrapped type, dim-twin secondary; Lumen spring-in + a
   reduce-gated idle breathe on the Listen!/verdict ring. Routed through

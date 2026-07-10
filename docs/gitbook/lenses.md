@@ -12,11 +12,11 @@ Palette Cycling).
 | **Memory** | your life, remembered | Dream Mode, Ghost Layer, Lucid Recall, REM, Yesterlight, Premonition, Waypath |
 | **People** | who is around you | Social Lens, Timbre, Name Capture |
 | **Truth** | what is true and where beliefs come from | Truth Lens, Candor, Provenance |
-| **World** | understand what you look at | Oracle (look-to-know), Label Lens, AI Brain, Rosetta, Puente |
+| **World** | understand what you look at | Juno (look-to-know), Label Lens, AI Brain, Rosetta, Puente |
 | **Life** | do, keep, and build | Commitment Drift, Saga, Reality Compiler |
 | **Together** | two wearers, one sky | Confluence |
 
-The core lenses have their own chapters ([Oracle](oracle.md),
+The core lenses have their own chapters ([Juno](juno.md),
 [Perception and memory](perception-memory.md), [Truth](truth.md),
 [Saga](progression.md), [Privacy](privacy.md)). This chapter covers the rest
 of the set — each fully wired into the orchestrator, each with a design spec
@@ -72,11 +72,11 @@ real), hardening the model when a predicted event lands.
 
 - **Scholar** (`orchestrator/scholar.py`) — read the question and answer
   it, spell out a form's fields, or put dense text in plain words; and
-  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice oracle
+  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice juno
   with hard dietary vetoes and plugin data connectors. Both routed by the
   Glance Arbiter or voice; full chapter:
   [Scholar and TasteLens](world-lenses.md).
-- **Object Lens / Oracle-look** (`object_lens/`, specs `docs/OBJECT_LENS.md`)
+- **Object Lens / Juno-look** (`object_lens/`, specs `docs/OBJECT_LENS.md`)
   — `look_at_object(frame, facet=None|"own"|"ai"|"shop")` builds a
   contextual panel for the thing in view. Providers plug in per domain
   (an AI provider backed by the tiered brain, a label provider, Rosetta for
@@ -123,9 +123,9 @@ real), hardening the model when a predicted event lands.
   and the phone's Rehearsal screen is now **live end to end** — every beat
   round-trips the Brain's `rc/*` endpoints (rehearse, keep, deploy, revoke),
   with deploys recording BLE envelopes until the glasses transport attaches.
-  The Oracle also compiles **native timers, intervals, and a clock** through
+  The Juno also compiles **native timers, intervals, and a clock** through
   the same engine, on the spot, with or without a Brain
-  ([Oracle](oracle.md#3-timers-intervals-and-the-clock--no-brain-required)).
+  ([Juno](juno.md#3-timers-intervals-and-the-clock--no-brain-required)).
   The five recorded sessions under `out/rc_v2/` (round timer, rolling
   rounds, spar night, a refused strobe — the safety path — and hot-swap
   revoke) are its executable spec, alongside `docs/rc_v2/echo.md`,

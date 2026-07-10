@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useBrainStore, OracleProfile } from "../src/state/useBrainStore";
+import { useBrainStore, JunoProfile } from "../src/state/useBrainStore";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
@@ -24,7 +24,7 @@ function Chips({ items, tint }: { items: string[]; tint: string }) {
 export default function Profile() {
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getProfile = useBrainStore((s) => s.getProfile);
-  const [p, setP] = React.useState<OracleProfile | null>(null);
+  const [p, setP] = React.useState<JunoProfile | null>(null);
   const [loaded, setLoaded] = React.useState(false);
 
   React.useEffect(() => {
@@ -47,7 +47,7 @@ export default function Profile() {
   return (
     <Screen>
       <ScreenHeader
-        title="What Oracle knows"
+        title="What Juno knows"
         eyebrow="Your profile"
         subtitle={p && p.observations ? `learned from ${p.observations} of your own lines` : undefined}
       />
@@ -55,16 +55,16 @@ export default function Profile() {
       {!macConnected ? (
         <EmptyState
           title="Connect your Mac mini"
-          hint="Oracle builds your profile on the glasses and mirrors it to your Brain so you can see it here."
+          hint="Juno builds your profile on the glasses and mirrors it to your Brain so you can see it here."
         />
       ) : !loaded ? (
-        <EmptyState title="Loading…" hint="Reading what Oracle has learned." />
+        <EmptyState title="Loading…" hint="Reading what Juno has learned." />
       ) : !p ? (
         <EmptyState title="Couldn’t reach your Brain" hint="Is the Mac mini awake and reachable?" />
       ) : empty ? (
         <EmptyState
           title="Nothing learned yet"
-          hint="As you talk with Oracle on, it learns the topics you return to and remembers what you tell it — “call me Sam”, “I prefer aisle seats”."
+          hint="As you talk with Juno on, it learns the topics you return to and remembers what you tell it — “call me Sam”, “I prefer aisle seats”."
         />
       ) : (
         <>
@@ -105,7 +105,7 @@ export default function Profile() {
           ) : null}
 
           <Text style={[typography.caption, s.footnote]}>
-            Built on-device from your own words — never other people’s, never raw audio. Say “forget that” to Oracle to clear a preference.
+            Built on-device from your own words — never other people’s, never raw audio. Say “forget that” to Juno to clear a preference.
           </Text>
         </>
       )}

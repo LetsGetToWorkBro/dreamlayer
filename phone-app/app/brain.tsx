@@ -338,7 +338,7 @@ export default function Brain() {
 
 const LENSES = [
   { name: "Lucid Recall", blurb: "Your memory, files & mail — ask anything" },
-  { name: "Oracle", blurb: "Look at a thing, know what it is" },
+  { name: "Juno", blurb: "Look at a thing, know what it is" },
   { name: "People", blurb: "Names, faces you chose to remember, what you owe" },
   { name: "Waypath", blurb: "Where you left it, how to get back" },
   { name: "Rosetta & Puente", blurb: "Read and hear the world in your language" },

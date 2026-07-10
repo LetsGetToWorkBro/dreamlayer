@@ -2,7 +2,7 @@
 
 Saga is the game layer over living with the Halo. You climb from **Sleeper** to
 **Architect of Memory** as you keep promises (the quest RPG) *and* explore the
-ecosystem — pairing, syncing, waking Oracle, recalling a face. Every few levels
+ecosystem — pairing, syncing, waking Juno, recalling a face. Every few levels
 is a milestone; every feature has a badge, so the game nudges you to try
 everything.
 
@@ -55,7 +55,7 @@ RANKS = [
     (3,  "Dreamer"),
     (6,  "Lucid"),
     (10, "Seer"),
-    (15, "Oracle"),
+    (15, "Juno"),
     (21, "Luminary"),
     (28, "Architect of Memory"),
 ]
@@ -102,7 +102,7 @@ ACHIEVEMENTS = [
                 "Reach level 10.", "milestone", level=10),
     Achievement("farsight", "Farsight", "You see further than the day.",
                 "Reach level 15.", "milestone", level=15),
-    Achievement("oracles_eye", "Oracle's Eye", "Knowing before asking.",
+    Achievement("junos_eye", "Juno's Eye", "Knowing before asking.",
                 "Reach level 20.", "milestone", level=20),
     Achievement("luminous", "Luminous", "You light the room.",
                 "Reach level 25.", "milestone", level=25),
@@ -128,8 +128,8 @@ ACHIEVEMENTS = [
                 "Turn on the cloud tier.", "explore", 1, 150, "cloud"),
     Achievement("veiled", "Veiled", "Off the record.",
                 "Slip into Incognito once.", "explore", 1, 150, "incognito"),
-    Achievement("hey_oracle", "Hey Oracle", "You spoke; it listened.",
-                "Wake Oracle by voice.", "explore", 1, 150, "oracle_wake"),
+    Achievement("hey_juno", "Hey Juno", "You spoke; it listened.",
+                "Wake Juno by voice.", "explore", 1, 150, "juno_wake"),
     Achievement("face_to_name", "Face to Name", "You know them again.",
                 "Surface a person's dossier.", "explore", 1, 150, "dossier"),
     Achievement("total_recall", "Total Recall", "Your whole mind, searchable.",
@@ -146,8 +146,8 @@ ACHIEVEMENTS = [
                 "Enter Focus mode.", "explore", 1, 150, "focus"),
     Achievement("rewind", "Rewind", "Scrub back through the day.",
                 "Open Rewind.", "explore", 1, 150, "rewind"),
-    Achievement("listen", "Listen", "Oracle tapped your shoulder.",
-                "Get a “Listen!” from Oracle.", "explore", 1, 150, "hark"),
+    Achievement("listen", "Listen", "Juno tapped your shoulder.",
+                "Get a “Listen!” from Juno.", "explore", 1, 150, "hark"),
     Achievement("local_mind", "Local Mind", "Smarts with no cord to the cloud.",
                 "Pull a local model.", "explore", 1, 150, "model"),
     Achievement("the_vault", "The Vault", "Nothing lost.",

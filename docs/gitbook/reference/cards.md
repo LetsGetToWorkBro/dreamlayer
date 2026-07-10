@@ -12,9 +12,9 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | ReadyCard | boot, resume, connect | device | — | — |
 | SavedMemoryCard | scene/conversation kept, nod-to-save | device | 1200 | chime visual, burst |
 | QueryListeningCard | single click / ask | device | on result | live amp waveform |
-| ListeningCard | Oracle wake (any source) | device | 0 | earcon `wake`, haptic tick |
+| ListeningCard | Juno wake (any source) | device | 0 | earcon `wake`, haptic tick |
 | LoadingCard | a tier thinking | device | on result | — |
-| OracleReplyCard | Oracle answer/action | device | 6000 | — |
+| JunoReplyCard | Juno answer/action | device | 6000 | — |
 | ObjectRecallCard | object recall | device | 3500 | conduct flair |
 | CommitmentRecallCard | commitment recall / capture | device | 4000 | — |
 | CommitmentDriftCard | `tick_drift` slippage | device | 4500 | — |

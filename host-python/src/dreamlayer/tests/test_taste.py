@@ -1,4 +1,4 @@
-"""test_taste.py — TasteLens: the real-world choice oracle.
+"""test_taste.py — TasteLens: the real-world choice juno.
 
 Pins the pure ranking (dietary veto beats everything, budget gate, rating +
 cheaper-is-better, stable ties), the pluggable shop_fn enrichment, the honest

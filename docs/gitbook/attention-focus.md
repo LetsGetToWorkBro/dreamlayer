@@ -35,7 +35,7 @@ The discipline that keeps it from nagging:
 - **Normal harks are held during Focus; urgent watch-outs pierce it.**
   Everything is silenced by the Veil.
 - `set_attention(False)` (the phone's "Proactive alerts" toggle, or "Hey
-  Oracle, stop keeping watch") mutes the policy entirely.
+  Juno, stop keeping watch") mutes the policy entirely.
 
 The heartbeat: `pulse(context)` — or the background `start_pulse(context_fn,
 interval=15.0)` — runs anticipation and attention together on one context
@@ -44,7 +44,7 @@ that a device build supplies to the pulse.
 
 ## Focus mode
 
-`set_focus(minutes)` — default 25 by voice ("Hey Oracle, focus mode") —
+`set_focus(minutes)` — default 25 by voice ("Hey Juno, focus mode") —
 turns the *interruptions* down while **capture keeps running**. That second
 half is the difference from Incognito, which pauses capture itself.
 
@@ -114,7 +114,7 @@ into one decision.
 
 The candidate lenses today: Person (a face → Social Lens), Scholar (answer /
 form / plain-words), TasteLens (a shelf or menu → the pick), Rosetta (foreign
-text → translate), and Oracle (an object, or a weak fallback to name what's
+text → translate), and Juno (an object, or a weak fallback to name what's
 here). The chooser, when a look is genuinely ambiguous:
 
 ![GlanceChoiceCard — a pick runs the lens and teaches the arbiter](assets/cards/glance_choice.png)
@@ -129,4 +129,4 @@ here). The chooser, when a look is genuinely ambiguous:
 | Message pop-ups | silent | held | shown |
 | Fact-check / answer-ahead / delivery reads | silent | held | shown (if enabled) |
 | Live caption display | silent | hidden (ledger keeps) | shown |
-| Things you ask for (recall, rewind, Oracle) | recall of kept memories still answers | answered | answered |
+| Things you ask for (recall, rewind, Juno) | recall of kept memories still answers | answered | answered |

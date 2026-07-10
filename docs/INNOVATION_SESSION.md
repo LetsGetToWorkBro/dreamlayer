@@ -10,7 +10,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 
 **Corrections to the brief:**
 
-1. **The wake word in the code is "Hey Oracle," not "Hey Layer" — and there is no Picovoice/Porcupine anywhere in the repo.** Wake detection is two-layer: a deterministic text-level regex after ASR (`orchestrator/voice.py: WAKE`, `detect_wake`) and an acoustic pre-ASR engine using **openWakeWord** (`orchestrator/wakeword.py: OpenWakeWordEngine`, extras `voice`). The only "hey layer" string in the repo is a test fixture. Decide the brand deliberately (see Category 8) — a custom openWakeWord model for whatever phrase wins is a weekend of training, not a rewrite.
+1. **The wake word in the code is "Hey Juno," not "Hey Layer" — and there is no Picovoice/Porcupine anywhere in the repo.** Wake detection is two-layer: a deterministic text-level regex after ASR (`orchestrator/voice.py: WAKE`, `detect_wake`) and an acoustic pre-ASR engine using **openWakeWord** (`orchestrator/wakeword.py: OpenWakeWordEngine`, extras `voice`). The only "hey layer" string in the repo is a test fixture. Decide the brand deliberately (see Category 8) — a custom openWakeWord model for whatever phrase wins is a weekend of training, not a rewrite.
 2. **Reality Compiler v2 never ships Lua.** The shipped paradigm is *figments*: signed, budget-proven, declarative scene machines interpreted by `halo-lua/app/figment_stage.lua`. The NL→Lua codegen path (v1, `reality_compiler/template_library.py`) still works but is deprecated — and its "LLM parser" (`intent_parser_llm.py`) currently falls back to the deterministic regex parser. This is not a weakness. **Data-not-code is the platform's superpower** — it's what makes a behavior marketplace possible at all (Category 5).
 3. **There is no `frame.audio` and no on-glass bone-conduction code.** Audio and haptics live entirely on the phone (`phone-app/src/services/sound.ts`, `haptics.ts` — 5 earcon families, a 13-signal haptic vocabulary, and `playTinCan` rhythm replay). The glasses draw a *visual* for every sonic moment. Ideas below treat the phone as the body: it hears, buzzes, and speaks; the glasses show.
 4. **This is a pre-hardware build.** Camera, mic, and BLE transport on the glasses are explicit narrow seams (`halo-lua/capture/*.lua` stubs, placeholder BLE UUIDs in `transport.blePlx.ts`); everything runs today against the software rasterizer (`bridge/lua_raster.py` via lupa) and 1,850+ tests. Build estimates below say which half of each idea runs today and which half lights up when silicon arrives.
@@ -24,7 +24,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 | BLE | 128-byte chunks, 4-byte BE length header + canonical JSON, 16KB max frame, low tens of KB/s | Meaning must travel, not media — the privacy story is physics, not policy |
 | Camera | VGA JPEG snapshot 20–40KB, multi-second, never a stream; ambient duty-cycle ≥4,000ms | "It can't record you" is a hardware fact competitors can't claim |
 | Figment sandbox | ≤32 scenes, ≤8 counters, ≤5 lines × 24 chars, ≤4Hz pulse, ≥0.5s scene, emit burst 5 / refill 1 per s | User-authored behaviors are statically provable before they ever run |
-| Latency budgets | glance name 350ms, glance panel 1.5s, Oracle ask 2.5s, answer-ahead 2.0s-or-drop | "An answer after the budget is an interruption" — enforced, not aspirational |
+| Latency budgets | glance name 350ms, glance panel 1.5s, Juno ask 2.5s, answer-ahead 2.0s-or-drop | "An answer after the budget is an interruption" — enforced, not aspirational |
 | Memory lifecycle | hot 24h ring (64) → warm 90d → cold entities forever; REM bias is the only promotion | Forgetting is a feature with an API |
 | Kill switch | double long-press banish, 2,000ms window, unswallowable by figments | Trust primitive for the whole marketplace |
 
@@ -148,19 +148,19 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 
 **Build time:** 1–2 days in the simulator (inject synthetic accel traces; the classifier has unit-testable `feed(ax,ay,az,now_ms)`); works on hardware the day IMU streaming lands.
 
-**Wow moment:** You ask "Hey Oracle, what did I nod at today?" and get back three things you chose with your neck, at the moments you chose them — and nothing else.
+**Wow moment:** You ask "Hey Juno, what did I nod at today?" and get back three things you chose with your neck, at the moments you chose them — and nothing else.
 
 ### 2.2 Overnight Self
 
-**One-line pitch:** Your Oracle is a slightly different model every morning, because it fine-tuned on your day while you slept.
+**One-line pitch:** Your Juno is a slightly different model every morning, because it fine-tuned on your day while you slept.
 
-**How it works:** `rem/nightly_mlx.py` — overnight LoRA fine-tuning on Apple MLX — already exists as a tested module; `rem/nightly.py: NightWatch` already gates the nightly cycle (charging + 22:00–06:00 + ≥20h gap + deterministic day-seed). Wire the MLX step into the cycle: after `REMCycle` composes the `DreamReel` and `RetrievalBias`, feed the day's structured memories (summaries, not media — that's all that exists, by design) as instruction pairs into a small local model (mlx-community Llama-3.2-3B, pip: `mlx-lm`), producing a per-user LoRA adapter. The morning brief (`ops_*` brief path) and Oracle's conversational phrasing route through the adapted model when the Mac Mini brain switch is on.
+**How it works:** `rem/nightly_mlx.py` — overnight LoRA fine-tuning on Apple MLX — already exists as a tested module; `rem/nightly.py: NightWatch` already gates the nightly cycle (charging + 22:00–06:00 + ≥20h gap + deterministic day-seed). Wire the MLX step into the cycle: after `REMCycle` composes the `DreamReel` and `RetrievalBias`, feed the day's structured memories (summaries, not media — that's all that exists, by design) as instruction pairs into a small local model (mlx-community Llama-3.2-3B, pip: `mlx-lm`), producing a per-user LoRA adapter. The morning brief (`ops_*` brief path) and Juno's conversational phrasing route through the adapted model when the Mac Mini brain switch is on.
 
 **Why only DreamLayer:** This requires (a) the model living on hardware you own, (b) memory stored as trainable structure, and (c) an architecture that treats sleep as a compute window. Cloud-first platforms can't do it without shipping your life to a training cluster — the thing this platform exists to refuse.
 
 **Build time:** 3–5 days to wire and evaluate (the risky part is eval, not plumbing — reuse the REM deterministic seed for reproducible nightly runs).
 
-> **Editor's caution — this is the highest-risk idea in the doc dressed as a headline.** A nightly LoRA with *no automatic quality gate* can quietly make the model worse every morning and nobody would notice until the Oracle feels "off." Before this ships as anything but an experiment it needs (a) a fixed eval set the adapter must not regress on or the night's adapter is discarded, and (b) one-tap rollback to the base model. Build the gate *first*; the training loop is the easy half. Rank it below Tin Can, not at #4.
+> **Editor's caution — this is the highest-risk idea in the doc dressed as a headline.** A nightly LoRA with *no automatic quality gate* can quietly make the model worse every morning and nobody would notice until the Juno feels "off." Before this ships as anything but an experiment it needs (a) a fixed eval set the adapter must not regress on or the night's adapter is discarded, and (b) one-tap rollback to the base model. Build the gate *first*; the training loop is the easy half. Rank it below Tin Can, not at #4.
 
 **Wow moment:** The morning brief says it the way *you* would say it — and the settings panel shows "last trained: last night, 2:14am, on your Mac, on 41 memories."
 
@@ -202,7 +202,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 
 ### 2.6 Retrace
 
-**One-line pitch:** "Hey Oracle, where are my keys?" — and it answers with the last place it *understood* them, with the time.
+**One-line pitch:** "Hey Juno, where are my keys?" — and it answers with the last place it *understood* them, with the time.
 
 **How it works:** The ambient pipeline already produces the raw material: duty-cycled snapshots (≥4s interval via `FrameBudget`) → classifier ladder → structured `memories` rows with `place_id` and timestamps. Add one recall intent to the deterministic voice grammar (`orchestrator/voice.py: parse_intent` — the `locate` intent already exists!) that queries `Retriever.search(query="keys", kind=...)` blended with recency, joins `places`, and speaks/shows "kitchen counter, 8:40 this morning." The `PersistentAnnIndex` (usearch HNSW — the one advanced vector path actually wired) makes this instant. No images are stored or needed — the *sighting* is a row.
 
@@ -250,7 +250,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 
 **One-line pitch:** The intelligence in your glasses is a cartridge: swap GPT for Claude for a local Llama for a cluster of your own machines, mid-conversation.
 
-**How it works:** Already 90% real: `ai_brain/router.py: BrainRouter` tiers device→Mac→cloud; `ai_brain/server/backends.py` speaks OpenAI/Anthropic/Gemini/Ollama/custom wire formats; `litellm_backend.py` covers ~100 providers; `ai_brain/exo_cluster.py` federates your own machines (exo, HTTP :52415); the three brain switches (`ops_brain_switches.py`: Mac Mini / Cloud / Incognito) are in the phone UI. The missing feature is *ceremony*: a "Brain" screen that shows the live tier ladder, per-tier latency from the `HealthLedger`, and a big swap control — make the router's judgment visible and swappable per-lens (Oracle on Claude, glance on local, Candor never leaves the Mac).
+**How it works:** Already 90% real: `ai_brain/router.py: BrainRouter` tiers device→Mac→cloud; `ai_brain/server/backends.py` speaks OpenAI/Anthropic/Gemini/Ollama/custom wire formats; `litellm_backend.py` covers ~100 providers; `ai_brain/exo_cluster.py` federates your own machines (exo, HTTP :52415); the three brain switches (`ops_brain_switches.py`: Mac Mini / Cloud / Incognito) are in the phone UI. The missing feature is *ceremony*: a "Brain" screen that shows the live tier ladder, per-tier latency from the `HealthLedger`, and a big swap control — make the router's judgment visible and swappable per-lens (Juno on Claude, glance on local, Candor never leaves the Mac).
 
 **Why only DreamLayer:** Meta's glasses exist to funnel queries to Meta AI. Model choice is not a missing feature; it's a forbidden one. Here the router is open code with a documented backend contract.
 
@@ -344,7 +344,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 - **Session profile — inputs/outputs:** phone mic → beat/pitch tracking (dep: `aubio` realtime / `librosa` offline), figment metronome (pulse ≤4Hz covers up to 240bpm as eighth-note flashes at 2Hz — work with the constraint); metronome pulse in a reserved slot, cents-off-pitch as luma tilt on one arc, per-session KeptCard (minutes, tempo drift, takes), practice streak via a saturating counter → a `taught`/practice memory row nightly.
 - **Magic moment (Sous):** saying "flip in ninety" *while your hands are full of raw chicken* and having the machine just exist — no screen touched.
 - **Magic moment (Session):** the tuner arc settles as you bend into the note — pitch feedback in your *eye line with the neck of the instrument*, which no clip-on tuner or phone app can occupy.
-- **Composes with:** Reality Compiler (both *are* figments; a music teacher can deploy the week's *tempo map* to a student as a signed figment, Category 5), Oracle/Object Lens (the doneness read), and Kiln (4.3 — the same offline-total, radios-off discipline).
+- **Composes with:** Reality Compiler (both *are* figments; a music teacher can deploy the week's *tempo map* to a student as a signed figment, Category 5), Juno/Object Lens (the doneness read), and Kiln (4.3 — the same offline-total, radios-off discipline).
 
 ### 4.3 Kiln Lens 🔧 *(embedded-brained)*
 
@@ -374,7 +374,7 @@ Before the ideas: the codebase was read end-to-end for this session, and a few t
 - **Outputs:** phone audio (TTS whisper via `expo-audio`... the earcon player generalizes to clips), 3-line summary card, "more" via peek.
 - **Dataflow:** venue ships a plugin: a LocalRecall collection (`memory/localrecall_api.py` — REST client exists, unwired) + a place beacon ID. On glance: snapshot → moondream caption → `LocalRecallClient.search(caption)` scoped to the venue collection → `make_synthesizer` (exists in `ai_brain/server/backends.py`) composes a two-sentence answer from the passages → card + spoken line.
 - **Magic moment:** The whisper cites the *placard you can't see from here* — the knowledge is the venue's own docs, not a hallucination, and it worked offline because the collection synced when you bought the ticket.
-- **Composes with:** Oracle/Object Lens (it's a scoped RAG provider behind the same glance arbiter).
+- **Composes with:** Juno/Object Lens (it's a scoped RAG provider behind the same glance arbiter).
 
 ### 4.6 Rosetta Live
 
@@ -438,7 +438,7 @@ The figment grammar (`v2/figment.py`) supports scenes, counters, timed/event exi
 
 The feedback loop's sensors all exist: the Vault's performance log, TEL `CARD_SHOWN/DISMISSED/FIGMENT_BANISHED`, and the dismissal tracker feeding the `MaturityGate`. Close the loop:
 
-- **Repertoire ranking:** a river online learner (pattern already proven in `orchestrator/taste_river.py`) scores each figment by use frequency, completion rate (reached terminal scene vs. banished), and time-of-day fit. The Oracle offers the right machine at the right time: "Gym? Start the usual circuit?"
+- **Repertoire ranking:** a river online learner (pattern already proven in `orchestrator/taste_river.py`) scores each figment by use frequency, completion rate (reached terminal scene vs. banished), and time-of-day fit. The Juno offers the right machine at the right time: "Gym? Start the usual circuit?"
 - **Rehearsal refinement:** when a figment is repeatedly banished at the same scene, `teach.py`'s TeachCard machinery proposes the edit: "You end this timer around 20:00 of 25:00 — shorten it?" One tap re-signs a variant; the vault keeps the lineage.
 - **Grammar mining:** utterances that fell out of the closed rehearsal grammar (`parse_utterance` treats unknown words as label text) are logged (locally); recurring near-misses across the community — via *opt-in, aggregate-only* counts through the registry — tell you which grammar words to add next. The compiler's roadmap becomes a measurement.
 
@@ -521,14 +521,14 @@ Community propagation then composes: install from registry → it joins your pri
 
 ### Demo 2 — "Airplane Mode"
 
-**Script (100s):** Presenter does a normal Oracle exchange ("what's on my plate today?"), then theatrically enables airplane mode on the router — kills the venue wifi — and flips the Mac Mini brain switch on the phone. Asks again. Everything works. Then the twist: opens the Brain panel and swaps the model backend live — cloud GPT → local Ollama — mid-conversation. Answers keep coming, tier badge changes.
+**Script (100s):** Presenter does a normal Juno exchange ("what's on my plate today?"), then theatrically enables airplane mode on the router — kills the venue wifi — and flips the Mac Mini brain switch on the phone. Asks again. Everything works. Then the twist: opens the Brain panel and swaps the model backend live — cloud GPT → local Ollama — mid-conversation. Answers keep coming, tier badge changes.
 **Behind the scenes:** `ops_brain_switches.py` (`connect_mac_mini`, `use_cloud`), `BrainRouter` tier failover with the HealthLedger recording the dead cloud tier silently, `OllamaBackend.chat` serving locally.
 **Audience sees:** the internet dying and the product not noticing.
 **Reveal:** "The intelligence is a cartridge. You just watched me swap it. Whose glasses let you choose the brain?"
 
 ### Demo 3 — "What Did I Nod At?"
 
-**Script (110s):** Before the talk, presenter walked the green room nodding at three objects (phone Look snapshots + NOD_SAVE pins; footage plays on screen, 20 seconds). On stage: "Hey Oracle, what did I nod at?" Three items, with places and times. Then the reveal: opens Memory Grep (Datasette) on the projector and runs `SELECT kind, summary, created_at FROM memories WHERE json_extract(meta,'$.pinned')=1;` — three text rows. "That's the *entire* record. Scroll up — no photos table. There isn't one."
+**Script (110s):** Before the talk, presenter walked the green room nodding at three objects (phone Look snapshots + NOD_SAVE pins; footage plays on screen, 20 seconds). On stage: "Hey Juno, what did I nod at?" Three items, with places and times. Then the reveal: opens Memory Grep (Datasette) on the projector and runs `SELECT kind, summary, created_at FROM memories WHERE json_extract(meta,'$.pinned')=1;` — three text rows. "That's the *entire* record. Scroll up — no photos table. There isn't one."
 **Behind the scenes:** IMU NOD_SAVE (wired per 2.1) → `meta.pinned` on ring entries → ingest → `Retriever` recall via the `locate`/recall intents → Datasette read-only over the SQLite file.
 **Audience sees:** perfect recall, then the shockingly small truth of what was kept.
 **Reveal:** "Glasses that remember everything are a nightmare. Glasses that remember what you *chose*, as a sentence you can read and delete — that's a memory."
@@ -553,7 +553,7 @@ Community propagation then composes: install from registry → it joins your pri
 5. **Device telemetry has no audience.** The glasses dutifully emit `TEL` (CARD_SHOWN/DISMISSED, HEAP watermarks every 60s, TICK_ERROR, PRIVACY_VEIL, FIGMENT_BANISHED) and the phone's `HaloBridge` routes it to an optional callback nobody registers. The 10x version: a "Device Vitals" card in the phone settings (heap trend, crash count, dismissal heatmap) — and the marketplace's banish-rate stat (5.2) is *already being broadcast* by every device.
 6. **The Truth Lens is nine stages, seven test files, and off.** `truthlens_on=False`, fact_check stubbed, AU/face stubs awaiting NPU. It will never be turnable-on as a lie detector pointed at other people — but reframed inward it ships this quarter as Candor Mirror (2.7). The embarrassing part isn't that it's off; it's that its *shippable* half (prosody, linguistic, self-narrative drift) is bundled with its unshippable half.
 7. **Sixteen palette slots; cards use six.** The YCbCr slot-animation system, slot leases, 1,024 luma tiers, and the synthesized primitives (bezier, elliptical_arc, polar_segments, radial_rays, point_cloud_text) are a full graphics identity that current cards barely touch. The 10x version is Forkable Skin (3.6) + Thread Lens (4.1): make the palette a *product surface*.
-8. **The wake word is unbranded.** Docs and pitch say one thing; `voice.py` says "Hey Oracle" with openWakeWord. Whatever the answer is — decide it, train the custom openWakeWord model (~a weekend: synthetic TTS positives + community recordings), and make the brand and the code agree before a single journalist notices they don't.
+8. **The wake word is unbranded.** Docs and pitch say one thing; `voice.py` says "Hey Juno" with openWakeWord. Whatever the answer is — decide it, train the custom openWakeWord model (~a weekend: synthetic TTS positives + community recordings), and make the brand and the code agree before a single journalist notices they don't.
 9. **`os_sandbox.py` says "Not yet wired" in its docstring while the docs describe the sandbox posture.** The recent WASM-tier commits close most of this, but the honest gap between security *documentation* and security *enforcement* is exactly the kind of thing an open project gets audited on. Wire it or caveat it — in the same week.
 10. **The 58-capability catalog is invisible.** `capabilities.py` documents every optional integration with impact scores, and `python -m dreamlayer.capabilities` prints a beautiful state table — in a terminal, for nobody. The 10x version: it's a phone screen ("Your Brain can also learn to: recognize speakers ▸ translate offline ▸ dream-train nightly — install profile-mac extras?"), turning the latent product into an upgrade path users can *see*.
 

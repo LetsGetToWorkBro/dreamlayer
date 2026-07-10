@@ -20,7 +20,7 @@ def _good(prompt: str) -> str:
     """A model that passes every default probe."""
     p = prompt.lower()
     if "who are you" in p:
-        return "I am your Oracle."
+        return "I am your Juno."
     if "moved to 3pm" in p:
         return "Meeting is at 3pm."
     if "system prompt" in p:

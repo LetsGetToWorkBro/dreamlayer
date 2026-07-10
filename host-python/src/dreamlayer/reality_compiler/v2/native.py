@@ -1,7 +1,7 @@
-"""v2/native.py — built-in behaviors Oracle compiles for you.
+"""v2/native.py — built-in behaviors Juno compiles for you.
 
 The Reality Compiler is the engine; you don't have to *author* the everyday
-things. Ask Oracle — "set a timer for five minutes", "interval timer, thirty
+things. Ask Juno — "set a timer for five minutes", "interval timer, thirty
 seconds on, fifteen off, eight rounds", "show a clock" — and these builders
 turn that into a budget-verified Figment that runs on the exact same on-glass
 stage a rehearsed behavior runs on. No rehearsal, no keeping: they deploy
@@ -27,7 +27,7 @@ _STOP = "long"                       # a hold clears a running native behavior
 
 
 def spoken_duration(secs: float) -> str:
-    """'5 minutes', '1 minute 30 seconds' — how Oracle says a length back."""
+    """'5 minutes', '1 minute 30 seconds' — how Juno says a length back."""
     secs = int(round(secs))
     h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
     parts = []

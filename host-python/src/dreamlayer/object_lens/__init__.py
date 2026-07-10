@@ -1,6 +1,6 @@
-"""object_lens — Oracle: look at anything, know it.
+"""object_lens — Juno: look at anything, know it.
 
-Display name: **Oracle** (the World lens's flagship — "look at anything and
+Display name: **Juno** (the World lens's flagship — "look at anything and
 it tells you what it is"). The code stays `object_lens` / `ObjectLens`.
 
 

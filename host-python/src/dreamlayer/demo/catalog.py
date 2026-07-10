@@ -30,8 +30,8 @@ class Feature:
 # ordered as a demo would walk it: wake → converse → perceive → remember → trust → protect
 FEATURES: list[Feature] = [
     Feature("wake",        "Wake → your day",       "Put the Halo on; the morning brief is already waiting.",           "morning_brief",   "The morning"),
-    Feature("oracle_wake", "Hey Oracle",            "A word wakes it — then just keep talking.",                        "listening",       "The morning"),
-    Feature("oracle_do",   "Ask it anything",       "It runs the device or answers from your brain, in its own voice.", "oracle_reply",    "The morning"),
+    Feature("juno_wake", "Hey Juno",            "A word wakes it — then just keep talking.",                        "listening",       "The morning"),
+    Feature("juno_do",   "Ask it anything",       "It runs the device or answers from your brain, in its own voice.", "juno_reply",    "The morning"),
 
     Feature("captions",    "Live captions",         "Every word, transcribed at the rim.",                              "spoken_caption",  "In conversation"),
     Feature("dossier",     "Look → who is this",    "A glance names them and surfaces your history together.",           "person_dossier",  "In conversation"),

@@ -47,10 +47,10 @@ app/                 expo-router screens — five tabs + Labs
   now.tsx            live Halo mirror, morning brief, voice box, quick actions
   messages.tsx       Messages/Mail relay: suggested replies, approve-and-send
   memories.tsx       your recall, grouped by day (+ ask-your-files when paired)
-  settings.tsx       every toggle: privacy, Oracle, wake, Labs, danger zone
+  settings.tsx       every toggle: privacy, Juno, wake, Labs, danger zone
   rewind.tsx         (Labs) today's hour blocks from the Brain
   saga.tsx           (Labs) rank, XP, achievements
-  profile.tsx        (Labs) what Oracle knows about you
+  profile.tsx        (Labs) what Juno knows about you
   rehearsal.tsx      (Labs) Reality Compiler v2 surface
   confluence.tsx     (Labs) two wearers, one entangled sky
   onboarding.tsx     first-run flow

@@ -5,8 +5,8 @@ Every glasses feature, in demo order. Each row is a beat in the master film (`ma
 | # | Section | Feature | VO line | Card |
 |--:|---------|---------|---------|------|
 | 1 | The morning | **Wake → your day** | Put the Halo on; the morning brief is already waiting. | `MorningBriefCard` |
-| 2 | The morning | **Hey Oracle** | A word wakes it — then just keep talking. | `ListeningCard` |
-| 3 | The morning | **Ask it anything** | It runs the device or answers from your brain, in its own voice. | `OracleReplyCard` |
+| 2 | The morning | **Hey Juno** | A word wakes it — then just keep talking. | `ListeningCard` |
+| 3 | The morning | **Ask it anything** | It runs the device or answers from your brain, in its own voice. | `JunoReplyCard` |
 | 4 | In conversation | **Live captions** | Every word, transcribed at the rim. | `SpokenCaptionCard` |
 | 5 | In conversation | **Look → who is this** | A glance names them and surfaces your history together. | `PersonDossierCard` |
 | 6 | In conversation | **Faces at the rim** | Who they are, without staring. | `PersonContextCard` |

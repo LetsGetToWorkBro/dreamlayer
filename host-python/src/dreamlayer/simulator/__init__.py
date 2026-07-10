@@ -13,7 +13,7 @@ Two halves:
 
     python -m dreamlayer.simulator          # http://127.0.0.1:8765
 
-Talk to Oracle in the input box ("set a timer for 2 minutes", "this is my
+Talk to Juno in the input box ("set a timer for 2 minutes", "this is my
 colleague Sarah, she runs marketing", "where's my bike?"), pick a face to
 look at, tap the temple, drop the Privacy Veil — and watch the round glass
 respond with real pixels. Nothing here is a mock of DreamLayer; only the

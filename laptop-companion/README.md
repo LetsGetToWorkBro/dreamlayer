@@ -1,6 +1,6 @@
 # DreamLayer laptop companion
 
-The small program you run **on your laptop** so **Oracle** (the Object lens)
+The small program you run **on your laptop** so **Juno** (the Object lens)
 can surface your live desk context — recent files and battery — when you look
 at the laptop through the glasses.
 
@@ -112,7 +112,7 @@ can draft → approve → send.
 ## How it fits DreamLayer
 
 The phone side is already built: `object_lens.integrations.laptop_data_source`
-wrapped in a `PolledSource`, feeding `LaptopProvider` (an Oracle provider).
+wrapped in a `PolledSource`, feeding `LaptopProvider` (an Juno provider).
 This agent is the other end of that contract. Anything else that answers those
 three lines — a different language, a soil sensor, an OBD dongle — plugs into
 the exact same phone-side machinery; only the reader changes.

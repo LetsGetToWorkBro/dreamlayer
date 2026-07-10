@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DreamLayer · Halo Simulator</title>
-<meta name="description" content="Run the whole DreamLayer stack in your browser — talk to Oracle, set a timer that counts down on the glass, introduce someone and be recognised. No app, no glasses.">
+<meta name="description" content="Run the whole DreamLayer stack in your browser — talk to Juno, set a timer that counts down on the glass, introduce someone and be recognised. No app, no glasses.">
 <link rel="canonical" href="https://dreamlayer.app/simulator.html">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="DreamLayer">
 <meta property="og:type" content="website">
 <meta property="og:title" content="DreamLayer · Halo Simulator">
-<meta property="og:description" content="Run the whole DreamLayer stack in your browser — no app, no glasses. Talk to Oracle, set a timer on the glass, introduce someone and be recognised.">
+<meta property="og:description" content="Run the whole DreamLayer stack in your browser — no app, no glasses. Talk to Juno, set a timer on the glass, introduce someone and be recognised.">
 <meta property="og:url" content="https://dreamlayer.app/simulator.html">
 <meta property="og:image" content="https://dreamlayer.app/assets/cine/still-dawn.webp">
 <meta name="twitter:card" content="summary_large_image">
@@ -190,8 +190,8 @@
   .log div{font-size:13.5px;line-height:1.4}
   .log .you{color:var(--text)}
   .log .you::before{content:"you  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
-  .log .oracle{color:var(--teal)}
-  .log .oracle::before{content:"oracle  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
+  .log .juno{color:var(--teal)}
+  .log .juno::before{content:"juno  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
   .try{display:flex;flex-direction:column;gap:2px}
   .try button{font:inherit;text-align:left;font-size:13.5px;color:var(--text-2);background:transparent;border:0;
     padding:7px 2px;cursor:pointer;border-radius:6px}
@@ -266,7 +266,7 @@
           <form class="say" id="sayform" autocomplete="off">
             <input id="sayinput" placeholder="e.g. “what’s 15% of 240?”"
                    enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
-            <button type="button" class="mic" id="micbtn" aria-label="Speak to Oracle" hidden><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button>
+            <button type="button" class="mic" id="micbtn" aria-label="Speak to Juno" hidden><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button>
             <button type="submit" aria-label="Send">↳</button>
           </form>
           <div class="grouplbl">…or tap an example</div>
@@ -474,7 +474,7 @@
     sim.handleVoice(b.textContent.replace(/^—.*—$/, "").trim(), look); paint();
   });
 
-  // ---- voice input (Web Speech API): actually talk to Oracle ----
+  // ---- voice input (Web Speech API): actually talk to Juno ----
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
     var mic = $("micbtn"); mic.hidden = false;
@@ -493,7 +493,7 @@
     rec.onend   = function(){ setListen(false); };
   }
 
-  // ---- cycling placeholder hints the breadth of what Oracle can do ----
+  // ---- cycling placeholder hints the breadth of what Juno can do ----
   (function(){
     var eg = ["what’s 15% of 240?", "5 miles in km", "set a timer for 2 minutes",
       "this is my colleague Sarah…", "how do you say hello in French?", "where’s my bike?"];
@@ -501,7 +501,7 @@
     setInterval(function(){
       if (document.activeElement === input || input.value) return;
       i = (i + 1) % eg.length;
-      input.setAttribute("placeholder", "Ask Oracle… “" + eg[i] + "”");
+      input.setAttribute("placeholder", "Ask Juno… “" + eg[i] + "”");
     }, 3200);
   })();
 
@@ -557,18 +557,18 @@
     fact: async function(){
       cap("Mid-conversation, someone claims something.");
       sim.say("you", "“The Great Wall is visible from space.”");
-      sim.say("oracle", sim._factCheck("disputed", "Great Wall visible from space", "Not with the naked eye — a myth.", "them"));
+      sim.say("juno", sim._factCheck("disputed", "Great Wall visible from space", "Not with the naked eye — a myth.", "them"));
       paint(); await sleep(3400); if (sceneStop) return;
       cap("Veritas checked it against what you know — quietly, no interruption.");
       await sleep(2900); if (sceneStop) return;
       cap("And when a claim holds up —");
       sim.say("you", "“The sun is a star.”");
-      sim.say("oracle", sim._factCheck("supported", "The sun is a star", "A G-type main-sequence star.", "them"));
+      sim.say("juno", sim._factCheck("supported", "The sun is a star", "A G-type main-sequence star.", "them"));
       paint(); await sleep(3400);
     },
     brief: async function(){
       cap("Put the glasses on. Your day is already there.");
-      sim.say("oracle", sim._brief()); paint(); await sleep(3400); if (sceneStop) return;
+      sim.say("juno", sim._brief()); paint(); await sleep(3400); if (sceneStop) return;
       cap("A short synthesis, the first things that matter — before you ask.");
       await sleep(3400);
     },

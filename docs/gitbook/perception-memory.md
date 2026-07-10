@@ -29,7 +29,7 @@ One ledger, four products:
 - **Dossier** — `greet(person)` surfaces a **PersonDossierCard**: last seen,
   recurring topics between you, their most recent line. Veil-gated
   (proactive), earcon `look`.
-- **Learning** — your own lines feed the [user model](oracle.md#how-it-learns-you--the-user-model)
+- **Learning** — your own lines feed the [user model](juno.md#how-it-learns-you--the-user-model)
   and the commitment parser; other speakers only increment "who you talk
   with".
 
@@ -78,7 +78,7 @@ The invariants are architectural, not policy:
 ## The social memory, spoken
 
 The Social Lens now takes dictation (`voice.py` grammars; each veil-gated,
-each confirmed in the Oracle's voice, each mirrored to the phone's People
+each confirmed in the Juno's voice, each mirrored to the phone's People
 tab):
 
 - **Notes** — "remember Maya's into rock climbing", or "note that she has
@@ -123,7 +123,7 @@ The spoken half of "where did I leave it" is the **Waypath Lens**
 plus a plain-words place — that a later *"where's my bike?"* answers from,
 drawing the direction/place card on the glass. The grammar and its
 deliberate refusals (past-tense verbs only, no person/event/idiom
-subjects) are in [the Oracle chapter](oracle.md#6-things-stashed-and-found).
+subjects) are in [the Juno chapter](juno.md#6-things-stashed-and-found).
 
 An anchor can also carry a bearing and distance ("12m to your left"),
 turned into one of eight human directions given your current heading —

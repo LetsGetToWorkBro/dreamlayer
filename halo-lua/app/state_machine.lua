@@ -254,8 +254,8 @@ function M.set_card(msg_payload)
     card = C.fact_check(msg_payload)
   elseif t == "AnswerAheadCard" then
     card = C.answer_ahead(msg_payload)
-  elseif t == "OracleReplyCard" then
-    card = C.oracle_reply(msg_payload)
+  elseif t == "JunoReplyCard" then
+    card = C.juno_reply(msg_payload)
   elseif t == "HarkCard" then
     card = C.hark(msg_payload)
   elseif t == "ScholarCard" then

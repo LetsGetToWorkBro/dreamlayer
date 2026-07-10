@@ -7,7 +7,7 @@ tested contracts.
 ```
  Halo glasses ── BLE ──> Phone (the hub) ── LAN / relay ──> Mac mini (the Brain) ── opt-in ──> Cloud
   render + sense          orchestrator: memory,              index over your files,             frontier reach,
-  23 card renderers       privacy gate, Oracle,              mail, calendar; Ollama;            logged on every
+  23 card renderers       privacy gate, Juno,              mail, calendar; Ollama;            logged on every
   gestures, Horizon       Veritas, anticipation              the control panel                  single call
 ```
 
@@ -28,7 +28,7 @@ JSON dict over BLE.
 ### 2. The orchestrator (the hub) — `host-python/src/dreamlayer/orchestrator/`
 
 The mind of the product, designed to run on the phone. One `Orchestrator`
-class coordinates everything: the Oracle voice assistant, the conversation
+class coordinates everything: the Juno voice assistant, the conversation
 ledger and live captions, Veritas fact-checking, Truth Lens delivery reads,
 Discernment fusion, answer-ahead, the anticipation and attention engines,
 commitment capture, time-scrub rewind, the Social Lens, Dream Mode, and the
@@ -51,7 +51,7 @@ exposes secrets, the filesystem, or outbound sends is additionally
 Expo / React Native. Six tabs (Brain, Now, Messages, People, Memories,
 Settings) plus hidden screens (Brief, Plugins, Rewind, Saga, Profile,
 Rehearsal, Confluence) and onboarding. It is the remote control: pairing, the
-three brain switches, every Oracle and privacy toggle, message approval, and
+three brain switches, every Juno and privacy toggle, message approval, and
 read-outs of everything the Brain knows — and it carries a Demo Mode that
 fills every screen with labeled sample data so the app is alive before any
 hardware is.
@@ -145,7 +145,7 @@ dreamlayer/
 ├── halo-lua/              device firmware: display/, app/, ble/, lib/, system/
 ├── host-python/           the Python engine (orchestrator + Brain + HUD mirror)
 │   └── src/dreamlayer/
-│       ├── orchestrator/  the hub: Oracle, Veritas, attention, anticipation...
+│       ├── orchestrator/  the hub: Juno, Veritas, attention, anticipation...
 │       ├── ai_brain/      tiered router, verify, saga; server/ is the Mac Brain
 │       ├── hud/           Python mirror renderer, cards, goldens, audio map
 │       ├── demo/          the emissive-overlay demo/film pipeline

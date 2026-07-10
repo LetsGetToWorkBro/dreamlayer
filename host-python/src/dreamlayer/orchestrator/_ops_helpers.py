@@ -21,7 +21,7 @@ def _default_http_get(url: str, token: str = "") -> dict:
 
 
 def _default_http_post(url: str, body: dict, token: str = "") -> dict:
-    """Minimal POST used to push the Oracle profile to the paired Mac mini Brain."""
+    """Minimal POST used to push the Juno profile to the paired Mac mini Brain."""
     import json
     import urllib.request
     headers = {"Content-Type": "application/json"}

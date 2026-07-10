@@ -180,15 +180,15 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Oracle</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Juno</Text>
         <Row
           label="Wake word"
-          sub="Say “Hey Oracle” to wake your assistant, then just keep talking — follow-ups need no wake word"
-          right={<Text style={[typography.caption, { color: colors.accentMemory }]}>“Hey Oracle”</Text>}
+          sub="Say “Hey Juno” to wake your assistant, then just keep talking — follow-ups need no wake word"
+          right={<Text style={[typography.caption, { color: colors.accentMemory }]}>“Hey Juno”</Text>}
         />
         <Row
           label="Proactive alerts"
-          sub="Let Oracle speak up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now"
+          sub="Let Juno speak up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now"
           right={
             <Switch
               value={proactiveAlerts}
@@ -200,7 +200,7 @@ export default function Settings() {
         />
         <Row
           label="Live fact-checker"
-          sub="As people talk, Oracle quietly checks what’s said — flagging when someone contradicts what they told you before, or when a claim doesn’t hold up. On-device first; reaches the cloud only if you’ve allowed it"
+          sub="As people talk, Juno quietly checks what’s said — flagging when someone contradicts what they told you before, or when a claim doesn’t hold up. On-device first; reaches the cloud only if you’ve allowed it"
           right={
             <Switch
               value={factCheck}
@@ -212,7 +212,7 @@ export default function Settings() {
         />
         <Row
           label="Answer-ahead"
-          sub="When someone asks you something, Oracle pulls the answer from what you know and shows it in time to say it yourself — no wake word"
+          sub="When someone asks you something, Juno pulls the answer from what you know and shows it in time to say it yourself — no wake word"
           right={
             <Switch
               value={answerAhead}
@@ -227,7 +227,7 @@ export default function Settings() {
         </Text>
         {(
           [
-            ["voice", "Voice — “Hey Oracle”"],
+            ["voice", "Voice — “Hey Juno”"],
             ["tap", "Tap the temple"],
             ["gaze", "Look & hold (gaze)"],
             ["raise", "Raise to speak"],
@@ -315,7 +315,7 @@ export default function Settings() {
           <Text style={[typography.body, { color: colors.accentMemory }]}>Saga — your rank, level & badges →</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/profile")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>What Oracle knows about you →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>What Juno knows about you →</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>

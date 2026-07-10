@@ -163,7 +163,7 @@ Everything under `docs/gitbook/assets/` is reproducible from the repo:
   `renderer.lua`, a constructor in `cards.lua` and `hud/cards.py`, a sample
   in `ALL_SAMPLES`, mirror parity in `hud/renderer.py`, and raster-harness
   tests (budget, richness, reduce-motion) — the O3 conversation cards
-  (FactCheck, AnswerAhead, OracleReply, Hark) are the template.
+  (FactCheck, AnswerAhead, JunoReply, Hark) are the template.
 - **A new brain tier or provider** implements the two-method `VisionBrain` /
   `KnowledgeBrain` protocols and registers with the router.
 - **A new device** implements the BLE framing and the `frame` adapter

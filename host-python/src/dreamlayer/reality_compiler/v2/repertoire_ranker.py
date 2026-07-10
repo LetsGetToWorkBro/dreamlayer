@@ -4,7 +4,7 @@ The feedback sensors already exist: the Vault's performance log records every
 deploy, and the figment lifecycle knows when a machine reached its terminal
 scene (complete) or was killed (banish). This closes the loop: an online learner
 scores each kept figment by **use frequency**, **completion rate** (reached the
-end vs. got banished), and **time-of-day fit**, so the Oracle can offer the
+end vs. got banished), and **time-of-day fit**, so the Juno can offer the
 right machine at the right time — "Gym? Start the usual circuit?"
 
 Same shape as `orchestrator/taste_river.py`: lazy-imports river (extras group

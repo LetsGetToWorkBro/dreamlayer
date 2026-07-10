@@ -149,7 +149,7 @@ function M.low_confidence()
 end
 
 -- ---------------------------------------------------------------------------
--- O3 conversation cards (Veritas / answer-ahead / Oracle / Listen!). Payloads
+-- O3 conversation cards (Veritas / answer-ahead / Juno / Listen!). Payloads
 -- arrive from the host; the constructors are PURE pass-through. All tone
 -- mapping (verdict/importance/kind -> color) lives in renderer.lua
 -- card_tone/FACT_COLOR — the BLE path never runs these constructors, so a
@@ -185,13 +185,13 @@ function M.answer_ahead(c)
   }
 end
 
-function M.oracle_reply(c)
+function M.juno_reply(c)
   return {
-    type       = "OracleReplyCard",
-    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.OracleReplyCard or 6000,
+    type       = "JunoReplyCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.JunoReplyCard or 6000,
     kind       = c.kind or "answer",
     primary    = c.primary or c.text or "",
-    -- Visual: memory/success pane, ORACLE eyebrow with a bloom cue, hero reply
+    -- Visual: memory/success pane, JUNO eyebrow with a bloom cue, hero reply
   }
 end
 
@@ -259,7 +259,7 @@ function M.listening(c)
   return {
     type       = "ListeningCard",
     dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.ListeningCard or 0,
-    eyebrow    = c.eyebrow or "ORACLE",
+    eyebrow    = c.eyebrow or "JUNO",
     primary    = c.primary or "Listening\xE2\x80\xA6",
     detail     = c.detail or "",
     source     = c.source or "voice",

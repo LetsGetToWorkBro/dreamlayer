@@ -29,7 +29,7 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/people` | token | the dossier registry `{items: [{name, note, tags, ts}]}` |
 | `/dreamlayer/rewind` | token | today in hour blocks `{blocks, count}` |
 | `/dreamlayer/saga` | token | the progression profile: rank, level, XP, every achievement |
-| `/dreamlayer/profile` | token | the mirrored Oracle user-model profile |
+| `/dreamlayer/profile` | token | the mirrored Juno user-model profile |
 | `/dreamlayer/brief/latest` | token | the scheduler's most recent morning brief (or `{}`) |
 | `/dreamlayer/brief/long/latest` | token | the last extended (long) brief (or `{}`) |
 | `/dreamlayer/social/people` | token | the mirrored social memory: people with relations, notes, debts, topics |

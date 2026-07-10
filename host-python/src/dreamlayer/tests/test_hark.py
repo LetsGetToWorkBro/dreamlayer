@@ -1,6 +1,6 @@
-"""test_hark.py — Oracle's "Listen!" (Navi) proactive cue + the earcon slot.
+"""test_hark.py — Juno's "Listen!" (Navi) proactive cue + the earcon slot.
 
-Oracle taps you on the shoulder with one thing worth hearing, plays its own
+Juno taps you on the shoulder with one thing worth hearing, plays its own
 attention sound, and never nags: rate-limited, Veil-silenced, Focus-aware.
 """
 from __future__ import annotations

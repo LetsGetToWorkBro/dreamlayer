@@ -1,4 +1,4 @@
-"""test_attention.py — when Oracle decides to say "Listen!" / "Watch out!"
+"""test_attention.py — when Juno decides to say "Listen!" / "Watch out!"
 
 The policy reads live context and raises the right interruption at the right
 moment, ranks urgency, and — crucially — never nags.
@@ -37,7 +37,7 @@ def test_leaving_a_place_you_left_something_is_a_listen():
     anch = [Anchor("bike", "4th & Alder rack")]
     # tick 1: you're at the rack (nothing yet — no departure)
     assert pol.evaluate(Context(now=1000.0, place="4th & Alder rack", anchors=anch)) == []
-    # tick 2: you've walked off → Oracle speaks up
+    # tick 2: you've walked off → Juno speaks up
     (a,) = pol.evaluate(Context(now=1100.0, place="on Alder St", anchors=anch))
     assert a.level == "listen" and "leaving your bike" in a.clue
 

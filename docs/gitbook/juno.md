@@ -1,20 +1,20 @@
-# The Oracle
+# The Juno
 
-The Oracle is DreamLayer's voice: the thing you wake, ask, command, and — over
+The Juno is DreamLayer's voice: the thing you wake, ask, command, and — over
 time — the thing that learns how to address you. It lives in the orchestrator
 (`orchestrator/orchestrator.py`, grammar in `orchestrator/voice.py` and
 `orchestrator/commands.py`, voice and manner in `orchestrator/persona.py`).
 
-![Hey Oracle — the wake moment](assets/demo/catalog/features/oracle_wake/preview.gif)
+![Hey Juno — the wake moment](assets/demo/catalog/features/juno_wake/preview.gif)
 
 ## Waking it
 
 Four wake sources, each independently toggleable (`set_wake_source`, mirrored
 by the phone's Settings screen):
 
-- **Voice** — a leading wake phrase. The grammar accepts *hey oracle*,
-  *ok/okay oracle*, *oracle*, *hey dreamlayer*, *ok dreamlayer*, and
-  *dreamlayer*, only as the first token of the line — "the oracle said so"
+- **Voice** — a leading wake phrase. The grammar accepts *hey juno*,
+  *ok/okay juno*, *juno*, *hey dreamlayer*, *ok dreamlayer*, and
+  *dreamlayer*, only as the first token of the line — "the juno said so"
   mid-sentence does not wake it. **Seam:** the on-device ASR and acoustic
   wake-word spotting that produce the text.
 - **Tap**, **gaze**, **raise** — hands-free wakes via `activate(source)`.
@@ -28,15 +28,15 @@ and a `tick` haptic.
 
 ### Continuous conversation
 
-A wake opens a **20-second session** (`oracle_session_s`). Inside it,
+A wake opens a **20-second session** (`juno_session_s`). Inside it,
 follow-ups need no wake word — `hear(text)` treats any line as addressed to
-the Oracle, and each command extends the window. Outside the window,
+the Juno, and each command extends the window. Outside the window,
 non-addressed lines are ignored (they still flow to captions and the ledger
 if those are on).
 
-## What "Hey Oracle" can do
+## What "Hey Juno" can do
 
-`ask_oracle` dispatches in strict order: an explicit **teach** first, then a
+`ask_juno` dispatches in strict order: an explicit **teach** first, then a
 **device command**, then a **knowledge intent**.
 
 ### 1. Teaches — "call me Sam"
@@ -49,13 +49,13 @@ if those are on).
   "note that I ...", "I always / usually / hate / avoid / can't stand ..." —
   normalized to first person, capped at 120 characters, at most 40 kept.
 
-A teach is confirmed in the Oracle's own voice ("Good to know you, Sam." /
+A teach is confirmed in the Juno's own voice ("Good to know you, Sam." /
 "Got it — I'll remember that.") and pushed to the paired Brain immediately.
 
 ### 2. Device commands
 
 Parsed by a closed grammar (`commands.py`); each returns an
-**OracleReplyCard** of kind `action` with a themed confirmation:
+**JunoReplyCard** of kind `action` with a themed confirmation:
 
 | Say | Command | Effect | Confirmation |
 |---|---|---|---|
@@ -75,7 +75,7 @@ toggleable command the other way.
 ### 3. Timers, intervals, and the clock — no Brain required
 
 Say *"set a timer for five minutes"*, *"interval timer, 30 on, 15 off, 8
-rounds"*, *"show a clock"*, or *"what time is it"* and the Oracle builds the
+rounds"*, *"show a clock"*, or *"what time is it"* and the Juno builds the
 behavior on the spot: each becomes a budget-verified Reality Compiler
 figment deployed straight to the glasses' stage. Two execution paths, same
 grammar (`voice.py: _parse_timer_clock`): with a paired Brain the figment is
@@ -112,7 +112,7 @@ to plain words with no chooser.
 
 ### 6. Things, stashed and found
 
-Tell the Oracle where you left something, then ask later — answered
+Tell the Juno where you left something, then ask later — answered
 entirely from your own **Waypath anchors**, no Brain required:
 
 | Say | Intent | What happens |
@@ -145,11 +145,11 @@ of returning a bare intent:
 | `missed` | "what did I miss?" | the Brain counts genuinely missed texts and emails and says so ("You missed 2 texts and 1 email.") |
 | `ask` | anything else | the tiered brain — device, then Mac mini, then cloud if enabled |
 
-Answers come back framed by the persona; when nothing is known the Oracle
+Answers come back framed by the persona; when nothing is known the Juno
 says so plainly: *"I don't have that one — want me to look further?"* — it
 never invents.
 
-![Ask it anything](assets/demo/catalog/features/oracle_do/preview.gif)
+![Ask it anything](assets/demo/catalog/features/juno_do/preview.gif)
 
 ## The persona
 
@@ -157,7 +157,7 @@ never invents.
 sentences; never overclaiming ("never invent facts; if you're not sure, say
 so" is written into the persona prompt used for LLM-backed replies). The
 greeting adapts to what it knows: "I'm here, Sam." once you have told it your
-name — `oracle_greeting()` uses `UserModel.address()`.
+name — `juno_greeting()` uses `UserModel.address()`.
 
 ## How it learns you — the user model
 
@@ -170,7 +170,7 @@ entirely on-device:
   you, and a running observation count.
 - **What it never keeps:** raw audio, other people's words as your interests,
   anything while the Privacy Veil is down (learning rides on `ingest_caption`
-  and `ask_oracle`, both veil-gated).
+  and `ask_juno`, both veil-gated).
 - **Persistence:** a single JSON file, `usermodel.json`, beside the memory
   vault; purely in-memory for ephemeral sessions.
 
@@ -181,10 +181,10 @@ entirely on-device:
 on an explicit teach. The Brain **mirrors** it (`profile.json`,
 `GET /dreamlayer/profile`) and never authors it; it also caps what it will
 store (name, up to 12 interests, 12 people, 40 preferences, the observation
-count). The phone renders the mirror on the Profile screen — "What Oracle
+count). The phone renders the mirror on the Profile screen — "What Juno
 knows about you" — so the model is always inspectable:
 
-![What Oracle knows about you](assets/phone/profile.png)
+![What Juno knows about you](assets/phone/profile.png)
 
 *The live phone screen. With no Brain paired it shows its empty state; the
-profile fills as the Oracle observes and as you teach it.*
+profile fills as the Juno observes and as you teach it.*

@@ -38,7 +38,7 @@ ai_brain/           tiered router → device / Mac mini / cloud
   ├── cloud.py      opt-in cloud tier
   └── server/       the Mac Brain: index · control panel · pairing · macOS sources
 lucid_recall/       query router → SocialLens / MemoryIndex → HUD card
-object_lens/        Oracle + Label — look at a thing → a contextual panel
+object_lens/        Juno + Label — look at a thing → a contextual panel
 social_lens/        recognise your own people; consent-first name capture
 truth_lens/         9-stage multimodal deception analysis
 dream_mode/         the ambient loop, Ghost Layer, world-anchored cards

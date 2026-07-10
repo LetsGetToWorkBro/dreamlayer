@@ -1,4 +1,4 @@
-"""hud/audio.py — Oracle's earcons: the short sounds the glasses play, varied.
+"""hud/audio.py — Juno's earcons: the short sounds the glasses play, varied.
 
 Cards carry an `earcon` id (e.g. "hark" for the "Listen!" tap, "wake" for a
 greeting). Each id maps to a **family** of clips — Hey 1/2, Listen 1/2, Look
@@ -18,8 +18,8 @@ from pathlib import Path
 
 # earcon id -> what it's for
 EARCONS = {
-    "wake":        "Oracle woke / a greeting — the 'Hey' family",
-    "hark":        "Listen! — Oracle has something for you",
+    "wake":        "Juno woke / a greeting — the 'Hey' family",
+    "hark":        "Listen! — Juno has something for you",
     "hark_urgent": "Watch out — an urgent heads-up",
     "look":        "Look at this — a thing worth your eyes",
     "chime":       "a neutral confirmation sound effect",

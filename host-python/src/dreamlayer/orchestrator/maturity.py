@@ -16,7 +16,7 @@ in stages:
               attention harks enabled.
 
 Regression: if the trailing-20 dismissal rate crosses 60%, drop one state
-for 24 h ("Oracle is recalibrating") — interrupting less is how trust is
+for 24 h ("Juno is recalibrating") — interrupting less is how trust is
 repaired. State persists in the settings table so a restart never resets
 the arc.
 """

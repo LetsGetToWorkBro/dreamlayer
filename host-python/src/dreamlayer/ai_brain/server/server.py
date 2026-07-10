@@ -76,7 +76,7 @@ def lan_ip() -> str:
 
 
 def _spoken_duration(secs: float) -> str:
-    """'5 minutes', '1 minute 30 seconds' — how Oracle says a length back."""
+    """'5 minutes', '1 minute 30 seconds' — how Juno says a length back."""
     secs = int(round(secs))
     h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
     parts = []
@@ -146,7 +146,7 @@ class Brain:
         from ...plugins import PluginStore
         self.plugins = PluginStore(self.cfg_dir / "plugins",
                                    host_capabilities=self.plugin_capabilities())
-        # Oracle's profile of you (name, interests, people, remembered prefs).
+        # Juno's profile of you (name, interests, people, remembered prefs).
         # Built on the glasses hub from the conversation stream, then *pushed*
         # here so the phone can read it — the hub->Brain bridge. Just a mirror;
         # the Brain never writes it, only stores what the hub sends.
@@ -337,7 +337,7 @@ class Brain:
 
     def rc_suggest(self) -> dict:
         """The right machine for right now, or nothing when none is a confident
-        fit — the Oracle's "Gym? Start the usual circuit?" """
+        fit — the Juno's "Gym? Start the usual circuit?" """
         return {"suggestion": self.rc.suggest()}
 
     def rc_grammar_candidates(self) -> dict:
@@ -439,7 +439,7 @@ class Brain:
         return {"ok": record.success, "name": name, "active": self._rc_active,
                 "mode": record.mode}
 
-    # -- native behaviors Oracle builds (timers, intervals, clock) -----------
+    # -- native behaviors Juno builds (timers, intervals, clock) -----------
 
     def rc_native(self, intent: str, args: dict) -> dict:
         """Turn a parsed voice intent (timer / interval / clock) into a
@@ -489,7 +489,7 @@ class Brain:
             self.rc.vault.revoke(fig.id)   # ephemeral: keep the Repertoire clean
         except Exception:
             pass
-        self.activity.add("rc", f"Oracle started {fig.name!r}")
+        self.activity.add("rc", f"Juno started {fig.name!r}")
         return {"ok": record.success, "intent": intent, "say": say,
                 "figment_id": fig.id, "name": fig.name}
 
@@ -1278,7 +1278,7 @@ class Brain:
         return {"memories": out}
 
     def set_profile(self, data: dict) -> dict:
-        """Store the Oracle profile the glasses hub just pushed (a mirror, so the
+        """Store the Juno profile the glasses hub just pushed (a mirror, so the
         phone can read it). Keeps only the known shape; persists to profile.json."""
         d = data if isinstance(data, dict) else {}
 
@@ -1938,7 +1938,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # owed, dated reminders — assembled from what the Brain holds
                 self._json(200, brain.memories())
             elif path == "/dreamlayer/profile":
-                # what the Oracle has learned about you (mirrored from the hub)
+                # what the Juno has learned about you (mirrored from the hub)
                 self._json(200, brain.profile)
             elif path == "/dreamlayer/brief/latest":
                 self._json(200, brain.last_brief or {})
@@ -2130,7 +2130,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 elif it.kind == "brief":
                     self._json(200, {"intent": "brief", **brain.brief()})
                 elif it.kind in ("timer", "interval", "clock"):
-                    # native behaviors Oracle builds & runs (docs/RC_V2): a
+                    # native behaviors Juno builds & runs (docs/RC_V2): a
                     # timer/interval compiles to a Figment on the stage; a
                     # clock time-query just answers
                     self._json(200, brain.rc_native(it.kind, it.args))
@@ -2175,7 +2175,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"unlocked": brain.saga_record(ev) if ev else [],
                                  "saga": brain.saga.snapshot()})
             elif path == "/dreamlayer/profile":
-                # the glasses hub pushes its Oracle profile snapshot so the phone
+                # the glasses hub pushes its Juno profile snapshot so the phone
                 # can read it (the hub->Brain bridge). Mirror-only.
                 self._json(200, brain.set_profile(self._body()))
             elif path == "/dreamlayer/model/pull":

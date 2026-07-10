@@ -1,6 +1,6 @@
 """test_conversation_cards_solid.py — the O3 cards join Meridian Solid.
 
-FactCheck / AnswerAhead / OracleReply / Hark used the flat generic layout; they
+FactCheck / AnswerAhead / JunoReply / Hark used the flat generic layout; they
 now carry the same material language as the hero cards (glass pane, gradient
 strokes, bloom, hero type, dim-twin secondary text). These lock in that richness
 so a regression to the austere look fails CI — the same contract Solid put on the
@@ -23,7 +23,7 @@ def _lit(card_key: str) -> int:
 RICHNESS_FLOORS = {
     "fact_check":   5200,
     "answer_ahead": 5200,
-    "oracle_reply": 4200,
+    "juno_reply": 4200,
     "hark":         4600,
 }
 
@@ -38,7 +38,7 @@ def test_they_route_to_dedicated_material_renderers():
     r = R.CardRenderer()
     for t, fn in (("FactCheckCard", "_fact_check"),
                   ("AnswerAheadCard", "_answer_ahead"),
-                  ("OracleReplyCard", "_oracle_reply"),
+                  ("JunoReplyCard", "_juno_reply"),
                   ("HarkCard", "_hark")):
         # each has its own renderer, not the generic _layout_card
         assert hasattr(r, fn)

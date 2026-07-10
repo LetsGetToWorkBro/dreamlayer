@@ -14,10 +14,10 @@ engineering-level detail on every card lives in
 | | |
 |---|---|
 | ![Ready](../assets/cards/ready.png) | **The quiet mark.** The glasses are on and *not* listening. This is what "idle" looks like. |
-| ![Listening](../assets/cards/query_listening.png) | **It's listening.** You woke the Oracle; the bars move with your voice. |
+| ![Listening](../assets/cards/query_listening.png) | **It's listening.** You woke the Juno; the bars move with your voice. |
 | ![Thinking](../assets/cards/loading.png) | **Thinking.** Your question is being answered. |
 | ![Saved](../assets/cards/saved_memory.png) | **Kept.** The moment you just saved is safely remembered. |
-| ![Reply](../assets/cards/oracle_reply.png) | **The Oracle answering** you, or confirming something it just did. |
+| ![Reply](../assets/cards/juno_reply.png) | **The Juno answering** you, or confirming something it just did. |
 
 ## Memory coming back to you
 

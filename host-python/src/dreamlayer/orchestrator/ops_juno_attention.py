@@ -1,4 +1,4 @@
-"""ops_oracle_attention — extracted Orchestrator method cluster (behaviour-preserving).
+"""ops_juno_attention — extracted Orchestrator method cluster (behaviour-preserving).
 
 A mixin the Orchestrator inherits; every method here still runs on the
 coordinator instance (shared self), so all self.<engine> attributes,
@@ -12,7 +12,7 @@ from ._ops_helpers import _default_http_get
 from ._ops_helpers import _default_http_post
 
 
-class OracleAttentionOps:
+class JunoAttentionOps:
 
     def set_anticipation(self, on: bool = True) -> None:
         self.anticipation_on = on
@@ -30,10 +30,10 @@ class OracleAttentionOps:
                 for k in self.anticipation.KINDS}
 
 
-    # -- Oracle: wake word + multimodal activation + listening feedback --
+    # -- Juno: wake word + multimodal activation + listening feedback --
 
     def set_wake_source(self, source: str, on: bool = True) -> None:
-        """Enable/disable a way to wake Oracle (voice / tap / gaze / raise)."""
+        """Enable/disable a way to wake Juno (voice / tap / gaze / raise)."""
         if on:
             self.wake_sources.add(source)
         else:
@@ -46,18 +46,18 @@ class OracleAttentionOps:
             self.wake_feedback[kind] = on
 
 
-    def oracle_listening(self, now: float | None = None) -> bool:
+    def juno_listening(self, now: float | None = None) -> bool:
         import time
-        return (now if now is not None else time.time()) < self.oracle_until
+        return (now if now is not None else time.time()) < self.juno_until
 
 
     def begin_listening(self, source: str = "voice", now: float | None = None):
-        """Open Oracle's listening session and show the reassurance cue — a
+        """Open Juno's listening session and show the reassurance cue — a
         Listening ring plus (device seams) an earcon and a haptic tick, per the
         wake_feedback toggles. Returns the card."""
         import time
         now = now if now is not None else time.time()
-        self.oracle_until = now + self.oracle_session_s
+        self.juno_until = now + self.juno_session_s
         fb = self.wake_feedback
         card = cards.listening(source, earcon=fb["audio"], haptic=fb["haptic"])
         if fb["visual"]:
@@ -66,18 +66,18 @@ class OracleAttentionOps:
 
 
     def end_listening(self) -> None:
-        self.oracle_until = 0.0
+        self.juno_until = 0.0
 
 
-    def oracle_greeting(self) -> str:
-        """Oracle's greeting, adapted to what it's learned — by name once it
+    def juno_greeting(self) -> str:
+        """Juno's greeting, adapted to what it's learned — by name once it
         knows it. Warms on wake / first line of a session."""
         from . import persona
         return persona.greeting(self.user.address())
 
 
     def user_snapshot(self, n: int = 5) -> dict:
-        """What the Oracle has learned about you — name, the topics you return
+        """What the Juno has learned about you — name, the topics you return
         to, who you talk with most, and what you've told it to remember. For the
         phone's profile screen; a read, never a write."""
         return self.user.snapshot(n).to_dict()
@@ -121,7 +121,7 @@ class OracleAttentionOps:
 
 
     def publish_profile(self, http_post=None) -> dict | None:
-        """Push the Oracle profile to the paired Mac mini Brain (POST
+        """Push the Juno profile to the paired Mac mini Brain (POST
         /dreamlayer/profile) so the phone can read it — the hub->Brain bridge.
         Best-effort and Veil-gated; silent with no Mac mini. `http_post` defaults
         to urllib."""
@@ -146,7 +146,7 @@ class OracleAttentionOps:
 
 
     def activate(self, source: str, now: float | None = None):
-        """Wake Oracle without a phrase — a tap, a gaze/dwell, or a raise-to-
+        """Wake Juno without a phrase — a tap, a gaze/dwell, or a raise-to-
         speak gesture (the device seam decides which). Enters listening if that
         source is enabled; returns the Listening card or None."""
         if source not in self.wake_sources:
@@ -157,10 +157,10 @@ class OracleAttentionOps:
     def hear(self, text: str, now: float | None = None) -> dict:
         """The wake pipeline for a transcribed line (ASR is the device seam).
 
-          • opens with "Hey Oracle" → wake, then run the command if one follows;
-          • Oracle already listening (session window) → treat as a follow-up,
+          • opens with "Hey Juno" → wake, then run the command if one follows;
+          • Juno already listening (session window) → treat as a follow-up,
             no wake word needed (continuous-conversation mode);
-          • otherwise → idle (Oracle wasn't addressed).
+          • otherwise → idle (Juno wasn't addressed).
         Each command extends the session so a back-and-forth flows."""
         import time
         from .voice import detect_wake
@@ -171,12 +171,12 @@ class OracleAttentionOps:
                 return {"intent": "idle"}
             self.begin_listening("voice", now)
             if remainder:
-                self.oracle_until = now + self.oracle_session_s
-                return self.ask_oracle(remainder)
+                self.juno_until = now + self.juno_session_s
+                return self.ask_juno(remainder)
             return {"intent": "listening"}
-        if self.oracle_listening(now):
-            self.oracle_until = now + self.oracle_session_s     # follow-up extends
-            return self.ask_oracle(text)
+        if self.juno_listening(now):
+            self.juno_until = now + self.juno_session_s     # follow-up extends
+            return self.ask_juno(text)
         return {"intent": "idle"}
 
 
@@ -236,7 +236,7 @@ class OracleAttentionOps:
 
     def hark(self, clue: str, detail: str = "", importance: str = "normal",
              now: float | None = None, cooldown_s: float = 120.0):
-        """Oracle's "Listen!" — a proactive tap on the shoulder with one thing
+        """Juno's "Listen!" — a proactive tap on the shoulder with one thing
         worth hearing (a clue, a heads-up). Rate-limited so it never nags:
         nothing fires within `cooldown_s` of the last hark. Silenced by the
         Privacy Veil; a *normal* hark also holds during Focus, but an *urgent*
@@ -263,7 +263,7 @@ class OracleAttentionOps:
 
     def pulse(self, context, commitments=None) -> dict:
         """One proactive heartbeat over the current moment: surface anticipation
-        cards *and* decide whether Oracle should speak up ("Listen!"/"Watch
+        cards *and* decide whether Juno should speak up ("Listen!"/"Watch
         out!"). The device seam assembles the `Context` from live signals (where
         you are, who's in view, calendar, anchors, commitments); start_pulse()
         drives this on an interval. Returns what fired."""

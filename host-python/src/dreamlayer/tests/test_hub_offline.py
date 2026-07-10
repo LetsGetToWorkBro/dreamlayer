@@ -36,7 +36,7 @@ def _ftypes(br):
 
 def test_hub_sets_a_timer_on_the_glasses():
     orc = _hub()
-    r = orc.handle_voice("Hey Oracle, set a timer for 5 minutes")
+    r = orc.handle_voice("Hey Juno, set a timer for 5 minutes")
     assert r["ok"] and "5 minutes" in r["say"]
     assert _ftypes(orc.bridge) == ["figment_put", "figment_swap"]
 

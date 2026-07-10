@@ -30,7 +30,7 @@ def test_black_becomes_transparent_and_ink_opaque():
 
 
 def test_emissive_preserves_size():
-    card = R.render(ALL_SAMPLES["oracle_reply"])
+    card = R.render(ALL_SAMPLES["juno_reply"])
     assert emissive(card).size == card.size
 
 

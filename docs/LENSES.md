@@ -47,7 +47,7 @@ One family, three directions.
 
 ## 🌍 World — *understand what you look at*
 
-- **Oracle** — look at anything → know it: recognise the object and show a
+- **Juno** — look at anything → know it: recognise the object and show a
   contextual panel (objects, not people). The flagship of World.
 - **Label Lens** — your own facts about a product/food/menu: dietary rules
   you set ("you're avoiding dairy"), whether you own or returned it,

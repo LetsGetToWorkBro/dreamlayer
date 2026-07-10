@@ -1,4 +1,4 @@
-"""test_facets_and_posture.py — Oracle facets (own/ai/shop) + network posture."""
+"""test_facets_and_posture.py — Juno facets (own/ai/shop) + network posture."""
 from __future__ import annotations
 
 import numpy as np

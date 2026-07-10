@@ -66,7 +66,7 @@ LENSES: list[Lens] = [
                 "dreamlayer.orchestrator.provenance"),
     ]),
     Lens("world", "World", "understand what you look at", [
-        Feature("oracle", "Oracle", "look at anything → know it (recognise + panel)",
+        Feature("juno", "Juno", "look at anything → know it (recognise + panel)",
                 "dreamlayer.object_lens"),
         Feature("label", "Label Lens", "your own facts about a product: dietary rules, ownership, returns",
                 "dreamlayer.object_lens.label"),

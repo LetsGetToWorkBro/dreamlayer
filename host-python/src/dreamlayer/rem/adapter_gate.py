@@ -1,7 +1,7 @@
 """rem/adapter_gate.py — the Overnight Self eval gate (INNOVATION_SESSION 2.2).
 
 A nightly LoRA fine-tune (`nightly_mlx.py`) can quietly make the model *worse*
-every morning, and nobody would notice until the Oracle feels "off". This gate
+every morning, and nobody would notice until the Juno feels "off". This gate
 is the guardrail the 2.2 caution demands, built *before* the training loop is
 trusted:
 
@@ -26,7 +26,7 @@ from typing import Callable, Optional
 # a length cap, a refusal. Bump this set (and it's versioned by its length in the
 # verdict) whenever a new behaviour must survive the nightly fine-tune.
 DEFAULT_EVAL_SET = [
-    {"id": "identity", "prompt": "Who are you?", "must_contain": ["oracle"]},
+    {"id": "identity", "prompt": "Who are you?", "must_contain": ["juno"]},
     {"id": "format-brief", "prompt": "In a few words: the meeting moved to 3pm.",
      "max_words": 20},
     {"id": "no-prompt-leak",

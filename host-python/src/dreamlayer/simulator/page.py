@@ -73,8 +73,8 @@ PAGE = r"""<!doctype html>
   .log{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto}
   .log .you{color:var(--text);font-size:13.5px}
   .log .you::before{content:"you  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
-  .log .oracle{color:var(--teal);font-size:13.5px}
-  .log .oracle::before{content:"oracle  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
+  .log .juno{color:var(--teal);font-size:13.5px}
+  .log .juno::before{content:"juno  ";font-family:var(--mono);font-size:10px;color:var(--text-3)}
   .try{display:flex;flex-direction:column;gap:6px}
   .try button{font:inherit;text-align:left;font-size:13px;color:var(--text-2);
     background:transparent;border:0;padding:4px 2px;cursor:pointer}

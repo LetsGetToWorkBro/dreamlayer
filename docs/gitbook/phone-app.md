@@ -73,7 +73,7 @@ The default landing tab:
 
 What the glasses are doing right now: a **HaloMirror** stage showing the last
 card (or the paused state), a Live/Paused status pill, the latest morning
-brief, a voice-command box that routes the same intents as the Oracle
+brief, a voice-command box that routes the same intents as the Juno
 (brief / answer / reply), and quick actions (brief, ask, pause/resume
 capture). It polls `GET /dreamlayer/brief/latest` every 90 seconds and fires
 a local notification when a genuinely new brief arrives.
@@ -116,14 +116,14 @@ with sources.
 
 ## Settings — every toggle
 
-| Privacy and relay | Oracle |
+| Privacy and relay | Juno |
 |---|---|
-| ![Settings](assets/phone/settings.png) | ![Oracle settings](assets/phone/settings_oracle.png) |
+| ![Settings](assets/phone/settings.png) | ![Juno settings](assets/phone/settings_juno.png) |
 
 - **Privacy:** Proactive cards with nested Events / People / Places cues,
   Focus mode, Incognito, Text pop-ups, Email pop-ups, Summarize long emails,
   Pause memory capture.
-- **Oracle:** the wake word (fixed "Hey Oracle" today), Proactive alerts,
+- **Juno:** the wake word (fixed "Hey Juno" today), Proactive alerts,
   Live fact-checker (Veritas), Answer-ahead, wake sources (voice, tap, gaze,
   raise), and listening feedback (visual, audio, haptic).
 - **Devices and brain:** glasses status and the link to the Brain tab.
@@ -149,7 +149,7 @@ is in [Settings and modes](reference/settings.md).
   day the glasses scrub), color-coded by kind.
 - **Saga** — rank, XP bar, and the achievement ledger; see
   [Progression](progression.md).
-- **Profile** — "What Oracle knows about you": the mirrored user model.
+- **Profile** — "What Juno knows about you": the mirrored user model.
 
 | Rehearsal | Confluence |
 |---|---|

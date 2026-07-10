@@ -89,7 +89,7 @@ the full breakdown is in [`docs/LENSES.md`](docs/LENSES.md).
 | 🧠 **Memory** | your life, remembered | Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition · Waypath |
 | 👤 **People** | who's around you | Social Lens · Timbre · Name Capture |
 | ⚖️ **Truth** | what's true, and where beliefs come from | Truth Lens · Candor · Provenance |
-| 🌍 **World** | understand what you look at | **Oracle** (look → know) · Label Lens · **AI Brain** · Rosetta · Puente |
+| 🌍 **World** | understand what you look at | **Juno** (look → know) · Label Lens · **AI Brain** · Rosetta · Puente |
 | 🎯 **Life** | do, keep, and build | Commitment Drift · Saga · Reality Compiler (Rehearsal + Wayfinding) |
 | 🤝 **Together** | two wearers, one sky | Confluence |
 
@@ -180,7 +180,7 @@ orchestrator/       central coordinator + the three brain switches
 ai_brain/           tiered vision + knowledge router → device / Mac mini / cloud
   └── server/       the Mac Brain: index, control panel, pairing, macOS sources
 lucid_recall/       query router → SocialLens / MemoryIndex → HUD card
-object_lens/        Oracle + Label — look at a thing → a contextual panel
+object_lens/        Juno + Label — look at a thing → a contextual panel
 social_lens/        recognise your own people; automatic self-introduction capture
 truth_lens/         9-stage multimodal deception analysis
 dream_mode/         the ambient loop, Ghost Layer, world-anchored cards
@@ -198,7 +198,7 @@ memory/ pipelines/ hud/ bridge/     storage · ingestion · rendering · BLE
 ## For developers
 
 ```python
-# Oracle — look at a thing, get a panel (objects, never people)
+# Juno — look at a thing, get a panel (objects, never people)
 panel = orchestrator.look_at_object(camera_frame)      # → HUD card
 
 # Ask your brain — folds into Lucid Recall; device → Mac mini → cloud

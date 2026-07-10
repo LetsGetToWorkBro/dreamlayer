@@ -1,6 +1,6 @@
-"""orchestrator/commands.py — "Hey Oracle, *do* something."
+"""orchestrator/commands.py — "Hey Juno, *do* something."
 
-Beyond asking questions, Oracle runs the device. This is the grammar that turns
+Beyond asking questions, Juno runs the device. This is the grammar that turns
 a spoken line into a device Command — focus, incognito, captions, proactive
 alerts, rewind, sync, reminders. Anything that isn't a command falls through to
 the knowledge/conversation router (voice.parse_intent), so "turn on focus" acts

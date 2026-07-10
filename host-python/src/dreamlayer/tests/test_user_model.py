@@ -1,4 +1,4 @@
-"""test_user_model.py — the Oracle learns you.
+"""test_user_model.py — the Juno learns you.
 
 A light on-device profile: the topics you return to, who you talk with, what you
 tell it to remember, and what to call you. Built passively from your own lines
@@ -15,7 +15,7 @@ from dreamlayer.tests.test_integration_dream_suite import FakeBridge
 
 
 def _replies(br):
-    return [f for f in br.raw if f.get("t") == "card" and f.get("type") == "OracleReplyCard"]
+    return [f for f in br.raw if f.get("t") == "card" and f.get("type") == "JunoReplyCard"]
 
 
 # -- passive interests --------------------------------------------------------
@@ -81,14 +81,14 @@ def test_greeting_warms_with_your_name():
 
 # -- end to end through the orchestrator --------------------------------------
 
-def test_oracle_learns_your_name_on_command():
+def test_juno_learns_your_name_on_command():
     br = FakeBridge()
     orc = Orchestrator(br)
-    out = orc.ask_oracle("Call me Sam")
+    out = orc.ask_juno("Call me Sam")
     assert out["intent"] == "learn" and out["executed"]
     assert orc.user.address() == "Sam"
     assert "Sam" in _replies(br)[-1]["primary"]
-    assert orc.oracle_greeting() == "I'm here, Sam."
+    assert orc.juno_greeting() == "I'm here, Sam."
 
 
 def test_orchestrator_builds_interests_from_captions():

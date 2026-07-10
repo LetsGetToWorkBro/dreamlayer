@@ -29,8 +29,8 @@ DAY_FRAME = (
 
 CARDS = {
     "ListeningCard": (
-        'C.listening({ source="voice", eyebrow="ORACLE",'
-        ' primary="Listening...", detail="woke by Hey Oracle" })'
+        'C.listening({ source="voice", eyebrow="JUNO",'
+        ' primary="Listening...", detail="woke by Hey Juno" })'
     ),
     "MessageCard": (
         'C.message({ headline="Text", primary="Priya",'

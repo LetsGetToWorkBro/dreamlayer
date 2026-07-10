@@ -38,7 +38,7 @@ display runtime, BLE, and the basic sensors could host the same experience.
   Horizon, Dream rendering, materials,
   motion, palettes, budgets — exercised through the real device Lua in the
   raster harness.
-- The entire orchestrator: Oracle grammar and persona, user model, Veritas,
+- The entire orchestrator: Juno grammar and persona, user model, Veritas,
   Truth Lens fusion and baselines, Discernment, answer-ahead, attention,
   anticipation, ledger, commitments, scrub, Social Lens matching and consent
   grammar, privacy gates.
@@ -100,7 +100,7 @@ low tens of KB/s. What that means, concretely:
 | Continuous audio | **only compressed** — 16 kHz PCM (256 kbps) will not survive this framing; an Opus-class codec at 16–24 kbps fits comfortably |
 
 **The open firmware question (load-bearing, unresolved):** roughly half the
-lens catalogue — Oracle voice, Veritas, live captions, Name Capture, Timbre,
+lens catalogue — Juno voice, Veritas, live captions, Name Capture, Timbre,
 Puente — consumes *transcribed speech*, which requires continuous audio off
 the glasses. Whether Halo's firmware exposes the microphone with an
 on-glass codec (or a raw stream the phone can encode) is a question for

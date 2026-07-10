@@ -327,8 +327,8 @@ def export_all(out_root: Path | None = None) -> list[Path]:
       detail = "When did we last ship to Denver?",
       footer = "Priya - your files",
     }"""
-    SOLID_CARDS["oracle_reply_hold"] = """{
-      type = "OracleReplyCard", kind = "action",
+    SOLID_CARDS["juno_reply_hold"] = """{
+      type = "JunoReplyCard", kind = "action",
       primary = "Focus on - the world is turned down.",
     }"""
     SOLID_CARDS["hark_hold"] = """{
@@ -357,8 +357,8 @@ def export_all(out_root: Path | None = None) -> list[Path]:
     }"""
     # Missing frames (glass-bound cards that used to render black)
     SOLID_CARDS["listening_hold"] = """{
-      type = "ListeningCard", eyebrow = "ORACLE", primary = "Listening...",
-      detail = "woke by Hey Oracle", source = "voice",
+      type = "ListeningCard", eyebrow = "JUNO", primary = "Listening...",
+      detail = "woke by Hey Juno", source = "voice",
     }"""
     SOLID_CARDS["message_hold"] = """{
       type = "MessageCard", headline = "Text", primary = "Priya",

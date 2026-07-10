@@ -42,7 +42,7 @@ asks your files and mail.
 ![Memories tab](../assets/phone/memories.png)
 
 **Settings** — every switch in one place: privacy, proactive cards and
-alerts, the fact-checker, answer-ahead, how the Oracle wakes, and how it
+alerts, the fact-checker, answer-ahead, how the Juno wakes, and how it
 shows it is listening. Plus the danger zone (erase all memories) and the
 Labs screens:
 
@@ -58,11 +58,11 @@ Labs screens:
   stage.
 - **Rewind** — your day as a scrollable timeline.
 - **Saga** — your rank, level, and achievements.
-- **Profile** — "What Oracle knows about you," the complete list.
+- **Profile** — "What Juno knows about you," the complete list.
 
 | Settings | Saga |
 |---|---|
-| ![Settings](../assets/phone/settings_oracle.png) | ![Saga](../assets/phone/saga.png) |
+| ![Settings](../assets/phone/settings_juno.png) | ![Saga](../assets/phone/saga.png) |
 
 ## The Mac app
 

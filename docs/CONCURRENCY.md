@@ -57,7 +57,7 @@ seam.
 Two clocks coexist deliberately, and mixing them is the one real footgun:
 
 - **`self._clock()` → `time.monotonic()`** — used for *durations and cooldowns*
-  that must be immune to wall-clock jumps (Oracle session window, glance-intent
+  that must be immune to wall-clock jumps (Juno session window, glance-intent
   freshness, hark pacing). Never persist a monotonic value; it's meaningless
   across processes.
 - **`time.time()` (wall clock)** — used where a method takes a `now: float |

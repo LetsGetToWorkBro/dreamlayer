@@ -30,23 +30,23 @@ from dreamlayer.hud import cards, renderer               # noqa: E402
 # The three shipped storyboards used by the pinned acts.
 STORYBOARDS = ["veritas", "answer_ahead", "owe_someone"]
 
-# The Oracle act, composed here from the same real cards the storyboards use.
-def _oracle() -> Scene:
-    return Scene("oracle", size=(1080, 1920), beats=[
+# The Juno act, composed here from the same real cards the storyboards use.
+def _juno() -> Scene:
+    return Scene("juno", size=(1080, 1920), beats=[
         Beat(cards.listening(source="voice"),
              t_in=0.8, t_out=3.4, anchor=(0.5, 0.44), width=0.5,
              label="wake — it hears you"),
         Beat(cards.spoken_caption("You", "Book the corner table for four, and tell Priya."),
              t_in=1.4, t_out=5.2, anchor=(0.5, 0.82), width=0.6, glow=False,
              label="you ask for the whole errand"),
-        Beat(cards.oracle_reply("Booked for 7:30. Priya has the time.", "action"),
+        Beat(cards.juno_reply("Booked for 7:30. Priya has the time.", "action"),
              t_in=5.6, t_out=11.0, anchor=(0.5, 0.44), width=0.52,
              label="done — both halves"),
     ], note="Ask it to do anything; the reply is the receipt.")
 
 # Curated cards for the hero, catalog grid, and privacy section.
 CARD_KEYS = [
-    "answer_ahead", "fact_check", "oracle_reply", "hark",
+    "answer_ahead", "fact_check", "juno_reply", "hark",
     "commitment_recall", "commitment_drift", "object_recall",
     "privacy_veil", "forget_last", "morning_brief", "person_dossier",
     "truth_gauge", "live_caption", "saved_memory", "query_listening",
@@ -54,7 +54,7 @@ CARD_KEYS = [
 
 # One plate seed per section so each act sits in a subtly different room.
 PLATE_SEEDS = {"hero": 5, "veritas": 7, "answer_ahead": 11,
-               "owe_someone": 23, "oracle": 41, "close": 13}
+               "owe_someone": 23, "juno": 41, "close": 13}
 PLATE_WIDE = (1600, 900)
 PLATE_TALL = (810, 1440)
 
@@ -67,8 +67,8 @@ def main(out_root: str = ".asset-src") -> None:
     for name in STORYBOARDS:
         m = render_scene(SCENES[name], root / "scenes" / name)
         print(f"scene {name}: {len(m['beats'])} beats, {m['duration']}s")
-    m = render_scene(_oracle(), root / "scenes" / "oracle")
-    print(f"scene oracle: {len(m['beats'])} beats, {m['duration']}s")
+    m = render_scene(_juno(), root / "scenes" / "juno")
+    print(f"scene juno: {len(m['beats'])} beats, {m['duration']}s")
 
     # 2. POV plates.
     plates = root / "plates"

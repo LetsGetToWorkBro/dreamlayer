@@ -23,7 +23,7 @@ def test_stash_grammar():
 
 
 def test_stash_grammar_parked():
-    it = parse_intent("Hey Oracle, I parked on level 3")
+    it = parse_intent("Hey Juno, I parked on level 3")
     assert it.kind == "stash" and it.args["subject"] == "the car"
     assert it.args["place"] == "level 3"
 
@@ -158,10 +158,10 @@ def test_hub_memory_writes_refuse_under_incognito_flag():
     assert orc.handle_voice("I left my bike at the rack")["ok"] is True
 
 
-def test_oracle_wrapper_speaks_locate():
+def test_juno_wrapper_speaks_locate():
     orc = Orchestrator(FakeBridge())
-    orc.ask_oracle("I left my bike at the north rack")
-    out = orc.ask_oracle("where's my bike?")
+    orc.ask_juno("I left my bike at the north rack")
+    out = orc.ask_juno("where's my bike?")
     assert "north rack" in out["text"]         # not persona.dunno()
 
 

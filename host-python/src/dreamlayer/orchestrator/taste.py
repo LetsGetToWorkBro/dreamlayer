@@ -1,4 +1,4 @@
-"""orchestrator/taste.py — TasteLens: the real-world choice oracle.
+"""orchestrator/taste.py — TasteLens: the real-world choice juno.
 
 Look at a whole shelf or a menu and get a **ranked comparison against your
 rules** — dietary vetoes first, then your budget, then quality (rating) and

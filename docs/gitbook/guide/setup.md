@@ -13,7 +13,7 @@ product does and ends at pairing.
 
 If you are skipping the Mac for now, you are already done: the phone is the
 brain, and the glasses pair from this same screen. Everything core — memory,
-people, promises, the Oracle — works right now.
+people, promises, the Juno — works right now.
 
 **No hardware at all yet?** Tap **"Explore with sample data"** at the end of
 the welcome. The whole app fills with clearly-labeled sample data — a
@@ -60,7 +60,7 @@ for devices on your side of it.
 
 The display wakes with a ring of light — that ring is your day. From here,
 the [day-with guide](a-day-with-dreamlayer.md) shows what living with it is
-like, and [Talking to it](talking-to-oracle.md) covers what you can say.
+like, and [Talking to it](talking-to-juno.md) covers what you can say.
 
 ## The three switches
 

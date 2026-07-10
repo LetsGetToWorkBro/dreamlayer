@@ -73,8 +73,8 @@ test.describe("landing page", () => {
     await scrollToSection(page, "#act-memory", 0.55);
     await shoot(page, `${p}-04-memory`);
 
-    await scrollToSection(page, "#act-oracle", 0.7);
-    await shoot(page, `${p}-05-oracle`);
+    await scrollToSection(page, "#act-juno", 0.7);
+    await shoot(page, `${p}-05-juno`);
 
     await scrollToSection(page, ".catalog", 0.2);
     await shoot(page, `${p}-06-catalog`);

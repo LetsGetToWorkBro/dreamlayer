@@ -73,7 +73,7 @@ cloud gate is independent. Incognito is the old "home/private" mode, renamed.
 
 | Capability | Cloud OFF (on-device / LAN) | Cloud ON |
 |---|---|---|
-| Name an object (Oracle) | ✓ fast, offline | ✓ (same Tier 0) |
+| Name an object (Juno) | ✓ fast, offline | ✓ (same Tier 0) |
 | DreamLayer's own memory, people, waypaths | ✓ always local | ✓ |
 | Search *your* files & mail (Lucid Recall) | ✓ on the Mac mini | ✓ |
 | Deep "explain / tell me more" on an object | ✓ Mac mini; **phone mode: coarse** | ✓ frontier VLM, richest |
@@ -193,7 +193,7 @@ Provenance can trace it.
    The seam (`VisionBrain` / `KnowledgeBrain`) doesn't care which.
 5. **Naming** — the **knowledge half folds into Lucid Recall** (it *is*
    "ask and receive," now extended from your memory to your files/mail), so
-   no new lens there. The **vision half is the AI Object Lens**. ("Oracle"
+   no new lens there. The **vision half is the AI Object Lens**. ("Juno"
    was a nice name we consciously don't need — Lucid Recall already is it.)
 
 ## 9. What "mind-blowing" looks like when this lands

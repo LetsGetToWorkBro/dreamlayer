@@ -11,7 +11,7 @@ rotation.
 
 | Earcon id | Means | Variant files | Fired by |
 |---|---|---|---|
-| `wake` | the Oracle woke / greeting | `hey1`, `hey2` | ListeningCard (any wake source) |
+| `wake` | the Juno woke / greeting | `hey1`, `hey2` | ListeningCard (any wake source) |
 | `hark` | "Listen!" | `listen1`, `listen2` | normal harks; self-contradiction and unverified fact-checks |
 | `hark_urgent` | "Watch out!" | `watchout1`, `watchout2` | urgent watch-out harks; disputed fact-checks |
 | `look` | "look at this" | `look1`, `look2` | person dossier surfacing |

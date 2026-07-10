@@ -59,7 +59,7 @@ def _answer_ahead() -> Scene:
 
 
 # 3) OWE-SOMEONE — it remembered so you didn't have to -----------------------
-# Someone you owe is a minute away. Oracle taps you — “Listen!” — with the one
+# Someone you owe is a minute away. Juno taps you — “Listen!” — with the one
 # thing, and what you owe. You hand it over.
 def _owe_someone() -> Scene:
     return Scene("owe_someone", size=(1080, 1920), beats=[
@@ -72,7 +72,7 @@ def _owe_someone() -> Scene:
                 "due": "today", "confidence": 0.82}),
              t_in=5.7, t_out=10.5, anchor=(0.5, 0.44), width=0.52,
              label="what you owe, surfaced"),
-        Beat(cards.oracle_reply("Handed off. One less thing.", "answer"),
+        Beat(cards.juno_reply("Handed off. One less thing.", "answer"),
              t_in=10.8, t_out=13.6, anchor=(0.5, 0.45), width=0.5,
              label="human outcome — done"),
     ], note="Walking POV, someone approaches. Earcon on the hark beat: listen1. "
@@ -114,9 +114,9 @@ def _the_tour() -> Scene:
             "detail": "beside the blue notebook", "last_seen": "7:42 PM",
             "confidence": 0.9}),
           20.9, 24.6, "where you left it"),
-        b(cards.oracle_reply("Focus on — the world's turned down.", "action"),
-          24.9, 28.2, "Hey Oracle, do anything"),
-        b(cards.oracle_reply("Everything stays with you. Always.", "answer"),
+        b(cards.juno_reply("Focus on — the world's turned down.", "action"),
+          24.9, 28.2, "Hey Juno, do anything"),
+        b(cards.juno_reply("Everything stays with you. Always.", "answer"),
           28.5, 32.0, "local-first · private by design"),
     ], note="No POV footage needed — renders complete over the synthetic plate. "
             "For a cinematic cut, drop AI-generated (Veo/Sora) environment plates "

@@ -59,7 +59,7 @@ per-scene priors, so tomorrow's ambiguous look leans your way:
 
 ![GlanceChoiceCard](assets/cards/glance_choice.png)
 
-## TasteLens — the real-world choice oracle
+## TasteLens — the real-world choice juno
 
 `orchestrator/taste.py`. Look at a shelf or a menu and get the pick — with
 the *why* spelled out, and nothing silently hidden:

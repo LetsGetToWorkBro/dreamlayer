@@ -102,7 +102,7 @@ itself and says so.
 
 ![Learn — in-app explainers](assets/panel/view_learn.png)
 
-Learn is the in-app explainer gallery — eight real HUD cards (Oracle,
+Learn is the in-app explainer gallery — eight real HUD cards (Juno,
 brief, truth gauge, face recall, object recall, proactive memory, caption,
 veil) as tappable chips. Advanced holds the activity feed and Health &
 schedule (quiet hours, brief hour, retention).

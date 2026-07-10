@@ -34,7 +34,7 @@ class ConversationOps:
         # dossier, anticipation, and the quest/drift engine.
         if u is not None and u.is_mine():
             self._capture_commitment(u)
-        # the Oracle quietly learns you: your own words shape your interests;
+        # the Juno quietly learns you: your own words shape your interests;
         # whoever you're talking to is someone you talk with.
         if u is not None:
             if u.is_mine():
@@ -73,7 +73,7 @@ class ConversationOps:
 
     def _answer_question(self, question: str):
         """Answer-ahead seam: ask your knowledge tier for the answer to an
-        overheard question. Same path as the Oracle's own asks (Brain, cloud when
+        overheard question. Same path as the Juno's own asks (Brain, cloud when
         opted in); returns None offline / on a miss, so nothing is surfaced. A
         retrieval-ranked answerer can drop in behind this shape."""
         if not self.privacy.allow_capture() or not getattr(self, "brain", None):

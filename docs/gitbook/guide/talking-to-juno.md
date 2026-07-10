@@ -1,6 +1,6 @@
 # Talking to it
 
-The voice in DreamLayer is called the **Oracle**. It is calm, brief, and
+The voice in DreamLayer is called the **Juno**. It is calm, brief, and
 honest — one or two plain sentences, and "I don't have that one" when it
 does not know, never a made-up answer.
 
@@ -8,7 +8,7 @@ does not know, never a made-up answer.
 
 Four ways, all optional and all switchable in Settings:
 
-- Say **"Hey Oracle"** (or just "Oracle").
+- Say **"Hey Juno"** (or just "Juno").
 - **Tap** the glasses.
 - **Look up and hold** for a moment.
 - **Raise** the glasses to your face as you start speaking.
@@ -84,9 +84,9 @@ Say it, then look — the next glance goes straight to that read. More in
 
 It confirms every teach out loud ("Good to know you, Sam.") and you can see
 everything it has learned about you — and exactly nothing more — on the
-phone's **Profile** screen, titled "What Oracle knows about you":
+phone's **Profile** screen, titled "What Juno knows about you":
 
-![What Oracle knows about you](../assets/phone/profile.png)
+![What Juno knows about you](../assets/phone/profile.png)
 
 ### Ask anything
 
@@ -100,11 +100,11 @@ Answers appear as a card in its voice, and actions confirm themselves in
 character: *"Focus on — the world's turned down."*, *"Incognito. Nothing's
 being kept."*, *"Rewinding your day."*
 
-![The Oracle replying](../assets/cards/oracle_reply.png)
+![The Juno replying](../assets/cards/juno_reply.png)
 
 ## What it learns about you — and what it never does
 
-Over time the Oracle notices the topics you return to, the people you talk
+Over time the Juno notices the topics you return to, the people you talk
 with most, and the preferences you have told it. That is the entire list. It
 never stores recordings of your voice, never learns from other people's
 words as if they were yours, and learns nothing at all while privacy is on.

@@ -22,7 +22,7 @@ People confuse these in every product; DreamLayer keeps them distinct:
 
 | You want | Use | What happens |
 |---|---|---|
-| "Stop interrupting me" | **Focus mode** — "Hey Oracle, focus mode" | Cards, captions, and pop-ups pause for 25 minutes. It still remembers quietly. True emergencies still get through. |
+| "Stop interrupting me" | **Focus mode** — "Hey Juno, focus mode" | Cards, captions, and pop-ups pause for 25 minutes. It still remembers quietly. True emergencies still get through. |
 | "Stop remembering for a while" | **Incognito** — "go incognito" | Nothing is kept, and the cloud is forced off, until you say "back on the record." |
 | "Be off. Completely." | **The Veil** — hold the button | Deaf and blind. Nothing in, nothing out, nothing kept. |
 
@@ -30,7 +30,7 @@ People confuse these in every product; DreamLayer keeps them distinct:
 
 Short version: **on your own devices, and it works that way by default.**
 
-- Your memories, your people, your promises, and everything the Oracle has
+- Your memories, your people, your promises, and everything the Juno has
   learned about you live on your phone and (if you added one) your Mac.
   The Mac reads your files *in place* on your own machine — nothing is
   uploaded to make search work.

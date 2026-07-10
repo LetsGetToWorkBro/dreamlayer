@@ -1,11 +1,11 @@
-"""orchestrator/voice.py — "Hey Oracle" wake + intent routing.
+"""orchestrator/voice.py — "Hey Juno" wake + intent routing.
 
 Hands-free is the whole point of glasses, so this turns a spoken line into a
 structured intent the orchestrator can act on. The microphone + speech-to-text
 is a device seam (ASR isn't done here); this layer takes the *transcribed
 text*, strips the wake phrase (detect_wake), and figures out what you meant:
 
-    "Hey Oracle, what did Marcus need?"       → recall(query)
+    "Hey Juno, what did Marcus need?"       → recall(query)
     "where did I leave my bike?"              → locate(subject="bike")
     "reply to Priya saying on my way"         → reply(to="Priya", text="on my way")
     "I left my bike at the north rack"        → stash(subject="bike", place="the north rack")
@@ -38,10 +38,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-# Oracle is DreamLayer's assistant. "Hey Oracle" is the primary wake phrase;
+# Juno is DreamLayer's assistant. "Hey Juno" is the primary wake phrase;
 # the rest are graceful variants (and the old DreamLayer names, kept working).
-ASSISTANT_NAME = "Oracle"
-WAKE = ("hey oracle", "ok oracle", "okay oracle", "oracle",
+ASSISTANT_NAME = "Juno"
+WAKE = ("hey juno", "ok juno", "okay juno", "juno",
         "hey dreamlayer", "ok dreamlayer", "dreamlayer")
 
 
@@ -51,7 +51,7 @@ class Intent:
     args: dict = field(default_factory=dict)
 
 
-# -- native timers & clock: the everyday behaviors Oracle just builds --------
+# -- native timers & clock: the everyday behaviors Juno just builds --------
 
 _WORD_NUM = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -393,7 +393,7 @@ def parse_intent(text: str) -> Intent:
     if note is not None:
         return note
 
-    # native timers / clock — Oracle builds these; no rehearsal needed. Checked
+    # native timers / clock — Juno builds these; no rehearsal needed. Checked
     # before stash so "put a clock on the hud" is a clock, not a stashed "clock".
     tc = _parse_timer_clock(t)
     if tc is not None:

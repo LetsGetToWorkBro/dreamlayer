@@ -62,7 +62,7 @@ memories, your people, your promises — stays on hardware you own. The
 You do not need any hardware to feel what this is like: a full simulator of
 the glasses runs on the website at
 [dreamlayer.app/simulator.html](https://dreamlayer.app/simulator.html) —
-type to the Oracle, play out scenes, watch the real cards appear on the
+type to the Juno, play out scenes, watch the real cards appear on the
 glass. And the phone app's "Explore with sample data" fills every screen
 with labeled demo data. Both are covered in
 [The Halo Simulators](../simulator.md).

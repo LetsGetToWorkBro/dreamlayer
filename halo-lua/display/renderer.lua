@@ -1084,7 +1084,7 @@ local function card_tone(card)
   elseif card.type == "HarkCard" then
     return card.importance == "urgent" and P.warning_amber
                                         or P.accent_memory
-  elseif card.type == "OracleReplyCard" then
+  elseif card.type == "JunoReplyCard" then
     return card.kind == "action" and P.accent_success or P.accent_memory
   elseif card.type == "ScholarCard" or card.type == "TasteCard" then
     -- the honest "connect a Brain" state tones ghost; a real read is memory
@@ -1099,7 +1099,7 @@ local function card_tone(card)
   return nil
 end
 
-local function draw_oracle_reply(card, sc, enter_t, exit_t)
+local function draw_juno_reply(card, sc, enter_t, exit_t)
   local action = card.kind == "action"
   local accent = action and P.accent_success or P.accent_memory
   local ramp   = action and MAT.RAMP_SUCCESS or MAT.RAMP_MEMORY
@@ -1111,7 +1111,7 @@ local function draw_oracle_reply(card, sc, enter_t, exit_t)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
     frame.display.circle(CX-40, 64, 3, accent, true)
     MAT.bloom_ring(CX-40, 64, 3, accent)
-    text("ORACLE", CX+6, 64, accent, "sm")
+    text("JUNO", CX+6, 64, accent, "sm")
     MAT.grad_line(60, 82, 196, 82, ramp)
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
@@ -1368,7 +1368,7 @@ end
 -- type via the fit ladder / text_block, secondary cooled to dim twins.
 -- ---------------------------------------------------------------------------
 
--- ListeningCard: Oracle's wake-acknowledgment cue — a soft pulse ring that
+-- ListeningCard: Juno's wake-acknowledgment cue — a soft pulse ring that
 -- breathes on hold (reduce_motion: a still ring), distinct from the active
 -- capture waveform (draw_query_listening). Not the same card.
 local function draw_listening(card, sc, enter_t, exit_t, idle_t)
@@ -1389,7 +1389,7 @@ local function draw_listening(card, sc, enter_t, exit_t, idle_t)
     frame.display.circle(CX, 104, 3, P.accent_memory, true)
   end
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    text(card.eyebrow or "ORACLE", CX, 158, P.accent_memory, "sm")
+    text(card.eyebrow or "JUNO", CX, 158, P.accent_memory, "sm")
     text(card.primary or "Listening\xE2\x80\xA6", CX, 180, P.text_primary, "md")
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and (card.detail or "") ~= "" then
@@ -1526,7 +1526,7 @@ local DRAW = {
   -- O3 conversation cards (Meridian Solid + Lumen)
   FactCheckCard         = function(c,sc,et,xt,it) draw_fact_check(c,sc,et,xt,it)          end,
   AnswerAheadCard       = function(c,sc,et,xt,it) draw_answer_ahead(c,sc,et,xt)           end,
-  OracleReplyCard       = function(c,sc,et,xt,it) draw_oracle_reply(c,sc,et,xt)           end,
+  JunoReplyCard       = function(c,sc,et,xt,it) draw_juno_reply(c,sc,et,xt)           end,
   HarkCard              = function(c,sc,et,xt,it) draw_hark(c,sc,et,xt,it)                end,
   -- World lenses (Meridian Solid + Lumen)
   ScholarCard           = function(c,sc,et,xt,it) draw_scholar(c,sc,et,xt)               end,

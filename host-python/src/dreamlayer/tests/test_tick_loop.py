@@ -1,6 +1,6 @@
 """test_tick_loop.py — the proactive heartbeat that drives everything.
 
-One tick over a live Context surfaces anticipation cards and lets Oracle speak
+One tick over a live Context surfaces anticipation cards and lets Juno speak
 up; start_ticking() runs it on an interval off a device-seam context function.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ def test_tick_runs_anticipation_and_attention():
                   commitments=[Commitment("Marcus", "the signed lease")])
     out = orc.pulse(ctx)
     assert out["cues"]                                   # anticipation fired a card
-    assert out["alert"] and out["alert"]["type"] == "HarkCard"   # Oracle spoke up
+    assert out["alert"] and out["alert"]["type"] == "HarkCard"   # Juno spoke up
     kinds = {c["type"] for c in _cards(br)}
     assert "HarkCard" in kinds
 

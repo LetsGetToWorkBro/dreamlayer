@@ -56,7 +56,7 @@ npm run assets                          # = assets:render + assets:build
 ```
 
 - `scripts/render_scenes.py` renders the demo storyboards (`veritas`,
-  `answer_ahead`, `owe_someone`, plus an `oracle` scene composed from the same
+  `answer_ahead`, `owe_someone`, plus an `juno` scene composed from the same
   real cards), the POV plates at 16:9 and 9:16 (`synth_plate`, one seed per
   section), the curated emissive card stills, and the real device animations
   (`scripts/export_meridian_motion.py`) into `.asset-src/`.

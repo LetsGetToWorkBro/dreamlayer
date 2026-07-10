@@ -1,7 +1,7 @@
 /**
- * sound.ts — Oracle's voice: short earcons, with variety.
+ * sound.ts — Juno's voice: short earcons, with variety.
  *
- * Each cue is a *family* of clips (Hey 1/2, Listen 1/2, …). When Oracle wants
+ * Each cue is a *family* of clips (Hey 1/2, Listen 1/2, …). When Juno wants
  * your attention we pick a variant at random, never repeating the last one, so
  * you don't hear the exact same thing every time. Card `earcon` ids map onto a
  * family; the runtime just says "play the listen cue" and we vary it.
@@ -30,7 +30,7 @@ const FAMILIES: Record<string, number[]> = {
   hey: [
     require("../../assets/sounds/hey1.mp3"),
     require("../../assets/sounds/hey2.mp3"),
-  ], // Oracle wakes ("Hey Oracle")
+  ], // Juno wakes ("Hey Juno")
   listen: [
     require("../../assets/sounds/listen1.mp3"),
     require("../../assets/sounds/listen2.mp3"),
@@ -96,7 +96,7 @@ export async function playEarcon(name: string): Promise<void> {
   }
 }
 
-/** Oracle's "Listen!" — the shoulder tap (Listen 1/2, rotated). */
+/** Juno's "Listen!" — the shoulder tap (Listen 1/2, rotated). */
 export function playListen(): void {
   playEarcon("listen");
 }

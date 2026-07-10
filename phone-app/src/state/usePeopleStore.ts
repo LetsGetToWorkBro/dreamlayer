@@ -3,7 +3,7 @@
  *
  * Everyone you've met (Social Lens): how you know them, when you last saw them,
  * your notes, and any open debts. The hub (glasses) owns the truth and mirrors
- * it to the paired Brain — the same hub→Brain bridge the Oracle profile uses —
+ * it to the paired Brain — the same hub→Brain bridge the Juno profile uses —
  * and this store reads it, and posts edits (add/remove a note, set the
  * relationship, settle debts) back to the Brain.
  *

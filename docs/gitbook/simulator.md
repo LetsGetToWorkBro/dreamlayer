@@ -11,7 +11,7 @@ the Python one stays the real-stack tool.
 
 `python -m dreamlayer.simulator` (default `127.0.0.1:8765`) boots the
 **actual product**: a real `Orchestrator` over an emulator bridge, voice
-routed through the genuine "Hey Oracle" surface, the glass rendered by the
+routed through the genuine "Hey Juno" surface, the glass rendered by the
 same renderer that produces this book's card images, and Reality Compiler
 figments replayed through the reference Python stage interpreter (the
 parity-pinned twin of the device Lua). Only the hardware is faked: typed

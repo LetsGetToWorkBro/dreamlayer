@@ -69,10 +69,10 @@ M.DISMISS_MS = {
   ErrorCard            = 4000,
   LowConfidenceCard    = 3000,
   TruthLensCard        = 5000,
-  -- O3 conversation cards (Veritas / answer-ahead / Oracle / Listen!)
+  -- O3 conversation cards (Veritas / answer-ahead / Juno / Listen!)
   FactCheckCard        = 7000,
   AnswerAheadCard      = 8000,
-  OracleReplyCard      = 6000,
+  JunoReplyCard      = 6000,
   HarkCard             = 6500,
   -- World lenses (Scholar / Glance chooser / TasteLens) — match host payloads
   ScholarCard          = 9000,

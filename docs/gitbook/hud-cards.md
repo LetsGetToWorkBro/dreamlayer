@@ -32,7 +32,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![QueryListeningCard](assets/cards/query_listening.png)
 
-- **Appears:** single click, or "Hey Oracle" — the ask posture.
+- **Appears:** single click, or "Hey Juno" — the ask posture.
 - **Shows:** a cardioid microphone glyph over a 32-bar waveform. With live
   `amp` frames from the host (~15 bytes, capture-time only) the bars track
   your actual voice through the palette's voice slot; without them the
@@ -43,8 +43,8 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![ListeningCard](assets/cards/listening.png)
 
-- **Appears:** the moment the Oracle wakes, from any enabled source — voice
-  ("Hey Oracle"), tap, gaze, raise, or gesture. Shown only if visual wake
+- **Appears:** the moment the Juno wakes, from any enabled source — voice
+  ("Hey Juno"), tap, gaze, raise, or gesture. Shown only if visual wake
   feedback is on.
 - **Shows:** a pulsing ring plus the wake source; carries earcon `wake` and
   haptic `tick` on the payload (each independently toggleable).
@@ -158,7 +158,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![TimeScrubNodeCard](assets/cards/time_scrub_node.png)
 
-- **Appears:** rewind — "Hey Oracle, rewind my day," or the phone's Rewind
+- **Appears:** rewind — "Hey Juno, rewind my day," or the phone's Rewind
   screen's on-glass twin. One card per moment as you scrub.
 - **Shows:** a horizontal timeline of the day; the current node enlarged with
   bloom and a tick, neighbours as ghost labels, position ("3 of 11") in the
@@ -258,13 +258,13 @@ The device-Lua render of the same card:
 - **Sound:** none — silent by design; a tick haptic only.
 - **Dismiss:** 8000.
 
-### OracleReplyCard
+### JunoReplyCard
 
-![OracleReplyCard](assets/cards/oracle_reply.png)
+![JunoReplyCard](assets/cards/juno_reply.png)
 
-- **Appears:** the Oracle answered you (kind `answer`) or did something for
+- **Appears:** the Juno answered you (kind `answer`) or did something for
   you (kind `action` — "Focus on — the world's turned down.").
-- **Shows:** the reply in the Oracle's voice under an ORACLE eyebrow with a
+- **Shows:** the reply in the Juno's voice under an JUNO eyebrow with a
   bloomed cue dot; success ramp for actions, memory ramp for answers.
 - **Dismiss:** 6000.
 

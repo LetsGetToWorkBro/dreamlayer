@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
     srv = make_simulator_server(host=args.host, port=args.port)
     print(f"\n  ◐ DreamLayer Halo Simulator\n"
           f"    http://{args.host}:{args.port}\n\n"
-          f"  Talk to Oracle. Set a timer. Introduce someone. Drop the veil.\n"
+          f"  Talk to Juno. Set a timer. Introduce someone. Drop the veil.\n"
           f"  Every pixel is the real stack — only the hardware is simulated.\n")
     try:
         srv.serve_forever()

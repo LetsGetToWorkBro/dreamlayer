@@ -14,7 +14,7 @@ import type {
   CalendarEvent,
   RewindBlock,
   SagaSnapshot,
-  OracleProfile,
+  JunoProfile,
   ActivityItem,
   LongBrief,
   BrainMessage,
@@ -145,7 +145,7 @@ export const demoRewind: RewindBlock[] = [
   },
 ];
 
-export const demoProfile: OracleProfile = {
+export const demoProfile: JunoProfile = {
   name: "You",
   interests: ["Ceramics", "Cycling", "Specialty coffee", "Design"],
   people: ["Marcus Reyes", "Priya Anand", "Dana Osei"],

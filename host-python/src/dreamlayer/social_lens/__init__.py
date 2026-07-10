@@ -55,12 +55,12 @@ Meet someone on the spot
     fr.meet("Sarah", frame=frame, note="runs marketing")
 
   Creates the contact from the face + the name you gave it (or updates an
-  existing one). The voice path ("Oracle, this is my colleague Sarah, she
+  existing one). The voice path ("Juno, this is my colleague Sarah, she
   runs marketing") routes here.
 
 Jot a note on the spot
 ----------------------
-    # "Oracle, remember Maya's into rock climbing"
+    # "Juno, remember Maya's into rock climbing"
     fr.add_note("into rock climbing", who="Maya")   # by name
     # or note whoever you just looked at:
     fr.identify(frame); fr.add_note("just got a puppy")

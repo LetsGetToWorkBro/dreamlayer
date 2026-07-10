@@ -22,7 +22,7 @@ built around what you actually see and say:
 - [Start here](guide/start-here.md) — what it is and what it does for you
 - [Setting up](guide/setup.md) — paired and working in minutes
 - [A day with DreamLayer](guide/a-day-with-dreamlayer.md) — what it is like
-- [Talking to it](guide/talking-to-oracle.md) — everything "Hey Oracle" can do
+- [Talking to it](guide/talking-to-juno.md) — everything "Hey Juno" can do
 - [What just appeared on my glasses?](guide/cards.md) — the glance guide
 - [The fact-checker](guide/truth.md) — what to trust, plainly
 - [Your privacy](guide/privacy.md) — the contract, in plain words

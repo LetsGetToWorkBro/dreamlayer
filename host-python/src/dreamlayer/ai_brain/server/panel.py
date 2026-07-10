@@ -430,7 +430,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
   <section>
     <div class="eyebrow">Your data</div><h2>Your memory is a file</h2>
-    <p class="lead">Everything the Oracle remembers is one local SQLite file — browse it read-only, or take a copy. No cloud, no command line.</p>
+    <p class="lead">Everything the Juno remembers is one local SQLite file — browse it read-only, or take a copy. No cloud, no command line.</p>
     <div class="row" style="margin-top:6px"><span id="memfile" class="conn-s" style="margin:0">…</span></div>
     <div class="row" style="margin-top:14px">
       <button onclick="browseMemory()">Browse (read-only)</button>
@@ -611,7 +611,7 @@ let modelSel="keyword", ollamaOK=null, browsePath="";
 
 /* feature explainers — each pairs a real HUD card image with what it does */
 const EXPLAINERS=[
-  {t:"Oracle",img:"oracle_reply.png",b:"Ask anything out loud. Oracle answers on the glass in a line or two — drawn from your own memory first, the web only when it must."},
+  {t:"Juno",img:"juno_reply.png",b:"Ask anything out loud. Juno answers on the glass in a line or two — drawn from your own memory first, the web only when it must."},
   {t:"Morning brief",img:"morning_brief.png",b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
   {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
   {t:"Face recall",img:"person_dossier.png",b:"Glance at someone you've met and their name, how you know them, and your last note surface — privately, only to you."},

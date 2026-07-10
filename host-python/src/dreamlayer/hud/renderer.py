@@ -486,7 +486,7 @@ class CardRenderer:
             # Meridian Solid: the O3 conversation cards get the full material
             # treatment (glass pane, gradient strokes, bloom, hero type).
             "HarkCard":             self._hark,
-            "OracleReplyCard":      self._oracle_reply,
+            "JunoReplyCard":      self._juno_reply,
             "FactCheckCard":        self._fact_check,
             "AnswerAheadCard":      self._answer_ahead,
             "ScholarCard":          self._scholar,
@@ -1084,7 +1084,7 @@ class CardRenderer:
 
     # ------------------------------------------------------------------
     # Meridian Solid — the O3 conversation cards (Veritas / answer-ahead /
-    # Oracle reply / Listen!). Same material language as the hero cards:
+    # Juno reply / Listen!). Same material language as the hero cards:
     # a surface-luma glass pane, gradient separators, bloom on the status
     # cue, hero-class type via the fit ladder, secondary text cooled to a
     # dim twin. Panes are additive (richer, not brighter); text is never in
@@ -1108,9 +1108,9 @@ class CardRenderer:
         glass_disc(draw, CX, cy, r, PANE, 4)
         self._circle(draw, CX, cy, r + 4, 1, rim, alpha=90)
 
-    def _oracle_reply(self, draw, card):
-        """OracleReplyCard — Oracle's answer/confirmation. Memory-toned pane,
-        ORACLE eyebrow with a bloom cue, the reply in hero type (or wrapped)."""
+    def _juno_reply(self, draw, card):
+        """JunoReplyCard — Juno's answer/confirmation. Memory-toned pane,
+        JUNO eyebrow with a bloom cue, the reply in hero type (or wrapped)."""
         action = card.get("kind") == "action"
         accent = T.ACCENT_SUCCESS if action else T.ACCENT_MEMORY
         body = str(card.get("primary") or "")
@@ -1118,7 +1118,7 @@ class CardRenderer:
         # eyebrow with a bloomed status dot
         bloom_ring(draw, CX - 40, 64, 3, accent)
         self._dot(draw, CX - 40, 64, 3, accent)
-        self._text_rgba(draw, CX + 6, 64, "ORACLE",
+        self._text_rgba(draw, CX + 6, 64, "JUNO",
                         "xs", accent, alpha=235)
         grad_line(draw, 60, 82, 196, 82, RAMP_SUCCESS if action else RAMP_MEMORY)
         if len(body) <= 20:
@@ -1222,13 +1222,13 @@ class CardRenderer:
     # -- Missing frames (parity with renderer.lua draw_* — same beds) --------
 
     def _listening(self, draw, card):
-        """ListeningCard — Oracle's wake cue: a soft ring + ORACLE/Listening…
+        """ListeningCard — Juno's wake cue: a soft ring + JUNO/Listening…
         (mirrors renderer.lua draw_listening; the device breathes on hold)."""
         self._pane(draw, 118, 74)
         self._circle(draw, CX, 104, 28, 1, T.ACCENT_MEMORY)
         bloom_ring(draw, CX, 104, 28, T.ACCENT_MEMORY)
         self._dot(draw, CX, 104, 3, T.ACCENT_MEMORY)
-        self._text_rgba(draw, CX, 158, str(card.get("eyebrow") or "ORACLE"),
+        self._text_rgba(draw, CX, 158, str(card.get("eyebrow") or "JUNO"),
                         "xs", T.ACCENT_MEMORY, alpha=230)
         self._text(draw, CX, 180, str(card.get("primary") or "Listening…"),
                    "md", T.TEXT_PRIMARY)
@@ -1371,7 +1371,7 @@ class CardRenderer:
             self._text_rgba(draw, CX, 200, footer, "xs", T.TEXT_GHOST, alpha=170)
 
     def _hark(self, draw, card):
-        """HarkCard — Oracle's "Listen!" A bloomed ring pierces the eye, the one
+        """HarkCard — Juno's "Listen!" A bloomed ring pierces the eye, the one
         thing worth hearing in hero type, the trailing detail cooled. Urgent
         (watch-out) burns amber, a plain listen stays memory-teal."""
         urgent = card.get("importance") == "urgent"

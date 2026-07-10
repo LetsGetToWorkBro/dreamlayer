@@ -37,7 +37,7 @@ resuming.
 | Capture | **paused** | keeps running |
 | Cloud | **forced off** (preference restored after) | unchanged |
 | Interruptions | (capture is off anyway) | held — cards, captions, pop-ups; urgent watch-outs still pierce |
-| Set by | phone toggle, panel toggle, "Hey Oracle, go incognito" | phone toggle, "Hey Oracle, focus mode" (default 25 minutes) |
+| Set by | phone toggle, panel toggle, "Hey Juno, go incognito" | phone toggle, "Hey Juno, focus mode" (default 25 minutes) |
 
 On the Brain, incognito maps to `network_mode: "lan_only"`, which hard-fails
 `cloud_ready()` — no cloud call can be assembled while it holds. Quiet hours

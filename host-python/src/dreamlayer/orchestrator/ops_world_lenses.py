@@ -53,7 +53,7 @@ class WorldLensOps:
 
 
     def look_at_object(self, frame, now: float | None = None, facet=None):
-        """Oracle (Object Lens): recognise the object and surface its panel.
+        """Juno (Object Lens): recognise the object and surface its panel.
 
         facet picks the intent — None = everything; "own" = your own facts
         (private, instant glance); "ai" = let an AI explain/translate it;
@@ -108,7 +108,7 @@ class WorldLensOps:
         if scene and action:
             lens = {"scholar_answer": "scholar_answer", "scholar_form": "scholar_form",
                     "scholar_explain": "scholar_explain", "translate": "rosetta",
-                    "oracle": "oracle", "person": "person"}.get(action, action)
+                    "juno": "juno", "person": "person"}.get(action, action)
             self.glance_arbiter.reinforce(scene, lens)
         return self._run_glance_action(action, frame, args or {})
 
@@ -127,7 +127,7 @@ class WorldLensOps:
             return self.look_at_object(frame, facet="ai")
         if action == "taste":
             return self.taste(frame)
-        return self.look_at_object(frame)     # oracle / default
+        return self.look_at_object(frame)     # juno / default
 
 
     def _classify_glance(self, frame):

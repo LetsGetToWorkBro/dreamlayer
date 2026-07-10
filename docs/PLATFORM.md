@@ -205,7 +205,7 @@ capability is skipped, not crashed; a throwing plugin is isolated.
   the *why* ("dairy-free · you bought this before · 4.6★"). A new
   `ScholarExplain`-style renderer.
 - **Route.** A `TasteLensCandidate` bids when the scene is `shelf`/`menu`
-  (many labels, price cues); the arbiter fires it or offers it against Oracle.
+  (many labels, price cues); the arbiter fires it or offers it against Juno.
 
 **Tests.** Ranking (hard veto beats soft preference; ties broken stably); the
 `shop` provider seam plugs in and shifts the order; veil gate; the arbiter

@@ -86,14 +86,14 @@ local CARD_PRIORITY = {
   -- O3 conversation cards
   FactCheckCard        = CardQueue.URGENT,    -- Veritas: a claim needs your eye now
   AnswerAheadCard      = CardQueue.URGENT,    -- the answer, in time to say it
-  HarkCard             = CardQueue.URGENT,    -- Oracle's "Listen!"
-  OracleReplyCard      = CardQueue.CONTEXT,   -- Oracle's answer / confirmation
+  HarkCard             = CardQueue.URGENT,    -- Juno's "Listen!"
+  JunoReplyCard      = CardQueue.CONTEXT,   -- Juno's answer / confirmation
   -- World lenses (each answers an active look / tap)
   ScholarCard          = CardQueue.URGENT,    -- an answer/form read off the world
   GlanceChoiceCard     = CardQueue.URGENT,    -- the chooser: awaiting your tap
   TasteCard            = CardQueue.URGENT,    -- the pick, while you're deciding
   -- Missing frames
-  ListeningCard        = CardQueue.URGENT,    -- Oracle's wake cue, the moment it wakes
+  ListeningCard        = CardQueue.URGENT,    -- Juno's wake cue, the moment it wakes
   MessageCard          = CardQueue.URGENT,    -- a text/mail arriving
   UpcomingCard         = CardQueue.CONTEXT,   -- an event about to start
   HereCard             = CardQueue.CONTEXT,   -- something you left is right here

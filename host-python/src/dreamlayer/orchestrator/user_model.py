@@ -1,6 +1,6 @@
-"""user_model.py — the Oracle learns you.
+"""user_model.py — the Juno learns you.
 
-A light, private profile the Oracle builds as you go, so it can adapt: what you
+A light, private profile the Juno builds as you go, so it can adapt: what you
 talk about (topics you return to), who you talk with, what you've told it to
 remember, and what to call you. It's the difference between an assistant that
 resets every session and one that already knows you.

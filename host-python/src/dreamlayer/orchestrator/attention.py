@@ -1,4 +1,4 @@
-"""orchestrator/attention.py — when Oracle should say "Listen!"
+"""orchestrator/attention.py — when Juno should say "Listen!"
 
 The anticipation engine decides *what card* to show; this decides *when it's
 worth interrupting you out loud*. It reads the same live Context (where you are,
@@ -10,7 +10,7 @@ owe) and emits Alerts at two levels:
   • watchout — genuinely time-critical: you need to leave *now*.
 
 Pure and deterministic like the anticipation engine — feed it a Context, get
-the alerts back. The orchestrator turns the top fresh one into a hark (Oracle's
+the alerts back. The orchestrator turns the top fresh one into a hark (Juno's
 "Listen!"/"Watch out!"), which carries its own Veil/Focus gating and pacing. A
 per-key cooldown here means the *same* alert never nags, even as the moment
 lingers.
@@ -25,7 +25,7 @@ from .anticipation import Context, Event, Anchor, Commitment, _norm, _match_plac
 @dataclass
 class Alert:
     level: str      # "listen" | "watchout"
-    clue: str       # the line Oracle speaks
+    clue: str       # the line Juno speaks
     detail: str     # a short second line
     key: str        # dedup key — one alert per real thing
 

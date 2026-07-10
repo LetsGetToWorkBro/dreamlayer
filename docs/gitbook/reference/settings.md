@@ -2,7 +2,7 @@
 
 Every user-facing setting in the ecosystem, its default, what it does, and
 what it drives. Three surfaces expose them: the phone app, the Brain panel,
-and the Oracle's voice commands; underneath they converge on orchestrator
+and the Juno's voice commands; underneath they converge on orchestrator
 setters and Brain config keys.
 
 ## Phone app toggles
@@ -28,9 +28,9 @@ Settings screens (placement). Persisted to AsyncStorage unless noted.
 | Proactive alerts | Settings | on | the hark policy ("Listen!" / "Watch out!") |
 | Live fact-checker | Settings | **off** | Veritas |
 | Answer-ahead | Settings | **off** | the conversational copilot |
-| Wake by voice / tap / gaze / raise | Settings | all on | Oracle wake sources |
+| Wake by voice / tap / gaze / raise | Settings | all on | Juno wake sources |
 | Listening feedback: visual / audio / haptic | Settings | all on | wake ring, earcon, haptic tick |
-| Wake word | Settings | "Hey Oracle" | fixed label today (not editable) |
+| Wake word | Settings | "Hey Juno" | fixed label today (not editable) |
 | Erase all memories | Settings (danger) | — | clears the local memory store, confirmed |
 
 ## Orchestrator setters

@@ -77,8 +77,8 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   particles, parallax. [Meridian](meridian.md)
 - **Meridian** — the HUD design language; "the display is a place, not a
   stage."
-- **Oracle** — the voice: wake, commands, persona, and the user model.
-  [Oracle](oracle.md)
+- **Juno** — the voice: wake, commands, persona, and the user model.
+  [Juno](juno.md)
 - **Privacy Veil** — one gesture, fully deaf and blind; the spine every lens
   respects. [Privacy](privacy.md)
 - **Premonition** — recurring-pattern ghosts of the near future on the
@@ -107,7 +107,7 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
   gradient ramps, blooms. [Meridian](meridian.md)
 - **Synesthesia** — Dream Mode's six-word poetic sense read.
-- **TasteLens** — the shelf/menu choice oracle: hard dietary vetoes, soft
+- **TasteLens** — the shelf/menu choice juno: hard dietary vetoes, soft
   budget, plugin data connectors. [World lenses](world-lenses.md)
 - **Testimony thread** — the Truth Lens gauge: nine stages around the ring,
   torn where deceptive.
@@ -117,8 +117,8 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **TinCan** — a single tap sent down the Confluence wire.
 - **Truth Lens** — the nine-stage delivery read against a per-person
   baseline. [Truth](truth.md)
-- **User model** — the Oracle's small private profile of you; mirrored,
-  never authored, by the Brain. [Oracle](oracle.md)
+- **User model** — the Juno's small private profile of you; mirrored,
+  never authored, by the Brain. [Juno](juno.md)
 - **Veritas** — the live fact-checker: offline self-contradiction plus the
   tiered world check. [Truth](truth.md)
 - **Waypath** — point-me-to-my-things: "I left my bike at the north rack"

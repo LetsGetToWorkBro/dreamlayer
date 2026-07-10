@@ -77,5 +77,5 @@ def test_every_feature_has_a_badge():
     events = {a.event for a in saga.ACHIEVEMENTS if a.category == "explore"}
     for feature in ("pair", "mac", "cloud", "incognito", "calendar", "contacts",
                     "reminders", "brief", "recall", "focus", "rewind", "hark",
-                    "model", "backup", "folder", "oracle_wake", "dossier"):
+                    "model", "backup", "folder", "juno_wake", "dossier"):
         assert feature in events, f"no badge for {feature}"

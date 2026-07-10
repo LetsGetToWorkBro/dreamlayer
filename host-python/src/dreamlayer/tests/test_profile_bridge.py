@@ -1,6 +1,6 @@
-"""test_profile_bridge.py — the hub->Brain bridge for the Oracle profile.
+"""test_profile_bridge.py — the hub->Brain bridge for the Juno profile.
 
-The Oracle profile is built on the glasses hub (from the conversation stream),
+The Juno profile is built on the glasses hub (from the conversation stream),
 then *pushed* to the Brain so the phone can read it. The Brain only mirrors what
 the hub sends; it never authors the profile.
 """
@@ -64,5 +64,5 @@ def test_a_teach_pushes_immediately():
     orc.brain_url = "http://mac.local:7777"
     posts = []
     orc.publish_profile = lambda http_post=None: posts.append(1)  # type: ignore
-    orc.ask_oracle("Remember that I prefer window seats")
+    orc.ask_juno("Remember that I prefer window seats")
     assert posts, "an explicit teach should push the profile right away"

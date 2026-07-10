@@ -59,7 +59,7 @@ export type SagaSnapshot = {
   unlocked_count: number; total_count: number;
   achievements: SagaAchievement[];
 };
-export type OracleProfile = {
+export type JunoProfile = {
   name: string;
   interests: string[];
   people: string[];
@@ -88,9 +88,9 @@ type BrainState = {
   summarizeEmails: boolean; // Brain shortens long emails before relaying
   focus: boolean; // turn the interruptions down (distinct from incognito)
   cues: Record<CueKind, boolean>; // which proactive cue kinds are on
-  wakeSources: Record<WakeSource, boolean>; // how Oracle can be woken
+  wakeSources: Record<WakeSource, boolean>; // how Juno can be woken
   wakeFeedback: Record<WakeFeedback, boolean>; // how it shows it's listening
-  proactiveAlerts: boolean; // let Oracle speak up: Listen! / Watch out!
+  proactiveAlerts: boolean; // let Juno speak up: Listen! / Watch out!
   factCheck: boolean; // Veritas: fact-check the conversation as it happens
   answerAhead: boolean; // pre-answer questions the room asks you
   demoMode: boolean; // labeled sample data so the app is alive with no hardware
@@ -155,7 +155,7 @@ type BrainState = {
   getRewind: () => Promise<RewindBlock[]>;
   getSaga: () => Promise<SagaSnapshot | null>;
   recordSaga: (event: string) => Promise<void>;
-  getProfile: () => Promise<OracleProfile | null>;
+  getProfile: () => Promise<JunoProfile | null>;
 
   // messages relayed by the Brain — read on the glasses, reply hands-free
   fetchMessages: () => Promise<{ items: BrainMessage[]; enabled: boolean }>;
@@ -590,7 +590,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     if (!m.connected || !m.url) return null;
     try {
       const r = await brainFetch(m, "/dreamlayer/profile");
-      return (await r.json()) as OracleProfile;
+      return (await r.json()) as JunoProfile;
     } catch {
       return null;
     }

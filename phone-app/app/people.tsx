@@ -3,7 +3,7 @@
  *
  * Everyone you've met through the glasses (Social Lens): how you know them,
  * when you last saw them, your notes, and any open debts. Read here; edit a
- * note, fix a relationship, or mark a debt settled — or just talk to Oracle
+ * note, fix a relationship, or mark a debt settled — or just talk to Juno
  * ("remember Maya's a climber", "Marcus paid me back") and it shows up here.
  *
  * On your device only. Mirrors host-python via usePeopleStore.

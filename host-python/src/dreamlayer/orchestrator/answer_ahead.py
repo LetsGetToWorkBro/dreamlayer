@@ -15,7 +15,7 @@ Two jobs:
 
 Conservative and paced: one prompt per cooldown, above a confidence floor, held
 during Focus, Veil-gated by the caller. The mic + ASR are the device seam; the
-answer source is the same knowledge tier the Oracle asks.
+answer source is the same knowledge tier the Juno asks.
 """
 from __future__ import annotations
 

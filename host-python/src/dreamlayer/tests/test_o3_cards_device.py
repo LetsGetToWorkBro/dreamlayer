@@ -1,6 +1,6 @@
 """test_o3_cards_device.py — the O3 conversation cards render on the device Lua.
 
-FactCheck / AnswerAhead / OracleReply / Hark were Python-only; they now have
+FactCheck / AnswerAhead / JunoReply / Hark were Python-only; they now have
 device renderers (display/renderer.lua) with the Meridian Solid materials and
 Lumen animation, routed through cards.lua + state_machine + the queue. These
 drive the *actual* device code on the raster harness — the same path the goldens
@@ -36,8 +36,8 @@ CARDS = {
         'C.answer_ahead({ primary="March 14th - two pallets.",'
         ' detail="When did we last ship to Denver?", footer="Priya - your files" })'
     ),
-    "OracleReplyCard": (
-        'C.oracle_reply({ kind="action", primary="Focus on - the world is turned down." })'
+    "JunoReplyCard": (
+        'C.juno_reply({ kind="action", primary="Focus on - the world is turned down." })'
     ),
     "HarkCard": (
         'C.hark({ importance="normal", primary="Marcus is 2 min away - you owe him the lease.",'
@@ -194,9 +194,9 @@ def test_ble_hark_urgent_tone_reaches_pixels():
     assert _has_color(h, 0xFF6600, (64, 36, 192, 110))
 
 
-def test_ble_oracle_action_tone_reaches_pixels():
+def test_ble_juno_action_tone_reaches_pixels():
     from dreamlayer.hud import cards as host_cards
-    payload = host_cards.oracle_reply(text="Focus on.", kind="action")
+    payload = host_cards.juno_reply(text="Focus on.", kind="action")
     h = _session(reduce=False)
     h.execute(f"__now = 1000; _r.show_card({_lua_literal(payload)})")
     _tick(h, 2000)

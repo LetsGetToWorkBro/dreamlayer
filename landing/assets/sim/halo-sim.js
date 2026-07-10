@@ -2,7 +2,7 @@
    halo-sim.js — the Halo, running in your browser.
 
    A faithful client-side port of the DreamLayer stack the Python simulator
-   runs (host-python/src/dreamlayer): the "Hey Oracle" voice grammar
+   runs (host-python/src/dreamlayer): the "Hey Juno" voice grammar
    (orchestrator/voice.py), the orchestrator loop, Social Lens recall, Waypath,
    the native timer/interval/clock Figments (reality_compiler/v2), and the HUD
    card renderer (hud/renderer.py + themes.py). Same behaviours, same palette,
@@ -31,7 +31,7 @@
   /* ======================================================================
      1. VOICE GRAMMAR — port of orchestrator/voice.py parse_intent
      ====================================================================== */
-  var WAKE = ["hey oracle", "ok oracle", "okay oracle", "oracle",
+  var WAKE = ["hey juno", "ok juno", "okay juno", "juno",
     "hey dreamlayer", "ok dreamlayer", "dreamlayer"];
 
   function stripWake(text) {
@@ -309,9 +309,9 @@
      ====================================================================== */
   var FACES = { "face-a": 0.82, "face-b": 0.37, "face-c": 0.61 };
 
-  /* ---- Oracle answer engine — honest in-browser computation + a small demo
+  /* ---- Juno answer engine — honest in-browser computation + a small demo
      set. Real math / unit / tip / temperature answers; a curated fact & phrase
-     set for the demo. Anything else returns null so Oracle answers honestly that
+     set for the demo. Anything else returns null so Juno answers honestly that
      it would reach your Brain. On the glasses the Brain answers on the glass;
      here we answer what a browser honestly can, and show it on the same card. -- */
   var UNITS = {
@@ -356,7 +356,7 @@
   }
   function answerQuery(raw) {
     var q = (raw || "").trim().toLowerCase().replace(/[?.!]+$/, "")
-      .replace(/^(hey |ok |okay )?(oracle|dreamlayer)[,\s]+/, "").trim();
+      .replace(/^(hey |ok |okay )?(juno|dreamlayer)[,\s]+/, "").trim();
     if (!q) return null;
     var m = q.match(/([\d.]+)\s*(?:%|percent)\s*of\s*\$?([\d.]+)/);
     if (m) return { primary: fmtNum(parseFloat(m[1]) / 100 * parseFloat(m[2])), sub: m[1] + "% of " + m[2] };
@@ -389,7 +389,7 @@
     this.card = null;            // current HUD card object (or null → ready)
     this.transcript = [];
     this._faceOf = {};           // look-id → person id (who a face belongs to)
-    this.say("oracle", "Halo ready. Talk to me.");
+    this.say("juno", "Halo ready. Talk to me.");
   }
   Sim.prototype.say = function (who, line) {
     if (line) { this.transcript.push({ who: who, line: String(line) }); if (this.transcript.length > 40) this.transcript.shift(); }
@@ -408,12 +408,12 @@
     text = (text || "").trim(); if (!text) return { say: "" };
     this.say("you", text);
     var out = this._route(text, look);
-    this.say("oracle", out.say);
+    this.say("juno", out.say);
     return out;
   };
 
   Sim.prototype._route = function (text, look) {
-    // teach Oracle about yourself first
+    // teach Juno about yourself first
     var learned = parseLearn(text);
     if (learned) {
       if (learned.kind === "name") { this.profile.name = learned.value; this._toast("Learned", "Call you " + learned.value, C.teal); return { say: "Got it — I'll call you " + learned.value + "." }; }
@@ -568,16 +568,16 @@
     return null;
   };
   Sim.prototype.lookAt = function (look) {
-    if (this.incognito) { this.say("oracle", "(veiled — I see nothing)"); return { say: "" }; }
-    if (!look || FACES[look] == null) { this.say("oracle", "(nobody in view)"); return { say: "Nobody in view." }; }
+    if (this.incognito) { this.say("juno", "(veiled — I see nothing)"); return { say: "" }; }
+    if (!look || FACES[look] == null) { this.say("juno", "(nobody in view)"); return { say: "Nobody in view." }; }
     var p = this._personForFace(look);
-    if (!p) { this.say("oracle", "I don't know them yet — introduce us."); return { say: "I don't know them yet — introduce us." }; }
+    if (!p) { this.say("juno", "I don't know them yet — introduce us."); return { say: "I don't know them yet — introduce us." }; }
     this.lastPerson = p;
     this.card = { type: "recall", name: p.name, relation: p.relation,
       note: p.notes[p.notes.length - 1] || "", debts: p.debts.slice(), shownAt: now() };
     var bits = [p.relation, p.notes[p.notes.length - 1]].filter(Boolean);
     var line = "That's " + p.name + (bits.length ? " — " + bits.join(", ") + "." : ".");
-    this.say("oracle", line);
+    this.say("juno", line);
     return { say: line };
   };
   Sim.prototype.gesture = function (name) {
@@ -587,7 +587,7 @@
   };
   Sim.prototype.veil = function (on) {
     this.incognito = !!on;
-    this.say("oracle", on ? "Veil down — I see and keep nothing." : "Veil up. I'm with you again.");
+    this.say("juno", on ? "Veil down — I see and keep nothing." : "Veil up. I'm with you again.");
     return { veiled: this.incognito };
   };
   Sim.prototype._toast = function (eyebrow, primary, color) {

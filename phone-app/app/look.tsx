@@ -3,7 +3,7 @@
  *
  * Pulling out the phone IS consent and intent: the sensor is 10x the Halo
  * snapshot and there's no BLE tax. One photo rides the exact pipeline the
- * glasses use (POST /dreamlayer/brain/explain), so Oracle's whole vision
+ * glasses use (POST /dreamlayer/brain/explain), so Juno's whole vision
  * stack — local model first, cloud only when opted in — is real and
  * testable today, before the glasses' camera path exists.
  *
@@ -108,7 +108,7 @@ export default function Look() {
     <Screen>
       <ScreenHeader
         title="Look"
-        eyebrow="Oracle"
+        eyebrow="Juno"
         subtitle="Point the phone at anything — same pipeline as the glasses"
       />
       {kit ? (

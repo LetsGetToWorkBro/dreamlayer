@@ -9,7 +9,7 @@ worker+deadline shape WorldChecker already proved on the caption path.
 |----------------------------|-----------|
 | glance name (tier 0)       | 350 ms    |
 | glance panel ("what is it")| 1.5 s     |
-| oracle ask                 | 2.5 s     |
+| juno ask                 | 2.5 s     |
 | veritas world-check        | 2.5 s (world_check.py, unchanged) |
 | answer-ahead               | 2.0 s or drop silently            |
 | morning brief / REM        | unbounded, scheduled              |
@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 GLANCE_NAME_MS = 350
 GLANCE_PANEL_MS = 1500
-ORACLE_ASK_MS = 2500
+JUNO_ASK_MS = 2500
 ANSWER_AHEAD_MS = 2000
 
 # One small shared pool: deadline work is I/O-shaped (model/HTTP calls) and

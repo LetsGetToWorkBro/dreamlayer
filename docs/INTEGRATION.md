@@ -39,7 +39,7 @@ they expose the filesystem, secrets, or hand out pairing material.
 | `/dreamlayer/reminders` | token | open reminders + lists + sync state `{items[], lists[], sync, selected[]}` **(seam: AppleScript)** |
 | `/dreamlayer/rewind` | token | today merged into hour blocks — activity + messages + events `{blocks[], count}` |
 | `/dreamlayer/saga` | token | the progression profile — rank, level, XP, and every achievement's what/how/status |
-| `/dreamlayer/profile` | token | the mirrored Oracle user-model profile (the hub authors it; the Brain only stores) |
+| `/dreamlayer/profile` | token | the mirrored Juno user-model profile (the hub authors it; the Brain only stores) |
 | `/dreamlayer/brief/latest` | token | the scheduler's most recent morning brief (or `{}`) |
 | `/dreamlayer/browse?path=` | **local** | subfolders of a directory (the folder picker) |
 | `/dreamlayer/token` | **local** | the current pairing token (for the panel) |
@@ -85,8 +85,8 @@ device seams are the callables they accept.
   person into ranked, de-duped, veil-gated cards
   (`orchestrator/anticipation.py`: `Context`, `Event`, `Anchor`, `Commitment`).
   Feed it live context each tick.
-- **Oracle (wake + voice)** — `orchestrator.hear(text)` is the wake pipeline:
-  "Hey Oracle …" wakes the assistant and runs the command; while it's listening
+- **Juno (wake + voice)** — `orchestrator.hear(text)` is the wake pipeline:
+  "Hey Juno …" wakes the assistant and runs the command; while it's listening
   (a ~20s session) follow-ups need no wake word (continuous-conversation mode);
   otherwise the line is ignored. `activate(source)` wakes it hands-free by
   **tap / gaze / raise** (`set_wake_source` toggles each). On wake it shows a
@@ -156,22 +156,22 @@ device seams are the callables they accept.
   confidence floor, held during Focus, Veil-gated. **Seam:** `_answer_question`
   routes through `brain.ask` (cloud when opted in) → `{text, confidence, source}`;
   returns `None` offline / on a low-confidence miss, so nothing is surfaced.
-- **The Oracle learns you** — `orchestrator/user_model.py: UserModel` is a light,
+- **The Juno learns you** — `orchestrator/user_model.py: UserModel` is a light,
   private profile built on-device: the topics you return to (from your *own*
-  lines in `ingest_caption` + your Oracle asks), who you talk with most, what
-  you've told it to remember, and what to call you. `ask_oracle` catches explicit
+  lines in `ingest_caption` + your Juno asks), who you talk with most, what
+  you've told it to remember, and what to call you. `ask_juno` catches explicit
   teaches first ("call me Sam", "remember that I prefer aisle seats") →
   `user.learn` → an in-voice confirmation. It adapts the persona
-  (`oracle_greeting()` → `persona.greeting(name)`) and exposes `user_snapshot()`
+  (`juno_greeting()` → `persona.greeting(name)`) and exposes `user_snapshot()`
   for the phone. Persisted as `usermodel.json` beside the vault (in-memory for an
   `:memory:` db); only keywords/preferences, never raw audio or others' words.
-  Veil-gated (learning rides on `ingest_caption`/`ask_oracle`). **Hub→Brain
+  Veil-gated (learning rides on `ingest_caption`/`ask_juno`). **Hub→Brain
   bridge:** `publish_profile(http_post)` pushes `user_snapshot()` to the paired
   Mac mini (`POST /dreamlayer/profile`) so the phone can read it — debounced on
   observation, immediate on an explicit teach. The Brain *mirrors* it
   (`server.set_profile` → `profile.json`, `GET /dreamlayer/profile`) and never
   authors it. Phone: `useBrainStore.getProfile()` + `app/profile.tsx` ("What
-  Oracle knows about you").
+  Juno knows about you").
 - **Spoken commitments** — `ingest_caption` runs `conversation.parse_commitment`
   on your own lines, so "I'll send you the lease by Friday" becomes a tracked
   commitment (`db.add_commitment`, attributed to whoever you're talking to) that

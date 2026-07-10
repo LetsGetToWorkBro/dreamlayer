@@ -100,7 +100,7 @@ def test_a_blank_or_garbled_read_is_unavailable():
 # -- voice intents ------------------------------------------------------------
 
 def test_voice_routes_the_scholar_intents():
-    assert parse_intent("Hey Oracle, what's the answer?").kind == "scholar"
+    assert parse_intent("Hey Juno, what's the answer?").kind == "scholar"
     assert parse_intent("answer this question").args["mode"] == "answer"
     assert parse_intent("how do I fill this out?").args["mode"] == "form"
     fill = parse_intent("how do I fill this out to renew my license")

@@ -141,7 +141,7 @@ Three daemon loops: the brief scheduler (fires once daily at the configured
 hour, stores `last_brief` for `GET /dreamlayer/brief/latest`), the
 calendar/contacts/reminders sync loop (15 minutes, plus an immediate pull
 when a sync toggle turns on), and the folder watcher. The Brain also mirrors
-two things it never authors: the Oracle's user-model profile (pushed by the
+two things it never authors: the Juno's user-model profile (pushed by the
 hub, capped and stored as `profile.json`) and the Saga ledger it advances on
 ecosystem events.
 

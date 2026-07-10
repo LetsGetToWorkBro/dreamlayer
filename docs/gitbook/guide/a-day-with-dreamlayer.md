@@ -18,15 +18,15 @@ time: almost nothing. The resting display is just that quiet ring.
 
 ## Asking for things
 
-Say **"Hey Oracle"** — or just tap the glasses — and it listens for the next
+Say **"Hey Juno"** — or just tap the glasses — and it listens for the next
 twenty seconds, so you can talk naturally without repeating the wake word:
 
-![Ask it anything](../assets/demo/catalog/features/oracle_do/preview.gif)
+![Ask it anything](../assets/demo/catalog/features/juno_do/preview.gif)
 
 "Where did I leave the bike?" "What did Marcus say he needed?" "Remind me to
 call the plumber." "Focus mode." It answers in a calm sentence or two, and if
 it does not know, it says so — it never makes things up. The full list of
-what you can say is in [Talking to it](talking-to-oracle.md).
+what you can say is in [Talking to it](talking-to-juno.md).
 
 ## In conversation
 
@@ -84,7 +84,7 @@ preference for next time.
 
 ## When you need quiet
 
-Say "Hey Oracle, focus mode" and the interruptions stop — no cards, no
+Say "Hey Juno, focus mode" and the interruptions stop — no cards, no
 captions, no pop-ups — for twenty-five minutes, while it keeps remembering
 in the background. Only a genuine emergency ("you must leave *now*") is
 allowed through.

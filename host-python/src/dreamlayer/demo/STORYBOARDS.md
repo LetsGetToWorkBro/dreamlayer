@@ -43,7 +43,7 @@ Caption punch-in: **"It answered before I could."**
 | 0–1.2 | Walking a lobby, someone approaching | footsteps | — |
 | 1.2–5.4 | You slow | **earcon: listen1** | **HarkCard** — LISTEN · *Marcus is 2 min away — you owe him the lease.* · *from your last chat* |
 | 5.7–10.5 | He's here | handshake foley | **CommitmentRecallCard** — *Send the signed lease* · due *today* |
-| 10.8–13.6 | You hand over an envelope, he smiles | your VO: "I never opened my phone." | **OracleReplyCard** — ORACLE · *Handed off. One less thing.* |
+| 10.8–13.6 | You hand over an envelope, he smiles | your VO: "I never opened my phone." | **JunoReplyCard** — JUNO · *Handed off. One less thing.* |
 
 Caption punch-in: **"It nudged me before I walked past the one guy I owed."**
 

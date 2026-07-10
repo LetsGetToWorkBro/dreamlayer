@@ -49,7 +49,7 @@ from .ops_world_lenses import WorldLensOps
 from .ops_brain_switches import BrainSwitchOps
 from .ops_messages import MessagesOps
 from .ops_conversation import ConversationOps
-from .ops_oracle_attention import OracleAttentionOps
+from .ops_juno_attention import JunoAttentionOps
 from .ops_commitments import CommitmentRecallOps
 from .ops_plugins import PluginOps
 
@@ -62,7 +62,7 @@ class Orchestrator(
     BrainSwitchOps,
     MessagesOps,
     ConversationOps,
-    OracleAttentionOps,
+    JunoAttentionOps,
     CommitmentRecallOps,
     PluginOps,
 ):
@@ -145,11 +145,11 @@ class Orchestrator(
         #   • set_incognito() is the privacy shield — forces cloud off and
         #     pauses capture for the session (replaces the old "home" mode).
         # health: tier failures are skipped-not-fatal AND recorded; each tier
-        # call runs under the Oracle-ask latency budget (budgets.py).
-        from .budgets import ORACLE_ASK_MS
+        # call runs under the Juno-ask latency budget (budgets.py).
+        from .budgets import JUNO_ASK_MS
         self.brain = BrainRouter(cloud_opt_in=True, local_only=True,
                                  health=self.health,
-                                 deadline_ms=ORACLE_ASK_MS)
+                                 deadline_ms=JUNO_ASK_MS)
         self._cloud_pref = True               # remembered across incognito
         self.mac_mini_connected = False       # phone is the brain until paired
         self.incognito = False
@@ -192,15 +192,15 @@ class Orchestrator(
         # figment lands on the revocation list, not just off the stage.
         self._banished_figments: set[str] = set()
         self.rc_deployer = None                  # seam: StageDeployer or None
-        # Oracle — the assistant. "Hey Oracle" wakes it; tap / gaze / raise are
+        # Juno — the assistant. "Hey Juno" wakes it; tap / gaze / raise are
         # multimodal alternatives. On wake it shows a Listening ring + (device
         # seams) an earcon and a haptic tick, then stays open a short session so
         # follow-ups need no wake word.
-        self.oracle_until = 0.0
-        self.oracle_session_s = 20.0
+        self.juno_until = 0.0
+        self.juno_session_s = 20.0
         self.wake_sources = {"voice", "tap", "gaze", "raise"}
         self.wake_feedback = {"visual": True, "audio": True, "haptic": True}
-        self._last_hark = -1e9                  # rate-limit Oracle's "Listen!"
+        self._last_hark = -1e9                  # rate-limit Juno's "Listen!"
         # Attention policy: decides *when* a moment is worth an audible "Listen!"
         # (a commitment slipping, someone you owe, something you left) or an
         # urgent "Watch out!" (leave now). Feeds hark(); never nags (per-key
@@ -237,11 +237,11 @@ class Orchestrator(
         # Answer-ahead — overhears a question aimed at you and surfaces the
         # answer from your own knowledge in time to say it yourself. No wake
         # word. Off by default; answers route through _answer_question (the same
-        # knowledge tier the Oracle asks).
+        # knowledge tier the Juno asks).
         from .answer_ahead import AnswerAhead
         self.answer_ahead = AnswerAhead(answer_fn=self._answer_question)
         self.copilot_on = False
-        # User model — the Oracle learns you: the topics you return to, who you
+        # User model — the Juno learns you: the topics you return to, who you
         # talk with, what you tell it to remember, what to call you. Built
         # on-device from your own lines + explicit teaches; persisted beside the
         # vault (in-memory for an :memory: db). Feeds the persona's greeting and
@@ -410,15 +410,15 @@ class Orchestrator(
                 "plugins": self.capability_log.report()}
 
 
-    def ask_oracle(self, text: str) -> dict:
-        """The full "Hey Oracle" surface: run a device command if it is one
+    def ask_juno(self, text: str) -> dict:
+        """The full "Hey Juno" surface: run a device command if it is one
         ("turn on focus", "go incognito", "rewind my day"), otherwise answer
         from your brain — device → Mac mini → cloud, so it can pull up anything
-        about you or the wider world. Replies as text on the glasses in Oracle's
+        about you or the wider world. Replies as text on the glasses in Juno's
         own voice. Returns {intent, text, executed, ...}."""
         from .commands import parse_command
         from . import persona
-        # first: is this you teaching Oracle about yourself? ("call me Sam",
+        # first: is this you teaching Juno about yourself? ("call me Sam",
         # "remember that I prefer aisle seats") — it learns and confirms.
         learned = self.user.learn(text)
         if learned is not None:
@@ -426,17 +426,17 @@ class Orchestrator(
                 line = persona.confirm("learned_name", name=learned["value"])
             else:
                 line = persona.confirm("learned_pref")
-            self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
+            self.bridge.send_card(cards.juno_reply(line, "action"), event="juno")
             self.publish_profile()          # a teach is worth pushing right away
             return {"intent": "learn", "text": line, "executed": True,
                     "learned": learned}
         cmd = parse_command(text)
         if cmd is not None:
             line, executed, intent = self._run_command(cmd)
-            self.bridge.send_card(cards.oracle_reply(line, "action"), event="oracle")
+            self.bridge.send_card(cards.juno_reply(line, "action"), event="juno")
             return {"intent": intent, "text": line, "executed": executed}
         # not a command → knowledge / conversation. Your questions also reveal
-        # what you care about, so the Oracle keeps learning as you ask.
+        # what you care about, so the Juno keeps learning as you ask.
         self.user.observe(text)
         res = self.handle_voice(text)
         kind = res.get("intent")
@@ -455,7 +455,7 @@ class Orchestrator(
             line = res["say"]
         else:
             line = persona.dunno()
-        self.bridge.send_card(cards.oracle_reply(line, "answer"), event="oracle")
+        self.bridge.send_card(cards.juno_reply(line, "answer"), event="juno")
         out = {"intent": kind, "text": line, "executed": False}
         out.update({k: v for k, v in res.items() if k not in ("intent", "answer")})
         return out

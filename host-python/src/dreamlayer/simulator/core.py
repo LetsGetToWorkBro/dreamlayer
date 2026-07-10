@@ -4,7 +4,7 @@ HaloSimulator owns a real Orchestrator on an EmulatorBridge and plays the
 part of the missing hardware:
 
 - **voice** — your typed line IS the transcript the mic+ASR seam would
-  deliver; it runs through the real "Hey Oracle" surface (commands, learns,
+  deliver; it runs through the real "Hey Juno" surface (commands, learns,
   intents, native timers).
 - **eyes** — "look at" picks a synthetic camera frame (each face is a
   distinct frame, exactly how the test-suite faces work), so introductions
@@ -69,7 +69,7 @@ class HaloSimulator:
         self._raw_cursor = 0
         self._last_tick = time.monotonic()
         self.transcript: list[dict] = []      # {who, line}
-        self._say("oracle", "Halo simulator ready. Talk to me.")
+        self._say("juno", "Halo simulator ready. Talk to me.")
 
     # ------------------------------------------------------------------
     # inputs — the hardware seams, simulated
@@ -89,7 +89,7 @@ class HaloSimulator:
     def voice(self, text: str, look: Optional[str] = None) -> dict:
         """A spoken line (typed = the ASR seam). With a face in view the
         line goes through handle_voice(frame=…) so introductions and scholar
-        work; otherwise through the full "Hey Oracle" command surface."""
+        work; otherwise through the full "Hey Juno" command surface."""
         text = (text or "").strip()
         if not text:
             return {"ok": False, "say": ""}
@@ -101,12 +101,12 @@ class HaloSimulator:
                     r = self.orc.handle_voice(text, frame=frame) or {}
                     say = r.get("say") or r.get("answer") or ""
                 else:
-                    r = self.orc.ask_oracle(text) or {}
+                    r = self.orc.ask_juno(text) or {}
                     say = r.get("text") or r.get("say") or ""
             except Exception as e:  # never let a demo line kill the sim
                 r, say = {"intent": "error"}, f"(something broke: {e})"
             self._drain()
-            self._say("oracle", say)
+            self._say("juno", say)
             return {"ok": True, "say": say, "intent": r.get("intent", "")}
 
     def glance(self, look: Optional[str] = None) -> dict:
@@ -114,7 +114,7 @@ class HaloSimulator:
         with self._lock:
             frame = self._frame_for(look)
             if frame is None:
-                self._say("oracle", "(nobody in view)")
+                self._say("juno", "(nobody in view)")
                 return {"ok": False, "say": "Nobody in view."}
             out = None
             try:
@@ -128,7 +128,7 @@ class HaloSimulator:
                 say = f"That's {out['person']}" + (f" — {', '.join(bits)}." if bits else ".")
             else:
                 say = "I don't know them yet — introduce us."
-            self._say("oracle", say)
+            self._say("juno", say)
             return {"ok": True, "say": say, "recall": out or {}}
 
     def gesture(self, name: str) -> dict:
@@ -151,7 +151,7 @@ class HaloSimulator:
         """The Privacy Veil — the glasses go deaf and blind."""
         with self._lock:
             (self.orc.privacy.pause() if on else self.orc.privacy.resume())
-            self._say("oracle", "Veil down — I see and keep nothing." if on
+            self._say("juno", "Veil down — I see and keep nothing." if on
                       else "Veil up. I'm with you again.")
             return {"ok": True, "veiled": on}
 

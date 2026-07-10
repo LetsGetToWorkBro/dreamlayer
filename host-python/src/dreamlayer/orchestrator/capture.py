@@ -1,6 +1,6 @@
 """orchestrator/capture.py — the missing loop: microphone → text → the hub.
 
-Every voice surface (Oracle wake, Veritas, captions, Name Capture, Timbre,
+Every voice surface (Juno wake, Veritas, captions, Name Capture, Timbre,
 Puente) consumes *transcribed text*, and until now nothing produced it — the
 seams existed (VAD, ASR, speaker id) but no code read a mic or drove `hear()`.
 This is that glue.
