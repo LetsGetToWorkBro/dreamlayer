@@ -117,17 +117,21 @@ class TestPersistentAnn:
 
 
 class TestEmbedderLadder:
-    def test_mock_is_the_last_rung(self):
-        # in this environment neither sentence-transformers nor a key exists
+    def test_hashing_is_the_offline_default(self):
+        # with neither sentence-transformers nor a key, the offline default is
+        # the real lexical hashing embedder — NOT the 32-d mock fixture.
         e = default_embedder(config=None)
         from dreamlayer.memory.embedder_local import LocalEmbeddingProvider
+        from dreamlayer.memory.embeddings import HashingEmbeddingProvider
         if not LocalEmbeddingProvider.available:
             import os
             if not os.environ.get("OPENAI_API_KEY"):
-                assert isinstance(e, MockEmbeddingProvider)
+                assert isinstance(e, HashingEmbeddingProvider)
 
     def test_signature_distinguishes_spaces(self):
+        from dreamlayer.memory.embeddings import HashingEmbeddingProvider
         assert embedder_signature(MockEmbeddingProvider()) == "mock:32"
+        assert embedder_signature(HashingEmbeddingProvider()) == "hashing:512"
 
 
 class TestRetentionLifecycle:

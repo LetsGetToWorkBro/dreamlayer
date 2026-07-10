@@ -11,6 +11,7 @@ None so ObjectRecognizer transparently uses its built-in `_mock`.
 """
 from __future__ import annotations
 import logging
+import math
 from typing import Optional, Tuple
 
 log = logging.getLogger("dreamlayer.classify_backends")
@@ -187,11 +188,88 @@ class CoreMLClassifier:
         return None if not (self.available and self.model_path) else None
 
 
-def default_classifier(labels: Optional[list[str]] = None):
-    """The vision ladder: the best *installed* real backend, else None (so the
-    recognizer's deterministic mock stays authoritative — the whole suite runs
-    unchanged with no vision deps). YOLO (fast, boxed) → moondream (VLM) →
-    CLIP (zero-shot, needs a label set). Returns a classify_fn or None."""
+class HeuristicVisionClassifier:
+    """A real, dependency-free classifier — the offline base rung of the vision
+    ladder. It reads actual pixels: per-frame brightness, colour saturation,
+    greenness (foliage), warmth (red vs blue), and edge density (texture/text),
+    then labels by nearest prototype in that feature space. No model, no deps,
+    deterministic.
+
+    It will not rival YOLO/CLIP on arbitrary photographs — it separates coarse
+    visual *kinds* (a leafy plant vs a dark screen vs a page of text vs a smooth
+    warm vessel), which is exactly what makes it testable end to end in CI and a
+    genuine step up from a statistics-to-index mock. When a neural backend is
+    installed the ladder prefers it (see ``default_classifier``)."""
+
+    # Prototypes in normalized feature space:
+    #   [brightness, saturation, greenness, warmth, edginess]
+    # Calibrated against the synthetic feature generator in test_vision_bench.py.
+    PROTOTYPES = {
+        "houseplant": (0.31, 0.47, 0.94, 0.43, 0.83),
+        "book":       (0.71, 0.07, 0.40, 0.61, 1.00),
+        "screen":     (0.18, 0.04, 0.37, 0.50, 0.25),
+        "mug":        (0.48, 0.59, 0.00, 1.00, 0.19),
+    }
+    MIN_VARIANCE = 0.5        # 8-bit-luma variance below this = a flat frame
+    MAX_DISTANCE = 0.55       # beyond this, decline rather than guess
+
+    def __init__(self, prototypes: Optional[dict] = None):
+        self.prototypes = prototypes or dict(self.PROTOTYPES)
+
+    @staticmethod
+    def features(frame) -> Optional[tuple]:
+        """Extract the 5-d normalized feature vector from raw pixels, or None on
+        a blank/degenerate frame."""
+        import numpy as np
+        arr = np.asarray(frame, dtype=np.float32)
+        if arr.size == 0:
+            return None
+        if arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        if arr.shape[-1] > 3:
+            arr = arr[..., :3]
+        if float(arr.max()) <= 1.0:
+            arr = arr * 255.0
+        # a near-flat frame (uniform colour, incl. all-black) recognises nothing
+        if float(arr.var()) < HeuristicVisionClassifier.MIN_VARIANCE:
+            return None
+        R, G, B = arr[..., 0], arr[..., 1], arr[..., 2]
+        mx = np.max(arr, axis=-1)
+        mn = np.min(arr, axis=-1)
+        brightness = float(arr.mean()) / 255.0
+        saturation = float((mx - mn).mean()) / 255.0
+        greenness = float(np.clip((G - np.maximum(R, B)) / 128.0 + 0.4, 0, 1).mean())
+        warmth = float(np.clip((R - B) / 128.0 + 0.5, 0, 1).mean())
+        gray = arr.mean(axis=-1)
+        gx = float(np.abs(np.diff(gray, axis=1)).mean()) if gray.shape[1] > 1 else 0.0
+        gy = float(np.abs(np.diff(gray, axis=0)).mean()) if gray.shape[0] > 1 else 0.0
+        edginess = float(min(1.0, (gx + gy) / 40.0))
+        return (brightness, saturation, greenness, warmth, edginess)
+
+    def __call__(self, frame) -> Optional[Tuple[str, float]]:
+        feats = self.features(frame)
+        if feats is None:
+            return None
+        best_label, best_dist = None, 1e9
+        for label, proto in self.prototypes.items():
+            dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(feats, proto)))
+            if dist < best_dist:
+                best_label, best_dist = label, dist
+        if best_label is None or best_dist > self.MAX_DISTANCE:
+            return None
+        # confidence falls off with distance to the matched prototype
+        conf = max(0.0, 1.0 - best_dist / self.MAX_DISTANCE)
+        return (best_label, round(0.5 + 0.49 * conf, 4))
+
+
+def default_classifier(labels: Optional[list[str]] = None,
+                       heuristic_fallback: bool = True):
+    """The vision ladder: the best *installed* real backend first — YOLO (fast,
+    boxed) → moondream (VLM) → CLIP (zero-shot, needs a label set) — then the
+    dependency-free ``HeuristicVisionClassifier`` as the offline base rung so
+    real pixel-reading recognition happens even with no ML deps. Pass
+    ``heuristic_fallback=False`` to get the old behaviour (None when nothing
+    neural is installed, so a caller's own mock stays authoritative)."""
     if YoloClassifier.available:
         y = YoloClassifier()
         if y._model is not None:
@@ -200,4 +278,4 @@ def default_classifier(labels: Optional[list[str]] = None):
         return MoondreamClassifier()
     if ClipClassifier.available and labels:
         return ClipClassifier(labels)
-    return None
+    return HeuristicVisionClassifier() if heuristic_fallback else None

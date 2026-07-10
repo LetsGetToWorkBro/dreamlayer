@@ -44,7 +44,7 @@ external, with the exact install command per row. The operator's guide is
 | **chromadb** | Linear store, no metadata filtering | Embedded vector DB with collections + metadata filters | "Memories about Jordan, from last month" becomes a real query |
 | **lancedb** | Everything in RAM | Columnar on-disk ANN | Scales past RAM |
 | **usearch** | Linear cosine router | HNSW approximate-nearest-neighbour index | Sub-ms routing at scale |
-| **sentence-transformers** | Embeddings from a *mock* provider (no real meaning) or OpenAI (cloud, paid, networked) | Real semantic embeddings computed locally | Memories become semantically searchable **offline and free** — the single biggest win here |
+| **sentence-transformers** | Offline default is a real lexical embedder (hashed char-ngrams, morphology-aware) — not the 32-d mock; OpenAI is the cloud option | Neural MiniLM embeddings computed locally, preferred over the lexical default when installed | Memories are semantically searchable **offline and free**, and get sharper with the model — the single biggest win here |
 | **mem0** **[live]** | Passthrough list; duplicates accumulated | Dedup + decay (even in fallback) | Memory stays clean, not noisy |
 | **docarray** | Plain dataclass | Typed multimodal doc schema w/ validation | Structured, validated records |
 | **networkx** | Hand-rolled adjacency dict, basic lookups | Real graph algorithms (paths, centrality, communities) | "How do I know this person / who connects us" becomes answerable |
@@ -79,7 +79,7 @@ external, with the exact install command per row. The operator's guide is
 | **EyeMU** | Basic nod / double-tap heuristics | Richer IMU gesture recognition | More hands-free head/motion gestures |
 | **LostFound** | No scene graph | Spatial scene understanding for object recall | "Where did I leave it" gets real spatial context |
 | **supervision (ByteTrack)** | Nearest-centroid tracking, loses identity under occlusion | Proper multi-object tracking | Keeps track of the same thing across frames |
-| **CLIP / ultralytics / moondream / coremltools** | `classify_fn=None` — "what is this?" declined | Four real classifiers (open-vocab CLIP, YOLO, Moondream VLM, on-device CoreML) | Object recognition actually happens, with an on-device option |
+| **CLIP / ultralytics / moondream / coremltools** | Offline default is a real pixel-reading classifier (`HeuristicVisionClassifier`) — reads colour/edges/texture, not a statistics-to-index mock | Four neural classifiers (open-vocab CLIP, YOLO, Moondream VLM, on-device CoreML), preferred over the heuristic when installed | Object recognition happens even offline, and gets sharper with a model |
 | **diart** | No live diarization | Real-time speaker turns | "Who's talking right now" in a live conversation |
 | **LatentSpatialMemory** | Spatial anchoring was a no-op | Spatial recall | Memories tie to places |
 | **EgoLife** | No long-horizon episodic index | Temporal/egocentric recall | "What happened last Tuesday" becomes searchable |

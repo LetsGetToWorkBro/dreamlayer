@@ -1,0 +1,5 @@
+
+# coverage artifacts
+.coverage
+.coverage.*
+htmlcov/

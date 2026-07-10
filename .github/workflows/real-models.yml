@@ -1,0 +1,51 @@
+name: real-models
+
+# The default `pytest` job runs the intelligence stack against its real,
+# dependency-free tiers (the hashing embedder, the heuristic vision classifier).
+# This job is the other half of the honesty contract: it installs the heavy ML
+# deps and runs the `real_model`-marked tests against the *actual* neural
+# backends (MiniLM sentence-transformers, open_clip/CLIP), so the claim "the
+# real path is exercised in CI" is literally true.
+#
+# It is intentionally NOT on every push: torch + model downloads are slow and
+# network-dependent, so it runs weekly and on demand, and never gates a PR.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+
+jobs:
+  real-models:
+    runs-on: ubuntu-latest
+    # a scheduled run only makes sense on the canonical repo, not forks
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'LetsGetToWorkBro'
+
+    defaults:
+      run:
+        working-directory: host-python
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: host-python/pyproject.toml
+
+      - name: Install with real ML backends
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          # CPU torch keeps the runner light; sentence-transformers -> MiniLM,
+          # open-clip-torch -> CLIP. Both download their weights on first use.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]" sentence-transformers open-clip-torch
+
+      - name: Run the real-model tests
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          TOKENIZERS_PARALLELISM: "false"
+        run: pytest --tb=short -m "real_model"

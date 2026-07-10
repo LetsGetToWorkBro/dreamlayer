@@ -72,9 +72,9 @@ class Orchestrator(
         self.config = cfg
         self.state = HostState()
 
-        # Embedder ladder: local MiniLM → OpenAI (key) → mock, first available
-        # (memory.embeddings.default_embedder). 32-d hash vectors are the
-        # fixture of last resort, not a tier.
+        # Embedder ladder: local MiniLM → OpenAI (key) → hashing lexical model,
+        # first available (memory.embeddings.default_embedder). The offline
+        # default is a real char-ngram embedder, not the 32-d mock fixture.
         from ..memory.embeddings import default_embedder
         self.embedder = default_embedder(cfg)
 

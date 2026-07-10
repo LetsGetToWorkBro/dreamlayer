@@ -13,6 +13,15 @@ from ..pipelines import vision
 from ..pipelines.extraction import extract_commitments
 
 
+def _readable(value) -> str:
+    """Natural-language text for a scene field that may be a structured dict.
+    ``{"name": "Keys", "near": "..."}`` → ``"Keys"``; a plain string passes
+    through; anything else is stringified. Keeps embed/summary text clean."""
+    if isinstance(value, dict):
+        return str(value.get("name") or value.get("label") or "").strip()
+    return str(value or "").strip()
+
+
 class IngestOps:
 
     # ------------------------------------------------------------------
@@ -67,10 +76,18 @@ class IngestOps:
         if not self.privacy.allow_capture():
             return None
         mem = vision.extract_object_memory(scene)
-        emb = self.embedder.embed(f"{mem['object']} {mem['place']} {mem['detail']}")
+        # object/place can arrive as structured dicts ({"name","near",...}); the
+        # embedding and summary must read as natural language, not stringified
+        # JSON — otherwise the object's name is drowned out by field keys and
+        # punctuation and even a real embedder retrieves it poorly.
+        obj = _readable(mem["object"])
+        place = _readable(mem["place"])
+        detail = _readable(mem["detail"])
+        near = mem["object"].get("near", "") if isinstance(mem["object"], dict) else ""
+        emb = self.embedder.embed(" ".join(t for t in (obj, near, place, detail) if t))
         mid = self.db.add_memory(
             "object",
-            f"{mem['object']} at {mem['place']}",
+            f"{obj} at {place}" if place else obj,
             embedding=emb,
             confidence=mem["confidence"],
             meta=mem,

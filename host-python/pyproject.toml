@@ -58,4 +58,5 @@ testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]
 markers = [
     "hardware: needs a real Halo device / hardware deps (deselected in CI)",
     "benchmark: latency-budget test via pytest-benchmark (deselected in CI)",
+    "real_model: needs heavy ML deps installed (MiniLM/CLIP/moondream); deselected in the default job, run by the real-models workflow",
 ]

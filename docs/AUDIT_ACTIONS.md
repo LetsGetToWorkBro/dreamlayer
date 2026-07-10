@@ -1,7 +1,7 @@
 # Audit remediation — the owner-action register
 
 The 2026-07 system audit was remediated in code where code could fix it,
-in two passes:
+in three passes:
 
 - **Pass 1 (audit fixes):** BLE framing interop, on-glass crash guard +
   banish kill switch, v1 codegen deletion, Ed25519 plugin signing,
@@ -21,6 +21,13 @@ in two passes:
   promoted to a tab; a cross-device e2e (live Brain ↔ hub ↔ real device
   Lua), BLE chaos storms, structured logging, `docs/CONCURRENCY.md`, the
   panel per-seam health view, and a `--cov-fail-under=85` coverage gate.
+- **Pass 3 (offline intelligence made real):** the offline default embedder
+  is now a real dependency-free lexical model (hashed char-ngrams, not the
+  32-d mock) and the offline default vision backend a real pixel-reading
+  classifier, each held to an enforced quality floor; the recall threshold
+  was recalibrated to the better-behaved embedder, object-memory summaries
+  are natural language rather than stringified dicts, and a non-blocking
+  `real-models` CI workflow exercises MiniLM/CLIP for real.
 
 What remains is, by nature, **owner action** — things a terminal cannot
 do. This file is the tracked list; delete entries as they land. Note that
@@ -77,7 +84,13 @@ attacker meet.
 
 ## 7. Perception bench (Rig 3)
 The Social Lens threshold (0.65) and the new top-2 margin (0.08) are
-placeholders calibrated against a stub embedder.
-- [ ] with the real on-device embedder: ROC over genuine/impostor pairs,
-      set threshold + margin from data, and add the fixed-photo-set
-      recognition regression to CI
+placeholders calibrated against a stub embedder. The *offline* intelligence
+path is now real, not mock: the default text embedder is a dependency-free
+char-ngram lexical model (`HashingEmbeddingProvider`) held to an enforced
+precision@3 floor, and the default vision backend is a real pixel-reading
+`HeuristicVisionClassifier` held to an accuracy floor; the neural backends
+(MiniLM, CLIP) run for real in the `real-models` CI workflow. What still
+needs the physical embedder:
+- [ ] with the real on-device face embedder: ROC over genuine/impostor
+      pairs, set the Social-Lens threshold + margin from data, and add the
+      fixed-photo-set recognition regression to CI

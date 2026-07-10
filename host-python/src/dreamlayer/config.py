@@ -15,7 +15,11 @@ class Config:
     paths:                      Paths = field(default_factory=Paths)
     capture_min_interval_ms:    int   = 4000
     proactive_min_confidence:   float = 0.45
-    recall_min_confidence:      float = 0.40
+    # Recall acceptance floor on the blended (similarity+confidence) score. Set
+    # for the real lexical embedder (HashingEmbeddingProvider), whose partial-
+    # match cosines are lower-magnitude — and better calibrated — than the old
+    # 32-d mock's, so the floor tracks it rather than the fixture.
+    recall_min_confidence:      float = 0.35
     reduce_motion:              bool  = False
 
     # LLM tier-3 extraction

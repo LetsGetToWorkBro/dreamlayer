@@ -14,7 +14,13 @@ class EmbeddingProvider(ABC):
 
 
 class MockEmbeddingProvider(EmbeddingProvider):
-    """Deterministic hash-based embeddings — no external deps, always works."""
+    """Deterministic hash-based embeddings — no external deps, always works.
+
+    A 32-d bag-of-word-hashes: a *test fixture*, not an intelligence tier. It
+    only matches on shared whole words (no morphology, no subword signal), so a
+    query and a memory that mean the same thing but spell it differently miss.
+    Kept for tests that pin exact vectors; the real offline default is
+    HashingEmbeddingProvider below."""
     DIM = 32
 
     def embed(self, text: str) -> list[float]:
@@ -22,6 +28,71 @@ class MockEmbeddingProvider(EmbeddingProvider):
         for tok in text.lower().split():
             h = int(hashlib.md5(tok.encode()).hexdigest(), 16)
             vec[h % self.DIM] += 1.0
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        return [v / norm for v in vec]
+
+
+def _hashed_index(feature: str, dim: int) -> tuple[int, float]:
+    """The signed hashing trick: map a string feature to a bucket and a ±1 sign
+    from independent bytes of one blake2b digest. The sign hash makes colliding
+    features cancel on average instead of always reinforcing, which keeps a
+    fixed-width vector honest as the feature vocabulary grows."""
+    h = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+    idx = int.from_bytes(h[:4], "big") % dim
+    sign = 1.0 if (h[4] & 1) else -1.0
+    return idx, sign
+
+
+def _tokenize(text: str) -> list[str]:
+    """Lowercase alphanumeric runs — locale-free and dependency-free."""
+    out, cur = [], []
+    for ch in text.lower():
+        if ch.isalnum():
+            cur.append(ch)
+        elif cur:
+            out.append("".join(cur))
+            cur = []
+    if cur:
+        out.append("".join(cur))
+    return out
+
+
+class HashingEmbeddingProvider(EmbeddingProvider):
+    """A real offline lexical embedder — no model, no deps, deterministic.
+
+    Each text becomes an L2-normalized vector of hashed features: word unigrams
+    plus character n-grams (3- and 4-grams over ``^word$``-padded tokens). The
+    n-grams are what lift this above the mock — morphological variants share
+    most of their grams, so *owe / owed / owes* and *water / watering* land
+    close, and near-miss spellings still retrieve. It is still lexical, not
+    semantic (it will not connect *buy* and *purchase*); the ladder in
+    ``default_embedder`` prefers MiniLM/OpenAI whenever either is installed and
+    only falls back to this. This is the offline default the system actually
+    ships with when no model is present."""
+    DIM = 512
+    NGRAMS = (3, 4)
+    WORD_WEIGHT = 1.0
+    GRAM_WEIGHT = 0.5
+
+    def __init__(self, dim: int | None = None):
+        if dim is not None:
+            self.DIM = dim
+
+    def _accumulate(self, vec: list[float], feature: str, weight: float) -> None:
+        idx, sign = _hashed_index(feature, self.DIM)
+        vec[idx] += sign * weight
+
+    def embed(self, text: str) -> list[float]:
+        vec = [0.0] * self.DIM
+        for tok in _tokenize(text):
+            self._accumulate(vec, "w:" + tok, self.WORD_WEIGHT)
+            padded = "^" + tok + "$"
+            for n in self.NGRAMS:
+                if len(padded) <= n:
+                    self._accumulate(vec, "g:" + padded, self.GRAM_WEIGHT)
+                    continue
+                for i in range(len(padded) - n + 1):
+                    self._accumulate(vec, "g:" + padded[i:i + n], self.GRAM_WEIGHT)
         norm = math.sqrt(sum(v * v for v in vec)) or 1.0
         return [v / norm for v in vec]
 
@@ -114,10 +185,10 @@ def unpack_embedding(raw) -> list[float] | None:
 
 
 # ---------------------------------------------------------------------------
-# The default embedder ladder. 32-d md5 hashes are a test fixture, not an
-# intelligence tier — prefer real semantics whenever anything real is
-# installed: local MiniLM (384-d, offline, no key) → OpenAI (needs a key)
-# → mock, last.
+# The default embedder ladder. Prefer real semantics whenever anything neural
+# is installed: local MiniLM (384-d, offline, no key) → OpenAI (needs a key).
+# With neither, the offline default is the real lexical HashingEmbeddingProvider
+# — NOT the 32-d md5 mock, which is only a test fixture.
 # ---------------------------------------------------------------------------
 
 def default_embedder(config=None) -> EmbeddingProvider:
@@ -126,7 +197,7 @@ def default_embedder(config=None) -> EmbeddingProvider:
         return LocalEmbeddingProvider(config)
     if getattr(config, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
         return OpenAIEmbeddingProvider(config)
-    return MockEmbeddingProvider()
+    return HashingEmbeddingProvider()
 
 
 def embedder_signature(embedder) -> str:
@@ -140,6 +211,8 @@ def embedder_signature(embedder) -> str:
         model = (getattr(embedder._config, "embedding_model", "")
                  or embedder.DEFAULT_MODEL)
         return f"openai:{model}"
+    if isinstance(embedder, HashingEmbeddingProvider):
+        return f"hashing:{embedder.DIM}"
     if isinstance(embedder, MockEmbeddingProvider):
         return f"mock:{embedder.DIM}"
     return type(embedder).__name__

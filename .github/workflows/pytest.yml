@@ -33,5 +33,5 @@ jobs:
         # --cov-fail-under is set 5 points below the measured total (90%) so
         # coverage can only rot LOUDLY — a drop fails the build.
         run: >
-          pytest --tb=short -m "not hardware and not benchmark"
+          pytest --tb=short -m "not hardware and not benchmark and not real_model"
           --cov=dreamlayer --cov-report=term-missing --cov-fail-under=85
