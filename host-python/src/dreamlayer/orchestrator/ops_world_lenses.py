@@ -295,6 +295,54 @@ class WorldLensOps:
         self.bridge.send_card(card, event="caption")
         return card
 
+    def thread(self, image: bytes, place: str = "", k: int = 6) -> dict:
+        """Thread Lens (INNOVATION_SESSION 4.1): steal color from the world.
+        Extract a k-swatch palette from a deliberate snapshot, save it as a
+        `taught` memory (recallable by place + time), and hand back the hex
+        swatches to paint into the display's dynamic palette bank. Veil-gated;
+        the image is never stored — only the palette (a few hex codes)."""
+        from ..object_lens.palette_extract import extract_palette
+        if not self.privacy.allow_capture():
+            return {"ok": False, "reason": "incognito"}
+        swatches = extract_palette(image, k)
+        if not swatches:
+            return {"ok": False, "reason": "no palette"}
+        meta = {"palette": swatches, "place": place}
+        try:
+            self.db.add_memory(kind="taught", summary="palette " + " ".join(swatches),
+                               confidence=0.8, meta=meta)
+        except Exception as exc:
+            self.health.record_failure("thread", exc)
+        return {"ok": True, "swatches": swatches, "place": place}
+
+    def ember(self, now=None, window_days: int = 3, weather: str = ""):
+        """Ember Lens (INNOVATION_SESSION 4.9, sensitive by design): on a day that
+        matters, one quiet line — a memory you *chose to keep* (pinned), a year
+        ago today. Never an ambush: only pinned memories surface, at most one, and
+        a storm-state morning suppresses it. Veil-gated. Returns the card, or None.
+        """
+        import datetime as _dt
+        import json as _json
+        if not self.privacy.allow_capture() or weather == "storm":
+            return None
+        now = now or _dt.datetime.now(_dt.timezone.utc)
+        target = now - _dt.timedelta(days=365)
+        lo = (target - _dt.timedelta(days=window_days)).isoformat()
+        hi = (target + _dt.timedelta(days=window_days)).isoformat()
+        try:
+            rows = self.db.conn.execute(
+                "SELECT summary, meta FROM memories WHERE created_at BETWEEN ? AND ? "
+                "ORDER BY created_at", (lo, hi)).fetchall()
+        except Exception:
+            return None
+        for summary, meta_s in rows:
+            meta = _json.loads(meta_s or "{}")
+            if meta.get("pinned"):
+                card = cards.saved_memory(summary)
+                self.bridge.send_card(card, event="ember")
+                return card
+        return None
+
     def docent(self, query: str, client=None, synth=None):
         """Docent Lens (INNOVATION_SESSION 4.5): a venue's place-keyed knowledge
         layer. Given a caption/query and a venue's LocalRecall collection

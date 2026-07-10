@@ -45,7 +45,10 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | O5 | ESP32 physical-events kit sketch (1.6) | **REGISTERED** | `examples/esp32/` sketch + one host route | sketch is owner hardware; host route is BUILD |
 | V1 | Proof-carrying / signing / isolation tiers (3.2, 3.4) | DONE | `plugins/*`, this session's SDK arc | verify only |
 
-Categories 4 (lenses), 7 (demos), and the Top-5 are **specs/narratives**, not build items — they compose the BUILD rows above. They stay in `INNOVATION_SESSION.md` as the design source.
+| L1 | Thread Lens — steal color from the world (4.1) | **DONE** | `object_lens/palette_extract.py` + `ops_world_lenses.thread()` | ✅ extract k-swatch palette from a snapshot → `taught` memory (image not stored), veil-gated; 5 tests |
+| L2 | Ember Lens — the anniversary layer (4.9) | **DONE** | `ops_world_lenses.ember()` | ✅ one pinned, year-ago memory surfaces; storm-suppressed, veil-gated, opt-in via pinning; 5 tests |
+
+Remaining Category-4 lenses are **device/figment-shaped**, not host builds: Sous & Session (4.2) and Kiln (4.3) are figment templates (example content); Waypath (4.7) is GPS/on-glass. Docent (B14) and Rosetta Live (B13) already shipped.
 
 ---
 
