@@ -1388,6 +1388,35 @@ class Brain:
                 "missed": {"texts": len(texts), "emails": len(emails)}}
 
 
+def _cloud_view_payload(brain: Brain) -> dict:
+    """What DreamLayer Cloud can see — the opaque byte-shapes only, never content
+    (INNOVATION_SESSION Category 6 / B16). The trust centerpiece: render the
+    nothing. The server stores ciphertext, room ids, and counts; this reports
+    exactly those, and names — in the client's own words — what it can never see.
+    Honest today: with no cloud configured, the answer is 'the server holds
+    nothing', which is the point."""
+    try:
+        caps = set(brain.plugin_capabilities())
+    except Exception:
+        caps = set()
+    enabled = bool({"cloud_sync", "cloud_relay", "cloud_ai"} & caps)
+    return {
+        "enabled": enabled,
+        # {bytes, last_backup_ts} once a ciphertext backup exists; None ⇒ nothing
+        # stored. The server can never open it — the key is your passphrase.
+        "vault": None,
+        # rooms the device participates in: an opaque id + a member count, never
+        # who. The relay routes; it does not read.
+        "relay": {"rooms": []},
+        "listings": 0,
+        "cannot_see": [
+            "your memories — the SQLite file never leaves the device unencrypted",
+            "who you are — bonds are pairwise keys; the relay learns only a room id",
+            "what a figment means — a dozen integers cross the wire, nothing more",
+        ],
+    }
+
+
 def _capability_payload(brain: Brain) -> dict:
     """Live optional-capability report for the panel (dreamlayer/capabilities.py)
     with the panel's own persisted off-switches applied. Env DL_DISABLE_* still
@@ -1597,6 +1626,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "seams": brain.health.snapshot()})
             elif path == "/dreamlayer/capabilities":
                 self._json(200, _capability_payload(brain))
+            elif path == "/dreamlayer/cloud":
+                self._json(200, _cloud_view_payload(brain))
             elif path == "/dreamlayer/history":
                 self._json(200, {"items": _activity_feed(brain, 40)})
             elif path == "/dreamlayer/calendar":

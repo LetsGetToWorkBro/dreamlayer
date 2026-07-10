@@ -326,6 +326,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/vitals")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Device vitals — what your glasses report →</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/cloud")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>What the cloud can see — the byte-shapes →</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.section}>
