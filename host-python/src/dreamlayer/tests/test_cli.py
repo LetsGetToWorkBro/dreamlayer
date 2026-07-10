@@ -79,6 +79,33 @@ def test_list_registry_catalogue(tmp_path, capsys):
     assert rc == 0 and "face-synth" in out and "[free]" in out and "official" in out
 
 
+def test_info_shows_manifest_and_contributions(tmp_path, capsys):
+    _, d = _new(tmp_path)
+    rc = cli.main(["plugins", "info", str(d)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "demo-plugin" in out and "contributes" in out and "card_renderer" in out
+
+
+def test_info_json(tmp_path, capsys):
+    _, d = _new(tmp_path)
+    capsys.readouterr()                           # drop the scaffold's "created" line
+    assert cli.main(["plugins", "info", str(d), "--json"]) == 0
+    import json as _json
+    data = _json.loads(capsys.readouterr().out)
+    assert data["name"] == "demo-plugin" and data["contributes"]["card_renderer"]
+
+
+def test_contributions_maps_extension_points():
+    from dreamlayer.sdk import contributions
+    from dreamlayer.plugins.filler import filler_plugin
+    from dreamlayer.plugins.currency import currency_plugin
+    fc = contributions(filler_plugin())
+    assert fc["card_renderer"] == ["FillerCard"] and fc["perceptor"] == 1
+    cc = contributions(currency_plugin())
+    assert cc["object_provider"] == 1 and "card_renderer" not in cc
+
+
 def test_preview_writes_a_device_png(tmp_path):
     _, d = _new(tmp_path)
     out = tmp_path / "shot.png"

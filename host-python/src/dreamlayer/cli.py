@@ -292,6 +292,37 @@ def cmd_install(args) -> int:
     return 1
 
 
+def cmd_info(args) -> int:
+    from dreamlayer.sdk import contributions
+    from dreamlayer.plugins.store import load_plugin_object
+    try:
+        pkg = _load_package(args.path)
+    except Exception as e:
+        _err(f"{BAD} {e}")
+        return 2
+    m = pkg.manifest
+    contribs = contributions(load_plugin_object(pkg))
+    if args.json:
+        _p(json.dumps({"name": m.name, "version": m.version, "api": m.api,
+                       "min_sdk": m.min_sdk, "requires": list(m.requires),
+                       "official": m.official, "pricing": m.pricing,
+                       "contributes": contribs}, indent=2))
+        return 0
+    _p(f"{m.name}  v{m.version}  (api {m.api}"
+       + (f", min_sdk {m.min_sdk}" if m.min_sdk else "") + ")")
+    if m.official:
+        _p("  ✓ official — DreamLayer team")
+    _p(f"  needs: {', '.join(m.requires) or 'no special access'}")
+    _p(f"  price: {(m.pricing or {}).get('model', 'free')}")
+    if contribs:
+        _p("  contributes:")
+        for kind, v in contribs.items():
+            _p(f"    • {kind}: {', '.join(v) if isinstance(v, list) else v}")
+    else:
+        _p("  contributes: (nothing detected)")
+    return 0
+
+
 def _store_banner(card_img, size=(640, 340)):
     """Compose a 256 device card, alpha-masked, centred on a dark store banner."""
     from PIL import Image
@@ -468,6 +499,11 @@ def build_parser() -> argparse.ArgumentParser:
     inst.add_argument("--brain", help="Brain base URL (or set DREAMLAYER_BRAIN)")
     inst.add_argument("--token", help="Brain token (or set DREAMLAYER_TOKEN)")
     inst.set_defaults(func=cmd_install)
+
+    info = sub.add_parser("info", help="show a plugin's manifest + what it contributes")
+    info.add_argument("path", nargs="?", default=".", help="plugin directory or package .json")
+    info.add_argument("--json", action="store_true", help="machine-readable output")
+    info.set_defaults(func=cmd_info)
 
     prev = sub.add_parser("preview", help="render the plugin's HUD card through the real device renderer")
     prev.add_argument("path", nargs="?", default=".", help="plugin directory or package .json")

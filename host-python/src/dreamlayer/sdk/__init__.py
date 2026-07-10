@@ -84,7 +84,7 @@ from .protocols import PluginContextProtocol, SettingsProtocol, ManifestDict
 from .discovery import discover, load_discovered, DiscoveredPlugin, ENTRY_GROUP
 
 # --- render a card through the real device renderer (preview + snapshot) -----
-from .preview import render_card, registered_card_types
+from .preview import render_card, registered_card_types, contributions
 
 
 def package_from_dir(path):
@@ -132,8 +132,8 @@ __all__ = [
     "PluginEventBus", "EVENT_KINDS",
     # discovery (entry points)
     "discover", "load_discovered", "DiscoveredPlugin", "ENTRY_GROUP",
-    # preview / visual regression
-    "render_card", "registered_card_types",
+    # preview / visual regression / introspection
+    "render_card", "registered_card_types", "contributions",
     # packaging + validation
     "PluginManifest", "PluginPackage", "sha256_of", "package_from_dir",
     "validate", "scan_source", "ValidationReport",

@@ -39,6 +39,23 @@ def registered_card_types(plugin) -> list:
     return list(renderer._extra.keys())
 
 
+def contributions(plugin) -> dict:
+    """What a plugin *adds* to the layer — the à-la-carte contribution map,
+    discovered by running its ``register`` against a recording context. Card
+    renderers are listed by type; other extension points by count. This is how
+    the store/CLI show "what does this plugin do" without pluggy-style hook
+    discovery (see docs/adr/0001-plugin-extension-model.md)."""
+    from ..plugins.base import PluginContext, PluginRegistry
+    from ..plugins.package import KNOWN_CAPABILITIES
+    ctx = PluginContext(capabilities=frozenset(KNOWN_CAPABILITIES), config={})
+    PluginRegistry(ctx).load_all([_plugin_object(plugin)])
+    out: dict = {}
+    for kind, items in ctx.added.items():
+        if items:
+            out[kind] = list(items) if kind == "card_renderer" else len(items)
+    return out
+
+
 def render_card(plugin, card: Optional[dict] = None):
     """Render ``card`` through the real 256×256 device renderer and return a PIL
     image. ``plugin`` is a plugin object / factory / PluginPackage; ``card`` is

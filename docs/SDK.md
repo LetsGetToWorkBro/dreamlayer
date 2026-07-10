@@ -205,4 +205,8 @@ the code. Free plugins stay free to publish and install; a paid tier
   and the pricing model.
 - [`PLATFORM.md`](PLATFORM.md) — where the Plugin API sits among the five
   platform pillars.
-- `dreamlayer plugins --help` — every command and flag.
+- `dreamlayer plugins --help` — every command and flag (`new`, `validate`,
+  `pack`, `install`, `list`, `info`, `preview`, `dev`).
+- [`adr/0001-plugin-extension-model.md`](adr/0001-plugin-extension-model.md) —
+  why the extension model is `register(ctx)` + capabilities, not pluggy.
+  `dreamlayer plugins info` (and `sdk.contributions()`) shows what a plugin adds.
