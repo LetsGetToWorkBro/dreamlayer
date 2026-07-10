@@ -1796,6 +1796,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # Category 1) so "Deploy to my Brain" needs no CORS and no
                 # pasted token. Same posture as the panel: the token is injected
                 # only for a localhost request.
+                # NB: no CORS header here on purpose. This HTML carries the
+                # injected Brain token (localhost only), so it must stay
+                # same-origin — a page on another site must not be able to
+                # fetch() and read it. It's loaded by navigation, never fetch.
                 html = _builder_page(brain.config.token if self._from_localhost() else "")
                 if html is None:
                     self._json(404, {"error": "builder assets not found"}); return
@@ -1803,11 +1807,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
-                self._cors()
                 self.end_headers()
                 self.wfile.write(body)
                 return
             if path == "/dreamlayer/build/figment.js":
+                # same-origin asset for the served page — no CORS needed
                 js = _builder_asset("figment.js")
                 if js is None:
                     self._json(404, {"error": "not found"}); return
@@ -1815,7 +1819,6 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self.send_response(200)
                 self.send_header("Content-Type", "application/javascript; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
-                self._cors()
                 self.end_headers()
                 self.wfile.write(body)
                 return

@@ -147,3 +147,78 @@ class TestBrainServesBuilder:
     def test_page_omits_token_off_localhost(self):
         from dreamlayer.ai_brain.server.server import _builder_page
         assert '"token": ""' in _builder_page("")
+
+
+# -- an ADVANCED-editor graph (not just a template) passes the real gate -------
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+class TestAdvancedGraphParity:
+    def _build(self, script: str) -> dict:
+        out = subprocess.run(["node", "-e", script], cwd=LENS,
+                             capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        return json.loads(out.stdout)
+
+    def test_a_hand_wired_graph_passes_the_python_gate(self):
+        # emptyFigment (s0 timed→end) + an event-only s1, cross-wired — the exact
+        # shape the Advanced editor produces, not a bundled template.
+        data = self._build(
+            "var K=require('./figment.js');"
+            "var f=K.emptyFigment();"
+            "var s1=K.addBlankScene(f);"
+            "K.setTransition(f.scenes.s0,'double',s1.id);"   # s0 --double--> s1
+            "K.setTransition(s1,'double','@end');"           # s1 --double--> end
+            "console.log(JSON.stringify(f));")
+        report = verify(Figment.from_dict(data))
+        assert report.ok, report.violations             # browser 'valid' == on-glass valid
+
+    def test_js_and_python_agree_on_an_invalid_graph(self):
+        # a timeout transition with no duration is illegal in BOTH — the JS must
+        # not call it safe when Python would reject it (the dangerous direction).
+        script = (
+            "var K=require('./figment.js');"
+            "var f=K.emptyFigment();"
+            "var s1=K.addBlankScene(f);"                    # untimed
+            "K.setTransition(s1,'timeout','@end');"          # on_timeout w/o duration
+            "console.log(JSON.stringify({ok:K.validate(f).ok, fig:f}));")
+        got = self._build(script)
+        assert got["ok"] is False                            # JS rejects it
+        assert verify(Figment.from_dict(got["fig"])).ok is False   # so does Python
+
+
+# -- the Brain serves the builder over HTTP (same-origin, no CORS) -------------
+
+class TestBuildRouteHttp:
+    def _live(self, tmp_path):
+        from dreamlayer.tests.test_ai_brain_server import LiveBrain
+        return LiveBrain(tmp_path)
+
+    def test_build_page_and_asset_served(self, tmp_path):
+        import urllib.request
+        lb = self._live(tmp_path)
+        try:
+            resp = urllib.request.urlopen(lb.url + "/dreamlayer/build")
+            page = resp.read().decode()
+            assert "__DL_BUILD__" in page and "/dreamlayer/build/figment.js" in page
+            # 127.0.0.1 is localhost → the token is injected (same as the panel)
+            assert '"token": "tok"' in page
+            # SECURITY: this page carries the token, so it must NOT be readable
+            # cross-origin — no Access-Control-Allow-Origin on the HTML/JS.
+            assert resp.headers.get("Access-Control-Allow-Origin") is None
+            jsresp = urllib.request.urlopen(lb.url + "/dreamlayer/build/figment.js")
+            assert "LensKit" in jsresp.read().decode()
+            assert jsresp.headers.get("Access-Control-Allow-Origin") is None
+        finally:
+            lb.stop()
+
+    def test_options_preflight_and_cors_headers(self, tmp_path):
+        import urllib.request
+        lb = self._live(tmp_path)
+        try:
+            req = urllib.request.Request(lb.url + "/dreamlayer/build", method="OPTIONS")
+            r = urllib.request.urlopen(req)
+            assert r.status == 204
+            assert r.headers.get("Access-Control-Allow-Origin") == "*"
+            assert "X-DreamLayer-Token" in (r.headers.get("Access-Control-Allow-Headers") or "")
+        finally:
+            lb.stop()
