@@ -48,7 +48,7 @@ Rule we learned on contact: **verify each idea against the current tree before a
 | L1 | Thread Lens — steal color from the world (4.1) | **DONE** | `object_lens/palette_extract.py` + `ops_world_lenses.thread()` | ✅ extract k-swatch palette from a snapshot → `taught` memory (image not stored), veil-gated; 5 tests |
 | L2 | Ember Lens — the anniversary layer (4.9) | **DONE** | `ops_world_lenses.ember()` | ✅ one pinned, year-ago memory surfaces; storm-suppressed, veil-gated, opt-in via pinning; 5 tests |
 
-| L3 | Waypath Lens — the dot, no maps app (4.7) | **DONE (geometry)** | phone `src/nav/waypath.ts` | ✅ bearing/haversine/relative-angle/next-waypoint/`dotFor`; GPS (expo-location) + routing API are injected seams (not Apple/Google Maps); 9 tests |
+| L3 | Waypath Lens — the dot, no maps app (4.7) | **DONE** | phone `src/nav/{waypath,osrm}.ts` + `useWaypathStore` + `app/waypath.tsx` | ✅ geometry (9 tests) + OSRM routing adapter (self-hostable, fetch-injected) + store + screen (one-dot ring, distance, arrival, expo-location guarded); GPS + routing are seams, not Apple/Google Maps; 20 tests total |
 | L4 | Sous & Kiln — example figments (4.2, 4.3) | **DONE** | `reality_compiler/v2/recipes.py` + `examples/figments/*.json` | ✅ budget-verified builders + committed JSON; double-nod advance, battery-low escape, print counter; 6 tests |
 
 Docent (B14) and Rosetta Live (B13) already shipped as host lenses; Thread (L1) and Ember (L2) too.
