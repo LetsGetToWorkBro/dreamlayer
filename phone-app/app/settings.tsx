@@ -285,6 +285,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/brain")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Pair devices, connect your Mac mini, cloud →</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/brain-tiers")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Brain — the tier ladder, live latency & swap →</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.section}>

@@ -31,6 +31,7 @@ class HealthLedger:
         self._fail: dict[str, int] = {}
         self._ok: dict[str, int] = {}
         self._recent: dict[str, deque] = {}
+        self._lat: dict[str, float] = {}       # seam -> EWMA latency (ms)
 
     def record_failure(self, seam: str, error: object = "") -> None:
         with self._lock:
@@ -39,9 +40,15 @@ class HealthLedger:
             ring.append({"ts": self._now(),
                          "error": str(error)[:200]})
 
-    def record_ok(self, seam: str) -> None:
+    def record_ok(self, seam: str, ms: object = None) -> None:
         with self._lock:
             self._ok[seam] = self._ok.get(seam, 0) + 1
+            if ms is not None:
+                # a smoothed round-trip so a live "how fast is this tier"
+                # readout doesn't jitter on one slow call
+                prev = self._lat.get(seam)
+                self._lat[seam] = float(ms) if prev is None else \
+                    prev + 0.3 * (float(ms) - prev)
 
     def failures(self, seam: str) -> int:
         with self._lock:
@@ -61,6 +68,8 @@ class HealthLedger:
                     "last_error": last["error"] if last else "",
                     "last_ts": last["ts"] if last else 0.0,
                 }
+                if seam in self._lat:
+                    out[seam]["latency_ms"] = round(self._lat[seam], 1)
             return out
 
     def recent(self, seam: str) -> list:

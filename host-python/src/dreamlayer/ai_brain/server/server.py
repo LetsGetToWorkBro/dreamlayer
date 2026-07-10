@@ -1533,6 +1533,51 @@ def _cloud_view_payload(brain: Brain) -> dict:
     }
 
 
+def _brain_view_payload(brain: Brain) -> dict:
+    """The Brain as a cartridge (INNOVATION_SESSION 3.1): the live tier ladder —
+    on-device → Mac mini → cloud — each with the round-trip latency the router
+    actually measured (health ledger), plus which model is loaded and the cloud/
+    incognito switches. Makes the router's judgment visible and swappable."""
+    seams = {}
+    try:
+        seams = brain.health.snapshot()
+    except Exception:
+        seams = {}
+    cloud_on = bool(brain.config.cloud_enabled) and not brain.config.lan_only
+    incognito = brain.incognito_now()
+
+    def tier(seam_key, name, note, enabled):
+        s = seams.get(f"brain:{seam_key}", {})
+        ok, fail = int(s.get("successes", 0)), int(s.get("failures", 0))
+        total = ok + fail
+        return {
+            "id": seam_key, "name": name, "note": note, "enabled": enabled,
+            "latency_ms": s.get("latency_ms"),          # None until it has answered
+            "answered": ok, "failed": fail,
+            "reliability": round(ok / total, 2) if total else None,
+            "seen": total > 0,
+        }
+
+    mac_on = not brain.config.lan_only            # local-only ("phone is the brain") drops the remote tier
+    tiers = [
+        tier("device", "On-device", "small, instant, always yours", True),
+        tier("mac_mini", "Mac mini", "bigger local model, over your own files", mac_on),
+        tier("cloud", "Cloud",
+             "the hardest, non-personal asks" if cloud_on else "off — nothing leaves the device",
+             cloud_on and not incognito),
+    ]
+    # the tier that would answer now = the highest-preference enabled one
+    active = next((t["id"] for t in tiers if t["enabled"]), "device")
+    return {
+        "model": brain.config.model,               # the loaded cartridge
+        "cloud_provider": getattr(brain.config, "cloud_provider", "") or "",
+        "cloud": cloud_on,
+        "incognito": incognito,
+        "active_tier": active,
+        "tiers": tiers,
+    }
+
+
 def _capability_payload(brain: Brain) -> dict:
     """Live optional-capability report for the panel (dreamlayer/capabilities.py)
     with the panel's own persisted off-switches applied. Env DL_DISABLE_* still
@@ -1697,6 +1742,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"config": brain.config.public(),
                                  "stats": brain.index.stats(),
                                  "plan": brain.plan_summary()})
+            elif path == "/dreamlayer/brain/tiers":
+                # the Brain ceremony (3.1): tier ladder + measured latency
+                self._json(200, _brain_view_payload(brain))
             elif path == "/dreamlayer/status":
                 ago = None
                 if brain._last_phone_ts:

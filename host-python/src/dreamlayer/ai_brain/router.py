@@ -38,9 +38,13 @@ class BrainRouter:
         self.deadline_ms = deadline_ms
 
     def _call_tier(self, brain, fn, seam_hint: str):
-        """One tier attempt under the deadline; failures recorded, never fatal."""
+        """One tier attempt under the deadline; failures recorded, never fatal.
+        A success also records the round-trip latency, so the phone's Brain
+        screen can show how fast each tier actually is (INNOVATION 3.1)."""
+        import time
         from ..orchestrator.budgets import run_with_deadline
         seam = f"brain:{getattr(brain, 'tier', '') or seam_hint}"
+        t0 = time.time()
         try:
             ans = run_with_deadline(fn, self.deadline_ms,
                                     health=self.health, seam=seam)
@@ -49,7 +53,7 @@ class BrainRouter:
                 self.health.record_failure(seam, exc)
             return None
         if ans is not None and self.health is not None:
-            self.health.record_ok(seam)
+            self.health.record_ok(seam, ms=(time.time() - t0) * 1000.0)
         return ans
 
     # -- registration (in preference order) -----------------------------
