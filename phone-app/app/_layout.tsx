@@ -12,6 +12,7 @@ import { colors } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
 import { TabIcon } from "../src/ui/components/TabIcon";
 import { useBrainStore } from "../src/state/useBrainStore";
+import { usePackStore } from "../src/state/usePackStore";
 import { t } from "../src/i18n";
 
 /** Frosted glass under the tab bar — a blur on native, a translucent wash on web. */
@@ -36,6 +37,10 @@ export default function Layout() {
   });
   const hydrate = useBrainStore((s) => s.hydrate);
   const hydrated = useBrainStore((s) => s.hydrated);
+  // apply the chosen earcon/haptic pack (B8) app-wide on launch
+  React.useEffect(() => {
+    usePackStore.getState().hydrate();
+  }, []);
   React.useEffect(() => {
     if (!hydrated) {
       hydrate();
@@ -107,6 +112,7 @@ export default function Layout() {
       <Tabs.Screen name="vitals" options={{ href: null }} />
       <Tabs.Screen name="cloud" options={{ href: null }} />
       <Tabs.Screen name="waypath" options={{ href: null }} />
+      <Tabs.Screen name="packs" options={{ href: null }} />
       <Tabs.Screen name="rewind" options={{ href: null }} />
       <Tabs.Screen name="saga" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />

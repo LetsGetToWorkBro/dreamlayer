@@ -332,6 +332,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/waypath")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>Waypath — one point of light, no map →</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/packs")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>Feel — pick an earcon & haptic pack →</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.section}>

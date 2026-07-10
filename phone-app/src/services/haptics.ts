@@ -31,7 +31,7 @@ function mod(): any {
 }
 
 /** One beat of a pattern: an impact weight or a notification type. */
-type Beat =
+export type Beat =
   | { impact: "light" | "medium" | "heavy"; at: number }
   | { notify: "success" | "warning" | "error"; at: number };
 
@@ -107,11 +107,26 @@ function fire(beat: Beat): void {
 /** Play a vocabulary signal. Timed beats run on setTimeout chains; an empty
  * pattern (answer_ahead) is a deliberate no-op. */
 export function play(signal: HapticSignal): void {
-  const beats = PATTERNS[signal] ?? [];
+  const beats = resolve(signal);
   for (const beat of beats) {
     if (beat.at === 0) fire(beat);
     else setTimeout(() => fire(beat), beat.at);
   }
+}
+
+// --- Earcon/Haptic Packs (B8): a selected pack may reskin the feel. The pack
+// picker installs an override table here; play() consults it before the
+// built-in vocabulary. answer_ahead stays silent by construction (the pack
+// gate rejects a non-empty answer_ahead), so an override can't make it buzz.
+let _overrides: Partial<Record<HapticSignal, Beat[]>> | null = null;
+
+export function setHapticOverrides(map: Partial<Record<HapticSignal, Beat[]>> | null): void {
+  _overrides = map;
+}
+
+function resolve(signal: HapticSignal): Beat[] {
+  const o = _overrides && _overrides[signal];
+  return o ?? PATTERNS[signal] ?? [];
 }
 
 /**
