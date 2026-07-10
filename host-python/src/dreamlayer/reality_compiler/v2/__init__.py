@@ -30,6 +30,7 @@ from .deployer import StageDeployer, DeployRecord
 from .compiler import RealityCompilerV2, TextCompileResult
 from .repertoire_ranker import RepertoireRanker
 from .refine import propose_refinement, build_variant, RefineProposal, banish_hotspot
+from .grammar_mine import GrammarMiner
 from .skill import compile_skill, parse_skill, Step
 
 __all__ = [

@@ -280,7 +280,9 @@ class Brain:
             elif kind == "dwell":
                 session.dwell(float(b.get("seconds") or 0.0))
             elif kind == "say":
-                session.say(str(b.get("text") or ""))
+                text = str(b.get("text") or "")
+                session.say(text)
+                self.rc.mine_utterance(text)   # grammar mining (5.3), local-only
             # unknown kinds are ignored — the grammar can't be smuggled past
         try:
             result = session.finish()
@@ -337,6 +339,11 @@ class Brain:
         """The right machine for right now, or nothing when none is a confident
         fit — the Oracle's "Gym? Start the usual circuit?" """
         return {"suggestion": self.rc.suggest()}
+
+    def rc_grammar_candidates(self) -> dict:
+        """The words people keep trying to say that the rehearsal grammar can't
+        hear yet — the compiler's roadmap, measured locally (5.3)."""
+        return {"candidates": self.rc.grammar_candidates()}
 
     def rc_deploy(self, figment_id: str) -> dict:
         """Hot-swap a kept figment onto the stage. On success it's the one on

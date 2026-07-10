@@ -37,6 +37,7 @@ from .deployer import DeployRecord, StageDeployer
 from .figment import Figment
 from .playback import PlaybackFrame, run_through
 from .rehearsal import RehearsalResult, RehearsalSession
+from .grammar_mine import GrammarMiner
 from .repertoire_ranker import RepertoireRanker
 from .vault import Vault, VaultEntry
 
@@ -65,6 +66,9 @@ class RealityCompilerV2:
         # actually use it. Rebuilt from the vault log so it survives a restart.
         self.ranker = RepertoireRanker()
         self._hydrate_ranker()
+        # grammar mining (5.3): count the words people try to say that the
+        # closed grammar can't hear yet, so its roadmap is a measurement.
+        self.miner = GrammarMiner(self.vault.root / "grammar_mine.json")
 
     # ------------------------------------------------------------------
     # The paradigm: rehearse → keep → deploy
@@ -126,6 +130,20 @@ class RealityCompilerV2:
         variant = build_variant(self.vault.load(proposal.figment_id).figment,
                                 proposal.scene, proposal.suggested_sec)
         return self.keep(variant)      # verifies budgets + signs
+
+    def mine_utterance(self, text: str) -> None:
+        """Feed one spoken beat to the grammar miner (5.3). A beat that fell out
+        of the closed grammar (became a label) contributes its words to the
+        near-miss counts; a recognised command teaches nothing."""
+        from .rehearsal import parse_utterance
+        try:
+            self.miner.observe(text, parse_utterance(text))
+        except Exception:
+            pass                          # mining never affects a rehearsal
+
+    def grammar_candidates(self, top: int = 10, min_count: int = 2) -> list[dict]:
+        """The words people keep trying to say that the grammar can't hear yet."""
+        return self.miner.candidates(top=top, min_count=min_count)
 
     def suggest(self, hour: Optional[int] = None) -> Optional[dict]:
         """The best machine for right now, or None. "Gym? Start the usual?" """
