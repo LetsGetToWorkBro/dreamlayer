@@ -21,6 +21,19 @@ local PalAnim    = require("display.palette_animator")
 local Parallax   = require("display.parallax")
 local Anim       = require("display.animations")
 local Telemetry  = require("ble.telemetry")
+local Theme      = require("display.theme")      -- Forkable Skin (3.6)
+
+-- Forkable Skin: if the host set a theme table before boot, restyle the
+-- static identity (palette + type scale + motion) over the shipped defaults.
+-- Applied before any card renders; refused whole if it fails the skin budget,
+-- so a bad theme falls back to the defaults instead of a half-applied look.
+if type(_G.DREAMLAYER_THEME) == "table" then
+  local ok, issues = Theme.apply(_G.DREAMLAYER_THEME)
+  if not ok then
+    Telemetry.emit(Telemetry.TICK_ERROR,
+                   { where = "theme", why = issues[1] or "invalid theme" })
+  end
+end
 
 -- figment_put/swap/revoke/text arrive as BLE envelopes → stage handlers
 Figment.register(HostComm)

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dreamlayer.dream_mode.inner_weather import (
-    InnerWeather, EMIT_HYSTERESIS, WARN_COOLDOWN_S, WARN_SUSTAIN_TICKS,
+    InnerWeather, EMIT_HYSTERESIS, WARN_COOLDOWN_S, WARN_SUSTAIN_TICKS, WARN_STATE,
 )
 from dreamlayer.orchestrator.recall_context import RecallContext
 
@@ -167,6 +167,73 @@ class TestStormFront:
         for _ in range(300):
             for f in iw.tick(calm_ctx()):
                 assert f.get("name") != "inner_storm"
+
+
+def mild_ctx(step=0):
+    """Restless *for a calm person*, but the absolute state never crosses the
+    fixed WARN_STATE (0.55) — the "very still person's real agitation" the fixed
+    threshold would sleep through."""
+    return RecallContext(
+        imu_delta={"yaw": 0.6, "pitch": 0.4, "roll": 0.2},
+        imu_pose={"pitch": 0.1 * (step % 3), "yaw": 0.1 * (step % 2),
+                  "roll": 0.05 * (step % 4)},
+        mic_amplitude=0.1,
+        extra={"self_prosody": {"speech_rate_norm": 1.3,
+                                "hesitation_rate": 1.0,
+                                "pause_ratio": 0.35}},
+    )
+
+
+class TestPersonalBaseline:
+    """The WeatherBaseline learner in isolation (INNOVATION 2.8)."""
+
+    def test_defers_to_the_fixed_threshold_before_warmup(self):
+        from dreamlayer.dream_mode.weather_river import WeatherBaseline
+        b = WeatherBaseline(warmup=20)
+        b.observe(0.6)
+        assert b.is_elevated(0.6, fallback=0.55) is True     # 0.6 > 0.55 fallback
+        assert b.is_elevated(0.4, fallback=0.55) is False
+
+    def test_a_fidgety_baseline_stops_nagging(self):
+        # a person who lives around 0.7: after warmup, 0.7 is *normal for them*
+        from dreamlayer.dream_mode.weather_river import WeatherBaseline
+        b = WeatherBaseline(warmup=20)
+        for _ in range(80):
+            b.observe(0.7)
+        assert b.mean() > 0.6
+        assert b.is_elevated(0.7, fallback=0.55) is False    # their normal ≠ a storm
+        assert b.is_elevated(0.92, fallback=0.55) is True    # well above their norm
+
+    def test_a_calm_baseline_becomes_more_sensitive(self):
+        # a very still person: a rise the fixed 0.55 would miss still registers
+        from dreamlayer.dream_mode.weather_river import WeatherBaseline
+        b = WeatherBaseline(warmup=20)
+        for _ in range(80):
+            b.observe(0.05)
+        assert b.is_elevated(0.40, fallback=0.55) is True    # unusual *for them*
+
+
+class TestCalibratedWarning:
+    """Calibrated InnerWeather warns on what's unusual for the wearer, not on a
+    fixed line — divergence from the uncalibrated estimator on the same input."""
+
+    def test_calibrated_catches_a_rise_the_fixed_threshold_sleeps_through(self):
+        cal = InnerWeather(now_fn=Clock(), calibrate=True)
+        fixed = InnerWeather(now_fn=Clock())               # default, uncalibrated
+        cal_warn = fixed_warn = 0
+        # settle both on a calm baseline, then a sustained mild rise
+        for _ in range(40):
+            cal.tick(calm_ctx()); fixed.tick(calm_ctx())
+        for i in range(120):
+            cal_warn += sum(f.get("name") == "inner_storm" for f in cal.tick(mild_ctx(i)))
+            fixed_warn += sum(f.get("name") == "inner_storm" for f in fixed.tick(mild_ctx(i)))
+        assert cal.state < WARN_STATE                       # never crosses the fixed line
+        assert fixed_warn == 0                              # so the fixed estimator is silent
+        assert cal_warn >= 1                                # but it was unusual *for this wearer*
+
+    def test_calibration_is_off_by_default(self):
+        assert InnerWeather(now_fn=Clock())._baseline is None
+        assert InnerWeather(now_fn=Clock(), calibrate=True)._baseline is not None
 
 
 class TestDeviceRenderer:

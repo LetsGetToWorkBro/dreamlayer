@@ -73,7 +73,10 @@ class DreamEngine:
         # their timbre at the rim; without it strangers still static
         self.timbre    = TimbreReactor(baselines=narrative,
                                        privacy=privacy)
-        self.inner     = InnerWeather(privacy=privacy)
+        # calibrate the storm warning to the wearer's own baseline (2.8): the
+        # river learns what "restless" means for *you*, so the early warning
+        # doesn't nag the naturally fidgety or sleep through the very still.
+        self.inner     = InnerWeather(privacy=privacy, calibrate=True)
         # confluence: optional EntangledSky (dreamlayer.confluence) —
         # set by the app layer when a bond goes live; the engine only
         # forwards its frames and exposes the weather it would share

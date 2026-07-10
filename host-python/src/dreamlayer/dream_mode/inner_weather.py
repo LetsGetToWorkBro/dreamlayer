@@ -52,9 +52,22 @@ def _norm(v: float, lo: float, hi: float) -> float:
 
 
 class InnerWeather:
-    def __init__(self, privacy=None, now_fn=None) -> None:
+    def __init__(self, privacy=None, now_fn=None, calibrate=False,
+                 baseline=None) -> None:
         self._privacy = privacy
         self._now = now_fn or time.time
+        # personal calibration (INNOVATION 2.8): when on, the storm *warning*
+        # fires relative to your own learned baseline ("what a loud day means
+        # for you"), instead of a fixed threshold. Off by default — the churn
+        # the ring paints is always the absolute state, so a calm person stays
+        # calm either way; only the warning becomes personal.
+        if baseline is not None:
+            self._baseline = baseline
+        elif calibrate:
+            from .weather_river import WeatherBaseline
+            self._baseline = WeatherBaseline()
+        else:
+            self._baseline = None
         self.state = 0.0           # 0 flowing … 1 storming
         self._slow = 0.0
         self._prev_slow = 0.0
@@ -111,8 +124,15 @@ class InnerWeather:
 
         frames: list[dict] = []
 
-        # the storm front: sustained climb toward a restless state
-        if self.trend > WARN_TREND and self.state > WARN_STATE:
+        # the storm front: sustained climb toward a restless state. When a
+        # personal baseline is attached, "restless" means restless *for you*
+        # (learned online); otherwise the fixed WARN_STATE threshold.
+        if self._baseline is not None:
+            self._baseline.observe(self.state)
+            stormy = self._baseline.is_elevated(self.state, WARN_STATE)
+        else:
+            stormy = self.state > WARN_STATE
+        if self.trend > WARN_TREND and stormy:
             self._climb_ticks += 1
         else:
             self._climb_ticks = 0

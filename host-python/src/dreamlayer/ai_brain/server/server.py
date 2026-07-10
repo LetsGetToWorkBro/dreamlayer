@@ -280,7 +280,9 @@ class Brain:
             elif kind == "dwell":
                 session.dwell(float(b.get("seconds") or 0.0))
             elif kind == "say":
-                session.say(str(b.get("text") or ""))
+                text = str(b.get("text") or "")
+                session.say(text)
+                self.rc.mine_utterance(text)   # grammar mining (5.3), local-only
             # unknown kinds are ignored — the grammar can't be smuggled past
         try:
             result = session.finish()
@@ -325,10 +327,23 @@ class Brain:
                 "entry": present.repertoire_entry(entry, self._rc_active)}
 
     def rc_repertoire(self) -> dict:
+        # ranked by fit-for-now (5.3): the machine you finish, at the hour you
+        # usually run it, floats to the top; plus the one-line "start the usual?"
         from ...reality_compiler.v2 import present
         items = [present.repertoire_entry(e, self._rc_active)
-                 for e in self.rc.repertoire()]
-        return {"items": items, "active": self._rc_active}
+                 for e in self.rc.ranked_repertoire()]
+        return {"items": items, "active": self._rc_active,
+                "suggestion": self.rc.suggest()}
+
+    def rc_suggest(self) -> dict:
+        """The right machine for right now, or nothing when none is a confident
+        fit — the Oracle's "Gym? Start the usual circuit?" """
+        return {"suggestion": self.rc.suggest()}
+
+    def rc_grammar_candidates(self) -> dict:
+        """The words people keep trying to say that the rehearsal grammar can't
+        hear yet — the compiler's roadmap, measured locally (5.3)."""
+        return {"candidates": self.rc.grammar_candidates()}
 
     def rc_deploy(self, figment_id: str) -> dict:
         """Hot-swap a kept figment onto the stage. On success it's the one on
@@ -344,9 +359,39 @@ class Brain:
         record = self.rc.revoke(figment_id)
         if self._rc_active == figment_id:
             self._rc_active = None
+        # a revoke is the wearer rejecting the machine — the strongest negative
+        # signal the ranker gets, so it stops offering what you keep dropping.
+        self.rc.record_outcome(figment_id, "banish")
         self.activity.add("rc", f"Revoked figment {figment_id}")
         return {"ok": record.success, "message": record.message,
                 "active": self._rc_active, **self.rc_repertoire()}
+
+    def rc_complete(self, figment_id: str) -> dict:
+        """A deployed figment reached its terminal scene — the positive signal
+        the ranker learns "you finish this one" from (5.3)."""
+        self.rc.record_outcome(figment_id, "complete")
+        if self._rc_active == figment_id:
+            self._rc_active = None
+        return {"ok": True, **self.rc_repertoire()}
+
+    def rc_refine_suggestion(self, figment_id: str) -> dict:
+        """If you keep quitting this figment at the same scene, the compiler's
+        proposed edit — "you end this around 20:00 of 25:00, shorten it?" (5.3).
+        Returns {proposal: null} when there's nothing to tune."""
+        p = self.rc.refine_proposal(figment_id)
+        return {"proposal": p.as_dict() if p is not None else None}
+
+    def rc_refine_apply(self, figment_id: str) -> dict:
+        """One tap: materialise the proposed refinement as a budget-verified,
+        re-signed variant (lineage kept). Returns the new entry + repertoire."""
+        from ...reality_compiler.v2 import present
+        p = self.rc.refine_proposal(figment_id)
+        if p is None:
+            return {"ok": False, "error": "nothing to refine"}
+        entry = self.rc.apply_refinement(p)
+        self.activity.add("rc", f"Refined {figment_id} → {entry.figment.id}")
+        return {"ok": True, "entry": present.repertoire_entry(entry, self._rc_active),
+                **self.rc_repertoire()}
 
     def rc_event(self, name: str) -> dict:
         """Forward a physical-world signal to the figment on stage (the $6
