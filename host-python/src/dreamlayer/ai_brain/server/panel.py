@@ -1204,11 +1204,24 @@ async function saveOps(){const bh=$("briefhour").value.trim();
   toast("Schedule saved");load();}
 async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e){return;}
   const up=h.uptime_s<3600?Math.floor(h.uptime_s/60)+"m":Math.floor(h.uptime_s/3600)+"h";
-  $("health").innerHTML=
+  let html=
     `<div class="mrow"><span class="lbl">Version</span><span class="nm">v${esc(h.version)}</span><span class="st off-t">running</span></div>`+
     `<div class="mrow"><span class="lbl">Index</span><span class="nm">${h.disk_kb} KB</span><span class="st off-t">on disk</span></div>`+
     `<div class="mrow"><span class="lbl">Model</span><span class="nm">${h.ollama_ms==null?'—':h.ollama_ms+' ms'}</span><span class="st ${h.ollama_ms==null?'off-t':'ok-t'}">${h.ollama_ms==null?'keyword / offline':'ollama latency'}</span></div>`+
     `<div class="mrow"><span class="lbl">Uptime</span><span class="nm">${up}</span><span class="st off-t">since boot</span></div>`;
+  // Per-seam failure ledger (HealthLedger.snapshot): degradation is silent for
+  // the wearer, visible to the operator here. A seam with any failures shows the
+  // count + its last error; a clean seam reads "ok".
+  const seams=h.seams||{};const names=Object.keys(seams).sort();
+  if(names.length){
+    html+=`<div class="mrow" style="opacity:.55;margin-top:10px"><span class="lbl">Seams</span><span class="nm"></span><span class="st off-t">failures · last error</span></div>`;
+    for(const nm of names){const s=seams[nm]||{};const bad=(s.failures||0)>0;
+      const detail=bad?esc(String(s.last_error||"").slice(0,80)):`${s.successes||0} ok`;
+      html+=`<div class="mrow"><span class="lbl">${esc(nm)}</span>`+
+        `<span class="nm">${bad?s.failures+" fail":"ok"}</span>`+
+        `<span class="st ${bad?'off-t':'ok-t'}">${detail}</span></div>`;}
+  }
+  $("health").innerHTML=html;
 }
 
 /* drag & drop — files only */

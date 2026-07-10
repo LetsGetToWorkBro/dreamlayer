@@ -35,6 +35,11 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=7777)
     args = ap.parse_args(argv)
 
+    # opt-in structured logging (DL_LOG_JSON=1 → one JSON line per record);
+    # a no-op formatting change otherwise, so default output is unchanged.
+    from ...logging_setup import configure_logging
+    configure_logging()
+
     brain = Brain(args.dir)
     if args.token:
         brain.config.token = args.token
