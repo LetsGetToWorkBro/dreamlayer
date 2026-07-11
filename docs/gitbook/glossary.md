@@ -107,7 +107,7 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
   gradient ramps, blooms. [Meridian](meridian.md)
 - **Synesthesia** — Dream Mode's six-word poetic sense read.
-- **TasteLens** — the shelf/menu choice juno: hard dietary vetoes, soft
+- **TasteLens** — the shelf/menu choice engine: hard dietary vetoes, soft
   budget, plugin data connectors. [World lenses](world-lenses.md)
 - **Testimony thread** — the Truth Lens gauge: nine stages around the ring,
   torn where deceptive.
@@ -117,7 +117,7 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **TinCan** — a single tap sent down the Confluence wire.
 - **Truth Lens** — the nine-stage delivery read against a per-person
   baseline. [Truth](truth.md)
-- **User model** — the Juno's small private profile of you; mirrored,
+- **User model** — Juno's small private profile of you; mirrored,
   never authored, by the Brain. [Juno](juno.md)
 - **Veritas** — the live fact-checker: offline self-contradiction plus the
   tiered world check. [Truth](truth.md)

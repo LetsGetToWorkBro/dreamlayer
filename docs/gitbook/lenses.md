@@ -72,7 +72,7 @@ real), hardening the model when a predicted event lands.
 
 - **Scholar** (`orchestrator/scholar.py`) — read the question and answer
   it, spell out a form's fields, or put dense text in plain words; and
-  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice juno
+  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice engine
   with hard dietary vetoes and plugin data connectors. Both routed by the
   Glance Arbiter or voice; full chapter:
   [Scholar and TasteLens](world-lenses.md).
@@ -123,7 +123,7 @@ real), hardening the model when a predicted event lands.
   and the phone's Rehearsal screen is now **live end to end** — every beat
   round-trips the Brain's `rc/*` endpoints (rehearse, keep, deploy, revoke),
   with deploys recording BLE envelopes until the glasses transport attaches.
-  The Juno also compiles **native timers, intervals, and a clock** through
+  Juno also compiles **native timers, intervals, and a clock** through
   the same engine, on the spot, with or without a Brain
   ([Juno](juno.md#3-timers-intervals-and-the-clock--no-brain-required)).
   The five recorded sessions under `out/rc_v2/` (round timer, rolling

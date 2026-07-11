@@ -7,7 +7,7 @@ tested contracts.
 ```
  Halo glasses ── BLE ──> Phone (the hub) ── LAN / relay ──> Mac mini (the Brain) ── opt-in ──> Cloud
   render + sense          orchestrator: memory,              index over your files,             frontier reach,
-  23 card renderers       privacy gate, Juno,              mail, calendar; Ollama;            logged on every
+  33 card renderers       privacy gate, Juno,              mail, calendar; Ollama;            logged on every
   gestures, Horizon       Veritas, anticipation              the control panel                  single call
 ```
 
@@ -17,7 +17,7 @@ tested contracts.
 
 Lua that runs on the Brilliant Labs Halo. It owns exactly two jobs: **draw**
 and **sense**. The display code (`halo-lua/display/`) implements the Meridian
-design language — the Horizon day-ring resting state, 23 card renderers, the
+design language — the Horizon day-ring resting state, 33 card renderers, the
 Lumen motion engines (springs, palette animation, particles, parallax) and the
 Solid material system (glass panes, gradient ramps, real font sizes). The app
 layer (`halo-lua/app/`) holds a small state machine and an IMU gesture
@@ -152,7 +152,7 @@ dreamlayer/
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
 │       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         1,909 collected tests
+│       └── tests/         2,278 collected tests
 │   └── packaging/         the macOS .dmg app (py2app, entitlements)
 ├── phone-app/             Expo / React Native app + the App Store kit
 ├── laptop-companion/      minimal context agent + macOS Brain installer

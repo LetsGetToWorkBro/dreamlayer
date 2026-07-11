@@ -42,7 +42,7 @@ asks your files and mail.
 ![Memories tab](../assets/phone/memories.png)
 
 **Settings** — every switch in one place: privacy, proactive cards and
-alerts, the fact-checker, answer-ahead, how the Juno wakes, and how it
+alerts, the fact-checker, answer-ahead, how Juno wakes, and how it
 shows it is listening. Plus the danger zone (erase all memories) and the
 Labs screens:
 

@@ -73,7 +73,7 @@ The default landing tab:
 
 What the glasses are doing right now: a **HaloMirror** stage showing the last
 card (or the paused state), a Live/Paused status pill, the latest morning
-brief, a voice-command box that routes the same intents as the Juno
+brief, a voice-command box that routes the same intents as Juno
 (brief / answer / reply), and quick actions (brief, ask, pause/resume
 capture). It polls `GET /dreamlayer/brief/latest` every 90 seconds and fires
 a local notification when a genuinely new brief arrives.

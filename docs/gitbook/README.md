@@ -46,7 +46,7 @@ is a fact-checker, after all:
    appears in — exactly as on the website and simulator, where the interface is
    real and the world behind it is a stand-in.
 2. **Built versus pending is always labeled.** DreamLayer is pre-hardware:
-   the software is complete and tested (1,909 passing tests), and the places
+   the software is complete and tested (2,278 passing tests), and the places
    where physical hardware plugs in are called out honestly wherever they
    matter.
 3. **Accuracy over hype.** Where the technical half states a number, it is

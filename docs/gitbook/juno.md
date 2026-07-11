@@ -1,6 +1,6 @@
-# The Juno
+# Juno
 
-The Juno is DreamLayer's voice: the thing you wake, ask, command, and — over
+Juno is DreamLayer's voice: the thing you wake, ask, command, and — over
 time — the thing that learns how to address you. It lives in the orchestrator
 (`orchestrator/orchestrator.py`, grammar in `orchestrator/voice.py` and
 `orchestrator/commands.py`, voice and manner in `orchestrator/persona.py`).
@@ -30,7 +30,7 @@ and a `tick` haptic.
 
 A wake opens a **20-second session** (`juno_session_s`). Inside it,
 follow-ups need no wake word — `hear(text)` treats any line as addressed to
-the Juno, and each command extends the window. Outside the window,
+Juno, and each command extends the window. Outside the window,
 non-addressed lines are ignored (they still flow to captions and the ledger
 if those are on).
 
@@ -49,7 +49,7 @@ if those are on).
   "note that I ...", "I always / usually / hate / avoid / can't stand ..." —
   normalized to first person, capped at 120 characters, at most 40 kept.
 
-A teach is confirmed in the Juno's own voice ("Good to know you, Sam." /
+A teach is confirmed in Juno's own voice ("Good to know you, Sam." /
 "Got it — I'll remember that.") and pushed to the paired Brain immediately.
 
 ### 2. Device commands
@@ -75,7 +75,7 @@ toggleable command the other way.
 ### 3. Timers, intervals, and the clock — no Brain required
 
 Say *"set a timer for five minutes"*, *"interval timer, 30 on, 15 off, 8
-rounds"*, *"show a clock"*, or *"what time is it"* and the Juno builds the
+rounds"*, *"show a clock"*, or *"what time is it"* and Juno builds the
 behavior on the spot: each becomes a budget-verified Reality Compiler
 figment deployed straight to the glasses' stage. Two execution paths, same
 grammar (`voice.py: _parse_timer_clock`): with a paired Brain the figment is
@@ -112,7 +112,7 @@ to plain words with no chooser.
 
 ### 6. Things, stashed and found
 
-Tell the Juno where you left something, then ask later — answered
+Tell Juno where you left something, then ask later — answered
 entirely from your own **Waypath anchors**, no Brain required:
 
 | Say | Intent | What happens |
@@ -145,7 +145,7 @@ of returning a bare intent:
 | `missed` | "what did I miss?" | the Brain counts genuinely missed texts and emails and says so ("You missed 2 texts and 1 email.") |
 | `ask` | anything else | the tiered brain — device, then Mac mini, then cloud if enabled |
 
-Answers come back framed by the persona; when nothing is known the Juno
+Answers come back framed by the persona; when nothing is known Juno
 says so plainly: *"I don't have that one — want me to look further?"* — it
 never invents.
 
@@ -187,4 +187,4 @@ knows about you" — so the model is always inspectable:
 ![What Juno knows about you](assets/phone/profile.png)
 
 *The live phone screen. With no Brain paired it shows its empty state; the
-profile fills as the Juno observes and as you teach it.*
+profile fills as Juno observes and as you teach it.*

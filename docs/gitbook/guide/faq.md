@@ -12,7 +12,7 @@ or you saying "meet my colleague Sarah" — kept on your device, erasable
 with "forget that."
 
 **Does it work without internet?**
-Yes. Memory, people, promises, finding your things, the Juno, live
+Yes. Memory, people, promises, finding your things, Juno, live
 captions, and the strongest fact-check (catching self-contradictions) all
 work with no connection whatsoever. Internet adds exactly one thing: answers
 to hard general-knowledge questions — and only if you keep that switch on.
@@ -79,7 +79,7 @@ Both sides must opt in, and either can end it.
 **Can I try it before owning anything?**
 Yes, two ways. The website has a full in-browser simulator of the glasses
 ([dreamlayer.app/simulator.html](https://dreamlayer.app/simulator.html)) —
-type to the Juno, run scenes, watch real cards render. And the phone app
+type to Juno, run scenes, watch real cards render. And the phone app
 has "Explore with sample data": every screen fills with clearly-labeled
 demo data, with a banner on screen the whole time and a one-tap exit.
 

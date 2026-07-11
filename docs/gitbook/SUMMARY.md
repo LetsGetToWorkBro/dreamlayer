@@ -21,7 +21,7 @@
 - [The Halo Simulator](simulator.md)
 - [HUD cards — the full gallery](hud-cards.md)
 - [Meridian — the design language](meridian.md)
-- [The Juno](juno.md)
+- [Juno](juno.md)
 - [Perception and memory](perception-memory.md)
 - [Truth and discernment](truth.md)
 - [Attention and focus](attention-focus.md)

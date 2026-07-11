@@ -78,7 +78,7 @@ The invariants are architectural, not policy:
 ## The social memory, spoken
 
 The Social Lens now takes dictation (`voice.py` grammars; each veil-gated,
-each confirmed in the Juno's voice, each mirrored to the phone's People
+each confirmed in Juno's voice, each mirrored to the phone's People
 tab):
 
 - **Notes** — "remember Maya's into rock climbing", or "note that she has
