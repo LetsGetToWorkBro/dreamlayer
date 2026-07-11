@@ -12,7 +12,7 @@ claim filters, confidence floors, per-speaker cooldowns, and an explicit
 "unverified" verdict. A fact-checker that fires constantly, or overclaims, is
 worse than none.
 
-![Veritas in conversation — the self-contradiction catch](assets/demo/catalog/features/veritas/preview.gif)
+![Veritas in conversation — the self-contradiction catch](assets/demo/catalog/features/veritas/preview.webp)
 
 ## Veritas — the live fact-checker
 
@@ -81,7 +81,7 @@ Sparingly, by construction:
 
 ### The card
 
-![FactCheckCard](assets/cards/fact_check.png)
+![FactCheckCard](assets/cards/fact_check.webp)
 
 Verdict tone is resolved on the device renderer itself, so a wire-delivered
 card can never lose its color: green **VERIFIED** (chime earcon), amber
@@ -120,7 +120,7 @@ CALIBRATING below 0.3 confidence.
 On glass it renders as the testimony thread — nine stages around the ring,
 truthful stages as continuous arc, deceptive ones torn:
 
-![TruthLensCard — the testimony thread](assets/cards/truth_gauge.png)
+![TruthLensCard — the testimony thread](assets/cards/truth_gauge.webp)
 
 With Truth Lens on, the orchestrator runs a delivery read for the current
 speaker on every other-speaker line (`_read_delivery`), *without* the HUD
@@ -155,7 +155,7 @@ fusion actually thinks:
 The stance and headline land on the FactCheckCard, and the footer carries the
 tag ("Marcus - elevated - seen before").
 
-![Read the room](assets/demo/catalog/features/truth_gauge/preview.gif)
+![Read the room](assets/demo/catalog/features/truth_gauge/preview.webp)
 
 ## Answer-ahead — the conversational copilot
 
@@ -167,7 +167,7 @@ question — a wh-question, or one aimed at you — and never a rhetorical
 knowledge through the same tiered router (cloud only when opted in) and
 flashes an **AnswerAheadCard** you can read and say yourself.
 
-![The answer before you speak](assets/demo/catalog/features/answer_ahead/preview.gif)
+![The answer before you speak](assets/demo/catalog/features/answer_ahead/preview.webp)
 
 Its manners are the feature: no wake word, **no earcon — silent by design**
 (a tick haptic only), a cooldown between fires, a confidence floor beneath

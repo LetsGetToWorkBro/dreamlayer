@@ -20,7 +20,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### ReadyCard
 
-![ReadyCard](assets/cards/ready.png)
+![ReadyCard](assets/cards/ready.webp)
 
 - **Appears:** on boot, on `show_ready`, on resume from the veil, on connect.
 - **Shows:** the calm mark — a memory-trace core inside gradient rings with
@@ -30,7 +30,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### QueryListeningCard
 
-![QueryListeningCard](assets/cards/query_listening.png)
+![QueryListeningCard](assets/cards/query_listening.webp)
 
 - **Appears:** single click, or "Hey Juno" — the ask posture.
 - **Shows:** a cardioid microphone glyph over a 32-bar waveform. With live
@@ -41,7 +41,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### ListeningCard
 
-![ListeningCard](assets/cards/listening.png)
+![ListeningCard](assets/cards/listening.webp)
 
 - **Appears:** the moment Juno wakes, from any enabled source — voice
   ("Hey Juno"), tap, gaze, raise, or gesture. Shown only if visual wake
@@ -51,7 +51,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### LoadingCard
 
-![LoadingCard](assets/cards/loading.png)
+![LoadingCard](assets/cards/loading.webp)
 
 - **Appears:** while a tier is thinking.
 - **Shows:** three ghost rings and 12 static segments. Nothing rotates — a
@@ -63,7 +63,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### ErrorCard
 
-![ErrorCard](assets/cards/error.png)
+![ErrorCard](assets/cards/error.webp)
 
 - **Appears:** on a failure worth telling you about ("BLE timeout").
 - **Shows:** an amber triangle and one plain sentence. The attention ring
@@ -72,7 +72,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### LowConfidenceCard
 
-![LowConfidenceCard](assets/cards/low_confidence.png)
+![LowConfidenceCard](assets/cards/low_confidence.webp)
 
 - **Appears:** when recall has nothing above threshold.
 - **Shows:** "Not sure" in ghost ink. DreamLayer says *I don't know* rather
@@ -83,7 +83,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### SavedMemoryCard
 
-![SavedMemoryCard](assets/cards/saved_memory.png)
+![SavedMemoryCard](assets/cards/saved_memory.webp)
 
 - **Appears:** the instant a moment is kept — a scene ingested, a
   conversation captured, a nod-to-save.
@@ -98,7 +98,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### ObjectRecallCard
 
-![ObjectRecallCard](assets/cards/object_recall.png)
+![ObjectRecallCard](assets/cards/object_recall.webp)
 
 - **Appears:** "where did I leave my keys?" — object recall.
 - **Shows:** a spatial scene, not a list: the place as a translucent field,
@@ -112,7 +112,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### CommitmentRecallCard
 
-![CommitmentRecallCard](assets/cards/commitment_recall.png)
+![CommitmentRecallCard](assets/cards/commitment_recall.webp)
 
 - **Appears:** when a promise is recalled — or the moment one is captured
   from your own speech ("I'll send you the lease by Friday").
@@ -123,7 +123,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### CommitmentDriftCard
 
-![CommitmentDriftCard](assets/cards/commitment_drift.png)
+![CommitmentDriftCard](assets/cards/commitment_drift.webp)
 
 - **Appears:** when a tracked promise starts to slip
   (`orchestrator.tick_drift`).
@@ -134,7 +134,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### ProactiveMemoryCard
 
-![ProactiveMemoryCard](assets/cards/proactive_memory.png)
+![ProactiveMemoryCard](assets/cards/proactive_memory.webp)
 
 - **Appears:** you arrive somewhere that holds a memory (`on_place`).
 - **Shows:** the remembered context under a five-ray radial field with a
@@ -143,7 +143,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### WorldAnchorCard
 
-![WorldAnchorCard](assets/cards/world_anchor.png)
+![WorldAnchorCard](assets/cards/world_anchor.webp)
 
 - **Appears:** in Dream Mode, when the Ghost Layer finds a memory pinned to
   where you are standing.
@@ -156,7 +156,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### TimeScrubNodeCard
 
-![TimeScrubNodeCard](assets/cards/time_scrub_node.png)
+![TimeScrubNodeCard](assets/cards/time_scrub_node.webp)
 
 - **Appears:** rewind — "Hey Juno, rewind my day," or the phone's Rewind
   screen's on-glass twin. One card per moment as you scrub.
@@ -169,7 +169,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### MorningBriefCard
 
-![MorningBriefCard](assets/cards/morning_brief.png)
+![MorningBriefCard](assets/cards/morning_brief.webp)
 
 - **Appears:** the moment the Halo goes on in the morning
   (`orchestrator.wake` fetches the Brain scheduler's latest brief).
@@ -181,7 +181,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ### PersonContextCard
 
-![PersonContextCard](assets/cards/person_context.png)
+![PersonContextCard](assets/cards/person_context.webp)
 
 - **Appears:** someone you know is in view (anticipation person cue).
 - **Shows:** name in hero type, one why-line ("owes you the lease"),
@@ -194,11 +194,11 @@ Each entry lists: when the card appears, what it shows, its materials
 The Solid recomposition sample (`person_context_v2`) shows the same card as a
 centerpiece:
 
-![PersonContextCard v2](assets/cards/person_context_v2.png)
+![PersonContextCard v2](assets/cards/person_context_v2.webp)
 
 ### PersonDossierCard
 
-![PersonDossierCard](assets/cards/person_dossier.png)
+![PersonDossierCard](assets/cards/person_dossier.webp)
 
 - **Appears:** you greet — or look at — someone the conversation ledger
   knows (`greet`, `look_at_person`). Carries earcon `look`.
@@ -210,7 +210,7 @@ centerpiece:
 
 ### SpokenCaptionCard
 
-![SpokenCaptionCard](assets/cards/spoken_caption.png)
+![SpokenCaptionCard](assets/cards/spoken_caption.webp)
 
 - **Appears:** every line of speech while live captions are on
   (`ingest_caption`); the ledger keeps recording even when the display is
@@ -220,7 +220,7 @@ centerpiece:
 
 ### LiveCaptionCard
 
-![LiveCaptionCard](assets/cards/live_caption.png)
+![LiveCaptionCard](assets/cards/live_caption.webp)
 
 - **Appears:** translated speech — Puente (the ear) or Rosetta reading text
   aloud in your language.
@@ -228,7 +228,7 @@ centerpiece:
 
 ### FactCheckCard — Veritas
 
-![FactCheckCard](assets/cards/fact_check.png)
+![FactCheckCard](assets/cards/fact_check.webp)
 
 - **Appears:** a claim someone made failed (or passed) the live fact-check.
   See [Truth and discernment](truth.md) for exactly when Veritas speaks.
@@ -245,11 +245,11 @@ centerpiece:
 
 The device-Lua render of the same card:
 
-![FactCheck on the device path](assets/device/fact_check_device.png)
+![FactCheck on the device path](assets/device/fact_check_device.webp)
 
 ### AnswerAheadCard
 
-![AnswerAheadCard](assets/cards/answer_ahead.png)
+![AnswerAheadCard](assets/cards/answer_ahead.webp)
 
 - **Appears:** someone else asked a real, answerable question and the copilot
   pre-fetched the answer ("ON THE TIP OF YOUR TONGUE").
@@ -260,7 +260,7 @@ The device-Lua render of the same card:
 
 ### JunoReplyCard
 
-![JunoReplyCard](assets/cards/juno_reply.png)
+![JunoReplyCard](assets/cards/juno_reply.webp)
 
 - **Appears:** Juno answered you (kind `answer`) or did something for
   you (kind `action` — "Focus on — the world's turned down.").
@@ -270,7 +270,7 @@ The device-Lua render of the same card:
 
 ### HarkCard
 
-![HarkCard](assets/cards/hark.png)
+![HarkCard](assets/cards/hark.webp)
 
 - **Appears:** the attention policy decided *this moment* is worth
   interrupting you: "Listen!" (a commitment about to slip, someone you owe in
@@ -284,7 +284,7 @@ The device-Lua render of the same card:
 
 ### TruthLensCard — the testimony thread
 
-![TruthLensCard](assets/cards/truth_gauge.png)
+![TruthLensCard](assets/cards/truth_gauge.webp)
 
 - **Appears:** a Truth Lens delivery read completed on a calibrated speaker.
 - **Shows:** the nine analysis stages as a 360-degree testimony thread — each
@@ -299,11 +299,11 @@ The device-Lua render of the same card:
 
 | Clean truthful read (device Lua) | Elevated, mixed read (device Lua) |
 |---|---|
-| ![Truthful](assets/device/testimony_truthful.png) | ![Elevated](assets/device/testimony_elevated.png) |
+| ![Truthful](assets/device/testimony_truthful.webp) | ![Elevated](assets/device/testimony_elevated.webp) |
 
 ### DeviationAlertCard
 
-![DeviationAlertCard](assets/cards/deviation_alert.png)
+![DeviationAlertCard](assets/cards/deviation_alert.webp)
 
 - **Appears:** the Tell engine noticed new speech contradicting a prior
   commitment (`tell_check`).
@@ -322,7 +322,7 @@ ambient. They stay up until you act (dismiss 0).
 
 ### PrivacyVeilCard
 
-![PrivacyVeilCard](assets/cards/privacy_veil.png)
+![PrivacyVeilCard](assets/cards/privacy_veil.webp)
 
 - **Appears:** long press — the veil lands. Capture, pop-ups, anticipation:
   everything stops.
@@ -330,19 +330,19 @@ ambient. They stay up until you act (dismiss 0).
 
 ### ForgetLastCard
 
-![ForgetLastCard](assets/cards/forget_last.png)
+![ForgetLastCard](assets/cards/forget_last.webp)
 
 - **Appears:** "forget that" — confirming the last capture was erased.
 
 ### PrivateZoneCard
 
-![PrivateZoneCard](assets/cards/private_zone.png)
+![PrivateZoneCard](assets/cards/private_zone.webp)
 
 - **Appears:** you entered a place you marked as never-record.
 
 ### ConsentRequiredCard
 
-![ConsentRequiredCard](assets/cards/consent_required.png)
+![ConsentRequiredCard](assets/cards/consent_required.webp)
 
 - **Appears:** a new data source wants in; nothing proceeds without a
   deliberate confirm.
@@ -351,7 +351,7 @@ ambient. They stay up until you act (dismiss 0).
 
 ### SynesthesiaCard
 
-![SynesthesiaCard](assets/cards/synesthesia.png)
+![SynesthesiaCard](assets/cards/synesthesia.webp)
 
 - **Appears:** in Dream Mode — the VLM's six-word poetic read of what the
   senses feel like right now.
@@ -359,7 +359,7 @@ ambient. They stay up until you act (dismiss 0).
 
 The v2 form adds a dominant color and a gestural three-shape sprite:
 
-![SynesthesiaCard v2](assets/cards/synesthesia_v2.png)
+![SynesthesiaCard v2](assets/cards/synesthesia_v2.webp)
 
 ## The once-missing frames
 

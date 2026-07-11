@@ -5,7 +5,7 @@ time — the thing that learns how to address you. It lives in the orchestrator
 (`orchestrator/orchestrator.py`, grammar in `orchestrator/voice.py` and
 `orchestrator/commands.py`, voice and manner in `orchestrator/persona.py`).
 
-![Hey Juno — the wake moment](assets/demo/catalog/features/juno_wake/preview.gif)
+![Hey Juno — the wake moment](assets/demo/catalog/features/juno_wake/preview.webp)
 
 ## Waking it
 
@@ -24,7 +24,7 @@ On wake, three kinds of feedback fire, each independently toggleable
 (`set_wake_feedback`): a visual **ListeningCard** ring, the `wake` earcon,
 and a `tick` haptic.
 
-![ListeningCard](assets/cards/listening.png)
+![ListeningCard](assets/cards/listening.webp)
 
 ### Continuous conversation
 
@@ -149,7 +149,7 @@ Answers come back framed by the persona; when nothing is known Juno
 says so plainly: *"I don't have that one — want me to look further?"* — it
 never invents.
 
-![Ask it anything](assets/demo/catalog/features/juno_do/preview.gif)
+![Ask it anything](assets/demo/catalog/features/juno_do/preview.webp)
 
 ## The persona
 

@@ -8,14 +8,14 @@ it deliberately does not do.
 It is **off by default**. You turn it on with one switch in the phone's
 Settings ("Live fact-checker").
 
-![The self-contradiction catch, live](../assets/demo/catalog/features/veritas/preview.gif)
+![The self-contradiction catch, live](../assets/demo/catalog/features/veritas/preview.webp)
 
 ## What you see
 
 When Veritas has something to say, one card appears for seven seconds. The
 color tells you everything at a glance:
 
-![A red card: they said different before](../assets/cards/fact_check.png)
+![A red card: they said different before](../assets/cards/fact_check.webp)
 
 - **Red — "They said different before."** The strongest signal. This exact
   person previously said something that contradicts what they just said, and

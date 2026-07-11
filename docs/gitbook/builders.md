@@ -166,10 +166,10 @@ Everything under `docs/gitbook/assets/` is reproducible from the repo:
 
 | Assets | Command |
 |---|---|
-| `assets/cards/*.png` (31) | `generate_golden(key, dir)` over `ALL_SAMPLES` |
-| `assets/device/*.png` | copied from `assets/cinema_v2/golden/` (device-Lua renders) |
+| `assets/cards/*.webp` | `generate_golden(key, dir)` over `ALL_SAMPLES`, then composited as animated see-through glass lenses over illustrative environments (the HUD is the real renderer's output; the world behind it is a stand-in) |
+| `assets/device/*.webp` | device-Lua renders from `assets/cinema_v2/golden/`, lens-composited the same way |
 | `assets/motion/*.gif` | `python scripts/export_meridian_motion.py` |
-| `assets/demo/catalog/` | `python -m dreamlayer.demo catalog <dir>` (master GIF downscaled for the repo; feature posters and overlays pruned) |
+| `assets/demo/catalog/` | `python -m dreamlayer.demo catalog <dir>`, previews reshaped as circular glass lenses (feature posters and overlays pruned) |
 | `assets/panel/*.png` | boot the Brain server, seed folders/people/events, screenshot headlessly (Playwright) |
 | `assets/phone/*.png` | `npx expo export --platform web`, serve `dist/` with SPA fallback, screenshot at phone size |
 

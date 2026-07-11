@@ -10,7 +10,7 @@ seconds, then gets out of the way.
 That is the whole idea. It is not a phone screen strapped to your face. Most
 of the time the display shows almost nothing at all.
 
-![Every feature in ninety seconds — this is real footage of the interface](../assets/demo/catalog/master/preview.gif)
+![Every feature in ninety seconds — the real interface, over an illustrative world](../assets/demo/catalog/master/preview.webp)
 
 ## What it actually does for you
 

@@ -10,7 +10,7 @@ ring *is* your day. Your meetings sit around it like hours on a clock face,
 and a soft pulse marks now. Before you have asked anything, your morning
 brief is floating there:
 
-![Wake up to your day, already summarized](../assets/demo/catalog/features/wake/preview.gif)
+![Wake up to your day, already summarized](../assets/demo/catalog/features/wake/preview.webp)
 
 Two warm sentences: what is coming, what you missed overnight, what you owe
 people. It fades on its own. The glasses then do what they do most of the
@@ -21,7 +21,7 @@ time: almost nothing. The resting display is just that quiet ring.
 Say **"Hey Juno"** — or just tap the glasses — and it listens for the next
 twenty seconds, so you can talk naturally without repeating the wake word:
 
-![Ask it anything](../assets/demo/catalog/features/juno_do/preview.gif)
+![Ask it anything](../assets/demo/catalog/features/juno_do/preview.webp)
 
 "Where did I leave the bike?" "What did Marcus say he needed?" "Remind me to
 call the plumber." "Focus mode." It answers in a calm sentence or two, and if
@@ -34,27 +34,27 @@ This is where DreamLayer earns its keep. While you talk with people, it can:
 
 **Show live captions** of what is being said, quietly at the edge:
 
-![Live captions](../assets/demo/catalog/features/captions/preview.gif)
+![Live captions](../assets/demo/catalog/features/captions/preview.webp)
 
 **Remind you who someone is.** You glance at a person you have met before
 and their name, your history, and the last thing they told you appears:
 
-![A glance names them](../assets/demo/catalog/features/dossier/preview.gif)
+![A glance names them](../assets/demo/catalog/features/dossier/preview.webp)
 
 **Catch your promises.** You say "I'll send you the lease by Friday" — it
 heard that, and now it is tracked. No typing, no app:
 
-![A promise, captured from your own words](../assets/demo/catalog/features/commitment/preview.gif)
+![A promise, captured from your own words](../assets/demo/catalog/features/commitment/preview.webp)
 
 **Hand you the answer** when someone asks the room a question you should
 know:
 
-![The answer before you speak](../assets/demo/catalog/features/answer_ahead/preview.gif)
+![The answer before you speak](../assets/demo/catalog/features/answer_ahead/preview.webp)
 
 **Check the facts.** If a claim contradicts what that same person told you
 before, or does not survive a quick check, you see it — quietly, just you:
 
-![Truth, checked live](../assets/demo/catalog/features/veritas/preview.gif)
+![Truth, checked live](../assets/demo/catalog/features/veritas/preview.webp)
 
 ## Looking at the world
 
@@ -66,7 +66,7 @@ that breaks your dietary rules flagged, never hidden. When a look could
 mean two things, a small chooser offers both; your tap teaches it your
 preference for next time.
 
-![The best pick, with reasons](../assets/cards/taste.png)
+![The best pick, with reasons](../assets/cards/taste.webp)
 
 ## Through the day
 
@@ -80,7 +80,7 @@ preference for next time.
 - Save any moment worth keeping with a small nod. A check mark blooms — the
   one little celebration in the whole interface:
 
-![Keep a moment](../assets/demo/catalog/features/saved/preview.gif)
+![Keep a moment](../assets/demo/catalog/features/saved/preview.webp)
 
 ## When you need quiet
 
@@ -98,7 +98,7 @@ kept until you hold it again. More in [Your privacy](privacy.md).
 Ask it to **rewind your day** and scrub back through your moments, on the
 glasses or in the phone app:
 
-![Rewind your day](../assets/demo/catalog/features/rewind/preview.gif)
+![Rewind your day](../assets/demo/catalog/features/rewind/preview.webp)
 
 At night, on the charger, it tidies up: consolidating what mattered, letting
 go of what did not, so tomorrow's ring starts fresh. There is even a rank

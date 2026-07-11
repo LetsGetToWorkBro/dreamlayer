@@ -11,7 +11,7 @@ heard, or kept — until you lift it. Technically: `pause()` closes the
 `PrivacyGate`, and every capture-adjacent path in the orchestrator checks
 `privacy.allow_capture()` before doing anything.
 
-![One gesture and capture stops](assets/demo/catalog/features/veil/preview.gif)
+![One gesture and capture stops](assets/demo/catalog/features/veil/preview.webp)
 
 Gated by the veil: scene and conversation ingest, live captions and the
 ledger, the user model's learning, commitment capture, anticipation cards,
@@ -56,7 +56,7 @@ On the Brain, incognito maps to `network_mode: "lan_only"`, which hard-fails
 - **Forget** — "forget that" erases the last capture and confirms with the
   ForgetLastCard.
 
-| ![Consent](assets/cards/consent_required.png) | ![Private zone](assets/cards/private_zone.png) | ![Forget](assets/cards/forget_last.png) |
+| ![Consent](assets/cards/consent_required.webp) | ![Private zone](assets/cards/private_zone.webp) | ![Forget](assets/cards/forget_last.webp) |
 |---|---|---|
 
 ## The three brain switches

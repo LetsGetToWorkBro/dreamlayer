@@ -35,7 +35,7 @@ and two card families render through the dedicated dream path on the device:
 - **Synesthesia** — a poetic six-word read of what the senses feel like,
   with a dominant color and a gestural sprite.
 
-![Notes on the world — a memory pinned to a place](assets/demo/catalog/features/anchor/preview.gif)
+![Notes on the world — a memory pinned to a place](assets/demo/catalog/features/anchor/preview.webp)
 
 **REM** (`rem/`, spec `docs/REM.md`) is the sleep cycle:
 `maybe_dream_tonight(charging)` runs consolidation when the glasses charge at
@@ -56,11 +56,11 @@ real), hardening the model when a predicted event lands.
   visible: dream-sky weather driven by your day's texture, rendered through
   the dynamic palette slots.
 
-  ![Your inner weather](assets/demo/catalog/features/inner/preview.gif)
+  ![Your inner weather](assets/demo/catalog/features/inner/preview.webp)
 
   | A quiet dream sky (device Lua) | An anchor echo in weather (device Lua) |
   |---|---|
-  | ![Storm](assets/device/weather_dream_storm.png) | ![Echo](assets/device/weather_anchor_echo.png) |
+  | ![Storm](assets/device/weather_dream_storm.webp) | ![Echo](assets/device/weather_anchor_echo.webp) |
 
 - **Prism Lens** (`docs/PRISM_LENS.md`) — the kaleidoscope, rebuilt in Lumen
   with spring bloom, breathing rotation, and counter-rotating halo rings,
@@ -137,7 +137,7 @@ real), hardening the model when a predicted event lands.
   `tick_drift` raises the drift card as decay grows. The Horizon draws the
   arc; a broken promise shatters exactly once.
 
-  ![Before it slips](assets/demo/catalog/features/drift/preview.gif)
+  ![Before it slips](assets/demo/catalog/features/drift/preview.webp)
 
 - **Reality Compiler v2** (`reality_compiler/`, specs `docs/rc_v2/`) — the
   build-a-skill path: **Rehearsal** compiles a described procedure

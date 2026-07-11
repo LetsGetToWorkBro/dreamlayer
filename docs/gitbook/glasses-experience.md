@@ -16,7 +16,7 @@ The rim is not decoration — reading the ring *is* reading your calendar.
 
 | The day, idle | The Veil down |
 |---|---|
-| ![Horizon idle](assets/device/horizon_idle_day.png) | ![Horizon paused](assets/device/horizon_idle_paused.png) |
+| ![Horizon idle](assets/device/horizon_idle_day.webp) | ![Horizon paused](assets/device/horizon_idle_paused.webp) |
 
 *Both frames are rendered by the actual device Lua through the raster
 harness — these are the pixels the firmware produces.*
@@ -33,7 +33,7 @@ shatters — once, at the transition, never again on replay.
 
 | The promise ladder | A shattered promise |
 |---|---|
-| ![Promise ladder](assets/device/promise_ladder.png) | ![Shattered](assets/device/promise_shattered.png) |
+| ![Promise ladder](assets/device/promise_ladder.webp) | ![Shattered](assets/device/promise_shattered.webp) |
 
 ![The shatter moment](assets/motion/promise_shatter.gif)
 
@@ -51,7 +51,7 @@ itself back into the day.
 
 | Condensing | Holding (confidence ring) | Receding |
 |---|---|---|
-| ![Condense](assets/device/focus_condense.png) | ![Hold](assets/device/focus_hold.png) | ![Recede](assets/device/focus_recede.png) |
+| ![Condense](assets/device/focus_condense.webp) | ![Hold](assets/device/focus_hold.webp) | ![Recede](assets/device/focus_recede.webp) |
 
 The hold ring's color *is* the answer's confidence; a one-shot glint runs the
 confidence arc as it settles, and the settled frame is a static gauge — no

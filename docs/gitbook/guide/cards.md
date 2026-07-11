@@ -13,50 +13,50 @@ engineering-level detail on every card lives in
 
 | | |
 |---|---|
-| ![Ready](../assets/cards/ready.png) | **The quiet mark.** The glasses are on and *not* listening. This is what "idle" looks like. |
-| ![Listening](../assets/cards/query_listening.png) | **It's listening.** You woke Juno; the bars move with your voice. |
-| ![Thinking](../assets/cards/loading.png) | **Thinking.** Your question is being answered. |
-| ![Saved](../assets/cards/saved_memory.png) | **Kept.** The moment you just saved is safely remembered. |
-| ![Reply](../assets/cards/juno_reply.png) | **Juno answering** you, or confirming something it just did. |
+| ![Ready](../assets/cards/ready.webp) | **The quiet mark.** The glasses are on and *not* listening. This is what "idle" looks like. |
+| ![Listening](../assets/cards/query_listening.webp) | **It's listening.** You woke Juno; the bars move with your voice. |
+| ![Thinking](../assets/cards/loading.webp) | **Thinking.** Your question is being answered. |
+| ![Saved](../assets/cards/saved_memory.webp) | **Kept.** The moment you just saved is safely remembered. |
+| ![Reply](../assets/cards/juno_reply.webp) | **Juno answering** you, or confirming something it just did. |
 
 ## Memory coming back to you
 
 | | |
 |---|---|
-| ![Object recall](../assets/cards/object_recall.png) | **Where your thing is.** The little map shows you (the dot at the bottom), the place, and the object — with how sure it is and when it last saw it. |
-| ![Commitment](../assets/cards/commitment_recall.png) | **A promise.** Who, what, and when — either one you asked about, or one it just heard you make. |
-| ![Drift](../assets/cards/commitment_drift.png) | **A promise slipping.** The bar on the left is draining; the promise is getting old. It surfaces before you break it, not after. |
-| ![Proactive](../assets/cards/proactive_memory.png) | **This place holds a memory.** You arrived somewhere, and something you left or noted here came back with you. |
-| ![Brief](../assets/cards/morning_brief.png) | **Your morning brief.** The day ahead, in two sentences. |
-| ![Rewind](../assets/cards/time_scrub_node.png) | **Rewinding.** One moment of your day; scrub back and forth through them. |
+| ![Object recall](../assets/cards/object_recall.webp) | **Where your thing is.** The little map shows you (the dot at the bottom), the place, and the object — with how sure it is and when it last saw it. |
+| ![Commitment](../assets/cards/commitment_recall.webp) | **A promise.** Who, what, and when — either one you asked about, or one it just heard you make. |
+| ![Drift](../assets/cards/commitment_drift.webp) | **A promise slipping.** The bar on the left is draining; the promise is getting old. It surfaces before you break it, not after. |
+| ![Proactive](../assets/cards/proactive_memory.webp) | **This place holds a memory.** You arrived somewhere, and something you left or noted here came back with you. |
+| ![Brief](../assets/cards/morning_brief.webp) | **Your morning brief.** The day ahead, in two sentences. |
+| ![Rewind](../assets/cards/time_scrub_node.webp) | **Rewinding.** One moment of your day; scrub back and forth through them. |
 
 ## People
 
 | | |
 |---|---|
-| ![Person](../assets/cards/person_context.png) | **Someone you know is here.** Name, one line of why they matter right now ("owes you the lease"). |
-| ![Dossier](../assets/cards/person_dossier.png) | **Your history with them.** When you last met and what you two tend to talk about. Only for people you chose to save — never strangers. |
+| ![Person](../assets/cards/person_context.webp) | **Someone you know is here.** Name, one line of why they matter right now ("owes you the lease"). |
+| ![Dossier](../assets/cards/person_dossier.webp) | **Your history with them.** When you last met and what you two tend to talk about. Only for people you chose to save — never strangers. |
 
 ## Looking at the world
 
 | | |
 |---|---|
-| ![Scholar answer](../assets/cards/scholar_answer.png) | **The answer, read off the page.** You looked at a question and asked for the answer. |
-| ![Form help](../assets/cards/scholar_form.png) | **Form help.** Every field on the form in front of you, and what goes in it. |
-| ![Plain words](../assets/cards/scholar_explain.png) | **In plain words.** Dense text — a contract clause, a spec — translated into language people actually use. |
-| ![Best pick](../assets/cards/taste.png) | **The pick.** You looked at a shelf or a menu; the winner is big, the runners-up show their reasons, and anything that breaks your dietary rules is flagged with a cross — never silently hidden. |
-| ![Which one?](../assets/cards/glance_choice.png) | **"What do you want?"** Your look was ambiguous — one tap picks, and it learns your preference for next time. |
+| ![Scholar answer](../assets/cards/scholar_answer.webp) | **The answer, read off the page.** You looked at a question and asked for the answer. |
+| ![Form help](../assets/cards/scholar_form.webp) | **Form help.** Every field on the form in front of you, and what goes in it. |
+| ![Plain words](../assets/cards/scholar_explain.webp) | **In plain words.** Dense text — a contract clause, a spec — translated into language people actually use. |
+| ![Best pick](../assets/cards/taste.webp) | **The pick.** You looked at a shelf or a menu; the winner is big, the runners-up show their reasons, and anything that breaks your dietary rules is flagged with a cross — never silently hidden. |
+| ![Which one?](../assets/cards/glance_choice.webp) | **"What do you want?"** Your look was ambiguous — one tap picks, and it learns your preference for next time. |
 
 ## Conversation helpers
 
 | | |
 |---|---|
-| ![Caption](../assets/cards/spoken_caption.png) | **Live captions.** What was just said, written at the edge. |
-| ![Translation](../assets/cards/live_caption.png) | **Translation.** Speech or text in another language, rendered in yours. |
-| ![Answer ahead](../assets/cards/answer_ahead.png) | **"On the tip of your tongue."** Someone asked a question; here is the answer, silently, for you to say. |
-| ![Fact check](../assets/cards/fact_check.png) | **The fact-checker spoke.** Green means verified, amber means check this, red means they contradicted themselves. Full story in [The fact-checker](truth.md). |
-| ![Truth gauge](../assets/cards/truth_gauge.png) | **A read on delivery.** The ring shows how the analysis went around its nine steps — smooth arcs read as steady, torn gaps as strained. It only judges people it knows well. |
-| ![Hark](../assets/cards/hark.png) | **"Listen!" — a tap on the shoulder.** The one thing worth telling you right now: you are about to be late, you owe the person in front of you, you are walking away from your stuff. Amber means urgent. |
+| ![Caption](../assets/cards/spoken_caption.webp) | **Live captions.** What was just said, written at the edge. |
+| ![Translation](../assets/cards/live_caption.webp) | **Translation.** Speech or text in another language, rendered in yours. |
+| ![Answer ahead](../assets/cards/answer_ahead.webp) | **"On the tip of your tongue."** Someone asked a question; here is the answer, silently, for you to say. |
+| ![Fact check](../assets/cards/fact_check.webp) | **The fact-checker spoke.** Green means verified, amber means check this, red means they contradicted themselves. Full story in [The fact-checker](truth.md). |
+| ![Truth gauge](../assets/cards/truth_gauge.webp) | **A read on delivery.** The ring shows how the analysis went around its nine steps — smooth arcs read as steady, torn gaps as strained. It only judges people it knows well. |
+| ![Hark](../assets/cards/hark.webp) | **"Listen!" — a tap on the shoulder.** The one thing worth telling you right now: you are about to be late, you owe the person in front of you, you are walking away from your stuff. Amber means urgent. |
 
 ## Privacy — deliberately loud
 
@@ -65,17 +65,17 @@ They slam in, because you should never be unsure about privacy.
 
 | | |
 |---|---|
-| ![Veil](../assets/cards/privacy_veil.png) | **Fully off.** Deaf and blind until you hold the button again. |
-| ![Forget](../assets/cards/forget_last.png) | **Forgotten.** The last capture is gone, as you asked. |
-| ![Private zone](../assets/cards/private_zone.png) | **A no-record place.** You marked this place private; nothing records here. |
-| ![Consent](../assets/cards/consent_required.png) | **Your call.** Something new wants access; nothing proceeds until you say so. |
+| ![Veil](../assets/cards/privacy_veil.webp) | **Fully off.** Deaf and blind until you hold the button again. |
+| ![Forget](../assets/cards/forget_last.webp) | **Forgotten.** The last capture is gone, as you asked. |
+| ![Private zone](../assets/cards/private_zone.webp) | **A no-record place.** You marked this place private; nothing records here. |
+| ![Consent](../assets/cards/consent_required.webp) | **Your call.** Something new wants access; nothing proceeds until you say so. |
 
 ## The odd ones out
 
 | | |
 |---|---|
-| ![Deviation](../assets/cards/deviation_alert.png) | **"That's not what you said before."** Your own plan changed — a gentle before-versus-now nudge. |
-| ![Error](../assets/cards/error.png) | **Something failed.** One plain sentence about what. |
-| ![Not sure](../assets/cards/low_confidence.png) | **An honest shrug.** It does not know, and it says so rather than guessing. |
-| ![Anchor](../assets/cards/world_anchor.png) | **A memory echo.** In Dream Mode, a pale note pinned to the place you are standing. |
-| ![Synesthesia](../assets/cards/synesthesia.png) | **Dream Mode poetry.** Six words for what this moment feels like. Double-tap enters and leaves this mode. |
+| ![Deviation](../assets/cards/deviation_alert.webp) | **"That's not what you said before."** Your own plan changed — a gentle before-versus-now nudge. |
+| ![Error](../assets/cards/error.webp) | **Something failed.** One plain sentence about what. |
+| ![Not sure](../assets/cards/low_confidence.webp) | **An honest shrug.** It does not know, and it says so rather than guessing. |
+| ![Anchor](../assets/cards/world_anchor.webp) | **A memory echo.** In Dream Mode, a pale note pinned to the place you are standing. |
+| ![Synesthesia](../assets/cards/synesthesia.webp) | **Dream Mode poetry.** Six words for what this moment feels like. Double-tap enters and leaves this mode. |

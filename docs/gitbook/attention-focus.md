@@ -11,7 +11,7 @@ between.
 A **hark** is the system tapping you on the shoulder: one line, one ring, an
 earcon, a haptic.
 
-![A tap on the shoulder](assets/demo/catalog/features/hark/preview.gif)
+![A tap on the shoulder](assets/demo/catalog/features/hark/preview.webp)
 
 `orchestrator/attention.py: AttentionPolicy.evaluate(ctx, commitments)` scans
 the same live `Context` the anticipation engine sees and produces at most a
@@ -72,7 +72,7 @@ transcript against your prior commitments and raises a **DeviationAlertCard**
 when the new words contradict the old plan — before-versus-now across a
 dashed divider, with a severity dot.
 
-![Off your usual path](assets/demo/catalog/features/deviation/preview.gif)
+![Off your usual path](assets/demo/catalog/features/deviation/preview.webp)
 
 ## The Glance Arbiter — which lens owns a look
 
@@ -117,7 +117,7 @@ form / plain-words), TasteLens (a shelf or menu → the pick), Rosetta (foreign
 text → translate), and Juno (an object, or a weak fallback to name what's
 here). The chooser, when a look is genuinely ambiguous:
 
-![GlanceChoiceCard — a pick runs the lens and teaches the arbiter](assets/cards/glance_choice.png)
+![GlanceChoiceCard — a pick runs the lens and teaches the arbiter](assets/cards/glance_choice.webp)
 
 ## Who gets to interrupt — the summary
 

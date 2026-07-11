@@ -11,7 +11,7 @@ hearing, no remembering, no cards, nothing. A shield fills the display so
 there is never any doubt about the state you are in. Hold again to come
 back.
 
-![The Privacy Veil](../assets/demo/catalog/features/veil/preview.gif)
+![The Privacy Veil](../assets/demo/catalog/features/veil/preview.webp)
 
 This is not a "mute" that some features ignore. Every single capability in
 the product checks this one gate before doing anything.

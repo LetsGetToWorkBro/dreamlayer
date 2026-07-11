@@ -14,7 +14,7 @@ also flashes at the rim as a **SpokenCaptionCard**; `set_captions(False)`
 hides the display but keeps the ledger. Focus mode hides captions the same
 way. The Veil stops both.
 
-![Live captions](assets/demo/catalog/features/captions/preview.gif)
+![Live captions](assets/demo/catalog/features/captions/preview.webp)
 
 **Seam:** the microphone and on-device ASR that produce the text, plus
 optional speaker diarization for the `speaker` label.
@@ -43,7 +43,7 @@ talking to, confirmed with a **CommitmentRecallCard**, and from there feeds
 the dossier, anticipation, attention ("you owe Marcus..."), commitment
 drift, and the quest engine.
 
-![A promise, captured and returned](assets/demo/catalog/features/commitment/preview.gif)
+![A promise, captured and returned](assets/demo/catalog/features/commitment/preview.webp)
 
 ## Look at someone — the Social Lens
 
@@ -52,7 +52,7 @@ an on-device index of people you were introduced to and chose to keep. On a
 match it shows the identity card, and if the ledger knows them, follows with
 the conversation dossier.
 
-![Look — who is this](assets/demo/catalog/features/dossier/preview.gif)
+![Look — who is this](assets/demo/catalog/features/dossier/preview.webp)
 
 The invariants are architectural, not policy:
 
@@ -113,7 +113,7 @@ recall card is stamped with an `origin_deg` — the angle of the day the
 memory came from — so it condenses from the *time it happened* on the
 Horizon. Below threshold, DreamLayer says "Not sure" rather than guessing.
 
-![Where you left it](assets/demo/catalog/features/object/preview.gif)
+![Where you left it](assets/demo/catalog/features/object/preview.webp)
 
 And when you never told it where a thing is, **Retrace** answers from
 *sightings*: "where did I last see it" searches the passive object
@@ -211,7 +211,7 @@ says nothing at all, an APPRENTICE speaks at most three times a day.
 Arriving somewhere that holds a memory also fires `on_place` and the
 **ProactiveMemoryCard**:
 
-![It remembers for you](assets/demo/catalog/features/proactive/preview.gif)
+![It remembers for you](assets/demo/catalog/features/proactive/preview.webp)
 
 ## Message pop-ups
 
@@ -233,7 +233,7 @@ Two synchronized views of the same day:
 - **On the phone:** the Rewind screen lists the same hour blocks from
   `GET /dreamlayer/rewind` — activity, messages, and events merged.
 
-![Rewind your day](assets/demo/catalog/features/rewind/preview.gif)
+![Rewind your day](assets/demo/catalog/features/rewind/preview.webp)
 
 ## The morning brief
 
@@ -246,7 +246,7 @@ Silent when there is no brief or no paired Brain; veil-gated. The phone's Now
 tab polls the same endpoint and pushes a local notification when a new brief
 lands. **Seam:** the glasses' wear/wake signal.
 
-![Wake to your day](assets/demo/catalog/features/wake/preview.gif)
+![Wake to your day](assets/demo/catalog/features/wake/preview.webp)
 
 ## Keeping and forgetting
 
@@ -266,4 +266,4 @@ surfaces (the People tab and Reminders), each with its own remove control,
 and a place-purge silently deleting your contacts would be the wrong kind
 of surprise.
 
-![Keep a moment](assets/demo/catalog/features/saved/preview.gif)
+![Keep a moment](assets/demo/catalog/features/saved/preview.webp)

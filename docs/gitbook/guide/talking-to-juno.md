@@ -17,7 +17,7 @@ When it wakes you get a small ring, a soft chime, and a tiny vibration — each
 one can be turned off if you prefer a silent wake. Then it listens for about
 twenty seconds, so follow-up questions need no wake word. Just keep talking.
 
-![Listening](../assets/cards/listening.png)
+![Listening](../assets/cards/listening.webp)
 
 ## Things to try saying
 
@@ -100,7 +100,7 @@ Answers appear as a card in its voice, and actions confirm themselves in
 character: *"Focus on — the world's turned down."*, *"Incognito. Nothing's
 being kept."*, *"Rewinding your day."*
 
-![Juno replying](../assets/cards/juno_reply.png)
+![Juno replying](../assets/cards/juno_reply.webp)
 
 ## What it learns about you — and what it never does
 

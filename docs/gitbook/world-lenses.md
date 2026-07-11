@@ -15,7 +15,7 @@ share one honest failure state: with no Brain to read through, they show
 
 ### Answer — "what's the answer?"
 
-![ScholarCard, answer mode](assets/cards/scholar_answer.png)
+![ScholarCard, answer mode](assets/cards/scholar_answer.webp)
 
 `answer(frame, question="")` reads the question in view and answers it. The
 prompt demands a structured `ANSWER:` / `WHY:` reply; confidence is 0.85,
@@ -24,7 +24,7 @@ Veritas). Voice: *"what's the answer"*, *"answer this"*, *"solve this"*.
 
 ### Form help — "how do I fill this out?"
 
-![ScholarCard, form mode](assets/cards/scholar_form.png)
+![ScholarCard, form mode](assets/cards/scholar_form.webp)
 
 `form(frame, purpose="")` reads a form and returns a summary plus one
 `FIELD: label — what to write` line per field (up to six listed on the
@@ -33,7 +33,7 @@ optional purpose ("...to change my address").
 
 ### Plain words — "what does this mean?"
 
-![ScholarCard, explain mode](assets/cards/scholar_explain.png)
+![ScholarCard, explain mode](assets/cards/scholar_explain.webp)
 
 `explain(frame)` turns dense text — a contract clause, a spec, legalese —
 into a gist plus key points. Voice: *"explain this"*, *"what does this
@@ -57,14 +57,14 @@ form, or prose — the arbiter shows the **GlanceChoiceCard** (dismiss 6 s, up
 to three one-tap options). A pick runs the lens *and* teaches the arbiter's
 per-scene priors, so tomorrow's ambiguous look leans your way:
 
-![GlanceChoiceCard](assets/cards/glance_choice.png)
+![GlanceChoiceCard](assets/cards/glance_choice.webp)
 
 ## TasteLens — the real-world choice engine
 
 `orchestrator/taste.py`. Look at a shelf or a menu and get the pick — with
 the *why* spelled out, and nothing silently hidden:
 
-![TasteCard](assets/cards/taste.png)
+![TasteCard](assets/cards/taste.webp)
 
 ### The ranking rules (pure, offline-testable)
 
@@ -130,9 +130,9 @@ each lands. Their settled holds are part of the device golden contract.
 
 | Scholar on the device Lua | TasteLens on the device Lua | The chooser on the device Lua |
 |---|---|---|
-| ![Scholar device](assets/device/scholar_device.png) | ![Taste device](assets/device/taste_device.png) | ![Chooser device](assets/device/glance_choice_device.png) |
+| ![Scholar device](assets/device/scholar_device.webp) | ![Taste device](assets/device/taste_device.webp) | ![Chooser device](assets/device/glance_choice_device.webp) |
 
 The honest no-Brain state renders on-glass too — "Connect a Brain" in ghost
 ink rather than a guess:
 
-![The unavailable state, device-rendered](assets/device/scholar_unavailable_device.png)
+![The unavailable state, device-rendered](assets/device/scholar_unavailable_device.webp)

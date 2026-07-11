@@ -12,7 +12,7 @@ It runs on your own devices, works without the internet, and goes fully deaf
 and blind with one press of a button. Privacy is not a setting here; it is
 how the thing is built.
 
-![The whole product in ninety seconds — the real interface, over an illustrative world](assets/demo/catalog/master/preview.gif)
+![The whole product in ninety seconds — the real interface, over an illustrative world](assets/demo/catalog/master/preview.webp)
 
 ## Read this book two ways
 
