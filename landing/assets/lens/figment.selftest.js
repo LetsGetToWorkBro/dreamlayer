@@ -112,6 +112,22 @@ ok(!K.composeLocal("xyzzy random gibberish").matched, "composeLocal declines non
 // every trigger carries a plain-language hint for the builder's inline help
 ok(K.TRIGGERS.every(function (t) { return t.label && t.hint; }), "every trigger has a plain label + hint");
 
+// share codec: a whole lens round-trips through a URL-safe code, and a broken
+// or unsafe code is refused (never loaded)
+["mandala", "coach", "whisper"].forEach(function (id) {
+  var f = K.showcases[id]();
+  var code = K.encodeShare(f, { author: "ada" });
+  ok(/^[A-Za-z0-9_-]+$/.test(code), "share code is URL-safe for " + id);
+  var back = K.decodeShare(code);
+  ok(back && back.figment && back.author === "ada", "share round-trips for " + id);
+  ok(K.validate(back.figment).ok, "the decoded " + id + " lens is still valid");
+});
+ok(K.decodeShare("!!!not base64!!!") === null, "a garbage share code is refused");
+ok(K.decodeShare(K.encodeShare(K.figment("Empty", ""))) === null, "a share with no scenes is refused");
+// figment golf: the score reports bytes + machine packed in
+var golf = K.golfScore(K.templates.countdown());
+ok(golf.bytes > 0 && golf.valid === true && typeof golf.moves === "number", "golfScore reports bytes/moves/valid");
+
 // every tutorial showcase is budget-clean AND exercises a distinct edge
 Object.keys(K.showcases).forEach(function (id) {
   ok(K.validate(K.showcases[id]()).ok, "showcase '" + id + "' is valid: " + JSON.stringify(K.validate(K.showcases[id]()).violations));

@@ -21,7 +21,7 @@ dreamlayer = "dreamlayer.cli:main"
 
 [project.optional-dependencies]
 # lupa runs the halo-lua test suites (pinned to lupa.lua53 = device Lua)
-dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6", "pytest-cov>=4"]
+dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6", "pytest-cov>=4", "qrcode>=7"]
 hardware = ["brilliant-ble", "brilliant-msg"]
 dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
 

@@ -166,6 +166,28 @@
   @media(max-width:640px){ .tour{flex-direction:column} .tour-rail{width:auto;display:flex;gap:6px;overflow-x:auto;
     border-right:0;border-bottom:1px solid var(--border);padding:12px} .tour-rail .step .lbl{display:none}
     .tour-rail .step{padding:6px} }
+  /* remix banner */
+  .remix-banner{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,rgba(47,212,196,.14),transparent);
+    border-bottom:1px solid var(--border);padding:9px 20px;font-size:13.5px;color:var(--text)}
+  .remix-banner b{color:var(--teal)}
+  .remix-banner .rb-x{margin-left:auto;background:transparent;border:0;color:var(--text2);cursor:pointer;font-size:15px}
+  /* share modal */
+  .share-scrim{position:fixed;inset:0;z-index:55;background:rgba(4,10,10,.72);backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .share{position:relative;width:min(620px,96vw);background:linear-gradient(160deg,#0c1618,#0a1012);
+    border:1px solid var(--border);border-radius:18px;padding:26px 28px;box-shadow:0 30px 120px rgba(0,0,0,.6)}
+  .share-x{position:absolute;top:12px;right:14px;background:transparent;border:0;color:var(--text2);font-size:18px;cursor:pointer}
+  .share-x:hover{color:var(--text)}
+  .share h2{margin:0 0 8px;font-size:20px}
+  .share-body{display:flex;gap:22px;margin-top:16px;flex-wrap:wrap}
+  .share-qr{flex:none;background:#fff;border-radius:12px;padding:10px;line-height:0}
+  .share-qr canvas{display:block;width:200px;height:200px;image-rendering:pixelated}
+  .share-link{flex:1;min-width:220px;display:flex;flex-direction:column}
+  .share-row{display:flex;gap:8px}
+  .share-row input{font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  .btn.sm{padding:8px 14px;font-size:13px}
+  .share-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .share-scrim .toast{min-height:16px}
 </style>
 </head>
 <body>
@@ -175,6 +197,10 @@
   <button class="home helpbtn" id="showtour" title="See what's possible">✦ What's possible</button>
   <a class="home" href="./index.html">← dreamlayer</a>
 </header>
+<div class="remix-banner" id="remixBanner" style="display:none">
+  <span id="remixMsg"></span>
+  <button class="rb-x" id="remixDismiss" title="Dismiss">✕</button>
+</div>
 
 <!-- First-run tutorial: a guided showcase of the edges of the grammar. Each
      chapter can load a live example onto the ring so you watch it run. -->
@@ -266,6 +292,8 @@
 
     <div class="panel">
       <p class="eyebrow">Share it</p>
+      <button class="btn" id="shareBtn" style="width:100%">🔗 Share this lens</button>
+      <p class="muted" style="margin:8px 0 12px">A whole lens fits in a link (and a QR). Anyone can open it, remix it, and their glasses re-prove it's safe — so sharing carries zero risk.</p>
       <details id="publishDetails">
         <summary>Publish to the store →</summary>
         <label class="f">Your name / handle</label>
@@ -282,6 +310,29 @@
   </div>
 </div>
 
+<!-- Share modal: the lens as a link + a scannable QR -->
+<div class="share-scrim" id="shareModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="share">
+    <button class="share-x" id="shareX" title="Close (Esc)">✕</button>
+    <h2 id="shareTitle">Share “<span id="shareName">your lens</span>”</h2>
+    <p class="muted">Send this link, or let someone scan the code. It opens live in the builder to remix — no account, no install, and their glasses re-prove it before it runs.</p>
+    <div class="share-body">
+      <div class="share-qr"><canvas id="shareQr" aria-label="QR code for this lens"></canvas></div>
+      <div class="share-link">
+        <label class="f">Link</label>
+        <div class="share-row"><input id="shareUrl" readonly /><button class="btn sm" id="shareCopy">Copy</button></div>
+        <div class="share-actions">
+          <button class="btn ghost sm" id="shareTweet">Share on X</button>
+          <button class="btn ghost sm" id="shareDownloadQr">↓ QR image</button>
+        </div>
+        <div class="toast" id="shareToast"></div>
+        <p class="muted" id="shareSize"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./assets/lens/qr.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script>
 (function(){
@@ -1020,11 +1071,81 @@
     else if(e.key==="ArrowLeft") document.getElementById("tourPrev").click();
   });
 
+  // -- share: a whole lens travels as a link (+ QR) -------------------------
+  var shareModal=document.getElementById("shareModal");
+  function shareUrlFor(f){
+    var code=K.encodeShare(f, { author: document.getElementById("pubauthor").value.trim() });
+    var base=location.origin==="null"||!location.origin ? "https://dreamlayer.app/lens-builder.html"
+                                                         : location.origin+location.pathname;
+    return { url: base+"#lens="+code, code: code };
+  }
+  function openShare(){
+    if(!fig) return;
+    if(!K.validate(fig).ok){ flash("Make the lens valid first — the proof card shows what to fix."); return; }
+    var s=shareUrlFor(fig);
+    document.getElementById("shareName").textContent = fig.name||"your lens";
+    document.getElementById("shareUrl").value = s.url;
+    var st=document.getElementById("shareToast"); st.className="toast"; st.textContent="";
+    document.getElementById("shareSize").textContent = "";
+    // QR — big lenses can exceed QR capacity; fall back to the link gracefully
+    var qc=document.getElementById("shareQr"), wrap=qc.parentNode;
+    try{
+      if(!window.QRLite) throw new Error("no qr");
+      QRLite.draw(qc, s.url, { px:220, ecl:"L", dark:"#0a1012", light:"#ffffff" });
+      wrap.style.display=""; document.getElementById("shareDownloadQr").style.display="";
+    }catch(e){
+      wrap.style.display="none"; document.getElementById("shareDownloadQr").style.display="none";
+      document.getElementById("shareSize").textContent = "This lens is a bit big for a QR — use the link.";
+    }
+    shareModal.style.display="flex";
+  }
+  function closeShare(){ shareModal.style.display="none"; }
+  document.getElementById("shareBtn").onclick = openShare;
+  document.getElementById("shareX").onclick = closeShare;
+  shareModal.addEventListener("click", function(e){ if(e.target===shareModal) closeShare(); });
+  document.getElementById("shareCopy").onclick = function(){
+    var inp=document.getElementById("shareUrl"); inp.select();
+    var st=document.getElementById("shareToast");
+    function ok(){ st.className="toast ok-t"; st.textContent="✓ Link copied — paste it anywhere."; }
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(inp.value).then(ok, function(){ document.execCommand("copy"); ok(); }); }
+    else { try{ document.execCommand("copy"); ok(); }catch(e){ st.className="toast"; st.textContent="Select the link and copy it."; } }
+  };
+  document.getElementById("shareTweet").onclick = function(){
+    var url=document.getElementById("shareUrl").value;
+    var text="I built a lens for AR glasses in the browser — no code. Remix it:";
+    window.open("https://twitter.com/intent/tweet?text="+encodeURIComponent(text)+"&url="+encodeURIComponent(url),"_blank","noopener");
+  };
+  document.getElementById("shareDownloadQr").onclick = function(){
+    var qc=document.getElementById("shareQr");
+    try{ var a=document.createElement("a"); a.href=qc.toDataURL("image/png"); a.download=(fig.name||"lens").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+"-qr.png"; a.click(); }catch(e){}
+  };
+
+  // -- open a shared lens (#lens=…) as a remix ------------------------------
+  function tryOpenSharedLens(){
+    var m=(location.hash||"").match(/[#&]lens=([^&]+)/);
+    if(!m) return false;
+    var res=K.decodeShare(decodeURIComponent(m[1]));
+    if(!res){ flash("That shared lens couldn't be opened (link may be truncated)."); return false; }
+    fig=res.figment; if(fig.id==null) fig.id=""; editKind="remix"; markRecipe(null);
+    startDemo(null); setMode("advanced"); boot();
+    var banner=document.getElementById("remixBanner");
+    document.getElementById("remixMsg").innerHTML = "You're remixing <b>“"+esc(fig.name||"a shared lens")+"”</b>"+
+      (res.author?(" by "+esc(res.author)):"")+" — make it yours, then re-share or deploy.";
+    banner.style.display="flex";
+    try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}  // clean the URL
+    return true;
+  }
+  document.getElementById("remixDismiss").onclick = function(){ document.getElementById("remixBanner").style.display="none"; };
+  document.addEventListener("keydown", function(e){ if(e.key==="Escape" && shareModal.style.display==="flex") closeShare(); });
+
   // boot
-  loadPreset("mandala");   // a calm, offline, no-Brain-needed lens to land on
+  if(!tryOpenSharedLens()){
+    loadPreset("mandala");   // a calm, offline, no-Brain-needed lens to land on
+  }
   tick();
   // first-time visitors meet the tour automatically; afterwards it's the ✦ button
-  try{ if(!localStorage.getItem("dl_tour_seen")) openTour(); }catch(e){}
+  // (a shared-lens visitor skips the tour — they came to remix, not to learn)
+  try{ if(!localStorage.getItem("dl_tour_seen") && !(location.hash||"").match(/lens=/) && editKind!=="remix") openTour(); }catch(e){}
 })();
 </script>
 </body>

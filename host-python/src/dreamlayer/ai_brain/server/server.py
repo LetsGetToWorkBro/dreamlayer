@@ -1679,6 +1679,7 @@ def _builder_page(token: str) -> "Optional[str]":
         return None
     html = (d / "lens-builder.html").read_text(encoding="utf-8")
     html = html.replace("./assets/lens/figment.js", "/dreamlayer/build/figment.js")
+    html = html.replace("./assets/lens/qr.js", "/dreamlayer/build/qr.js")
     inject = ("<script>window.__DL_BUILD__="
               + json.dumps({"token": token, "sameOrigin": True})
               + ";</script>")
@@ -1893,9 +1894,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self.end_headers()
                 self.wfile.write(body)
                 return
-            if path == "/dreamlayer/build/figment.js":
-                # same-origin asset for the served page — no CORS needed
-                js = _builder_asset("figment.js")
+            if path in ("/dreamlayer/build/figment.js", "/dreamlayer/build/qr.js"):
+                # same-origin assets for the served page — no CORS needed
+                js = _builder_asset(path.rsplit("/", 1)[1])
                 if js is None:
                     self._json(404, {"error": "not found"}); return
                 body = js.encode("utf-8")

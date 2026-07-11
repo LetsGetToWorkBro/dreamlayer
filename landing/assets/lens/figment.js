@@ -657,6 +657,61 @@
     });
   }
 
+  // -- shareable lenses: a whole lens fits in a URL --------------------------
+  // A figment is small, signed-*able* data, so a lens travels as a link (and a
+  // QR). Anyone who opens it gets the lens live in the builder to remix — and
+  // their glasses re-prove it before it ever runs, so a share carries zero
+  // trust. UTF-8 → base64url, no server, no account.
+  function _b64urlEncode(str) {
+    var b64 = (typeof btoa !== "undefined")
+      ? btoa(unescape(encodeURIComponent(str)))
+      : Buffer.from(str, "utf-8").toString("base64");
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function _b64urlDecode(s) {
+    var b64 = String(s).replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    return (typeof atob !== "undefined")
+      ? decodeURIComponent(escape(atob(b64)))
+      : Buffer.from(b64, "base64").toString("utf-8");
+  }
+  function encodeShare(fig, meta) {
+    meta = meta || {};
+    var f = JSON.parse(canonical(fig));
+    if (f.id === "") delete f.id;                // the builder mints identity on import
+    var payload = { v: 1, f: f };
+    if (meta.author) payload.a = String(meta.author).slice(0, 40);
+    return _b64urlEncode(JSON.stringify(payload));
+  }
+  function decodeShare(code) {
+    try {
+      var p = JSON.parse(_b64urlDecode(code));
+      if (!p || !p.f || typeof p.f !== "object") return null;
+      var fig = p.f; if (!fig.scenes || !Object.keys(fig.scenes).length) return null;
+      if (!fig.name) fig.name = "Shared lens";
+      if (fig.id == null) fig.id = "";
+      if (!validate(fig).ok) return null;        // never load a lens that isn't safe
+      return { figment: fig, author: (p.a || "") };
+    } catch (e) { return null; }
+  }
+  // Figment Golf: the same lens in fewer bytes is the whole game. `bytes` is the
+  // canonical UTF-8 size; `moves` is how much machine you packed into them.
+  function golfScore(fig) {
+    var c = canonical(fig);
+    var bytes = (typeof TextEncoder !== "undefined") ? new TextEncoder().encode(c).length
+      : (typeof Buffer !== "undefined" ? Buffer.byteLength(c, "utf8") : c.length);
+    var ids = Object.keys(fig.scenes || {}), moves = 0;
+    ids.forEach(function (id) {
+      var s = fig.scenes[id];
+      moves += (s.lines || []).length + (s.glyphs || []).length;
+      moves += (s.on ? Object.keys(s.on).length : 0) + (s.on_timeout || []).length;
+      if (s.pulse) moves += 1; if (s.cadence) moves += 1; if (s.tick) moves += 1;
+    });
+    moves += Object.keys(fig.counters || {}).length;
+    return { bytes: bytes, moves: moves, scenes: ids.length,
+             valid: validate(fig).ok };
+  }
+
   // -- scene-graph editing (the advanced editor) -----------------------------
   // the triggers a scene can listen for; "timeout" is the timed exit, the rest
   // are physical/gesture events (see figment_stage.lua on_event).
@@ -772,6 +827,7 @@
     newSceneId: newSceneId, setTransition: setTransition, removeTransition: removeTransition,
     listTransitions: listTransitions, graphEdges: graphEdges,
     validate: validate, safetyCard: safetyCard, canonical: canonical, listing: listing,
+    encodeShare: encodeShare, decodeShare: decodeShare, golfScore: golfScore,
     templates: { reps: tReps, focus: tFocus, score: tScore, breathing: tBreathing,
       interval: tInterval, countdown: tCountdown, checklist: tChecklist },
     showcases: SHOWCASES,

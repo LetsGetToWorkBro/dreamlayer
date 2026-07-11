@@ -88,6 +88,21 @@ class TestUnderNode:
         report = verify(fig)
         assert report.ok, f"{show} rejected by the real gate: {report.violations}"
 
+    @pytest.mark.parametrize("show", ["mandala", "coach", "whisper", "fusion"])
+    def test_shared_link_decodes_to_a_gate_passing_lens(self, show):
+        # a lens travels as a URL-safe code; decoding it in the browser must
+        # yield a figment the REAL Python gate accepts — "shareable" can never
+        # mean "smuggles something unsafe onto the glasses"
+        script = ("var K=require('./figment.js');"
+                  "var code=K.encodeShare(K.showcases['" + show + "'](),{author:'x'});"
+                  "var back=K.decodeShare(code);"
+                  "console.log(JSON.stringify(back.figment));")
+        out = subprocess.run(["node", "-e", script], cwd=LENS,
+                             capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        fig = Figment.from_dict(json.loads(out.stdout))
+        assert verify(fig).ok, f"decoded {show} rejected by the real gate"
+
     # (show, events that reach the {slot} scene before the host pushes text)
     @pytest.mark.parametrize("show,setup", [
         ("whisper", []), ("ask", ["double"]), ("secondSight", ["long"]),
@@ -266,6 +281,11 @@ def test_builder_page_is_wired():
     assert "var HELP" in page and "COLOR_LABEL" in page    # plain-language help + colour names
     assert "Full editor" in page                       # mode toggle renamed from "Advanced"
     assert 'loadPreset("mandala")' in page             # lands on a calm showcase, not a scene graph
+    # sharing primitives: link + QR + remix
+    assert 'id="shareBtn"' in page and "encodeShare" in page   # share a lens as a link
+    assert "decodeShare" in page and "#lens=" in page          # open a shared lens as a remix
+    assert "./assets/lens/qr.js" in page                       # the vendored QR encoder
+    assert 'id="remixBanner"' in page
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
@@ -363,6 +383,7 @@ class TestBuildRouteHttp:
             resp = urllib.request.urlopen(lb.url + "/dreamlayer/build")
             page = resp.read().decode()
             assert "__DL_BUILD__" in page and "/dreamlayer/build/figment.js" in page
+            assert "/dreamlayer/build/qr.js" in page   # the QR asset is rewritten too
             # 127.0.0.1 is localhost → the token is injected (same as the panel)
             assert '"token": "tok"' in page
             # SECURITY: this page carries the token, so it must NOT be readable
@@ -371,6 +392,9 @@ class TestBuildRouteHttp:
             jsresp = urllib.request.urlopen(lb.url + "/dreamlayer/build/figment.js")
             assert "LensKit" in jsresp.read().decode()
             assert jsresp.headers.get("Access-Control-Allow-Origin") is None
+            qrresp = urllib.request.urlopen(lb.url + "/dreamlayer/build/qr.js")
+            assert "QRLite" in qrresp.read().decode()
+            assert qrresp.headers.get("Access-Control-Allow-Origin") is None
         finally:
             lb.stop()
 
