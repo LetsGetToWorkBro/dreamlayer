@@ -37,6 +37,7 @@
     pause: '<rect x="7.3" y="5" width="3.3" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.4" y="5" width="3.3" height="14" rx="1" fill="currentColor" stroke="none"/>',
     restart:'<path d="M20 12a8 8 0 11-2.3-5.6"/><path d="M20 3.5v4h-4"/>',
     brush: '<path d="M14 4l6 6-7.5 7.5a3 3 0 01-1.4.8L5 20l1.7-6.1a3 3 0 01.8-1.4z"/><path d="M12 6l6 6"/>',
+    bolt:  '<path d="M13 2L5 13h5l-1 9 9-12h-5z"/>',
   };
   function svg(name, cls) {
     var body = P[name];

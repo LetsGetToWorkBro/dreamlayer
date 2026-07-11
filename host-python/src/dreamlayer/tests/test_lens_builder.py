@@ -351,7 +351,7 @@ def test_builder_page_is_wired():
     # SVG icons instead of emoji on the preset + control chrome
     assert "./assets/lens/icons.js" in page and "DLIcon(" in page
     assert "setPlayBtn" in page                        # the play button reflects real state
-    for e in ("🗣", "👁", "🫀", "🚪", "🔥", "🏋", "🌸", "🖌"):
+    for e in ("🗣", "👁", "🫀", "🚪", "🔥", "🏋", "🌸", "🖌", "⚡", "🔗"):
         assert e not in page, f"emoji {e} should be an SVG icon now"
 
 
