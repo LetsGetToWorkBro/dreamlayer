@@ -238,7 +238,12 @@ Three ways to author one, easiest first:
   emitting a heartbeat back), **Threshold** (`place:enter` rituals), **Ember**
   (the Vault surfaces a memory where it happened), **Coach** (phone pose + Brain
   judge your form), and a breathing painted mandala. Every one is the same
-  signed, budget-proven figment underneath.
+  signed, budget-proven figment underneath. In the builder the feed is
+  simulated; on a paired Brain it runs for real over two wires — `POST
+  /dreamlayer/rc/feed {text}` streams host text (a translation, a camera label,
+  a Vault memory) into the running lens's `{slot}`, and `POST /dreamlayer/rc/emit
+  {tag, text}` closes the loop: the lens emits, the Brain acts, the answer lands
+  back on the glass (`emit "ask"` runs your Brain over the spoken question).
 - **The phone** — rehearse it by performing it (tap, speak the beats, keep), in
   the app's rehearsal flow.
 - **JSON + the CLI** — hand-write or generate the figment and check it:

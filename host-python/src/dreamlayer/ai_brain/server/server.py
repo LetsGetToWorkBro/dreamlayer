@@ -9,6 +9,8 @@ Serves the control panel and the API the phone and the panel both call:
     POST /dreamlayer/upload?folder=&name=   drag-drop a file in → reindex
     POST /dreamlayer/brain/ask      {query} → Answer (logged to history)
     POST /dreamlayer/rc/compose     {prompt} → verified figment ("Ask Juno")
+    POST /dreamlayer/rc/feed        {text} → stream text into the live lens slot
+    POST /dreamlayer/rc/emit        {tag, text} → lens emit → Brain → slot (ask)
     POST /dreamlayer/brain/explain  {label, image?, want?} → Answer
     GET  /dreamlayer/history        recent questions
 
@@ -475,6 +477,54 @@ class Brain:
         self.activity.add("rc", f"Event {name!r} → figment {self._rc_active}")
         return {"ok": record.success, "name": name, "active": self._rc_active,
                 "mode": record.mode}
+
+    def rc_feed(self, text: str, source: str = "") -> dict:
+        """Stream a line of host text into the running lens's ``{slot}`` — the
+        wire the world-facing lenses ride: a live translation, a camera label,
+        a resurfaced Vault memory. It's the read-only twin of ``rc_event``
+        (which advances scenes); feed only fills the text slot. The slot is one
+        short line on the round glass, so it's clamped to MAX_TEXT_LEN here.
+        Refused when no lens is on stage — there's nothing to show it on."""
+        from ...reality_compiler.v2.figment import MAX_TEXT_LEN
+        text = str(text or "")[:MAX_TEXT_LEN]
+        if self._rc_active is None:
+            return {"ok": False, "error": "no lens on stage to feed"}
+        record = self.rc.deployer.push_text(self._rc_active, text)
+        if source:
+            self.activity.add("rc", f"{str(source)[:24]} → lens")
+        return {"ok": record.success, "text": text,
+                "active": self._rc_active, "mode": record.mode}
+
+    def rc_emit(self, tag: str, text: str = "") -> dict:
+        """Close the loop glass → Brain → glass. A running lens emits a tag and
+        the Brain acts on it, streaming the result back into the lens's slot:
+
+          ``ask``  → run your Brain over the spoken question, push the answer
+                     (from your own files/memory, or the cloud if you allow it)
+          other    → carry the tag's text payload straight to the slot (a camera
+                     label from ``look``, a translation the hub already made)
+
+        This is what makes the showcase lenses real on a paired Brain: the phone
+        relays a figment's emit here, and the answer lands back on the glass.
+        Refused when no lens is on stage."""
+        from ...reality_compiler.v2.figment import MAX_EMIT_TAG_LEN
+        tag = str(tag or "")[:MAX_EMIT_TAG_LEN]
+        if not tag:
+            return {"ok": False, "error": "empty emit tag"}
+        if self._rc_active is None:
+            return {"ok": False, "error": "no lens on stage"}
+        if tag == "ask":
+            ans = self.ask(text or "")
+            reply = (ans.text if ans and not ans.is_empty() else "") or "no answer yet"
+            tier = ans.tier if ans else ""
+            out = self.rc_feed(reply, source="ask")
+            self.activity.add("rc", "Lens asked → Brain answered")
+            return {**out, "tag": tag, "answer": reply, "tier": tier}
+        if text:
+            return {**self.rc_feed(text, source=f"emit:{tag}"), "tag": tag}
+        # a bare emit with no payload and no built-in reaction: acknowledged,
+        # left for a plugin/hub to interpret, never an error
+        return {"ok": True, "tag": tag, "active": self._rc_active, "noted": True}
 
     # -- native behaviors Juno builds (timers, intervals, clock) -----------
 
@@ -2121,6 +2171,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # "Ask Juno" — describe a lens in words, get a verified figment
                 # back into the builder (offline intent parser; not deployed)
                 self._json(200, brain.rc_compose(self._body().get("prompt", "")))
+            elif path == "/dreamlayer/rc/feed":
+                # stream host text (translation / camera label / memory) into the
+                # running lens's {slot} — the world-facing showcases' live wire
+                b = self._body()
+                self._json(200, brain.rc_feed(b.get("text", ""), b.get("source", "")))
+            elif path == "/dreamlayer/rc/emit":
+                # the lens emitted a tag; act on it and stream the result back
+                # (emit "ask" → Brain answers into the slot). Closes the loop.
+                b = self._body()
+                self._json(200, brain.rc_emit(b.get("tag", ""), b.get("text", "")))
             elif path == "/dreamlayer/rc/import":
                 # the no-code browser builder's "Deploy to my Brain"
                 self._json(200, brain.rc_import(self._body().get("figment") or self._body()))
