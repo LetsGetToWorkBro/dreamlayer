@@ -137,7 +137,10 @@ class DreamRemOps:
         now = now if now is not None else time.time()
         lt = time.localtime(now)
         elapsed = lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec
-        return self.start_scrub(lookback_s=max(elapsed, 60.0), now=now, show=True)
+        # back to midnight, but always at least the last hour — otherwise a
+        # rewind just after midnight is blank even though you were just doing
+        # something a few minutes ago (those moments sit before the date line).
+        return self.start_scrub(lookback_s=max(elapsed, 3600.0), now=now, show=True)
 
 
     def scrub(self, direction: str, show: bool = True) -> dict | None:
