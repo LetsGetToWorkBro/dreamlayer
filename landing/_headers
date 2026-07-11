@@ -1,0 +1,19 @@
+# Cloudflare Pages response headers.
+#
+# Keep Juno's sprite kit fresh. Her filenames are stable (juno.js,
+# juno_idle*.webp), so without this a changed clip stays cached on the
+# device — notably iOS Safari, which held onto an old animation across
+# several deploys. `no-cache` doesn't forbid storing; it forces the browser
+# to revalidate with the server (via ETag) before reuse, so an unchanged
+# asset still 304s but a new one is fetched immediately.
+/assets/juno/*
+  Cache-Control: no-cache
+
+# The pages that embed her must revalidate too, so a bumped ?v= is actually
+# seen rather than read from a stale cached HTML.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/lens-builder.html
+  Cache-Control: no-cache

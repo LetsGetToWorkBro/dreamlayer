@@ -20,6 +20,11 @@
   "use strict";
   var reduce = (typeof matchMedia !== "undefined") &&
     matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Cache-buster for the sprite assets. Bump this whenever juno_idle*.webp
+  // changes — the filenames stay stable, so without it browsers (esp. iOS
+  // Safari) keep serving a stale clip. Keep it in sync with the ?v= on the
+  // <script src="…/juno.js"> tags so the whole kit refreshes together.
+  var V = "?v=3";
 
   function base() {
     try {
@@ -60,9 +65,9 @@
     img.decoding = "async";
     // the animated loop when motion is welcome; the still poster otherwise. If
     // the animation ever fails to load, fall back to the still.
-    var still = dir + "juno_idle.webp";
+    var still = dir + "juno_idle.webp" + V;
     img.onerror = function () { if (img.src.indexOf("juno_idle.webp") < 0) img.src = still; };
-    img.src = reduce ? still : (dir + "juno_idle_anim.webp");
+    img.src = reduce ? still : (dir + "juno_idle_anim.webp" + V);
     el.appendChild(img);
     return api(el, img);
   }

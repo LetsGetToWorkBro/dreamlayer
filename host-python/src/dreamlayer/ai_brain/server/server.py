@@ -1702,6 +1702,9 @@ def _builder_page(token: str) -> "Optional[str]":
     html = html.replace("./assets/lens/figment.js", "/dreamlayer/build/figment.js")
     html = html.replace("./assets/lens/qr.js", "/dreamlayer/build/qr.js")
     html = html.replace("./assets/lens/icons.js", "/dreamlayer/build/icons.js")
+    # Juno's sprite script lives under a different served path; rewrite it so
+    # the Ask-Juno avatar loads (any ?v= cache-buster rides along untouched).
+    html = html.replace("./assets/juno/juno.js", "/dreamlayer/build/juno/juno.js")
     inject = ("<script>window.__DL_BUILD__="
               + json.dumps({"token": token, "sameOrigin": True})
               + ";</script>")

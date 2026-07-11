@@ -285,8 +285,8 @@ section{position:relative}
 @keyframes junoHue{0%,100%{filter:blur(16px) hue-rotate(-16deg)}50%{filter:blur(16px) hue-rotate(20deg)}}
 /* wing-shimmer — an iridescent highlight sweeps across her, clipped to her shape */
 .hero .hero-juno .jshimmer{position:absolute;inset:0;pointer-events:none;z-index:2;
-  -webkit-mask:url(./assets/juno/juno_idle.webp) center/contain no-repeat;
-  mask:url(./assets/juno/juno_idle.webp) center/contain no-repeat;
+  -webkit-mask:url(./assets/juno/juno_idle.webp?v=3) center/contain no-repeat;
+  mask:url(./assets/juno/juno_idle.webp?v=3) center/contain no-repeat;
   background:linear-gradient(115deg,transparent 40%,rgba(210,245,255,.45) 48%,rgba(255,255,255,.65) 50%,
     rgba(205,240,255,.45) 52%,transparent 60%);background-size:260% 100%;
   mix-blend-mode:screen;animation:junoFloat 10s ease-in-out infinite,junoShimmer 10s ease-in-out infinite}
@@ -1658,7 +1658,7 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
 <script src="./assets/vendor/ScrollTrigger.min.js" defer></script>
 <script src="./assets/vendor/lenis.min.js" defer></script>
 <script src="./assets/sim/halo-sim.js" defer></script>
-<script src="./assets/juno/juno.js" defer></script>
+<script src="./assets/juno/juno.js?v=3" defer></script>
 <script>
 /* Juno hero ambience — drifting fairy-dust + a smooth cursor parallax. Layered
    on top of the video/poster so she feels alive even when the clip is a still.
