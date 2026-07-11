@@ -149,6 +149,28 @@ class TestServer:
             # the People section now merges the glasses' social memory
             # (relation/notes/debts) with the dossier registry
             assert "/dreamlayer/social/people" in body and "met on Halo" in body
+            # Juno lives on the panel: her mount + compositor script are present
+            assert 'class="juno-hero"' in body and "data-juno" in body
+            assert "/dreamlayer/build/juno/juno.js" in body
+        finally:
+            lb.stop()
+
+    def test_juno_script_and_assets_serve(self, tmp_path):
+        lb = LiveBrain(tmp_path)
+        try:
+            # the UMD compositor script — text, JS content-type
+            status, body = _get(lb.url + "/dreamlayer/build/juno/juno.js")
+            assert status == 200 and "Juno" in body and "mount" in body
+            # a binary asset — raw read (can't decode as text)
+            req = urllib.request.Request(lb.url + "/dreamlayer/build/juno/juno_idle.webp")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=5) as r:
+                assert r.status == 200
+                assert r.headers.get("Content-Type") == "image/webp"
+                assert len(r.read()) > 100
+            # path traversal and unknown extensions are refused
+            assert _get(lb.url + "/dreamlayer/build/juno/..%2f..%2fserver.py")[0] == 404
+            assert _get(lb.url + "/dreamlayer/build/juno/secrets.env")[0] == 404
         finally:
             lb.stop()
 

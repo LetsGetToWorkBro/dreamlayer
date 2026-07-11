@@ -1670,6 +1670,27 @@ def _builder_asset(name: str) -> "Optional[str]":
     return fp.read_text(encoding="utf-8") if fp.is_file() else None
 
 
+_JUNO_CTYPES = {
+    "js": "application/javascript; charset=utf-8",
+    "mp4": "video/mp4", "webm": "video/webm",
+    "webp": "image/webp", "png": "image/png",
+}
+
+
+def _juno_asset(name: str) -> "Optional[tuple[bytes, str]]":
+    """Read a Juno sprite asset (script, packed clip, or poster) from the
+    landing bundle. Binary-safe. None for anything unknown or path-escaping."""
+    d = _builder_dir()
+    if d is None or "/" in name or ".." in name:
+        return None
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    ctype = _JUNO_CTYPES.get(ext)
+    if ctype is None:
+        return None
+    fp = d / "assets" / "juno" / name
+    return (fp.read_bytes(), ctype) if fp.is_file() else None
+
+
 def _builder_page(token: str) -> "Optional[str]":
     """The builder HTML, rewritten to load figment.js from the Brain and told
     it's same-origin (so it hides the URL/token inputs and deploys relatively).
@@ -1905,6 +1926,23 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self.send_response(200)
                 self.send_header("Content-Type", "application/javascript; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path.startswith("/dreamlayer/build/juno/"):
+                # Juno's sprite kit for the panel: her UMD compositor script and
+                # the packed colour+matte clips it composites (mp4/webm) plus the
+                # still poster (webp). Same-origin, static, no token — the page
+                # just needs to paint her.
+                name = path[len("/dreamlayer/build/juno/"):]
+                data = _juno_asset(name)
+                if data is None:
+                    self._json(404, {"error": "not found"}); return
+                body, ctype = data
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=86400")
                 self.end_headers()
                 self.wfile.write(body)
                 return

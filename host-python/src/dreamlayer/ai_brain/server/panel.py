@@ -272,6 +272,24 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     animation:pagein .3s var(--ease) both}         /* override the scroll-reveal's opacity:0 */
   @keyframes pagein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .head-cine{display:none}                          /* clean app header, not a web hero */
+  /* Juno — a living companion in the corner. juno.js composites her packed
+     colour+matte clip to a <canvas> for true transparency and breathes the
+     media; here we float the whole figure and drift a hue-shifting aura behind
+     her, so the panel feels tended rather than static. */
+  .juno-hero{position:fixed;right:22px;bottom:20px;width:116px;z-index:15;pointer-events:none;
+    animation:jhFloat 10s ease-in-out infinite;will-change:transform}
+  .juno-hero::before{content:"";position:absolute;left:50%;top:48%;width:150%;height:150%;
+    transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
+    background:radial-gradient(closest-side,rgba(47,212,196,.30),rgba(47,212,196,0) 72%);
+    animation:jhAura 6.5s ease-in-out infinite,jhHue 26s linear infinite}
+  .juno-hero[data-state="thinking"]::before{background:radial-gradient(closest-side,rgba(47,212,196,.42),rgba(47,212,196,0) 72%)}
+  .juno-hero[data-state="success"]::before{background:radial-gradient(closest-side,rgba(86,211,100,.40),rgba(86,211,100,0) 72%)}
+  @keyframes jhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  @keyframes jhAura{0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}
+    50%{opacity:.82;transform:translate(-50%,-50%) scale(1.08)}}
+  @keyframes jhHue{0%,100%{filter:blur(7px) hue-rotate(-16deg)}50%{filter:blur(7px) hue-rotate(16deg)}}
+  @media(max-width:760px){.juno-hero{display:none}}
+  @media(prefers-reduced-motion:reduce){.juno-hero,.juno-hero::before{animation:none}}
   @media(max-width:760px){body{overflow:auto}
     .wrap{flex-direction:column;height:auto}
     .side{width:auto;height:auto;flex-direction:row;flex-wrap:wrap;gap:4px;border-right:0;
@@ -599,6 +617,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <div class="modal pd"><div id="pdinner"></div></div>
 </div>
 <div id="toast"></div>
+<div class="juno-hero" data-juno data-juno-state="idle" aria-hidden="true"></div>
+<script src="/dreamlayer/build/juno/juno.js" defer></script>
 <script>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
