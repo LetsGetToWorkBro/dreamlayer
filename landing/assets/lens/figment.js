@@ -523,7 +523,8 @@
         "pull-up", "pullup", "tally", "nod to count", "count my", "count reps"],
         make: function () { return tReps({ label: (t.match(/(push-?ups?|sit-?ups?|squats?|pull-?ups?|reps?)/) || [])[0] || "reps" }); } },
       { k: "checklist", kw: ["checklist", "to-do", "to do", "todo", "steps", "ritual",
-        "routine", "then ", "reminder list"],
+        "routine", "then ", "reminder", "remind me", "medication", "meds", "pill",
+        "stretch", "hydrate", "drink water", "skincare", "morning routine", "night routine"],
         make: function () {
           var steps = t.replace(/^.*?:/, "").split(/,|\bthen\b|;/).map(function (s) { return s.trim(); })
                        .filter(Boolean).map(function (s) { return s.slice(0, B.MAX_TEXT_LEN); });
@@ -702,18 +703,32 @@
     });
     if (fig.initial === id) fig.initial = Object.keys(fig.scenes)[0] || "";
   }
+  // changing a transition's target/trigger in the editor must NOT wipe the
+  // counter/emit/record/guard behaviour it carries — merge, don't replace.
   function setTransition(scene_, trigger, target) {
-    if (trigger === "timeout") { scene_.on_timeout = [{ target: target }]; }
-    else { scene_.on = scene_.on || {}; scene_.on[trigger] = { target: target }; }
+    if (trigger === "timeout") {
+      var prev = (scene_.on_timeout && scene_.on_timeout[scene_.on_timeout.length - 1]) || {};
+      scene_.on_timeout = [_assign({}, prev, { target: target })];
+    } else {
+      scene_.on = scene_.on || {};
+      scene_.on[trigger] = _assign({}, scene_.on[trigger] || {}, { target: target });
+    }
+  }
+  function _assign(dst) {
+    for (var i = 1; i < arguments.length; i++) { var s = arguments[i]; for (var k in s) if (s.hasOwnProperty(k)) dst[k] = s[k]; }
+    return dst;
   }
   function removeTransition(scene_, trigger) {
     if (trigger === "timeout") { delete scene_.on_timeout; }
     else if (scene_.on) { delete scene_.on[trigger]; }
   }
+  // each entry carries what the transition *does* beyond navigating, so the
+  // editor can show it (a rep counter's "+1", a "sends ask", a guarded branch)
+  function _extras(t) { return { ops: t.counter_ops || [], emit: (t.emit == null ? null : t.emit), record: !!t.record, when: t.when || null }; }
   function listTransitions(scene_) {
     var out = [];
-    (scene_.on_timeout || []).forEach(function (t) { out.push({ trigger: "timeout", target: t.target }); });
-    if (scene_.on) Object.keys(scene_.on).forEach(function (k) { out.push({ trigger: k, target: scene_.on[k].target }); });
+    (scene_.on_timeout || []).forEach(function (t) { out.push(_assign({ trigger: "timeout", target: t.target }, _extras(t))); });
+    if (scene_.on) Object.keys(scene_.on).forEach(function (k) { out.push(_assign({ trigger: k, target: scene_.on[k].target }, _extras(scene_.on[k]))); });
     return out;
   }
   function graphEdges(fig) {

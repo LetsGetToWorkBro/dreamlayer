@@ -35,10 +35,13 @@ capabilities you need; the host grants them or skips your plugin cleanly.
 | `cards` | register custom HUD card renderers |
 | `object_lens` / `glance` | add rows when the wearer looks at things / bid for the glance |
 | `perception` | add a perception provider |
+| `ring` | read veil / day-ring state |
 | `mesh` | emit/receive tiny GhostMode circle packets |
 | `shop` | be a TasteLens price/review source |
-| `vision` / `network` / `midi` | vision model, network egress, MIDI out |
+| `vision` / `network` / `midi` / `fs` | vision model, network egress, MIDI out, file reads |
 | `cloud_ai` / `cloud_sync` / `cloud_relay` | DreamLayer Cloud entitlements — declaring one makes yours a cloud-plan plugin |
+
+(The full set lives in `plugins.package.KNOWN_CAPABILITIES`.)
 
 ## 2 · Run it locally
 

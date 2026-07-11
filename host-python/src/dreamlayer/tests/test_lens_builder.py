@@ -248,7 +248,7 @@ class TestBrainLensLoop:
 def test_builder_page_is_wired():
     page = (LENS.parents[1] / "lens-builder.html").read_text(encoding="utf-8")
     assert "assets/lens/figment.js" in page          # loads the logic module
-    assert "This behavior <b>CANNOT</b>" in page or "This behavior" in page
+    assert "<b>CANNOT</b>" in page and "<b>WILL</b>" in page   # the proof shows both halves
     assert "/dreamlayer/rc/import" in page            # deploy hits the real endpoint
     assert "X-DreamLayer-Token" in page               # sends the Brain token
     # the three follow-ons: advanced scene-graph, publish, same-origin

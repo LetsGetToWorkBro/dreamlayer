@@ -1,5 +1,10 @@
 # Optional integrations — what each adds, and over what
 
+> **Not the same as [`INTEGRATION.md`](INTEGRATION.md)** (singular), which maps
+> the hardware seams and Brain API. This doc catalogs the optional *library*
+> adapters.
+
+
 DreamLayer wired 58 open-source libraries in as **optional adapters**, each behind
 a `try/except ImportError` with a working fallback. This is the reference for what
 every one of them changes, stated as **before → after**.

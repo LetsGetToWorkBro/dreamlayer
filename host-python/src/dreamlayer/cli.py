@@ -744,7 +744,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="list plugins advertised via importlib entry points")
     ls.add_argument("--brain", help="Brain base URL (or set DREAMLAYER_BRAIN)")
     ls.add_argument("--token", help="Brain token (or set DREAMLAYER_TOKEN)")
-    ls.add_argument("--registry", help="path to a registry index.json")
+    ls.add_argument("--registry", help="path to a registry index.json "
+                    "(default: ./registry/index.json — run from the repo root, "
+                    "or pass this / use --installed --brain URL)")
     ls.set_defaults(func=cmd_list)
 
     # memories — your data is one file, and here is the SQL prompt over it

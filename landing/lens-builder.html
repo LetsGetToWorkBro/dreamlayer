@@ -94,6 +94,14 @@
   .lens-does{background:var(--surface);border:1px solid var(--border);border-radius:11px;
     padding:10px 13px;margin-bottom:12px;font-size:13px;color:var(--text)}
   .lens-does b{color:var(--teal)}
+  .chip{display:inline-block;font-size:10.5px;color:var(--teal);background:rgba(47,212,196,.09);
+    border:1px solid rgba(47,212,196,.28);border-radius:999px;padding:1px 8px;margin:0 4px 3px 0;white-space:nowrap}
+  .schips{margin-left:6px} .schips .chip{color:var(--text2);background:transparent;border-color:var(--border)}
+  .tchips{margin:2px 0 8px 2px}
+  .dl-flash{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);z-index:70;
+    background:#0c1618;border:1px solid var(--teal);border-radius:10px;padding:9px 15px;font-size:13px;color:var(--text);
+    box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.18s}
+  .dl-flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .trans .t{display:grid;grid-template-columns:1fr 14px 1fr 22px;gap:6px;align-items:center;margin-bottom:6px}
   .trans .t .arr{color:var(--text2);text-align:center}
@@ -107,6 +115,7 @@
   .proof h3{margin:0 0 8px;font-size:14px}
   .proof ul{margin:6px 0 0;padding-left:18px}
   .proof li{margin:3px 0;font-size:12.5px;color:var(--text2)} .proof .cannot li{color:var(--text)}
+  .proof .will li{color:var(--text)} .proof .will li::marker{color:var(--green)}
   .viol{color:var(--red);font-size:12.5px;margin:4px 0}
   .toast{margin-top:9px;font-size:13px;min-height:18px} .ok-t{color:var(--green)} .bad-t{color:var(--red)}
   .panel{border-top:1px solid var(--border);margin-top:18px;padding-top:16px}
@@ -174,7 +183,7 @@
     <button class="tour-x" id="tourX" title="Close (Esc)">✕</button>
     <div class="tour-rail" id="tourRail"></div>
     <div class="tour-body">
-      <p class="tour-kicker" id="tourKicker">The whole stack · 1 / 8</p>
+      <p class="tour-kicker" id="tourKicker">The whole stack</p>
       <h2 id="tourTitle">—</h2>
       <div class="tour-copy" id="tourCopy"></div>
       <div class="tour-demo" id="tourDemo"></div>
@@ -210,14 +219,14 @@
 
   <div class="col mid">
     <div class="stage">
-      <div class="ringwrap"><canvas id="ring" width="600" height="600"></canvas></div>
+      <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
       <div class="controls">
         <button class="btn" id="play">▶ Play</button>
         <button class="btn ghost" id="restart">↺ Restart</button>
         <button class="btn ghost" id="paint">🖌 Paint</button>
       </div>
       <div class="paintbar" id="paintbar" style="display:none">
-        <span class="pb-title">Painting <b id="paintscene">—</b></span>
+        <span class="pb-title">Painting <select id="paintscene" aria-label="Which screen to paint"></select></span>
         <div class="pb-swatches" id="paintcolors"></div>
         <div class="pb-widths" id="paintwidths"></div>
         <button class="btn ghost sm" id="paintundo">↶ Undo stroke</button>
@@ -296,7 +305,16 @@
       K.TRIGGERS.map(function(t){ return "<li><b>"+t.label+"</b> — "+t.hint+"</li>"; }).join("") + "</ul>",
     start: "The screen your lens opens on when it starts.",
     paint: "Draw right onto the glass — a few bounded strokes that ride safely inside the signed lens.",
+    cadence: "The whole ring slowly <b>swells and fades</b> — breathe in, hold, breathe out — over seconds (not a flicker). Lovely for box-breathing, winding down, or steadying a racing moment.",
   };
+  // a brief floating message — so the editor never silently reverts an edit
+  var _flashT = null;
+  function flash(msg){
+    var f = document.getElementById("dl-flash");
+    if(!f){ f=document.createElement("div"); f.id="dl-flash"; f.className="dl-flash"; document.body.appendChild(f); }
+    f.textContent = msg; f.classList.add("show");
+    if(_flashT) clearTimeout(_flashT); _flashT = setTimeout(function(){ f.classList.remove("show"); }, 2600);
+  }
   var COLOR_LABEL = { background:"black", surface:"dark panel", text_primary:"white", text_secondary:"grey",
     accent_memory:"green", accent_attention:"coral", accent_success:"bright green", accent_error:"red",
     border_subtle:"faint line", status_paused:"slate" };
@@ -436,6 +454,17 @@
     var opens = first ? 'Opens on <b>“'+esc(first.replace(/\{[^}]+\}/g,"…"))+'”</b>. ' : "";
     return opens + "Has " + bits.join(", ") + ".";
   }
+  // read-only chips describing what a transition does beyond navigating —
+  // so a counter/emit/record/guard is never invisible in the editor
+  function transChips(t){
+    var c = [];
+    (t.ops||[]).forEach(function(o){ var sign=o.op==="set"?"set ":(o.op==="dec"?"−":"+"); var amt=o.amount==null?1:o.amount;
+      c.push(o.op==="set" ? ("set "+o.counter+" = "+amt) : (sign+amt+" "+o.counter)); });
+    if(t.emit) c.push("sends “"+t.emit+"”");
+    if(t.record) c.push("saves to your Vault");
+    if(t.when) c.push("only if "+t.when.counter+" "+({ge:"≥",le:"≤",eq:"="}[t.when.cmp]||t.when.cmp)+" "+t.when.value);
+    return c.length ? '<div class="tchips">'+c.map(function(x){return '<span class="chip">'+esc(x)+'</span>';}).join("")+'</div>' : "";
+  }
   function buildAdvanced(){
     var ed = document.getElementById("editorAdvanced"); ed.innerHTML = "";
     // a friendly summary + a "what am I looking at?" pointer
@@ -446,9 +475,14 @@
     Object.keys(fig.scenes).forEach(function(sid){
       var s = fig.scenes[sid], timed = s.duration_sec != null;
       var el = document.createElement("div"); el.className = "scene" + (sid===activeScene?" active":"");
-      // header — "Screen N" with an editable short name
+      // header — "Screen N" with an editable short name + at-a-glance state chips
+      var st = [];
+      if ((s.glyphs||[]).length) st.push("painted");
+      if (s.cadence) st.push("breathes");
+      if (s.pulse) st.push("flashes");
+      var schips = st.length ? '<span class="schips">'+st.map(function(x){return '<span class="chip">'+x+'</span>';}).join("")+'</span>' : '';
       var h = '<div class="hd"><span class="sid">Screen '+sceneNo(sid)+'</span>'+ib("screen")+
-        '<input class="rename" value="'+esc(sid)+'" maxlength="12" title="short name for this screen"/>'+
+        '<input class="rename" value="'+esc(sid)+'" maxlength="12" title="short name for this screen"/>'+schips+
         '<label class="start"><input type="radio" name="startscene" '+(fig.initial===sid?"checked":"")+'/> starts here</label>'+
         '<button class="del" title="delete this screen">🗑</button></div>';
       // lines
@@ -463,11 +497,13 @@
       var timing = '<div class="sub">Countdown '+ib("timing")+'</div><div class="flags">'+
         '<label><input type="checkbox" class="timed" '+(timed?"checked":"")+'/> give it a countdown</label>'+
         (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" style="width:90px"/> <span>seconds</span>' : '<span class="muted">off — waits for a gesture below</span>')+
-        (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> flash near the end '+ib("pulse")+'</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>';
-      // transitions
+        (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> flash near the end '+ib("pulse")+'</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>'+
+        '<div class="flags"><label><input type="checkbox" class="cadence" '+(s.cadence?"checked":"")+'/> breathe — slow swell in &amp; out '+ib("cadence")+'</label>'+
+        (s.cadence?' <input type="number" class="cin" min="0" step="1" value="'+s.cadence.in_s+'" style="width:52px" title="in (s)"/><input type="number" class="chold" min="0" step="1" value="'+s.cadence.hold_s+'" style="width:52px" title="hold (s)"/><input type="number" class="cout" min="0" step="1" value="'+s.cadence.out_s+'" style="width:52px" title="out (s)"/>':"")+'</div>';
+      // transitions (each shows, read-only, anything it does beyond navigating)
       var trans = '<div class="sub">When something happens → go to '+ib("triggers")+'</div><div class="trans">' + K.listTransitions(s).map(function(t){
         return '<div class="t" data-trig="'+t.trigger+'"><select class="tt">'+K.TRIGGERS.map(function(tr){return '<option value="'+tr.key+'"'+(tr.key===t.trigger?" selected":"")+'>'+tr.label+'</option>';}).join("")+'</select>'+
-          '<span class="arr">→</span><select class="tg">'+targetOpts(t.target)+'</select><span class="x" title="remove">✕</span></div>';
+          '<span class="arr">→</span><select class="tg">'+targetOpts(t.target)+'</select><span class="x" title="remove">✕</span></div>'+transChips(t);
       }).join("") + '</div><button class="btn ghost sm addtrans">+ add a trigger</button>';
       el.innerHTML = h + lines + timing + trans;
       wireAdvanced(el, s, sid);
@@ -495,13 +531,22 @@
     var dur = el.querySelector(".dur"); if(dur) dur.oninput=function(){ var v=parseFloat(dur.value); if(!isNaN(v)){ s.duration_sec=Math.max(K.BUDGETS.MIN_SCENE_SEC, v); if(s.pulse) s.pulse.window_sec=Math.min(s.pulse.window_sec,s.duration_sec); refresh(); } };
     var pl = el.querySelector(".pulse"); if(pl) pl.onchange=function(){ if(pl.checked) s.pulse={window_sec:Math.min(10,s.duration_sec||10),rate_hz:2.0,color:"accent_attention"}; else delete s.pulse; buildEditors(); refresh(); };
     var pr = el.querySelector(".prate"); if(pr) pr.oninput=function(){ var v=parseFloat(pr.value); if(!isNaN(v)&&s.pulse){ s.pulse.rate_hz=v; refresh(); } };
+    var cad = el.querySelector(".cadence"); if(cad) cad.onchange=function(){ if(cad.checked) s.cadence={in_s:4,hold_s:2,out_s:4}; else delete s.cadence; buildEditors(); refresh(); };
+    var ci=el.querySelector(".cin"), ch=el.querySelector(".chold"), co=el.querySelector(".cout");
+    function cadIn(k,inp){ if(inp) inp.oninput=function(){ var v=parseFloat(inp.value); if(!isNaN(v)&&s.cadence){ s.cadence[k]=Math.max(0,v); refresh(); } }; }
+    cadIn("in_s",ci); cadIn("hold_s",ch); cadIn("out_s",co);
     el.querySelectorAll(".trans .t").forEach(function(row){
       var trig = row.dataset.trig;
       row.querySelector(".tt").onchange = function(e){
         var nt=e.target.value;
-        // don't clobber a trigger another row already owns — revert instead
-        if(nt!==trig && K.listTransitions(s).some(function(t){return t.trigger===nt;})){ buildEditors(); return; }
-        K.removeTransition(s,trig); K.setTransition(s,nt, row.querySelector(".tg").value);
+        // don't clobber a trigger another row already owns — revert with a note
+        if(nt!==trig && K.listTransitions(s).some(function(t){return t.trigger===nt;})){ flash("That trigger is already used on this screen."); buildEditors(); return; }
+        // carry the counter/emit/record/guard behaviour across the trigger change
+        var old = trig==="timeout" ? (s.on_timeout&&s.on_timeout[s.on_timeout.length-1]) : (s.on&&s.on[trig]);
+        var tgt = row.querySelector(".tg").value;
+        K.removeTransition(s,trig); K.setTransition(s,nt,tgt);
+        var neu = nt==="timeout" ? s.on_timeout[0] : s.on[nt];
+        if(old){ if(old.counter_ops) neu.counter_ops=old.counter_ops; if(old.emit!=null) neu.emit=old.emit; if(old.record) neu.record=old.record; if(old.when&&nt==="timeout") neu.when=old.when; }
         if(nt==="timeout" && s.duration_sec==null){ s.duration_sec=10; }
         buildEditors(); refresh();
       };
@@ -518,8 +563,11 @@
     };
   }
   function renameScene(oldId, nid){
-    nid = String(nid||"").toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);  // safe id charset
-    if(!nid || nid===oldId || fig.scenes[nid]) { buildEditors(); return; }
+    var raw = String(nid||"");
+    nid = raw.toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);  // safe id charset
+    if(nid===oldId){ buildEditors(); return; }
+    if(!nid){ flash("A screen needs a short name (letters or numbers)."); buildEditors(); return; }
+    if(fig.scenes[nid]){ flash("Another screen is already called “"+nid+"”."); buildEditors(); return; }
     var order = Object.keys(fig.scenes), rebuilt = {};
     order.forEach(function(id){ rebuilt[id===oldId?nid:id] = fig.scenes[id]; });
     fig.scenes = rebuilt; fig.scenes[nid].id = nid;
@@ -568,7 +616,10 @@
     var p = document.getElementById("proof"); p.className = "proof " + (card.ok ? "ok" : "bad");
     var h = "<h3>"+(card.ok ? "✓ Safe to wear" : "✕ Not yet valid")+"</h3>";
     if(!card.ok){ h += card.violations.map(function(v){ return '<div class="viol">• '+esc(v.msg)+(v.scene?" ("+v.scene+")":"")+'</div>'; }).join(""); }
-    else { h += '<div class="muted">This behavior <b>CANNOT</b>:</div><ul class="cannot">'+card.cannot.map(function(c){return "<li>"+esc(c)+"</li>";}).join("")+'</ul><div class="muted" style="margin-top:8px">Your device re-checks this — it is not a promise.</div>'; }
+    else {
+      if(card.will&&card.will.length){ h += '<div class="muted">This lens <b>WILL</b>:</div><ul class="will">'+card.will.map(function(w){return "<li>"+esc(w)+"</li>";}).join("")+'</ul>'; }
+      h += '<div class="muted">…and <b>CANNOT</b>:</div><ul class="cannot">'+card.cannot.map(function(c){return "<li>"+esc(c)+"</li>";}).join("")+'</ul><div class="muted" style="margin-top:8px">Your device re-checks this — it is not a promise.</div>';
+    }
     p.innerHTML = h;
     var ok = card.ok;
     document.getElementById("download").disabled = !ok;
@@ -590,13 +641,18 @@
   var GPX_UI={sm:3,md:6,lg:11};
   (function initPaintPickers(){
     var cw=document.getElementById("paintcolors");
+    var CNAME={text_primary:"white",text_secondary:"grey",accent_memory:"green",accent_attention:"coral",
+      accent_success:"bright green",accent_error:"red",border_subtle:"faint line",status_paused:"slate",surface:"dark panel"};
     K.COLORS.filter(function(c){return c!=="background";}).forEach(function(c){
-      var b=document.createElement("button"); b.className="sw"+(c===paintColor?" on":""); b.title=c;
+      var b=document.createElement("button"); b.className="sw"+(c===paintColor?" on":""); b.title=CNAME[c]||c;
+      b.setAttribute("aria-label","Paint colour: "+(CNAME[c]||c));
       b.style.background=K.HEX[c]; b.onclick=function(){ paintColor=c; markSw(); }; cw.appendChild(b);
     });
     var ww=document.getElementById("paintwidths");
+    var WNAME={sm:"thin",md:"medium",lg:"thick"};
     K.SIZES.forEach(function(z){
-      var b=document.createElement("button"); b.className="wd"+(z===paintWidth?" on":""); b.dataset.w=z; b.title=z;
+      var b=document.createElement("button"); b.className="wd"+(z===paintWidth?" on":""); b.dataset.w=z; b.title=WNAME[z]||z;
+      b.setAttribute("aria-label","Brush width: "+(WNAME[z]||z));
       var bar=document.createElement("i"); bar.style.width="16px"; bar.style.height=GPX_UI[z]+"px"; b.appendChild(bar);
       b.onclick=function(){ paintWidth=z; markW(); }; ww.appendChild(b);
     });
@@ -607,7 +663,12 @@
   function paintCount(){
     var sid=paintTargetScene(), s=sid&&fig.scenes[sid], n=(s&&s.glyphs)?s.glyphs.length:0;
     document.getElementById("paintcount").textContent = n+" / "+K.BUDGETS.MAX_GLYPHS+" strokes"+(n>=K.BUDGETS.MAX_GLYPHS?" (max reached)":"");
-    document.getElementById("paintscene").textContent = sid||"—";
+  }
+  function fillPaintPicker(){
+    var sel=document.getElementById("paintscene"); var cur=paintTargetScene();
+    sel.innerHTML = Object.keys(fig.scenes).map(function(id){
+      return '<option value="'+id+'"'+(id===cur?" selected":"")+'>Screen '+sceneNo(id)+' ('+id+')</option>'; }).join("");
+    sel.onchange = function(){ activeScene=sel.value; paintCount(); paintStatic(); };
   }
   function paintStatic(){ var sid=paintTargetScene(); if(sid&&fig.scenes[sid]) draw(fig.scenes[sid], 0, dwell(fig.scenes[sid])); }
   function setPaint(on){
@@ -616,7 +677,7 @@
     document.getElementById("paint").classList.toggle("on", on);
     document.getElementById("paint").textContent = on?"🖌 Done painting":"🖌 Paint";
     if(on){ play=false; document.getElementById("play").textContent="▶ Play";
-      activeScene = paintTargetScene(); paintCount(); paintStatic(); }
+      activeScene = paintTargetScene(); fillPaintPicker(); paintCount(); paintStatic(); }
     else { if(!raf){ play=true; document.getElementById("play").textContent="⏸ Pause"; t0=nowms(); tick(); } }
   }
   document.getElementById("paint").onclick = function(){ setPaint(!paintMode); };
