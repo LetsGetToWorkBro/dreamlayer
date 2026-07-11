@@ -16,6 +16,7 @@ import { PrimaryButton }    from "../src/ui/components/PrimaryButton";
 import { EyebrowLabel }     from "../src/ui/components/EyebrowLabel";
 import { HaloPairingRing }  from "../src/ui/components/HaloPairingRing";
 import { QrScanner }        from "../src/ui/components/QrScanner";
+import { Juno }             from "../src/ui/components/Juno";
 
 const { width: SW } = Dimensions.get("window");
 const ACCENT_MAP = {
@@ -79,7 +80,9 @@ export default function Onboarding() {
         <View style={styles.hero}>
           {isPairStep
             ? <HaloPairingRing scanning={!connected} />
-            : <StepGlyph stepId={step.id} accent={accent} />}
+            : step.id === "welcome"
+              ? <Juno size={135} state="idle" />
+              : <StepGlyph stepId={step.id} accent={accent} />}
         </View>
         <Animated.View style={[styles.copy, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           {step.eyebrow && <EyebrowLabel label={step.eyebrow} accent={accent} />}
