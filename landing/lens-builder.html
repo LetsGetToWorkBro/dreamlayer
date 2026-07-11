@@ -89,6 +89,10 @@
   button.btn:disabled{opacity:.45;cursor:default}
   input,select,textarea{font:inherit;background:var(--surface2);color:var(--text);
     border:1px solid var(--border);border-radius:9px;padding:7px 9px;width:100%}
+  /* checkboxes/radios must keep their intrinsic size — the width:100% above
+     otherwise stretches them (they're flex items inside .flags labels), which
+     blows the Countdown row apart on narrow/mobile widths */
+  input[type=checkbox],input[type=radio]{width:auto;flex:none;padding:0}
   textarea{resize:vertical;min-height:52px}
   label.f{display:block;font-size:12px;color:var(--text2);margin:11px 0 4px}
   .name-row input{font-size:17px;font-weight:600}
@@ -129,6 +133,7 @@
   .trans .t .arr{color:var(--text2);text-align:center}
   .flags{display:flex;gap:14px;align-items:center;margin-top:8px;color:var(--text2);font-size:13px;flex-wrap:wrap}
   .flags label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  .flags .nums{display:inline-flex;gap:6px;flex:none}   /* keep in·hold·out together */
   .muted{color:var(--text2);font-size:12.5px}
   .graph{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px;margin-top:14px}
   .graph svg{width:100%;height:auto;display:block}
@@ -595,7 +600,7 @@
         (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" style="width:90px"/> <span>seconds</span>' : '<span class="muted">off — waits for a gesture below</span>')+
         (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> flash near the end '+ib("pulse")+'</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>'+
         '<div class="flags"><label><input type="checkbox" class="cadence" '+(s.cadence?"checked":"")+'/> breathe — slow swell in &amp; out '+ib("cadence")+'</label>'+
-        (s.cadence?' <input type="number" class="cin" min="0" step="1" value="'+s.cadence.in_s+'" style="width:52px" title="in (s)"/><input type="number" class="chold" min="0" step="1" value="'+s.cadence.hold_s+'" style="width:52px" title="hold (s)"/><input type="number" class="cout" min="0" step="1" value="'+s.cadence.out_s+'" style="width:52px" title="out (s)"/>':"")+'</div>';
+        (s.cadence?' <span class="nums"><input type="number" class="cin" min="0" step="1" value="'+s.cadence.in_s+'" style="width:52px" title="in (s)"/><input type="number" class="chold" min="0" step="1" value="'+s.cadence.hold_s+'" style="width:52px" title="hold (s)"/><input type="number" class="cout" min="0" step="1" value="'+s.cadence.out_s+'" style="width:52px" title="out (s)"/></span>':"")+'</div>';
       // transitions (each shows, read-only, anything it does beyond navigating)
       var trans = '<div class="sub">When something happens → go to '+ib("triggers")+'</div><div class="trans">' + K.listTransitions(s).map(function(t){
         return '<div class="t" data-trig="'+t.trigger+'"><select class="tt">'+K.TRIGGERS.map(function(tr){return '<option value="'+tr.key+'"'+(tr.key===t.trigger?" selected":"")+'>'+tr.label+'</option>';}).join("")+'</select>'+
