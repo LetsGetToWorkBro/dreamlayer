@@ -149,7 +149,7 @@ class TestServer:
             # the People section now merges the glasses' social memory
             # (relation/notes/debts) with the dossier registry
             assert "/dreamlayer/social/people" in body and "met on Halo" in body
-            # Juno lives on the panel: her mount + compositor script are present
+            # Juno lives on the panel: her mount + sprite script are present
             assert 'class="juno-hero"' in body and "data-juno" in body
             assert "/dreamlayer/build/juno/juno.js" in body
         finally:
@@ -158,7 +158,7 @@ class TestServer:
     def test_juno_script_and_assets_serve(self, tmp_path):
         lb = LiveBrain(tmp_path)
         try:
-            # the UMD compositor script — text, JS content-type
+            # the UMD sprite script — text, JS content-type
             status, body = _get(lb.url + "/dreamlayer/build/juno/juno.js")
             assert status == 200 and "Juno" in body and "mount" in body
             # a binary asset — raw read (can't decode as text)
