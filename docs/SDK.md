@@ -222,9 +222,13 @@ author.
 Three ways to author one, easiest first:
 
 - **The browser builder** — `landing/lens-builder.html`. Pick a recipe (interval
-  timer, checklist ritual, countdown, box-breathing), customize it, watch it run
-  on a live ring preview, read the safety card, then **Deploy to your Brain** or
-  download the JSON. Zero install, zero code.
+  timer, checklist ritual, countdown, box-breathing) — or just **Ask Juno**:
+  describe the lens in plain English and it drafts one for you (offline intent
+  parser on the Brain; a client-side recipe match on the static page). Customize
+  it, **Paint** bounded vector strokes right onto the ring, watch it run on a
+  live preview, read the safety card, then **Deploy to your Brain** or download
+  the JSON. Zero install, zero code. Paint strokes are data too — count/vertex/
+  colour capped, so they re-prove safe like everything else.
 - **The phone** — rehearse it by performing it (tap, speak the beats, keep), in
   the app's rehearsal flow.
 - **JSON + the CLI** — hand-write or generate the figment and check it:
