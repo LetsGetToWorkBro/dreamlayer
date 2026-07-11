@@ -40,6 +40,20 @@
   canvas#ring{width:300px;height:300px;border-radius:50%;background:#000;
     box-shadow:0 0 60px rgba(47,212,196,.10)}
   .controls{display:flex;gap:10px}
+  canvas#ring.painting{cursor:crosshair;box-shadow:0 0 60px rgba(224,107,82,.28)}
+  .paintbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;justify-content:center;
+    max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .paintbar .pb-title{font-size:12px;color:var(--text2);width:100%;text-align:center}
+  .paintbar .pb-title b{color:var(--text)}
+  .pb-swatches{display:flex;gap:6px}
+  .pb-swatches .sw{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+  .pb-swatches .sw.on{border-color:var(--text)}
+  .pb-widths{display:flex;gap:6px}
+  .pb-widths .wd{display:flex;align-items:center;justify-content:center;width:30px;height:24px;
+    border:1px solid var(--border);border-radius:7px;background:var(--surface2);cursor:pointer}
+  .pb-widths .wd.on{border-color:var(--teal)}
+  .pb-widths .wd i{display:block;background:var(--text);border-radius:3px}
+  .pb-count{font-size:11px;color:var(--text2);width:100%;text-align:center}
   button.btn{font:inherit;background:var(--teal);color:#00201c;border:0;border-radius:999px;
     padding:9px 18px;font-weight:650;cursor:pointer}
   button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
@@ -104,6 +118,15 @@
       <div class="controls">
         <button class="btn" id="play">▶ Play</button>
         <button class="btn ghost" id="restart">↺ Restart</button>
+        <button class="btn ghost" id="paint">🖌 Paint</button>
+      </div>
+      <div class="paintbar" id="paintbar" style="display:none">
+        <span class="pb-title">Painting <b id="paintscene">—</b></span>
+        <div class="pb-swatches" id="paintcolors"></div>
+        <div class="pb-widths" id="paintwidths"></div>
+        <button class="btn ghost sm" id="paintundo">↶ Undo stroke</button>
+        <button class="btn ghost sm" id="paintclear">✕ Clear</button>
+        <span class="pb-count" id="paintcount"></span>
       </div>
       <p class="muted" id="scenelabel">—</p>
     </div>
@@ -389,7 +412,84 @@
   function nowms(){ return (typeof performance!=="undefined"&&performance.now)?performance.now():0; }
   function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
   document.getElementById("restart").onclick = restart;
-  document.getElementById("play").onclick = function(){ play=!play; this.textContent=play?"▶ Play":"⏸ Pause"; if(play&&!raf) tick(); };
+  document.getElementById("play").onclick = function(){ if(paintMode) return; play=!play; this.textContent=play?"▶ Play":"⏸ Pause"; if(play&&!raf) tick(); };
+
+  // -- paint mode: draw bounded vector strokes onto the active scene ----------
+  var paintMode=false, paintColor="accent_attention", paintWidth="md", drawing=false, curStroke=null;
+  var GPX_UI={sm:3,md:6,lg:11};
+  (function initPaintPickers(){
+    var cw=document.getElementById("paintcolors");
+    K.COLORS.filter(function(c){return c!=="background";}).forEach(function(c){
+      var b=document.createElement("button"); b.className="sw"+(c===paintColor?" on":""); b.title=c;
+      b.style.background=K.HEX[c]; b.onclick=function(){ paintColor=c; markSw(); }; cw.appendChild(b);
+    });
+    var ww=document.getElementById("paintwidths");
+    K.SIZES.forEach(function(z){
+      var b=document.createElement("button"); b.className="wd"+(z===paintWidth?" on":""); b.dataset.w=z; b.title=z;
+      var bar=document.createElement("i"); bar.style.width="16px"; bar.style.height=GPX_UI[z]+"px"; b.appendChild(bar);
+      b.onclick=function(){ paintWidth=z; markW(); }; ww.appendChild(b);
+    });
+  })();
+  function markSw(){ [].forEach.call(document.querySelectorAll("#paintcolors .sw"),function(b){ b.classList.toggle("on", b.title===paintColor); }); }
+  function markW(){ [].forEach.call(document.querySelectorAll("#paintwidths .wd"),function(b){ b.classList.toggle("on", b.dataset.w===paintWidth); }); }
+  function paintTargetScene(){ return (fig && (fig.scenes[activeScene] ? activeScene : fig.initial)) || null; }
+  function paintCount(){
+    var sid=paintTargetScene(), s=sid&&fig.scenes[sid], n=(s&&s.glyphs)?s.glyphs.length:0;
+    document.getElementById("paintcount").textContent = n+" / "+K.BUDGETS.MAX_GLYPHS+" strokes"+(n>=K.BUDGETS.MAX_GLYPHS?" (max reached)":"");
+    document.getElementById("paintscene").textContent = sid||"—";
+  }
+  function paintStatic(){ var sid=paintTargetScene(); if(sid&&fig.scenes[sid]) draw(fig.scenes[sid], 0, dwell(fig.scenes[sid])); }
+  function setPaint(on){
+    paintMode=on; cv.classList.toggle("painting", on);
+    document.getElementById("paintbar").style.display = on?"flex":"none";
+    document.getElementById("paint").classList.toggle("on", on);
+    document.getElementById("paint").textContent = on?"🖌 Done painting":"🖌 Paint";
+    if(on){ play=false; document.getElementById("play").textContent="▶ Play";
+      activeScene = paintTargetScene(); paintCount(); paintStatic(); }
+    else { if(!raf){ play=true; document.getElementById("play").textContent="⏸ Pause"; t0=nowms(); tick(); } }
+  }
+  document.getElementById("paint").onclick = function(){ setPaint(!paintMode); };
+  function r4(n){ return Math.round(Math.max(0,Math.min(1,n))*1e4)/1e4; }
+  function evNorm(e){
+    var r=cv.getBoundingClientRect(), src=(e.touches&&e.touches[0])||e;
+    return [ r4((src.clientX-r.left)/r.width), r4((src.clientY-r.top)/r.height) ];
+  }
+  function strokeStart(e){
+    if(!paintMode) return; e.preventDefault();
+    var sid=paintTargetScene(); if(!sid) return; var s=fig.scenes[sid]; s.glyphs=s.glyphs||[];
+    if(s.glyphs.length>=K.BUDGETS.MAX_GLYPHS){ paintCount(); return; }
+    drawing=true; curStroke=K.glyph([evNorm(e)], {color:paintColor, width:paintWidth});
+    s.glyphs.push(curStroke);
+  }
+  function strokeMove(e){
+    if(!paintMode||!drawing||!curStroke) return; e.preventDefault();
+    var p=evNorm(e), pts=curStroke.points, last=pts[pts.length-1];
+    // downsample: only keep a point once the pen has travelled a bit, and never past the cap
+    if(pts.length>=K.BUDGETS.MAX_GLYPH_POINTS) return;
+    if(Math.abs(p[0]-last[0])+Math.abs(p[1]-last[1]) < 0.02) return;
+    pts.push(p); paintStatic();
+  }
+  function strokeEnd(){
+    if(!drawing) return; drawing=false;
+    var sid=paintTargetScene(), s=sid&&fig.scenes[sid];
+    if(s&&curStroke&&curStroke.points.length<2) s.glyphs.pop();   // a tap is not a stroke
+    curStroke=null; paintCount(); paintStatic(); refresh(); buildAdvanced(); drawGraph();
+  }
+  cv.addEventListener("mousedown", strokeStart); cv.addEventListener("mousemove", strokeMove);
+  window.addEventListener("mouseup", strokeEnd);
+  cv.addEventListener("touchstart", strokeStart, {passive:false});
+  cv.addEventListener("touchmove", strokeMove, {passive:false});
+  cv.addEventListener("touchend", strokeEnd);
+  document.getElementById("paintundo").onclick = function(){
+    var sid=paintTargetScene(), s=sid&&fig.scenes[sid];
+    if(s&&s.glyphs&&s.glyphs.length){ s.glyphs.pop(); if(!s.glyphs.length) delete s.glyphs; }
+    paintCount(); paintStatic(); refresh();
+  };
+  document.getElementById("paintclear").onclick = function(){
+    var sid=paintTargetScene(), s=sid&&fig.scenes[sid];
+    if(s){ delete s.glyphs; } paintCount(); paintStatic(); refresh();
+  };
+
   function advance(s){ if(s.duration_sec!=null&&s.on_timeout&&s.on_timeout.length) return s.on_timeout[s.on_timeout.length-1].target;
     if(s.on){ if(s.on["imu:nod"]) return s.on["imu:nod"].target; if(s.on.double) return s.on.double.target; var k=Object.keys(s.on)[0]; if(k) return s.on[k].target; } return "@end"; }
   function dwell(s){ return s.duration_sec!=null ? s.duration_sec : 2.4; }
@@ -411,6 +511,14 @@
     if(s.duration_sec!=null){ var f=Math.max(0,1-el/dur); ctx.strokeStyle=K.HEX.accent_memory; ctx.lineWidth=6;
       ctx.beginPath(); ctx.arc(C,C,C*0.93,-Math.PI/2,-Math.PI/2+f*2*Math.PI); ctx.stroke(); }
     var pulseOn=false; if(s.pulse&&s.duration_sec!=null&&(dur-el)<=s.pulse.window_sec) pulseOn=(Math.floor(el*s.pulse.rate_hz*2)%2===0);
+    // painted strokes: the bounded vector layer, drawn beneath the text so words stay legible
+    var GPX={sm:3,md:6,lg:11};
+    (s.glyphs||[]).forEach(function(g){ var pts=g.points||[]; if(pts.length<2) return;
+      ctx.strokeStyle=K.HEX[g.color]||K.HEX.accent_attention; ctx.lineWidth=GPX[g.width]||6;
+      ctx.lineCap="round"; ctx.lineJoin="round"; ctx.beginPath();
+      ctx.moveTo(pts[0][0]*W, pts[0][1]*W);
+      for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i][0]*W, pts[i][1]*W);
+      ctx.stroke(); });
     ctx.textAlign="center"; ctx.textBaseline="middle";
     (s.lines||[]).forEach(function(ln){ var y=C-84+(ln.row||0)*64;
       ctx.fillStyle = pulseOn?K.HEX[s.pulse.color]:(K.HEX[ln.color]||K.HEX.text_primary);

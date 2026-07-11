@@ -38,6 +38,7 @@ def test_js_budgets_match_the_python_source():
         ("MAX_LINES", F.MAX_LINES), ("MAX_TEXT_LEN", F.MAX_TEXT_LEN),
         ("MAX_PULSE_HZ", F.MAX_PULSE_HZ), ("MIN_SCENE_SEC", F.MIN_SCENE_SEC),
         ("MAX_NAME_LEN", F.MAX_NAME_LEN), ("MAX_BRANCHES", F.MAX_BRANCHES),
+        ("MAX_GLYPHS", F.MAX_GLYPHS), ("MAX_GLYPH_POINTS", F.MAX_GLYPH_POINTS),
     ]:
         assert _js_const(name) == float(py), f"{name} drifted: JS {_js_const(name)} vs py {py}"
 

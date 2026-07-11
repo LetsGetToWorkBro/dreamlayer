@@ -11,7 +11,7 @@ docs/RC_V2_ATTACKS.md (how it holds).
 """
 from .figment import (
     Figment, Scene, TextLine, PulseSpec, CounterDecl, CounterOp,
-    Guard, Transition, FigmentError, END, SELF,
+    Guard, Transition, GlyphSpec, FigmentError, END, SELF,
 )
 from .budgets import verify, verify_or_raise, BudgetReport, Violation
 from .interpreter import Stage, DisplayFrame
@@ -36,7 +36,7 @@ from .skill import compile_skill, parse_skill, Step
 __all__ = [
     "compile_skill", "parse_skill", "Step",
     "Figment", "Scene", "TextLine", "PulseSpec", "CounterDecl", "CounterOp",
-    "Guard", "Transition", "FigmentError", "END", "SELF",
+    "Guard", "Transition", "GlyphSpec", "FigmentError", "END", "SELF",
     "verify", "verify_or_raise", "BudgetReport", "Violation",
     "Stage", "DisplayFrame",
     "RehearsalSession", "RehearsalResult", "Beat", "parse_utterance",

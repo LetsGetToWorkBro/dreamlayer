@@ -43,6 +43,12 @@ EMIT_REFILL_PER_S = 1.0    # BLE token bucket refill
 MAX_EMIT_TAG_LEN  = 16
 MAX_NAME_LEN      = 40
 
+# Paint layer (INNOVATION_SESSION 5, "draw on your lens"): a scene may carry
+# a handful of bounded vector strokes. Pure decoration — no time or emit cost —
+# so it stays provable with nothing more than count/vertex/coordinate caps.
+MAX_GLYPHS        = 6      # strokes per scene
+MAX_GLYPH_POINTS  = 24     # vertices per stroke (>= 2)
+
 END  = "@end"    # transition target: figment finishes, stage goes ambient
 SELF = "@self"   # transition target: re-enter current scene (resets clock)
 
@@ -167,6 +173,33 @@ class CadenceSpec:
 
 
 @dataclass
+class GlyphSpec:
+    """A painted vector stroke — the "draw on your lens" layer. `points` is a
+    polyline in normalized display coordinates (0..1, origin at the top-left of
+    the 256px round glass), drawn in one palette `color` at a `width` token.
+
+    It carries no clock and emits nothing, so it needs only the count/vertex/
+    coordinate caps to stay inside the proof envelope — the same static-cost
+    guarantee the rest of the grammar gives."""
+    points: list[tuple[float, float]]
+    color: str = "accent_attention"
+    width: str = "md"
+
+    def to_dict(self) -> dict:
+        return {"points": [[round(float(x), 4), round(float(y), 4)]
+                           for x, y in self.points],
+                "color": self.color, "width": self.width}
+
+    @staticmethod
+    def from_dict(d: dict) -> "GlyphSpec":
+        return GlyphSpec(
+            [(float(p[0]), float(p[1])) for p in d.get("points", [])],
+            d.get("color", "accent_attention"),
+            d.get("width", "md"),
+        )
+
+
+@dataclass
 class CounterDecl:
     """A bounded integer. All ops saturate at [lo, hi]."""
     name: str
@@ -257,6 +290,7 @@ class Scene:
     on: dict[str, Transition] = field(default_factory=dict)
     pulse: Optional[PulseSpec] = None
     cadence: Optional[CadenceSpec] = None        # 5.1 #4: breathing envelope
+    glyphs: list[GlyphSpec] = field(default_factory=list)  # painted strokes
 
     def timed(self) -> bool:
         return self.duration_sec is not None or self.duration_range is not None
@@ -282,6 +316,8 @@ class Scene:
             d["pulse"] = self.pulse.to_dict()
         if self.cadence:
             d["cadence"] = self.cadence.to_dict()
+        if self.glyphs:
+            d["glyphs"] = [g.to_dict() for g in self.glyphs]
         return d
 
     @staticmethod
@@ -297,6 +333,7 @@ class Scene:
             on={k: Transition.from_dict(v) for k, v in d.get("on", {}).items()},
             pulse=PulseSpec.from_dict(d["pulse"]) if d.get("pulse") else None,
             cadence=CadenceSpec.from_dict(d["cadence"]) if d.get("cadence") else None,
+            glyphs=[GlyphSpec.from_dict(g) for g in d.get("glyphs", [])],
         )
 
 

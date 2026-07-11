@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .figment import (
-    Figment, Scene, Transition,
+    Figment, Scene, Transition, GlyphSpec,
     END, SELF, EMIT_BURST, EMIT_REFILL_PER_S, MAX_TEXT_LEN,
 )
 
@@ -38,6 +38,7 @@ class DisplayFrame:
     """What the stage would draw right now."""
     scene: str
     lines: list[ResolvedLine] = field(default_factory=list)
+    glyphs: list[GlyphSpec] = field(default_factory=list)  # painted strokes
     pulse_on: bool = False
     pulse_color: Optional[str] = None
     cadence_phase: str = ""            # "in" | "hold" | "out" | "" (no cadence)
@@ -233,6 +234,7 @@ class Stage:
             scene=self.current,
             lines=[ResolvedLine(self._resolve(ln.content), ln.row,
                                 ln.size, ln.color) for ln in s.lines],
+            glyphs=list(s.glyphs),
             pulse_on=pulse_on,
             pulse_color=pulse_color,
             cadence_phase=cadence_phase,

@@ -65,5 +65,23 @@ var evok = K.figment("Ev2", "a");
 K.addScene(evok, K.scene("a", { lines: [K.line("x")], on: { "imu:nod": { target: K.END }, double: { target: K.END } } }));
 ok(K.validate(evok).ok, "known events (imu:nod, double) are accepted");
 
+// paint layer: a bounded stroke is accepted, an off-display / oversized one is not
+var painted = K.figment("Painted", "a");
+K.addScene(painted, K.scene("a", { duration_sec: 5, tick: "countdown",
+  lines: [K.line("HI", { size: "lg" })], on_timeout: [{ target: K.END }],
+  glyphs: [K.glyph([[0.2, 0.2], [0.8, 0.8]], { color: "accent_success", width: "lg" })] }));
+ok(K.validate(painted).ok, "a simple painted stroke is accepted: " + JSON.stringify(K.validate(painted).violations));
+
+var offglass = K.figment("Off", "a");
+K.addScene(offglass, K.scene("a", { lines: [K.line("x")],
+  glyphs: [{ points: [[0.5, 0.5], [1.4, 0.5]], color: "accent_attention", width: "md" }] }));
+ok(!K.validate(offglass).ok, "a stroke that leaves the display is rejected");
+
+var toomany = K.figment("Many", "a");
+var manyStrokes = [];
+for (var gi = 0; gi <= K.BUDGETS.MAX_GLYPHS; gi++) manyStrokes.push(K.glyph([[0.1, 0.1], [0.9, 0.9]]));
+K.addScene(toomany, K.scene("a", { lines: [K.line("x")], glyphs: manyStrokes }));
+ok(!K.validate(toomany).ok, "more than MAX_GLYPHS strokes is rejected");
+
 if (fails.length) { console.error("FAIL\n" + fails.join("\n")); process.exit(1); }
-console.log("ok — " + K.TEMPLATES.length + " templates valid, graph + listing + events checked, violations caught");
+console.log("ok — " + K.TEMPLATES.length + " templates valid, graph + listing + events + paint checked, violations caught");

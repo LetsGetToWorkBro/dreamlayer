@@ -29,6 +29,7 @@ from .figment import (
     MAX_SCENES, MAX_COUNTERS, MAX_LINES, MAX_TEXT_LEN, MAX_COUNTER_OPS,
     MAX_BRANCHES, MAX_PULSE_HZ, MIN_SCENE_SEC, MAX_SCENE_SEC,
     EMIT_REFILL_PER_S, MAX_EMIT_TAG_LEN, MAX_NAME_LEN,
+    MAX_GLYPHS, MAX_GLYPH_POINTS,
     COLOR_TOKENS, SIZES, TICKS, END, SELF, _valid_event,
 )
 
@@ -168,6 +169,23 @@ def verify(fig: Figment) -> BudgetReport:
                         "scene duration", sid)
             if s.pulse.color not in COLOR_TOKENS:
                 bad("color", f"pulse color {s.pulse.color!r} is not a token", sid)
+
+        # -- paint layer: bounded strokes, palette colors, in-frame coords
+        if len(s.glyphs) > MAX_GLYPHS:
+            bad("glyphs", f"{len(s.glyphs)} strokes > max {MAX_GLYPHS}", sid)
+        for gi, g in enumerate(s.glyphs):
+            if not (2 <= len(g.points) <= MAX_GLYPH_POINTS):
+                bad("glyph_points", f"stroke {gi} has {len(g.points)} points "
+                    f"(need 2..{MAX_GLYPH_POINTS})", sid)
+            for x, y in g.points:
+                if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                    bad("glyph_coord", f"stroke {gi} point ({x:g},{y:g}) "
+                        "outside the [0,1] display", sid)
+                    break
+            if g.color not in COLOR_TOKENS:
+                bad("color", f"stroke {gi} color {g.color!r} is not a token", sid)
+            if g.width not in SIZES:
+                bad("glyph_width", f"stroke {gi} width {g.width!r} unknown", sid)
 
         # -- cadence (5.1 #4): a breath must be slow, non-negative, bounded
         if s.cadence is not None:

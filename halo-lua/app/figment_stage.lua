@@ -35,6 +35,9 @@ local MIN_SCENE_SEC  = 0.5
 local EMIT_BURST     = 5
 local EMIT_REFILL    = 1.0
 local BATTERY_COOLDOWN_SEC = 60.0
+local MAX_GLYPHS       = 6     -- painted strokes per scene
+local MAX_GLYPH_POINTS = 24    -- vertices per stroke
+local GLYPH_PX = { sm = 2, md = 4, lg = 7 }  -- width token -> pixels
 
 -- Provenance mark (INNOVATION_SESSION 5.4): a figment that came from someone
 -- else (meta.origin == "shared") wears a small shield at the top of the ring,
@@ -73,6 +76,13 @@ local function _clamp_ok(fig)
     if _count(scene.lines) > MAX_LINES then return false end
     if scene.duration_sec and scene.duration_sec < MIN_SCENE_SEC then return false end
     if scene.pulse and (scene.pulse.rate_hz or 0) > MAX_PULSE_HZ then return false end
+    if scene.glyphs then
+      if #scene.glyphs > MAX_GLYPHS then return false end
+      for _, g in ipairs(scene.glyphs) do
+        local np = g.points and #g.points or 0
+        if np < 2 or np > MAX_GLYPH_POINTS then return false end
+      end
+    end
   end
   return true
 end
@@ -248,6 +258,23 @@ local function _render()
     end
   end
 
+  -- painted strokes (the "draw on your lens" layer): the bounded vector layer,
+  -- rendered beneath the text so a scene's words stay legible on top of the art.
+  -- Points are normalized 0..1 over the 256px glass; drawn as connected segments.
+  if _display.line then
+    for _, g in ipairs(scene.glyphs or {}) do
+      local pts = g.points or {}
+      local col = g.color or "accent_attention"
+      local w = GLYPH_PX[g.width] or 4
+      for i = 1, #pts - 1 do
+        local a, b = pts[i], pts[i + 1]
+        _display.line(math.floor((a[1] or 0) * 255), math.floor((a[2] or 0) * 255),
+                      math.floor((b[1] or 0) * 255), math.floor((b[2] or 0) * 255),
+                      col, w)
+      end
+    end
+  end
+
   for _, line in ipairs(scene.lines or {}) do
     local row = math.min(line.row or 0, MAX_LINES - 1)
     local y = 40 + row * 44   -- 5 rows inside the 256px circular safe area
@@ -371,7 +398,7 @@ function M.register(host_comm)
   host_comm.register(MT.FIGMENT_TEXT,   _on_text)
 end
 
--- deps: { display = {text,clear,show}, send = fn(tbl),
+-- deps: { display = {text,clear,show,line?}, send = fn(tbl),
 --         battery = fn() -> pct, random = fn() -> [0,1) }
 function M.bind(deps)
   _display = deps.display or _display

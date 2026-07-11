@@ -21,6 +21,7 @@
     MAX_SCENES: 32, MAX_COUNTERS: 8, MAX_LINES: 5, MAX_TEXT_LEN: 24,
     MAX_PULSE_HZ: 4.0, MIN_SCENE_SEC: 0.5, MAX_SCENE_SEC: 24 * 3600.0,
     MAX_NAME_LEN: 40, MAX_BRANCHES: 4,
+    MAX_GLYPHS: 6, MAX_GLYPH_POINTS: 24,
   };
   var END = "@end", SELF = "@self";
   var COLORS = ["background", "surface", "text_primary", "text_secondary",
@@ -50,7 +51,17 @@
     if (o.on) s.on = o.on;                              // {event: {target}}
     if (o.pulse) s.pulse = o.pulse;                     // {window_sec, rate_hz, color}
     if (o.tick) s.tick = o.tick;
+    if (o.glyphs) s.glyphs = o.glyphs;                  // [{points:[[x,y]..], color, width}]
     return s;
+  }
+  // one painted stroke: a polyline in normalized 0..1 display coords. Coords are
+  // rounded to 4 places to match figment.py's canonical form (signature-stable).
+  function r4(n) { return Math.round(Math.max(0, Math.min(1, +n)) * 1e4) / 1e4; }
+  function glyph(points, opts) {
+    opts = opts || {};
+    return { points: (points || []).map(function (p) { return [r4(p[0]), r4(p[1])]; })
+               .slice(0, B.MAX_GLYPH_POINTS),
+             color: opts.color || "accent_attention", width: opts.width || "md" };
   }
   function figment(name, initial) {
     return { id: "", name: name || "My lens", initial: initial || "",
@@ -183,6 +194,19 @@
         if (timed(s) && s.pulse.window_sec > s.duration_sec) bad("pulse", "pulse window exceeds the scene", sid);
         if (COLORS.indexOf(s.pulse.color) < 0) bad("color", "pulse color is not a token", sid);
       }
+      // painted strokes: mirror budgets.verify's paint-layer caps exactly
+      if (s.glyphs) {
+        if (s.glyphs.length > B.MAX_GLYPHS) bad("glyphs", s.glyphs.length + " strokes > max " + B.MAX_GLYPHS, sid);
+        s.glyphs.forEach(function (g, gi) {
+          var pts = g.points || [];
+          if (!(pts.length >= 2 && pts.length <= B.MAX_GLYPH_POINTS)) bad("glyph_points", "stroke " + gi + " needs 2.." + B.MAX_GLYPH_POINTS + " points", sid);
+          for (var k = 0; k < pts.length; k++) {
+            if (!(pts[k][0] >= 0 && pts[k][0] <= 1 && pts[k][1] >= 0 && pts[k][1] <= 1)) { bad("glyph_coord", "stroke " + gi + " leaves the display", sid); break; }
+          }
+          if (COLORS.indexOf(g.color) < 0) bad("color", "stroke " + gi + " color is not a token", sid);
+          if (SIZES.indexOf(g.width) < 0) bad("glyph_width", "stroke " + gi + " width unknown", sid);
+        });
+      }
     });
     return { ok: v.length === 0, violations: v };
   }
@@ -304,7 +328,7 @@
   return {
     BUDGETS: B, COLORS: COLORS, SIZES: SIZES, HEX: HEX, END: END, SELF: SELF,
     TRIGGERS: TRIGGERS, TEMPLATES: TEMPLATES,
-    figment: figment, scene: scene, line: line, addScene: addScene,
+    figment: figment, scene: scene, line: line, glyph: glyph, addScene: addScene,
     emptyFigment: emptyFigment, addBlankScene: addBlankScene, deleteScene: deleteScene,
     newSceneId: newSceneId, setTransition: setTransition, removeTransition: removeTransition,
     listTransitions: listTransitions, graphEdges: graphEdges,

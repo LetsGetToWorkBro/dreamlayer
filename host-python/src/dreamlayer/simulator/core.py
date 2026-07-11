@@ -232,6 +232,14 @@ class HaloSimulator:
             r, g, b = _token_rgb(f.pulse_color)
             d.ellipse([6, 6, SIZE - 7, SIZE - 7], outline=(r, g, b, 200), width=3)
             d.ellipse([12, 12, SIZE - 13, SIZE - 13], outline=(r, g, b, 70), width=5)
+        # painted strokes (the "draw on your lens" layer) — beneath the text so
+        # the words stay legible on top of the art
+        _STROKE_PX = {"sm": 2, "md": 4, "lg": 7}
+        for g in f.glyphs:
+            pts = [(x * SIZE, y * SIZE) for x, y in g.points]
+            if len(pts) >= 2:
+                d.line(pts, fill=_token_rgb(g.color),
+                       width=_STROKE_PX.get(g.width, 4), joint="curve")
         for ln in f.lines:
             if not ln.text:
                 continue
