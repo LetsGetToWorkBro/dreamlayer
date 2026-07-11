@@ -72,6 +72,22 @@
   .banner{margin:0;padding:12px 26px;background:var(--surface2);border-bottom:1px solid var(--border);
     color:var(--text2);font-size:13px;display:flex;gap:10px;align-items:center}
   .banner b{color:var(--text)}
+  /* lens jams */
+  .jams{padding:16px 26px 4px;display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
+  .jam{background:linear-gradient(135deg,rgba(47,212,196,.09),rgba(224,181,74,.06));
+    border:1px solid var(--border);border-radius:14px;padding:14px 16px;min-width:240px;max-width:340px;
+    display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:.15s}
+  .jam:hover{border-color:var(--teal)}
+  .jam.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
+  .jam .jt{font-weight:650;font-size:15px;display:flex;align-items:center;gap:8px}
+  .jam .jtheme{color:var(--text2);font-size:12.5px}
+  .jam .jmeta{display:flex;gap:10px;align-items:center;font-size:11.5px;margin-top:2px}
+  .jam .pill2{text-transform:uppercase;letter-spacing:.04em;border-radius:999px;padding:1px 8px;border:1px solid var(--border)}
+  .jam .pill2.open{color:var(--green);border-color:rgba(86,211,100,.4)}
+  .jam .pill2.upcoming{color:var(--amber);border-color:rgba(224,181,74,.4)}
+  .jam .pill2.closed{color:var(--text2)}
+  .jam .cd{color:var(--teal);font-variant-numeric:tabular-nums}
+  .jamback{margin:12px 26px 0;display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--teal)}
   /* share modal */
   .scrim{position:fixed;inset:0;background:rgba(3,8,7,.72);display:none;align-items:center;
     justify-content:center;z-index:40;padding:20px}
@@ -96,12 +112,15 @@
 <header>
   <h1>🌐 Lens Gallery</h1>
   <span class="tag">Every lens here runs live below and is yours to remix — a proven scene machine, not code.</span>
-  <span class="home"><a href="./lens-builder.html">Build your own →</a><a href="./index.html">Home</a></span>
+  <span class="home"><a href="./golf.html">⛳ Golf</a><a href="./lens-builder.html">Build your own →</a><a href="./index.html">Home</a></span>
 </header>
 
 <p class="banner" id="offlineBanner" style="display:none">
   <span>✨</span><span>Showing <b>featured lenses</b> — the community wall loads when you're online. Every one is fully remixable right now.</span>
 </p>
+
+<!-- Lens Jams: themed, time-boxed collections -->
+<div id="jamStrip" style="display:none"></div>
 
 <div class="toolbar">
   <label class="search">
@@ -115,6 +134,8 @@
   </div>
   <span class="count" id="count"></span>
 </div>
+
+<div class="jamback" id="jamBack" style="display:none">← back to all lenses <span style="color:var(--text2)">· showing <b></b></span></div>
 
 <div class="grid" id="grid" aria-live="polite"></div>
 
@@ -374,7 +395,75 @@
       if(items.length && items.every(function(x){ return x._seed; }))
         document.getElementById("offlineBanner").style.display = "";
     }, 2500);
+
+    loadJams();
+    document.getElementById("jamBack").onclick = clearJam;
   }
+
+  // -- Lens Jams: themed, time-boxed collections ----------------------------
+  var jams = [], jamCurrent = null, jamTimer = null, allItems = null;
+  function fmtCountdown(secs){
+    if(secs <= 0) return "closing…";
+    var d = Math.floor(secs/86400), h = Math.floor((secs%86400)/3600), m = Math.floor((secs%3600)/60);
+    if(d > 0) return d + "d " + h + "h left";
+    if(h > 0) return h + "h " + m + "m left";
+    return m + "m left";
+  }
+  function loadJams(){
+    fetch(REGISTRY + "/api/jams").then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){
+        if(!data || !data.jams || !data.jams.length) return;
+        jams = data.jams.filter(function(j){ return j.status !== "closed" || j.entries > 0; });
+        if(jams.length) renderJams();
+      }).catch(function(){});
+  }
+  function renderJams(){
+    var strip = document.getElementById("jamStrip");
+    strip.className = "jams"; strip.style.display = "";
+    strip.innerHTML = jams.map(function(j){
+      var now = Math.floor(Date.now()/1000);
+      var cd = j.status === "open" && j.closes ? '<span class="cd" data-close="' + j.closes + '">' + fmtCountdown(j.closes - now) + '</span>'
+             : j.status === "upcoming" && j.opens ? '<span class="cd">opens soon</span>' : '';
+      return '<div class="jam' + (jamCurrent===j.id?" on":"") + '" data-jam="' + j.id + '">' +
+        '<div class="jt">🎪 ' + escg(j.title) + '</div>' +
+        (j.theme ? '<div class="jtheme">' + escg(j.theme) + '</div>' : '') +
+        '<div class="jmeta"><span class="pill2 ' + j.status + '">' + j.status + '</span>' +
+          '<span>' + j.entries + (j.entries===1?" lens":" lenses") + '</span>' + cd + '</div></div>';
+    }).join("");
+    [].forEach.call(strip.querySelectorAll(".jam"), function(el){
+      el.onclick = function(){ toggleJam(el.getAttribute("data-jam")); };
+    });
+    if(jamTimer) clearInterval(jamTimer);
+    jamTimer = setInterval(function(){
+      var now = Math.floor(Date.now()/1000);
+      [].forEach.call(strip.querySelectorAll(".cd[data-close]"), function(s){
+        s.textContent = fmtCountdown(Number(s.getAttribute("data-close")) - now);
+      });
+    }, 60000);
+  }
+  function toggleJam(id){
+    if(jamCurrent === id){ clearJam(); return; }
+    jamCurrent = id; renderJams();
+    var back = document.getElementById("jamBack");
+    fetch(REGISTRY + "/api/jams/" + encodeURIComponent(id)).then(function(r){ return r.json(); })
+      .then(function(data){
+        if(allItems === null) allItems = items;
+        var live = (data.lenses||[]).map(hydrate).filter(Boolean);
+        items = live;
+        var jam = (data.jam||{});
+        back.style.display = ""; back.querySelector("b").textContent = jam.title || id;
+        render();
+        if(!live.length) grid.innerHTML = '<div class="empty"><h2>No lenses in this jam yet.</h2>' +
+          '<p>' + (jam.prompt ? escg(jam.prompt) + ' ' : '') + '<a href="./lens-builder.html">Build the first →</a></p></div>';
+      }).catch(function(){});
+  }
+  function clearJam(){
+    jamCurrent = null;
+    if(allItems !== null){ items = allItems; allItems = null; }
+    document.getElementById("jamBack").style.display = "none";
+    renderJams(); render();
+  }
+  function escg(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
   qEl.addEventListener("input", render);
   document.getElementById("segFeat").onclick = function(){ setSort("featured", this); };

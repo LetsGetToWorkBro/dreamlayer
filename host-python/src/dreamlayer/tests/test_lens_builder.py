@@ -125,6 +125,65 @@ class TestUnderNode:
         assert any("HELLO WORLD" in ln.text for ln in st.frame().lines), \
             f"{show} did not surface the host's slot text"
 
+    # The JS reference interpreter (LensKit.Stage) must agree with the Python one
+    # frame-for-frame — this is what makes Figment Golf's "verified" honest: the
+    # browser, the registry, and the glasses all read a lens the same way.
+    _PARITY_SCRIPT = [
+        ["step", 1], ["inject", "single"], ["inject", "double"], ["inject", "long"],
+        ["inject", "imu:nod"], ["inject", "imu:shake"], ["inject", "text", "HOLA"],
+        ["step", 5], ["inject", "place:enter"], ["inject", "bond:near"],
+        ["inject", "ble:3"], ["step", 30], ["step", 300],
+    ]
+
+    def _py_trace(self, fig, script):
+        from dreamlayer.reality_compiler.v2.interpreter import Stage
+        st = Stage(fig)
+
+        def snap():
+            fr = st.frame()
+            return {
+                "scene": "@end" if st.ended else st.current,
+                "ended": st.ended,
+                "lines": [ln.text for ln in fr.lines],
+                "remaining": round(st.remaining(), 3),
+                "pulse": fr.pulse_on,
+                "counters": dict(st.counters),
+            }
+        trace = [snap()]
+        for op in script:
+            if op[0] == "step":
+                st.step(op[1])
+            elif op[0] == "inject":
+                st.inject(op[1], op[2] if len(op) > 2 else None)
+            trace.append(snap())
+        return trace
+
+    @pytest.mark.parametrize("kind,name", [
+        ("templates", "countdown"), ("templates", "score"), ("templates", "reps"),
+        ("templates", "interval"), ("templates", "breathing"), ("templates", "checklist"),
+        ("showcases", "coach"), ("showcases", "keep"), ("showcases", "mandala"),
+        ("showcases", "whisper"), ("showcases", "world"), ("showcases", "fusion"),
+    ])
+    def test_js_python_interpreter_parity(self, kind, name):
+        fig_json = subprocess.run(
+            ["node", "-e",
+             f"console.log(JSON.stringify(require('./figment.js').{kind}.{name}()))"],
+            cwd=LENS, capture_output=True, text=True).stdout
+        fig = Figment.from_dict(json.loads(fig_json))
+        script = self._PARITY_SCRIPT
+        js = subprocess.run(["node", "stage_probe.js"], cwd=LENS, capture_output=True,
+                            text=True, input=json.dumps({"fig": json.loads(fig_json), "script": script}))
+        assert js.returncode == 0, js.stderr
+        js_trace = json.loads(js.stdout)
+        py_trace = self._py_trace(fig, script)
+        assert len(js_trace) == len(py_trace)
+        for i, (a, b) in enumerate(zip(js_trace, py_trace)):
+            # round remaining the same way on both sides before comparing
+            a = {**a, "remaining": round(a["remaining"], 3)}
+            assert a == b, (
+                f"{kind}.{name} diverged at frame {i} "
+                f"(after {script[i-1] if i else 'init'}):\n  js={a}\n  py={b}")
+
 
 # -- the Brain import endpoint (Deploy to my Brain) ---------------------------
 
@@ -301,6 +360,18 @@ def test_gallery_page_is_wired():
     assert "new LensPlayer" in page                     # cards actually animate
     assert "IntersectionObserver" in page              # only on-screen cards animate
     assert 'id="q"' in page and 'data-sort="newest"' in page   # search + Featured/Newest
+    assert 'id="jamStrip"' in page and "/api/jams" in page      # Lens Jams strip
+
+
+def test_golf_page_is_wired():
+    page = (LENS.parents[1] / "golf.html").read_text(encoding="utf-8")
+    assert "./assets/lens/figment.js" in page          # the game runs on the lens engine
+    assert "./assets/lens/player.js" in page           # live preview of the pasted lens
+    assert "K.GOLF" in page and "runChallenge" in page  # client-side verification
+    assert "/api/golf/" in page and "/submit" in page  # server re-verifies + ranks
+    assert "leaderboard" in page                        # the board
+    assert "decodeShare" in page                        # accepts a share code/link
+    assert "lens-builder.html#lens=" in page           # "study" a rival's lens / start one
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
@@ -317,6 +388,14 @@ def test_gallery_player_module_loads_under_node():
 def test_registry_figment_submit_route():
     api = Path(__file__).resolve().parents[4] / "registry-api"
     r = subprocess.run(["node", "worker.figments.test.mjs"], cwd=api,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_registry_golf_and_jams_routes():
+    api = Path(__file__).resolve().parents[4] / "registry-api"
+    r = subprocess.run(["node", "worker.golf.test.mjs"], cwd=api,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 

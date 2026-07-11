@@ -128,6 +128,32 @@ ok(K.decodeShare(K.encodeShare(K.figment("Empty", ""))) === null, "a share with 
 var golf = K.golfScore(K.templates.countdown());
 ok(golf.bytes > 0 && golf.valid === true && typeof golf.moves === "number", "golfScore reports bytes/moves/valid");
 
+// the reference interpreter runs a lens: a countdown ends on time, a counter counts
+var stg = new K.Stage(K.templates.countdown());
+ok(stg.frame().scene === "run" && !stg.ended, "Stage starts in the initial scene");
+stg.step(600);
+ok(stg.ended, "Stage ends the countdown after its duration");
+var sc = new K.Stage(K.templates.score());
+sc.inject("single"); sc.inject("single"); sc.inject("double");
+ok(sc.counters.us === 2 && sc.counters.them === 1, "Stage tracks tap/double-tap counters");
+sc.inject("long");
+ok(sc.counters.us === 0 && sc.counters.them === 0, "Stage resets counters on a long press");
+
+// figment golf challenges: each is verifiable, and a real solution SOLVES it
+ok(K.GOLF.length >= 4 && K.GOLF.every(function (c) { return c.id && c.brief && c.par > 0 && c.checks.length; }),
+   "GOLF ships challenges with a brief, a par, and acceptance checks");
+function _pocket(name) { var f = K.figment(name || "Timer", "a");
+  K.addScene(f, K.scene("a", { duration_sec: 180, tick: "countdown", lines: [K.line("{remaining}")], on_timeout: [{ target: K.END }] })); return f; }
+var gr = K.runChallenge(_pocket(), K.GOLF.filter(function (c) { return c.id === "pocket-timer"; })[0]);
+ok(gr.solved && gr.bytes > 0 && gr.underPar >= 0, "a correct lens solves pocket-timer and lands at/under par");
+// a valid but wrong-duration lens must NOT solve it (behavior, not shape)
+var wrong = K.figment("W", "a");
+K.addScene(wrong, K.scene("a", { duration_sec: 60, tick: "countdown", lines: [K.line("{remaining}")], on_timeout: [{ target: K.END }] }));
+ok(!K.runChallenge(wrong, K.GOLF[0]).solved, "a wrong-duration lens does not solve pocket-timer");
+// the score template really solves the two-sided tally
+ok(K.runChallenge(K.templates.score(), K.GOLF.filter(function (c) { return c.id === "tally"; })[0]).solved,
+   "the scoreboard template solves the tally challenge");
+
 // every tutorial showcase is budget-clean AND exercises a distinct edge
 Object.keys(K.showcases).forEach(function (id) {
   ok(K.validate(K.showcases[id]()).ok, "showcase '" + id + "' is valid: " + JSON.stringify(K.validate(K.showcases[id]()).violations));

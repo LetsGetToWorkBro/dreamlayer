@@ -712,6 +712,202 @@
              valid: validate(fig).ok };
   }
 
+  // -- reference interpreter (the JS twin of reality_compiler/v2/interpreter.py
+  // and halo-lua/app/figment_stage.lua). Faithful enough that Figment Golf can
+  // *verify* a submission actually solves a challenge — not merely parses — and
+  // the registry re-runs the exact same check server-side. Parity with the
+  // Python Stage is pinned by tests/test_lens_builder.py. -----------------------
+  var EMIT_BURST = 5, EMIT_REFILL_PER_S = 1.0;
+  function _fmtClock(secs) {
+    secs = Math.max(0, Math.ceil(secs));
+    return secs >= 60 ? (Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2)) : String(secs);
+  }
+  function Stage(fig) {
+    this.fig = fig;
+    this.counters = {};
+    var cs = fig.counters || {};
+    Object.keys(cs).forEach((function (n) { this.counters[n] = cs[n].start || 0; }).bind(this));
+    this.slot = ""; this.emits = []; this.recorded = []; this.dropped = 0;
+    this.ended = false; this.clock = 0; this._tokens = EMIT_BURST;
+    this.scene_elapsed = 0; this._lastElapsed = 0;
+    this._enter(fig.initial);
+  }
+  Stage.prototype._scene = function () { return this.fig.scenes[this.current]; };
+  Stage.prototype._enter = function (id) {
+    this._lastElapsed = this.scene_elapsed || 0;
+    this.current = id; this.scene_elapsed = 0;
+    var s = this._scene();
+    this._duration = (s && s.duration_sec != null) ? s.duration_sec : null;   // no rng scenes in the builder
+  };
+  Stage.prototype._end = function () { this._lastElapsed = this.scene_elapsed; this.ended = true; };
+  Stage.prototype.step = function (dt) {
+    if (dt == null) dt = 1.0;
+    if (this.ended) return this;
+    var left = dt;
+    while (left > 1e-9 && !this.ended) {
+      if (this._duration == null) { this._advance(left); break; }
+      var rem = this._duration - this.scene_elapsed;
+      if (left < rem - 1e-9) { this._advance(left); break; }
+      this._advance(rem); left -= rem; this._timeout();
+    }
+    return this;
+  };
+  Stage.prototype._advance = function (dt) {
+    this.clock += dt; this.scene_elapsed += dt;
+    this._tokens = Math.min(EMIT_BURST, this._tokens + dt * EMIT_REFILL_PER_S);
+  };
+  Stage.prototype.inject = function (event, text) {
+    if (this.ended) return false;
+    if (event === "text" && text != null) this.slot = String(text).slice(0, B.MAX_TEXT_LEN);
+    return this._dispatch(event);
+  };
+  Stage.prototype._dispatch = function (event) {
+    var on = this._scene().on || {}, t = on[event];
+    if (t == null && event.indexOf("ble:") === 0) t = on.ble;
+    if (t == null) return false;
+    this._take(t); return true;
+  };
+  Stage.prototype._timeout = function () {
+    var ot = this._scene().on_timeout || [];
+    for (var i = 0; i < ot.length; i++) {
+      if (ot[i].when == null || this._guard(ot[i])) { this._take(ot[i]); return; }
+    }
+    this._end();
+  };
+  Stage.prototype._guard = function (t) {
+    var g = t.when, v = this.counters[g.counter] || 0;
+    if (g.cmp === "ge") return v >= g.value;
+    if (g.cmp === "le") return v <= g.value;
+    return v === g.value;
+  };
+  Stage.prototype._take = function (t) {
+    var self = this;
+    (t.counter_ops || []).forEach(function (op) {
+      var d = self.fig.counters[op.counter]; if (!d) return;
+      var cur = self.counters[op.counter] || 0;
+      if (op.op === "inc") cur += op.amount; else if (op.op === "dec") cur -= op.amount; else cur = op.amount;
+      self.counters[op.counter] = Math.max(d.lo == null ? 0 : d.lo, Math.min(d.hi == null ? 999 : d.hi, cur));
+    });
+    if (t.emit != null) {
+      if (this._tokens >= 1.0) { this._tokens -= 1.0; this.emits.push([this.clock, t.emit]);
+        if (t.record) this.recorded.push([this.clock, t.emit]); }
+      else this.dropped += 1;
+    }
+    if (t.target === END) this._end();
+    else if (t.target === SELF) this._enter(this.current);
+    else if (this.fig.scenes[t.target]) this._enter(t.target);
+    else this._end();
+  };
+  Stage.prototype.remaining = function () {
+    return this._duration == null ? 0 : Math.max(0, this._duration - this.scene_elapsed);
+  };
+  Stage.prototype._resolve = function (content) {
+    var s = this._scene(), self = this;
+    var el = s.tick ? this.scene_elapsed : this._lastElapsed;
+    var out = String(content)
+      .replace(/\{remaining\}/g, _fmtClock(this.remaining()))
+      .replace(/\{remaining_s\}/g, String(Math.ceil(this.remaining())))
+      .replace(/\{elapsed\}/g, _fmtClock(el))
+      .replace(/\{elapsed_ms\}/g, String(Math.floor(el * 1000)))
+      .replace(/\{slot\}/g, this.slot)
+      .replace(/\{count:(\w+)\}/g, function (_, n) { return String(self.counters[n] != null ? self.counters[n] : 0); });
+    return out.slice(0, B.MAX_TEXT_LEN);
+  };
+  Stage.prototype.frame = function () {
+    if (this.ended) return { scene: END, ended: true, lines: [], pulse_on: false };
+    var s = this._scene(), self = this, pulse_on = false, pulse_color = null;
+    if (s.pulse && this._duration != null && this.remaining() <= s.pulse.window_sec) {
+      pulse_on = (Math.floor(this.scene_elapsed * s.pulse.rate_hz * 2) % 2) === 0;
+      pulse_color = s.pulse.color;
+    }
+    return {
+      scene: this.current, ended: false,
+      lines: (s.lines || []).map(function (ln) {
+        return { text: self._resolve(ln.content), row: ln.row, size: ln.size, color: ln.color }; }),
+      pulse_on: pulse_on, pulse_color: pulse_color,
+    };
+  };
+
+  // -- Figment Golf: verified challenges ---------------------------------------
+  // A challenge is a *brief* plus a machine-checkable acceptance spec: fresh
+  // Stages driven through scripted scenarios, each asserting an observable
+  // outcome. "Solving" it means the exact behavior — so the leaderboard ranks
+  // genuine skill (fewest bytes that still pass), not popularity. `par` is a
+  // clean reference solution's byte count; beat it and you're under par.
+  function _lineText(fr) { return (fr.lines || []).map(function (l) { return l.text; }).join(" • "); }
+  function _runScenario(fig, sc) {
+    var st = new Stage(fig), fail = null;
+    (sc.ops || []).forEach(function (op) {
+      if (op[0] === "step") st.step(op[1]);
+      else if (op[0] === "tap") st.inject("single");
+      else if (op[0] === "inject") st.inject(op[1], op[2]);
+      else if (op[0] === "text") st.inject("text", op[1]);
+    });
+    var e = sc.expect || {}, fr = st.frame();
+    function bad(m) { if (!fail) fail = m; }
+    if (e.ended != null && !!fr.ended !== !!e.ended) bad(e.ended ? "should have ended" : "should still be running");
+    if (e.scene != null && st.current !== e.scene && !fr.ended) bad("expected scene “" + e.scene + "”, was “" + st.current + "”");
+    if (e.lineHas != null && _lineText(fr).toLowerCase().indexOf(String(e.lineHas).toLowerCase()) < 0)
+      bad("expected the glass to show “" + e.lineHas + "”");
+    if (e.lineLacks != null && _lineText(fr).toLowerCase().indexOf(String(e.lineLacks).toLowerCase()) >= 0)
+      bad("the glass must not show “" + e.lineLacks + "” yet");
+    if (e.count != null) Object.keys(e.count).forEach(function (n) {
+      if ((st.counters[n] || 0) !== e.count[n]) bad(n + " should be " + e.count[n] + " (was " + (st.counters[n] || 0) + ")"); });
+    if (e.remainingLe != null && st.remaining() > e.remainingLe + 1e-6) bad("timer runs too long");
+    if (e.remainingGe != null && st.remaining() < e.remainingGe - 1e-6) bad("timer is too short");
+    if (e.pulse != null && !!fr.pulse_on !== !!e.pulse) bad(e.pulse ? "should be pulsing now" : "should not be pulsing yet");
+    return { ok: fail == null, why: fail, label: sc.label || "" };
+  }
+  function runChallenge(fig, ch) {
+    var g = golfScore(fig), results = (ch.checks || []).map(function (sc) { return _runScenario(fig, sc); });
+    var passed = g.valid && results.every(function (r) { return r.ok; });
+    return { solved: passed, valid: g.valid, bytes: g.bytes, moves: g.moves,
+             par: ch.par || 0, underPar: passed && ch.par ? (ch.par - g.bytes) : 0,
+             checks: results };
+  }
+
+  // The launch challenges. Each brief is unambiguous and every acceptance check
+  // is a behavior, never a shape — so a solver is rewarded for expressing the
+  // exact thing in fewer bytes, nothing else.
+  var GOLF = [
+    { id: "pocket-timer", title: "Pocket timer", emoji: "⏱",
+      brief: "A silent 3-minute timer that counts down and ends on its own. Show the time remaining. No taps, no extras.",
+      par: 270,
+      checks: [
+        { label: "opens at 3:00 on the glass", ops: [], expect: { remainingGe: 180, remainingLe: 180, ended: false, lineHas: "3:00" } },
+        { label: "still running at 2:59", ops: [["step", 179]], expect: { ended: false } },
+        { label: "ends by 3:00", ops: [["step", 180]], expect: { ended: true } },
+      ] },
+    { id: "last-30", title: "The last 30", emoji: "🔴",
+      brief: "A 2-minute focus timer that pulses in its final 30 seconds, then ends. The pulse must be off before the last 30s and on inside it.",
+      par: 340,
+      checks: [
+        { label: "shows 2:00 at the start", ops: [], expect: { lineHas: "2:00", ended: false } },
+        { label: "no pulse at 1:00 in", ops: [["step", 60]], expect: { ended: false, pulse: false } },
+        { label: "pulsing at 1:40 in", ops: [["step", 100]], expect: { ended: false, pulse: true } },
+        { label: "ends by 2:00", ops: [["step", 120]], expect: { ended: true } },
+      ] },
+    { id: "tally", title: "Two-sided tally", emoji: "🏓",
+      brief: "A scoreboard: tap for US, double-tap for THEM, press-and-hold to reset both to zero. Show both running scores.",
+      par: 620,
+      checks: [
+        { label: "two taps make US = 2", ops: [["inject", "single"], ["inject", "single"]], expect: { count: { us: 2 } } },
+        { label: "a double-tap makes THEM = 1", ops: [["inject", "double"]], expect: { count: { them: 1 } } },
+        { label: "the score shows on the glass", ops: [["inject", "single"]], expect: { lineHas: "1" } },
+        { label: "hold resets both to zero", ops: [["inject", "single"], ["inject", "double"], ["inject", "long"]],
+          expect: { count: { us: 0, them: 0 } } },
+      ] },
+    { id: "streak", title: "Nod streak", emoji: "👆",
+      brief: "Count clean nods. Each nod adds one and shows the running total; a head-shake resets to zero. Runs until you look away (a long press ends it).",
+      par: 450,
+      checks: [
+        { label: "three nods make the count 3", ops: [["inject", "imu:nod"], ["inject", "imu:nod"], ["inject", "imu:nod"]],
+          expect: { count: { n: 3 }, lineHas: "3" } },
+        { label: "a shake resets to zero", ops: [["inject", "imu:nod"], ["inject", "imu:shake"]], expect: { count: { n: 0 } } },
+        { label: "a long press ends it", ops: [["inject", "imu:nod"], ["inject", "long"]], expect: { ended: true } },
+      ] },
+  ];
+
   // -- scene-graph editing (the advanced editor) -----------------------------
   // the triggers a scene can listen for; "timeout" is the timed exit, the rest
   // are physical/gesture events (see figment_stage.lua on_event).
@@ -828,6 +1024,7 @@
     listTransitions: listTransitions, graphEdges: graphEdges,
     validate: validate, safetyCard: safetyCard, canonical: canonical, listing: listing,
     encodeShare: encodeShare, decodeShare: decodeShare, golfScore: golfScore,
+    Stage: Stage, runChallenge: runChallenge, GOLF: GOLF,
     templates: { reps: tReps, focus: tFocus, score: tScore, breathing: tBreathing,
       interval: tInterval, countdown: tCountdown, checklist: tChecklist },
     showcases: SHOWCASES,

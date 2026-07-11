@@ -16,6 +16,13 @@
  * registry/index.json) so GET /api/plugins can fold stats into the catalogue.
  */
 
+// The lens engine — the SAME module the browser builder runs on. Importing it
+// here lets the Worker *re-verify* every Figment Golf submission with the exact
+// interpreter the client used (LensKit.runChallenge), so the leaderboard ranks
+// proven solutions, and recompute the byte score server-side so it can't be
+// gamed. Wrangler bundles it at deploy; Node resolves it in the test harness.
+import LensKit from "../landing/assets/lens/figment.js";
+
 const INDEX_URL_DEFAULT =
   "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
 
@@ -101,6 +108,26 @@ function shareCode(figment, author) {
   let bin = "";
   for (let i = 0; i < utf8.length; i++) bin += String.fromCharCode(utf8[i]);
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// A public leaderboard row: no PII, just the maker's handle, the proven byte
+// score, and the code so anyone can open the winning lens and learn from it.
+function lbRow(author, fig, extra) {
+  const g = LensKit.golfScore(fig);
+  return Object.assign({ author: cleanText(author, 40) || "anon",
+    bytes: g.bytes, moves: g.moves, scenes: g.scenes,
+    code: shareCode(fig, author), at: Date.now() / 1000 }, extra || {});
+}
+// Fewest bytes wins; the earlier entry breaks a tie (first to find it).
+const byBytes = (a, b) => (a.bytes - b.bytes) || (a.at - b.at);
+const rankOf = (sorted, row) =>
+  1 + sorted.findIndex((e) => e.author.toLowerCase() === row.author.toLowerCase() && e.bytes === row.bytes);
+
+// A Jam's live state from its window. `opens`/`closes` are unix seconds.
+function jamStatus(jam, now) {
+  if (jam.opens && now < jam.opens) return "upcoming";
+  if (jam.closes && now > jam.closes) return "closed";
+  return "open";
 }
 
 // Shape-check a figment listing from the builder. Returns an error string, or
@@ -227,6 +254,12 @@ export default {
         if (!sub) return json({ error: "no such submission" }, 404);
         const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
         if (!gal.some((e) => e.id === id)) {
+          // carry a jam tag through only if it names a real jam
+          let jam = "";
+          if (sub.jam && validName(sub.jam)) {
+            const jams = await readJSON(env.SOCIAL, "jams:index", []);
+            if (jams.some((j) => j.id === sub.jam)) jam = sub.jam;
+          }
           gal.unshift({
             id,
             name: cleanText(sub.name, 40) || "Untitled",
@@ -234,6 +267,7 @@ export default {
             description: cleanText(sub.description, 240),
             scenes: Object.keys(sub.figment.scenes || {}).length,
             code: shareCode(sub.figment, sub.author),
+            jam,
             at: Date.now() / 1000,
           });
           while (gal.length > 500) gal.pop();     // bound the wall
@@ -249,6 +283,101 @@ export default {
         const queue = await readJSON(env.SOCIAL, "figments:queue", []);
         const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
         return json({ pending: queue.length, gallery: gal.length });
+      }
+      return json({ error: "method not allowed" }, 405);
+    }
+
+    // -- Figment Golf: verified byte-golf challenges --------------------------
+    // The whole game: express the exact behavior in the fewest bytes. Every
+    // submission is decoded, re-proven safe, and run through the challenge's
+    // acceptance checks with the SAME interpreter the builder uses — then the
+    // byte score is recomputed server-side, so the board can't be gamed.
+    if (parts[0] === "api" && parts[1] === "golf") {
+      const challenges = LensKit.GOLF;
+      // GET /api/golf — the challenge list (brief + par, never the answer)
+      if (request.method === "GET" && !parts[2]) {
+        return json({ challenges: challenges.map((c) =>
+          ({ id: c.id, title: c.title, emoji: c.emoji, brief: c.brief, par: c.par })) });
+      }
+      // GET /api/golf/:id/leaderboard — fewest bytes first, code included
+      if (request.method === "GET" && parts[2] && parts[3] === "leaderboard") {
+        const ch = challenges.find((c) => c.id === parts[2]);
+        const lb = (await readJSON(env.SOCIAL, "golf:lb:" + parts[2], [])).slice().sort(byBytes);
+        return json({ id: parts[2], par: ch ? ch.par : 0,
+          entries: lb.slice(0, 50).map((e, i) => Object.assign({ rank: i + 1 }, e)) });
+      }
+      // POST /api/golf/:id/submit {code, author} — verify + rank
+      if (request.method === "POST" && parts[2] && parts[3] === "submit") {
+        if (!(await allowed(env, request, "golf_submit", 40))) return rateLimited();
+        const ch = challenges.find((c) => c.id === parts[2]);
+        if (!ch) return json({ error: "no such challenge" }, 404);
+        const body = await request.json().catch(() => ({}));
+        const got = LensKit.decodeShare(String(body.code || ""));
+        if (!got || !got.figment) return json({ error: "that isn't a valid, safe lens" }, 400);
+        const res = LensKit.runChallenge(got.figment, ch);
+        if (!res.solved) {
+          return json({ error: "the lens doesn't solve this challenge yet", solved: false,
+            checks: res.checks.filter((c) => !c.ok).map((c) => ({ label: c.label, why: c.why })) }, 422);
+        }
+        const row = lbRow(cleanText(body.author, 40) || got.author || "anon", got.figment);
+        const lb = await readJSON(env.SOCIAL, "golf:lb:" + ch.id, []);
+        const prev = lb.find((e) => e.author.toLowerCase() === row.author.toLowerCase());
+        if (prev && prev.bytes <= row.bytes) {
+          const sorted = lb.slice().sort(byBytes);
+          return json({ status: "kept", note: "your best entry still stands",
+            rank: rankOf(sorted, prev), bytes: prev.bytes, par: ch.par,
+            entries: sorted.slice(0, 50).map((e, i) => Object.assign({ rank: i + 1 }, e)) });
+        }
+        const next = lb.filter((e) => e.author.toLowerCase() !== row.author.toLowerCase());
+        next.push(row);
+        next.sort(byBytes);
+        while (next.length > 200) next.pop();
+        await env.SOCIAL.put("golf:lb:" + ch.id, JSON.stringify(next));
+        return json({ status: "accepted", rank: rankOf(next, row), bytes: row.bytes,
+          par: ch.par, underPar: ch.par - row.bytes,
+          entries: next.slice(0, 50).map((e, i) => Object.assign({ rank: i + 1 }, e)) });
+      }
+      return json({ error: "method not allowed" }, 405);
+    }
+
+    // -- Lens Jams: themed, time-boxed collections ---------------------------
+    // A jam gives the community a reason to come back this week — a theme, a
+    // window, and a filtered wall. Lenses tag their submission with a jam id;
+    // approved ones show up under the jam. Admin defines jams; anyone reads.
+    if (parts[0] === "api" && parts[1] === "jams") {
+      const now = Date.now() / 1000;
+      // GET /api/jams — every jam with its live status + entry count
+      if (request.method === "GET" && !parts[2]) {
+        const jams = await readJSON(env.SOCIAL, "jams:index", []);
+        const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
+        return json({ jams: jams.map((j) => Object.assign({}, j, {
+          status: jamStatus(j, now),
+          entries: gal.filter((e) => e.jam === j.id).length })) });
+      }
+      // POST /api/jams — admin creates or updates a jam definition
+      if (request.method === "POST" && !parts[2]) {
+        if (!env.ADMIN_TOKEN || request.headers.get("X-Admin-Token") !== env.ADMIN_TOKEN)
+          return json({ error: "forbidden" }, 403);
+        const b = await request.json().catch(() => ({}));
+        if (!validName(b.id)) return json({ error: "jam id must be a slug" }, 400);
+        const jam = { id: b.id, title: cleanText(b.title, 60) || b.id,
+          theme: cleanText(b.theme, 120), prompt: cleanText(b.prompt, 400),
+          opens: Number(b.opens) || 0, closes: Number(b.closes) || 0, at: now };
+        const jams = await readJSON(env.SOCIAL, "jams:index", []);
+        const i = jams.findIndex((j) => j.id === jam.id);
+        if (i >= 0) jams[i] = jam; else jams.unshift(jam);
+        while (jams.length > 100) jams.pop();
+        await env.SOCIAL.put("jams:index", JSON.stringify(jams));
+        return json({ status: "saved", jam });
+      }
+      // GET /api/jams/:id — the jam + its approved, remixable lenses
+      if (request.method === "GET" && parts[2]) {
+        const jams = await readJSON(env.SOCIAL, "jams:index", []);
+        const jam = jams.find((j) => j.id === parts[2]);
+        if (!jam) return json({ error: "no such jam" }, 404);
+        const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
+        return json({ jam: Object.assign({}, jam, { status: jamStatus(jam, now) }),
+          lenses: gal.filter((e) => e.jam === jam.id) });
       }
       return json({ error: "method not allowed" }, 405);
     }

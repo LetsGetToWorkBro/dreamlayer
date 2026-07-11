@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DreamLayer · Figment Golf</title>
+<meta name="description" content="Figment Golf: express a behavior on your glasses in the fewest bytes. Every solution is verified against the real interpreter and the byte score is authoritative — pure skill, no popularity gaming." />
+<meta property="og:title" content="DreamLayer · Figment Golf" />
+<meta property="og:description" content="Express a behavior in the fewest bytes. Verified, not voted. Climb the board." />
+<meta property="og:url" content="https://dreamlayer.app/golf.html" />
+<link rel="canonical" href="https://dreamlayer.app/golf.html" />
+<style>
+  :root{
+    --bg:#07100f; --surface:#0e1a18; --surface2:#12211f; --border:#1c2e2b;
+    --text:#eaf3f1; --text2:#8aa5a0; --teal:#2fd4c4; --amber:#e0b54a;
+    --red:#e06b52; --green:#56d364;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{padding:20px 26px;border-bottom:1px solid var(--border);display:flex;
+    align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;font-weight:650}
+  header .tag{color:var(--text2);font-size:13.5px;max-width:600px}
+  header .home{margin-left:auto;font-size:13.5px;display:flex;gap:16px}
+  .wrap{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 62px)}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .col{padding:22px;overflow-y:auto}
+  .col.left{border-right:1px solid var(--border)}
+  @media(max-width:900px){.col.left{border-right:0;border-bottom:1px solid var(--border)}}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 12px}
+  .chal{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:13px 15px;margin-bottom:10px;cursor:pointer;color:inherit;transition:.15s;
+    display:flex;gap:12px;align-items:flex-start}
+  .chal:hover{border-color:var(--teal)}
+  .chal.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
+  .chal .ico{font-size:22px;flex:none;width:26px;text-align:center}
+  .chal b{display:block;font-size:15px;margin-bottom:2px}
+  .chal span{color:var(--text2);font-size:12.5px;display:block}
+  .chal .par{color:var(--teal);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-top:4px}
+  .brief{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:18px}
+  .brief h2{margin:0 0 6px;font-size:18px}
+  .brief p{margin:0;color:var(--text2)}
+  .brief .par-line{margin-top:10px;color:var(--teal);font-size:13px}
+  .rules{color:var(--text2);font-size:12.5px;margin:8px 0 0}
+  .grid2{display:grid;grid-template-columns:1fr 300px;gap:20px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  label.f{display:block;font-size:12px;color:var(--text2);margin:14px 0 5px}
+  textarea,input{font:inherit;background:var(--surface2);color:var(--text);
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;width:100%}
+  textarea{resize:vertical;min-height:64px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  button.btn{font:inherit;background:var(--teal);color:#00201c;border:0;border-radius:999px;
+    padding:9px 18px;font-weight:650;cursor:pointer}
+  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:600}
+  button.btn:disabled{opacity:.45;cursor:default}
+  .verify{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-top:16px}
+  .verify.pending{opacity:.6}
+  .score{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .score .big{font-size:30px;font-weight:700}
+  .score .par{color:var(--text2);font-size:13px}
+  .score .delta{font-size:13px;font-weight:650;padding:2px 10px;border-radius:999px}
+  .score .delta.under{color:var(--green);border:1px solid rgba(86,211,100,.4)}
+  .score .delta.over{color:var(--amber);border:1px solid rgba(224,181,74,.4)}
+  ul.checks{list-style:none;margin:0;padding:0}
+  ul.checks li{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;padding:4px 0}
+  ul.checks li .mk{flex:none;width:18px;text-align:center}
+  ul.checks li.pass .mk{color:var(--green)} ul.checks li.fail .mk{color:var(--red)}
+  ul.checks li.fail{color:var(--text2)}
+  ul.checks li .why{color:var(--text2);font-size:12px;margin-left:6px}
+  .preview{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .preview canvas{width:220px;height:220px;border-radius:50%;background:#000;box-shadow:0 0 40px rgba(47,212,196,.1)}
+  .preview .cap{color:var(--text2);font-size:12px}
+  .board{margin-top:26px}
+  .board h3{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--text2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  td.rank{color:var(--teal);font-weight:700;width:38px}
+  td.bytes{font-variant-numeric:tabular-nums;font-weight:650}
+  tr.you{background:rgba(47,212,196,.06)}
+  .board .empty{color:var(--text2);font-size:13px;padding:14px 0}
+  .medal{font-size:14px}
+  .toast{font-size:13px;min-height:18px;margin-top:8px}
+  .toast.ok-t{color:var(--green)} .toast.err-t{color:var(--red)}
+  .offline{color:var(--amber);font-size:12.5px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>⛳ Figment Golf</h1>
+  <span class="tag">Express the exact behavior in the fewest bytes. Every entry is <b>verified</b> against the real interpreter — skill, not votes.</span>
+  <span class="home"><a href="./gallery.html">🌐 Gallery</a><a href="./lens-builder.html">Builder</a><a href="./index.html">Home</a></span>
+</header>
+
+<div class="wrap">
+  <div class="col left">
+    <p class="eyebrow">Challenges</p>
+    <div id="chalList"></div>
+    <p class="rules">Each brief is checked by <b>behavior</b>, never shape. Your score is the lens's canonical byte size — the registry recomputes it, so the board can't be gamed.</p>
+  </div>
+  <div class="col right" id="detail"></div>
+</div>
+
+<script src="./assets/lens/figment.js"></script>
+<script src="./assets/lens/player.js"></script>
+<script>
+(function(){
+  "use strict";
+  var REGISTRY = "https://api.dreamlayer.app";
+  var K = window.LensKit;
+  var CH = K ? K.GOLF : [];
+  // a running-start template for each challenge, so "make one" is one click
+  var STARTER = { "pocket-timer":"countdown", "last-30":"countdown", "tally":"score", "streak":"reps" };
+  var sel = CH.length ? CH[0].id : null;
+  var player = null, lastCode = "";
+
+  function starterUrl(ch){
+    try{
+      var mk = K.templates[STARTER[ch.id]] || K.templates.countdown;
+      var code = K.encodeShare(mk(), { author: "" });
+      return "./lens-builder.html#lens=" + code;
+    }catch(e){ return "./lens-builder.html"; }
+  }
+
+  function renderList(){
+    var host = document.getElementById("chalList"); host.innerHTML = "";
+    CH.forEach(function(ch){
+      var b = document.createElement("button");
+      b.className = "chal" + (ch.id === sel ? " on" : "");
+      b.innerHTML = '<span class="ico">' + (ch.emoji||"⛳") + '</span><span class="tx"><b></b>' +
+        '<span class="bf"></span><span class="par">par ' + ch.par + ' bytes</span></span>';
+      b.querySelector("b").textContent = ch.title;
+      b.querySelector(".bf").textContent = ch.brief;
+      b.onclick = function(){ sel = ch.id; lastCode=""; renderList(); renderDetail(); };
+      host.appendChild(b);
+    });
+  }
+
+  function renderDetail(){
+    var ch = CH.find(function(c){ return c.id === sel; }); if(!ch) return;
+    if(player){ try{ player.stop(); }catch(e){} player=null; }
+    var d = document.getElementById("detail");
+    d.innerHTML =
+      '<div class="brief"><h2></h2><p></p>' +
+        '<div class="par-line">Par: <b>' + ch.par + ' bytes</b> — beat it to go under par.</div></div>' +
+      '<div class="grid2">' +
+        '<div class="make">' +
+          '<label class="f">Paste your lens’s share code or link (the builder’s 🔗 Share button gives you one)</label>' +
+          '<textarea id="code" placeholder="eyJ2Ijox… or https://dreamlayer.app/lens-builder.html#lens=…"></textarea>' +
+          '<div class="btnrow">' +
+            '<a class="btn ghost" href="' + starterUrl(ch) + '">✦ Start one in the builder →</a>' +
+            '<button class="btn" id="submitBtn" disabled>Submit to the board</button>' +
+          '</div>' +
+          '<label class="f">Your maker handle</label>' +
+          '<input id="author" maxlength="40" placeholder="how the board should credit you" />' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>' +
+        '<div class="preview"><canvas id="pv" width="240" height="240"></canvas>' +
+          '<div class="cap" id="pvcap">paste a lens to preview it live</div></div>' +
+      '</div>' +
+      '<div class="verify pending" id="verify"><div class="cap" style="color:var(--text2);font-size:13px">Your solution is checked here the moment you paste it.</div></div>' +
+      '<div class="board" id="board"></div>';
+    d.querySelector(".brief h2").textContent = ch.title;
+    d.querySelector(".brief p").textContent = ch.brief;
+    document.getElementById("code").addEventListener("input", onCode);
+    document.getElementById("submitBtn").onclick = submit;
+    try{ document.getElementById("author").value = localStorage.getItem("dl_golf_handle") || ""; }catch(e){}
+    loadBoard(ch.id);
+  }
+
+  function extractCode(raw){
+    raw = String(raw||"").trim();
+    var m = raw.match(/[#?&]lens=([A-Za-z0-9_-]+)/);
+    if(m) return m[1];
+    return raw.replace(/\s+/g,"");
+  }
+
+  function onCode(){
+    var ch = CH.find(function(c){ return c.id === sel; });
+    var code = extractCode(document.getElementById("code").value);
+    var v = document.getElementById("verify");
+    var btn = document.getElementById("submitBtn");
+    var cap = document.getElementById("pvcap");
+    if(player){ try{ player.stop(); }catch(e){} player=null; }
+    if(!code){ v.className="verify pending"; v.innerHTML='<div class="cap" style="color:var(--text2);font-size:13px">Your solution is checked here the moment you paste it.</div>';
+      btn.disabled=true; cap.textContent="paste a lens to preview it live"; drawBlank(); return; }
+    var got = K.decodeShare(code);
+    if(!got || !got.figment){ v.className="verify"; v.innerHTML='<div style="color:var(--red)">That code isn’t a valid, safe lens. Copy it from the builder’s Share button.</div>';
+      btn.disabled=true; cap.textContent="—"; drawBlank(); return; }
+    lastCode = code;
+    // live preview
+    player = new LensPlayer(document.getElementById("pv"), got.figment, {}).start();
+    cap.textContent = (got.figment.name||"your lens") + " — running live";
+    // verify against the challenge, client-side (the registry re-checks on submit)
+    var res = K.runChallenge(got.figment, ch);
+    v.className = "verify";
+    var delta = ch.par - res.bytes;
+    v.innerHTML =
+      '<div class="score"><span class="big">' + res.bytes + ' B</span>' +
+        '<span class="par">par ' + ch.par + '</span>' +
+        '<span class="delta ' + (delta>=0?"under":"over") + '">' + (delta>=0?("−"+delta+" under par"):("+"+(-delta)+" over par")) + '</span>' +
+        '<span class="par">· ' + res.moves + ' moves · ' + res.scenes + (res.scenes===1?" scene":" scenes") + '</span></div>' +
+      '<ul class="checks">' + res.checks.map(function(c){
+        return '<li class="' + (c.ok?"pass":"fail") + '"><span class="mk">' + (c.ok?"✓":"✕") + '</span>' +
+          '<span>' + esc(c.label) + (c.ok?"":('<span class="why">— ' + esc(c.why||"") + '</span>')) + '</span></li>';
+      }).join("") + '</ul>' +
+      (res.solved ? '<div style="color:var(--green);margin-top:8px">✓ Solved — submit it and see where you land.</div>'
+                  : '<div style="color:var(--text2);margin-top:8px">Fix the ✕ checks in the builder, re-share, and paste again.</div>');
+    btn.disabled = !res.solved;
+  }
+
+  function drawBlank(){ var cv=document.getElementById("pv"); if(!cv) return; var x=cv.getContext("2d");
+    x.clearRect(0,0,cv.width,cv.height); x.fillStyle="#000"; x.beginPath(); x.arc(120,120,119,0,7); x.fill(); }
+
+  function submit(){
+    var ch = CH.find(function(c){ return c.id === sel; });
+    var author = document.getElementById("author").value.trim();
+    var toast = document.getElementById("toast");
+    if(!lastCode){ return; }
+    try{ if(author) localStorage.setItem("dl_golf_handle", author); }catch(e){}
+    toast.className="toast"; toast.textContent="Verifying on the registry…";
+    fetch(REGISTRY + "/api/golf/" + ch.id + "/submit", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ code:lastCode, author:author })
+    }).then(function(r){ return r.json().then(function(d){ return {r:r,d:d}; }); })
+      .then(function(x){
+        if(x.r.status===200 && (x.d.status==="accepted"||x.d.status==="kept")){
+          toast.className="toast ok-t";
+          toast.textContent = x.d.status==="accepted"
+            ? ("✓ You’re #" + x.d.rank + " on the board at " + x.d.bytes + " bytes!")
+            : ("Your best entry (#" + x.d.rank + ", " + x.d.bytes + " B) still stands.");
+          renderBoard(ch.id, x.d.entries, author);
+        } else {
+          toast.className="toast err-t";
+          toast.textContent = x.d.error || "Couldn’t submit — try again.";
+        }
+      }).catch(function(){ toast.className="toast err-t"; toast.textContent="Offline — the board needs a connection to record your score."; });
+  }
+
+  function loadBoard(id){
+    var board = document.getElementById("board");
+    board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="empty">Loading…</div>';
+    fetch(REGISTRY + "/api/golf/" + id + "/leaderboard")
+      .then(function(r){ return r.json(); })
+      .then(function(d){ renderBoard(id, d.entries||[]); })
+      .catch(function(){ board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="offline">The board loads when you’re online. Verify and build offline — submit when you reconnect.</div>'; });
+  }
+  function renderBoard(id, entries, you){
+    if(id !== sel) return;
+    var board = document.getElementById("board");
+    var medal = ["🥇","🥈","🥉"];
+    if(!entries.length){ board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="empty">No entries yet — be the first to set par.</div>'; return; }
+    board.innerHTML = '<h3>🏆 Leaderboard <span style="color:var(--text2);font-weight:400;font-size:12px">fewest bytes wins</span></h3>' +
+      '<table><thead><tr><th>#</th><th>Maker</th><th>Bytes</th><th></th></tr></thead><tbody>' +
+      entries.map(function(e,i){
+        var rank = e.rank || (i+1);
+        return '<tr class="' + (you && e.author===you ? "you":"") + '">' +
+          '<td class="rank">' + (rank<=3?('<span class="medal">'+medal[rank-1]+'</span>'):rank) + '</td>' +
+          '<td>' + esc(e.author) + '</td>' +
+          '<td class="bytes">' + e.bytes + '</td>' +
+          '<td><a href="./lens-builder.html#lens=' + encodeURIComponent(e.code) + '">Study →</a></td></tr>';
+      }).join("") + '</tbody></table>';
+  }
+
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  if(K && CH.length){ renderList(); renderDetail(); }
+  else document.getElementById("detail").innerHTML = '<div class="brief"><h2>Couldn’t load the game.</h2><p>Refresh to try again.</p></div>';
+})();
+</script>
+</body>
+</html>
