@@ -265,10 +265,10 @@ section{position:relative}
 /* Juno — the assistant sprite (true-alpha), a presence beside the hero.
    Scoped under .hero to beat juno.js's base `.juno{position:relative}`. */
 .hero .hero-juno{position:absolute;z-index:1;pointer-events:none;top:50%;
-  width:clamp(240px,30vw,480px);right:max(2vw,calc(50% - 660px));transform:translateY(-52%);
-  opacity:.96;filter:drop-shadow(0 6px 30px rgba(47,212,196,.14))}
-@media(max-width:900px){.hero .hero-juno{width:min(72vw,360px);right:auto;left:50%;top:34%;
-  transform:translate(-50%,-50%);opacity:.5}}
+  width:clamp(190px,23vw,360px);right:max(1vw,calc(50% - 680px));transform:translateY(-50%);
+  opacity:.96;filter:drop-shadow(0 8px 34px rgba(47,212,196,.16))}
+@media(max-width:900px){.hero .hero-juno{width:min(52vw,260px);right:auto;left:50%;top:32%;
+  transform:translate(-50%,-50%);opacity:.42}}
 .hero-ring{position:relative;width:clamp(150px,20svh,190px);height:clamp(150px,20svh,190px);margin:0 auto 40px}
 .hero-ring .r{position:absolute;inset:0;border:2px solid var(--teal);border-radius:50%}
 .hero-ring .r.breathe{animation:ringbreathe var(--breath) ease-in-out infinite}
