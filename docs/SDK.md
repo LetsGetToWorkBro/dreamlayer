@@ -230,9 +230,15 @@ Three ways to author one, easiest first:
   the JSON. Zero install, zero code. Paint strokes are data too — count/vertex/
   colour capped, so they re-prove safe like everything else. First visit opens a
   **"What's possible" tour** — a guided showcase that loads live lenses onto the
-  ring (head-steered decks, a breathing painted mandala, world-triggered rituals
-  that fire on `place:enter` / `bond:near` / a BLE button, a rep log that writes
-  to your Vault) so the edges of the grammar land by being watched.
+  ring, each simulating the real stack feed so the loop between the glass and
+  everything behind it lands by being watched: **Whisper** (camera + Brain →
+  live translation streamed into `{slot}`), **Ask** (speak → your Brain answers
+  from your Vault, with a provenance shield), **Second Sight** (glance → the
+  camera names it), **Tethered** (a bonded partner's presence via `bond:near`,
+  emitting a heartbeat back), **Threshold** (`place:enter` rituals), **Ember**
+  (the Vault surfaces a memory where it happened), **Coach** (phone pose + Brain
+  judge your form), and a breathing painted mandala. Every one is the same
+  signed, budget-proven figment underneath.
 - **The phone** — rehearse it by performing it (tap, speak the beats, keep), in
   the app's rehearsal flow.
 - **JSON + the CLI** — hand-write or generate the figment and check it:

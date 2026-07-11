@@ -324,7 +324,148 @@
     }));
     return f;
   }
+  // -- the loop between the glass and the whole stack -------------------------
+  // These are the "no way" lenses: the world feeds them (place/bond/ble events),
+  // the Brain streams into {slot} (translations, an LLM answer, a camera label,
+  // a resurfaced memory), and they emit back (a heartbeat, a logged rep). Every
+  // one is a real, budget-proven figment — the tour simulates the live feed.
+  function _ring(cx, cy, r) {
+    var pts = [], N = 13;
+    for (var i = 0; i <= N; i++) { var a = (i / N) * Math.PI * 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+    return pts;
+  }
+  function _heart(cx, cy, s) {
+    var pts = [], N = 20;
+    for (var i = 0; i <= N; i++) {
+      var t = (i / N) * Math.PI * 2, x = 16 * Math.pow(Math.sin(t), 3);
+      var y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      pts.push([cx + x * s, cy - y * s]);
+    }
+    return pts;
+  }
+  function _heartGlyph(col) { return [glyph(_heart(0.5, 0.44, 0.0155), { color: col, width: "sm" })]; }
+
+  // Whisper — read/hear any language, live. Camera OCR + mic → Brain/cloud
+  // translate → the words stream onto {slot}.
+  function shWhisper() {
+    var f = figment("Whisper — live translate", "live");
+    addScene(f, scene("live", {
+      lines: [line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("▸ translating live", { row: 4, size: "sm", color: "accent_memory" })],
+      glyphs: [glyph([[0.18, 0.8], [0.34, 0.8]], { color: "accent_memory", width: "sm" }),
+               glyph([[0.66, 0.8], [0.82, 0.8]], { color: "accent_memory", width: "sm" })],
+      on: { "text": { target: SELF }, "double": { target: END } },
+    }));
+    return f;
+  }
+  // Ask — your Brain, on glass. Double-tap & speak → emit "ask" → the Brain
+  // answers from your own memory (or cloud) → the answer lands in {slot}.
+  function shAsk() {
+    var f = figment("Ask — your Brain, on glass", "idle");
+    addScene(f, scene("idle", {
+      lines: [line("ASK ME ANYTHING", { row: 1, size: "md", color: "text_secondary" }),
+              line("double-tap · then speak", { row: 3, size: "sm", color: "text_secondary" })],
+      on: { "double": { target: "hear", emit: "ask" } },
+    }));
+    addScene(f, scene("hear", {
+      duration_sec: 2, tick: "countup",
+      lines: [line("listening…", { row: 1, size: "md", color: "accent_attention" })],
+      pulse: { window_sec: 2, rate_hz: 1.5, color: "accent_attention" },
+      on_timeout: [{ target: "answer" }], on: { "text": { target: "answer" }, "double": { target: "idle" } },
+    }));
+    addScene(f, scene("answer", {
+      lines: [line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("⛨ from your memory", { row: 4, size: "sm", color: "accent_memory" })],
+      on: { "text": { target: SELF }, "double": { target: "idle" } },
+    }));
+    return f;
+  }
+  // Tethered — feel a bonded partner across the world. Their presence fires
+  // bond:near, their mood-weather tints the ring, you emit a heartbeat back.
+  function shTethered() {
+    var f = figment("Tethered — feel them near", "away");
+    addScene(f, scene("away", {
+      lines: [line("· · ·", { row: 1, size: "lg", color: "text_secondary" }),
+              line("2,400 miles away", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: _heartGlyph("border_subtle"), cadence: { in_s: 4, hold_s: 1, out_s: 4 },
+      on: { "bond:near": { target: "near" }, "text": { target: SELF }, "double": { target: END } },
+    }));
+    addScene(f, scene("near", {
+      duration_sec: 6, tick: "countdown",
+      lines: [line("SHE'S NEAR", { row: 1, size: "lg", color: "accent_memory" })],
+      glyphs: _heartGlyph("accent_memory"), pulse: { window_sec: 6, rate_hz: 1.1, color: "accent_memory" },
+      on_timeout: [{ target: "away", emit: "beat", record: true }], on: { "double": { target: END } },
+    }));
+    return f;
+  }
+  // Threshold — your world reacts to where you are. Arriving fires place:enter
+  // and the right ritual just begins.
+  function shThreshold() {
+    var f = figment("Threshold — arrive & begin", "home");
+    addScene(f, scene("home", {
+      lines: [line("HOME", { row: 0, size: "md", color: "text_secondary" }),
+              line("walk somewhere…", { row: 4, size: "sm", color: "text_secondary" })],
+      on: { "place:enter": { target: "gym" }, "double": { target: END } },
+    }));
+    addScene(f, scene("gym", {
+      duration_sec: 5, tick: "countdown",
+      lines: [line("GYM ✦ ROUND 1", { row: 1, size: "lg", color: "accent_attention" })],
+      pulse: { window_sec: 3, rate_hz: 2.0, color: "accent_attention" },
+      on_timeout: [{ target: "home" }], on: { "place:exit": { target: "home" }, "double": { target: END } },
+    }));
+    return f;
+  }
+  // Second Sight — the camera whispers what it sees. Glance + hold → emit
+  // "look" → vision (local or cloud) names it into {slot}.
+  function shSecondSight() {
+    var f = figment("Second Sight — name anything", "look");
+    addScene(f, scene("look", {
+      lines: [line("GLANCE + HOLD", { row: 1, size: "md", color: "text_secondary" }),
+              line("to name what you see", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph(_ring(0.5, 0.42, 0.13), { color: "accent_memory", width: "sm" })],
+      on: { "long": { target: "seen", emit: "look" }, "double": { target: END } },
+    }));
+    addScene(f, scene("seen", {
+      lines: [line("{slot}", { row: 1, size: "md", color: "accent_success" }),
+              line("hold to look again ↻", { row: 4, size: "sm", color: "text_secondary" })],
+      on: { "text": { target: SELF }, "long": { target: "look" }, "double": { target: END } },
+    }));
+    return f;
+  }
+  // Ember — your own memory, handed back at the perfect moment. Standing where
+  // it happened (place:enter) the Vault surfaces a line into {slot}.
+  function shEmber() {
+    var f = figment("Ember — memory, returned", "quiet");
+    addScene(f, scene("quiet", {
+      lines: [line("· here ·", { row: 1, size: "md", color: "text_secondary" })],
+      on: { "place:enter": { target: "back" }, "text": { target: "back" }, "double": { target: END } },
+    }));
+    addScene(f, scene("back", {
+      lines: [line("{slot}", { row: 1, size: "md", color: "accent_memory" })],
+      glyphs: [glyph([[0.5, 0.72], [0.44, 0.6], [0.5, 0.5], [0.56, 0.6], [0.5, 0.72]], { color: "accent_attention", width: "sm" })],
+      cadence: { in_s: 5, hold_s: 2, out_s: 5 },
+      on: { "text": { target: SELF }, "double": { target: END } },
+    }));
+    return f;
+  }
+  // Coach — the camera judges your FORM, not your reps. The phone's pose + the
+  // Brain stream a live cue into {slot}; a clean rep logs to your Vault.
+  function shCoach() {
+    var f = figment("Coach — form, not reps", "set");
+    f.counters.reps = counter("reps", { hi: 99 });
+    addScene(f, scene("set", {
+      lines: [line("{slot}", { row: 0, size: "lg", color: "accent_attention" }),
+              line("clean reps: {count:reps}", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.24, 0.62], [0.5, 0.62]], { color: "accent_attention", width: "lg" })],
+      on: { "text": { target: SELF },
+            "single": { target: SELF, counter_ops: [inc("reps")], emit: "rep", record: true },
+            "double": { target: END } },
+    }));
+    return f;
+  }
   var SHOWCASES = {
+    whisper: shWhisper, ask: shAsk, secondSight: shSecondSight, tethered: shTethered,
+    threshold: shThreshold, ember: shEmber, coach: shCoach,
     headControl: shHeadControl, mandala: shMandala, world: shWorld,
     keep: shKeep, fusion: shFusion,
   };

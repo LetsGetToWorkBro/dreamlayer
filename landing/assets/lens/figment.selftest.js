@@ -110,6 +110,14 @@ Object.keys(K.showcases).forEach(function (id) {
 var world = K.showcases.world();
 ok(world.scenes.wait.on["place:enter"] && world.scenes.wait.on["bond:near"] && world.scenes.wait.on["ble:3"],
    "the world showcase reacts to place, bond, and BLE triggers");
+// the stack showcases: each pulls a real capability
+ok(/\{slot\}/.test(K.showcases.whisper().scenes.live.lines[0].content), "whisper streams host text into {slot}");
+ok(K.showcases.ask().scenes.idle.on.double.emit === "ask", "ask emits a question for the Brain");
+ok(K.showcases.secondSight().scenes.look.on.long.emit === "look", "second sight asks the camera to look");
+ok(K.showcases.tethered().scenes.near.on_timeout[0].emit === "beat", "tethered emits a heartbeat back");
+ok(K.showcases.threshold().scenes.home.on["place:enter"], "threshold fires on arriving somewhere");
+ok(K.showcases.ember().scenes.quiet.on["place:enter"], "ember surfaces a memory where it happened");
+ok(K.showcases.coach().counters.reps && K.showcases.coach().scenes.set.on.single.record, "coach logs only clean reps");
 var keep = K.showcases.keep();
 ok(keep.scenes.count.on["imu:nod"].record === true, "the keep showcase records each nod to the ledger");
 var mand = K.showcases.mandala();

@@ -72,7 +72,9 @@ class TestUnderNode:
         assert report.ok, f"{recipe} rejected by the real gate: {report.violations}"
 
     @pytest.mark.parametrize("show", ["headControl", "mandala", "world",
-                                      "keep", "fusion"])
+                                      "keep", "fusion", "whisper", "ask",
+                                      "secondSight", "tethered", "threshold",
+                                      "ember", "coach"])
     def test_a_tutorial_showcase_passes_the_real_gate(self, show):
         # the "what's possible" tour loads these live — they push the whole
         # grammar (gestures, guards, paint, cadence, world-triggers, record)
@@ -85,6 +87,28 @@ class TestUnderNode:
         fig = Figment.from_dict(json.loads(out.stdout))
         report = verify(fig)
         assert report.ok, f"{show} rejected by the real gate: {report.violations}"
+
+    # (show, events that reach the {slot} scene before the host pushes text)
+    @pytest.mark.parametrize("show,setup", [
+        ("whisper", []), ("ask", ["double"]), ("secondSight", ["long"]),
+        ("ember", []), ("coach", []),
+    ])
+    def test_slot_fed_showcase_renders_the_hosts_text(self, show, setup):
+        # the "live feed" is real: these showcases show {slot}, and the host
+        # (Brain/camera) pushes text into it via a "text" event. Prove the
+        # reference interpreter actually surfaces that text on a line.
+        from dreamlayer.reality_compiler.v2.interpreter import Stage
+        out = subprocess.run(
+            ["node", "-e",
+             f"console.log(JSON.stringify(require('./figment.js').showcases.{show}()))"],
+            cwd=LENS, capture_output=True, text=True)
+        fig = Figment.from_dict(json.loads(out.stdout))
+        st = Stage(fig)
+        for ev in setup:
+            st.inject(ev)                          # reach the answer/seen scene
+        st.inject("text", "HELLO WORLD")           # the host streams a line in
+        assert any("HELLO WORLD" in ln.text for ln in st.frame().lines), \
+            f"{show} did not surface the host's slot text"
 
 
 # -- the Brain import endpoint (Deploy to my Brain) ---------------------------

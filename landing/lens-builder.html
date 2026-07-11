@@ -277,9 +277,9 @@
   // the rich templates (counters, gestures, painted glyphs) read best as a
   // scene graph — open them in Advanced; the classic knob recipes stay Simple
   var ADVANCED_TEMPLATES = { reps:1, focus:1, score:1 };
-  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id);
+  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id); startDemo(null);
     if(ADVANCED_TEMPLATES[t.id]) setMode("advanced"); else setMode("simple"); boot(); }
-  function loadBlank(){ fig = K.emptyFigment(); editKind = "blank"; markRecipe("blank"); setMode("advanced"); boot(); }
+  function loadBlank(){ fig = K.emptyFigment(); editKind = "blank"; markRecipe("blank"); startDemo(null); setMode("advanced"); boot(); }
   function boot(){
     document.getElementById("fname").value = fig.name;
     buildEditors(); refresh(); restart();
@@ -588,15 +588,57 @@
     return { target:"@end" };
   }
   function dwell(s){ return s.duration_sec!=null ? s.duration_sec : 1.6; }
+
+  // -- showcase demo feed: simulate the Brain/camera/partner feeding a lens ----
+  // Each script is a timeline of {at, slot, fire} — `slot` streams host text
+  // into {slot}; `fire` delivers a world/gesture event (place:enter, bond:near,
+  // ble:3, long, single, double). This is exactly what the real stack pushes;
+  // here it's scripted so the "no way" behavior plays live in the browser.
+  var DEMOS = {
+    whisper: { loop:6.8, steps:[ {at:0.3,slot:"¿Dónde está la estación?"}, {at:1.4,slot:"Where is the station?"},
+      {at:3.0,slot:"La cuenta, por favor"}, {at:4.0,slot:"The check, please"},
+      {at:5.4,slot:"Dos cafés, gracias"} ] },
+    ask: { loop:7.5, steps:[ {at:0.7,fire:"double"}, {at:3.0,slot:"Your lease is due Fri the 14th."},
+      {at:6.2,fire:"double"} ] },
+    secondSight: { loop:7.5, steps:[ {at:1.0,fire:"long"}, {at:1.6,slot:"Monstera · water weekly"},
+      {at:4.2,fire:"long"}, {at:4.8,slot:"Cabernet · 2018 · bold, dry"} ] },
+    tethered: { loop:11, steps:[ {at:2.6,fire:"bond:near"} ] },
+    threshold:{ loop:9, steps:[ {at:2.2,fire:"place:enter"} ] },
+    ember: { loop:8.5, steps:[ {at:1.6,fire:"place:enter"}, {at:2.2,slot:"You sat here with Dad — 3y ago"} ] },
+    coach: { loop:8.5, steps:[ {at:0.8,slot:"↓ go deeper"}, {at:1.8,slot:"hold…"},
+      {at:2.6,slot:"✓ clean rep",fire:"single"}, {at:4.0,slot:"chest up"}, {at:5.0,slot:"steady"},
+      {at:5.8,slot:"✓ clean rep",fire:"single"} ] },
+  };
+  var demo=null, demoStart=0, demoIdx=0, pslot="";
+  function startDemo(id){ demo=DEMOS[id]||null; demoStart=nowms(); demoIdx=0; pslot=""; }
+  function fireEvent(ev){
+    var s=fig&&fig.scenes[activeScene]; if(!s||!s.on) return;
+    var tr=s.on[ev]; if(!tr) return; applyOps(tr);
+    var n=tr.target==="@self"?activeScene:tr.target;
+    activeScene=(n==="@end"||!fig.scenes[n])?fig.initial:n;
+    t0=nowms(); if(mode==="advanced") drawGraph();
+  }
+  function demoTick(){
+    if(!demo) return;
+    var d=(nowms()-demoStart)/1000;
+    while(demoIdx<demo.steps.length && d>=demo.steps[demoIdx].at){
+      var st=demo.steps[demoIdx++];
+      if(st.slot!=null) pslot=st.slot;
+      if(st.fire) fireEvent(st.fire);
+    }
+    if(d>=(demo.loop||6)){ demoStart=nowms(); demoIdx=0; pslot=""; activeScene=fig.initial; resetCounters(); }
+  }
   function tick(){
     raf=null;
     if(fig&&activeScene){
+      demoTick();
       var s=fig.scenes[activeScene];
-      if(s){ var el=(nowms()-t0)/1000;
-        if(play&&el>=dwell(s)){ var tr=pickTrans(s); applyOps(tr); var n=tr.target;
+      if(s){ var el=(nowms()-t0)/1000, timed=s.duration_sec!=null;
+        // a demo drives event-only scenes itself; timed scenes still time out
+        if(play&&el>=dwell(s)&&(timed||!demo)){ var tr=pickTrans(s); applyOps(tr); var n=tr.target;
           if(n==="@self") n=activeScene;
           activeScene=(n==="@end"||!fig.scenes[n])?fig.initial:n;
-          if(activeScene===fig.initial && n==="@end") resetCounters();  // loop restarts the tally
+          if(activeScene===fig.initial && n==="@end" && !demo) resetCounters();
           t0=nowms(); el=0; if(mode==="advanced") drawGraph(); }
         draw(s, el, dwell(s));
       }
@@ -609,7 +651,7 @@
       .replace(/\{remaining_s\}/g, s.duration_sec!=null?String(Math.max(0,Math.ceil(dur-el))):"")
       .replace(/\{elapsed\}/g, mmss(Math.floor(el)))
       .replace(/\{elapsed_ms\}/g, String(Math.floor(el*1000)))
-      .replace(/\{slot\}/g, "")
+      .replace(/\{slot\}/g, pslot||"")
       .replace(/\{count:(\w+)\}/g, function(_,n){ return String(pcount[n]!=null?pcount[n]:0); });
   }
   function draw(s, el, dur){
@@ -688,10 +730,11 @@
     EXAMPLES.forEach(function(ex){ var b=document.createElement("button"); b.textContent=ex;
       b.onclick=function(){ document.getElementById("askprompt").value=ex; }; wrap.appendChild(b); });
   })();
-  function loadComposed(f, kind, note){
+  function loadComposed(f, kind, note, demoId){
     fig = f; editKind = kind || "juno"; markRecipe(null);
     document.getElementById("fname").value = fig.name;
     setMode("advanced"); boot();
+    startDemo(demoId||null);   // showcases carry a simulated live feed; others clear it
     var toast=document.getElementById("asktoast"); toast.className="toast ok-t";
     toast.textContent = "✓ " + (note || ("Drafted “"+fig.name+"”. Tweak it, paint on it, then deploy."));
   }
@@ -747,30 +790,32 @@
   // point lands by being watched — not just read.
   var TOUR = [
     { rail:"Data, not code", title:"You can't break it. That's the point.",
-      copy:"<p>Everything here is a <b>figment</b> — a little machine described as <b>data</b>. It can't name a function, reach the network, open your files, or touch the camera. There's no loop you can write that runs forever.</p>"+
-           "<p>So we don't ask you to be careful. Your <b>glasses re-prove every lens is safe</b> before it runs, and again on every hop — phone, Brain, glass. <span class='whoa'>Build the wildest thing you can imagine; it still can't misbehave.</span></p>" },
-    { rail:"Steer with your head", title:"Control it with a nod.", demo:"headControl",
-      copy:"<p>Scenes can listen for real on-glass gestures — <code>nod</code>, <code>shake</code>, look up (<code>peek</code>), <code>tilt</code>, even a <code>double-nod</code> — plus taps and long-presses.</p>"+
-           "<p>This deck flips forward on a nod, back on a shake, and finishes when you glance up. <span class='whoa'>No hands, no phone, no menus.</span></p>" },
-    { rail:"Tally anything", title:"A number that lives on your eye.", demo:"keep",
-      copy:"<p>Bounded counters let a lens keep score. Nod to add a rep — and here's the twist: each nod is flagged <code>record</code>, so it's <b>written to your private Vault performance log</b>.</p>"+
-           "<p><span class='whoa'>Your push-up history, your meds-taken record, your practice streak — captured by a lens you drew in a browser.</span></p>" },
-    { rail:"Paint that breathes", title:"Draw on the glass. Make it breathe.", demo:"mandala",
-      copy:"<p>Paint bounded vector strokes right onto the lens — they ride inside the signed figment like everything else. Add a <b>cadence</b> and the whole ring breathes on a slow envelope: in, hold, out.</p>"+
-           "<p><span class='whoa'>A hand-painted mandala that inhales and exhales with you</span> — for box-breathing, HRV, talking someone down from a panic.</p>" },
-    { rail:"The world reaches in", title:"When the world moves, your lens answers.", demo:"world",
-      copy:"<p>This is the one that stops people. A scene can wait on the <b>world</b>, not just your body:</p>"+
-           "<p><code>place:enter</code> — you arrive somewhere. <code>bond:near</code> — a bonded partner comes close. <code>ble:3</code> — a $6 button out in the world.</p>"+
-           "<p><span class='whoa'>“When she leaves work, my dinner timer starts.” “When I reach the gym, the circuit begins.”</span> One lens. No app. No server.</p>" },
-    { rail:"It decides", title:"A lens that makes up its own mind.",
-      copy:"<p>Timed exits can carry <b>guards</b>: <em>after 3 rounds, finish — otherwise, go again.</em> Counters, guards and branches let a lens <b>make decisions</b> as it runs.</p>"+
-           "<p>And rate-limited <code>emit</code> tags let it nudge the world back — ring a light, poke your Brain — <span class='whoa'>all still inside a proof that says it can never flood or run away.</span></p>" },
-    { rail:"Leave it to someone", title:"A behavior you can hand down.",
-      copy:"<p>A finished lens is tiny, signed, and <b>provably yours</b>. Dedicate it — a birthday breathing ritual, a good-luck cue — and it becomes an <b>heirloom</b>: it will still run, unchanged, on a device that doesn't exist yet.</p>"+
-           "<p><span class='whoa'>You're not writing an app. You're leaving someone a small, living gift.</span></p>" },
-    { rail:"Now push it", title:"Fuse it all. Then go further.", demo:"fusion",
-      copy:"<p>Here's paint, a counter, a deciding guard, a gesture, a real-world trigger, and the ledger — <b>all in one signed ritual</b>: arrive at the gym → three rounds, breathing between → done, logged.</p>"+
-           "<p>Now it's your turn. Describe something impossible to <b>Ask Juno</b>, or start blank and <span class='whoa'>see how far the grammar bends.</span></p>" },
+      copy:"<p>Everything here is a <b>figment</b> — a little machine described as <b>data</b>. It can't name a function, run forever, or misbehave. Your <b>glasses re-prove every lens is safe</b> before it runs, and again on every hop — phone, Brain, glass.</p>"+
+           "<p>So don't hold back. <span class='whoa'>The wilder your idea, the more this matters — and it still can't hurt anything.</span> Here's what people build.</p>" },
+    { rail:"Translate anything", title:"Read and hear any language. Live.", demo:"whisper",
+      copy:"<p>Look at a foreign menu, or listen to someone speak — the <b>camera</b> reads it, the <b>Brain</b> (on your Mac, or the cloud) translates, and the words <b>stream onto the glass in real time</b>.</p>"+
+           "<p><span class='whoa'>No app to open, no phone to hold up.</span> You just… understand. The lens is three lines of data; the whole stack does the rest.</p>" },
+    { rail:"Your Brain, on glass", title:"Ask out loud. See the answer.", demo:"ask",
+      copy:"<p>Double-tap, speak a question. The lens <code>emit</code>s it; your <b>Brain answers from your own files and memory</b> (or the cloud) and streams the reply into your vision — with a <b>⛨ provenance shield</b> so you know where it came from.</p>"+
+           "<p><span class='whoa'>Your second brain, answering in your field of view.</span> “When's the lease due?” — and it just knows.</p>" },
+    { rail:"Name what you see", title:"Glance at anything. Know it.", demo:"secondSight",
+      copy:"<p>Hold a glance on a plant, a bottle, a landmark. The <b>camera + vision model</b> (local or cloud) name it and add one useful fact, right on the ring.</p>"+
+           "<p>For travelers, the curious, the low-vision. <span class='whoa'>Look at the world and have it quietly explained.</span></p>" },
+    { rail:"Feel them near", title:"A lens that glows when they're close.", demo:"tethered",
+      copy:"<p>Bond with someone. Their emotional <b>weather</b> tints your ring; when they come near, <code>bond:near</code> fires and the glass warms — and you <code>emit</code> a <b>heartbeat back to them</b>.</p>"+
+           "<p><span class='whoa'>No text. No call. Just presence, across any distance.</span> Two people, one quiet thread.</p>" },
+    { rail:"Your world reacts", title:"Walk through a door. The right thing happens.", demo:"threshold",
+      copy:"<p>Geofence the places in your life. <code>place:enter</code> fires a ritual: reach the gym → the circuit begins; step into your kid's room → it dims to a bedtime breath; walk on stage → your notes appear.</p>"+
+           "<p><span class='whoa'>Your surroundings become the interface.</span> Nothing to tap — you just move through your day and it keeps up.</p>" },
+    { rail:"Memory, returned", title:"Your life, handed back at the perfect moment.", demo:"ember",
+      copy:"<p>Standing where something happened — or on the anniversary — your <b>Vault</b> surfaces a single line into your vision: <em>“you sat here with Dad, 3 years ago today.”</em></p>"+
+           "<p><span class='whoa'>Not a photo you go looking for. A memory that finds you</span> — exactly when it means the most.</p>" },
+    { rail:"Coach your form", title:"It watches how you move, not just how many.", demo:"coach",
+      copy:"<p>The phone's <b>pose model + the Brain</b> judge your squat depth, your running cadence, your posture — and stream a live cue onto the glass. A <em>clean</em> rep logs to your Vault; a sloppy one doesn't.</p>"+
+           "<p><span class='whoa'>A personal trainer living in your glasses</span> — this is what a rep counter grows up to be.</p>" },
+    { rail:"Paint that breathes", title:"And it's beautiful, too.", demo:"mandala",
+      copy:"<p>Paint bounded vector strokes right onto a lens; add a <b>cadence</b> and the whole ring breathes — in, hold, out. A hand-drawn mandala for box-breathing, HRV, talking someone down.</p>"+
+           "<p>Every one of these — translation, memory, presence, coaching — is <b>the same signed, provable figment</b> underneath. <span class='whoa'>Now imagine yours.</span> Describe it to <b>Ask Juno</b>, or start blank.</p>" },
   ];
   var tourI=0, tourEl=document.getElementById("tour");
   function tourRender(){
@@ -784,12 +829,14 @@
     document.getElementById("tourKicker").textContent="The whole stack · "+(tourI+1)+" / "+TOUR.length;
     document.getElementById("tourTitle").textContent=ch.title;
     document.getElementById("tourCopy").innerHTML=ch.copy;
-    var demo=document.getElementById("tourDemo"); demo.innerHTML="";
+    var demoBox=document.getElementById("tourDemo"); demoBox.innerHTML="";
     if(ch.demo){
       var b=document.createElement("button"); b.textContent="▶ Load & run this on the ring";
       b.onclick=function(){ runShowcase(ch.demo); };
-      var cap=document.createElement("span"); cap.className="cap"; cap.textContent="Loads a real, budget-proven lens into the builder — tweak it, paint on it, make it yours.";
-      demo.appendChild(b); demo.appendChild(cap);
+      var cap=document.createElement("span"); cap.className="cap";
+      cap.textContent = DEMOS[ch.demo] ? "Loads the real lens and simulates the live Brain/camera/partner feed so you can watch it work."
+                                       : "Loads a real, budget-proven lens into the builder — tweak it, paint on it, make it yours.";
+      demoBox.appendChild(b); demoBox.appendChild(cap);
     }
     document.getElementById("tourPrev").style.visibility = tourI===0?"hidden":"";
     document.getElementById("tourNext").textContent = tourI===TOUR.length-1 ? "Start creating ✦" : "Next →";
@@ -797,7 +844,10 @@
   function runShowcase(key){
     var mk=(K.showcases&&K.showcases[key])||(K.templates&&K.templates[key]);
     if(!mk) return; closeTour(true);
-    loadComposed(mk(), "showcase", "Running “"+mk().name+"” — watch the ring, then make it yours.");
+    var hasDemo = !!DEMOS[key];
+    loadComposed(mk(), "showcase",
+      "Running “"+mk().name+"”"+(hasDemo?" — the Brain/camera feed is simulated so you can watch it live.":" — watch the ring, then make it yours."),
+      hasDemo?key:null);
   }
   function openTour(){ tourI=0; tourRender(); tourEl.style.display="flex"; }
   function closeTour(keep){
