@@ -3,9 +3,11 @@
 The phone app (`phone-app/`, Expo / React Native, TypeScript strict) is the
 remote control and the pocket brain: pairing, the three switches, every
 toggle, message approval, and a phone-sized view of everything the Brain
-knows. Six tabs — **Brain, Now, Messages, People, Memories, Settings** —
-plus hidden screens reached from Settings and Now (Brief, Plugins, Rewind,
-Saga, Profile, Rehearsal, Confluence) and a five-step onboarding.
+knows. Seven tabs — **Brain, Now, Look, Messages, People, Memories,
+Settings** — plus hidden screens reached from Settings and Now (Brief,
+Plugins, Waypath, Capabilities, Device Vitals, Feel, Rewind, Saga, Profile,
+Rehearsal, Confluence, and the Cloud and Brain-tier views) and a five-step
+onboarding.
 
 *Every screenshot in this chapter is the real app: the repository's code
 exported to web (`npx expo export --platform web`) and captured headlessly
@@ -46,6 +48,20 @@ bundle; the client already prefers LAN and falls back. Setting the cloud or
 incognito switch also syncs the Brain (`POST /dreamlayer/config` with
 `cloud_enabled` / `network_mode`), so phone and panel never disagree.
 
+Three newer pieces make that connection honest under real-world networks:
+
+- **One connection truth** (`src/state/useConnectionStore.ts`) — a single
+  reachability store with four states and four plain labels: "Brain:
+  home", "Brain: away — via relay", "Brain: unreachable — still
+  remembering locally", "No Brain paired". Two consecutive probe failures
+  flip it offline; one success recovers it instantly.
+- **The config outbox** — a settings change that cannot reach the Brain is
+  merged, persisted, and kept as *pending sync* (never silently dropped);
+  the moment the connection store sees a recovery, the outbox drains.
+- **Offline caches** — the Memories and People stores hydrate from their
+  last-known snapshots on launch, so the app shows what it knew before any
+  network round-trip.
+
 ## Brain — the hub tab
 
 ![Brain tab](assets/phone/brain.png)
@@ -77,6 +93,17 @@ brief, a voice-command box that routes the same intents as Juno
 (brief / answer / reply), and quick actions (brief, ask, pause/resume
 capture). It polls `GET /dreamlayer/brief/latest` every 90 seconds and fires
 a local notification when a genuinely new brief arrives.
+
+## Look — the deliberate camera tier
+
+![Look tab](assets/phone/look.png)
+
+New enough to have earned a tab: point the phone at anything and one
+photo rides `POST /dreamlayer/brain/explain` — the same pipeline the
+glasses use, with the answer stamped by the tier that produced it
+("answered by: laptop"). The camera module loads lazily; no camera or no
+permission degrades to an honest empty state ("No camera here"), never a
+crash — which is exactly what the web export above shows.
 
 ## Messages — hands-free relay
 
@@ -127,7 +154,9 @@ with sources.
   Live fact-checker (Veritas), Answer-ahead, wake sources (voice, tap, gaze,
   raise), and listening feedback (visual, audio, haptic).
 - **Devices and brain:** glasses status and the link to the Brain tab.
-- **Labs:** Saga, Profile, Rewind, Rehearsal, Confluence.
+- **Labs:** Saga, Profile, Rewind, Rehearsal, Confluence — joined by
+  Waypath, Capabilities, Device Vitals, and Feel (below), plus "What the
+  cloud can see" and the live Brain tier ladder.
 - **Explore:** the Demo Mode switch ("Explore the whole app with labeled
   sample data — no glasses or Mac needed").
 - **Danger zone:** Erase all memories (confirmed) — it clears the local
@@ -160,8 +189,10 @@ is in [Settings and modes](reference/settings.md).
   keyboard's dictation) round-trips `POST /dreamlayer/rc/rehearse`, the
   score and budget proof render from the Brain's real reply, Keep signs the
   figment into the vault, and Arm / Revoke drive
-  `rc/deploy` / `rc/revoke`. The one remaining seam: deploys record their
-  BLE envelopes until the glasses transport attaches.
+  `rc/deploy` / `rc/revoke`. The remaining seam has narrowed: the whole
+  loop — including a running lens talking back to the Brain — is closed
+  and tested in TypeScript; what's left is the native BLE transport
+  itself, so deploys record their exact envelopes until a Halo attaches.
 - **Brief** — the extended morning brief, in sections (Today, Due, Waiting
   on you, Messages, Yesterday), composed on demand via
   `POST /dreamlayer/brief` with `depth: "long"` and stored to read offline.
@@ -179,6 +210,40 @@ is in [Settings and modes](reference/settings.md).
 - **Confluence** — the bond lifecycle (propose, accept, live), togetherness,
   TinCan pings, weather gifts. Presentational until live bond streaming
   lands.
+
+## The new Labs screens
+
+| Waypath | Feel | Capabilities |
+|---|---|---|
+| ![Waypath](assets/phone/waypath.png) | ![Feel](assets/phone/packs.png) | ![Capabilities](assets/phone/capabilities.png) |
+
+- **Waypath** — "one point of light — no map, no maps app." Enter (or use)
+  your location and a destination; a real OSRM route (the default public
+  server, self-hostable — the router URL is a swap-in seam) becomes a
+  single dot on a ring plus a distance line ("28 m to the next turn"),
+  bearing-corrected as you move. A **"Simulate the walk"** link ticks a
+  fake GPS along the actual route so the whole screen is demoable at a
+  desk — that is exactly how the screenshot above was taken.
+- **Feel** — the earcon/haptic pack picker. Two bundled packs today
+  (Glass, the default; Analog, weightier), applied app-wide and persisted;
+  the footer states the contract: "Every pack passes the same sensory
+  gate — patterns ≤400ms, the silent signal stays silent."
+- **Capabilities** — the phone-sized view of
+  [the capability report](integrations.md): what your paired Brain can
+  also learn to do, sorted by impact, with the honest footer "the phone
+  never installs code." Shown unpaired above — its real content needs a
+  Mac on the LAN.
+- **Device Vitals** — the audience for the glasses' TEL telemetry frames:
+  heap now/peak with a text sparkline, crash and veil counts, cards
+  shown/dismissed rates, figments banished. Empty ("No telemetry yet")
+  until real glasses stream it — the honest pre-hardware state.
+- **What the cloud can see** and **Brain — the tier ladder** — two small
+  trust screens: the first renders `GET /dreamlayer/cloud` (see
+  [DreamLayer Cloud](cloud.md)); the second renders
+  `GET /dreamlayer/brain/tiers` — every tier with its measured latency and
+  reliability, and a swap control. That ladder is the
+  **Bring-Your-Own-Brain ceremony**: the moment a Mac joins, you *watch*
+  answers get faster and richer, tier by tier.
 
 ## Onboarding
 
@@ -199,8 +264,27 @@ the Brain tab.
 - **Earcons** (`src/services/sound.ts`) — the app ships the actual sound
   files (`assets/sounds/`: two "hey" wakes, two listens, two watch-outs, two
   looks, two chimes) with variant rotation that never repeats back-to-back.
-- **Haptics** (`src/services/haptics.ts`) — light/medium/success/warn, safe
-  everywhere.
+- **Haptics** (`src/services/haptics.ts`) — no longer four buzzes but a
+  **data-driven vocabulary** of fourteen named signals (confirm, action,
+  attention, interrupt, veil_on/veil_off ramps, commitment_crack and
+  _bloom, truth_flag, figment_deployed — and answer_ahead, which is
+  *silence by design*), every pattern at most ~400 ms, plus TinCan
+  replaying the sender's actual tap rhythm. The full table is in
+  [Earcons and haptics](reference/earcons.md#the-phone-haptic-vocabulary).
+- **The BLE bridge** (`src/ble/`) — the glasses wire, in pure TypeScript:
+  `framing.ts` is the 4-byte length-prefix protocol ported byte-for-byte
+  from Python (pinned to Python-generated vectors), and `bridge.ts` is a
+  transport-injected state machine — MTU chunking, streaming reassembly,
+  reconnect backoff (0.5 s doubling to 8 s), and routing of inbound cards,
+  figment acks, lens emits, and TEL telemetry. **Seam:** the native
+  adapter (`transport.blePlx.ts`, react-native-ble-plx) loads lazily,
+  returns null in Expo Go/web, and still carries placeholder service UUIDs
+  marked for the bench — the real IDs need a Halo on a desk.
+- **The lens relay** (`src/services/lensRelay.ts`) — closes the
+  glass-to-Brain-to-glass loop: a running lens's rate-limited emit rides
+  the bridge to `POST /dreamlayer/rc/emit` (an `ask` emit runs the Brain
+  and pushes the answer back), and host text streams into the lens's slot
+  via `rc/feed`. See [the Lens Builder](lens-builder.md#the-loop-glass-to-brain-and-back).
 
 ### Design system
 
@@ -250,8 +334,15 @@ cd phone-app
 npm install
 npx expo start        # scan the QR with Expo Go (iOS/Android)
 npx tsc --noEmit      # typecheck (strict)
+npm test              # the phone's own test suite
 ```
 
-There is no test suite in the phone package today; the pairing codec's
-Python twin is covered by the host suite, and `tsc --noEmit` is the standing
-check.
+The package finally has its own test suite: **Jest, run as two projects** —
+"logic" (ts-jest over the pure-TS stores, services, BLE framing/bridge,
+pairing) and "component" (jest-expo with React Native Testing Library over
+the screens) — 103 test cases across 19 files at time of writing,
+covering the framing parity vectors, the reconnect state machine, the
+connection store's hysteresis, the outbox, Waypath geometry and routing,
+the pack gate, and the new screens. `tsc --noEmit` remains the standing
+typecheck, and the pairing codec's Python twin is still pinned by the
+host suite.

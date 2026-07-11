@@ -28,7 +28,11 @@ JSON dict over BLE.
 ### 2. The orchestrator (the hub) — `host-python/src/dreamlayer/orchestrator/`
 
 The mind of the product, designed to run on the phone. One `Orchestrator`
-class coordinates everything: the Juno voice assistant, the conversation
+class coordinates everything — since the decomposition pass it is a thin
+coordinator composed of ten focused ops mixins (ingest, conversation,
+commitments, world lenses, brain switches, messages, dream/REM,
+confluence, Juno/attention, plugins), behavior-preserving and
+API-identical. It coordinates: the Juno voice assistant, the conversation
 ledger and live captions, Veritas fact-checking, Truth Lens delivery reads,
 Discernment fusion, answer-ahead, the anticipation and attention engines,
 commitment capture, time-scrub rewind, the Social Lens, Dream Mode, and the
@@ -48,13 +52,15 @@ exposes secrets, the filesystem, or outbound sends is additionally
 
 ### 4. The phone app — `phone-app/`
 
-Expo / React Native. Six tabs (Brain, Now, Messages, People, Memories,
-Settings) plus hidden screens (Brief, Plugins, Rewind, Saga, Profile,
-Rehearsal, Confluence) and onboarding. It is the remote control: pairing, the
-three brain switches, every Juno and privacy toggle, message approval, and
-read-outs of everything the Brain knows — and it carries a Demo Mode that
-fills every screen with labeled sample data so the app is alive before any
-hardware is.
+Expo / React Native. Seven tabs (Brain, Now, Look, Messages, People,
+Memories, Settings) plus hidden screens (Brief, Plugins, Waypath,
+Capabilities, Device Vitals, Feel, Rewind, Saga, Profile, Rehearsal,
+Confluence, Cloud, Brain tiers) and onboarding. It is the remote control:
+pairing, the three brain switches, every Juno and privacy toggle, message
+approval, and read-outs of everything the Brain knows — and it carries a
+Demo Mode that fills every screen with labeled sample data so the app is
+alive before any hardware is. It now also ships its own Jest test suite
+alongside the strict typecheck.
 
 A fifth, smaller piece — `laptop-companion/` — is a stdlib-only agent serving
 one endpoint (`GET /dreamlayer/context`: recent file names, hostname, battery)

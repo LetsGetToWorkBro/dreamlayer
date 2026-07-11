@@ -115,6 +115,15 @@ Horizon. Below threshold, DreamLayer says "Not sure" rather than guessing.
 
 ![Where you left it](assets/demo/catalog/features/object/preview.gif)
 
+And when you never told it where a thing is, **Retrace** answers from
+*sightings*: "where did I last see it" searches the passive object
+memories, blends confidence with recency, and returns the last confident
+sighting with its place and time. A spoken "where's my charger?" now
+falls through Waypath (nothing stashed) into Retrace (maybe seen) before
+giving up — and the honest misses are distinct: "I don't have a spot
+saved for your charger yet" versus a sighting-based answer. No image is
+ever stored; a sighting is one text row, forgettable like any other.
+
 ## Stashes and the Waypath
 
 The spoken half of "where did I leave it" is the **Waypath Lens**
@@ -140,6 +149,49 @@ confirm with the SavedMemoryCard. A passive ring buffer (`SilentCapture` +
 can still reach a moment you never explicitly saved. **Seam:** the camera and
 microphone frames that feed it.
 
+A quiet gesture rides the same path: **nod to save**. With the IMU gesture
+classifier enabled (a boot flag, off by default), a deliberate nod pins the
+newest sighting in the ring — `meta.pinned`, persisted, celebrated with the
+SavedMemoryCard — and a shake dismisses the current card. A pinned sighting
+is a single text row; no image is stored.
+
+## The memory substrate
+
+What "remembering" is made of got real this wave (`memory/`):
+
+- **Real embeddings by default.** The embedder ladder is local **MiniLM**
+  (`all-MiniLM-L6-v2`, 384-d, ~80 MB, no key — the Total Recall pack) →
+  OpenAI (`text-embedding-3-small`, key required) → the offline floor, a
+  **real lexical hashing embedder** (word unigrams + character 3/4-grams,
+  512-d, signed hashing trick). The old 32-d mock is now explicitly a test
+  fixture, not an intelligence tier. Vectors persist as packed float32
+  blobs, and every vector is stamped with its embedding-space signature so
+  spaces never mix.
+- **A persistent ANN index.** HNSW over `usearch` (one sidecar file beside
+  the database, updated on every ingest) — because a linear scan breaks
+  inside year one of real use. Without `usearch` every query falls back to
+  the exact linear cosine scan with identical scoring.
+- **A retention lifecycle.** Hot (a 24-hour ring, purged after REM), warm
+  (90 days for consolidated rows — a memory REM keeps reaching for
+  survives its window), cold (forever, but only *entities*: people,
+  promises, tasks, teaches, places). Pinned rows never expire. The sweep
+  is deliberately conservative: unknown age means keep.
+- **A cold-start maturity arc.** A fresh install is an **OBSERVER** (48
+  hours and 200 scored events of pure silence), then an **APPRENTICE**
+  (high-confidence commitment/event cues only, at most three a day, no
+  audible harks), then a **RESIDENT**. And it can be demoted: if you
+  dismiss more than 60% of its last twenty cards it steps down for a day —
+  "Juno is recalibrating." Ephemeral sessions skip the arc.
+
+## Browse it, export it, burn it
+
+The memory store is one SQLite file you own, and the product says so out
+loud: `dreamlayer memories browse` opens a read-only, SQL-queryable web
+view over it (veil-gated — "Lower the veil first."), `export` / `import`
+copy it whole, and `burn --yes` deletes it. The Mac panel surfaces the
+same browse/export controls, so none of this needs a terminal. Details in
+[the SDK chapter](sdk.md#your-memory-is-a-file).
+
 ## Anticipation — the proactive cards
 
 `anticipate_tick(Context)` ties place, time, and person into ranked, deduped,
@@ -153,8 +205,11 @@ individually mutable from the phone (`set_cue`):
 | `place` | arriving where an anchor lives | HereCard "your bike is here" | 1 |
 
 A 300-second per-key cooldown stops repeats; Focus holds all of it; the Veil
-stops it entirely. Arriving somewhere that holds a memory also fires
-`on_place` and the **ProactiveMemoryCard**:
+stops it entirely — and on a fresh install, the
+[maturity arc](#the-memory-substrate) holds it too: an OBSERVER install
+says nothing at all, an APPRENTICE speaks at most three times a day.
+Arriving somewhere that holds a memory also fires `on_place` and the
+**ProactiveMemoryCard**:
 
 ![It remembers for you](assets/demo/catalog/features/proactive/preview.gif)
 

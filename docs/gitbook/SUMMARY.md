@@ -34,7 +34,9 @@
 - [The AI Brain deep dive](ai-brain.md)
 - [Integrations and capabilities](integrations.md)
 - [The platform — plugins, the mesh, and the store](platform.md)
-- [Build on DreamLayer — lenses & plugins](builders.md)
+- [The Lens Builder — lenses without code](lens-builder.md)
+- [The community layer — gallery, Golf, Jams](community.md)
+- [The SDK — plugins with code](sdk.md)
 - [DreamLayer Cloud](cloud.md)
 
 ## Reference

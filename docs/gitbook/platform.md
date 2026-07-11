@@ -49,9 +49,10 @@ and demos (15 tests cover the crypto, the drops, and the veil).
 
 ## Pillar 3 — the Plugin API
 
-`plugins/base.py` is the supported extension surface. A plugin is a name, a
-version, a list of required **capabilities**, and one `register(ctx)` call.
-The `PluginContext` exposes exactly six hooks and nothing else:
+`plugins/base.py` is the supported extension surface — now formally
+versioned and shipped as [the SDK](sdk.md) (`dreamlayer.sdk`, typed, with
+its own CLI). A plugin is a name, a version, a list of required
+**capabilities**, and one `register(ctx)` call. The registration hooks:
 
 | Hook | What it extends |
 |---|---|
@@ -62,19 +63,32 @@ The `PluginContext` exposes exactly six hooks and nothing else:
 | `add_card_renderer` | how a custom card draws |
 | `add_shop_provider` | a TasteLens data connector |
 
+API v2 plugins can additionally *live* (`start`/`stop`/`tick` lifecycle),
+*listen* (a veil-gated event bus — while the Veil is down, only the veil
+event is delivered), and *remember* (per-plugin persisted settings) — the
+detail is in [the SDK chapter](sdk.md#plugin-api-v2).
+
 Capabilities are the permission system: a plugin declares what it needs
-(`network`, `midi`, `mesh`, `cards`, `perception`...) and the host grants
-only what it can and will — `fs` and `subprocess` are withheld by default,
+(`network`, `midi`, `mesh`, `cards`, `perception`, the `cloud_*`
+entitlements...) and the host grants only what it can and will — `fs` is
+withheld by default, `subprocess` and `ctypes` map to a capability that
+cannot be declared at all (forbidden outright, not merely withheld),
 `network` is revoked while the Veil is down, and a plugin requiring a
 capability the device cannot grant is refused at install. A throwing
-plugin is isolated; the registry records loaded / skipped / failed.
+plugin is isolated; the registry records loaded / skipped / failed — and
+untrusted plugins now run down an [isolation ladder](sdk.md#the-isolation-ladder)
+(subprocess jail, OS sandbox where available, a WASM tier behind an
+operator flag), watched by a capability-transparency log.
 There is also a **plan seam** on top: a paid plan can grant extra
 capabilities beyond the free set, though today the free plan grants
 everything — the honest state of that seam is in
 [DreamLayer Cloud](cloud.md).
 
-Want to write one? The ten-minute tutorial plugin, `examples/hello-lens/`,
-is CI-tested and walked through in [Open source](open-source.md).
+Want to write one? `dreamlayer plugins new` scaffolds an API v2 plugin in
+one command ([the SDK](sdk.md)); the ten-minute tutorial plugin,
+`examples/hello-lens/`, is CI-tested and walked through in
+[Open source](open-source.md). Want to build one *without* code? That is
+[the Lens Builder](lens-builder.md).
 
 ## Pillar 4 — TasteLens
 
@@ -104,16 +118,21 @@ stays dormant until one exists.
 A plugin ships as a **package**: a manifest (name, semver, entry point,
 required capabilities, sha256 checksum of the source, author copy and
 screenshot kept outside the checksum so copy edits do not re-sign code)
-plus one Python file. Every install — store or sideload — passes a
-**four-line validation gate**:
+plus one Python file. Every install — store or sideload — passes the
+validation gate, now **five defences**:
 
-1. Manifest shape (name/version/entry/api rules, only known capabilities).
+1. Manifest shape (name/version/entry/api rules, only known capabilities)
+   plus an SDK-compatibility check: a plugin declaring `min_sdk` newer
+   than the host is refused by name.
 2. Integrity — the checksum must match, twice (registry-advertised and
    fetched).
-3. A static AST scan — `subprocess`, sockets, `ctypes`, file deletion,
+3. Authenticity — a manifest-bound Ed25519 signature when present (a bad
+   signature is a hard error; unsigned installs under curated-registry
+   trust with a warning).
+4. A static AST scan — `subprocess`, sockets, `ctypes`, file deletion,
    `eval`/`exec`/`pickle` are flagged; each allowed only if the matching
    capability was declared, some forbidden outright.
-4. A smoke load against a mock context granting only declared capabilities.
+5. A smoke load against a mock context granting only declared capabilities.
 
 The honest limit, stated in `docs/MARKETPLACE.md`: in-process Python cannot
 be perfectly sandboxed — the gate is defense-in-depth for a curated,
@@ -154,8 +173,11 @@ refusal path still fires for a capability the host genuinely lacks.*
 Ratings, downloads, and comments live in a deliberately separate service:
 a Cloudflare Worker at **[api.dreamlayer.app](https://api.dreamlayer.app)**
 (`registry-api/`, KV-backed; the bare root redirects to the store). The
-contract is five routes: list stats, per-plugin stats and comments, rate,
-comment, record a download. The split is a security decision — **the API
+contract began as five routes — list stats, per-plugin stats and comments,
+rate, comment, record a download — and has since grown the waitlist and
+the [community layer](community.md) (figment gallery submissions, verified
+Figment Golf, Lens Jams), all rate-limited per IP and hardened against
+stored-XSS and index pollution. The split is a security decision — **the API
 serves only numbers, never plugin code**. The catalog itself is git-backed
 and validated (`registry/`), and clients merge the two by name, falling
 back to their bundled snapshot when the API is unreachable. Compromising
@@ -163,7 +185,10 @@ the social service cannot ship code to anyone.
 
 ### The registry today
 
-Six plugins, every one passing the gate in CI (`registry/packages/`):
+Six plugins, every one passing the gate in CI (`registry/packages/`) —
+all now **API v2**, all carrying the "Official — DreamLayer team" badge
+(the store renders it), all free (the paid-store UX exists behind a
+payments flag that is off; see [the community layer](community.md#the-store-meanwhile)):
 
 | Plugin | What it does | Needs |
 |---|---|---|

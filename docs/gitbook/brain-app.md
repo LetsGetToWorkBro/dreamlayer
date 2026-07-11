@@ -38,7 +38,10 @@ What's connected (Brain, model, cloud, incognito, phone, index) polled
 live, a first-run nudge when upgrade packs are available, and the **Plan**
 card: "Free - local & open" — with the honest framing that every feature in
 the app is free, and a working notify-me waitlist for
-[DreamLayer Cloud](cloud.md).
+[DreamLayer Cloud](cloud.md). Home also carries **"Your memory is a
+file"** — the panel's Memory Grep card: where the SQLite memory store
+lives, a one-click read-only browse (Datasette, local-only), and an
+export-a-copy button, so owning your data needs no terminal.
 
 ### Your day
 
@@ -62,7 +65,12 @@ model is Ollama with per-model status and one-click pulls, and the cloud
 tier speaks **seven provider presets across three wire formats** — OpenAI,
 Anthropic, Gemini, OpenRouter, Ollama-local (key-free), the DreamLayer
 Cloud preset, and Custom for any OpenAI-compatible endpoint (LM Studio,
-llama.cpp, and friends).
+llama.cpp, and friends). Beside the cloud wiring sits the trust
+centerpiece, **"What the cloud can see"** — rendered live from
+`GET /dreamlayer/cloud`: what the server currently holds (with no cloud
+configured, honestly nothing) and the three things it can never see —
+your memories, who you are, what a figment means. See
+[DreamLayer Cloud](cloud.md).
 
 ### Connections, Privacy
 
@@ -80,7 +88,10 @@ are mirrors of their own surfaces.
 ![Plugins view](assets/panel/view_plugins.png)
 
 Installed plugins with their permissions, what this Brain can grant,
-per-plugin remove, and sideloading through the same validation gate. Phone
+per-plugin remove, and sideloading through the same validation gate — plus
+the door for people who don't write code: **"Build a lens →"** opens
+[the Lens Builder](lens-builder.md) served by this very Brain at
+`/dreamlayer/build`, where deploys land one click away. Phone
 installs are real now too: the phone fetches the package from the registry
 and sideloads it here, surfacing this Brain's actual verdict.
 
@@ -88,8 +99,8 @@ and sideloads it here, surfacing this Brain's actual verdict.
 
 ![Capabilities view](assets/panel/view_caps.png)
 
-The live [capability report](integrations.md): all 58 optional
-integrations grouped by tier, each with a status dot (active / off /
+The live [capability report](integrations.md): all 42 optional
+capabilities grouped by tier, each with a status dot (active / off /
 missing / unsupported / external), an impact rating, and either a one-click
 **Turn on / Turn off** or the exact `pip install` to get it — plus the five
 **capability packs** (Total Recall, Sharp Ears, Clear Eyes, Guardian,

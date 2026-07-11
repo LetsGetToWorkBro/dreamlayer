@@ -65,6 +65,15 @@ integrity. Ratings and downloads live on a separate service that never
 touches plugin code. Browse at
 [dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
 
+**Can I make my own lens without being a programmer?**
+Yes — that is the Lens Builder
+([dreamlayer.app/lens-builder.html](https://dreamlayer.app/lens-builder.html)):
+describe what you want in plain words ("a 5 minute countdown that pulses
+at the end"), watch it run on a practice lens, and send it to your own
+setup in one click. A lens is data, not code — it physically cannot spy,
+flash, or run wild, and your glasses re-verify that before running
+anything, including lenses other people share with you as links.
+
 **What is Dream Mode?**
 Double-tap the glasses and the display becomes something quieter and
 stranger: memories pinned to the places where they happened, and a poetic

@@ -374,3 +374,10 @@ Other modules carry their own cards (QuestCard and QuestRewardCard from the
 Saga, SocialLensCard, IntroOfferCard, ConsistencyCard from Candor, provenance
 and waypath panels) — see the [card catalog reference](reference/cards.md)
 for the complete constructor table.
+
+Two newer host-emitted types ride the safety net rather than a bespoke
+renderer: **CandorCard** (the [Candor Mirror](lenses.md#truths-siblings)
+debrief — "How you spoke") and **WaypathCard** (the direction/place
+answer). They draw through the layout path — legible by construction,
+never black — and are candidates for bespoke treatment when their designs
+settle.

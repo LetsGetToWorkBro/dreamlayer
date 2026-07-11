@@ -6,7 +6,7 @@ the first and almost none in the second once it is set up.
 
 ## The phone app
 
-Six tabs along the bottom. (Every screen also works in **Demo Mode** —
+Seven tabs along the bottom. (Every screen also works in **Demo Mode** —
 labeled sample data with a banner that never leaves the screen — so you can
 explore the whole app before owning any hardware; that is exactly how the
 screenshots in this book were taken.)
@@ -18,6 +18,10 @@ Incognito), and a box to ask your brain anything from your pocket.
 
 **Now** — a live mirror of what the glasses are showing this moment, your
 latest morning brief, and quick actions (brief me, pause memory).
+
+**Look** — point the phone's camera at anything and ask, the same way the
+glasses will: one photo, one answer, stamped with where the answer came
+from.
 
 **Messages** — texts and email relayed from your Mac, with three suggested
 replies per message. Nothing sends until you tap **Approve and send** —
@@ -53,6 +57,15 @@ Labs screens:
   one tap. Installing really installs it — onto your Mac, after its safety
   check, never onto the phone. The store also lives on the web at
   [dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
+- **Waypath** — walking directions as a single dot of light on a ring — no
+  map, no maps app, just "28 m to the next turn." There is even a
+  simulate-the-walk button so you can watch it work from your couch.
+- **Feel** — pick how the app sounds and buzzes: touch packs, each held to
+  the same gentle rules (short patterns, and the silent signal stays
+  silent).
+- **Capabilities** — what your Mac could also learn to do, with honest
+  install sizes; **Device vitals** — what the glasses report back about
+  themselves once they exist.
 - **Rehearsal** — teach the glasses a routine by performing it: tap out the
   beats ("Tap - Tap - Hold"), watch it learn live, keep it, and put it on
   stage.

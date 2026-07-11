@@ -39,7 +39,11 @@ of the time the display shows almost nothing at all.
 - **It is extendable.** A community plugin store
   ([dreamlayer.app/plugins](https://dreamlayer.app/plugins.html)) adds
   things like live currency conversion on price tags — each plugin
-  showing exactly what it is allowed to do before you install it.
+  showing exactly what it is allowed to do before you install it. And you
+  can build your own lens **without writing code**: describe it in plain
+  words at [dreamlayer.app/lens-builder.html](https://dreamlayer.app/lens-builder.html),
+  watch it run, share it as a link or QR — it cannot break anything, and
+  the glasses re-check that before running it.
 - **It shuts up when you want.** One long press and the glasses go completely
   deaf and blind — nothing seen, heard, or kept — until you turn them back
   on. Privacy is a physical gesture, not a buried setting.

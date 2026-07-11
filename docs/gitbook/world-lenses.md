@@ -101,6 +101,24 @@ The arbiter's TasteLens candidate bids 0.88 on a `shelf` or `menu` scene
 unavailable state when nothing reads. Tests: `test_taste.py` and
 `test_taste_connector.py`.
 
+## Docent — the venue speaks
+
+The newest World surface (`ops_world_lenses.py: docent`): a museum, shop,
+or venue publishes its own knowledge as a LocalRecall collection, and a
+question asked *there* is answered from *its* passages — grounded, cited,
+truncated to one Scholar answer card. The collection syncs on arrival, so
+the answer works fully offline; with a model wired the passages are
+composed, without one the top passages speak for themselves. Veil-gated
+like every lens. (Tests: `test_docent.py`.)
+
+## Rosetta Live — the ear, offline
+
+Rosetta the eye translates what you *look at*; **Rosetta Live**
+(`translate_heard`) translates what someone is *saying* — one caption card
+per utterance, in your language, **fully offline** when the Argos
+translation pack is installed. Nothing is recorded, nothing leaves, and
+incognito silences it entirely. (Tests: `test_rosetta_live.py`.)
+
 ## On the glass
 
 All three now render on the device itself: Scholar and Taste share the

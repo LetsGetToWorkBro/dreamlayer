@@ -60,6 +60,16 @@ auth, Stripe billing, the managed-AI proxy, R2-backed sync storage, relay
 rooms, and marketplace payments — phases P1 through P4 in `docs/CLOUD.md`,
 all designed to run as the same single Worker at `api.dreamlayer.app`.
 
+**And one trust surface, live now:** `GET /dreamlayer/cloud` — "what the
+cloud can see" — reports exactly what a server currently holds for you
+(with no cloud configured: nothing — an empty vault, no relay rooms, no
+listings) alongside the three permanent cannots: your memories, who you
+are, what a figment means. It renders as a card in the Mac panel's
+Intelligence view and as its own screen on the phone. The point is
+structural honesty: the answer is computed from state, not written in
+copy — the day the service exists, the same card will show precisely the
+ciphertext blobs and room ids it holds, and nothing else.
+
 ## The honest summary
 
 Today, nothing about DreamLayer requires an account, and no paid feature
