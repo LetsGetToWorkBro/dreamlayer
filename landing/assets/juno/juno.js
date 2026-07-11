@@ -1,14 +1,17 @@
-/* juno.js — mounts Juno, the DreamLayer assistant sprite, as a screen-blended
- * looping video. She's rendered on pure black, so `mix-blend-mode: screen`
- * drops her light onto the dark UI with no alpha channel (the same trick the
- * gallery HUD uses). Self-contained: injects its own CSS, lazy-plays only when
- * on screen, and falls back to a still poster under prefers-reduced-motion.
+/* juno.js — mounts Juno, the DreamLayer assistant sprite, with TRUE
+ * transparency so she sits on any background.
  *
- *   <div data-juno></div>                       auto-mounts on DOMContentLoaded
+ * She's rendered on black; the source is a single H.264 clip that packs the
+ * COLOR frame on top and a LUMA ALPHA MATTE on the bottom. We play it muted,
+ * off-screen, and composite the two halves onto a <canvas> every frame — the
+ * matte's brightness becomes the pixel's alpha. This animates on every browser
+ * incl. iOS Safari (which supports neither VP9-alpha nor HEVC-alpha over the
+ * open web). Under prefers-reduced-motion (or before play) we show a still
+ * transparent WebP.
+ *
+ *   <div data-juno></div>                         auto-mounts on DOMContentLoaded
  *   var j = Juno.mount(el);  j.setState("thinking");   // idle|thinking|success
  *
- * States reuse the one idle loop today (a light/º filter shift); when more
- * clips exist they slot in by swapping sources — the API doesn't change.
  * UMD → global `Juno`. */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) module.exports = factory();
@@ -17,10 +20,9 @@
   "use strict";
   var reduce = (typeof matchMedia !== "undefined") &&
     matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var RENDER_W = 384;   // cap the canvas' internal width — bounds the per-frame cost
 
   function base() {
-    // resolve the folder this script was loaded from, so pages can include it
-    // from anywhere without hard-coding the asset path
     try {
       var s = document.currentScript || (function () {
         var all = document.getElementsByTagName("script");
@@ -34,13 +36,11 @@
   var B = base();
 
   var STYLE = ".juno{position:relative;display:block;pointer-events:none;line-height:0}" +
-    ".juno-media{width:100%;height:100%;object-fit:contain;display:block;" +
-      "mix-blend-mode:screen;transition:filter .5s ease}" +
-    ".juno[data-state=\"thinking\"] .juno-media{filter:brightness(1.12) saturate(1.15);" +
-      "animation:junoBreathe 2.4s ease-in-out infinite}" +
-    ".juno[data-state=\"success\"] .juno-media{filter:brightness(1.4) saturate(1.25)}" +
-    "@keyframes junoBreathe{0%,100%{opacity:.92}50%{opacity:1}}" +
-    "@media (prefers-reduced-motion: reduce){.juno-media{animation:none!important;filter:none!important}}";
+    ".juno-media{width:100%;height:auto;object-fit:contain;display:block;transition:filter .5s ease}" +
+    ".juno-src{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:0}" +
+    ".juno[data-state=\"thinking\"] .juno-media{filter:brightness(1.12) saturate(1.15) drop-shadow(0 0 10px rgba(47,212,196,.35))}" +
+    ".juno[data-state=\"success\"] .juno-media{filter:brightness(1.35) saturate(1.2) drop-shadow(0 0 12px rgba(86,211,100,.4))}" +
+    "@media (prefers-reduced-motion: reduce){.juno-media{filter:none!important}}";
   function injectStyle() {
     if (document.getElementById("juno-style")) return;
     var st = document.createElement("style"); st.id = "juno-style"; st.textContent = STYLE;
@@ -54,29 +54,70 @@
     el.classList.add("juno");
     el.setAttribute("data-state", opts.state || "idle");
     el.innerHTML = "";
-    if (reduce) {                                    // stillness for reduced-motion
-      var img = document.createElement("img");
-      img.className = "juno-media"; img.src = dir + "juno_idle_poster.webp";
-      img.alt = "Juno, the DreamLayer assistant"; el.appendChild(img);
-      return api(el, null);
+
+    var poster = document.createElement("img");
+    poster.className = "juno-media"; poster.src = dir + "juno_idle.webp";
+    poster.alt = "Juno, the DreamLayer assistant";
+    el.appendChild(poster);
+    if (reduce) return api(el, null);                 // stillness for reduced-motion
+
+    var canvas = document.createElement("canvas");
+    canvas.className = "juno-media"; canvas.setAttribute("aria-hidden", "true");
+    canvas.style.display = "none";                    // shown once the first frame is drawn
+    el.appendChild(canvas);
+
+    var video = document.createElement("video");
+    video.className = "juno-src";
+    video.muted = true; video.defaultMuted = true; video.loop = true; video.autoplay = true;
+    video.playsInline = true; video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", "");
+    video.preload = "auto"; video.setAttribute("aria-hidden", "true");
+    // mp4 (H.264) first — universal on real browsers incl. iOS; webm (VP9) is
+    // the fallback for engines without H.264. Both pack colour-over-matte.
+    video.innerHTML = '<source src="' + dir + 'juno_idle_packed.mp4" type="video/mp4">' +
+                      '<source src="' + dir + 'juno_idle_packed.webm" type="video/webm">';
+    el.appendChild(video);
+
+    var ctx = canvas.getContext("2d");
+    var off = document.createElement("canvas"), octx = off.getContext("2d", { willReadFrequently: true });
+    var vis = true, raf = null, sized = false, firstDrawn = false;
+
+    function size() {
+      var vw = video.videoWidth, vh = (video.videoHeight / 2) | 0;   // top color, bottom matte
+      if (!vw || !vh) return false;
+      var rw = Math.min(vw, RENDER_W), rh = Math.round(rw * vh / vw);
+      canvas.width = off.width = rw; canvas.height = off.height = rh;
+      sized = true; return true;
     }
-    var v = document.createElement("video");
-    v.className = "juno-media";
-    v.muted = true; v.defaultMuted = true; v.loop = true; v.autoplay = true;
-    v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
-    v.preload = "metadata"; v.poster = dir + "juno_idle_poster.webp";
-    v.setAttribute("aria-label", "Juno, the DreamLayer assistant");
-    v.innerHTML = '<source src="' + dir + 'juno_idle.webm" type="video/webm">' +
-                  '<source src="' + dir + 'juno_idle.mp4" type="video/mp4">';
-    el.appendChild(v);
-    var play = function () { var p = v.play(); if (p && p.catch) p.catch(function () {}); };
+    var giveUp = false;
+    function draw() {
+      raf = null;
+      if (!giveUp && video.readyState >= 2 && (sized || size())) {
+        var w = canvas.width, h = canvas.height;
+        try {
+          octx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight / 2, 0, 0, w, h);
+          var col = octx.getImageData(0, 0, w, h);
+          octx.drawImage(video, 0, video.videoHeight / 2, video.videoWidth, video.videoHeight / 2, 0, 0, w, h);
+          var mat = octx.getImageData(0, 0, w, h), cd = col.data, md = mat.data;
+          for (var i = 0; i < cd.length; i += 4) cd[i + 3] = md[i];   // alpha = matte luma
+          ctx.putImageData(col, 0, 0);
+          if (!firstDrawn) { firstDrawn = true; canvas.style.display = ""; poster.style.display = "none"; }
+        } catch (e) {
+          // e.g. a tainted canvas (cross-origin video) — keep the still poster
+          giveUp = true; canvas.style.display = "none"; poster.style.display = ""; stop(); return;
+        }
+      }
+      if (vis) raf = requestAnimationFrame(draw);
+    }
+    function start() { var p = video.play(); if (p && p.catch) p.catch(function () {}); if (!raf && vis) draw(); }
+    function stop() { video.pause(); if (raf) cancelAnimationFrame(raf); raf = null; }
+
+    video.addEventListener("loadeddata", start);
     if ("IntersectionObserver" in window) {
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) { if (e.isIntersecting) play(); else v.pause(); });
-      }, { rootMargin: "120px" });
-      io.observe(el);
-    } else { play(); }
-    return api(el, v);
+      new IntersectionObserver(function (es) {
+        es.forEach(function (e) { vis = e.isIntersecting; if (vis) start(); else stop(); });
+      }, { rootMargin: "160px" }).observe(el);
+    } else { start(); }
+    return api(el, video);
   }
   function setState(el, state) { if (el) el.setAttribute("data-state", state || "idle"); }
   function api(el, v) {
