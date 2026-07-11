@@ -228,7 +228,11 @@ Three ways to author one, easiest first:
   it, **Paint** bounded vector strokes right onto the ring, watch it run on a
   live preview, read the safety card, then **Deploy to your Brain** or download
   the JSON. Zero install, zero code. Paint strokes are data too — count/vertex/
-  colour capped, so they re-prove safe like everything else.
+  colour capped, so they re-prove safe like everything else. First visit opens a
+  **"What's possible" tour** — a guided showcase that loads live lenses onto the
+  ring (head-steered decks, a breathing painted mandala, world-triggered rituals
+  that fire on `place:enter` / `bond:near` / a BLE button, a rep log that writes
+  to your Vault) so the edges of the grammar land by being watched.
 - **The phone** — rehearse it by performing it (tap, speak the beats, keep), in
   the app's rehearsal flow.
 - **JSON + the CLI** — hand-write or generate the figment and check it:

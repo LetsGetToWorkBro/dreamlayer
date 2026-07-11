@@ -203,6 +203,132 @@
     { id: "countdown", name: "Countdown", blurb: "A single timer that pulses as it lands.", make: tCountdown },
   ];
 
+  // -- showcase lenses for the tutorial: each pushes a different edge ---------
+  // These exist to make people say "wait, it can do THAT?" — they use the whole
+  // grammar (gestures, counters, guards, paint, cadence, world-triggers, the
+  // performance ledger) and every one still passes the exact same budget proof.
+  function _petal(cx, cy, ang, len, wid) {
+    var ox = Math.cos(ang), oy = Math.sin(ang), px = -oy, py = ox;
+    return [[cx, cy],
+            [cx + ox * len * 0.5 + px * wid, cy + oy * len * 0.5 + py * wid],
+            [cx + ox * len, cy + oy * len],
+            [cx + ox * len * 0.5 - px * wid, cy + oy * len * 0.5 - py * wid],
+            [cx, cy]];
+  }
+  function _mandala() {
+    var g = [], N = 6;
+    for (var k = 0; k < N; k++)
+      g.push(glyph(_petal(0.5, 0.5, (k / N) * Math.PI * 2, 0.34, 0.12),
+                   { color: k % 2 ? "accent_memory" : "accent_attention", width: "sm" }));
+    return g;
+  }
+  // Steer with your head: a deck you flip with nod / shake / peek — no hands.
+  function shHeadControl() {
+    var f = figment("Head-steered deck", "a");
+    var deck = [["FOCUS", "accent_memory"], ["BREATHE", "accent_success"], ["STAND TALL", "accent_attention"]];
+    deck.forEach(function (d, i) {
+      var next = "abc"[(i + 1) % deck.length], prev = "abc"[(i + deck.length - 1) % deck.length];
+      addScene(f, scene("abc"[i], {
+        lines: [line(d[0], { row: 1, size: "lg", color: d[1] }),
+                line("nod → · shake ← · look up = done", { row: 4, size: "sm", color: "text_secondary" })],
+        glyphs: [glyph([[0.30, 0.30], [0.70, 0.30]], { color: d[1], width: "sm" })],
+        on: { "imu:nod": { target: next }, "imu:shake": { target: prev }, "imu:peek": { target: END } },
+      }));
+    });
+    return f;
+  }
+  // Paint that breathes: a hand-painted mandala on a slow breathing envelope.
+  function shMandala() {
+    var f = figment("Breathing mandala", "breathe");
+    addScene(f, scene("breathe", {
+      duration_sec: 300, tick: "countdown",
+      lines: [line("BREATHE", { row: 0, size: "md", color: "text_secondary" })],
+      glyphs: _mandala(),
+      cadence: { in_s: 4, hold_s: 4, out_s: 6 },
+      pulse: { window_sec: 12, rate_hz: 0.8, color: "accent_memory" },
+      on_timeout: [{ target: END }], on: { double: { target: END } },
+    }));
+    return f;
+  }
+  // The world reaches in: one lens, three real-world triggers — a place you
+  // arrive at, a bonded partner coming near, a $6 BLE button out in the world.
+  function shWorld() {
+    var f = figment("When the world moves", "wait");
+    addScene(f, scene("wait", {
+      lines: [line("READY", { row: 1, size: "lg", color: "text_secondary" }),
+              line("arrive · partner near · button", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.5, 0.28], [0.5, 0.5], [0.68, 0.5]], { color: "border_subtle", width: "sm" })],
+      on: { "place:enter": { target: "here" }, "bond:near": { target: "them" }, "ble:3": { target: "btn" } },
+    }));
+    var beat = function (id, txt, col, back) {
+      addScene(f, scene(id, {
+        duration_sec: 4, tick: "countdown",
+        lines: [line(txt, { row: 1, size: "lg", color: col })],
+        pulse: { window_sec: 3, rate_hz: 1.5, color: col },
+        on_timeout: [{ target: back }], on: { double: { target: END } },
+      }));
+    };
+    beat("here", "YOU'RE HERE", "accent_success", "wait");
+    beat("them", "THEY'RE NEAR", "accent_memory", "wait");
+    beat("btn", "PRESSED", "accent_attention", "wait");
+    return f;
+  }
+  // Data you keep: every nod is logged to your Vault performance ledger, so the
+  // lens becomes an instrument — a rep history, a meds-taken record.
+  function shKeep() {
+    var f = figment("Logged reps", "count");
+    f.counters.reps = counter("reps", { hi: 999 });
+    addScene(f, scene("count", {
+      lines: [line("{count:reps}", { row: 1, size: "lg", color: "accent_memory" }),
+              line("each nod is saved", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.28, 0.66], [0.5, 0.72], [0.72, 0.66]], { color: "accent_memory", width: "md" })],
+      on: { "imu:nod": { target: SELF, counter_ops: [inc("reps")], emit: "rep", record: true },
+            "long": { target: SELF, counter_ops: [zero("reps")] },
+            "double": { target: END } },
+    }));
+    return f;
+  }
+  // Push every limit: paint + a counter + a guard that decides + a gesture + a
+  // world-trigger + the ledger, fused into one signed, provable ritual.
+  function shFusion() {
+    var f = figment("The whole stack", "arrive");
+    f.counters.rounds = counter("rounds", { hi: 9 });
+    addScene(f, scene("arrive", {
+      lines: [line("AT THE GYM?", { row: 1, size: "md", color: "text_secondary" }),
+              line("arrive to begin · ✕✕ now", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: _mandala().slice(0, 3),
+      on: { "place:enter": { target: "work" }, "double": { target: "work" } },
+    }));
+    addScene(f, scene("work", {
+      duration_sec: 30, tick: "countdown",
+      lines: [line("ROUND {count:rounds}", { row: 0, size: "lg", color: "accent_attention" })],
+      glyphs: [glyph([[0.3, 0.7], [0.5, 0.62], [0.7, 0.7]], { color: "accent_attention", width: "md" })],
+      pulse: { window_sec: 5, rate_hz: 2.0, color: "accent_attention" },
+      on_timeout: [{ target: "rest", counter_ops: [inc("rounds")], emit: "round", record: true }],
+      on: { double: { target: END } },
+    }));
+    addScene(f, scene("rest", {
+      duration_sec: 15, tick: "countdown",
+      lines: [line("BREATHE", { row: 1, size: "lg", color: "accent_success" })],
+      cadence: { in_s: 4, hold_s: 2, out_s: 4 },
+      // a guard decides: after 3 rounds, you're done — else back to work
+      on_timeout: [{ target: "done", when: { counter: "rounds", cmp: "ge", value: 3 } },
+                   { target: "work" }],
+      on: { double: { target: END } },
+    }));
+    addScene(f, scene("done", {
+      duration_sec: 5,
+      lines: [line("DONE ×{count:rounds}", { row: 1, size: "lg", color: "accent_success" })],
+      glyphs: [glyph([[0.34, 0.54], [0.45, 0.64], [0.68, 0.4]], { color: "accent_success", width: "lg" })],
+      on_timeout: [{ target: END }], on: { double: { target: END } },
+    }));
+    return f;
+  }
+  var SHOWCASES = {
+    headControl: shHeadControl, mandala: shMandala, world: shWorld,
+    keep: shKeep, fusion: shFusion,
+  };
+
   // -- Ask Juno (client fallback): a lightweight plain-English → figment map ---
   // When the page is served BY a Brain, "Ask Juno" POSTs to /dreamlayer/rc/compose
   // and the full offline IntentParser (intent_parser.py) runs there. On the static
@@ -443,5 +569,6 @@
     validate: validate, safetyCard: safetyCard, canonical: canonical, listing: listing,
     templates: { reps: tReps, focus: tFocus, score: tScore, breathing: tBreathing,
       interval: tInterval, countdown: tCountdown, checklist: tChecklist },
+    showcases: SHOWCASES,
   };
 });

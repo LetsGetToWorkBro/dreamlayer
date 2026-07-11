@@ -71,6 +71,21 @@ class TestUnderNode:
         report = verify(fig)
         assert report.ok, f"{recipe} rejected by the real gate: {report.violations}"
 
+    @pytest.mark.parametrize("show", ["headControl", "mandala", "world",
+                                      "keep", "fusion"])
+    def test_a_tutorial_showcase_passes_the_real_gate(self, show):
+        # the "what's possible" tour loads these live — they push the whole
+        # grammar (gestures, guards, paint, cadence, world-triggers, record)
+        # and must still clear the exact same budget proof
+        out = subprocess.run(
+            ["node", "-e",
+             f"console.log(JSON.stringify(require('./figment.js').showcases.{show}()))"],
+            cwd=LENS, capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        fig = Figment.from_dict(json.loads(out.stdout))
+        report = verify(fig)
+        assert report.ok, f"{show} rejected by the real gate: {report.violations}"
+
 
 # -- the Brain import endpoint (Deploy to my Brain) ---------------------------
 
@@ -155,6 +170,8 @@ def test_builder_page_is_wired():
     assert 'id="paint"' in page                        # the paint-on-your-lens mode
     assert "/dreamlayer/rc/compose" in page            # Ask Juno hits the compose endpoint
     assert "composeLocal" in page                      # and degrades client-side off-Brain
+    assert 'id="tour"' in page and "runShowcase" in page   # the "what's possible" tutorial
+    assert "dl_tour_seen" in page                      # first-run gating so it isn't nagware
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")

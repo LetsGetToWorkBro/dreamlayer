@@ -98,14 +98,75 @@
   .askex button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface2);
     border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
   .askex button:hover{color:var(--text);border-color:var(--teal)}
+  .helpbtn{cursor:pointer;background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:650}
+  .helpbtn:hover{background:rgba(47,212,196,.10)}
+  /* tutorial */
+  .tour-scrim{position:fixed;inset:0;z-index:50;background:rgba(4,10,10,.72);backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .tour{position:relative;display:flex;width:min(860px,96vw);max-height:92vh;overflow:hidden;
+    background:linear-gradient(160deg,#0c1618,#0a1012);border:1px solid var(--border);border-radius:18px;
+    box-shadow:0 30px 120px rgba(0,0,0,.6),0 0 80px rgba(47,212,196,.06)}
+  .tour-x{position:absolute;top:12px;right:14px;z-index:2;background:transparent;border:0;color:var(--text2);
+    font-size:18px;cursor:pointer;line-height:1}
+  .tour-x:hover{color:var(--text)}
+  .tour-rail{width:210px;flex:none;background:rgba(0,0,0,.28);border-right:1px solid var(--border);
+    padding:20px 12px;overflow-y:auto}
+  .tour-rail .step{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border-radius:9px;cursor:pointer;
+    color:var(--text2);font-size:12.5px;line-height:1.25}
+  .tour-rail .step:hover{background:rgba(255,255,255,.03)}
+  .tour-rail .step.on{background:rgba(47,212,196,.10);color:var(--text)}
+  .tour-rail .step .n{flex:none;width:19px;height:19px;border-radius:50%;border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2)}
+  .tour-rail .step.on .n{border-color:var(--teal);color:var(--teal)}
+  .tour-rail .step.done .n{background:var(--teal);color:#00201c;border-color:var(--teal)}
+  .tour-body{flex:1;padding:28px 30px;overflow-y:auto;display:flex;flex-direction:column}
+  .tour-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 6px}
+  .tour-body h2{margin:0 0 12px;font-size:23px;line-height:1.15;letter-spacing:-.01em}
+  .tour-copy{color:var(--text);font-size:14.5px;line-height:1.55}
+  .tour-copy p{margin:0 0 11px} .tour-copy b{color:#fff}
+  .tour-copy .whoa{color:var(--teal);font-style:italic}
+  .tour-copy code{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:12.5px}
+  .tour-demo{margin:14px 0 6px;min-height:0}
+  .tour-demo button{font:inherit;font-weight:650;background:var(--teal);color:#00201c;border:0;border-radius:999px;
+    padding:9px 16px;cursor:pointer}
+  .tour-demo button:hover{filter:brightness(1.06)}
+  .tour-demo .cap{display:block;margin-top:7px;font-size:12px;color:var(--text2)}
+  .tour-nav{display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:18px}
+  .tour-skip{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer}
+  .tour-skip input{width:auto}
+  @media(max-width:640px){ .tour{flex-direction:column} .tour-rail{width:auto;display:flex;gap:6px;overflow-x:auto;
+    border-right:0;border-bottom:1px solid var(--border);padding:12px} .tour-rail .step .lbl{display:none}
+    .tour-rail .step{padding:6px} }
 </style>
 </head>
 <body>
 <header>
   <h1>Lens Builder</h1>
   <span class="tag">A behavior is <b>data</b>, not code. Build one here — no coding — watch your device re-prove it's safe, deploy it, share it.</span>
+  <button class="home helpbtn" id="showtour" title="See what's possible">✦ What's possible</button>
   <a class="home" href="./index.html">← dreamlayer</a>
 </header>
+
+<!-- First-run tutorial: a guided showcase of the edges of the grammar. Each
+     chapter can load a live example onto the ring so you watch it run. -->
+<div class="tour-scrim" id="tour" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+  <div class="tour">
+    <button class="tour-x" id="tourX" title="Close (Esc)">✕</button>
+    <div class="tour-rail" id="tourRail"></div>
+    <div class="tour-body">
+      <p class="tour-kicker" id="tourKicker">The whole stack · 1 / 8</p>
+      <h2 id="tourTitle">—</h2>
+      <div class="tour-copy" id="tourCopy"></div>
+      <div class="tour-demo" id="tourDemo"></div>
+      <div class="tour-nav">
+        <label class="tour-skip"><input type="checkbox" id="tourNoShow" /> Don't show this again</label>
+        <span style="flex:1"></span>
+        <button class="btn ghost" id="tourPrev">← Back</button>
+        <button class="btn" id="tourNext">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="wrap">
   <div class="col left">
@@ -681,9 +742,86 @@
 
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 
+  // -- the "what's possible" tour: a guided showcase of the grammar's edges ---
+  // Each chapter can drop a live, budget-proven example onto the ring, so the
+  // point lands by being watched — not just read.
+  var TOUR = [
+    { rail:"Data, not code", title:"You can't break it. That's the point.",
+      copy:"<p>Everything here is a <b>figment</b> — a little machine described as <b>data</b>. It can't name a function, reach the network, open your files, or touch the camera. There's no loop you can write that runs forever.</p>"+
+           "<p>So we don't ask you to be careful. Your <b>glasses re-prove every lens is safe</b> before it runs, and again on every hop — phone, Brain, glass. <span class='whoa'>Build the wildest thing you can imagine; it still can't misbehave.</span></p>" },
+    { rail:"Steer with your head", title:"Control it with a nod.", demo:"headControl",
+      copy:"<p>Scenes can listen for real on-glass gestures — <code>nod</code>, <code>shake</code>, look up (<code>peek</code>), <code>tilt</code>, even a <code>double-nod</code> — plus taps and long-presses.</p>"+
+           "<p>This deck flips forward on a nod, back on a shake, and finishes when you glance up. <span class='whoa'>No hands, no phone, no menus.</span></p>" },
+    { rail:"Tally anything", title:"A number that lives on your eye.", demo:"keep",
+      copy:"<p>Bounded counters let a lens keep score. Nod to add a rep — and here's the twist: each nod is flagged <code>record</code>, so it's <b>written to your private Vault performance log</b>.</p>"+
+           "<p><span class='whoa'>Your push-up history, your meds-taken record, your practice streak — captured by a lens you drew in a browser.</span></p>" },
+    { rail:"Paint that breathes", title:"Draw on the glass. Make it breathe.", demo:"mandala",
+      copy:"<p>Paint bounded vector strokes right onto the lens — they ride inside the signed figment like everything else. Add a <b>cadence</b> and the whole ring breathes on a slow envelope: in, hold, out.</p>"+
+           "<p><span class='whoa'>A hand-painted mandala that inhales and exhales with you</span> — for box-breathing, HRV, talking someone down from a panic.</p>" },
+    { rail:"The world reaches in", title:"When the world moves, your lens answers.", demo:"world",
+      copy:"<p>This is the one that stops people. A scene can wait on the <b>world</b>, not just your body:</p>"+
+           "<p><code>place:enter</code> — you arrive somewhere. <code>bond:near</code> — a bonded partner comes close. <code>ble:3</code> — a $6 button out in the world.</p>"+
+           "<p><span class='whoa'>“When she leaves work, my dinner timer starts.” “When I reach the gym, the circuit begins.”</span> One lens. No app. No server.</p>" },
+    { rail:"It decides", title:"A lens that makes up its own mind.",
+      copy:"<p>Timed exits can carry <b>guards</b>: <em>after 3 rounds, finish — otherwise, go again.</em> Counters, guards and branches let a lens <b>make decisions</b> as it runs.</p>"+
+           "<p>And rate-limited <code>emit</code> tags let it nudge the world back — ring a light, poke your Brain — <span class='whoa'>all still inside a proof that says it can never flood or run away.</span></p>" },
+    { rail:"Leave it to someone", title:"A behavior you can hand down.",
+      copy:"<p>A finished lens is tiny, signed, and <b>provably yours</b>. Dedicate it — a birthday breathing ritual, a good-luck cue — and it becomes an <b>heirloom</b>: it will still run, unchanged, on a device that doesn't exist yet.</p>"+
+           "<p><span class='whoa'>You're not writing an app. You're leaving someone a small, living gift.</span></p>" },
+    { rail:"Now push it", title:"Fuse it all. Then go further.", demo:"fusion",
+      copy:"<p>Here's paint, a counter, a deciding guard, a gesture, a real-world trigger, and the ledger — <b>all in one signed ritual</b>: arrive at the gym → three rounds, breathing between → done, logged.</p>"+
+           "<p>Now it's your turn. Describe something impossible to <b>Ask Juno</b>, or start blank and <span class='whoa'>see how far the grammar bends.</span></p>" },
+  ];
+  var tourI=0, tourEl=document.getElementById("tour");
+  function tourRender(){
+    var rail=document.getElementById("tourRail"); rail.innerHTML="";
+    TOUR.forEach(function(ch,i){
+      var d=document.createElement("div"); d.className="step"+(i===tourI?" on":"")+(i<tourI?" done":"");
+      d.innerHTML='<span class="n">'+(i<tourI?"✓":(i+1))+'</span><span class="lbl">'+esc(ch.rail)+'</span>';
+      d.onclick=function(){ tourI=i; tourRender(); }; rail.appendChild(d);
+    });
+    var ch=TOUR[tourI];
+    document.getElementById("tourKicker").textContent="The whole stack · "+(tourI+1)+" / "+TOUR.length;
+    document.getElementById("tourTitle").textContent=ch.title;
+    document.getElementById("tourCopy").innerHTML=ch.copy;
+    var demo=document.getElementById("tourDemo"); demo.innerHTML="";
+    if(ch.demo){
+      var b=document.createElement("button"); b.textContent="▶ Load & run this on the ring";
+      b.onclick=function(){ runShowcase(ch.demo); };
+      var cap=document.createElement("span"); cap.className="cap"; cap.textContent="Loads a real, budget-proven lens into the builder — tweak it, paint on it, make it yours.";
+      demo.appendChild(b); demo.appendChild(cap);
+    }
+    document.getElementById("tourPrev").style.visibility = tourI===0?"hidden":"";
+    document.getElementById("tourNext").textContent = tourI===TOUR.length-1 ? "Start creating ✦" : "Next →";
+  }
+  function runShowcase(key){
+    var mk=(K.showcases&&K.showcases[key])||(K.templates&&K.templates[key]);
+    if(!mk) return; closeTour(true);
+    loadComposed(mk(), "showcase", "Running “"+mk().name+"” — watch the ring, then make it yours.");
+  }
+  function openTour(){ tourI=0; tourRender(); tourEl.style.display="flex"; }
+  function closeTour(keep){
+    tourEl.style.display="none";
+    if(document.getElementById("tourNoShow").checked){ try{ localStorage.setItem("dl_tour_seen","1"); }catch(e){} }
+    if(!keep){ try{ localStorage.setItem("dl_tour_seen","1"); }catch(e){} }
+  }
+  document.getElementById("showtour").onclick = openTour;
+  document.getElementById("tourX").onclick = function(){ closeTour(); };
+  document.getElementById("tourPrev").onclick = function(){ if(tourI>0){ tourI--; tourRender(); } };
+  document.getElementById("tourNext").onclick = function(){ if(tourI<TOUR.length-1){ tourI++; tourRender(); } else { closeTour(); } };
+  tourEl.addEventListener("click", function(e){ if(e.target===tourEl) closeTour(); });
+  document.addEventListener("keydown", function(e){
+    if(tourEl.style.display==="none") return;
+    if(e.key==="Escape") closeTour();
+    else if(e.key==="ArrowRight") document.getElementById("tourNext").click();
+    else if(e.key==="ArrowLeft") document.getElementById("tourPrev").click();
+  });
+
   // boot
   loadTemplate(K.TEMPLATES[0]);
   tick();
+  // first-time visitors meet the tour automatically; afterwards it's the ✦ button
+  try{ if(!localStorage.getItem("dl_tour_seen")) openTour(); }catch(e){}
 })();
 </script>
 </body>

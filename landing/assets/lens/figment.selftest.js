@@ -103,5 +103,21 @@ ok(reps.counters.reps && reps.scenes.count.on["imu:nod"] && reps.scenes.count.gl
 });
 ok(!K.composeLocal("xyzzy random gibberish").matched, "composeLocal declines nonsense");
 
+// every tutorial showcase is budget-clean AND exercises a distinct edge
+Object.keys(K.showcases).forEach(function (id) {
+  ok(K.validate(K.showcases[id]()).ok, "showcase '" + id + "' is valid: " + JSON.stringify(K.validate(K.showcases[id]()).violations));
+});
+var world = K.showcases.world();
+ok(world.scenes.wait.on["place:enter"] && world.scenes.wait.on["bond:near"] && world.scenes.wait.on["ble:3"],
+   "the world showcase reacts to place, bond, and BLE triggers");
+var keep = K.showcases.keep();
+ok(keep.scenes.count.on["imu:nod"].record === true, "the keep showcase records each nod to the ledger");
+var mand = K.showcases.mandala();
+ok(mand.scenes.breathe.cadence && mand.scenes.breathe.glyphs.length >= 5, "the mandala breathes and is painted");
+var fus = K.showcases.fusion();
+ok(fus.scenes.rest.on_timeout.some(function (t) { return t.when && t.when.cmp === "ge"; }),
+   "the fusion showcase makes a guarded decision");
+
 if (fails.length) { console.error("FAIL\n" + fails.join("\n")); process.exit(1); }
-console.log("ok — " + K.TEMPLATES.length + " templates valid, graph + listing + events + paint + askjuno checked, violations caught");
+console.log("ok — " + K.TEMPLATES.length + " templates + " + Object.keys(K.showcases).length +
+  " showcases valid, graph + listing + events + paint + askjuno + tour checked, violations caught");
