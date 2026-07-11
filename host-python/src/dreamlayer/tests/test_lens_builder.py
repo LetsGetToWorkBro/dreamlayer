@@ -348,6 +348,11 @@ def test_builder_page_is_wired():
     assert "decodeShare" in page and "#lens=" in page          # open a shared lens as a remix
     assert "./assets/lens/qr.js" in page                       # the vendored QR encoder
     assert 'id="remixBanner"' in page
+    # SVG icons instead of emoji on the preset + control chrome
+    assert "./assets/lens/icons.js" in page and "DLIcon(" in page
+    assert "setPlayBtn" in page                        # the play button reflects real state
+    for e in ("🗣", "👁", "🫀", "🚪", "🔥", "🏋", "🌸", "🖌"):
+        assert e not in page, f"emoji {e} should be an SVG icon now"
 
 
 def test_gallery_page_is_wired():
