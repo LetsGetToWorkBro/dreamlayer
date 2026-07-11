@@ -1,27 +1,24 @@
 // Juno.tsx
-// Juno — the DreamLayer assistant — rendered "alive" on the phone.
+// Juno — the DreamLayer assistant — alive on the phone.
 //
-// The web build composites a packed color+matte video to a canvas for true
-// transparency (assets/juno/juno.js). React Native has no <video> compositor,
-// so here she's a transparent PNG (assets/juno.png, AI-matted full body) that
-// we make *feel* living with RN Animated: a slow float bob, a breathing scale,
-// a soft turning drift, a pulsing aura behind her, and a few rising sparkles.
-// Everything runs on the native driver (transform/opacity only) so it stays
-// smooth and never blocks JS.
+// She's a real animated clip, not a still: assets/juno.webp is an animated,
+// true-alpha WebP (her AI-matted idle loop — she drifts, her wings and hair and
+// dress move) played by expo-image, which handles animated WebP with
+// transparency on both iOS and Android. Around her we keep a soft, state-tinted
+// aura and a few rising sparkles, plus a gentle float — the *ambient* motion,
+// while the clip itself carries her performance.
 //
-// Reduce-motion (AccessibilityInfo) → she holds still with a faint steady aura.
-// `state` (idle | thinking | success) tints the aura and her glow, mirroring
-// the web sprite's data-state.
+// Reduce-motion (AccessibilityInfo) → she holds still on the first frame
+// (assets/juno.png) with a faint steady aura, and nothing loops.
+// `state` (idle | thinking | success) tints the aura and her glow.
 //
-//   <Juno size={180} state="thinking" />
-//
-// New Architecture (RN 0.81): Animated.loop/sequence/parallel + useNativeDriver
-// are unchanged; Easing is re-exported from react-native.
+//   <Juno size={135} state="thinking" />
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Animated, Easing, StyleSheet, AccessibilityInfo, Platform,
+  View, Animated, Easing, StyleSheet, AccessibilityInfo, Platform, Image as RNImage,
   type ViewStyle, type StyleProp,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { colors } from "../theme/colors";
 
 export type JunoState = "idle" | "thinking" | "success";
@@ -44,8 +41,11 @@ const SPARKS = [
   { x: 0.08, y: 0.48, r: 2.2, delay: 300,  rise: 16, dur: 3600 },
 ];
 
+const ANIM = require("../../../assets/juno.webp");   // animated true-alpha loop
+const STILL = require("../../../assets/juno.png");    // first-frame poster
+
 export function Juno({
-  size = 180,
+  size = 135,
   state = "idle",
   style,
 }: {
@@ -54,7 +54,7 @@ export function Juno({
   style?: StyleProp<ViewStyle>;
 }) {
   const aura = AURA_BY_STATE[state] ?? colors.accentMemory;
-  const h = Math.round(size * 458 / 318);   // preserve the matte's aspect ratio
+  const h = Math.round(size * 426 / 240);   // the clip's aspect (poster matches)
 
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
@@ -64,30 +64,17 @@ export function Juno({
     return () => { alive = false; sub?.remove?.(); };
   }, []);
 
-  // Motion values — created once, driven by loops below.
-  const float   = useRef(new Animated.Value(0)).current;  // 0..1 bob
-  const breathe = useRef(new Animated.Value(0)).current;  // 0..1 scale
-  const turn    = useRef(new Animated.Value(0)).current;  // -1..1 sway
-  const auraA   = useRef(new Animated.Value(0.35)).current;
-  const sparks  = useMemo(() => SPARKS.map((s) => ({ ...s, v: new Animated.Value(0) })), []);
+  // Ambient motion values — the clip carries her body; these carry the mood.
+  const float  = useRef(new Animated.Value(0)).current;   // 0..1 gentle bob
+  const auraA  = useRef(new Animated.Value(0.35)).current;
+  const sparks = useMemo(() => SPARKS.map((s) => ({ ...s, v: new Animated.Value(0) })), []);
 
   useEffect(() => {
-    if (reduce) {
-      float.setValue(0.5); breathe.setValue(0.5); turn.setValue(0); auraA.setValue(0.28);
-      return;
-    }
-    const pingpong = (v: Animated.Value, to: number, dur: number) =>
-      Animated.loop(Animated.sequence([
-        Animated.timing(v, { toValue: to, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0,  duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]));
-
+    if (reduce) { float.setValue(0.5); auraA.setValue(0.26); return; }
     const loops = [
-      pingpong(float, 1, 2600),
-      pingpong(breathe, 1, 3300),
       Animated.loop(Animated.sequence([
-        Animated.timing(turn, { toValue: 1,  duration: 4200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(turn, { toValue: -1, duration: 4200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 1, duration: 3200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 3200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ])),
       Animated.loop(Animated.sequence([
         Animated.timing(auraA, { toValue: 0.5,  duration: 2600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -101,17 +88,17 @@ export function Juno({
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [reduce, float, breathe, turn, auraA, sparks]);
+  }, [reduce, float, auraA, sparks]);
 
-  const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [6, -10] });
-  const scale      = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.99, 1.02] });
-  const rotate     = turn.interpolate({ inputRange: [-1, 1], outputRange: ["-2.2deg", "2.2deg"] });
-  const translateX = turn.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] });
+  const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [5, -6] });
+
+  const glow = Platform.OS === "ios"
+    ? { shadowColor: aura, shadowOpacity: state === "idle" ? 0.3 : 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } }
+    : null;
 
   return (
     <View style={[{ width: size, height: h, alignItems: "center", justifyContent: "center" }, style]}>
-      {/* Aura — three soft concentric glows so the bloom reads on Android too
-          (where shadowRadius doesn't paint). Pulses with auraA. */}
+      {/* Aura — three soft concentric glows so the bloom reads on Android too. */}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center, { opacity: auraA }]}>
         <View style={[styles.glow, { width: size * 0.92, height: size * 0.92, borderRadius: size, backgroundColor: aura, opacity: 0.16 }]} />
         <View style={[styles.glow, { width: size * 0.62, height: size * 0.62, borderRadius: size, backgroundColor: aura, opacity: 0.20 }]} />
@@ -138,19 +125,13 @@ export function Juno({
         );
       })}
 
-      {/* Juno herself. */}
-      <Animated.Image
-        source={require("../../../assets/juno.png")}
-        accessibilityLabel="Juno, the DreamLayer assistant"
-        resizeMode="contain"
-        style={{
-          width: size, height: h,
-          transform: [{ translateY }, { translateX }, { rotate }, { scale }],
-          ...(Platform.OS === "ios"
-            ? { shadowColor: aura, shadowOpacity: state === "idle" ? 0.35 : 0.55, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } }
-            : null),
-        }}
-      />
+      {/* Juno herself — the animated clip, gently floating. Still poster when
+          reduce-motion is on. */}
+      <Animated.View style={{ transform: [{ translateY }], ...(glow || {}) }}>
+        {reduce
+          ? <RNImage source={STILL} accessibilityLabel="Juno, the DreamLayer assistant" resizeMode="contain" style={{ width: size, height: h }} />
+          : <ExpoImage source={ANIM} accessibilityLabel="Juno, the DreamLayer assistant" contentFit="contain" autoplay style={{ width: size, height: h }} />}
+      </Animated.View>
     </View>
   );
 }
