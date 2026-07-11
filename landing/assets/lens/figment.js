@@ -484,30 +484,68 @@
     var t = String(prompt || "").toLowerCase().trim();
     if (!t) return { matched: false };
     var mins = _dur(t, "minute|min"), secs = _dur(t, "second|sec");
+    var dur = mins ? mins * 60 : secs;   // seconds, if a length was named
     var has = function () { for (var i = 0; i < arguments.length; i++) if (t.indexOf(arguments[i]) >= 0) return true; return false; };
-    var fig, kind;
-    if (has("score", "scoreboard", "keep score", " vs ", "point")) {
-      fig = tScore({}); kind = "score";
-    } else if (has("rep", "count", "tally", "push-up", "pushup", "sit-up", "situp",
-                   "squat", "pull-up", "pullup", "nod to")) {
-      fig = tReps({ label: (t.match(/(push-?ups?|sit-?ups?|squats?|pull-?ups?|reps?)/) || [])[0] || "reps" });
-      kind = "reps";
-    } else if (has("focus", "deep work", "pomodoro", "work session", "concentrate", "study")) {
-      fig = tFocus({ minutes: mins || 25 }); kind = "focus";
-    } else if (has("interval", "hiit", "tabata") || (has("work") && has("rest"))) {
-      fig = tInterval({ work: (mins ? mins * 60 : secs) || 180, rest: 30 }); kind = "interval";
-    } else if (has("breath", "box breathing")) {
-      var b = secs || 4; fig = tBreathing({ in_s: b, hold_s: b, out_s: b }); kind = "breathing";
-    } else if (has("checklist", "steps", "ritual", "routine", "then ")) {
-      var steps = t.replace(/^.*?:/, "").split(/,|\bthen\b|;/).map(function (s) { return s.trim(); })
-                   .filter(Boolean).map(function (s) { return s.slice(0, B.MAX_TEXT_LEN); });
-      fig = tChecklist({ steps: steps.length ? steps.slice(0, B.MAX_SCENES) : undefined }); kind = "checklist";
-    } else if (has("countdown", "count down", "timer", "count up", "stopwatch")) {
-      fig = tCountdown({ seconds: (mins ? mins * 60 : secs) || 300 }); kind = "countdown";
-    } else {
-      return { matched: false };
+    // ordered matchers — most specific first. The stack showcases come first so
+    // the wonder-features the tour promises are actually draftable from words.
+    var M = [
+      // -- the whole-stack showcases (need a paired Brain to feed live) --------
+      { k: "whisper", kw: ["translat", "language", "spanish", "french", "japanese",
+        "foreign", "menu", "subtitle", "interpret"], make: function () { return shWhisper(); } },
+      { k: "ask", kw: ["ask", "answer", "question", "what's due", "when is my",
+        "my brain", "recall", "look it up", "remind me what"], make: function () { return shAsk(); } },
+      { k: "coach", kw: ["form", "posture", "squat depth", "my squat", "trainer",
+        "coach my", "coach me", "technique"], make: function () { return shCoach(); } },
+      { k: "secondSight", kw: ["what is this", "what am i looking", "identify",
+        "name this", "name what", "what plant", "what wine", "landmark", "recognize"],
+        make: function () { return shSecondSight(); } },
+      { k: "tethered", kw: ["partner", "girlfriend", "boyfriend", "spouse", "wife",
+        "husband", "long distance", "miss you", "thinking of", "presence", "when they're near",
+        "loved one"], make: function () { return shTethered(); } },
+      { k: "ember", kw: ["memory", "remember when", "anniversary", "years ago",
+        "this spot", "where it happened", "resurface"], make: function () { return shEmber(); } },
+      { k: "threshold", kw: ["when i get to", "when i arrive", "when i reach", "geofence",
+        "at the gym start", "when i walk in", "when i enter", "place trigger"],
+        make: function () { return shThreshold(); } },
+      { k: "mandala", kw: ["mandala", "meditat", "calm", "zen", "grounding"],
+        make: function () { return shMandala(); } },
+      // -- the makeable-today recipes (work offline, no Brain) -----------------
+      { k: "score", kw: ["score", "scoreboard", "keep score", " vs ", "point"],
+        make: function () { return tScore({}); } },
+      { k: "focus", kw: ["focus", "deep work", "pomodoro", "work session", "concentrate", "study"],
+        make: function () { return tFocus({ minutes: mins || 25 }); } },
+      { k: "interval", kw: ["interval", "hiit", "tabata"],
+        make: function () { return tInterval({ work: dur || 180, rest: _restSec(t) || 30 }); } },
+      { k: "breathing", kw: ["breath", "box breathing", "breathe"],
+        make: function () { var b = dur || 4; return tBreathing({ in_s: b, hold_s: b, out_s: b }); } },
+      // reps needs a word-ish boundary so "countdown"/"count down" don't hijack it
+      { k: "reps", kw: ["rep", "push-up", "pushup", "sit-up", "situp", "squat",
+        "pull-up", "pullup", "tally", "nod to count", "count my", "count reps"],
+        make: function () { return tReps({ label: (t.match(/(push-?ups?|sit-?ups?|squats?|pull-?ups?|reps?)/) || [])[0] || "reps" }); } },
+      { k: "checklist", kw: ["checklist", "to-do", "to do", "todo", "steps", "ritual",
+        "routine", "then ", "reminder list"],
+        make: function () {
+          var steps = t.replace(/^.*?:/, "").split(/,|\bthen\b|;/).map(function (s) { return s.trim(); })
+                       .filter(Boolean).map(function (s) { return s.slice(0, B.MAX_TEXT_LEN); });
+          return tChecklist({ steps: steps.length ? steps.slice(0, B.MAX_SCENES) : undefined });
+        } },
+      { k: "countdown", kw: ["countdown", "count down", "timer", "count up", "stopwatch", "egg timer"],
+        make: function () { return tCountdown({ seconds: dur || 300 }); } },
+      // interval also matches the two-phase "work … rest" phrasing
+      { k: "interval2", real: "interval", test: function () { return has("work") && has("rest"); },
+        make: function () { return tInterval({ work: dur || 180, rest: _restSec(t) || 30 }); } },
+    ];
+    for (var i = 0; i < M.length; i++) {
+      var m = M[i], hit = m.test ? m.test() : m.kw.some(function (w) { return t.indexOf(w) >= 0; });
+      if (hit) return { matched: true, kind: m.real || m.k, figment: m.make() };
     }
-    return { matched: true, kind: kind, figment: fig };
+    return { matched: false };
+  }
+  function _restSec(t) {
+    var m = t.match(/(\d+(?:\.\d+)?)\s*(?:minute|min|second|sec)\s*(?:of\s*)?rest/) ||
+            t.match(/rest\s*(?:of\s*|for\s*)?(\d+(?:\.\d+)?)\s*(?:minute|min|second|sec)/);
+    if (!m) return null;
+    return /min/.test(m[0]) ? +m[1] * 60 : +m[1];
   }
 
   // -- validation (a subset of budgets.verify — everything the builder emits) -
@@ -598,12 +636,12 @@
       ok: rep.ok,
       violations: rep.violations,
       cannot: [
-        "pulse faster than " + B.MAX_PULSE_HZ + " Hz — the photic-safety cap (this one: ≤ " + (worstHz || 0) + " Hz)",
-        "reach the network, your files, the camera, or the mic — it is data, not code",
+        "flash faster than " + B.MAX_PULSE_HZ + " times a second — the eye-safety cap (this one: ≤ " + (worstHz || 0) + ")",
+        "reach the internet, your files, the camera, or the mic — it's data, not code",
         "show more than " + B.MAX_LINES + " lines at once",
-        "swallow your kill switch — double-long-press banish lives below every lens",
+        "block your exit — a press-and-hold always dismisses any lens",
       ],
-      will: [sceneCount + " scene(s), each held at least half a second"],
+      will: [sceneCount + " screen(s), each held at least half a second"],
     };
   }
 
@@ -621,12 +659,23 @@
   // -- scene-graph editing (the advanced editor) -----------------------------
   // the triggers a scene can listen for; "timeout" is the timed exit, the rest
   // are physical/gesture events (see figment_stage.lua on_event).
+  // The things a scene can wait for, in plain words. `timeout` is the timed
+  // exit; the rest are gestures, world signals, or a line of text from your
+  // Brain (see reality_compiler/v2/figment._valid_event + figment_stage.lua).
+  // `hint` powers the builder's inline help so a newcomer knows what each means.
   var TRIGGERS = [
-    { key: "timeout", label: "when it ends" },
-    { key: "double", label: "double-tap" },
-    { key: "single", label: "tap" },
-    { key: "long", label: "long-press" },
-    { key: "imu:nod", label: "nod" },
+    { key: "timeout",     label: "the countdown ends",   hint: "when this screen's timer runs out" },
+    { key: "single",      label: "tap",                  hint: "one tap on the temple of the glasses" },
+    { key: "double",      label: "double-tap",           hint: "two quick taps" },
+    { key: "long",        label: "press & hold",         hint: "press and hold on the temple" },
+    { key: "imu:nod",     label: "nod your head",        hint: "a clear up-down nod" },
+    { key: "imu:shake",   label: "shake your head",      hint: "a left-right shake — good for 'no' / go back" },
+    { key: "imu:peek",    label: "glance up",            hint: "flick your eyes/head up" },
+    { key: "place:enter", label: "you arrive somewhere", hint: "reach a place your Brain knows (geofence)" },
+    { key: "place:exit",  label: "you leave a place",    hint: "step away from a known place" },
+    { key: "bond:near",   label: "a loved one is near",  hint: "a bonded partner comes close" },
+    { key: "ble:3",       label: "a button is pressed",  hint: "a $6 wireless button out in the world" },
+    { key: "text",        label: "your Brain sends text",hint: "the Brain streams a line into {slot} (a translation, an answer)" },
   ];
   function emptyFigment() {
     var f = figment("My lens", "s0");

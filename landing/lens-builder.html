@@ -30,8 +30,14 @@
     border-radius:14px;padding:13px 15px;margin-bottom:9px;cursor:pointer;color:inherit;transition:.15s}
   .recipe:hover{border-color:var(--teal)}
   .recipe.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
+  .recipe{display:flex;gap:11px;align-items:flex-start}
+  .recipe .rx-ico{font-size:20px;line-height:1.2;flex:none;width:24px;text-align:center}
+  .recipe .rx-txt{display:block}
   .recipe b{display:block;font-size:15px;margin-bottom:2px}
   .recipe span{color:var(--text2);font-size:12.5px}
+  .recipe .rx-tag{display:inline-block;font-style:normal;font-size:10px;letter-spacing:.03em;
+    text-transform:uppercase;color:var(--teal);border:1px solid var(--border);border-radius:999px;
+    padding:1px 7px;margin:0 0 3px}
   .modeswitch{display:flex;gap:0;margin:18px 0 6px;border:1px solid var(--border);border-radius:999px;overflow:hidden}
   .modeswitch button{flex:1;font:inherit;background:transparent;color:var(--text2);border:0;padding:8px;cursor:pointer;font-size:13.5px}
   .modeswitch button.on{background:var(--teal);color:#00201c;font-weight:650}
@@ -71,9 +77,23 @@
   .scene .hd input.rename{width:96px;font-size:12px;padding:4px 6px}
   .scene .hd .start{margin-left:auto;font-size:11.5px;color:var(--text2);display:flex;gap:5px;align-items:center;cursor:pointer}
   .scene .hd .del{color:var(--text2);cursor:pointer;background:none;border:0;font-size:15px}
-  .lines .ln{display:grid;grid-template-columns:1fr 54px 62px 1fr 22px;gap:6px;margin-bottom:6px;align-items:center}
-  .lines .ln .x{color:var(--text2);cursor:pointer;text-align:center}
-  .sub{font-size:11.5px;color:var(--text2);margin:8px 0 4px;letter-spacing:.06em;text-transform:uppercase}
+  .lines .ln{display:grid;grid-template-columns:1fr 68px 84px 96px 26px;gap:6px;margin-bottom:7px;align-items:center}
+  .lines .ln select{padding:6px 4px;font-size:12px}
+  .lines .ln .x{color:var(--text2);cursor:pointer;text-align:center;font-size:15px;line-height:26px}
+  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 1fr;grid-auto-rows:auto} .lines .ln .lc{grid-column:1/3} }
+  .sub{font-size:11.5px;color:var(--text2);margin:8px 0 4px;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+  /* inline help: a ⓘ button that opens a plain-language popover */
+  .ib{flex:none;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);background:transparent;
+    color:var(--text2);font-size:12px;line-height:1;cursor:pointer;padding:0;font-style:italic;font-weight:700}
+  .ib:hover{border-color:var(--teal);color:var(--teal)}
+  .pop{position:fixed;z-index:60;max-width:290px;background:#0c1618;border:1px solid var(--teal);
+    border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.5;color:var(--text);
+    box-shadow:0 14px 44px rgba(0,0,0,.55)}
+  .pop b{color:#fff} .pop code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:11.5px}
+  .pop ul{margin:6px 0 0;padding-left:16px} .pop li{margin:2px 0}
+  .lens-does{background:var(--surface);border:1px solid var(--border);border-radius:11px;
+    padding:10px 13px;margin-bottom:12px;font-size:13px;color:var(--text)}
+  .lens-does b{color:var(--teal)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .trans .t{display:grid;grid-template-columns:1fr 14px 1fr 22px;gap:6px;align-items:center;margin-bottom:6px}
   .trans .t .arr{color:var(--text2);text-align:center}
@@ -172,20 +192,20 @@
   <div class="col left">
     <div class="askjuno" id="askjuno">
       <p class="eyebrow">Ask Juno</p>
-      <p class="muted" style="margin:0 0 8px">Describe the lens you want — Juno drafts it and your device re-proves it's safe.</p>
+      <p class="muted" style="margin:0 0 8px">Say what you want in plain words — <b>Juno</b> (the assistant) drafts a lens, and your glasses re-prove it's safe. A <i>lens</i> is a little thing your glasses show.</p>
       <textarea id="askprompt" rows="2" maxlength="240" placeholder="count my push-ups with a nod"></textarea>
       <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
       <div class="toast" id="asktoast"></div>
       <div class="askex" id="askex"></div>
     </div>
-    <p class="eyebrow">Start from a recipe</p>
+    <p class="eyebrow">Start from an idea</p>
     <div id="recipes"></div>
-    <button class="recipe" id="blank" data-id="blank"><b>Start blank</b><span>An empty scene to wire up yourself.</span></button>
+    <button class="recipe" id="blank"><span class="rx-ico">✏️</span><span class="rx-txt"><b>Start blank</b><span>A blank lens to build from scratch.</span></span></button>
     <div class="modeswitch" id="modeswitch">
-      <button data-mode="simple" class="on">Simple</button>
-      <button data-mode="advanced">Advanced</button>
+      <button data-mode="simple" class="on">Quick tweaks</button>
+      <button data-mode="advanced">Full editor</button>
     </div>
-    <p class="muted" id="modehint">Tweak the recipe's knobs. Switch to <b>Advanced</b> to wire scenes and transitions yourself.</p>
+    <p class="muted" id="modehint">Change the words and timing. Switch to <b>Full editor</b> to add screens and choose what makes them change.</p>
   </div>
 
   <div class="col mid">
@@ -231,7 +251,7 @@
         <div class="toast" id="toast"></div>
       </div>
       <div id="deployGuide" style="display:none">
-        <p class="muted">To put this on your glasses, open the builder <b>from your Brain</b> — the Mac panel → Plugins → “Build a lens” — for one-click deploy. Or <b>Download</b> above and run <code>dreamlayer figment safety my-lens.json</code>.</p>
+        <p class="muted">To put this on your glasses, open the builder <b>from your Brain</b> — the Mac panel → Plugins → “Build a lens” — and hit Deploy for one-click install. No Brain yet? <b>Download</b> the lens above; you can double-check it any time with <code>dreamlayer figment safety my-lens.json</code>.</p>
       </div>
     </div>
 
@@ -262,23 +282,74 @@
   var REGISTRY = "https://api.dreamlayer.app";
   var fig = null, mode = "simple", editKind = "template";
 
-  // -- recipes ---------------------------------------------------------------
+  // -- inline help: plain-language popovers so nobody has to guess ------------
+  var HELP = {
+    lens: "A <b>lens</b> is a little thing your glasses show. It's made of <b>screens</b>, and it flips between them when something happens — you nod, a timer ends, you arrive somewhere. It can never touch the internet, your files, or the camera, so you can build anything you dream up.",
+    screen: "A <b>screen</b> is one moment your lens shows. Give it a few lines of text (and maybe a countdown), then choose below what makes it move to the next screen.",
+    text: "Up to <b>5 short lines</b> — type anything. Three magic words:<ul><li><code>{slot}</code> — a line your Brain sends live (a translation, an answer)</li><li><code>{count:reps}</code> — a running tally</li><li><code>{remaining}</code> — the countdown's time left</li></ul>",
+    color: "The colours your glasses can paint. The handy ones:<ul><li><b>white</b> — normal text</li><li><b>grey</b> — quiet / secondary</li><li><b>green</b> — good / on-track</li><li><b>coral</b> — attention</li><li><b>red</b> — warning</li></ul>",
+    size: "How big the line is — <b>small</b>, <b>medium</b>, or <b>large</b>.",
+    row: "Which line it sits on, from the top (1) to the bottom (5).",
+    timing: "Give this screen a <b>countdown</b>. When it hits zero, the screen does its <b>“the countdown ends”</b> action below. Leave it off and the screen simply waits for a gesture instead.",
+    pulse: "The ring gently <b>flashes</b> in the final seconds, so you feel the moment land without staring. It's capped at 4 flashes/second for eye safety — the builder won't let you exceed it.",
+    triggers: "What makes this screen hand off to another one. Pick a gesture, the timer, or a signal from the world:<ul>" +
+      K.TRIGGERS.map(function(t){ return "<li><b>"+t.label+"</b> — "+t.hint+"</li>"; }).join("") + "</ul>",
+    start: "The screen your lens opens on when it starts.",
+    paint: "Draw right onto the glass — a few bounded strokes that ride safely inside the signed lens.",
+  };
+  var COLOR_LABEL = { background:"black", surface:"dark panel", text_primary:"white", text_secondary:"grey",
+    accent_memory:"green", accent_attention:"coral", accent_success:"bright green", accent_error:"red",
+    border_subtle:"faint line", status_paused:"slate" };
+  var SIZE_LABEL = { sm:"small", md:"medium", lg:"large" };
+  var _pop = null;
+  function closePop(){ if(_pop){ _pop.remove(); _pop=null; } }
+  function ib(key){ return '<button class="ib" data-help="'+key+'" title="What’s this?" type="button">i</button>'; }
+  document.addEventListener("click", function(e){
+    var t = e.target, btn = t && t.closest ? t.closest(".ib") : null;
+    if(btn){ e.preventDefault(); var key=btn.dataset.help;
+      if(_pop && _pop._key===key){ closePop(); return; }
+      closePop(); _pop=document.createElement("div"); _pop.className="pop"; _pop._key=key;
+      _pop.innerHTML=HELP[key]||key; document.body.appendChild(_pop);
+      var r=btn.getBoundingClientRect(), pw=_pop.offsetWidth, ph=_pop.offsetHeight;
+      var x=Math.min(r.left, window.innerWidth-pw-10), y=r.bottom+8;
+      if(y+ph>window.innerHeight-8) y=Math.max(8, r.top-ph-8);
+      _pop.style.left=Math.max(8,x)+"px"; _pop.style.top=y+"px"; return; }
+    if(_pop && (!t.closest || !t.closest(".pop"))) closePop();
+  });
+
+  // -- presets: start from a wonder, not a countdown -------------------------
+  // Each is a real, budget-proven showcase lens; the ones marked `brain` come
+  // alive on a paired Brain (the builder simulates the feed so you can watch).
+  var PRESETS = [
+    { id:"whisper",     emoji:"🗣", name:"Whisper",          blurb:"Read & hear any language, live.",           brain:true },
+    { id:"ask",         emoji:"✦",  name:"Ask",              blurb:"Speak a question — see your Brain's answer.", brain:true },
+    { id:"secondSight", emoji:"👁", name:"Second Sight",     blurb:"Glance at anything and just know it.",       brain:true },
+    { id:"tethered",    emoji:"🫀", name:"Tethered",         blurb:"Feel a loved one from across the world.",    brain:true },
+    { id:"threshold",   emoji:"🚪", name:"Threshold",        blurb:"Arrive somewhere and the right thing begins.", brain:true },
+    { id:"ember",       emoji:"🔥", name:"Ember",            blurb:"A memory, handed back where it happened.",   brain:true },
+    { id:"coach",       emoji:"🏋", name:"Coach",            blurb:"It watches your form, not your reps.",       brain:true },
+    { id:"mandala",     emoji:"🌸", name:"Breathing mandala", blurb:"A painted mandala that breathes with you.",  brain:false },
+  ];
   var recWrap = document.getElementById("recipes");
-  K.TEMPLATES.forEach(function(t){
+  PRESETS.forEach(function(t){
     var b = document.createElement("button");
     b.className = "recipe"; b.dataset.id = t.id;
-    b.innerHTML = "<b>"+t.name+"</b><span>"+t.blurb+"</span>";
-    b.onclick = function(){ loadTemplate(t); };
+    b.innerHTML = '<span class="rx-ico">'+t.emoji+'</span><span class="rx-txt"><b>'+t.name+'</b>'+
+      (t.brain ? '<em class="rx-tag">needs your Brain</em>' : '')+'<span>'+t.blurb+'</span></span>';
+    b.onclick = function(){ loadPreset(t.id); };
     recWrap.appendChild(b);
   });
   document.getElementById("blank").onclick = function(){ loadBlank(); };
   function markRecipe(id){ [].forEach.call(document.querySelectorAll(".recipe"), function(c){ c.classList.toggle("on", c.dataset.id===id); }); }
 
-  // the rich templates (counters, gestures, painted glyphs) read best as a
-  // scene graph — open them in Advanced; the classic knob recipes stay Simple
-  var ADVANCED_TEMPLATES = { reps:1, focus:1, score:1 };
-  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id); startDemo(null);
-    if(ADVANCED_TEMPLATES[t.id]) setMode("advanced"); else setMode("simple"); boot(); }
+  // load a preset/showcase into the builder (+ its simulated feed if it has one)
+  function loadPreset(id){
+    var mk=(K.showcases&&K.showcases[id])||(K.templates&&K.templates[id]); if(!mk) return;
+    var note = DEMOS[id] ? "Loaded “"+mk().name+"” — the Brain/camera feed is simulated so you can watch it work."
+                         : "Loaded “"+mk().name+"” — tweak it, paint on it, make it yours.";
+    loadComposed(mk(), "showcase", note, DEMOS[id]?id:null);
+    markRecipe(id);
+  }
   function loadBlank(){ fig = K.emptyFigment(); editKind = "blank"; markRecipe("blank"); startDemo(null); setMode("advanced"); boot(); }
   function boot(){
     document.getElementById("fname").value = fig.name;
@@ -299,8 +370,8 @@
     document.getElementById("addstep").style.display = (!adv && editKind==="checklist") ? "" : "none";
     document.getElementById("addscene").style.display = adv ? "" : "none";
     document.getElementById("modehint").innerHTML = adv
-      ? "Wire scenes and transitions freely. The proof still holds — you can't build something unsafe."
-      : "Tweak the recipe's knobs. Switch to <b>Advanced</b> to wire scenes and transitions yourself.";
+      ? "Add screens and choose what makes them change. Tap any <b>ⓘ</b> to see what a field means. The proof still holds — you can't build something unsafe."
+      : "Change the words and timing. Switch to <b>Full editor</b> to add screens and choose what makes them change.";
     if(fig) buildEditors();
   }
 
@@ -314,7 +385,7 @@
       var s = fig.scenes[sid], timed = s.duration_sec != null;
       var label = (s.lines[0] && s.lines[0].content) || sid;
       var el = document.createElement("div"); el.className = "scene";
-      el.innerHTML = '<div class="hd"><span class="sid">'+sid+'</span>'+
+      el.innerHTML = '<div class="hd"><span class="sid">Screen '+sceneNo(sid)+'</span>'+
         (editKind==="checklist" ? '<button class="del" title="remove">✕</button>' : '')+'</div>'+
         '<div class="grid2"><input class="lbl" maxlength="24" value="'+esc(label)+'" placeholder="what it says"/>'+
         (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" title="seconds"/>' : '<span class="muted" style="align-self:center">step</span>')+'</div>'+
@@ -344,40 +415,60 @@
   }
 
   // -- ADVANCED editor (full scene graph) -----------------------------------
+  function sceneNo(sid){ return Object.keys(fig.scenes).indexOf(sid) + 1; }
   function targetOpts(sel){
-    var opts = Object.keys(fig.scenes).map(function(id){ return '<option value="'+esc(id)+'"'+(sel===id?" selected":"")+'>→ '+esc(id)+'</option>'; });
-    opts.push('<option value="'+K.END+'"'+(sel===K.END?" selected":"")+'>→ End (banish)</option>');
-    opts.push('<option value="'+K.SELF+'"'+(sel===K.SELF?" selected":"")+'>→ Restart this scene</option>');
+    var opts = Object.keys(fig.scenes).map(function(id){
+      return '<option value="'+esc(id)+'"'+(sel===id?" selected":"")+'>→ Screen '+sceneNo(id)+' ('+esc(id)+')</option>'; });
+    opts.push('<option value="'+K.END+'"'+(sel===K.END?" selected":"")+'>→ Finish (dismiss the lens)</option>');
+    opts.push('<option value="'+K.SELF+'"'+(sel===K.SELF?" selected":"")+'>↻ Stay on this screen</option>');
     return opts.join("");
+  }
+  // one plain-English sentence describing the whole lens, for the top of the editor
+  function describeLens(f){
+    var ids = Object.keys(f.scenes), s0 = f.scenes[f.initial] || f.scenes[ids[0]];
+    var first = (s0 && s0.lines && s0.lines[0] && s0.lines[0].content) || "";
+    var bits = [ ids.length === 1 ? "1 screen" : ids.length + " screens" ];
+    if (ids.some(function(id){ return f.scenes[id].duration_sec != null; })) bits.push("a countdown");
+    if (ids.some(function(id){ return (f.scenes[id].glyphs||[]).length; })) bits.push("some paint");
+    var blob = JSON.stringify(f);
+    if (blob.indexOf("{slot}") >= 0) bits.push("live text from your Brain");
+    if (blob.indexOf("{count:") >= 0) bits.push("a tally");
+    var opens = first ? 'Opens on <b>“'+esc(first.replace(/\{[^}]+\}/g,"…"))+'”</b>. ' : "";
+    return opens + "Has " + bits.join(", ") + ".";
   }
   function buildAdvanced(){
     var ed = document.getElementById("editorAdvanced"); ed.innerHTML = "";
+    // a friendly summary + a "what am I looking at?" pointer
+    var intro = document.createElement("div"); intro.className = "lens-does";
+    intro.innerHTML = '<b>Your lens:</b> ' + describeLens(fig) +
+      ' <span style="white-space:nowrap">'+ib("lens")+'</span>';
+    ed.appendChild(intro);
     Object.keys(fig.scenes).forEach(function(sid){
       var s = fig.scenes[sid], timed = s.duration_sec != null;
       var el = document.createElement("div"); el.className = "scene" + (sid===activeScene?" active":"");
-      // header
-      var h = '<div class="hd"><span class="sid">scene</span>'+
-        '<input class="rename" value="'+esc(sid)+'" maxlength="12"/>'+
-        '<label class="start"><input type="radio" name="startscene" '+(fig.initial===sid?"checked":"")+'/> start</label>'+
-        '<button class="del" title="delete scene">🗑</button></div>';
+      // header — "Screen N" with an editable short name
+      var h = '<div class="hd"><span class="sid">Screen '+sceneNo(sid)+'</span>'+ib("screen")+
+        '<input class="rename" value="'+esc(sid)+'" maxlength="12" title="short name for this screen"/>'+
+        '<label class="start"><input type="radio" name="startscene" '+(fig.initial===sid?"checked":"")+'/> starts here</label>'+
+        '<button class="del" title="delete this screen">🗑</button></div>';
       // lines
-      var lines = '<div class="sub">Text</div><div class="lines">' + (s.lines||[]).map(function(ln,i){
-        return '<div class="ln" data-i="'+i+'"><input class="lc" maxlength="24" value="'+esc(ln.content)+'"/>'+
-          '<select class="lr">'+[0,1,2,3,4].map(function(r){return '<option'+(ln.row===r?" selected":"")+'>'+r+'</option>';}).join("")+'</select>'+
-          '<select class="ls">'+K.SIZES.map(function(z){return '<option'+(ln.size===z?" selected":"")+'>'+z+'</option>';}).join("")+'</select>'+
-          '<select class="lco">'+K.COLORS.map(function(c){return '<option'+(ln.color===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
+      var lines = '<div class="sub">What it shows '+ib("text")+'</div><div class="lines">' + (s.lines||[]).map(function(ln,i){
+        return '<div class="ln" data-i="'+i+'"><input class="lc" maxlength="24" value="'+esc(ln.content)+'" placeholder="type a line…"/>'+
+          '<select class="lr" title="which line, top to bottom">'+[0,1,2,3,4].map(function(r){return '<option value="'+r+'"'+(ln.row===r?" selected":"")+'>line '+(r+1)+'</option>';}).join("")+'</select>'+
+          '<select class="ls" title="text size">'+K.SIZES.map(function(z){return '<option value="'+z+'"'+(ln.size===z?" selected":"")+'>'+(SIZE_LABEL[z]||z)+'</option>';}).join("")+'</select>'+
+          '<select class="lco" title="colour">'+K.COLORS.map(function(c){return '<option value="'+c+'"'+(ln.color===c?" selected":"")+'>'+(COLOR_LABEL[c]||c)+'</option>';}).join("")+'</select>'+
           '<span class="x" title="remove line">✕</span></div>';
-      }).join("") + '</div><button class="btn ghost sm addline">+ line</button>';
+      }).join("") + '</div><button class="btn ghost sm addline">+ add a line</button>';
       // timing
-      var timing = '<div class="sub">Timing</div><div class="flags">'+
-        '<label><input type="checkbox" class="timed" '+(timed?"checked":"")+'/> timed</label>'+
-        (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" style="width:90px"/> <span>sec</span>' : '<span class="muted">advances on a gesture below</span>')+
-        (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> pulse</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>';
+      var timing = '<div class="sub">Countdown '+ib("timing")+'</div><div class="flags">'+
+        '<label><input type="checkbox" class="timed" '+(timed?"checked":"")+'/> give it a countdown</label>'+
+        (timed ? '<input class="dur" type="number" min="0.5" step="0.5" value="'+s.duration_sec+'" style="width:90px"/> <span>seconds</span>' : '<span class="muted">off — waits for a gesture below</span>')+
+        (timed ? '<label><input type="checkbox" class="pulse" '+(s.pulse?"checked":"")+'/> flash near the end '+ib("pulse")+'</label>'+(s.pulse?' <input type="number" class="prate" min="0.5" max="4" step="0.5" value="'+s.pulse.rate_hz+'" style="width:64px"/> <span>Hz</span>':"") : "")+'</div>';
       // transitions
-      var trans = '<div class="sub">Transitions</div><div class="trans">' + K.listTransitions(s).map(function(t){
+      var trans = '<div class="sub">When something happens → go to '+ib("triggers")+'</div><div class="trans">' + K.listTransitions(s).map(function(t){
         return '<div class="t" data-trig="'+t.trigger+'"><select class="tt">'+K.TRIGGERS.map(function(tr){return '<option value="'+tr.key+'"'+(tr.key===t.trigger?" selected":"")+'>'+tr.label+'</option>';}).join("")+'</select>'+
           '<span class="arr">→</span><select class="tg">'+targetOpts(t.target)+'</select><span class="x" title="remove">✕</span></div>';
-      }).join("") + '</div><button class="btn ghost sm addtrans">+ transition</button>';
+      }).join("") + '</div><button class="btn ghost sm addtrans">+ add a trigger</button>';
       el.innerHTML = h + lines + timing + trans;
       wireAdvanced(el, s, sid);
       ed.appendChild(el);
@@ -687,7 +778,7 @@
       ctx.fillText(resolveTokens(ln.content, s, el, dur), C, y); });
     if(s.duration_sec!=null && !hasRemLine){ var rem=Math.max(0,Math.ceil(dur-el)); ctx.fillStyle=K.HEX.text_secondary;
       ctx.font="26px -apple-system,Segoe UI,Roboto"; ctx.fillText(mmss(rem), C, C+66); }
-    document.getElementById("scenelabel").textContent = "scene: "+activeScene;
+    document.getElementById("scenelabel").textContent = fig&&fig.scenes[activeScene] ? ("Screen "+sceneNo(activeScene)+" · "+activeScene) : "";
   }
   function mmss(s){ var m=Math.floor(s/60); return m+":"+("0"+(s%60)).slice(-2); }
 
@@ -717,19 +808,22 @@
       .then(function(r){return r.json();})
       .then(function(d){ if(d&&d.ok){ toast.className="toast ok-t"; toast.textContent="✓ On your glasses — "+(fig.name||"lens")+" is on stage."; }
         else { toast.className="toast bad-t"; toast.textContent="Brain refused it: "+((d&&d.error)||"unknown")+(d&&d.error==="unauthorised"?" — paste your Brain token above.":""); } })
-      .catch(function(){ toast.className="toast bad-t"; toast.textContent="Couldn't reach the Brain. Download the lens and use `dreamlayer figment safety`."; });
+      .catch(function(){ toast.className="toast bad-t"; toast.textContent="Couldn't reach the Brain. Download the lens above and deploy it from your Brain when it's back."; });
   };
 
   // -- Ask Juno: describe a lens, get a verified figment into the builder ----
-  var EXAMPLES = ["count my push-ups with a nod",
-    "a focus session that breathes while I work",
-    "keep score — tap for us, double-tap for them",
+  var EXAMPLES = ["translate a spanish menu for me",
+    "ask my Brain when the rent is due",
+    "count my push-ups with a nod",
     "box breathing, 4 seconds each"];
-  (function seedExamples(){
-    var wrap=document.getElementById("askex");
-    EXAMPLES.forEach(function(ex){ var b=document.createElement("button"); b.textContent=ex;
-      b.onclick=function(){ document.getElementById("askprompt").value=ex; }; wrap.appendChild(b); });
-  })();
+  function setExamples(list){
+    var wrap=document.getElementById("askex"); wrap.innerHTML="";
+    (list && list.length ? list : EXAMPLES).slice(0,6).forEach(function(ex){
+      var b=document.createElement("button"); b.textContent=ex;
+      b.onclick=function(){ document.getElementById("askprompt").value=ex; document.getElementById("askprompt").focus(); };
+      wrap.appendChild(b); });
+  }
+  setExamples(EXAMPLES);
   function loadComposed(f, kind, note, demoId){
     fig = f; editKind = kind || "juno"; markRecipe(null);
     document.getElementById("fname").value = fig.name;
@@ -758,10 +852,14 @@
   };
   function tryLocal(prompt, toast, serverExamples){
     var res=K.composeLocal(prompt);
-    if(res.matched && K.validate(res.figment).ok){ loadComposed(res.figment, res.kind); return; }
+    if(res.matched && K.validate(res.figment).ok){
+      var note = DEMOS[res.kind] ? "Drafted a “"+res.kind+"” lens — the feed is simulated so you can watch it. Tweak it, then deploy."
+                                 : "Drafted your lens — tweak it, paint on it, then deploy.";
+      loadComposed(res.figment, res.kind, note, DEMOS[res.kind]?res.kind:null); return;
+    }
     toast.className="toast bad-t";
-    toast.textContent="Juno couldn't turn that into a lens yet — try one of the examples below.";
-    void serverExamples;
+    toast.textContent="Juno couldn't turn that into one yet — try tapping an example below, then edit it.";
+    setExamples(serverExamples);   // surface the server's suggestions (or the defaults)
   }
 
   // -- share: publish to the store ------------------------------------------
@@ -842,14 +940,7 @@
     document.getElementById("tourPrev").style.visibility = tourI===0?"hidden":"";
     document.getElementById("tourNext").textContent = tourI===TOUR.length-1 ? "Start creating ✦" : "Next →";
   }
-  function runShowcase(key){
-    var mk=(K.showcases&&K.showcases[key])||(K.templates&&K.templates[key]);
-    if(!mk) return; closeTour(true);
-    var hasDemo = !!DEMOS[key];
-    loadComposed(mk(), "showcase",
-      "Running “"+mk().name+"”"+(hasDemo?" — the Brain/camera feed is simulated so you can watch it live.":" — watch the ring, then make it yours."),
-      hasDemo?key:null);
-  }
+  function runShowcase(key){ closeTour(true); loadPreset(key); }
   function openTour(){ tourI=0; tourRender(); tourEl.style.display="flex"; }
   function closeTour(keep){
     tourEl.style.display="none";
@@ -869,7 +960,7 @@
   });
 
   // boot
-  loadTemplate(K.TEMPLATES[0]);
+  loadPreset("mandala");   // a calm, offline, no-Brain-needed lens to land on
   tick();
   // first-time visitors meet the tour automatically; afterwards it's the ✦ button
   try{ if(!localStorage.getItem("dl_tour_seen")) openTour(); }catch(e){}

@@ -261,6 +261,11 @@ def test_builder_page_is_wired():
     assert "composeLocal" in page                      # and degrades client-side off-Brain
     assert 'id="tour"' in page and "runShowcase" in page   # the "what's possible" tutorial
     assert "dl_tour_seen" in page                      # first-run gating so it isn't nagware
+    # newcomer-friendliness: inline help + friendly editor, no raw jargon flagship
+    assert 'class="ib"' in page and "data-help" in page   # the ⓘ help popovers
+    assert "var HELP" in page and "COLOR_LABEL" in page    # plain-language help + colour names
+    assert "Full editor" in page                       # mode toggle renamed from "Advanced"
+    assert 'loadPreset("mandala")' in page             # lands on a calm showcase, not a scene graph
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
