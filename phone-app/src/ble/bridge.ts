@@ -28,6 +28,9 @@ export interface BleTransport {
 export type BridgeEvents = {
   onCard?: (card: Record<string, unknown>) => void;
   onFigmentAck?: (ack: Record<string, unknown>) => void;
+  /** A running lens emitted a rate-limited tag (device `figment_event`). The
+   *  app relays it to the Brain to close the glass→Brain→glass loop. */
+  onFigmentEmit?: (emit: { id?: string; tag: string }) => void;
   onTelemetry?: (tel: Record<string, unknown>) => void;
   onState?: (state: ConnState) => void;
   onMessage?: (obj: Record<string, unknown>) => void; // anything else
@@ -114,6 +117,8 @@ export class HaloBridge {
     const t = obj.t;
     if (t === "card") this.events.onCard?.(obj);
     else if (t === "figment_ack") this.events.onFigmentAck?.(obj);
+    else if (t === "figment_event" && typeof obj.tag === "string")
+      this.events.onFigmentEmit?.({ id: obj.id as string | undefined, tag: obj.tag });
     else if (t === "TEL") this.events.onTelemetry?.(obj);
     else this.events.onMessage?.(obj);
   }

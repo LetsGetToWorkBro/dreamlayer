@@ -10,6 +10,7 @@
 import { create } from "zustand";
 import { HaloBridge, type BleTransport, type ConnState } from "../ble/bridge";
 import { useVitalsStore } from "./useVitalsStore";
+import { relayEmit } from "../services/lensRelay";
 
 type GlassesState = {
   state: ConnState;
@@ -52,6 +53,8 @@ export const useGlassesStore = create<GlassesState>((set, get) => ({
       onState: (s) => set({ state: s }),
       // give device telemetry an audience — the Device Vitals screen (B11)
       onTelemetry: (tel) => useVitalsStore.getState().ingest(tel),
+      // a running lens emitted a tag → relay it to the Brain (glass→Brain→glass)
+      onFigmentEmit: (emit) => { void relayEmit(emit); },
       // card/ack routing is wired by the app layer as needed
     });
     set({ bridge });
