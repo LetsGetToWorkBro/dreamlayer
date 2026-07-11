@@ -364,6 +364,8 @@ def test_gallery_page_is_wired():
     assert "IntersectionObserver" in page              # only on-screen cards animate
     assert 'id="q"' in page and 'data-sort="newest"' in page   # search + Featured/Newest
     assert 'id="jamStrip"' in page and "/api/jams" in page      # Lens Jams strip
+    assert "./assets/lens/icons.js" in page and "DLIcon(" in page  # SVG icons, no emoji
+    assert "🌐" not in page and "🔗" not in page and "🎪" not in page  # emoji-free
 
 
 def test_golf_page_is_wired():
@@ -375,6 +377,17 @@ def test_golf_page_is_wired():
     assert "leaderboard" in page                        # the board
     assert "decodeShare" in page                        # accepts a share code/link
     assert "lens-builder.html#lens=" in page           # "study" a rival's lens / start one
+    assert "./assets/lens/icons.js" in page and "DLIcon(" in page  # SVG icons, no emoji
+    assert "⛳" not in page and "🏆" not in page and "🥇" not in page  # emoji-free
+
+
+def test_golf_challenges_carry_icon_keys_not_emoji():
+    # the challenge data drives SVG icons now, not emoji glyphs
+    js = JS.read_text(encoding="utf-8")
+    import re
+    block = js[js.index("var GOLF ="):]
+    assert 'icon: "timer"' in block and 'icon: "score"' in block
+    assert "emoji:" not in block, "GOLF should not carry emoji fields any more"
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
@@ -491,6 +504,7 @@ class TestBuildRouteHttp:
             page = resp.read().decode()
             assert "__DL_BUILD__" in page and "/dreamlayer/build/figment.js" in page
             assert "/dreamlayer/build/qr.js" in page   # the QR asset is rewritten too
+            assert "/dreamlayer/build/icons.js" in page  # the icon set is rewritten too
             # 127.0.0.1 is localhost → the token is injected (same as the panel)
             assert '"token": "tok"' in page
             # SECURITY: this page carries the token, so it must NOT be readable
@@ -502,6 +516,9 @@ class TestBuildRouteHttp:
             qrresp = urllib.request.urlopen(lb.url + "/dreamlayer/build/qr.js")
             assert "QRLite" in qrresp.read().decode()
             assert qrresp.headers.get("Access-Control-Allow-Origin") is None
+            icresp = urllib.request.urlopen(lb.url + "/dreamlayer/build/icons.js")
+            assert "DLIcon" in icresp.read().decode()
+            assert icresp.headers.get("Access-Control-Allow-Origin") is None
         finally:
             lb.stop()
 

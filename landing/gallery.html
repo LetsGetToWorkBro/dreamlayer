@@ -106,17 +106,26 @@
   .modal .x{position:relative;float:right;color:var(--text2);cursor:pointer;font-size:18px;
     margin:-8px -6px 0 0;background:none;border:0}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  /* inline-svg icons — inherit colour, scale with text */
+  .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
+  [data-icon]{display:inline-flex;align-items:center}
+  header h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal)}
+  .home a [data-icon] .ic{width:.95em;height:.95em}
+  .banner .bn-ic .ic{width:1.15em;height:1.15em;color:var(--teal)}
+  .chip .ic{width:.95em;height:.95em;vertical-align:-0.12em;margin-right:3px}
+  .icnbtn .ic{width:15px;height:15px}
+  .jam .jt .ic{width:1em;height:1em;color:var(--teal);margin-right:3px}
 </style>
 </head>
 <body>
 <header>
-  <h1>🌐 Lens Gallery</h1>
+  <h1><span class="ttl-ic" data-icon="globe"></span> Lens Gallery</h1>
   <span class="tag">Every lens here runs live below and is yours to remix — a proven scene machine, not code.</span>
-  <span class="home"><a href="./golf.html">⛳ Golf</a><a href="./lens-builder.html">Build your own →</a><a href="./index.html">Home</a></span>
+  <span class="home"><a href="./golf.html"><span data-icon="flag"></span> Golf</a><a href="./lens-builder.html">Build your own →</a><a href="./index.html">Home</a></span>
 </header>
 
 <p class="banner" id="offlineBanner" style="display:none">
-  <span>✨</span><span>Showing <b>featured lenses</b> — community submissions appear here as they're approved. Every one is fully remixable right now.</span>
+  <span class="bn-ic" data-icon="spark"></span><span>Showing <b>featured lenses</b> — community submissions appear here as they're approved. Every one is fully remixable right now.</span>
 </p>
 
 <!-- Lens Jams: themed, time-boxed collections -->
@@ -158,6 +167,7 @@
   </div>
 </div>
 
+<script src="./assets/lens/icons.js"></script>
 <script src="./assets/lens/qr.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script src="./assets/lens/player.js"></script>
@@ -175,14 +185,14 @@
 
   // -- seed: the showcases, so the wall is never dead (offline / empty API) --
   var SEED_META = {
-    whisper:     { emoji:"🗣", name:"Whisper",          blurb:"Read & hear any language, live.",             brain:true },
-    ask:         { emoji:"✦",  name:"Ask",              blurb:"Speak a question — see your Brain's answer.",  brain:true },
-    secondSight: { emoji:"👁", name:"Second Sight",     blurb:"Glance at anything and just know it.",         brain:true },
-    tethered:    { emoji:"🫀", name:"Tethered",         blurb:"Feel a loved one from across the world.",      brain:true },
-    threshold:   { emoji:"🚪", name:"Threshold",        blurb:"Arrive somewhere and the right thing begins.", brain:true },
-    ember:       { emoji:"🔥", name:"Ember",            blurb:"A memory, handed back where it happened.",     brain:true },
-    coach:       { emoji:"🏋", name:"Coach",            blurb:"It watches your form, not your reps.",         brain:true },
-    mandala:     { emoji:"🌸", name:"Breathing mandala", blurb:"A painted mandala that breathes with you.",   brain:false },
+    whisper:     { name:"Whisper",          blurb:"Read & hear any language, live.",             brain:true },
+    ask:         { name:"Ask",              blurb:"Speak a question — see your Brain's answer.",  brain:true },
+    secondSight: { name:"Second Sight",     blurb:"Glance at anything and just know it.",         brain:true },
+    tethered:    { name:"Tethered",         blurb:"Feel a loved one from across the world.",      brain:true },
+    threshold:   { name:"Threshold",        blurb:"Arrive somewhere and the right thing begins.", brain:true },
+    ember:       { name:"Ember",            blurb:"A memory, handed back where it happened.",     brain:true },
+    coach:       { name:"Coach",            blurb:"It watches your form, not your reps.",         brain:true },
+    mandala:     { name:"Breathing mandala", blurb:"A painted mandala that breathes with you.",   brain:false },
   };
   var SEED_ORDER = ["mandala","whisper","secondSight","ask","coach","tethered","threshold","ember"];
 
@@ -197,7 +207,7 @@
       out.push({
         id: "seed:"+id, name: meta.name, author: "DreamLayer",
         description: meta.blurb, scenes: Object.keys(fig.scenes||{}).length,
-        code: code, at: 1e12 - (i++), fig: fig, _seed: true, _brain: meta.brain, _emoji: meta.emoji,
+        code: code, at: 1e12 - (i++), fig: fig, _seed: true, _brain: meta.brain,
       });
     });
     return out;
@@ -212,7 +222,7 @@
       author: row.author || got.author || "someone",
       description: row.description || "", scenes: row.scenes || Object.keys(got.figment.scenes||{}).length,
       code: row.code, at: row.at || 0, fig: got.figment, _seed: false,
-      _brain: needsBrain(got.figment), _emoji: "◈",
+      _brain: needsBrain(got.figment),
     };
   }
   function needsBrain(fig){
@@ -268,7 +278,7 @@
 
     var chips = '<span class="chip safe" title="' +
         (proof && proof.cannot ? proof.cannot.join(" · ") : "budget-proven") +
-        '">🛡 ' + (guarantees ? guarantees + " guarantees" : "safe") + '</span>' +
+        '">' + DLIcon("shield") + (guarantees ? guarantees + " guarantees" : "safe") + '</span>' +
       '<span class="chip">' + it.scenes + (it.scenes === 1 ? " scene" : " scenes") + '</span>' +
       (it._brain ? '<span class="chip brain">needs your Brain</span>' : '');
     try{
@@ -286,8 +296,8 @@
         (it.description ? '<p class="desc"></p>' : '') +
         '<div class="actions">' +
           '<a class="btn remix" href="' + remixUrlFor(it) + '">✦ Remix</a>' +
-          '<button class="icnbtn share" title="Share link / QR" aria-label="Share">🔗</button>' +
-          '<button class="icnbtn deploy" title="Deploy to your glasses" aria-label="Deploy">📲</button>' +
+          '<button class="icnbtn share" title="Share link / QR" aria-label="Share">' + DLIcon("link") + '</button>' +
+          '<button class="icnbtn deploy" title="Deploy to your glasses" aria-label="Deploy">' + DLIcon("send") + '</button>' +
         '</div>' +
       '</div>';
     card.querySelector(".ringwrap").appendChild(cv);
@@ -456,7 +466,7 @@
       var cd = status === "open" && closes ? '<span class="cd" data-close="' + closes + '">' + escg(fmtCountdown(closes - now)) + '</span>'
              : status === "upcoming" && j.opens ? '<span class="cd">opens soon</span>' : '';
       return '<div class="jam' + (jamCurrent===j.id?" on":"") + '" data-jam="' + escg(j.id) + '">' +
-        '<div class="jt">🎪 ' + escg(j.title) + '</div>' +
+        '<div class="jt">' + DLIcon("tent") + escg(j.title) + '</div>' +
         (j.theme ? '<div class="jtheme">' + escg(j.theme) + '</div>' : '') +
         '<div class="jmeta"><span class="pill2 ' + status + '">' + status + '</span>' +
           '<span>' + entries + (entries===1?" lens":" lenses") + '</span>' + cd + '</div></div>';

@@ -910,7 +910,7 @@
   // is a behavior, never a shape — so a solver is rewarded for expressing the
   // exact thing in fewer bytes, nothing else.
   var GOLF = [
-    { id: "pocket-timer", title: "Pocket timer", emoji: "⏱",
+    { id: "pocket-timer", title: "Pocket timer", icon: "timer",
       brief: "A silent 3-minute timer that counts down and ends on its own. Show the time remaining. No taps, no extras.",
       par: 270,
       checks: [
@@ -921,7 +921,7 @@
         { label: "still running at 2:59", ops: [["step", 179]], expect: { ended: false } },
         { label: "ends by 3:00", ops: [["step", 180]], expect: { ended: true } },
       ] },
-    { id: "last-30", title: "The last 30", emoji: "🔴",
+    { id: "last-30", title: "The last 30", icon: "pulse",
       brief: "A 2-minute focus timer that pulses in its final 30 seconds, then ends. The pulse must be off before the last 30s and on inside it.",
       par: 340,
       checks: [
@@ -930,7 +930,7 @@
         { label: "pulsing at 1:40 in", ops: [["step", 100]], expect: { ended: false, pulse: true } },
         { label: "ends by 2:00", ops: [["step", 120]], expect: { ended: true } },
       ] },
-    { id: "tally", title: "Two-sided tally", emoji: "🏓",
+    { id: "tally", title: "Two-sided tally", icon: "score",
       brief: "A scoreboard: tap for US, double-tap for THEM, press-and-hold to reset both to zero. Show both running scores.",
       par: 620,
       checks: [
@@ -940,7 +940,7 @@
         { label: "hold resets both to zero", ops: [["inject", "single"], ["inject", "double"], ["inject", "long"]],
           expect: { count: { us: 0, them: 0 } } },
       ] },
-    { id: "streak", title: "Nod streak", emoji: "👆",
+    { id: "streak", title: "Nod streak", icon: "nod",
       brief: "Count clean nods. Each nod adds one and shows the running total; a head-shake resets to zero. Runs until you look away (a long press ends it).",
       par: 450,
       checks: [

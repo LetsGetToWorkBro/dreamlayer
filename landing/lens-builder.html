@@ -20,6 +20,8 @@
   header h1{font-size:19px;margin:0;font-weight:650}
   header .tag{color:var(--text2);font-size:13.5px;max-width:640px}
   header .home{margin-left:auto;font-size:13.5px}
+  header .home[href] [data-icon]{display:inline-flex;vertical-align:-0.14em}
+  header .home[href] .ic{width:.95em;height:.95em}
   .wrap{display:grid;grid-template-columns:290px 1fr 330px;min-height:calc(100vh - 62px)}
   @media(max-width:1080px){.wrap{grid-template-columns:1fr}}
   .col{padding:20px;overflow-y:auto}
@@ -195,8 +197,8 @@
   <h1>Lens Builder</h1>
   <span class="tag">A behavior is <b>data</b>, not code. Build one here — no coding — watch your device re-prove it's safe, deploy it, share it.</span>
   <button class="home helpbtn" id="showtour" title="See what's possible">✦ What's possible</button>
-  <a class="home" href="./gallery.html" title="Remixable lenses from the community">🌐 Gallery</a>
-  <a class="home" href="./golf.html" title="Express a behavior in the fewest bytes">⛳ Golf</a>
+  <a class="home" href="./gallery.html" title="Remixable lenses from the community"><span data-icon="globe"></span> Gallery</a>
+  <a class="home" href="./golf.html" title="Express a behavior in the fewest bytes"><span data-icon="flag"></span> Golf</a>
   <a class="home" href="./index.html">← dreamlayer</a>
 </header>
 <div class="remix-banner" id="remixBanner" style="display:none">
@@ -334,6 +336,7 @@
   </div>
 </div>
 
+<script src="./assets/lens/icons.js"></script>
 <script src="./assets/lens/qr.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script>

@@ -297,7 +297,7 @@ export default {
       // GET /api/golf — the challenge list (brief + par, never the answer)
       if (request.method === "GET" && !parts[2]) {
         return json({ challenges: challenges.map((c) =>
-          ({ id: c.id, title: c.title, emoji: c.emoji, brief: c.brief, par: c.par })) });
+          ({ id: c.id, title: c.title, icon: c.icon, brief: c.brief, par: c.par })) });
       }
       // GET /api/golf/:id/leaderboard — fewest bytes first, code included
       if (request.method === "GET" && parts[2] && parts[3] === "leaderboard") {

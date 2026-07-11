@@ -86,13 +86,22 @@
   .toast{font-size:13px;min-height:18px;margin-top:8px}
   .toast.ok-t{color:var(--green)} .toast.err-t{color:var(--red)}
   .offline{color:var(--amber);font-size:12.5px;margin-top:6px}
+  /* inline-svg icons */
+  .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
+  [data-icon]{display:inline-flex;align-items:center}
+  header h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal)}
+  .home a [data-icon] .ic{width:.95em;height:.95em}
+  .chal .ico .ic{width:22px;height:22px;color:var(--teal)}
+  .board h3 .ic{width:1em;height:1em;color:var(--amber);margin-right:4px;vertical-align:-0.14em}
+  td.rank .ic{width:18px;height:18px;vertical-align:-0.28em}
+  .ic-gold{color:#e0b54a}.ic-silver{color:#c3ced2}.ic-bronze{color:#c8875a}
 </style>
 </head>
 <body>
 <header>
-  <h1>⛳ Figment Golf</h1>
+  <h1><span class="ttl-ic" data-icon="flag"></span> Figment Golf</h1>
   <span class="tag">Express the exact behavior in the fewest bytes. Every entry is <b>verified</b> against the real interpreter — skill, not votes.</span>
-  <span class="home"><a href="./gallery.html">🌐 Gallery</a><a href="./lens-builder.html">Builder</a><a href="./index.html">Home</a></span>
+  <span class="home"><a href="./gallery.html"><span data-icon="globe"></span> Gallery</a><a href="./lens-builder.html">Builder</a><a href="./index.html">Home</a></span>
 </header>
 
 <div class="wrap">
@@ -104,6 +113,7 @@
   <div class="col right" id="detail"></div>
 </div>
 
+<script src="./assets/lens/icons.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script src="./assets/lens/player.js"></script>
 <script>
@@ -130,7 +140,7 @@
     CH.forEach(function(ch){
       var b = document.createElement("button");
       b.className = "chal" + (ch.id === sel ? " on" : "");
-      b.innerHTML = '<span class="ico">' + (ch.emoji||"⛳") + '</span><span class="tx"><b></b>' +
+      b.innerHTML = '<span class="ico">' + DLIcon(ch.icon || "flag") + '</span><span class="tx"><b></b>' +
         '<span class="bf"></span><span class="par">par ' + ch.par + ' bytes</span></span>';
       b.querySelector("b").textContent = ch.title;
       b.querySelector(".bf").textContent = ch.brief;
@@ -148,7 +158,7 @@
         '<div class="par-line">Par: <b>' + ch.par + ' bytes</b> — beat it to go under par.</div></div>' +
       '<div class="grid2">' +
         '<div class="make">' +
-          '<label class="f">Paste your lens’s share code or link (the builder’s 🔗 Share button gives you one)</label>' +
+          '<label class="f">Paste your lens’s share code or link (the builder’s ' + DLIcon("link") + ' Share button gives you one)</label>' +
           '<textarea id="code" placeholder="eyJ2Ijox… or https://dreamlayer.app/lens-builder.html#lens=…"></textarea>' +
           '<div class="btnrow">' +
             '<a class="btn ghost" href="' + starterUrl(ch) + '">✦ Start one in the builder →</a>' +
@@ -242,23 +252,23 @@
 
   function loadBoard(id){
     var board = document.getElementById("board");
-    board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="empty">Loading…</div>';
+    board.innerHTML = '<h3>' + DLIcon("trophy") + 'Leaderboard</h3><div class="empty">Loading…</div>';
     fetch(REGISTRY + "/api/golf/" + id + "/leaderboard")
       .then(function(r){ return r.json(); })
       .then(function(d){ renderBoard(id, d.entries||[]); })
-      .catch(function(){ board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="offline">The board loads when you’re online. Verify and build offline — submit when you reconnect.</div>'; });
+      .catch(function(){ board.innerHTML = '<h3>' + DLIcon("trophy") + 'Leaderboard</h3><div class="offline">The board loads when you’re online. Verify and build offline — submit when you reconnect.</div>'; });
   }
   function renderBoard(id, entries, you){
     if(id !== sel) return;
     var board = document.getElementById("board");
-    var medal = ["🥇","🥈","🥉"];
-    if(!entries.length){ board.innerHTML = '<h3>🏆 Leaderboard</h3><div class="empty">No entries yet — be the first to set par.</div>'; return; }
-    board.innerHTML = '<h3>🏆 Leaderboard <span style="color:var(--text2);font-weight:400;font-size:12px">fewest bytes wins</span></h3>' +
+    var medal = ["ic-gold","ic-silver","ic-bronze"];
+    if(!entries.length){ board.innerHTML = '<h3>' + DLIcon("trophy") + 'Leaderboard</h3><div class="empty">No entries yet — be the first to set par.</div>'; return; }
+    board.innerHTML = '<h3>' + DLIcon("trophy") + 'Leaderboard <span style="color:var(--text2);font-weight:400;font-size:12px">fewest bytes wins</span></h3>' +
       '<table><thead><tr><th>#</th><th>Maker</th><th>Bytes</th><th></th></tr></thead><tbody>' +
       entries.map(function(e,i){
         var rank = e.rank || (i+1);
         return '<tr class="' + (you && e.author===you ? "you":"") + '">' +
-          '<td class="rank">' + (rank>=1&&rank<=3?('<span class="medal">'+medal[rank-1]+'</span>'):rank) + '</td>' +
+          '<td class="rank">' + (rank>=1&&rank<=3?DLIcon('medal', medal[rank-1]):rank) + '</td>' +
           '<td>' + esc(e.author) + '</td>' +
           '<td class="bytes">' + e.bytes + '</td>' +
           '<td><a href="./lens-builder.html#lens=' + encodeURIComponent(e.code) + '">Study →</a></td></tr>';
