@@ -34,7 +34,11 @@
   .recipe.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
   .recipe{display:flex;gap:11px;align-items:flex-start}
   .recipe .rx-ico{font-size:20px;line-height:1.2;flex:none;width:24px;text-align:center}
+  .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
+  .recipe .rx-ico .ic{width:22px;height:22px;color:var(--teal);vertical-align:-3px}
   .recipe .rx-txt{display:block}
+  .controls .btn .ic{width:1em;height:1em;vertical-align:-0.14em;margin-right:1px}
+  .controls .btn [data-icon]{display:inline-flex;vertical-align:-0.14em}
   .recipe b{display:block;font-size:15px;margin-bottom:2px}
   .recipe span{color:var(--text2);font-size:12.5px}
   .recipe .rx-tag{display:inline-block;font-style:normal;font-size:10px;letter-spacing:.03em;
@@ -239,7 +243,7 @@
     </div>
     <p class="eyebrow">Start from an idea</p>
     <div id="recipes"></div>
-    <button class="recipe" id="blank"><span class="rx-ico">✏️</span><span class="rx-txt"><b>Start blank</b><span>A blank lens to build from scratch.</span></span></button>
+    <button class="recipe" id="blank"><span class="rx-ico" data-icon="pencil"></span><span class="rx-txt"><b>Start blank</b><span>A blank lens to build from scratch.</span></span></button>
     <div class="modeswitch" id="modeswitch">
       <button data-mode="simple" class="on">Quick tweaks</button>
       <button data-mode="advanced">Full editor</button>
@@ -251,9 +255,9 @@
     <div class="stage">
       <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
       <div class="controls">
-        <button class="btn" id="play">▶ Play</button>
-        <button class="btn ghost" id="restart">↺ Restart</button>
-        <button class="btn ghost" id="paint">🖌 Paint</button>
+        <button class="btn" id="play"></button>
+        <button class="btn ghost" id="restart"><span data-icon="restart"></span> Restart</button>
+        <button class="btn ghost" id="paint"><span data-icon="brush"></span> Paint</button>
       </div>
       <div class="paintbar" id="paintbar" style="display:none">
         <span class="pb-title">Painting <select id="paintscene" aria-label="Which screen to paint"></select></span>
@@ -395,20 +399,20 @@
   // Each is a real, budget-proven showcase lens; the ones marked `brain` come
   // alive on a paired Brain (the builder simulates the feed so you can watch).
   var PRESETS = [
-    { id:"whisper",     emoji:"🗣", name:"Whisper",          blurb:"Read & hear any language, live.",           brain:true },
-    { id:"ask",         emoji:"✦",  name:"Ask",              blurb:"Speak a question — see your Brain's answer.", brain:true },
-    { id:"secondSight", emoji:"👁", name:"Second Sight",     blurb:"Glance at anything and just know it.",       brain:true },
-    { id:"tethered",    emoji:"🫀", name:"Tethered",         blurb:"Feel a loved one from across the world.",    brain:true },
-    { id:"threshold",   emoji:"🚪", name:"Threshold",        blurb:"Arrive somewhere and the right thing begins.", brain:true },
-    { id:"ember",       emoji:"🔥", name:"Ember",            blurb:"A memory, handed back where it happened.",   brain:true },
-    { id:"coach",       emoji:"🏋", name:"Coach",            blurb:"It watches your form, not your reps.",       brain:true },
-    { id:"mandala",     emoji:"🌸", name:"Breathing mandala", blurb:"A painted mandala that breathes with you.",  brain:false },
+    { id:"whisper",     icon:"speech",   name:"Whisper",          blurb:"Read & hear any language, live.",           brain:true },
+    { id:"ask",         icon:"spark",    name:"Ask",              blurb:"Speak a question — see your Brain's answer.", brain:true },
+    { id:"secondSight", icon:"eye",      name:"Second Sight",     blurb:"Glance at anything and just know it.",       brain:true },
+    { id:"tethered",    icon:"heart",    name:"Tethered",         blurb:"Feel a loved one from across the world.",    brain:true },
+    { id:"threshold",   icon:"door",     name:"Threshold",        blurb:"Arrive somewhere and the right thing begins.", brain:true },
+    { id:"ember",       icon:"flame",    name:"Ember",            blurb:"A memory, handed back where it happened.",   brain:true },
+    { id:"coach",       icon:"dumbbell", name:"Coach",            blurb:"It watches your form, not your reps.",       brain:true },
+    { id:"mandala",     icon:"flower",   name:"Breathing mandala", blurb:"A painted mandala that breathes with you.",  brain:false },
   ];
   var recWrap = document.getElementById("recipes");
   PRESETS.forEach(function(t){
     var b = document.createElement("button");
     b.className = "recipe"; b.dataset.id = t.id;
-    b.innerHTML = '<span class="rx-ico">'+t.emoji+'</span><span class="rx-txt"><b>'+t.name+'</b>'+
+    b.innerHTML = '<span class="rx-ico">'+DLIcon(t.icon)+'</span><span class="rx-txt"><b>'+t.name+'</b>'+
       (t.brain ? '<em class="rx-tag">needs your Brain</em>' : '')+'<span>'+t.blurb+'</span></span>';
     b.onclick = function(){ loadPreset(t.id); };
     recWrap.appendChild(b);
@@ -690,7 +694,10 @@
   function nowms(){ return (typeof performance!=="undefined"&&performance.now)?performance.now():0; }
   function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); resetCounters(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
   document.getElementById("restart").onclick = restart;
-  document.getElementById("play").onclick = function(){ if(paintMode) return; play=!play; this.textContent=play?"▶ Play":"⏸ Pause"; if(play&&!raf) tick(); };
+  // the ring plays on load; the button shows the action it will take next
+  function setPlayBtn(){ var b=document.getElementById("play"); if(b) b.innerHTML = DLIcon(play?"pause":"play") + " " + (play?"Pause":"Play"); }
+  setPlayBtn();
+  document.getElementById("play").onclick = function(){ if(paintMode) return; play=!play; setPlayBtn(); if(play&&!raf) tick(); };
 
   // -- paint mode: draw bounded vector strokes onto the active scene ----------
   var paintMode=false, paintColor="accent_attention", paintWidth="md", drawing=false, curStroke=null;
@@ -731,10 +738,10 @@
     paintMode=on; cv.classList.toggle("painting", on);
     document.getElementById("paintbar").style.display = on?"flex":"none";
     document.getElementById("paint").classList.toggle("on", on);
-    document.getElementById("paint").textContent = on?"🖌 Done painting":"🖌 Paint";
-    if(on){ play=false; document.getElementById("play").textContent="▶ Play";
+    document.getElementById("paint").innerHTML = DLIcon("brush") + " " + (on?"Done painting":"Paint");
+    if(on){ play=false; setPlayBtn();
       activeScene = paintTargetScene(); fillPaintPicker(); paintCount(); paintStatic(); }
-    else { if(!raf){ play=true; document.getElementById("play").textContent="⏸ Pause"; t0=nowms(); tick(); } }
+    else { if(!raf){ play=true; setPlayBtn(); t0=nowms(); tick(); } }
   }
   document.getElementById("paint").onclick = function(){ setPaint(!paintMode); };
   function r4(n){ return Math.round(Math.max(0,Math.min(1,n))*1e4)/1e4; }
@@ -1047,7 +1054,7 @@
     document.getElementById("tourCopy").innerHTML=ch.copy;
     var demoBox=document.getElementById("tourDemo"); demoBox.innerHTML="";
     if(ch.demo){
-      var b=document.createElement("button"); b.textContent="▶ Load & run this on the ring";
+      var b=document.createElement("button"); b.innerHTML=DLIcon("play")+" Load &amp; run this on the ring";
       b.onclick=function(){ runShowcase(ch.demo); };
       var cap=document.createElement("span"); cap.className="cap";
       cap.textContent = DEMOS[ch.demo] ? "Loads the real lens and simulates the live Brain/camera/partner feed so you can watch it work."
