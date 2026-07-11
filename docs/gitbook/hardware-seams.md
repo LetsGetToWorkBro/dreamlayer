@@ -1,7 +1,7 @@
 # Hardware and seams
 
 DreamLayer is a **pre-hardware build**: the intelligence stack is complete
-and tested (1,909 passing tests), and the handful of places where physical
+and tested (2,278 passing tests), and the handful of places where physical
 hardware plugs in are explicit, narrow, and documented. This chapter is the
 honest matrix.
 
@@ -45,7 +45,13 @@ display runtime, BLE, and the basic sensors could host the same experience.
 - The Brain server: every endpoint, the index, config, pairing, saga,
   profile mirror, schedulers, backup/restore; live-HTTP tested.
 - The phone app's store, screens, pairing codec (byte-compatible with
-  Python), design system.
+  Python), design system — and now its BLE core: the length-prefixed
+  framing (pinned to Python-generated vectors) and the reconnect state
+  machine, tested in the phone's own Jest suite.
+- The offline intelligence floor: a real pixel-reading classifier as the
+  device vision rung (enforced accuracy floor) and a real lexical hashing
+  embedder as the memory floor — the "no models installed" path is now an
+  intelligence tier, not a stub.
 - The demo/film pipeline, golden images, motion exporters.
 
 ### Device seams (logic built and tested; physical signal to wire)
@@ -53,7 +59,8 @@ display runtime, BLE, and the basic sensors could host the same experience.
 | Seam | Plugs in at | What a device build supplies |
 |---|---|---|
 | BLE render + input | `bridge/` <-> `halo-lua/ble/` | the radio link; cards down, gestures up (framing already matched on both sides) |
-| Microphone + ASR | `hear(text)`, `ingest_caption(text)` | on-device speech-to-text and acoustic wake-word spotting |
+| The phone's native BLE adapter | `phone-app/src/ble/transport.blePlx.ts` | react-native-ble-plx in an EAS dev build, plus the Halo's real service UUIDs (placeholders marked for the bench today); everything above it — framing, chunking, reconnect, routing — is pure TS and tested |
+| Microphone + ASR | `hear(text)`, `ingest_caption(text)` | on-device speech-to-text; acoustic wake-word spotting has a real engine seam (openWakeWord, the `voice` extra) awaiting the mic feed |
 | Camera frames | `on_scene_frame`, `look_at_object`, `look_at_person` | frames from the glasses camera |
 | Face embedding | `load_contact_faces(face_embed_fn)`, Social Lens | a 512-d on-NPU face embedder (MobileFaceNet-class) |
 | Truth Lens face / voice channels | `observe_face(frame)`, `observe_voice(mic_fft, amplitude)` | AU frames and prosody from device sensors |

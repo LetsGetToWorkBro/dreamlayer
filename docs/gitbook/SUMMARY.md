@@ -21,7 +21,7 @@
 - [The Halo Simulator](simulator.md)
 - [HUD cards — the full gallery](hud-cards.md)
 - [Meridian — the design language](meridian.md)
-- [The Juno](juno.md)
+- [Juno](juno.md)
 - [Perception and memory](perception-memory.md)
 - [Truth and discernment](truth.md)
 - [Attention and focus](attention-focus.md)
@@ -34,7 +34,9 @@
 - [The AI Brain deep dive](ai-brain.md)
 - [Integrations and capabilities](integrations.md)
 - [The platform — plugins, the mesh, and the store](platform.md)
-- [Build on DreamLayer — lenses & plugins](builders.md)
+- [The Lens Builder — lenses without code](lens-builder.md)
+- [The community layer — gallery, Golf, Jams](community.md)
+- [The SDK — plugins with code](sdk.md)
 - [DreamLayer Cloud](cloud.md)
 
 ## Reference

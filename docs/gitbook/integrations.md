@@ -59,7 +59,9 @@ today.
 
 ## Knowing what is on: the capability report
 
-`capabilities.py` is read-only introspection over all 58 seams — it probes
+`capabilities.py` is read-only introspection over the catalog — **42 named
+capabilities** spanning the 58 wired libraries (a capability like local ASR
+bundles more than one library) — it probes
 what is importable without executing anything, honors `DL_DISABLE_<KEY>`
 kill-switch env vars, and reports each capability as **active / off /
 missing / unsupported / external**:

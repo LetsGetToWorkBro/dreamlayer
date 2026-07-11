@@ -13,7 +13,7 @@ product does and ends at pairing.
 
 If you are skipping the Mac for now, you are already done: the phone is the
 brain, and the glasses pair from this same screen. Everything core — memory,
-people, promises, the Juno — works right now.
+people, promises, Juno — works right now.
 
 **No hardware at all yet?** Tap **"Explore with sample data"** at the end of
 the welcome. The whole app fills with clearly-labeled sample data — a

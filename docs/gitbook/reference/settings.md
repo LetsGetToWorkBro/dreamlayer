@@ -2,7 +2,7 @@
 
 Every user-facing setting in the ecosystem, its default, what it does, and
 what it drives. Three surfaces expose them: the phone app, the Brain panel,
-and the Juno's voice commands; underneath they converge on orchestrator
+and Juno's voice commands; underneath they converge on orchestrator
 setters and Brain config keys.
 
 ## Phone app toggles

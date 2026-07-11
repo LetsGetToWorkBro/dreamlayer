@@ -7,7 +7,7 @@ tested contracts.
 ```
  Halo glasses ── BLE ──> Phone (the hub) ── LAN / relay ──> Mac mini (the Brain) ── opt-in ──> Cloud
   render + sense          orchestrator: memory,              index over your files,             frontier reach,
-  23 card renderers       privacy gate, Juno,              mail, calendar; Ollama;            logged on every
+  33 card renderers       privacy gate, Juno,              mail, calendar; Ollama;            logged on every
   gestures, Horizon       Veritas, anticipation              the control panel                  single call
 ```
 
@@ -17,7 +17,7 @@ tested contracts.
 
 Lua that runs on the Brilliant Labs Halo. It owns exactly two jobs: **draw**
 and **sense**. The display code (`halo-lua/display/`) implements the Meridian
-design language — the Horizon day-ring resting state, 23 card renderers, the
+design language — the Horizon day-ring resting state, 33 card renderers, the
 Lumen motion engines (springs, palette animation, particles, parallax) and the
 Solid material system (glass panes, gradient ramps, real font sizes). The app
 layer (`halo-lua/app/`) holds a small state machine and an IMU gesture
@@ -28,7 +28,11 @@ JSON dict over BLE.
 ### 2. The orchestrator (the hub) — `host-python/src/dreamlayer/orchestrator/`
 
 The mind of the product, designed to run on the phone. One `Orchestrator`
-class coordinates everything: the Juno voice assistant, the conversation
+class coordinates everything — since the decomposition pass it is a thin
+coordinator composed of ten focused ops mixins (ingest, conversation,
+commitments, world lenses, brain switches, messages, dream/REM,
+confluence, Juno/attention, plugins), behavior-preserving and
+API-identical. It coordinates: the Juno voice assistant, the conversation
 ledger and live captions, Veritas fact-checking, Truth Lens delivery reads,
 Discernment fusion, answer-ahead, the anticipation and attention engines,
 commitment capture, time-scrub rewind, the Social Lens, Dream Mode, and the
@@ -48,13 +52,15 @@ exposes secrets, the filesystem, or outbound sends is additionally
 
 ### 4. The phone app — `phone-app/`
 
-Expo / React Native. Six tabs (Brain, Now, Messages, People, Memories,
-Settings) plus hidden screens (Brief, Plugins, Rewind, Saga, Profile,
-Rehearsal, Confluence) and onboarding. It is the remote control: pairing, the
-three brain switches, every Juno and privacy toggle, message approval, and
-read-outs of everything the Brain knows — and it carries a Demo Mode that
-fills every screen with labeled sample data so the app is alive before any
-hardware is.
+Expo / React Native. Seven tabs (Brain, Now, Look, Messages, People,
+Memories, Settings) plus hidden screens (Brief, Plugins, Waypath,
+Capabilities, Device Vitals, Feel, Rewind, Saga, Profile, Rehearsal,
+Confluence, Cloud, Brain tiers) and onboarding. It is the remote control:
+pairing, the three brain switches, every Juno and privacy toggle, message
+approval, and read-outs of everything the Brain knows — and it carries a
+Demo Mode that fills every screen with labeled sample data so the app is
+alive before any hardware is. It now also ships its own Jest test suite
+alongside the strict typecheck.
 
 A fifth, smaller piece — `laptop-companion/` — is a stdlib-only agent serving
 one endpoint (`GET /dreamlayer/context`: recent file names, hostname, battery)
@@ -152,7 +158,7 @@ dreamlayer/
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
 │       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         1,909 collected tests
+│       └── tests/         2,278 collected tests
 │   └── packaging/         the macOS .dmg app (py2app, entitlements)
 ├── phone-app/             Expo / React Native app + the App Store kit
 ├── laptop-companion/      minimal context agent + macOS Brain installer

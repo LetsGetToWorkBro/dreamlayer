@@ -26,6 +26,13 @@ A real session, driven over its little HTTP API:
 |---|---|
 | ![Timer](assets/simulator/py_sim_timer.png) | ![Recall](assets/simulator/py_sim_glance.png) |
 
+**Glass Desk** rides the same binary: `python -m dreamlayer.simulator
+--watch my-lens/` is the zero-hardware devkit — it watches a plugin
+folder and re-renders its card through the real 256x256 device renderer
+on every save, safe-radius ring overlaid, into `.glass/glass.png`
+(`--once` for CI). Keep the file open in an image viewer and there is a
+live glass on your desk.
+
 The API is four POSTs and two GETs: `/sim/voice {text, look?}`,
 `/sim/glance {look?}`, `/sim/gesture {name}`, `/sim/veil {on}`;
 `/sim/frame.png` returns the current 256 x 256 glass and `/sim/state` the
@@ -45,6 +52,13 @@ browser-microphone voice input, and look-at face chips.
 
 ![The live fact-check scene: Veritas catches the Great Wall myth on the glass](assets/simulator/browser_sim.png)
 
+The world behind the lens is now a set of **per-scene backdrop clips**
+(first-person, teal-graded, seamlessly looping — one per scene plus an
+idle world), cross-dissolving as scenes change; a missing clip falls back
+to the idle world, and reduced-motion holds a still poster. The
+environment is explicitly illustrative — every pixel *on* the lens stays
+the real renderer's output.
+
 Below the scenes sits the interactive **"Try it yourself"** panel — the
 free-typing box, gestures, look chips, and example asks. On a desktop it
 opens itself (the whole point of the page is trying it); on a phone it
@@ -55,13 +69,16 @@ behind the lens is illustrative, and every pixel *on* the lens is the real
 renderer's output. It runs with no backend at all — nothing typed into it
 leaves the browser.
 
-And it is held to product standards, not demo standards: a **42-check
-Playwright QA** drives every control end to end on desktop and mobile —
-all six scenes, the guided tour and its any-touch abort, every intent
-family in the ask box, introduce-then-glance recall, waypath stash and
-recall, all three gestures, and the full Privacy Veil contract (writes
-refused, recall blind, clean lift) — with zero JavaScript errors on both
-viewports. One agreement bug that pass caught is worth recording: the
+And it is held to product standards, not demo standards: before its
+status-agreement fixes merged (#203), a 42-check Playwright pass drove
+every control end to end on desktop and mobile — all six scenes, the
+guided tour and its any-touch abort, every intent family in the ask box,
+introduce-then-glance recall, waypath stash and recall, all three
+gestures, and the full Privacy Veil contract (writes refused, recall
+blind, clean lift) — with zero JavaScript errors on both viewports; the
+standing in-repo check is the lens engine's Node self-test
+(`figment.selftest.js`) plus the JS-Python parity suite. One agreement
+bug that pass caught is worth recording: the
 status line used to say `timer` while a freshly-triggered card was
 interrupting the countdown on the glass; the status read now mirrors the
 renderer's own precedence, so the text and the lens can no longer

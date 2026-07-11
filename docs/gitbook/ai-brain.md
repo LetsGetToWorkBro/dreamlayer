@@ -36,7 +36,12 @@ Answer(text: str, sources: list[str], tier: str, confidence: float)
 `BrainRouter` holds vision and knowledge tiers in preference order and always
 prefers the lowest tier that can answer:
 
-1. **device** — the on-device recognizer seam. Instant, offline, coarse.
+1. **device** — the on-device tier. No longer a bare seam: a real
+   **pixel-reading classifier** (brightness, saturation, greenness,
+   warmth, edge density against labeled prototypes) is the offline base
+   rung, held to an enforced accuracy floor of 0.85 on its bench and
+   honest enough to decline a blank frame. The NPU model remains the seam
+   above it.
 2. **laptop** — the Mac mini over token-paired HTTP
    (`RemoteVisionBrain` / `RemoteKnowledgeBrain`, registered by
    `connect_brain` / pairing).
@@ -52,6 +57,16 @@ The rules, all enforced in `router.py` and covered by tests:
 - A tier that throws is skipped (dead Mac mini degrades gracefully); the
   first non-empty answer wins and is stamped with its tier.
 - Escalation on vision is driven by `want` ("quick" versus "tell me more").
+- **Every tier now runs under a deadline and a ledger.** The router takes a
+  `HealthLedger` and a per-tier deadline (`run_with_deadline`); a slow tier
+  is abandoned and recorded, a fast one records its round-trip latency. The
+  budget constants are product decisions: naming a glance **350 ms**, a
+  glance panel 1,500 ms, a spoken ask 2,500 ms, answer-ahead 2,000 ms. The
+  per-seam successes, failures, and latencies feed the designed failure
+  cards (an unreachable Brain draws an ErrorCard, never a black frame) and
+  the phone's live tier ladder (`GET /dreamlayer/brain/tiers`) — the
+  **Bring-Your-Own-Brain ceremony**, where pairing a Mac visibly speeds the
+  ladder up, a measured number beside each rung.
 
 Confidence conventions: the local index scores `0.4 + 0.15 x hits` (capped
 at 1.0); cloud knowledge answers carry 0.6, cloud vision 0.65, Ollama vision
@@ -131,9 +146,10 @@ the pairing token. The server enforces the boundary at one choke point —
 Semantic search is deliberately modest: local embeddings via Ollama's
 `nomic-embed-text`, cosine scoring, keyword fallback, and an explicit panel
 toggle. Turning it on re-embeds at reindex time; nothing is embedded in the
-cloud. (The orchestrator's own memory vault separately uses an embedding
-provider seam — a mock offline, OpenAI only when a key is present — for
-recall over saved moments.)
+cloud. (The orchestrator's own memory vault runs its own, separate
+embedder ladder — local MiniLM when the Total Recall pack is installed,
+OpenAI with a key, and a real lexical hashing embedder as the offline
+floor; see [the memory substrate](perception-memory.md#the-memory-substrate).)
 
 ## Schedulers and mirrors
 
@@ -141,7 +157,7 @@ Three daemon loops: the brief scheduler (fires once daily at the configured
 hour, stores `last_brief` for `GET /dreamlayer/brief/latest`), the
 calendar/contacts/reminders sync loop (15 minutes, plus an immediate pull
 when a sync toggle turns on), and the folder watcher. The Brain also mirrors
-two things it never authors: the Juno's user-model profile (pushed by the
+two things it never authors: Juno's user-model profile (pushed by the
 hub, capped and stored as `profile.json`) and the Saga ledger it advances on
 ecosystem events.
 

@@ -30,7 +30,7 @@ People confuse these in every product; DreamLayer keeps them distinct:
 
 Short version: **on your own devices, and it works that way by default.**
 
-- Your memories, your people, your promises, and everything the Juno has
+- Your memories, your people, your promises, and everything Juno has
   learned about you live on your phone and (if you added one) your Mac.
   The Mac reads your files *in place* on your own machine — nothing is
   uploaded to make search work.

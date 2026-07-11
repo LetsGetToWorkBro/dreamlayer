@@ -7,10 +7,13 @@ book's own images were generated.
 
 - **No code:** the [Lens Builder](https://dreamlayer.app/lens-builder.html) —
   describe a lens in plain words or start from a showcase, watch it run, deploy
-  to your Brain in one click.
+  to your Brain in one click. Full chapter: [the Lens Builder](lens-builder.md);
+  what people build lives on [the gallery, Golf, and Jams](community.md).
 - **Python plugin:** `dreamlayer plugins new my-lens` scaffolds one; `dreamlayer
-  plugins validate/preview/pack` checks and ships it. The full quickstart lives
-  in [`docs/SDK.md`](../SDK.md); [`examples/hello-lens/`](../../examples/hello-lens/)
+  plugins validate/preview/pack` checks and ships it, and
+  `python -m dreamlayer.simulator --watch my-lens/` gives you a live glass on
+  your desk (Glass Desk). Full chapter: [the SDK](sdk.md); the quickstart is
+  [`docs/SDK.md`](../SDK.md); [`examples/hello-lens/`](../../examples/hello-lens/)
   is a complete, CI-tested example you can copy.
 
 ## Layout
@@ -34,8 +37,10 @@ dreamlayer/
 │       ├── plugins/       the plugin API, validation gate, store client,
 │       │                  and the first-party plugins
 │       ├── reality_compiler/  v2: rehearsal, figments, native timers
-│       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
-│       ├── capabilities.py  the 58-seam capability report
+│       ├── simulator/     the Python Halo Simulator + Glass Desk (--watch)
+│       ├── sdk/           the stable authoring surface (dreamlayer.sdk)
+│       ├── cli.py         the dreamlayer CLI: plugins, figments, golf, memories
+│       ├── capabilities.py  the capability report (42 caps / 58 libraries)
 │       └── tests/         the whole suite lives here
 │   └── packaging/       the macOS .dmg app (py2app, entitlements, launch shim)
 ├── phone-app/           Expo / React Native (plus the App Store kit: fastlane, i18n)
@@ -43,7 +48,8 @@ dreamlayer/
 ├── examples/            hello-lens — the ten-minute plugin tutorial, CI-tested
 ├── registry/            the plugin marketplace catalog (index + packages)
 ├── registry-api/        the social-layer Cloudflare Worker (api.dreamlayer.app)
-├── landing/             the deployed site (dreamlayer.app: home, simulator, store, playground)
+├── landing/             the deployed site (dreamlayer.app: home, simulator, store,
+│                        playground, lens builder, gallery, golf)
 ├── web/                 the Vite/TS site rebuild + the WebBLE playground
 ├── docs/                specs; docs/gitbook/ is this book
 └── scripts/             demos, exporters, the Halo lab
@@ -74,7 +80,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 2,200+ passing
+cd host-python && python -m pytest -q     # 2,278 passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain

@@ -43,7 +43,7 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![ListeningCard](assets/cards/listening.png)
 
-- **Appears:** the moment the Juno wakes, from any enabled source — voice
+- **Appears:** the moment Juno wakes, from any enabled source — voice
   ("Hey Juno"), tap, gaze, raise, or gesture. Shown only if visual wake
   feedback is on.
 - **Shows:** a pulsing ring plus the wake source; carries earcon `wake` and
@@ -262,9 +262,9 @@ The device-Lua render of the same card:
 
 ![JunoReplyCard](assets/cards/juno_reply.png)
 
-- **Appears:** the Juno answered you (kind `answer`) or did something for
+- **Appears:** Juno answered you (kind `answer`) or did something for
   you (kind `action` — "Focus on — the world's turned down.").
-- **Shows:** the reply in the Juno's voice under an JUNO eyebrow with a
+- **Shows:** the reply in Juno's voice under a JUNO eyebrow with a
   bloomed cue dot; success ramp for actions, memory ramp for answers.
 - **Dismiss:** 6000.
 
@@ -374,3 +374,10 @@ Other modules carry their own cards (QuestCard and QuestRewardCard from the
 Saga, SocialLensCard, IntroOfferCard, ConsistencyCard from Candor, provenance
 and waypath panels) — see the [card catalog reference](reference/cards.md)
 for the complete constructor table.
+
+Two newer host-emitted types ride the safety net rather than a bespoke
+renderer: **CandorCard** (the [Candor Mirror](lenses.md#truths-siblings)
+debrief — "How you spoke") and **WaypathCard** (the direction/place
+answer). They draw through the layout path — legible by construction,
+never black — and are candidates for bespoke treatment when their designs
+settle.

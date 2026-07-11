@@ -12,7 +12,7 @@ or you saying "meet my colleague Sarah" — kept on your device, erasable
 with "forget that."
 
 **Does it work without internet?**
-Yes. Memory, people, promises, finding your things, the Juno, live
+Yes. Memory, people, promises, finding your things, Juno, live
 captions, and the strongest fact-check (catching self-contradictions) all
 work with no connection whatsoever. Internet adds exactly one thing: answers
 to hard general-knowledge questions — and only if you keep that switch on.
@@ -65,6 +65,15 @@ integrity. Ratings and downloads live on a separate service that never
 touches plugin code. Browse at
 [dreamlayer.app/plugins](https://dreamlayer.app/plugins.html).
 
+**Can I make my own lens without being a programmer?**
+Yes — that is the Lens Builder
+([dreamlayer.app/lens-builder.html](https://dreamlayer.app/lens-builder.html)):
+describe what you want in plain words ("a 5 minute countdown that pulses
+at the end"), watch it run on a practice lens, and send it to your own
+setup in one click. A lens is data, not code — it physically cannot spy,
+flash, or run wild, and your glasses re-verify that before running
+anything, including lenses other people share with you as links.
+
 **What is Dream Mode?**
 Double-tap the glasses and the display becomes something quieter and
 stranger: memories pinned to the places where they happened, and a poetic
@@ -79,7 +88,7 @@ Both sides must opt in, and either can end it.
 **Can I try it before owning anything?**
 Yes, two ways. The website has a full in-browser simulator of the glasses
 ([dreamlayer.app/simulator.html](https://dreamlayer.app/simulator.html)) —
-type to the Juno, run scenes, watch real cards render. And the phone app
+type to Juno, run scenes, watch real cards render. And the phone app
 has "Explore with sample data": every screen fills with clearly-labeled
 demo data, with a banner on screen the whole time and a one-tap exit.
 

@@ -16,7 +16,9 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   cloud. [AI Brain](ai-brain.md)
 - **Candor** — the on-device self-consistency check; Veritas reuses its
   contradiction predicate.
-- **Capability** — one of the 58 named optional integrations a machine may
+- **Candor Mirror** — the same machinery pointed inward: your pace,
+  fillers, and drift, coached privately. [Lenses](lenses.md)
+- **Capability** — one of the 42 named optional integrations a machine may
   or may not have, each with an honest status and a one-line way to get it.
   [Integrations](integrations.md)
 - **Capability pack** — a one-click bundle of capabilities (Total Recall,
@@ -38,14 +40,22 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **DreamLayer Cloud** — the optional paid relay/sync service: union-only
   entitlements, ciphertext sync, a blind relay; client seams built, service
   ahead. [Cloud](cloud.md)
+- **Docent** — a venue's own knowledge layer, answered on its premises,
+  offline. [World lenses](world-lenses.md)
 - **Dossier** — what the ledger knows about a person: last seen, shared
   topics, last line.
+- **Ember** — the gentle anniversary layer: one pinned memory from about a
+  year ago, storm-suppressed. [Lenses](lenses.md)
 - **Dream Mode** — the double-tap world: Ghost Layer echoes and Synesthesia.
   [Lenses](lenses.md)
 - **Earcon** — a short identity sound (wake, hark, hark_urgent, look, chime).
   [Earcons](reference/earcons.md)
 - **Figment** — a signed, budget-verified little program the Reality
   Compiler runs on the glass stage.
+- **Figment Golf** — build the described behavior in the fewest bytes;
+  server-verified leaderboards. [Community](community.md)
+- **Glass Desk** — the zero-hardware devkit: your plugin's card re-rendered
+  through the real device renderer on every save. [SDK](sdk.md)
 - **Focus** — do-not-disturb: interruptions held, capture keeps running.
   [Attention and focus](attention-focus.md)
 - **Glance Arbiter** — the look decides the lens: candidate lenses bid on
@@ -65,12 +75,18 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   "Watch out!". [Attention and focus](attention-focus.md)
 - **Horizon** — the resting-state day ring; the display's home.
   [Glasses experience](glasses-experience.md)
+- **Heirloom figment** — a kept figment carrying a signed dedication,
+  inheritable and provably the author's. [Lenses](lenses.md)
 - **Hub** — the phone-side orchestrator process; the mind of the product.
 - **Incognito** — capture paused, cloud forced off, for a session.
   [Privacy](privacy.md)
 - **Inner Weather** — your own climate rendered as dream-sky weather.
 - **Lens** — a product-level capability family; six of them, in code.
   [Lenses](lenses.md)
+- **Lens Builder** — compose a lens in the browser, no code; deploy to
+  your own Brain in one click. [Lens Builder](lens-builder.md)
+- **Lens Jam** — a themed, time-boxed community collection.
+  [Community](community.md)
 - **Lucid Recall** — ask-and-receive: the query router over memory, people,
   and (via the Brain) your files.
 - **Lumen** — the motion half of Meridian: springs, palette light,
@@ -79,6 +95,9 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   stage."
 - **Juno** — the voice: wake, commands, persona, and the user model.
   [Juno](juno.md)
+- **Maturity arc** — a fresh install earns its voice: OBSERVER, then
+  APPRENTICE, then RESIDENT — demoted when over-dismissed.
+  [Perception and memory](perception-memory.md#the-memory-substrate)
 - **Privacy Veil** — one gesture, fully deaf and blind; the spine every lens
   respects. [Privacy](privacy.md)
 - **Premonition** — recurring-pattern ghosts of the near future on the
@@ -89,7 +108,12 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   runnable on-glass skill.
 - **REM** — the nightly consolidation cycle; its retrieval bias tunes the
   next day's Horizon.
-- **Rosetta** — the eye: translate text you look at.
+- **Retrace** — "where did I last *see* it": recall from passive
+  sightings, by place and time.
+  [Perception and memory](perception-memory.md)
+- **Rosetta** — the eye: translate text you look at. **Rosetta Live** is
+  the ear, offline with the Argos pack.
+  [World lenses](world-lenses.md)
 - **Plugin** — a validated, capability-gated extension: one manifest, one
   Python file, six possible hooks. [Platform](platform.md)
 - **Saga** — progression: XP, levels, seven ranks, achievements.
@@ -97,6 +121,8 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Scholar** — the read-what-is-in-front-of-you lens: answer a question,
   spell out a form, put dense text in plain words.
   [World lenses](world-lenses.md)
+- **SDK** — the one supported authoring surface (`dreamlayer.sdk`) and its
+  CLI, from scaffold to store. [SDK](sdk.md)
 - **Seam** — a named point where tested software meets physical hardware.
   [Hardware and seams](hardware-seams.md)
 - **Simulator (Halo)** — the product with no glasses: the browser simulator
@@ -107,17 +133,19 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
   gradient ramps, blooms. [Meridian](meridian.md)
 - **Synesthesia** — Dream Mode's six-word poetic sense read.
-- **TasteLens** — the shelf/menu choice juno: hard dietary vetoes, soft
+- **TasteLens** — the shelf/menu choice engine: hard dietary vetoes, soft
   budget, plugin data connectors. [World lenses](world-lenses.md)
 - **Testimony thread** — the Truth Lens gauge: nine stages around the ring,
   torn where deceptive.
 - **Three switches** — Mac mini, Cloud, Incognito; independent, never a mode
   dial. [Privacy](privacy.md)
 - **Timbre** — audio texture for known voices (People lens).
+- **Thread** — steal color from the world: six swatches from whatever you
+  look at, kept as a memory; never the image. [Lenses](lenses.md)
 - **TinCan** — a single tap sent down the Confluence wire.
 - **Truth Lens** — the nine-stage delivery read against a per-person
   baseline. [Truth](truth.md)
-- **User model** — the Juno's small private profile of you; mirrored,
+- **User model** — Juno's small private profile of you; mirrored,
   never authored, by the Brain. [Juno](juno.md)
 - **Veritas** — the live fact-checker: offline self-contradiction plus the
   tiered world check. [Truth](truth.md)

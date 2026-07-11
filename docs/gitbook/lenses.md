@@ -72,7 +72,7 @@ real), hardening the model when a predicted event lands.
 
 - **Scholar** (`orchestrator/scholar.py`) — read the question and answer
   it, spell out a form's fields, or put dense text in plain words; and
-  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice juno
+  **TasteLens** (`orchestrator/taste.py`) — the shelf/menu choice engine
   with hard dietary vetoes and plugin data connectors. Both routed by the
   Glance Arbiter or voice; full chapter:
   [Scholar and TasteLens](world-lenses.md).
@@ -91,6 +91,21 @@ real), hardening the model when a predicted event lands.
   the microphone.
 - **Waypath** (`find_way(subject, heading_deg)`) — point-me-to-my-things:
   a bearing card from your heading to where the remembered object lives.
+- **Docent** (`docent(query)`) — a venue's own knowledge, answered on its
+  premises from its published collection, offline; and **Rosetta Live**
+  (`translate_heard`) — live speech translated to caption cards, offline
+  with the Argos pack. Both in
+  [the World lenses chapter](world-lenses.md#docent--the-venue-speaks).
+- **Thread** (`thread(image)`) — steal color from the world: the palette
+  of whatever you look at, quantized to six named swatches and kept as a
+  recallable memory. The image itself is never stored — only the swatches.
+- **Retrace** (`retrace(subject)`) — "where did I last *see* it": recall
+  from passive sightings, blended by confidence and recency
+  ([Perception and memory](perception-memory.md#ask-and-receive--object-and-commitment-recall)).
+- **Ember** (`ember()`) — the gentle anniversary layer, sensitive by
+  design: at most **one** memory, only one you *chose to keep* (pinned),
+  from about a year ago today — and it stays silent entirely when your
+  inner weather reads storm.
 
 ## Truth's siblings
 
@@ -103,6 +118,16 @@ real), hardening the model when a predicted event lands.
   — where did this belief come from? Traces a claim to its origins and
   standing in your own record; pairs with the `Answer.sources` attribution
   that every brain answer carries.
+- **Candor Mirror** (`orchestrator/candor.py`) — the truth machinery,
+  pointed inward. It listens only to *your own* lines: live speaking pace
+  (a gentle nudge when you sustain past 165 wpm), a filler-word tally
+  (hidden until you peek), and your own narrative drift folded in from the
+  consistency check. The debrief card — eyebrow "How you spoke" — reads
+  like: *"162 wpm (up), 9 'um's, and you told the project story
+  differently than Tuesday."* Inward-only by construction, and the Veil
+  silences it completely. The design point is written into the module: a
+  deception pipeline pointed at others is a scandal; pointed at yourself
+  it is a coach — and only an open codebase can prove which one it is.
 
 ## Life — building and keeping
 
@@ -123,13 +148,29 @@ real), hardening the model when a predicted event lands.
   and the phone's Rehearsal screen is now **live end to end** — every beat
   round-trips the Brain's `rc/*` endpoints (rehearse, keep, deploy, revoke),
   with deploys recording BLE envelopes until the glasses transport attaches.
-  The Juno also compiles **native timers, intervals, and a clock** through
+  Juno also compiles **native timers, intervals, and a clock** through
   the same engine, on the spot, with or without a Brain
   ([Juno](juno.md#3-timers-intervals-and-the-clock--no-brain-required)).
   The five recorded sessions under `out/rc_v2/` (round timer, rolling
   rounds, spar night, a refused strobe — the safety path — and hot-swap
   revoke) are its executable spec, alongside `docs/rc_v2/echo.md`,
   `loom.md`, and `rehearsal.md`.
+
+  The compiler now also **teaches itself**, three ways: **repertoire
+  ranking** learns which kept figment you start where and when, and offers
+  exactly one — "Gym timer — start the usual?"; **rehearsal refinement**
+  notices the scene you keep banishing a figment at ("You end Rounds
+  around 20:00 of 25:00 — every time.") and proposes a trimmed variant,
+  which re-runs the whole budget-verify-and-sign path before it can
+  deploy; and **grammar mining** counts the phrasings the parser keeps
+  failing on, locally, so the closed grammar grows from real misses rather
+  than guesses. The grammar itself grew too: **cadence scenes** (a slow
+  breathing envelope in seconds — never a flicker), **place and presence
+  events** (`place:enter`, a bonded partner's emit as your transition),
+  IMU gestures, and **ledger emits** — a figment's taps recorded into a
+  performance log you keep. And a kept figment can now carry a
+  **dedication**: signed into its canonical bytes, an heirloom another
+  device can inherit and prove came from you.
 
 ## Together — Confluence
 

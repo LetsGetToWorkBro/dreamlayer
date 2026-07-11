@@ -100,11 +100,11 @@ Answers appear as a card in its voice, and actions confirm themselves in
 character: *"Focus on — the world's turned down."*, *"Incognito. Nothing's
 being kept."*, *"Rewinding your day."*
 
-![The Juno replying](../assets/cards/juno_reply.png)
+![Juno replying](../assets/cards/juno_reply.png)
 
 ## What it learns about you — and what it never does
 
-Over time the Juno notices the topics you return to, the people you talk
+Over time Juno notices the topics you return to, the people you talk
 with most, and the preferences you have told it. That is the entire list. It
 never stores recordings of your voice, never learns from other people's
 words as if they were yours, and learns nothing at all while privacy is on.
