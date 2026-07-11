@@ -56,7 +56,8 @@ class TestUnderNode:
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
 
-    @pytest.mark.parametrize("recipe", ["interval", "countdown", "checklist", "breathing"])
+    @pytest.mark.parametrize("recipe", ["interval", "countdown", "checklist",
+                                        "breathing", "reps", "focus", "score"])
     def test_a_browser_built_figment_passes_the_real_gate(self, recipe):
         # dump the template the browser would emit, load it with the real
         # Figment, and run the real budget verifier — the strongest parity check

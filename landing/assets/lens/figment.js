@@ -52,8 +52,15 @@
     if (o.pulse) s.pulse = o.pulse;                     // {window_sec, rate_hz, color}
     if (o.tick) s.tick = o.tick;
     if (o.glyphs) s.glyphs = o.glyphs;                  // [{points:[[x,y]..], color, width}]
+    if (o.cadence) s.cadence = o.cadence;               // {in_s, hold_s, out_s} breathing
     return s;
   }
+  function counter(name, o) {                            // a bounded, saturating tally
+    o = o || {};
+    return { name: name, start: o.start || 0, lo: o.lo || 0, hi: o.hi == null ? 999 : o.hi };
+  }
+  function inc(name, by) { return { counter: name, op: "inc", amount: by == null ? 1 : by }; }
+  function zero(name) { return { counter: name, op: "set", amount: 0 }; }
   // one painted stroke: a polyline in normalized 0..1 display coords. Coords are
   // rounded to 4 places to match figment.py's canonical form (signature-stable).
   function r4(n) { return Math.round(Math.max(0, Math.min(1, +n)) * 1e4) / 1e4; }
@@ -129,11 +136,71 @@
     addScene(f, mk("hold2", "HOLD", hold, "in", "text_secondary"));
     return f;
   }
+  // A rep counter: nod to add one, hold to reset, double-tap to finish. Shows
+  // off counters + on-glass gestures + a painted tally arc + the {count} token.
+  function tReps(o) {
+    o = o || {};
+    var f = figment(o.name || "Rep counter", "count");
+    f.counters.reps = counter("reps", { hi: 999 });
+    addScene(f, scene("count", {
+      lines: [line("{count:reps}", { row: 1, size: "lg", color: "accent_memory" }),
+              line(o.label || "reps", { row: 0, size: "sm", color: "text_secondary" }),
+              line("nod +1 · hold 0 · ✕✕ done", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.26, 0.64], [0.5, 0.71], [0.74, 0.64]], { color: "accent_memory", width: "md" })],
+      on: { "imu:nod": { target: SELF, counter_ops: [inc("reps")] },
+            "long": { target: SELF, counter_ops: [zero("reps")] },
+            "double": { target: END } },
+    }));
+    return f;
+  }
+  // A deep-work session: a painted sigil that BREATHES while you focus, then a
+  // gentle end-pulse and a checkmark. Paint + cadence + pulse + countdown.
+  function tFocus(o) {
+    o = o || {}; var secs = (o.minutes || 25) * 60;
+    var f = figment(o.name || "Deep focus", "work");
+    addScene(f, scene("work", {
+      duration_sec: secs, tick: "countdown",
+      lines: [line("FOCUS", { row: 0, size: "lg", color: "accent_memory" })],
+      glyphs: [glyph([[0.5, 0.34], [0.66, 0.5], [0.5, 0.66], [0.34, 0.5], [0.5, 0.34]],
+                     { color: "accent_memory", width: "md" })],
+      cadence: { in_s: 4, hold_s: 2, out_s: 4 },
+      pulse: { window_sec: Math.min(15, secs), rate_hz: 1.5, color: "accent_attention" },
+      on_timeout: [{ target: "done" }], on: { double: { target: END } },
+    }));
+    addScene(f, scene("done", {
+      duration_sec: 4,
+      lines: [line("DONE", { row: 0, size: "lg", color: "accent_success" })],
+      glyphs: [glyph([[0.34, 0.54], [0.45, 0.64], [0.68, 0.4]], { color: "accent_success", width: "lg" })],
+      on_timeout: [{ target: END }], on: { double: { target: END } },
+    }));
+    return f;
+  }
+  // A live scoreboard: tap for us, double-tap for them, hold to reset. Two
+  // saturating counters + gestures, the score painted on the glass.
+  function tScore(o) {
+    o = o || {};
+    var f = figment(o.name || "Scoreboard", "play");
+    f.counters.us = counter("us", { hi: 99 });
+    f.counters.them = counter("them", { hi: 99 });
+    addScene(f, scene("play", {
+      lines: [line("{count:us} : {count:them}", { row: 1, size: "lg", color: "text_primary" }),
+              line("us   ·   them", { row: 0, size: "sm", color: "text_secondary" }),
+              line("tap us · ✕✕ them · hold 0", { row: 4, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.5, 0.26], [0.5, 0.58]], { color: "border_subtle", width: "sm" })],
+      on: { single: { target: SELF, counter_ops: [inc("us")] },
+            double: { target: SELF, counter_ops: [inc("them")] },
+            long: { target: SELF, counter_ops: [zero("us"), zero("them")] } },
+    }));
+    return f;
+  }
   var TEMPLATES = [
-    { id: "interval", name: "Interval timer", blurb: "Work / rest rounds — pulses near the switch.", make: tInterval },
-    { id: "countdown", name: "Countdown", blurb: "A single timer that pulses as it lands.", make: tCountdown },
-    { id: "checklist", name: "Checklist ritual", blurb: "Named stages you advance with a nod.", make: tChecklist },
+    { id: "reps", name: "Rep counter", blurb: "Nod to count — a live tally you paint on the glass.", make: tReps },
+    { id: "focus", name: "Deep focus", blurb: "A sigil that breathes while you work, then lands.", make: tFocus },
+    { id: "score", name: "Scoreboard", blurb: "Tap us, double-tap them. The score, on your eye.", make: tScore },
     { id: "breathing", name: "Box breathing", blurb: "In · hold · out · hold, gently breathing the ring.", make: tBreathing },
+    { id: "interval", name: "Interval timer", blurb: "Work / rest rounds — pulses near the switch.", make: tInterval },
+    { id: "checklist", name: "Checklist ritual", blurb: "Named stages you advance with a nod.", make: tChecklist },
+    { id: "countdown", name: "Countdown", blurb: "A single timer that pulses as it lands.", make: tCountdown },
   ];
 
   // -- Ask Juno (client fallback): a lightweight plain-English → figment map ---
@@ -152,9 +219,16 @@
     var mins = _dur(t, "minute|min"), secs = _dur(t, "second|sec");
     var has = function () { for (var i = 0; i < arguments.length; i++) if (t.indexOf(arguments[i]) >= 0) return true; return false; };
     var fig, kind;
-    if (has("interval", "hiit", "tabata") || (has("work") && has("rest"))) {
-      var parts = t.split(/work|rest/);
-      fig = tInterval({ work: (mins ? mins * 60 : secs) || 180, rest: 30 }); kind = "interval"; void parts;
+    if (has("score", "scoreboard", "keep score", " vs ", "point")) {
+      fig = tScore({}); kind = "score";
+    } else if (has("rep", "count", "tally", "push-up", "pushup", "sit-up", "situp",
+                   "squat", "pull-up", "pullup", "nod to")) {
+      fig = tReps({ label: (t.match(/(push-?ups?|sit-?ups?|squats?|pull-?ups?|reps?)/) || [])[0] || "reps" });
+      kind = "reps";
+    } else if (has("focus", "deep work", "pomodoro", "work session", "concentrate", "study")) {
+      fig = tFocus({ minutes: mins || 25 }); kind = "focus";
+    } else if (has("interval", "hiit", "tabata") || (has("work") && has("rest"))) {
+      fig = tInterval({ work: (mins ? mins * 60 : secs) || 180, rest: 30 }); kind = "interval";
     } else if (has("breath", "box breathing")) {
       var b = secs || 4; fig = tBreathing({ in_s: b, hold_s: b, out_s: b }); kind = "breathing";
     } else if (has("checklist", "steps", "ritual", "routine", "then ")) {
@@ -367,6 +441,7 @@
     newSceneId: newSceneId, setTransition: setTransition, removeTransition: removeTransition,
     listTransitions: listTransitions, graphEdges: graphEdges,
     validate: validate, safetyCard: safetyCard, canonical: canonical, listing: listing,
-    templates: { interval: tInterval, countdown: tCountdown, checklist: tChecklist, breathing: tBreathing },
+    templates: { reps: tReps, focus: tFocus, score: tScore, breathing: tBreathing,
+      interval: tInterval, countdown: tCountdown, checklist: tChecklist },
   };
 });

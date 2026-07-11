@@ -112,7 +112,7 @@
     <div class="askjuno" id="askjuno">
       <p class="eyebrow">Ask Juno</p>
       <p class="muted" style="margin:0 0 8px">Describe the lens you want — Juno drafts it and your device re-proves it's safe.</p>
-      <textarea id="askprompt" rows="2" maxlength="240" placeholder="a 5 minute countdown that pulses at the end"></textarea>
+      <textarea id="askprompt" rows="2" maxlength="240" placeholder="count my push-ups with a nod"></textarea>
       <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
       <div class="toast" id="asktoast"></div>
       <div class="askex" id="askex"></div>
@@ -213,7 +213,11 @@
   document.getElementById("blank").onclick = function(){ loadBlank(); };
   function markRecipe(id){ [].forEach.call(document.querySelectorAll(".recipe"), function(c){ c.classList.toggle("on", c.dataset.id===id); }); }
 
-  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id); boot(); }
+  // the rich templates (counters, gestures, painted glyphs) read best as a
+  // scene graph — open them in Advanced; the classic knob recipes stay Simple
+  var ADVANCED_TEMPLATES = { reps:1, focus:1, score:1 };
+  function loadTemplate(t){ fig = t.make(); editKind = t.id; markRecipe(t.id);
+    if(ADVANCED_TEMPLATES[t.id]) setMode("advanced"); else setMode("simple"); boot(); }
   function loadBlank(){ fig = K.emptyFigment(); editKind = "blank"; markRecipe("blank"); setMode("advanced"); boot(); }
   function boot(){
     document.getElementById("fname").value = fig.name;
@@ -425,7 +429,7 @@
   var cv=document.getElementById("ring"), ctx=cv.getContext("2d");
   var play=true, activeScene=null, t0=0, raf=null, SZ={sm:20,md:32,lg:44};
   function nowms(){ return (typeof performance!=="undefined"&&performance.now)?performance.now():0; }
-  function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
+  function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); resetCounters(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
   document.getElementById("restart").onclick = restart;
   document.getElementById("play").onclick = function(){ if(paintMode) return; play=!play; this.textContent=play?"▶ Play":"⏸ Pause"; if(play&&!raf) tick(); };
 
@@ -505,24 +509,61 @@
     if(s){ delete s.glyphs; } paintCount(); paintStatic(); refresh();
   };
 
-  function advance(s){ if(s.duration_sec!=null&&s.on_timeout&&s.on_timeout.length) return s.on_timeout[s.on_timeout.length-1].target;
-    if(s.on){ if(s.on["imu:nod"]) return s.on["imu:nod"].target; if(s.on.double) return s.on.double.target; var k=Object.keys(s.on)[0]; if(k) return s.on[k].target; } return "@end"; }
-  function dwell(s){ return s.duration_sec!=null ? s.duration_sec : 2.4; }
+  // live counter state, so a rep/score lens actually ticks up in the preview as
+  // it auto-cycles through its gestures (mirrors interpreter.py's saturating ops)
+  var pcount={};
+  function resetCounters(){ pcount={}; if(fig&&fig.counters) Object.keys(fig.counters).forEach(function(n){ pcount[n]=fig.counters[n].start||0; }); }
+  function applyOps(t){ (t.counter_ops||[]).forEach(function(op){ var d=fig.counters&&fig.counters[op.counter]; if(!d) return;
+    var c=pcount[op.counter]||0, by=op.amount==null?1:op.amount;
+    if(op.op==="inc") c+=by; else if(op.op==="dec") c-=by; else c=by;
+    pcount[op.counter]=Math.max(d.lo==null?0:d.lo, Math.min(d.hi==null?9999:d.hi, c)); }); }
+  // the transition the preview takes when a scene "ends" — timeout for timed
+  // scenes, else a representative gesture so event-only lenses still animate
+  function pickTrans(s){
+    if(s.duration_sec!=null && s.on_timeout && s.on_timeout.length) return s.on_timeout[s.on_timeout.length-1];
+    if(s.on){ var pref=["imu:nod","single","double","long","imu_tap"];
+      for(var i=0;i<pref.length;i++) if(s.on[pref[i]]) return s.on[pref[i]];
+      var k=Object.keys(s.on)[0]; if(k) return s.on[k]; }
+    return { target:"@end" };
+  }
+  function dwell(s){ return s.duration_sec!=null ? s.duration_sec : 1.6; }
   function tick(){
     raf=null;
     if(fig&&activeScene){
       var s=fig.scenes[activeScene];
       if(s){ var el=(nowms()-t0)/1000;
-        if(play&&el>=dwell(s)){ var n=advance(s); activeScene=(n==="@end"||n==="@self"||!fig.scenes[n])?fig.initial:n; t0=nowms(); el=0; if(mode==="advanced") drawGraph(); }
+        if(play&&el>=dwell(s)){ var tr=pickTrans(s); applyOps(tr); var n=tr.target;
+          if(n==="@self") n=activeScene;
+          activeScene=(n==="@end"||!fig.scenes[n])?fig.initial:n;
+          if(activeScene===fig.initial && n==="@end") resetCounters();  // loop restarts the tally
+          t0=nowms(); el=0; if(mode==="advanced") drawGraph(); }
         draw(s, el, dwell(s));
       }
     }
     raf = play ? requestAnimationFrame(tick) : null;
   }
+  function resolveTokens(txt, s, el, dur){
+    return String(txt||"")
+      .replace(/\{remaining\}/g, s.duration_sec!=null?mmss(Math.max(0,Math.ceil(dur-el))):"")
+      .replace(/\{remaining_s\}/g, s.duration_sec!=null?String(Math.max(0,Math.ceil(dur-el))):"")
+      .replace(/\{elapsed\}/g, mmss(Math.floor(el)))
+      .replace(/\{elapsed_ms\}/g, String(Math.floor(el*1000)))
+      .replace(/\{slot\}/g, "")
+      .replace(/\{count:(\w+)\}/g, function(_,n){ return String(pcount[n]!=null?pcount[n]:0); });
+  }
   function draw(s, el, dur){
     var W=cv.width, C=W/2; ctx.clearRect(0,0,W,W);
     ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(C,C,C-2,0,7); ctx.fill();
     ctx.strokeStyle="rgba(140,190,190,.12)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(C,C,C*0.875,0,7); ctx.stroke();
+    // breathing cadence: a soft halo that swells in → holds → falls out
+    if(s.cadence){ var per=(s.cadence.in_s||0)+(s.cadence.hold_s||0)+(s.cadence.out_s||0);
+      if(per>0){ var u=el%per, amp;
+        if(u<s.cadence.in_s) amp=u/(s.cadence.in_s||1);
+        else if(u<s.cadence.in_s+s.cadence.hold_s) amp=1;
+        else amp=1-(u-s.cadence.in_s-s.cadence.hold_s)/(s.cadence.out_s||1);
+        ctx.save(); ctx.globalAlpha=0.12+0.45*Math.max(0,Math.min(1,amp));
+        ctx.strokeStyle=K.HEX.accent_memory; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.arc(C,C,C*(0.62+0.14*amp),0,7); ctx.stroke(); ctx.restore(); } }
     if(s.duration_sec!=null){ var f=Math.max(0,1-el/dur); ctx.strokeStyle=K.HEX.accent_memory; ctx.lineWidth=6;
       ctx.beginPath(); ctx.arc(C,C,C*0.93,-Math.PI/2,-Math.PI/2+f*2*Math.PI); ctx.stroke(); }
     var pulseOn=false; if(s.pulse&&s.duration_sec!=null&&(dur-el)<=s.pulse.window_sec) pulseOn=(Math.floor(el*s.pulse.rate_hz*2)%2===0);
@@ -535,11 +576,13 @@
       for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i][0]*W, pts[i][1]*W);
       ctx.stroke(); });
     ctx.textAlign="center"; ctx.textBaseline="middle";
+    var hasRemLine=false;
     (s.lines||[]).forEach(function(ln){ var y=C-84+(ln.row||0)*64;
+      if(/\{remaining/.test(ln.content||"")) hasRemLine=true;
       ctx.fillStyle = pulseOn?K.HEX[s.pulse.color]:(K.HEX[ln.color]||K.HEX.text_primary);
       ctx.font=(SZ[ln.size]||32)+"px -apple-system,Segoe UI,Roboto,sans-serif";
-      ctx.fillText(ln.content||"", C, y); });
-    if(s.duration_sec!=null){ var rem=Math.max(0,Math.ceil(dur-el)); ctx.fillStyle=K.HEX.text_secondary;
+      ctx.fillText(resolveTokens(ln.content, s, el, dur), C, y); });
+    if(s.duration_sec!=null && !hasRemLine){ var rem=Math.max(0,Math.ceil(dur-el)); ctx.fillStyle=K.HEX.text_secondary;
       ctx.font="26px -apple-system,Segoe UI,Roboto"; ctx.fillText(mmss(rem), C, C+66); }
     document.getElementById("scenelabel").textContent = "scene: "+activeScene;
   }
@@ -575,9 +618,10 @@
   };
 
   // -- Ask Juno: describe a lens, get a verified figment into the builder ----
-  var EXAMPLES = ["a 5 minute countdown that pulses at the end",
-    "interval timer, 3 min work 1 min rest", "box breathing, 4 seconds each",
-    "checklist: warm up, main set, cool down"];
+  var EXAMPLES = ["count my push-ups with a nod",
+    "a focus session that breathes while I work",
+    "keep score — tap for us, double-tap for them",
+    "box breathing, 4 seconds each"];
   (function seedExamples(){
     var wrap=document.getElementById("askex");
     EXAMPLES.forEach(function(ex){ var b=document.createElement("button"); b.textContent=ex;

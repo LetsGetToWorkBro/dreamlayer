@@ -83,11 +83,23 @@ for (var gi = 0; gi <= K.BUDGETS.MAX_GLYPHS; gi++) manyStrokes.push(K.glyph([[0.
 K.addScene(toomany, K.scene("a", { lines: [K.line("x")], glyphs: manyStrokes }));
 ok(!K.validate(toomany).ok, "more than MAX_GLYPHS strokes is rejected");
 
-// Ask Juno (client fallback): plain-English maps to a valid recipe, junk doesn't
-["a 5 minute countdown that pulses at the end", "interval 3 min work 1 min rest",
- "box breathing 4 seconds", "checklist: warm up, main set, cool down"].forEach(function (p) {
-  var r = K.composeLocal(p);
-  ok(r.matched && K.validate(r.figment).ok, "composeLocal drafts a valid lens from: " + p);
+// every recipe in the gallery — including the rich ones (counters, gestures,
+// painted glyphs, cadence) — is budget-clean
+K.TEMPLATES.forEach(function (t) {
+  ok(K.validate(t.make()).ok, "recipe '" + t.id + "' is valid: " + JSON.stringify(K.validate(t.make()).violations));
+});
+// the rep counter really carries a counter + a gesture + a painted stroke
+var reps = K.templates.reps();
+ok(reps.counters.reps && reps.scenes.count.on["imu:nod"] && reps.scenes.count.glyphs.length,
+   "rep counter has a counter, a nod gesture, and a painted tally");
+
+// Ask Juno (client fallback): the creative prompts each map to their rich recipe
+[["count my push-ups with a nod", "reps"], ["a focus session that breathes while I work", "focus"],
+ ["keep score — tap for us, double-tap for them", "score"], ["box breathing 4 seconds", "breathing"],
+ ["interval 3 min work 1 min rest", "interval"]].forEach(function (p) {
+  var r = K.composeLocal(p[0]);
+  ok(r.matched && r.kind === p[1] && K.validate(r.figment).ok,
+     "composeLocal drafts a valid '" + p[1] + "' from: " + p[0] + " (got " + r.kind + ")");
 });
 ok(!K.composeLocal("xyzzy random gibberish").matched, "composeLocal declines nonsense");
 
