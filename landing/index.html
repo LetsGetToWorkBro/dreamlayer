@@ -264,22 +264,34 @@ section{position:relative}
 .hero-core{position:relative;z-index:2;text-align:center;padding:0 var(--gutter);will-change:transform,opacity}
 /* Juno — the assistant sprite (true-alpha), a presence beside the hero.
    Scoped under .hero to beat juno.js's base `.juno{position:relative}`. */
-.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;top:50%;
+.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;top:50%;perspective:1000px;
   width:clamp(190px,23vw,360px);right:max(1vw,calc(50% - 680px));
   transform:translateY(-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0);
   opacity:.96;filter:drop-shadow(0 8px 34px rgba(47,212,196,.16))}
-/* breathing aura behind her */
+/* breathing aura behind her — pulses, and its hue drifts slowly through teal→cyan */
 .hero .hero-juno::before{content:"";position:absolute;left:50%;top:44%;width:88%;height:54%;
   transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
   background:radial-gradient(closest-side,rgba(47,212,196,.26),rgba(120,180,255,.10) 55%,transparent 78%);
-  filter:blur(16px);animation:junoAura 6.5s ease-in-out infinite}
-/* richer float — bob + sway + breathe (overrides the component's base breathe) */
-.hero .hero-juno .juno-media{animation:junoFloat 9s ease-in-out infinite;will-change:transform}
-@keyframes junoFloat{0%{transform:translateY(0) rotate(-1deg) scale(1)}
-  50%{transform:translateY(-18px) rotate(1.3deg) scale(1.022)}
-  100%{transform:translateY(0) rotate(-1deg) scale(1)}}
+  filter:blur(16px);animation:junoAura 6.5s ease-in-out infinite,junoHue 26s linear infinite}
+/* richer float — bob + sway + breathe + a slow 3D turn (overrides the base breathe) */
+.hero .hero-juno .juno-media,.hero .hero-juno .jshimmer{animation:junoFloat 10s ease-in-out infinite;will-change:transform}
+@keyframes junoFloat{
+  0%{transform:translateY(0) rotate(-1deg) rotateY(0deg) scale(1)}
+  30%{transform:translateY(-11px) rotate(.5deg) rotateY(-9deg) scale(1.012)}
+  55%{transform:translateY(-19px) rotate(1.3deg) rotateY(7deg) scale(1.024)}
+  100%{transform:translateY(0) rotate(-1deg) rotateY(0deg) scale(1)}}
 @keyframes junoAura{0%,100%{opacity:.42;transform:translate(-50%,-50%) scale(.9)}
   50%{opacity:.9;transform:translate(-50%,-50%) scale(1.08)}}
+@keyframes junoHue{0%,100%{filter:blur(16px) hue-rotate(-16deg)}50%{filter:blur(16px) hue-rotate(20deg)}}
+/* wing-shimmer — an iridescent highlight sweeps across her, clipped to her shape */
+.hero .hero-juno .jshimmer{position:absolute;inset:0;pointer-events:none;z-index:2;
+  -webkit-mask:url(./assets/juno/juno_idle.webp) center/contain no-repeat;
+  mask:url(./assets/juno/juno_idle.webp) center/contain no-repeat;
+  background:linear-gradient(115deg,transparent 40%,rgba(210,245,255,.45) 48%,rgba(255,255,255,.65) 50%,
+    rgba(205,240,255,.45) 52%,transparent 60%);background-size:260% 100%;
+  mix-blend-mode:screen;animation:junoFloat 10s ease-in-out infinite,junoShimmer 10s ease-in-out infinite}
+@keyframes junoShimmer{0%,66%{background-position:190% 0;opacity:0}
+  74%{opacity:1}84%{opacity:1}92%,100%{background-position:-90% 0;opacity:0}}
 /* fairy-dust motes */
 .hero .hero-juno .jspark{position:absolute;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle,#eafff9,rgba(120,220,220,.5) 45%,transparent 72%);
@@ -290,7 +302,7 @@ section{position:relative}
 @media(max-width:900px){.hero .hero-juno{width:min(52vw,260px);right:auto;left:50%;top:32%;
   transform:translate(-50%,-50%);opacity:.42}}
 @media(prefers-reduced-motion:reduce){.hero .hero-juno .juno-media{animation:none}
-  .hero .hero-juno::before{animation:none}.hero .hero-juno .jspark{display:none}}
+  .hero .hero-juno::before{animation:none}.hero .hero-juno .jspark,.hero .hero-juno .jshimmer{display:none}}
 .hero-ring{position:relative;width:clamp(150px,20svh,190px);height:clamp(150px,20svh,190px);margin:0 auto 40px}
 .hero-ring .r{position:absolute;inset:0;border:2px solid var(--teal);border-radius:50%}
 .hero-ring .r.breathe{animation:ringbreathe var(--breath) ease-in-out infinite}
@@ -1650,7 +1662,8 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
     if(!el) return;
     if(!el.__juno) return setTimeout(init, 120);      // wait for juno.js to mount
     if(el.__jfx) return; el.__jfx = true;
-    if(!reduce){                                       // fairy-dust motes around her
+    if(!reduce){                                       // iridescent wing-shimmer + fairy-dust
+      var sh=document.createElement("div"); sh.className="jshimmer"; el.appendChild(sh);
       for(var i=0;i<12;i++){
         var s=document.createElement("div"), sz=(2+Math.random()*3.4).toFixed(1);
         s.className="jspark"; s.style.width=s.style.height=sz+"px";
