@@ -49,10 +49,26 @@
   .modeswitch button.on{background:var(--teal);color:#00201c;font-weight:650}
   .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
   .ringwrap{position:relative;width:300px;height:300px;margin-top:4px}
-  canvas#ring{width:300px;height:300px;border-radius:50%;background:#000;
+  /* a dim, blurred world behind the glass (illustrative), toggled by the picker */
+  .ringwrap.world-on::before{content:"";position:absolute;inset:0;border-radius:50%;z-index:0;
+    background:var(--lw,none) center/cover;
+    filter:blur(4px) brightness(.46) saturate(1.12) contrast(1.05)}
+  /* the glass itself: a specular glint, a dome shade, a thin rim */
+  .ringwrap.world-on::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:2;
+    pointer-events:none;
+    background:radial-gradient(70px 56px at 34% 29%,rgba(255,255,255,.16),transparent 60%),
+      radial-gradient(190px 190px at 50% 84%,rgba(0,0,0,.5),transparent 60%);
+    box-shadow:inset 0 0 0 1px rgba(150,220,220,.14),inset 0 -20px 46px rgba(0,0,0,.5)}
+  canvas#ring{position:relative;z-index:1;width:300px;height:300px;border-radius:50%;background:#000;
     box-shadow:0 0 60px rgba(47,212,196,.10)}
+  /* screen-blend the HUD over the world so its black reads through */
+  .ringwrap.world-on canvas#ring{background:transparent;mix-blend-mode:screen}
   .controls{display:flex;gap:10px}
   canvas#ring.painting{cursor:crosshair;box-shadow:0 0 60px rgba(224,107,82,.28)}
+  .bgpick{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:320px}
+  .bgpick button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
+  .bgpick button.on{color:#00201c;background:var(--teal);border-color:var(--teal);font-weight:650}
   .paintbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;justify-content:center;
     max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
   .paintbar .pb-title{font-size:12px;color:var(--text2);width:100%;text-align:center}
@@ -254,6 +270,16 @@
   <div class="col mid">
     <div class="stage">
       <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
+      <div class="bgpick" id="bgpick" role="group" aria-label="Preview background — the world behind the glass">
+        <button type="button" data-bg="">Black</button>
+        <button type="button" data-bg="world">Street</button>
+        <button type="button" data-bg="park">Park</button>
+        <button type="button" data-bg="answer">Desk</button>
+        <button type="button" data-bg="face">Room</button>
+        <button type="button" data-bg="fact">Table</button>
+        <button type="button" data-bg="brief">Dawn</button>
+        <button type="button" data-bg="alt">Dim</button>
+      </div>
       <div class="controls">
         <button class="btn" id="play"></button>
         <button class="btn ghost" id="restart"><span data-icon="restart"></span> Restart</button>
@@ -694,6 +720,22 @@
   function nowms(){ return (typeof performance!=="undefined"&&performance.now)?performance.now():0; }
   function restart(){ activeScene = fig ? fig.initial : null; t0=nowms(); resetCounters(); if(mode==="advanced"){ buildAdvanced(); drawGraph(); } }
   document.getElementById("restart").onclick = restart;
+
+  // -- preview background picker: Black, or a dim world behind the glass ------
+  (function initBgPick(){
+    var wrap = document.querySelector(".ringwrap"), pick = document.getElementById("bgpick");
+    if(!wrap || !pick) return;
+    function set(bg){
+      [].forEach.call(pick.querySelectorAll("button"), function(b){ b.classList.toggle("on", b.dataset.bg === bg); });
+      if(bg){ wrap.style.setProperty("--lw", "url('./assets/sim/lens_" + bg + ".webp')"); wrap.classList.add("world-on"); }
+      else { wrap.classList.remove("world-on"); }
+      try{ localStorage.setItem("dl_lensbg", bg); }catch(e){}
+    }
+    pick.addEventListener("click", function(e){ var b = e.target.closest("button"); if(b) set(b.dataset.bg); });
+    var saved = null; try{ saved = localStorage.getItem("dl_lensbg"); }catch(e){}
+    set(saved == null ? "world" : saved);   // default: the dusk-street world, so the glass look shows
+  })();
+
   // the ring plays on load; the button shows the action it will take next
   function setPlayBtn(){ var b=document.getElementById("play"); if(b) b.innerHTML = DLIcon(play?"pause":"play") + " " + (play?"Pause":"Play"); }
   setPlayBtn();
