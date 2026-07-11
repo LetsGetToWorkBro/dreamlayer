@@ -16,7 +16,26 @@ def test_example_folder_exists_with_tutorial():
     assert (EXAMPLE / "hello_lens.py").is_file()
     assert (EXAMPLE / "manifest.json").is_file()
     readme = (EXAMPLE / "README.md").read_text()
-    assert "make_plugin" in readme and "sha256_of" in readme
+    assert "make_plugin" in readme
+    # the tutorial teaches the actual CLI, not a hand-rolled hashing snippet
+    assert "dreamlayer plugins pack" in readme
+
+
+def test_example_obeys_the_sdk_import_contract():
+    # SDK.md says "import only from dreamlayer.sdk" — the flagship tutorial
+    # must obey its own rule or newcomers copy the wrong import
+    src = (EXAMPLE / "hello_lens.py").read_text()
+    assert "from dreamlayer.sdk import" in src
+    assert "from dreamlayer.plugins import" not in src
+
+
+def test_the_documented_cli_loads_this_example():
+    # "dreamlayer plugins validate examples/hello-lens/" is the documented first
+    # step; the SDK loader must accept the example's layout or that step is broken
+    from dreamlayer.sdk import (package_from_dir, validate as sdk_validate,
+                                KNOWN_CAPABILITIES)
+    pkg = package_from_dir(str(EXAMPLE))
+    assert sdk_validate(pkg, frozenset(KNOWN_CAPABILITIES)).ok
 
 
 def test_example_is_a_valid_store_package():

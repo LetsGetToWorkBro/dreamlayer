@@ -34,6 +34,7 @@
 - [The AI Brain deep dive](ai-brain.md)
 - [Integrations and capabilities](integrations.md)
 - [The platform — plugins, the mesh, and the store](platform.md)
+- [Build on DreamLayer — lenses & plugins](builders.md)
 - [DreamLayer Cloud](cloud.md)
 
 ## Reference

@@ -47,27 +47,28 @@ pip install -e "host-python[dev]"
 cd host-python && python -m pytest -q -k hello_lens     # the gate, on this folder
 ```
 
-Or load it in three lines anywhere:
+Or check and preview it with the CLI (from this folder):
 
-```python
-from dreamlayer.plugins import PluginContext, PluginRegistry
-from hello_lens import make
-PluginRegistry(PluginContext(capabilities={"cards"})).load(make())
+```bash
+dreamlayer plugins validate .    # runs the full store gate
+dreamlayer plugins preview .     # renders your card through the real 256px glass
 ```
 
 ## 3 · Package it
 
-A store package is `manifest.json` + your module, with a checksum binding
-them (see this folder's manifest). Compute it with:
+A store package is `manifest.json` + your module, bound by a checksum. The CLI
+computes it and writes the shippable package for you — no manual hashing:
 
-```python
-from dreamlayer.plugins.package import sha256_of
-print(sha256_of(open("hello_lens.py").read()))
+```bash
+dreamlayer plugins pack .        # -> a store-ready package JSON
 ```
 
 Every install runs the full gate (`plugins/validate.py`): manifest shape,
 checksum integrity, a static scan proving the code touches nothing beyond its
 declared capabilities, and a smoke load. No undeclared reach, ever.
+
+New to the CLI? `dreamlayer plugins new my-lens` scaffolds a fresh plugin, and
+[`docs/SDK.md`](../../docs/SDK.md) is the full quickstart.
 
 ## 4 · Ship it
 

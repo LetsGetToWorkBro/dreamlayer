@@ -3,6 +3,16 @@
 How to run, test, and extend every part of the repository — and how this
 book's own images were generated.
 
+## Start here — the fastest path in
+
+- **No code:** the [Lens Builder](https://dreamlayer.app/lens-builder.html) —
+  describe a lens in plain words or start from a showcase, watch it run, deploy
+  to your Brain in one click.
+- **Python plugin:** `dreamlayer plugins new my-lens` scaffolds one; `dreamlayer
+  plugins validate/preview/pack` checks and ships it. The full quickstart lives
+  in [`docs/SDK.md`](../SDK.md); [`examples/hello-lens/`](../../examples/hello-lens/)
+  is a complete, CI-tested example you can copy.
+
 ## Layout
 
 ```
