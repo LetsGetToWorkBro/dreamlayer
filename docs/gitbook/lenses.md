@@ -197,3 +197,22 @@ query (face keywords route to the Social Lens; fact keywords to the memory
 index and the tiered brain) and returns one HUD card. The AI knowledge tier
 folds into it — "ask about your own stuff" *is* Lucid Recall extended from
 memory to your files and mail.
+
+## The Innovation pass — ten more lenses
+
+Ten lenses added in the latest build. Each card below is the real renderer's
+output, shown through the glass — the interface is real; the world behind it is
+illustrative.
+
+| | |
+|---|---|
+| ![Retrace](assets/cards/retrace.webp) | **Retrace** — where you last saw a thing, by place and time ("north rack, 8:12am"). Ambient-sighting recall; veil-gated. |
+| ![Ember](assets/cards/ember.webp) | **Ember** — a memory you *chose to keep*, handed back a year later, where it happened. At most one, never an ambush, storm-suppressed. |
+| ![Docent](assets/cards/docent.webp) | **Docent** — a venue's own knowledge, grounded in a local collection and read from what you look at. |
+| ![Rosetta Live](assets/cards/rosetta_live.webp) | **Rosetta Live** — the ear: offline live translation, one subtitle card per utterance. |
+| ![Candor](assets/cards/candor.webp) | **Candor Mirror** — the self-coach: after a conversation, your own pace, fillers, and narrative drift — never pointed at anyone else. |
+| ![Waypath](assets/cards/waypath.webp) | **Waypath** — "that way": one bright dot on a faint ring, a distance, and nothing else. No map app. |
+| ![Thread](assets/cards/thread.webp) | **Thread** — steal a palette from the light in a room and keep it as a memory (the image is never stored). |
+| ![Sous](assets/cards/sous.webp) | **Sous** — hands-free kitchen timers as on-glass figments: "flip in ninety," every pan its own clock. |
+| ![Session](assets/cards/session.webp) | **Session** — a musician's companion: tempo on the rim, pitch in the luma, a practice log that writes itself. |
+| ![Kiln](assets/cards/kiln.webp) | **Kiln** — an offline-total firing companion; the Brain absent by design, the log kept as a lab notebook. |

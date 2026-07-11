@@ -113,11 +113,19 @@
     });
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     var self = this, hasRem = false;
-    (s.lines || []).forEach(function (ln) { var y = C - 84 * scale + (ln.row || 0) * 64 * scale;
+    var R = C * 0.9;                                    // the visible glass radius
+    (s.lines || []).forEach(function (ln) { var y = C - 88 * scale + (ln.row || 0) * 58 * scale;
       if (/\{remaining/.test(ln.content || "")) hasRem = true;
+      var txt = self._resolve(ln.content, s, el, dur);
       ctx.fillStyle = pulseOn ? HEX[s.pulse.color] : (HEX[ln.color] || HEX.text_primary);
-      ctx.font = ((SZ[ln.size] || 32) * scale) + "px -apple-system,Segoe UI,Roboto,sans-serif";
-      ctx.fillText(self._resolve(ln.content, s, el, dur), C, y);
+      var px = (SZ[ln.size] || 32) * scale;
+      ctx.font = px + "px -apple-system,Segoe UI,Roboto,sans-serif";
+      // fit the line inside the round glass: shrink to the chord width at this y
+      var dy = Math.abs(y - C), half = dy < R ? Math.sqrt(R * R - dy * dy) : R * 0.25;
+      var maxW = Math.max(24, 2 * half - 18 * scale), w = ctx.measureText(txt).width;
+      if (w > maxW) { px = Math.max(12 * scale, px * maxW / w);
+        ctx.font = px + "px -apple-system,Segoe UI,Roboto,sans-serif"; }
+      ctx.fillText(txt, C, y);
     });
     if (s.duration_sec != null && !hasRem) { var rem = Math.max(0, Math.ceil(dur - el));
       ctx.fillStyle = HEX.text_secondary; ctx.font = (26 * scale) + "px -apple-system,Segoe UI,Roboto";

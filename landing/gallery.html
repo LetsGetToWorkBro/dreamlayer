@@ -45,7 +45,22 @@
   .card:hover{border-color:var(--teal);box-shadow:0 8px 30px rgba(0,0,0,.35)}
   .card .ringwrap{position:relative;padding:20px;display:flex;justify-content:center;
     background:radial-gradient(120px 120px at 50% 42%,rgba(47,212,196,.07),transparent)}
-  .card canvas{width:200px;height:200px;border-radius:50%;background:#000;
+  /* the world behind the glass — a dim, blurred environment (illustrative;
+     the interface on the canvas is the real renderer) */
+  .card .ringwrap::before{content:"";position:absolute;top:20px;left:50%;
+    width:200px;height:200px;transform:translateX(-50%);border-radius:50%;z-index:0;
+    background:var(--lw,url('./assets/sim/lens_world.webp')) center/cover;
+    filter:blur(3px) brightness(.46) saturate(1.12) contrast(1.05)}
+  /* the glass itself — dome shading + a specular glint + a thin rim */
+  .card .ringwrap::after{content:"";position:absolute;top:20px;left:50%;
+    width:200px;height:200px;transform:translateX(-50%);border-radius:50%;z-index:2;
+    pointer-events:none;
+    background:radial-gradient(58px 46px at 34% 29%,rgba(255,255,255,.16),transparent 60%),
+      radial-gradient(150px 150px at 50% 84%,rgba(0,0,0,.5),transparent 60%);
+    box-shadow:inset 0 0 0 1px rgba(150,220,220,.14),inset 0 -16px 38px rgba(0,0,0,.5)}
+  /* the real HUD, screen-blended so its black reads through to the world */
+  .card canvas{position:relative;z-index:1;width:200px;height:200px;border-radius:50%;
+    background:transparent;mix-blend-mode:screen;
     box-shadow:0 0 40px rgba(47,212,196,.08)}
   .card .body{padding:2px 16px 16px;display:flex;flex-direction:column;flex:1}
   .card h3{margin:0 0 2px;font-size:16px;font-weight:650}
@@ -267,8 +282,21 @@
     list.forEach(function(it){ grid.appendChild(cardFor(it)); });
   }
 
+  // each lens gets a fitting dim world behind its glass (see .ringwrap::before)
+  var SEED_WORLD = { whisper:"face", ask:"answer", secondSight:"answer",
+    tethered:"alt", threshold:"world", ember:"park", coach:"face", mandala:"alt" };
+  var WORLD_POOL = ["world","park","answer","face","alt"];
+  function worldFor(it){
+    var seed = (it.id||"").indexOf("seed:") === 0 ? it.id.slice(5) : "";
+    if(SEED_WORLD[seed]) return SEED_WORLD[seed];
+    var h = 0, s = it.id || it.name || "";        // stable variety for community lenses
+    for(var i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+    return WORLD_POOL[h % WORLD_POOL.length];
+  }
+
   function cardFor(it){
     var card = document.createElement("div"); card.className = "card";
+    card.style.setProperty("--lw", "url('./assets/sim/lens_" + worldFor(it) + ".webp')");
     var cv = document.createElement("canvas"); cv.width = 240; cv.height = 240;
     cv.setAttribute("role","img");
     cv.setAttribute("aria-label", it.name + " lens running live");
@@ -317,7 +345,8 @@
 
   // a friendly placeholder for {slot} so streaming showcases read nicely
   function sampleSlot(it){
-    var m = { whisper:"la cuenta, por favor", ask:"the 14th", secondSight:"Monstera deliciosa" };
+    var m = { whisper:"la cuenta, por favor", ask:"the 14th", secondSight:"Monstera deliciosa",
+              ember:"you laughed here, 2024", coach:"Chest up ↑" };
     var id = (it.id||"").replace("seed:","");
     return m[id] || "…";
   }
