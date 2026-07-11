@@ -578,8 +578,15 @@
     if (ids.length > B.MAX_SCENES) bad("scene_count", ids.length + " scenes > max " + B.MAX_SCENES);
     if (Object.keys(fig.counters || {}).length > B.MAX_COUNTERS) bad("counter_count", "too many counters");
     if (ids.length && ids.indexOf(fig.initial) < 0) bad("initial", "start scene '" + fig.initial + "' doesn't exist");
+    // Refuse the two glass-grammar features the browser engine (Stage) does not
+    // model, so "valid here" strictly means "the preview/verifier runs it exactly
+    // as the glasses would". The no-code builder never emits these; this only
+    // guards a hand-crafted or Python-authored share code from being previewed,
+    // shared, or golf-verified against a simulation that would silently differ.
+    if (fig.battery_below != null) bad("unsupported", "battery-triggered lenses aren't supported in the browser lens engine");
     ids.forEach(function (sid) {
       var s = fig.scenes[sid];
+      if (s.duration_range) bad("unsupported", "random-timer (duration_range) scenes aren't supported in the browser lens engine", sid);
       if ((s.lines || []).length > B.MAX_LINES) bad("lines", s.lines.length + " lines > max " + B.MAX_LINES, sid);
       var rows = {};
       (s.lines || []).forEach(function (ln) {
@@ -861,7 +868,7 @@
   function runChallenge(fig, ch) {
     var g = golfScore(fig), results = (ch.checks || []).map(function (sc) { return _runScenario(fig, sc); });
     var passed = g.valid && results.every(function (r) { return r.ok; });
-    return { solved: passed, valid: g.valid, bytes: g.bytes, moves: g.moves,
+    return { solved: passed, valid: g.valid, bytes: g.bytes, moves: g.moves, scenes: g.scenes,
              par: ch.par || 0, underPar: passed && ch.par ? (ch.par - g.bytes) : 0,
              checks: results };
   }

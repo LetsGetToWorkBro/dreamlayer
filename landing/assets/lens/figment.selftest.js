@@ -154,6 +154,17 @@ ok(!K.runChallenge(wrong, K.GOLF[0]).solved, "a wrong-duration lens does not sol
 ok(K.runChallenge(K.templates.score(), K.GOLF.filter(function (c) { return c.id === "tally"; })[0]).solved,
    "the scoreboard template solves the tally challenge");
 
+// faithfulness gate: the browser engine refuses the two glass-only features it
+// can't simulate, so "valid here" == "the preview/verifier runs it like glass"
+var rnd = K.figment("Rnd", "a");
+K.addScene(rnd, K.scene("a", { lines: [K.line("hi")], on: { single: { target: K.END } } }));
+rnd.scenes.a.duration_range = [5, 10];   // random timer + event exit (Stage can't model the timer)
+ok(!K.validate(rnd).ok, "a random-timer (duration_range) scene is refused by the browser engine");
+var batt = K.figment("Bat", "a");
+batt.battery_below = 20;
+K.addScene(batt, K.scene("a", { lines: [K.line("hi")], on_timeout: [{ target: K.END }], duration_sec: 5, tick: "countdown" }));
+ok(!K.validate(batt).ok, "a battery-triggered lens is refused by the browser engine");
+
 // every tutorial showcase is budget-clean AND exercises a distinct edge
 Object.keys(K.showcases).forEach(function (id) {
   ok(K.validate(K.showcases[id]()).ok, "showcase '" + id + "' is valid: " + JSON.stringify(K.validate(K.showcases[id]()).violations));

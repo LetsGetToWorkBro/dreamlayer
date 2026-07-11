@@ -116,7 +116,7 @@
 </header>
 
 <p class="banner" id="offlineBanner" style="display:none">
-  <span>✨</span><span>Showing <b>featured lenses</b> — the community wall loads when you're online. Every one is fully remixable right now.</span>
+  <span>✨</span><span>Showing <b>featured lenses</b> — community submissions appear here as they're approved. Every one is fully remixable right now.</span>
 </p>
 
 <!-- Lens Jams: themed, time-boxed collections -->
@@ -128,9 +128,9 @@
     <span class="sr">Search lenses</span>
     <input id="q" type="search" placeholder="Search lenses, makers…" autocomplete="off" />
   </label>
-  <div class="seg" role="tablist" aria-label="Sort">
-    <button id="segFeat" class="on" data-sort="featured">Featured</button>
-    <button id="segNew" data-sort="newest">Newest</button>
+  <div class="seg" role="group" aria-label="Sort">
+    <button id="segFeat" class="on" data-sort="featured" aria-pressed="true">Featured</button>
+    <button id="segNew" data-sort="newest" aria-pressed="false">Newest</button>
   </div>
   <span class="count" id="count"></span>
 </div>
@@ -165,7 +165,7 @@
 (function(){
   "use strict";
   var REGISTRY = "https://api.dreamlayer.app";
-  var K = window.LensKit || window.Figment; // UMD global from figment.js
+  var K = window.LensKit; // UMD global from figment.js
   var grid = document.getElementById("grid");
   var qEl = document.getElementById("q");
   var countEl = document.getElementById("count");
@@ -224,7 +224,14 @@
   function remixUrlFor(item){ return "./lens-builder.html#lens=" + item.code; }
 
   // -- render ----------------------------------------------------------------
-  function stopAllPlayers(){ players.forEach(function(p){ try{ p.stop(); }catch(e){} }); players = []; }
+  // Stop every live ring AND drop the observer's refs to the canvases we're
+  // about to detach — otherwise each re-render (every search keystroke, every
+  // jam toggle) would leak canvases + LensPlayer instances the observer holds.
+  function stopAllPlayers(){
+    players.forEach(function(p){ try{ p.stop(); }catch(e){} });
+    players = [];
+    if(io) io.disconnect();     // cards rebuilt below re-observe their canvases
+  }
 
   function render(){
     stopAllPlayers();
@@ -236,7 +243,9 @@
     });
     list.sort(sort === "newest"
       ? function(a,b){ return (b.at||0) - (a.at||0); }
-      : function(a,b){ return (b._seed?1:0)-(a._seed?1:0) || (a._featIdx||0)-(b._featIdx||0) || (b.at||0)-(a.at||0); });
+      // Featured: real community lenses lead (_seed false → 0 sorts first),
+      // then by curated order (_featIdx), then newest.
+      : function(a,b){ return (a._seed?1:0)-(b._seed?1:0) || (a._featIdx||0)-(b._featIdx||0) || (b.at||0)-(a.at||0); });
 
     countEl.textContent = list.length + (list.length === 1 ? " lens" : " lenses");
 
@@ -327,11 +336,28 @@
       box.style.display = ""; dl.style.display = "";
     }catch(e){ box.style.display = "none"; dl.style.display = "none"; }
     shareScrim.style.display = "flex";
+    shareReturnFocus = document.activeElement;      // restore focus here on close
+    var x = document.getElementById("shareX"); if(x && x.focus) x.focus();
   }
-  function closeShare(){ shareScrim.style.display = "none"; }
+  var shareReturnFocus = null;
+  function shareOpen(){ return shareScrim.style.display === "flex"; }
+  function closeShare(){
+    shareScrim.style.display = "none";
+    if(shareReturnFocus && shareReturnFocus.focus){ try{ shareReturnFocus.focus(); }catch(e){} }
+    shareReturnFocus = null;
+  }
   document.getElementById("shareX").onclick = closeShare;
   shareScrim.addEventListener("click", function(e){ if(e.target === shareScrim) closeShare(); });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeShare(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && shareOpen()) closeShare(); });
+  // keep Tab within the open dialog
+  shareScrim.addEventListener("keydown", function(e){
+    if(e.key !== "Tab" || !shareOpen()) return;
+    var f = shareScrim.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])');
+    if(!f.length) return;
+    var first = f[0], last = f[f.length-1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
   document.getElementById("shareCopy").onclick = function(){
     var inp = document.getElementById("shareUrl"); inp.select();
     var toast = document.getElementById("shareToast");
@@ -422,13 +448,18 @@
     strip.className = "jams"; strip.style.display = "";
     strip.innerHTML = jams.map(function(j){
       var now = Math.floor(Date.now()/1000);
-      var cd = j.status === "open" && j.closes ? '<span class="cd" data-close="' + j.closes + '">' + fmtCountdown(j.closes - now) + '</span>'
-             : j.status === "upcoming" && j.opens ? '<span class="cd">opens soon</span>' : '';
-      return '<div class="jam' + (jamCurrent===j.id?" on":"") + '" data-jam="' + j.id + '">' +
+      // status drives a CSS class — accept only the known states; everything
+      // else (id, entries, closes) is escaped, never trusted into markup.
+      var status = ({open:1,upcoming:1,closed:1}[j.status]) ? j.status : "open";
+      var entries = Math.max(0, parseInt(j.entries, 10) || 0);
+      var closes = parseInt(j.closes, 10) || 0;
+      var cd = status === "open" && closes ? '<span class="cd" data-close="' + closes + '">' + escg(fmtCountdown(closes - now)) + '</span>'
+             : status === "upcoming" && j.opens ? '<span class="cd">opens soon</span>' : '';
+      return '<div class="jam' + (jamCurrent===j.id?" on":"") + '" data-jam="' + escg(j.id) + '">' +
         '<div class="jt">🎪 ' + escg(j.title) + '</div>' +
         (j.theme ? '<div class="jtheme">' + escg(j.theme) + '</div>' : '') +
-        '<div class="jmeta"><span class="pill2 ' + j.status + '">' + j.status + '</span>' +
-          '<span>' + j.entries + (j.entries===1?" lens":" lenses") + '</span>' + cd + '</div></div>';
+        '<div class="jmeta"><span class="pill2 ' + status + '">' + status + '</span>' +
+          '<span>' + entries + (entries===1?" lens":" lenses") + '</span>' + cd + '</div></div>';
     }).join("");
     [].forEach.call(strip.querySelectorAll(".jam"), function(el){
       el.onclick = function(){ toggleJam(el.getAttribute("data-jam")); };
@@ -443,11 +474,12 @@
   }
   function toggleJam(id){
     if(jamCurrent === id){ clearJam(); return; }
+    if(allItems === null) allItems = items;   // snapshot the full wall now, before any async
     jamCurrent = id; renderJams();
     var back = document.getElementById("jamBack");
     fetch(REGISTRY + "/api/jams/" + encodeURIComponent(id)).then(function(r){ return r.json(); })
       .then(function(data){
-        if(allItems === null) allItems = items;
+        if(jamCurrent !== id) return;         // the user left this jam before it loaded
         var live = (data.lenses||[]).map(hydrate).filter(Boolean);
         items = live;
         var jam = (data.jam||{});
@@ -465,13 +497,14 @@
   }
   function escg(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
-  qEl.addEventListener("input", render);
+  var qTimer = null;
+  qEl.addEventListener("input", function(){ clearTimeout(qTimer); qTimer = setTimeout(render, 140); });
   document.getElementById("segFeat").onclick = function(){ setSort("featured", this); };
   document.getElementById("segNew").onclick = function(){ setSort("newest", this); };
   function setSort(s, btn){
     sort = s;
-    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.remove("on"); });
-    btn.classList.add("on");
+    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.remove("on"); b.setAttribute("aria-pressed","false"); });
+    btn.classList.add("on"); btn.setAttribute("aria-pressed","true");
     render();
   }
 

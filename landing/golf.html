@@ -258,7 +258,7 @@
       entries.map(function(e,i){
         var rank = e.rank || (i+1);
         return '<tr class="' + (you && e.author===you ? "you":"") + '">' +
-          '<td class="rank">' + (rank<=3?('<span class="medal">'+medal[rank-1]+'</span>'):rank) + '</td>' +
+          '<td class="rank">' + (rank>=1&&rank<=3?('<span class="medal">'+medal[rank-1]+'</span>'):rank) + '</td>' +
           '<td>' + esc(e.author) + '</td>' +
           '<td class="bytes">' + e.bytes + '</td>' +
           '<td><a href="./lens-builder.html#lens=' + encodeURIComponent(e.code) + '">Study →</a></td></tr>';
