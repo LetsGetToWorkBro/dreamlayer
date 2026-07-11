@@ -17,6 +17,8 @@ function snap(st) {
     lines: (fr.lines || []).map(function (l) { return l.text; }),
     remaining: Math.round(st.remaining() * 1000) / 1000,
     pulse: !!fr.pulse_on,
+    cadence_phase: fr.cadence_phase || "",
+    cadence_level: Math.round((fr.cadence_level || 0) * 1000) / 1000,
     counters: Object.assign({}, st.counters),
   };
 }

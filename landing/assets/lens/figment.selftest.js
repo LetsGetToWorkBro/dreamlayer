@@ -165,6 +165,27 @@ batt.battery_below = 20;
 K.addScene(batt, K.scene("a", { lines: [K.line("hi")], on_timeout: [{ target: K.END }], duration_sec: 5, tick: "countdown" }));
 ok(!K.validate(batt).ok, "a battery-triggered lens is refused by the browser engine");
 
+// validate mirrors the FULL on-glass proof (not a looser subset): the
+// per-transition caps that budgets.verify enforces are enforced here too
+var ops = K.figment("Ops", "a"); ops.counters.a = { name: "a", start: 0, lo: 0, hi: 9999 };
+K.addScene(ops, K.scene("a", { lines: [K.line("x")], on: { single: { target: K.SELF,
+  counter_ops: [{ counter: "a", op: "inc", amount: 1 }, { counter: "a", op: "inc", amount: 1 },
+                 { counter: "a", op: "inc", amount: 1 }, { counter: "a", op: "inc", amount: 1 },
+                 { counter: "a", op: "inc", amount: 1 }] } } }));
+ok(!K.validate(ops).ok, "more than " + K.BUDGETS.MAX_COUNTER_OPS + " counter ops is rejected");
+var etag = K.figment("Tag", "a");
+K.addScene(etag, K.scene("a", { lines: [K.line("x")], duration_sec: 5, tick: "countdown",
+  on_timeout: [{ target: K.END, emit: "x".repeat(K.BUDGETS.MAX_EMIT_TAG_LEN + 1) }] }));
+ok(!K.validate(etag).ok, "an over-long emit tag is rejected");
+var undecl = K.figment("Und", "a");
+K.addScene(undecl, K.scene("a", { lines: [K.line("x")], on: { single: { target: K.SELF, counter_ops: [{ counter: "ghost", op: "inc", amount: 1 }] } } }));
+ok(!K.validate(undecl).ok, "a counter op on an undeclared counter is rejected");
+// counter saturation matches the Python/glass default (9999, not 999)
+var sat = K.figment("Sat", "a"); sat.counters.n = { name: "n", start: 9998, lo: 0 };  // hi omitted
+K.addScene(sat, K.scene("a", { lines: [K.line("{count:n}")], on: { single: { target: K.SELF, counter_ops: [{ counter: "n", op: "inc", amount: 1 }] } } }));
+var satS = new K.Stage(sat); satS.inject("single"); satS.inject("single"); satS.inject("single");
+ok(satS.counters.n === 9999, "an omitted counter hi saturates at 9999 (parity with the glasses)");
+
 // every tutorial showcase is budget-clean AND exercises a distinct edge
 Object.keys(K.showcases).forEach(function (id) {
   ok(K.validate(K.showcases[id]()).ok, "showcase '" + id + "' is valid: " + JSON.stringify(K.validate(K.showcases[id]()).violations));

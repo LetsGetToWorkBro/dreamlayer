@@ -302,8 +302,9 @@ export default {
       // GET /api/golf/:id/leaderboard — fewest bytes first, code included
       if (request.method === "GET" && parts[2] && parts[3] === "leaderboard") {
         const ch = challenges.find((c) => c.id === parts[2]);
+        if (!ch) return json({ error: "no such challenge" }, 404);
         const lb = (await readJSON(env.SOCIAL, "golf:lb:" + parts[2], [])).slice().sort(byBytes);
-        return json({ id: parts[2], par: ch ? ch.par : 0,
+        return json({ id: parts[2], par: ch.par,
           entries: lb.slice(0, 50).map((e, i) => Object.assign({ rank: i + 1 }, e)) });
       }
       // POST /api/golf/:id/submit {code, author} — verify + rank

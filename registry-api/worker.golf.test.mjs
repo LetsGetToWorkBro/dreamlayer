@@ -53,9 +53,25 @@ ok(res.d.underPar === res.d.par - res.d.bytes, "under-par is reported");
 res = await call(env, "POST", "/api/golf/pocket-timer/submit", { code: codeFor(tooShort(), "eve"), author: "eve" });
 ok(res.r.status === 422 && res.d.solved === false && res.d.checks.length, "a non-solving lens is refused with reasons: " + JSON.stringify(res.d));
 
+// a byte-cheaper STATIC label that never counts down must NOT be accepted
+// (the whole point of "verified" — it defeats the brief even though it's smaller)
+function staticLabel() {
+  const f = K.figment("Timer", "a");
+  K.addScene(f, K.scene("a", { duration_sec: 180, tick: "countdown",
+    lines: [K.line("3:00")], on_timeout: [{ target: K.END }] }));
+  return f;
+}
+ok(K.golfScore(staticLabel()).bytes < K.golfScore(pocketTimer()).bytes, "the static-label lens really is byte-cheaper");
+res = await call(env, "POST", "/api/golf/pocket-timer/submit", { code: codeFor(staticLabel(), "cheat"), author: "cheat" });
+ok(res.r.status === 422 && res.d.solved === false, "a static (non-counting) timer is refused despite fewer bytes");
+
 // garbage is refused before it can touch the board
 res = await call(env, "POST", "/api/golf/pocket-timer/submit", { code: "!!!not-a-lens!!!", author: "mallory" });
 ok(res.r.status === 400, "garbage code is refused");
+
+// an unknown challenge id 404s instead of returning an empty board
+res = await call(env, "GET", "/api/golf/no-such-challenge/leaderboard");
+ok(res.r.status === 404, "unknown challenge leaderboard 404s");
 
 // the leaderboard shows only the verified entry
 ({ d } = await call(env, "GET", "/api/golf/pocket-timer/leaderboard"));

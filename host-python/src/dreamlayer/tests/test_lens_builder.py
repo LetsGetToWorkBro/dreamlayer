@@ -39,6 +39,7 @@ def test_js_budgets_match_the_python_source():
         ("MAX_PULSE_HZ", F.MAX_PULSE_HZ), ("MIN_SCENE_SEC", F.MIN_SCENE_SEC),
         ("MAX_NAME_LEN", F.MAX_NAME_LEN), ("MAX_BRANCHES", F.MAX_BRANCHES),
         ("MAX_GLYPHS", F.MAX_GLYPHS), ("MAX_GLYPH_POINTS", F.MAX_GLYPH_POINTS),
+        ("MAX_COUNTER_OPS", F.MAX_COUNTER_OPS), ("MAX_EMIT_TAG_LEN", F.MAX_EMIT_TAG_LEN),
     ]:
         assert _js_const(name) == float(py), f"{name} drifted: JS {_js_const(name)} vs py {py}"
 
@@ -147,6 +148,8 @@ class TestUnderNode:
                 "lines": [ln.text for ln in fr.lines],
                 "remaining": round(st.remaining(), 3),
                 "pulse": fr.pulse_on,
+                "cadence_phase": fr.cadence_phase,
+                "cadence_level": round(fr.cadence_level, 3),
                 "counters": dict(st.counters),
             }
         trace = [snap()]

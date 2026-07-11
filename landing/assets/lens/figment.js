@@ -22,6 +22,7 @@
     MAX_PULSE_HZ: 4.0, MIN_SCENE_SEC: 0.5, MAX_SCENE_SEC: 24 * 3600.0,
     MAX_NAME_LEN: 40, MAX_BRANCHES: 4,
     MAX_GLYPHS: 6, MAX_GLYPH_POINTS: 24,
+    MAX_COUNTER_OPS: 4, MAX_EMIT_TAG_LEN: 16, COUNTER_HI: 9999,
   };
   var END = "@end", SELF = "@self";
   var COLORS = ["background", "surface", "text_primary", "text_secondary",
@@ -57,7 +58,7 @@
   }
   function counter(name, o) {                            // a bounded, saturating tally
     o = o || {};
-    return { name: name, start: o.start || 0, lo: o.lo || 0, hi: o.hi == null ? 999 : o.hi };
+    return { name: name, start: o.start || 0, lo: o.lo || 0, hi: o.hi == null ? B.COUNTER_HI : o.hi };
   }
   function inc(name, by) { return { counter: name, op: "inc", amount: by == null ? 1 : by }; }
   function zero(name) { return { counter: name, op: "set", amount: 0 }; }
@@ -608,6 +609,24 @@
       if (s.on) Object.keys(s.on).forEach(function (ev) {
         if (!validEvent(ev)) bad("event", "'" + ev + "' is not a trigger the glasses know", sid);
       });
+      // per-transition budget (mirror budgets.verify.check_transition): counter
+      // op count + declared-counter/emit-tag/guard checks, so "valid here" means
+      // the same thing the on-glass proof means, not a looser subset.
+      function checkTrans(t, isTimeout) {
+        if ((t.counter_ops || []).length > B.MAX_COUNTER_OPS) bad("counter_ops", (t.counter_ops.length) + " counter ops > max " + B.MAX_COUNTER_OPS, sid);
+        (t.counter_ops || []).forEach(function (op) {
+          if (!fig.counters || !fig.counters[op.counter]) bad("counter", "op on undeclared counter '" + op.counter + "'", sid);
+          if (["inc", "dec", "set"].indexOf(op.op) < 0) bad("counter", "unknown counter op '" + op.op + "'", sid);
+        });
+        if (t.emit != null && (!t.emit || String(t.emit).length > B.MAX_EMIT_TAG_LEN)) bad("emit_tag", "emit tag must be 1.." + B.MAX_EMIT_TAG_LEN + " chars", sid);
+        if (t.when != null) {
+          if (!isTimeout) bad("guard", "guards are only allowed on 'when it ends' steps", sid);
+          else if (!fig.counters || !fig.counters[t.when.counter]) bad("guard", "guard on undeclared counter '" + t.when.counter + "'", sid);
+          else if (["ge", "le", "eq"].indexOf(t.when.cmp) < 0) bad("guard", "unknown comparison '" + t.when.cmp + "'", sid);
+        }
+      }
+      (s.on_timeout || []).forEach(function (t) { checkTrans(t, true); });
+      if (s.on) Object.keys(s.on).forEach(function (ev) { checkTrans(s.on[ev], false); });
       if (s.pulse) {
         if (!timed(s)) bad("pulse", "pulse needs a timed scene", sid);
         if (!(s.pulse.rate_hz > 0 && s.pulse.rate_hz <= B.MAX_PULSE_HZ)) bad("pulse_rate", "pulse > " + B.MAX_PULSE_HZ + "Hz (the photic-safety cap)", sid);
@@ -793,7 +812,7 @@
       var d = self.fig.counters[op.counter]; if (!d) return;
       var cur = self.counters[op.counter] || 0;
       if (op.op === "inc") cur += op.amount; else if (op.op === "dec") cur -= op.amount; else cur = op.amount;
-      self.counters[op.counter] = Math.max(d.lo == null ? 0 : d.lo, Math.min(d.hi == null ? 999 : d.hi, cur));
+      self.counters[op.counter] = Math.max(d.lo == null ? 0 : d.lo, Math.min(d.hi == null ? B.COUNTER_HI : d.hi, cur));
     });
     if (t.emit != null) {
       if (this._tokens >= 1.0) { this._tokens -= 1.0; this.emits.push([this.clock, t.emit]);
@@ -820,18 +839,32 @@
       .replace(/\{count:(\w+)\}/g, function (_, n) { return String(self.counters[n] != null ? self.counters[n] : 0); });
     return out.slice(0, B.MAX_TEXT_LEN);
   };
+  Stage.prototype._cadence = function () {
+    var cad = this._scene().cadence;
+    if (!cad) return { phase: "", level: 0 };
+    var period = (cad.in_s || 0) + (cad.hold_s || 0) + (cad.out_s || 0);
+    if (period <= 0) return { phase: "", level: 0 };
+    var u = this.scene_elapsed % period, r3 = function (x) { return Math.round(x * 1000) / 1000; };
+    if (u < cad.in_s) return { phase: "in", level: r3(cad.in_s ? u / cad.in_s : 1) };
+    if (u < cad.in_s + cad.hold_s) return { phase: "hold", level: 1 };
+    var out = u - cad.in_s - cad.hold_s;
+    return { phase: "out", level: r3(1 - (cad.out_s ? out / cad.out_s : 1)) };
+  };
   Stage.prototype.frame = function () {
-    if (this.ended) return { scene: END, ended: true, lines: [], pulse_on: false };
+    if (this.ended) return { scene: END, ended: true, lines: [], pulse_on: false, cadence_phase: "", cadence_level: 0 };
     var s = this._scene(), self = this, pulse_on = false, pulse_color = null;
     if (s.pulse && this._duration != null && this.remaining() <= s.pulse.window_sec) {
       pulse_on = (Math.floor(this.scene_elapsed * s.pulse.rate_hz * 2) % 2) === 0;
       pulse_color = s.pulse.color;
     }
+    var cad = this._cadence();
     return {
       scene: this.current, ended: false,
       lines: (s.lines || []).map(function (ln) {
         return { text: self._resolve(ln.content), row: ln.row, size: ln.size, color: ln.color }; }),
+      glyphs: (s.glyphs || []).slice(),
       pulse_on: pulse_on, pulse_color: pulse_color,
+      cadence_phase: cad.phase, cadence_level: cad.level,
     };
   };
 
@@ -882,6 +915,9 @@
       par: 270,
       checks: [
         { label: "opens at 3:00 on the glass", ops: [], expect: { remainingGe: 180, remainingLe: 180, ended: false, lineHas: "3:00" } },
+        // the display must actually count down — a static "3:00" label reads
+        // "3:00" here, not "2:00", so only a real {remaining} lens passes
+        { label: "reads 2:00 a minute in", ops: [["step", 60]], expect: { ended: false, lineHas: "2:00" } },
         { label: "still running at 2:59", ops: [["step", 179]], expect: { ended: false } },
         { label: "ends by 3:00", ops: [["step", 180]], expect: { ended: true } },
       ] },
