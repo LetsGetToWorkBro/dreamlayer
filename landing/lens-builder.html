@@ -91,6 +91,13 @@
   .toast{margin-top:9px;font-size:13px;min-height:18px} .ok-t{color:var(--green)} .bad-t{color:var(--red)}
   .panel{border-top:1px solid var(--border);margin-top:18px;padding-top:16px}
   details summary{cursor:pointer;color:var(--teal);font-size:13.5px;margin-bottom:8px}
+  .askjuno{background:linear-gradient(180deg,rgba(47,212,196,.07),transparent);
+    border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:16px}
+  .askjuno textarea{min-height:44px}
+  .askex{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+  .askex button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface2);
+    border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
+  .askex button:hover{color:var(--text);border-color:var(--teal)}
 </style>
 </head>
 <body>
@@ -102,6 +109,14 @@
 
 <div class="wrap">
   <div class="col left">
+    <div class="askjuno" id="askjuno">
+      <p class="eyebrow">Ask Juno</p>
+      <p class="muted" style="margin:0 0 8px">Describe the lens you want — Juno drafts it and your device re-proves it's safe.</p>
+      <textarea id="askprompt" rows="2" maxlength="240" placeholder="a 5 minute countdown that pulses at the end"></textarea>
+      <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
+      <div class="toast" id="asktoast"></div>
+      <div class="askex" id="askex"></div>
+    </div>
     <p class="eyebrow">Start from a recipe</p>
     <div id="recipes"></div>
     <button class="recipe" id="blank" data-id="blank"><b>Start blank</b><span>An empty scene to wire up yourself.</span></button>
@@ -558,6 +573,48 @@
         else { toast.className="toast bad-t"; toast.textContent="Brain refused it: "+((d&&d.error)||"unknown")+(d&&d.error==="unauthorised"?" — paste your Brain token above.":""); } })
       .catch(function(){ toast.className="toast bad-t"; toast.textContent="Couldn't reach the Brain. Download the lens and use `dreamlayer figment safety`."; });
   };
+
+  // -- Ask Juno: describe a lens, get a verified figment into the builder ----
+  var EXAMPLES = ["a 5 minute countdown that pulses at the end",
+    "interval timer, 3 min work 1 min rest", "box breathing, 4 seconds each",
+    "checklist: warm up, main set, cool down"];
+  (function seedExamples(){
+    var wrap=document.getElementById("askex");
+    EXAMPLES.forEach(function(ex){ var b=document.createElement("button"); b.textContent=ex;
+      b.onclick=function(){ document.getElementById("askprompt").value=ex; }; wrap.appendChild(b); });
+  })();
+  function loadComposed(f, kind, note){
+    fig = f; editKind = kind || "juno"; markRecipe(null);
+    document.getElementById("fname").value = fig.name;
+    setMode("advanced"); boot();
+    var toast=document.getElementById("asktoast"); toast.className="toast ok-t";
+    toast.textContent = "✓ " + (note || ("Drafted “"+fig.name+"”. Tweak it, paint on it, then deploy."));
+  }
+  document.getElementById("askgo").onclick = function(){
+    var prompt=document.getElementById("askprompt").value.trim();
+    var toast=document.getElementById("asktoast");
+    if(!prompt){ toast.className="toast bad-t"; toast.textContent="Tell Juno what the lens should do."; return; }
+    toast.className="toast"; toast.textContent="Juno is drafting…";
+    if(SO){                                        // Brain-served: full offline parser, verified there
+      var h={"Content-Type":"application/json"}; var tok=(SO&&SO.token)||(document.getElementById("braintoken").value||"");
+      if(tok) h["X-DreamLayer-Token"]=tok;
+      fetch("/dreamlayer/rc/compose",{method:"POST",headers:h,body:JSON.stringify({prompt:prompt})})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d&&d.ok&&d.figment){ loadComposed(d.figment, "juno", "Drafted “"+(d.figment.name||"lens")+"” — "+(d.scenes||0)+" scene(s). Tweak, paint, deploy."); }
+          else if(d&&d.unmatched){ tryLocal(prompt, toast, d.examples); }
+          else { toast.className="toast bad-t"; toast.textContent="Juno couldn't draft that: "+((d&&(d.error||(d.violations||[])[0]))||"unknown"); }
+        })
+        .catch(function(){ tryLocal(prompt, toast); });
+    } else { tryLocal(prompt, toast); }           // static page: client-side recipe match
+  };
+  function tryLocal(prompt, toast, serverExamples){
+    var res=K.composeLocal(prompt);
+    if(res.matched && K.validate(res.figment).ok){ loadComposed(res.figment, res.kind); return; }
+    toast.className="toast bad-t";
+    toast.textContent="Juno couldn't turn that into a lens yet — try one of the examples below.";
+    void serverExamples;
+  }
 
   // -- share: publish to the store ------------------------------------------
   document.getElementById("publish").onclick = function(){

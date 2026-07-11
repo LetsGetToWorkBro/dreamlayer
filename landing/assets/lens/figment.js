@@ -136,6 +136,39 @@
     { id: "breathing", name: "Box breathing", blurb: "In · hold · out · hold, gently breathing the ring.", make: tBreathing },
   ];
 
+  // -- Ask Juno (client fallback): a lightweight plain-English → figment map ---
+  // When the page is served BY a Brain, "Ask Juno" POSTs to /dreamlayer/rc/compose
+  // and the full offline IntentParser (intent_parser.py) runs there. On the static
+  // landing page there is no Brain, so this keyword matcher picks a recipe and
+  // pulls out durations — a useful subset, always budget-clean because it only
+  // ever emits the vetted templates.
+  function _dur(t, unit) {
+    var m = t.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*(?:" + unit + ")"));
+    return m ? +m[1] : null;
+  }
+  function composeLocal(prompt) {
+    var t = String(prompt || "").toLowerCase().trim();
+    if (!t) return { matched: false };
+    var mins = _dur(t, "minute|min"), secs = _dur(t, "second|sec");
+    var has = function () { for (var i = 0; i < arguments.length; i++) if (t.indexOf(arguments[i]) >= 0) return true; return false; };
+    var fig, kind;
+    if (has("interval", "hiit", "tabata") || (has("work") && has("rest"))) {
+      var parts = t.split(/work|rest/);
+      fig = tInterval({ work: (mins ? mins * 60 : secs) || 180, rest: 30 }); kind = "interval"; void parts;
+    } else if (has("breath", "box breathing")) {
+      var b = secs || 4; fig = tBreathing({ in_s: b, hold_s: b, out_s: b }); kind = "breathing";
+    } else if (has("checklist", "steps", "ritual", "routine", "then ")) {
+      var steps = t.replace(/^.*?:/, "").split(/,|\bthen\b|;/).map(function (s) { return s.trim(); })
+                   .filter(Boolean).map(function (s) { return s.slice(0, B.MAX_TEXT_LEN); });
+      fig = tChecklist({ steps: steps.length ? steps.slice(0, B.MAX_SCENES) : undefined }); kind = "checklist";
+    } else if (has("countdown", "count down", "timer", "count up", "stopwatch")) {
+      fig = tCountdown({ seconds: (mins ? mins * 60 : secs) || 300 }); kind = "countdown";
+    } else {
+      return { matched: false };
+    }
+    return { matched: true, kind: kind, figment: fig };
+  }
+
   // -- validation (a subset of budgets.verify — everything the builder emits) -
   // mirror reality_compiler/v2/figment._valid_event so a scene's `on` keys are
   // held to the same grammar the Python gate enforces (no false "safe").
@@ -328,6 +361,7 @@
   return {
     BUDGETS: B, COLORS: COLORS, SIZES: SIZES, HEX: HEX, END: END, SELF: SELF,
     TRIGGERS: TRIGGERS, TEMPLATES: TEMPLATES,
+    composeLocal: composeLocal,
     figment: figment, scene: scene, line: line, glyph: glyph, addScene: addScene,
     emptyFigment: emptyFigment, addBlankScene: addBlankScene, deleteScene: deleteScene,
     newSceneId: newSceneId, setTransition: setTransition, removeTransition: removeTransition,

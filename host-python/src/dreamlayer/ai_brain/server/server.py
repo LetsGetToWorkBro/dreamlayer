@@ -8,6 +8,7 @@ Serves the control panel and the API the phone and the panel both call:
     POST /dreamlayer/folders        {action: add|remove, path}  → reindex
     POST /dreamlayer/upload?folder=&name=   drag-drop a file in → reindex
     POST /dreamlayer/brain/ask      {query} → Answer (logged to history)
+    POST /dreamlayer/rc/compose     {prompt} → verified figment ("Ask Juno")
     POST /dreamlayer/brain/explain  {label, image?, want?} → Answer
     GET  /dreamlayer/history        recent questions
 
@@ -373,6 +374,42 @@ class Brain:
         if self._rc_active == figment_id:
             self._rc_active = None
         return {"ok": True, **self.rc_repertoire()}
+
+    def rc_compose(self, prompt: str) -> dict:
+        """Ask Juno: turn a plain-English description of a lens into a figment.
+
+        The builder's "Ask Juno" box (INNOVATION_SESSION Category 1). We run the
+        offline intent parser — no cloud, no model needed — lift it to a figment
+        and budget-verify it *here* before it ever reaches the editor. The result
+        is returned but NOT deployed: it lands in the builder for the author to
+        preview, paint on, and tweak, then Deploy re-checks the proof again.
+        """
+        text = (prompt or "").strip()
+        if not text:
+            return {"ok": False, "unmatched": True,
+                    "error": "Tell Juno what the lens should do."}
+        try:
+            result = self.rc.compile_text(text)
+        except ValueError:
+            return {"ok": False, "unmatched": True,
+                    "error": "Juno couldn't turn that into a lens yet.",
+                    "examples": [
+                        "a 5 minute countdown that pulses at the end",
+                        "interval timer, 3 minutes work 1 minute rest",
+                        "count reps, add one on a nod",
+                        "box breathing, 4 seconds each",
+                        "teleprompter for my speech notes",
+                    ]}
+        except Exception as e:                          # pragma: no cover - defensive
+            return {"ok": False, "error": f"compose failed: {e}"}
+        fig = result.figment
+        return {
+            "ok": result.report.ok,
+            "figment": fig.to_dict(),
+            "describe": fig.describe(),
+            "scenes": len(fig.scenes),
+            "violations": [str(v) for v in result.report.violations],
+        }
 
     def rc_import(self, data: dict) -> dict:
         """Import a figment authored elsewhere — the no-code browser builder's
@@ -2080,6 +2117,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rc_deploy(self._body().get("figment_id", "")))
             elif path == "/dreamlayer/rc/revoke":
                 self._json(200, brain.rc_revoke(self._body().get("figment_id", "")))
+            elif path == "/dreamlayer/rc/compose":
+                # "Ask Juno" — describe a lens in words, get a verified figment
+                # back into the builder (offline intent parser; not deployed)
+                self._json(200, brain.rc_compose(self._body().get("prompt", "")))
             elif path == "/dreamlayer/rc/import":
                 # the no-code browser builder's "Deploy to my Brain"
                 self._json(200, brain.rc_import(self._body().get("figment") or self._body()))

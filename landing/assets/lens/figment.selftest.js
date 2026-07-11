@@ -83,5 +83,13 @@ for (var gi = 0; gi <= K.BUDGETS.MAX_GLYPHS; gi++) manyStrokes.push(K.glyph([[0.
 K.addScene(toomany, K.scene("a", { lines: [K.line("x")], glyphs: manyStrokes }));
 ok(!K.validate(toomany).ok, "more than MAX_GLYPHS strokes is rejected");
 
+// Ask Juno (client fallback): plain-English maps to a valid recipe, junk doesn't
+["a 5 minute countdown that pulses at the end", "interval 3 min work 1 min rest",
+ "box breathing 4 seconds", "checklist: warm up, main set, cool down"].forEach(function (p) {
+  var r = K.composeLocal(p);
+  ok(r.matched && K.validate(r.figment).ok, "composeLocal drafts a valid lens from: " + p);
+});
+ok(!K.composeLocal("xyzzy random gibberish").matched, "composeLocal declines nonsense");
+
 if (fails.length) { console.error("FAIL\n" + fails.join("\n")); process.exit(1); }
-console.log("ok — " + K.TEMPLATES.length + " templates valid, graph + listing + events + paint checked, violations caught");
+console.log("ok — " + K.TEMPLATES.length + " templates valid, graph + listing + events + paint + askjuno checked, violations caught");

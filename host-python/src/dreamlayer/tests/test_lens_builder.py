@@ -104,6 +104,40 @@ class TestBrainImport:
         assert out["ok"] is False                          # the Brain re-checks; 99Hz is out
 
 
+# -- Ask Juno: describe a lens, get a verified figment back -------------------
+
+class TestAskJuno:
+    def _brain(self, tmp_path):
+        from dreamlayer.ai_brain.server import Brain
+        return Brain(tmp_path)
+
+    def test_compose_drafts_a_verified_figment(self, tmp_path):
+        brain = self._brain(tmp_path)
+        out = brain.rc_compose("a 5 minute countdown that pulses at the end")
+        assert out["ok"] is True
+        assert out["scenes"] >= 1
+        # the returned figment must survive the real gate — it's what the
+        # builder loads, then re-checks again on deploy
+        fig = Figment.from_dict(out["figment"])
+        assert verify(fig).ok
+
+    def test_compose_does_not_deploy(self, tmp_path):
+        brain = self._brain(tmp_path)
+        brain.rc_compose("interval timer 3 minutes work 1 minute rest")
+        assert getattr(brain, "_rc_active", None) is None   # composing never stages
+
+    def test_compose_on_gibberish_is_a_friendly_miss(self, tmp_path):
+        brain = self._brain(tmp_path)
+        out = brain.rc_compose("qwx zzptmn frobnicate")
+        assert out["ok"] is False and out["unmatched"] is True
+        assert out["examples"]                              # offers a way forward
+
+    def test_compose_on_empty_prompt(self, tmp_path):
+        brain = self._brain(tmp_path)
+        out = brain.rc_compose("   ")
+        assert out["ok"] is False and out["unmatched"] is True
+
+
 # -- the builder page itself --------------------------------------------------
 
 def test_builder_page_is_wired():
@@ -117,6 +151,9 @@ def test_builder_page_is_wired():
     assert "/api/figments/submit" in page             # publish to the store
     assert "__DL_BUILD__" in page                     # same-origin (Brain-served) mode
     assert 'id="graph"' in page                        # the transition diagram
+    assert 'id="paint"' in page                        # the paint-on-your-lens mode
+    assert "/dreamlayer/rc/compose" in page            # Ask Juno hits the compose endpoint
+    assert "composeLocal" in page                      # and degrades client-side off-Brain
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
