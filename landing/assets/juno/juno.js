@@ -40,7 +40,11 @@
     ".juno-src{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:0}" +
     ".juno[data-state=\"thinking\"] .juno-media{filter:brightness(1.12) saturate(1.15) drop-shadow(0 0 10px rgba(47,212,196,.35))}" +
     ".juno[data-state=\"success\"] .juno-media{filter:brightness(1.35) saturate(1.2) drop-shadow(0 0 12px rgba(86,211,100,.4))}" +
-    "@media (prefers-reduced-motion: reduce){.juno-media{filter:none!important}}";
+    // she breathes even on the still poster — transform only, so it never fights
+    // the state filters above. Richer per-surface motion can override this.
+    "@keyframes junoBreathe{0%,100%{transform:translateZ(0) scale(1)}50%{transform:translateZ(0) scale(1.015)}}" +
+    ".juno-alive .juno-media{animation:junoBreathe 6.5s ease-in-out infinite;will-change:transform}" +
+    "@media (prefers-reduced-motion: reduce){.juno-media{filter:none!important}.juno-alive .juno-media{animation:none!important}}";
   function injectStyle() {
     if (document.getElementById("juno-style")) return;
     var st = document.createElement("style"); st.id = "juno-style"; st.textContent = STYLE;
@@ -52,6 +56,7 @@
     var dir = opts.base || B;
     injectStyle();
     el.classList.add("juno");
+    if (!reduce) el.classList.add("juno-alive");     // gentle breathing everywhere
     el.setAttribute("data-state", opts.state || "idle");
     el.innerHTML = "";
 
