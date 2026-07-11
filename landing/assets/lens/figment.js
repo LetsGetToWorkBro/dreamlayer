@@ -243,7 +243,8 @@
     var f = figment("Breathing mandala", "breathe");
     addScene(f, scene("breathe", {
       duration_sec: 300, tick: "countdown",
-      lines: [line("BREATHE", { row: 0, size: "md", color: "text_secondary" })],
+      lines: [line("BREATHE", { row: 0, size: "sm", color: "accent_memory" }),
+              line("in 4 · hold 4 · out 6", { row: 3, size: "sm", color: "text_secondary" })],
       glyphs: _mandala(),
       cadence: { in_s: 4, hold_s: 4, out_s: 6 },
       pulse: { window_sec: 12, rate_hz: 0.8, color: "accent_memory" },
@@ -345,16 +346,53 @@
     return pts;
   }
   function _heartGlyph(col) { return [glyph(_heart(0.5, 0.44, 0.0155), { color: col, width: "sm" })]; }
+  // -- a small kit of tasteful signature glyphs (normalized 0..1 coords) ------
+  function _reticle(cx, cy, r, col) {                    // an eye/scan ring + ticks
+    return [glyph(_ring(cx, cy, r), { color: col, width: "sm" }),
+            glyph([[cx - r * 1.7, cy], [cx - r * 0.9, cy]], { color: col, width: "sm" }),
+            glyph([[cx + r * 0.9, cy], [cx + r * 1.7, cy]], { color: col, width: "sm" })];
+  }
+  function _wave(cx, cy, w, h, col) {                    // a voice waveform
+    var bars = [0.35, 0.7, 0.5, 1, 0.62, 0.85, 0.45], n = bars.length, pts = [], x0 = cx - w / 2;
+    for (var i = 0; i < n; i++) { var x = x0 + (i / (n - 1)) * w, a = bars[i] * h;
+      pts.push([x, cy - a]); pts.push([x, cy + a]); }
+    return glyph(pts, { color: col, width: "sm" });
+  }
+  function _flame(cx, cy, s, col) {                      // a small ember flame
+    var p = [[0, 0.9], [-0.5, 0.3], [-0.28, -0.2], [0, -0.9], [0.28, -0.2], [0.5, 0.3], [0, 0.9]];
+    return glyph(p.map(function (q) { return [cx + q[0] * s, cy - q[1] * s]; }), { color: col, width: "sm" });
+  }
+  function _path(cx, cy, col) {                          // a doorway + a path ahead
+    return [glyph([[cx - 0.09, cy + 0.12], [cx - 0.06, cy - 0.1], [cx + 0.06, cy - 0.1], [cx + 0.09, cy + 0.12]], { color: col, width: "sm" }),
+            glyph([[cx - 0.02, cy + 0.13], [cx, cy + 0.02], [cx + 0.02, cy + 0.13]], { color: "border_subtle", width: "sm" })];
+  }
+  function _check(cx, cy, s, col) {                      // a checkmark
+    return glyph([[cx - s, cy], [cx - s * 0.2, cy + s * 0.8], [cx + s * 1.2, cy - s * 0.9]], { color: col, width: "md" });
+  }
+  function _bar(cx, cy, w, col) {                        // a barbell / form bar
+    return [glyph([[cx - w, cy], [cx + w, cy]], { color: col, width: "lg" }),
+            glyph([[cx - w, cy - 0.05], [cx - w, cy + 0.05]], { color: col, width: "md" }),
+            glyph([[cx + w, cy - 0.05], [cx + w, cy + 0.05]], { color: col, width: "md" })];
+  }
 
   // Whisper — read/hear any language, live. Camera OCR + mic → Brain/cloud
   // translate → the words stream onto {slot}.
   function shWhisper() {
-    var f = figment("Whisper — live translate", "live");
+    var f = figment("Whisper — live translate", "hear");
+    addScene(f, scene("hear", {
+      duration_sec: 1.6, tick: "countup",
+      lines: [line("ES → EN", { row: 0, size: "sm", color: "accent_memory" }),
+              line("listening…", { row: 1, size: "md", color: "text_secondary" })],
+      glyphs: [_wave(0.5, 0.66, 0.34, 0.07, "accent_memory")],
+      on_timeout: [{ target: "live" }], on: { "text": { target: "live" }, "double": { target: END } },
+    }));
     addScene(f, scene("live", {
-      lines: [line("{slot}", { row: 1, size: "md", color: "text_primary" }),
-              line("▸ translating live", { row: 4, size: "sm", color: "accent_memory" })],
-      glyphs: [glyph([[0.18, 0.8], [0.34, 0.8]], { color: "accent_memory", width: "sm" }),
-               glyph([[0.66, 0.8], [0.82, 0.8]], { color: "accent_memory", width: "sm" })],
+      lines: [line("ES → EN", { row: 0, size: "sm", color: "accent_memory" }),
+              line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("▸ live", { row: 3, size: "sm", color: "accent_memory" })],
+      glyphs: [glyph([[0.16, 0.8], [0.36, 0.8]], { color: "accent_memory", width: "sm" }),
+               glyph([[0.64, 0.8], [0.84, 0.8]], { color: "accent_memory", width: "sm" })],
+      cadence: { in_s: 2, hold_s: 1, out_s: 2 },
       on: { "text": { target: SELF }, "double": { target: END } },
     }));
     return f;
@@ -364,19 +402,26 @@
   function shAsk() {
     var f = figment("Ask — your Brain, on glass", "idle");
     addScene(f, scene("idle", {
-      lines: [line("ASK ME ANYTHING", { row: 1, size: "md", color: "text_secondary" }),
-              line("double-tap · then speak", { row: 3, size: "sm", color: "text_secondary" })],
+      lines: [line("JUNO", { row: 0, size: "sm", color: "accent_memory" }),
+              line("Ask me anything", { row: 1, size: "md", color: "text_secondary" }),
+              line("double-tap, then speak", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph(_ring(0.5, 0.64, 0.05), { color: "border_subtle", width: "sm" })],
+      cadence: { in_s: 2, hold_s: 1, out_s: 2 },
       on: { "double": { target: "hear", emit: "ask" } },
     }));
     addScene(f, scene("hear", {
       duration_sec: 2, tick: "countup",
-      lines: [line("listening…", { row: 1, size: "md", color: "accent_attention" })],
+      lines: [line("JUNO", { row: 0, size: "sm", color: "accent_memory" }),
+              line("listening…", { row: 1, size: "md", color: "accent_attention" })],
+      glyphs: [_wave(0.5, 0.66, 0.34, 0.07, "accent_attention")],
       pulse: { window_sec: 2, rate_hz: 1.5, color: "accent_attention" },
       on_timeout: [{ target: "answer" }], on: { "text": { target: "answer" }, "double": { target: "idle" } },
     }));
     addScene(f, scene("answer", {
-      lines: [line("{slot}", { row: 1, size: "md", color: "text_primary" }),
-              line("⛨ from your memory", { row: 4, size: "sm", color: "accent_memory" })],
+      lines: [line("ANSWER", { row: 0, size: "sm", color: "accent_memory" }),
+              line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("⛨ from your memory", { row: 3, size: "sm", color: "accent_memory" })],
+      glyphs: [_check(0.5, 0.72, 0.05, "accent_success")],
       on: { "text": { target: SELF }, "double": { target: "idle" } },
     }));
     return f;
@@ -386,14 +431,17 @@
   function shTethered() {
     var f = figment("Tethered — feel them near", "away");
     addScene(f, scene("away", {
-      lines: [line("· · ·", { row: 1, size: "lg", color: "text_secondary" }),
-              line("2,400 miles away", { row: 4, size: "sm", color: "text_secondary" })],
+      lines: [line("TETHERED", { row: 0, size: "sm", color: "accent_memory" }),
+              line("· · ·", { row: 1, size: "lg", color: "text_secondary" }),
+              line("2,400 miles away", { row: 3, size: "sm", color: "text_secondary" })],
       glyphs: _heartGlyph("border_subtle"), cadence: { in_s: 4, hold_s: 1, out_s: 4 },
       on: { "bond:near": { target: "near" }, "text": { target: SELF }, "double": { target: END } },
     }));
     addScene(f, scene("near", {
       duration_sec: 6, tick: "countdown",
-      lines: [line("SHE'S NEAR", { row: 1, size: "lg", color: "accent_memory" })],
+      lines: [line("TETHERED", { row: 0, size: "sm", color: "accent_memory" }),
+              line("She's near", { row: 1, size: "lg", color: "accent_memory" }),
+              line("a heartbeat away", { row: 3, size: "sm", color: "text_secondary" })],
       glyphs: _heartGlyph("accent_memory"), pulse: { window_sec: 6, rate_hz: 1.1, color: "accent_memory" },
       on_timeout: [{ target: "away", emit: "beat", record: true }], on: { "double": { target: END } },
     }));
@@ -404,13 +452,18 @@
   function shThreshold() {
     var f = figment("Threshold — arrive & begin", "home");
     addScene(f, scene("home", {
-      lines: [line("HOME", { row: 0, size: "md", color: "text_secondary" }),
-              line("walk somewhere…", { row: 4, size: "sm", color: "text_secondary" })],
+      lines: [line("THRESHOLD", { row: 0, size: "sm", color: "accent_memory" }),
+              line("You're home", { row: 1, size: "md", color: "text_secondary" }),
+              line("walk somewhere to begin", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: _path(0.5, 0.6, "accent_memory"), cadence: { in_s: 3, hold_s: 1, out_s: 3 },
       on: { "place:enter": { target: "gym" }, "double": { target: END } },
     }));
     addScene(f, scene("gym", {
       duration_sec: 5, tick: "countdown",
-      lines: [line("GYM ✦ ROUND 1", { row: 1, size: "lg", color: "accent_attention" })],
+      lines: [line("ARRIVED · GYM", { row: 0, size: "sm", color: "accent_attention" }),
+              line("Round 1", { row: 1, size: "lg", color: "accent_attention" }),
+              line("your ritual begins", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [_check(0.5, 0.72, 0.05, "accent_attention")],
       pulse: { window_sec: 3, rate_hz: 2.0, color: "accent_attention" },
       on_timeout: [{ target: "home" }], on: { "place:exit": { target: "home" }, "double": { target: END } },
     }));
@@ -421,14 +474,18 @@
   function shSecondSight() {
     var f = figment("Second Sight — name anything", "look");
     addScene(f, scene("look", {
-      lines: [line("GLANCE + HOLD", { row: 1, size: "md", color: "text_secondary" }),
+      lines: [line("SECOND SIGHT", { row: 0, size: "sm", color: "accent_memory" }),
+              line("Glance + hold", { row: 1, size: "md", color: "text_secondary" }),
               line("to name what you see", { row: 3, size: "sm", color: "text_secondary" })],
-      glyphs: [glyph(_ring(0.5, 0.42, 0.13), { color: "accent_memory", width: "sm" })],
+      glyphs: _reticle(0.5, 0.44, 0.11, "accent_memory"),
+      cadence: { in_s: 2, hold_s: 1, out_s: 2 },
       on: { "long": { target: "seen", emit: "look" }, "double": { target: END } },
     }));
     addScene(f, scene("seen", {
-      lines: [line("{slot}", { row: 1, size: "md", color: "accent_success" }),
-              line("hold to look again ↻", { row: 4, size: "sm", color: "text_secondary" })],
+      lines: [line("IDENTIFIED", { row: 0, size: "sm", color: "accent_success" }),
+              line("{slot}", { row: 1, size: "md", color: "accent_success" }),
+              line("hold to look again ↻", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: _reticle(0.5, 0.44, 0.11, "accent_success"),
       on: { "text": { target: SELF }, "long": { target: "look" }, "double": { target: END } },
     }));
     return f;
@@ -438,12 +495,18 @@
   function shEmber() {
     var f = figment("Ember — memory, returned", "quiet");
     addScene(f, scene("quiet", {
-      lines: [line("· here ·", { row: 1, size: "md", color: "text_secondary" })],
+      lines: [line("EMBER", { row: 0, size: "sm", color: "accent_memory" }),
+              line("· here ·", { row: 1, size: "md", color: "text_secondary" }),
+              line("a memory sleeps here", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [_flame(0.5, 0.62, 0.09, "border_subtle")],
+      cadence: { in_s: 5, hold_s: 2, out_s: 5 },
       on: { "place:enter": { target: "back" }, "text": { target: "back" }, "double": { target: END } },
     }));
     addScene(f, scene("back", {
-      lines: [line("{slot}", { row: 1, size: "md", color: "accent_memory" })],
-      glyphs: [glyph([[0.5, 0.72], [0.44, 0.6], [0.5, 0.5], [0.56, 0.6], [0.5, 0.72]], { color: "accent_attention", width: "sm" })],
+      lines: [line("A YEAR AGO", { row: 0, size: "sm", color: "accent_memory" }),
+              line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("where it happened", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [_flame(0.5, 0.62, 0.09, "accent_attention")],
       cadence: { in_s: 5, hold_s: 2, out_s: 5 },
       on: { "text": { target: SELF }, "double": { target: END } },
     }));
@@ -455,9 +518,10 @@
     var f = figment("Coach — form, not reps", "set");
     f.counters.reps = counter("reps", { hi: 99 });
     addScene(f, scene("set", {
-      lines: [line("{slot}", { row: 0, size: "lg", color: "accent_attention" }),
-              line("clean reps: {count:reps}", { row: 4, size: "sm", color: "text_secondary" })],
-      glyphs: [glyph([[0.24, 0.62], [0.5, 0.62]], { color: "accent_attention", width: "lg" })],
+      lines: [line("COACH", { row: 0, size: "sm", color: "accent_memory" }),
+              line("{slot}", { row: 1, size: "lg", color: "accent_attention" }),
+              line("clean reps: {count:reps}", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: _bar(0.5, 0.68, 0.16, "accent_attention"),
       on: { "text": { target: SELF },
             "single": { target: SELF, counter_ops: [inc("reps")], emit: "rep", record: true },
             "double": { target: END } },

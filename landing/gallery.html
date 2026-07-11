@@ -345,7 +345,8 @@
 
   // a friendly placeholder for {slot} so streaming showcases read nicely
   function sampleSlot(it){
-    var m = { whisper:"la cuenta, por favor", ask:"the 14th", secondSight:"Monstera deliciosa" };
+    var m = { whisper:"la cuenta, por favor", ask:"the 14th", secondSight:"Monstera deliciosa",
+              ember:"you laughed here, 2024", coach:"Chest up ↑" };
     var id = (it.id||"").replace("seed:","");
     return m[id] || "…";
   }

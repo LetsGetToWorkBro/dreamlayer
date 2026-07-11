@@ -113,7 +113,7 @@
     });
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     var self = this, hasRem = false;
-    (s.lines || []).forEach(function (ln) { var y = C - 84 * scale + (ln.row || 0) * 64 * scale;
+    (s.lines || []).forEach(function (ln) { var y = C - 88 * scale + (ln.row || 0) * 58 * scale;
       if (/\{remaining/.test(ln.content || "")) hasRem = true;
       ctx.fillStyle = pulseOn ? HEX[s.pulse.color] : (HEX[ln.color] || HEX.text_primary);
       ctx.font = ((SZ[ln.size] || 32) * scale) + "px -apple-system,Segoe UI,Roboto,sans-serif";
