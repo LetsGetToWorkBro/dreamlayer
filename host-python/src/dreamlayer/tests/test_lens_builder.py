@@ -288,6 +288,31 @@ def test_builder_page_is_wired():
     assert 'id="remixBanner"' in page
 
 
+def test_gallery_page_is_wired():
+    page = (LENS.parents[1] / "gallery.html").read_text(encoding="utf-8")
+    # the three modules the wall runs on
+    assert "./assets/lens/figment.js" in page          # decode + re-prove every lens
+    assert "./assets/lens/player.js" in page           # live ring preview per card
+    assert "./assets/lens/qr.js" in page               # share-by-QR
+    assert "/api/figments/gallery" in page             # fetches the approved wall
+    assert "decodeShare" in page                        # re-proves each code client-side
+    assert "seedItems" in page and "K.showcases" in page   # never a dead page (offline seed)
+    assert "lens-builder.html#lens=" in page           # Remix hands the lens to the builder
+    assert "new LensPlayer" in page                     # cards actually animate
+    assert "IntersectionObserver" in page              # only on-screen cards animate
+    assert 'id="q"' in page and 'data-sort="newest"' in page   # search + Featured/Newest
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_gallery_player_module_loads_under_node():
+    # the preview engine must be a clean UMD module (parses + exports a ctor)
+    r = subprocess.run(
+        ["node", "-e", "var P=require('./player.js');"
+                       "if(typeof P!=='function')process.exit(1);"],
+        cwd=LENS, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
 def test_registry_figment_submit_route():
     api = Path(__file__).resolve().parents[4] / "registry-api"

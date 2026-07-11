@@ -89,6 +89,20 @@ function cleanText(s, max) {
 
 const INDEX_CAP = 5000;   // bound index:names growth against slug spam
 
+// The share code the gallery hands the client — identical format to the
+// builder's LensKit.encodeShare (UTF-8 → base64url of {v,f,a}), so the same
+// LensKit.decodeShare re-proves and remixes it.
+function shareCode(figment, author) {
+  const f = JSON.parse(JSON.stringify(figment));
+  if (f.id === "") delete f.id;
+  const payload = { v: 1, f };
+  if (author) payload.a = String(author).slice(0, 40);
+  const utf8 = new TextEncoder().encode(JSON.stringify(payload));
+  let bin = "";
+  for (let i = 0; i < utf8.length; i++) bin += String.fromCharCode(utf8[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 // Shape-check a figment listing from the builder. Returns an error string, or
 // null when it's well-formed. The heavy proof (budgets) is re-run at review by
 // the Python gate; this just rejects junk before it queues.
@@ -196,9 +210,45 @@ export default {
         return json({ status: "queued", id, place: queue.length,
                       note: "queued for maintainer review — the proof is re-checked before it lists" });
       }
+      // GET /api/figments/gallery — the public wall of approved, remixable
+      // lenses. Each entry carries a share `code` (the whole lens) so the
+      // gallery previews and remixes in one request; the client re-proves it.
+      if (request.method === "GET" && parts[2] === "gallery") {
+        const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
+        return json({ lenses: gal });
+      }
+      // POST /api/figments/:id/approve — maintainer moves a queued submission
+      // onto the gallery. Gated by ADMIN_TOKEN; a no-op if it isn't configured.
+      if (request.method === "POST" && parts[2] && parts[3] === "approve") {
+        if (!env.ADMIN_TOKEN || request.headers.get("X-Admin-Token") !== env.ADMIN_TOKEN)
+          return json({ error: "forbidden" }, 403);
+        const id = parts[2];
+        const sub = await readJSON(env.SOCIAL, "figment:sub:" + id, null);
+        if (!sub) return json({ error: "no such submission" }, 404);
+        const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
+        if (!gal.some((e) => e.id === id)) {
+          gal.unshift({
+            id,
+            name: cleanText(sub.name, 40) || "Untitled",
+            author: cleanText(sub.author, 40),
+            description: cleanText(sub.description, 240),
+            scenes: Object.keys(sub.figment.scenes || {}).length,
+            code: shareCode(sub.figment, sub.author),
+            at: Date.now() / 1000,
+          });
+          while (gal.length > 500) gal.pop();     // bound the wall
+          await env.SOCIAL.put("figments:gallery", JSON.stringify(gal));
+        }
+        // drop it from the pending queue
+        const queue = await readJSON(env.SOCIAL, "figments:queue", []);
+        const nq = queue.filter((e) => e.id !== id);
+        if (nq.length !== queue.length) await env.SOCIAL.put("figments:queue", JSON.stringify(nq));
+        return json({ status: "approved", id, gallery: gal.length });
+      }
       if (request.method === "GET" && !parts[2]) {
         const queue = await readJSON(env.SOCIAL, "figments:queue", []);
-        return json({ pending: queue.length });
+        const gal = await readJSON(env.SOCIAL, "figments:gallery", []);
+        return json({ pending: queue.length, gallery: gal.length });
       }
       return json({ error: "method not allowed" }, 405);
     }
