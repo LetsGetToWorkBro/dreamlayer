@@ -1,5 +1,9 @@
 # DreamLayer — integration & device seams
 
+> **Not the same as [`INTEGRATIONS.md`](INTEGRATIONS.md)** (plural), which
+> catalogs the optional *library* adapters. This doc is about wiring to
+> *hardware and the API*.
+
 The map for wiring DreamLayer onto real hardware: the full **Brain HTTP API**,
 the **hub (orchestrator)** capabilities the phone drives, and the **seams** —
 the handful of places where a real microphone, radio, or OS reader plugs in.

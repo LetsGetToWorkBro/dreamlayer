@@ -5,7 +5,7 @@ type "HelloCard", this draws it: your text, centered, on the 256px glass.
 That's a complete lens — everything bigger (TasteLens, the Beacon, Face
 Synth) is this pattern with more ideas.
 """
-from dreamlayer.plugins import make_plugin
+from dreamlayer.sdk import make_plugin
 
 
 def draw_hello_card(draw, card):

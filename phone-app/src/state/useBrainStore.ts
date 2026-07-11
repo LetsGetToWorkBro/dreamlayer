@@ -127,6 +127,14 @@ type BrainState = {
   // the deliberate camera tier: a phone photo through the Brain's vision path
   explain: (imageB64: string, label?: string) => Promise<AskResult>;
 
+  // the lens relay — closes the glass→Brain→glass loop for the live showcases:
+  //  • feedLens streams host text (a translation, a camera label, a memory)
+  //    into the running lens's {slot}
+  //  • emitLens forwards a lens's emit tag; "ask" runs the Brain over the
+  //    spoken question and the answer lands back on the glass
+  feedLens: (text: string, source?: string) => Promise<boolean>;
+  emitLens: (tag: string, text?: string) => Promise<AskResult>;
+
   // one-glance morning brief synthesized by the Brain
   getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
   // the brief the Brain's scheduler delivered on its own at brief_hour (no compute)
@@ -440,6 +448,40 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
     } catch {
       return { text: "Couldn't reach your Brain — try again when it's back.", tier: "", sources: [] };
+    }
+  },
+
+  // -- the lens relay: close the loop on the phone side ----------------------
+  feedLens: async (text, source = "") => {
+    if (get().demoMode) return true;                 // the builder sim already shows it
+    const m = get().macMini;
+    if (!m.connected || !m.url || !text) return false;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/rc/feed", {
+        method: "POST",
+        body: JSON.stringify({ text, source }),
+      });
+      const j = await r.json();
+      return !!j.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  emitLens: async (tag, text = "") => {
+    if (get().demoMode) return { text: "", tier: "device", sources: [] };
+    const m = get().macMini;
+    if (!m.connected || !m.url || !tag) return null;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/rc/emit", {
+        method: "POST",
+        body: JSON.stringify({ tag, text }),
+      });
+      const j = await r.json();
+      // "ask" comes back with the Brain's answer (already pushed to the glass)
+      return { text: j.answer ?? j.text ?? "", tier: j.tier ?? "", sources: [] };
+    } catch {
+      return null;
     }
   },
 

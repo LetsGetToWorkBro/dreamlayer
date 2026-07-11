@@ -96,12 +96,21 @@ ok(reps.counters.reps && reps.scenes.count.on["imu:nod"] && reps.scenes.count.gl
 // Ask Juno (client fallback): the creative prompts each map to their rich recipe
 [["count my push-ups with a nod", "reps"], ["a focus session that breathes while I work", "focus"],
  ["keep score — tap for us, double-tap for them", "score"], ["box breathing 4 seconds", "breathing"],
- ["interval 3 min work 1 min rest", "interval"]].forEach(function (p) {
+ ["interval 3 min work 1 min rest", "interval"],
+ // the wonder-features the tour promises are now draftable from plain words too
+ ["translate a spanish menu", "whisper"], ["ask my brain when the rent is due", "ask"],
+ ["what is this plant", "secondSight"], ["a lens for my long distance partner", "tethered"],
+ ["when i get to the gym start a circuit", "threshold"], ["surface a memory where it happened", "ember"],
+ ["coach my squat form", "coach"],
+ // regression: "countdown" must NOT be hijacked by the rep counter's "count"
+ ["a 5 minute countdown", "countdown"]].forEach(function (p) {
   var r = K.composeLocal(p[0]);
   ok(r.matched && r.kind === p[1] && K.validate(r.figment).ok,
-     "composeLocal drafts a valid '" + p[1] + "' from: " + p[0] + " (got " + r.kind + ")");
+     "composeLocal drafts a valid '" + p[1] + "' from: " + p[0] + " (got " + (r.kind || "none") + ")");
 });
 ok(!K.composeLocal("xyzzy random gibberish").matched, "composeLocal declines nonsense");
+// every trigger carries a plain-language hint for the builder's inline help
+ok(K.TRIGGERS.every(function (t) { return t.label && t.hint; }), "every trigger has a plain label + hint");
 
 // every tutorial showcase is budget-clean AND exercises a distinct edge
 Object.keys(K.showcases).forEach(function (id) {

@@ -9,7 +9,7 @@
     "cards"
   ],
   "api": "1",
-  "checksum": "sha256:dd7168b1a57db4432a8ae18ee6885c93247cef94c696617896f54fc8ebfa314b",
+  "checksum": "sha256:988ffd025fe7ff5c82b4a7077065dcb26a459f45f2b84396772aec34d6de8165",
   "long": [
     "A complete, store-valid DreamLayer plugin in ~25 lines.",
     "Copy this folder, rename everything, and you have a lens."

@@ -102,8 +102,24 @@ def package_from_dir(path):
     d = _Path(path)
     meta_p, src_p = d / "plugin.json", d / "plugin.py"
     if not (meta_p.exists() and src_p.exists()):
-        raise FileNotFoundError(
-            f"{d} is not a plugin directory (needs plugin.json + plugin.py)")
+        # Fallback layout: manifest.json + the module named in its `entry`
+        # (module:factory) or `module` field. The in-repo examples use this,
+        # so the CLI loads *either* convention instead of rejecting one.
+        alt = d / "manifest.json"
+        if alt.exists():
+            meta0 = dict(_json.loads(alt.read_text(encoding="utf-8")))
+            mod = str(meta0.get("module")
+                      or str(meta0.get("entry", "")).split(":")[0]
+                      or "plugin")
+            meta_p, src_p = alt, d / (mod + ".py")
+            if not src_p.exists():
+                raise FileNotFoundError(
+                    f"{d}: manifest.json points at module {mod!r} but "
+                    f"{src_p.name} is missing")
+        else:
+            raise FileNotFoundError(
+                f"{d} is not a plugin directory (needs plugin.json + plugin.py, "
+                "or manifest.json + the module it names)")
     meta = dict(_json.loads(meta_p.read_text(encoding="utf-8")))
     source = src_p.read_text(encoding="utf-8")
     meta["checksum"] = sha256_of(source)

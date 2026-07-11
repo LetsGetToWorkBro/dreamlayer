@@ -31,8 +31,8 @@ dreamlayer --version                  # dreamlayer sdk 1.0.0
 ## Your first plugin in five minutes
 
 ```bash
-dreamlayer plugins new hello-world    # scaffold a working starter
-cd hello-world
+dreamlayer plugins new hello-lens    # scaffold a working starter
+cd hello-lens
 dreamlayer plugins validate .         # integrity + capability scan + smoke test
 pytest                                # the same gate, as a test
 ```
@@ -50,7 +50,7 @@ persisted setting. Edit two files:
 Then package and ship:
 
 ```bash
-dreamlayer plugins pack .                              # -> hello-world-0.1.0.json
+dreamlayer plugins pack .                              # -> hello-lens-0.1.0.json
 dreamlayer plugins install . --brain http://localhost:8765   # sideload to a Brain
 ```
 
@@ -67,7 +67,7 @@ def register(ctx):
     ctx.add_card_renderer("HelloCard", draw_hello)   # a HUD card
 
 def plugin():
-    return make_plugin("hello-world", register, requires=("cards",))
+    return make_plugin("hello-lens", register, requires=("cards",))
 ```
 
 | You're building | Import / call | Declare |
@@ -177,9 +177,11 @@ doubles as a visual-regression golden.
 Declare in `requires` only what you use. The host grants a capability if it can,
 skips your plugin (never crashes) if it can't, and the gate **refuses any
 undeclared reach** — a plugin that imports `socket` or writes files without
-declaring `network`/`fs` fails validation. Known capabilities: `cards`,
-`object_lens`, `glance`, `shop`, `perception`, `vision`, `ring`, `mesh`, `midi`,
-`network`, `fs`.
+declaring `network`/`fs` fails validation. Known capabilities (the full set in
+`plugins.package.KNOWN_CAPABILITIES`): `cards`, `object_lens`, `glance`, `shop`,
+`perception`, `vision`, `ring`, `mesh`, `midi`, `network`, `fs`, and the
+DreamLayer Cloud entitlements `cloud_ai`, `cloud_sync`, `cloud_relay` (granted
+only on a cloud-plan Brain; free plugins are unaffected).
 
 ## Trust, signing & isolation
 

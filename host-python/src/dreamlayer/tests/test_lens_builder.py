@@ -248,7 +248,7 @@ class TestBrainLensLoop:
 def test_builder_page_is_wired():
     page = (LENS.parents[1] / "lens-builder.html").read_text(encoding="utf-8")
     assert "assets/lens/figment.js" in page          # loads the logic module
-    assert "This behavior <b>CANNOT</b>" in page or "This behavior" in page
+    assert "<b>CANNOT</b>" in page and "<b>WILL</b>" in page   # the proof shows both halves
     assert "/dreamlayer/rc/import" in page            # deploy hits the real endpoint
     assert "X-DreamLayer-Token" in page               # sends the Brain token
     # the three follow-ons: advanced scene-graph, publish, same-origin
@@ -261,6 +261,11 @@ def test_builder_page_is_wired():
     assert "composeLocal" in page                      # and degrades client-side off-Brain
     assert 'id="tour"' in page and "runShowcase" in page   # the "what's possible" tutorial
     assert "dl_tour_seen" in page                      # first-run gating so it isn't nagware
+    # newcomer-friendliness: inline help + friendly editor, no raw jargon flagship
+    assert 'class="ib"' in page and "data-help" in page   # the ⓘ help popovers
+    assert "var HELP" in page and "COLOR_LABEL" in page    # plain-language help + colour names
+    assert "Full editor" in page                       # mode toggle renamed from "Advanced"
+    assert 'loadPreset("mandala")' in page             # lands on a calm showcase, not a scene graph
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")

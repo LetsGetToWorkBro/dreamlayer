@@ -216,7 +216,7 @@ kept   = social_lens.offer_introduction("hi, I'm Maya", frame=camera_frame)
 ```
 
 ```bash
-cd host-python && python -m pytest -q        # the full host suite (1,909 tests)
+cd host-python && python -m pytest -q        # the full host suite (2,200+ tests)
 ```
 
 **Knowledge base — the complete reference with real renders of every card,
@@ -243,18 +243,23 @@ is in [`docs/gitbook/hardware-seams.md`](docs/gitbook/hardware-seams.md).
 
 ## Build on DreamLayer
 
-Three doors in, shallowest first:
+Four doors in, shallowest first:
 
-1. **Run the whole layer with no hardware** — the [simulator](https://dreamlayer.app/simulator.html)
+1. **Make a lens with no code** — the [Lens Builder](https://dreamlayer.app/lens-builder.html)
+   in your browser. Describe what you want ("translate a spanish menu"), or start
+   from a showcase, watch it run on a live ring, then deploy to your Brain in one
+   click. Zero install, zero code — the fastest way to feel the platform.
+2. **Run the whole layer with no hardware** — the [simulator](https://dreamlayer.app/simulator.html)
    in your browser (ten seconds, zero install), or
    `pip install -e "host-python[dev]"` and the test suite. The phone app's
    Explore mode is the same idea on your handset — a labeled sample-data
    *tour*, so every screen is alive before anything is paired.
-2. **Write a lens in ten minutes** — [`examples/hello-lens/`](examples/hello-lens/)
-   is a complete, store-valid plugin (~25 lines) with the full tutorial: the
-   capability model, local testing through the real validation gate, packaging,
-   and shipping to the store. CI runs the example itself, so it can't rot.
-3. **Extend the engine** — optional capabilities follow one seam pattern
+3. **Write a plugin in ten minutes** — the Python SDK + CLI:
+   `dreamlayer plugins new my-lens` scaffolds one, `dreamlayer plugins
+   validate/preview/pack` checks and ships it. [`docs/SDK.md`](docs/SDK.md) is the
+   full quickstart; [`examples/hello-lens/`](examples/hello-lens/) is a complete,
+   store-valid example (~25 lines) that CI runs so it can't rot.
+4. **Extend the engine** — optional capabilities follow one seam pattern
    ([`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)); platform surfaces are in
    [`docs/PLATFORM.md`](docs/PLATFORM.md); [`CONTRIBUTING.md`](CONTRIBUTING.md)
    has the ground rules (DCO, one green command, privacy contract).
