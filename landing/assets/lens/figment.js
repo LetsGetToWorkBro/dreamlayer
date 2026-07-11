@@ -387,8 +387,8 @@
       on_timeout: [{ target: "live" }], on: { "text": { target: "live" }, "double": { target: END } },
     }));
     addScene(f, scene("live", {
-      lines: [line("ES → EN", { row: 0, size: "sm", color: "accent_memory" }),
-              line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+      lines: [line("{slot}", { row: 1, size: "md", color: "text_primary" }),
+              line("ES → EN", { row: 0, size: "sm", color: "accent_memory" }),
               line("▸ live", { row: 3, size: "sm", color: "accent_memory" })],
       glyphs: [glyph([[0.16, 0.8], [0.36, 0.8]], { color: "accent_memory", width: "sm" }),
                glyph([[0.64, 0.8], [0.84, 0.8]], { color: "accent_memory", width: "sm" })],
