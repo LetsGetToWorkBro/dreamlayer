@@ -262,6 +262,14 @@ section{position:relative}
 .hero-vignette{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(120% 90% at 50% 42%,transparent 30%,rgba(0,0,0,.78) 78%,#000 100%)}
 .hero-core{position:relative;z-index:2;text-align:center;padding:0 var(--gutter);will-change:transform,opacity}
+/* Juno — the assistant sprite, a screen-blended presence beside the hero.
+   Scoped under .hero to beat juno.js's base `.juno{position:relative}`. */
+.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;top:50%;
+  width:clamp(240px,30vw,480px);right:max(2vw,calc(50% - 660px));transform:translateY(-52%);opacity:.92}
+.hero .hero-juno .juno-media{-webkit-mask-image:radial-gradient(ellipse 68% 74% at 52% 45%,#000 42%,transparent 90%);
+  mask-image:radial-gradient(ellipse 68% 74% at 52% 45%,#000 42%,transparent 90%)}
+@media(max-width:900px){.hero .hero-juno{width:min(72vw,360px);right:auto;left:50%;top:34%;
+  transform:translate(-50%,-50%);opacity:.4}}
 .hero-ring{position:relative;width:clamp(150px,20svh,190px);height:clamp(150px,20svh,190px);margin:0 auto 40px}
 .hero-ring .r{position:absolute;inset:0;border:2px solid var(--teal);border-radius:50%}
 .hero-ring .r.breathe{animation:ringbreathe var(--breath) ease-in-out infinite}
@@ -820,6 +828,7 @@ body.menu-open{overflow:hidden}
   </div>
   <canvas id="field" aria-hidden="true"></canvas>
   <div class="hero-vignette"></div>
+  <div class="hero-juno" data-juno data-juno-state="idle" aria-hidden="true"></div>
   <div class="hero-core" id="heroCore">
     <div class="hero-glass" aria-hidden="true"><canvas id="heroGlass"></canvas></div>
     <span class="eyebrow arrive in" style="--d:60ms">A layer for smart AR glasses</span>
@@ -1608,6 +1617,7 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
 <script src="./assets/vendor/ScrollTrigger.min.js" defer></script>
 <script src="./assets/vendor/lenis.min.js" defer></script>
 <script src="./assets/sim/halo-sim.js" defer></script>
+<script src="./assets/juno/juno.js" defer></script>
 <script>
 /* ============================================================
    Cinematic plates: lazy-load, play-in-view, pause-out.

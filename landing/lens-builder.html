@@ -145,6 +145,12 @@
   .askjuno{background:linear-gradient(180deg,rgba(47,212,196,.07),transparent);
     border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:16px}
   .askjuno textarea{min-height:44px}
+  .askjuno-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .juno-avatar{width:40px;height:40px;flex:none;border-radius:50%;overflow:hidden;background:#05100e;
+    box-shadow:0 0 0 1px var(--border),0 0 18px rgba(47,212,196,.16);transition:box-shadow .4s ease}
+  .juno-avatar .juno-media{width:100%;height:100%;object-fit:cover;object-position:50% 20%}
+  .juno-avatar[data-state="thinking"]{box-shadow:0 0 0 1px var(--teal),0 0 22px rgba(47,212,196,.42)}
+  .juno-avatar[data-state="success"]{box-shadow:0 0 0 1px var(--green),0 0 24px rgba(86,211,100,.42)}
   .askex{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
   .askex button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface2);
     border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
@@ -250,7 +256,10 @@
 <div class="wrap">
   <div class="col left">
     <div class="askjuno" id="askjuno">
-      <p class="eyebrow">Ask Juno</p>
+      <div class="askjuno-head">
+        <div class="juno-avatar" id="junoAvatar" data-juno data-juno-state="idle" aria-hidden="true"></div>
+        <p class="eyebrow" style="margin:0">Ask Juno</p>
+      </div>
       <p class="muted" style="margin:0 0 8px">Say what you want in plain words — <b>Juno</b> (the assistant) drafts a lens, and your glasses re-prove it's safe. A <i>lens</i> is a little thing your glasses show.</p>
       <textarea id="askprompt" rows="2" maxlength="240" placeholder="count my push-ups with a nod"></textarea>
       <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
@@ -367,6 +376,7 @@
 </div>
 
 <script src="./assets/lens/icons.js"></script>
+<script src="./assets/juno/juno.js"></script>
 <script src="./assets/lens/qr.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script>
@@ -990,6 +1000,9 @@
       wrap.appendChild(b); });
   }
   setExamples(EXAMPLES);
+  // Juno reacts to the drafting flow (idle → thinking → success)
+  function junoState(s){ var a=document.getElementById("junoAvatar"); if(a&&a.__juno) a.__juno.setState(s);
+    else if(a&&window.Juno) Juno.setState(a, s); }
   function loadComposed(f, kind, note, demoId){
     fig = f; editKind = kind || "juno"; markRecipe(null);
     document.getElementById("fname").value = fig.name;
@@ -997,12 +1010,13 @@
     startDemo(demoId||null);   // showcases carry a simulated live feed; others clear it
     var toast=document.getElementById("asktoast"); toast.className="toast ok-t";
     toast.textContent = "✓ " + (note || ("Drafted “"+fig.name+"”. Tweak it, paint on it, then deploy."));
+    junoState("success"); setTimeout(function(){ junoState("idle"); }, 2600);
   }
   document.getElementById("askgo").onclick = function(){
     var prompt=document.getElementById("askprompt").value.trim();
     var toast=document.getElementById("asktoast");
     if(!prompt){ toast.className="toast bad-t"; toast.textContent="Tell Juno what the lens should do."; return; }
-    toast.className="toast"; toast.textContent="Juno is drafting…";
+    toast.className="toast"; toast.textContent="Juno is drafting…"; junoState("thinking");
     if(SO){                                        // Brain-served: full offline parser, verified there
       var h={"Content-Type":"application/json"}; var tok=(SO&&SO.token)||(document.getElementById("braintoken").value||"");
       if(tok) h["X-DreamLayer-Token"]=tok;
@@ -1011,7 +1025,7 @@
         .then(function(d){
           if(d&&d.ok&&d.figment){ loadComposed(d.figment, "juno", "Drafted “"+(d.figment.name||"lens")+"” — "+(d.scenes||0)+" scene(s). Tweak, paint, deploy."); }
           else if(d&&d.unmatched){ tryLocal(prompt, toast, d.examples); }
-          else { toast.className="toast bad-t"; toast.textContent="Juno couldn't draft that: "+((d&&(d.error||(d.violations||[])[0]))||"unknown"); }
+          else { toast.className="toast bad-t"; toast.textContent="Juno couldn't draft that: "+((d&&(d.error||(d.violations||[])[0]))||"unknown"); junoState("idle"); }
         })
         .catch(function(){ tryLocal(prompt, toast); });
     } else { tryLocal(prompt, toast); }           // static page: client-side recipe match
@@ -1025,6 +1039,7 @@
     }
     toast.className="toast bad-t";
     toast.textContent="Juno couldn't turn that into one yet — try tapping an example below, then edit it.";
+    junoState("idle");
     setExamples(serverExamples);   // surface the server's suggestions (or the defaults)
   }
 

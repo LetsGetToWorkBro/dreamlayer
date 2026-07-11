@@ -353,6 +353,9 @@ def test_builder_page_is_wired():
     assert "setPlayBtn" in page                        # the play button reflects real state
     for e in ("🗣", "👁", "🫀", "🚪", "🔥", "🏋", "🌸", "🖌", "⚡", "🔗"):
         assert e not in page, f"emoji {e} should be an SVG icon now"
+    # Juno, the assistant sprite, is present and reacts to the drafting flow
+    assert "./assets/juno/juno.js" in page and 'id="junoAvatar"' in page
+    assert "junoState(" in page                        # idle → thinking → success
 
 
 def test_gallery_page_is_wired():
