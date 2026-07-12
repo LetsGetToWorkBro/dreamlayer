@@ -36,7 +36,7 @@ intelligence = ["speechbrain", "spacy", "river", "human-learn", "supervision"]
 vision   = ["ultralytics", "moondream", "open-clip-torch", "coremltools; sys_platform=='darwin'", "mlx-vlm; sys_platform=='darwin'"]
 causal   = ["dowhy"]
 infra    = ["rich", "watchdog", "zeroconf", "datasette", "rerun-sdk"]
-privacy  = ["cryptography", "presidio-analyzer", "presidio-anonymizer", "anyio"]
+privacy  = ["cryptography", "presidio-analyzer", "presidio-anonymizer", "anyio", "c2pa-python"]
 platform = ["pluggy", "pyee", "argostranslate", "skia-python", "fastapi", "uvicorn", "frame-sdk", "pylsl", "wasmtime", "cbor2", "mlx; sys_platform=='darwin'", "mlx-lm; sys_platform=='darwin'"]
 
 # --- Deployment profiles: one install per target, composed from the groups

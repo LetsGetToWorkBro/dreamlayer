@@ -142,6 +142,22 @@ class IngestOps:
         frames ride the frame budget (one per capture interval): on real
         hardware every frame is a capture + a multi-second BLE transfer, so
         the duty cycle is enforced here, not assumed by each lens."""
+        # redact-on-ingest + capture provenance (opt-in seam, N2): before a
+        # frame reaches Dream Mode or the Vault, blur bystander PII and stamp a
+        # C2PA credential. Off by default (attribute None); when wired, the raw
+        # frame is replaced in-place so nothing downstream ever sees it.
+        cp = getattr(self, "capture_provenance", None)
+        if cp is not None:
+            raw = scene.get("camera_jpeg") or scene.get("camera_frame")
+            if raw:
+                res = cp.ingest(raw, privacy=self.privacy)
+                if res is None:                 # veiled / strict-refused
+                    scene = {k: v for k, v in scene.items()
+                             if k not in ("camera_jpeg", "camera_frame")}
+                else:
+                    scene = dict(scene)
+                    key = "camera_jpeg" if scene.get("camera_jpeg") else "camera_frame"
+                    scene[key] = res.jpeg
         if self.state.is_dream():
             jpeg = scene.get("camera_jpeg") or scene.get("camera_frame")
             if jpeg and self.frame_budget.allow_ambient(

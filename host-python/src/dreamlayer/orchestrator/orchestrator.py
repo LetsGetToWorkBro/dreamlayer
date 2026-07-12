@@ -193,6 +193,7 @@ class Orchestrator(
         # figment lands on the revocation list, not just off the stage.
         self._banished_figments: set[str] = set()
         self.rc_deployer = None                  # seam: StageDeployer or None
+        self.capture_provenance = None           # seam: CaptureProvenance (N2)
         # Juno — the assistant. "Hey Juno" wakes it; tap / gaze / raise are
         # multimodal alternatives. On wake it shows a Listening ring + (device
         # seams) an earcon and a haptic tick, then stays open a short session so
