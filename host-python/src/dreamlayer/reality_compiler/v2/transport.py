@@ -67,17 +67,51 @@ def event_envelope(name: str) -> dict:
     return {"t": EVENT, "name": str(name)[:32]}
 
 
-def frame(envelope: dict) -> bytes:
-    """4-byte big-endian total-length header + JSON body, exactly the
-    framing ble/protocol.lua reassembles."""
-    body = json.dumps(envelope, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
+try:  # optional, compact wire codec — extras group `memory`/`platform`
+    import cbor2  # type: ignore
+    _HAS_CBOR = True
+except Exception:
+    cbor2 = None                        # type: ignore
+    _HAS_CBOR = False
+
+
+def frame(envelope: dict, codec: str = "json") -> bytes:
+    """4-byte big-endian total-length header + body.
+
+    ``codec="json"`` (default) is byte-for-byte what ble/protocol.lua
+    reassembles today — the device wire is unchanged. ``codec="cbor"`` emits a
+    compact, self-describing CBOR body instead (fewer bytes over the air, a real
+    schema at the type layer); it is auto-detected on parse, so a JSON reader is
+    never handed a CBOR frame it can't read. CBOR is host/phone-ready now;
+    flipping the *device* default needs a Lua CBOR decoder on-glass (an owner
+    action — see docs/CONCURRENCY.md hardware seams), so JSON stays the default.
+
+    The bodies are distinguishable by their first byte — canonical JSON always
+    starts with ``{`` (0x7B); CBOR maps start in 0xA0–0xBF — so the reader sniffs
+    without a version byte, keeping old frames valid."""
+    if codec == "cbor":
+        if not _HAS_CBOR:
+            raise RuntimeError("cbor2 not installed (extras: memory/platform)")
+        body = cbor2.dumps(envelope, canonical=True)
+    else:
+        body = json.dumps(envelope, sort_keys=True,
+                          separators=(",", ":")).encode("utf-8")
     total = len(body) + 4
     return total.to_bytes(4, "big") + body
 
 
 def parse_frame(raw: bytes) -> dict:
+    """Reassemble a frame, auto-detecting JSON vs CBOR from the first body byte
+    (JSON `{` = 0x7B; CBOR map = 0xA0–0xBF). Old JSON frames parse unchanged."""
     total = int.from_bytes(raw[:4], "big")
     if total != len(raw):
         raise ValueError(f"frame length header {total} != actual {len(raw)}")
-    return json.loads(raw[4:].decode("utf-8"))
+    body = raw[4:]
+    if body[:1] == b"{":
+        return json.loads(body.decode("utf-8"))
+    if 0xA0 <= body[0] <= 0xBF:          # a CBOR map
+        if not _HAS_CBOR:
+            raise RuntimeError("frame is CBOR but cbor2 is not installed")
+        return cbor2.loads(body)
+    # fall back to JSON (e.g. a non-object payload) for backward compatibility
+    return json.loads(body.decode("utf-8"))
