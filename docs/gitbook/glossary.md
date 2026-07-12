@@ -50,6 +50,9 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   [Lenses](lenses.md)
 - **Earcon** — a short identity sound (wake, hark, hark_urgent, look, chime).
   [Earcons](reference/earcons.md)
+- **Emit capability** — a host power a lens may invoke (`ask`,
+  `translate`, `look`), usable only if declared in its signed `requires`.
+  [SDK](sdk.md#figments-have-a-contract-too)
 - **Figment** — a signed, budget-verified little program the Reality
   Compiler runs on the glass stage.
 - **Figment Golf** — build the described behavior in the fewest bytes;
@@ -93,8 +96,13 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
   particles, parallax. [Meridian](meridian.md)
 - **Meridian** — the HUD design language; "the display is a place, not a
   stage."
-- **Juno** — the voice: wake, commands, persona, and the user model.
-  [Juno](juno.md)
+- **Named slot** — `{slot:<name>}`: one of up to eight host-fed text
+  channels a lens can hold on one screen. [SDK](sdk.md#figments-have-a-contract-too)
+- **Output-shape rule** — ADR 0002: new text output is a figment by
+  default; a card must earn its bespoke renderer.
+  [SDK](sdk.md#the-output-shape-rule-adr-0002)
+- **Juno** — the assistant: wake, commands, persona, the user model — and
+  now a face (an animated character, labeled brand art). [Juno](juno.md)
 - **Maturity arc** — a fresh install earns its voice: OBSERVER, then
   APPRENTICE, then RESIDENT — demoted when over-dismissed.
   [Perception and memory](perception-memory.md#the-memory-substrate)

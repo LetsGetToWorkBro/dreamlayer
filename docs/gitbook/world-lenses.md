@@ -114,10 +114,20 @@ like every lens. (Tests: `test_docent.py`.)
 ## Rosetta Live — the ear, offline
 
 Rosetta the eye translates what you *look at*; **Rosetta Live**
-(`translate_heard`) translates what someone is *saying* — one caption card
-per utterance, in your language, **fully offline** when the Argos
-translation pack is installed. Nothing is recorded, nothing leaves, and
-incognito silences it entirely. (Tests: `test_rosetta_live.py`.)
+(`translate_heard`) translates what someone is *saying* — in your
+language, **fully offline** when the Argos translation pack is installed.
+Nothing is recorded, nothing leaves, and incognito silences it entirely.
+
+It was also the pilot for the platform's new
+[output-shape rule](sdk.md#the-output-shape-rule-adr-0002): instead of
+flashing one caption card per utterance, the translate path now deploys a
+single **Rosetta figment** — three named slots on one screen
+(`{slot:langs}` "ES → EN", `{slot:translation}` in primary type,
+`{slot:original}` beneath) — refreshed in place as each utterance lands,
+dismissed with a long press. One lens, reused across the whole
+conversation; the caption card survives only for the raw transcript role.
+(Tests: `test_rosetta_live.py`, plus the device-Lua stage drawing all
+three slots.)
 
 ## On the glass
 

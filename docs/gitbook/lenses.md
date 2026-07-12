@@ -93,8 +93,9 @@ real), hardening the model when a predicted event lands.
   a bearing card from your heading to where the remembered object lives.
 - **Docent** (`docent(query)`) — a venue's own knowledge, answered on its
   premises from its published collection, offline; and **Rosetta Live**
-  (`translate_heard`) — live speech translated to caption cards, offline
-  with the Argos pack. Both in
+  (`translate_heard`) — live speech translated on the glass, offline with
+  the Argos pack — now riding a single named-slot figment rather than
+  per-utterance caption cards. Both in
   [the World lenses chapter](world-lenses.md#docent--the-venue-speaks).
 - **Thread** (`thread(image)`) — steal color from the world: the palette
   of whatever you look at, quantized to six named swatches and kept as a

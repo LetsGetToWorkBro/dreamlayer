@@ -14,9 +14,13 @@ proofs, never executable trust.**
 
 [dreamlayer.app/gallery.html](https://dreamlayer.app/gallery.html) renders
 every published lens *live* — each card is a real canvas running the real
-interpreter, not a thumbnail. Every entry carries its share code, so
-**Remix** opens the full lens in [the builder](lens-builder.md) in one
-tap, and Share hands you the link and QR.
+interpreter, not a thumbnail, now drawn as a see-through glass lens over
+a fitting illustrative world (each showcase carries its own backdrop; the
+HUD is screen-blended over it, exactly the simulator's look). Every entry
+carries its share code, so **Remix** opens the full lens in
+[the builder](lens-builder.md) in one tap, and Share hands you the link
+and QR — and each card wears chips naming the host powers the lens
+declared, straight from its signed `requires`.
 
 Getting *into* the gallery is deliberately gated: "a submission is a
 request, never a publish." `POST /api/figments/submit` shape-checks the

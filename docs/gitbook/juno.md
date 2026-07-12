@@ -7,6 +7,30 @@ time — the thing that learns how to address you. It lives in the orchestrator
 
 ![Hey Juno — the wake moment](assets/demo/catalog/features/juno_wake/preview.webp)
 
+## Juno, embodied
+
+Juno now has a face — a small animated character (teal hair, four
+iridescent wings, a glowing orb ringed by memory glyphs) who appears in
+three places: floating behind the landing page's hero, greeting you on
+the phone app's first onboarding step, and resting in the corner of the
+Mac panel.
+
+![Juno on the landing hero](assets/site/juno_hero.png)
+
+One clip serves all three surfaces (a 10-second, 20 fps idle loop as a
+true-alpha animated WebP; the phone ships the identical bytes), and it
+degrades deliberately: reduced-motion swaps in a still, small panel
+windows hide her entirely, and mobile drops the shimmer and parallax for
+a cheap translate-only float. She is always decorative — marked hidden to
+screen readers, never intercepting a tap.
+
+One honesty note, because this book runs on the product's own standard:
+**Juno's character clip is brand art, not interface output.** It was
+produced by an external AI video/matting pipeline, not by the renderer
+that draws everything else in this book, and it is never presented as
+something the glasses display. The interface rule stands untouched; the
+character is the product's mascot, labeled as such here.
+
 ## Waking it
 
 Four wake sources, each independently toggleable (`set_wake_source`, mirrored

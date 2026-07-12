@@ -116,6 +116,47 @@ is stated in the module itself: in-process plugins' raw network/file
 access is not intercepted — the log is complete only for the isolated and
 mediated surfaces.
 
+## Figments have a contract too
+
+Plugins are not the only third-party surface with declared powers — the
+figment grammar grew its own, deliberately tiny pair:
+
+- **Named slots.** Beyond the default `{slot}`, a lens can address up to
+  **eight named channels** — `{slot:translation}`, `{slot:langs}` — each
+  still one 24-character line, still host-fed (a slot fill is a `text`
+  event, so it adds zero autonomous budget). The grammar is identical in
+  all three interpreters — Python stage, device Lua, browser `figment.js`
+  — and parity-tested across them.
+- **The emit-capability registry** (`reality_compiler/v2/capabilities.py`).
+  Three emit tags are host powers with plain-language summaries: `ask`,
+  `translate` (passive — the Brain fills a slot; the lens emits nothing),
+  and `look`. A lens must declare what it invokes in `meta.requires`,
+  which rides the signed canonical bytes — the figment twin of a plugin
+  manifest's `requires`. The verifier enforces declared-covers-emitted
+  before signing; the Brain re-checks at runtime and refuses an
+  undeclared power by name. Unregistered tags remain free local signals.
+  The safety card and every store listing surface the declared powers as
+  an "asks your Brain to" list.
+
+## The output-shape rule (ADR 0002)
+
+A second design record fixes *what shape new output ships in*:
+
+| The behavior is... | Ship it as | Why |
+|---|---|---|
+| a self-contained on-glass machine that owns the screen — text, state, host-fed slots, no novel geometry | **a figment** | zero renderer twin to maintain; budget-proven; signed; parity for free |
+| a transient overlay with custom geometry over whatever holds focus (the veil slam, a hark, the truth gauge) | **a card** | needs a bespoke draw and must not seize the stage |
+| a host power a lens invokes, not a screen | **an emit capability** | the reaction is host-side; the screen is whatever lens declared it |
+
+The headline: *new world-facing text output is a figment by default; a
+card is now the exception*, justified by custom geometry plus overlay
+semantics. Rosetta Live was the migration pilot
+([World lenses](world-lenses.md#rosetta-live--the-ear-offline)), the
+how-to lives in `docs/rc_v2/figment_migration.md` (step five is "retire
+the twin"), and the ADR names the next text-shaped candidates: the live
+caption, upcoming, here, and morning-brief cards. A test pins the
+decision — the docs' existence included.
+
 ## Your memory is a file
 
 The data-trinity commands treat your memory store as what it is — one

@@ -80,7 +80,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 2,278 passing at time of writing
+cd host-python && python -m pytest -q     # 2,302 passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain
