@@ -16,9 +16,10 @@ from __future__ import annotations
 from typing import Optional
 
 from .figment import (
-    END, Figment, Scene, TextLine, PulseSpec, Transition,
+    END, SELF, Figment, Scene, TextLine, PulseSpec, Transition,
     CounterDecl, CounterOp, Guard, MIN_SCENE_SEC,
 )
+from .capabilities import require
 
 # a calm end-of-phase pulse: the last few seconds breathe, never strobe
 _PULSE_WINDOW = 5.0
@@ -122,6 +123,37 @@ def interval_figment(work_sec: float, rest_sec: float,
         on={_STOP: Transition(target=END)},
     ))
     return fig
+
+
+def rosetta_figment(label: str = "Rosetta") -> Figment:
+    """Rosetta Live, as a figment (the migration pilot — see docs/rc_v2/
+    figment_migration.md). What someone is *saying*, in your language: the host
+    detects the source language and translates each utterance, then streams
+    three named slots onto the glass —
+
+        {slot:langs}        the language pair, e.g. "ES → EN"
+        {slot:translation}  the line in your language (primary)
+        {slot:original}     what they actually said (secondary)
+
+    It declares the ``translate`` capability: the figment shows the result, the
+    Brain does the work (capabilities.py). A hold dismisses it. Unlike the
+    SpokenCaptionCard it replaces on this path, the figment owns the screen and
+    needs no per-card renderer twin — the whitelisted stage draws it, pinned by
+    the same parity tests every figment gets."""
+    fig = Figment(name=label[:24] or "Rosetta", initial="listen")
+    fig.add_scene(Scene(
+        id="listen",
+        lines=[
+            TextLine("{slot:langs}", row=0, size="sm", color="accent_memory"),
+            TextLine("{slot:translation}", row=1, size="md"),
+            TextLine("{slot:original}", row=3, size="sm", color="text_secondary"),
+        ],
+        on={
+            "text": Transition(target=SELF),   # each utterance refreshes the slots
+            _STOP: Transition(target=END),
+        },
+    ))
+    return require(fig, "translate")
 
 
 def clock_figment(label: str = "Clock") -> Figment:

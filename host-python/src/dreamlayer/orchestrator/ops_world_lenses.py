@@ -285,15 +285,38 @@ class WorldLensOps:
     def translate_heard(self, text: str, target: str = "en", speaker: str = ""):
         """Rosetta Live (the ear, INNOVATION_SESSION 4.6): translate what someone
         is *saying* into your language — offline when the Argos backend is
-        installed — and show it as one subtitle card per utterance. Veil-gated;
-        nothing is recorded, the caption is a line of text. Returns the card sent,
-        or None while incognito."""
+        installed. As of the figment-migration pilot this rides a budget-proven
+        *figment* instead of a per-utterance SpokenCaptionCard: the Rosetta
+        figment owns the glasses stage and each utterance streams into its named
+        slots (langs / translation / original), so there is no per-card renderer
+        twin to keep in parity — the whitelisted stage draws it. Veil-gated;
+        nothing is recorded. Returns what was fed, or None while incognito.
+        (The SpokenCaptionCard lives on only for raw transcript, ops_conversation
+        — see docs/rc_v2/figment_migration.md.)"""
         if not self.privacy.allow_capture():
             return None
         res = self.rosetta.read(text, target=target)
-        card = cards.spoken_caption(speaker=speaker, text=res.translated)
-        self.bridge.send_card(card, event="caption")
-        return card
+        return self._rosetta_live_feed(res, speaker=speaker)
+
+    def _rosetta_live_feed(self, res, speaker: str = "") -> dict:
+        """Put the Rosetta figment on stage (once) and stream one utterance's
+        three named slots to it. Re-deploys if something else took the stage."""
+        from ..reality_compiler.v2 import native, transport
+        if (self._rosetta_figment_id is None
+                or self._active_figment != self._rosetta_figment_id):
+            fig = native.rosetta_figment()
+            self.bridge.send_raw(transport.put_envelope(fig))
+            self.bridge.send_raw(transport.swap_envelope(fig.id))
+            self._rosetta_figment_id = self._active_figment = fig.id
+        fid = self._rosetta_figment_id
+        langs = f"{res.source_lang.upper()} → {res.target_lang.upper()}"
+        for slot, val in (("langs", langs),
+                          ("translation", res.translated),
+                          ("original", res.source_text)):
+            self.bridge.send_raw(transport.text_envelope(fid, val, slot=slot))
+        return {"figment_id": fid, "langs": langs, "translation": res.translated,
+                "original": res.source_text, "speaker": speaker,
+                "surface": "figment"}
 
     def candor_hear(self, text: str, now: float | None = None) -> dict | None:
         """Candor Mirror (2.7): feed one of *your own* spoken lines to the self-

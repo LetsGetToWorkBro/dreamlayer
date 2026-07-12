@@ -200,6 +200,26 @@ class TestParityWithPython:
         lua["stage"].tick(0.05)
         assert shown_texts(lua) == ["K"]     # known slot never evicted
 
+    def test_rosetta_figment_named_slots_on_glass(self, lua):
+        # the migration pilot end-to-end: the Rosetta figment on the real Lua
+        # stage, fed three named slots, draws translation + original + langs —
+        # no SpokenCaptionCard, no per-card renderer twin
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.rosetta_figment()
+        put_and_swap(lua, fig)
+        py = Stage(fig)
+        for slot, val in (("langs", "ES → EN"),
+                          ("translation", "hello, thanks"),
+                          ("original", "hola, gracias")):
+            deliver(lua, transport.text_envelope(fig.id, val, slot))
+            py.inject("text:" + slot, val)
+        lua["stage"].tick(0.05)
+        shown = shown_texts(lua)
+        assert shown == [ln.text for ln in py.frame().lines]
+        assert "hello, thanks" in shown          # translation, primary line
+        assert "hola, gracias" in shown          # original, secondary line
+        assert "ES → EN" in shown                # the language pair eyebrow
+
     def test_guarded_loop_parity(self, lua):
         # 3 rounds of 1 s work — both stages end after exactly 3 cycles
         from dreamlayer.reality_compiler.v2 import (

@@ -167,6 +167,7 @@ class TestUnderNode:
         ("templates", "interval"), ("templates", "breathing"), ("templates", "checklist"),
         ("showcases", "coach"), ("showcases", "keep"), ("showcases", "mandala"),
         ("showcases", "whisper"), ("showcases", "world"), ("showcases", "fusion"),
+        ("showcases", "rosetta"),
     ])
     def test_js_python_interpreter_parity(self, kind, name):
         fig_json = subprocess.run(

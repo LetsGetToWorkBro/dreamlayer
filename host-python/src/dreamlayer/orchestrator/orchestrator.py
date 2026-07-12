@@ -185,6 +185,7 @@ class Orchestrator(
         self.social = SocialLens(privacy=self.privacy)
         self._last_person: dict | None = None    # who you last looked at (for on-the-spot notes)
         self._active_figment: str | None = None  # native timer/clock on the glasses stage
+        self._rosetta_figment_id: str | None = None  # Rosetta Live figment on stage
         # Figments the wearer killed on-glass (double long-press). The banish
         # gesture works with no host; when the event does arrive we honor it
         # durably. rc_deployer is an optional seam — whoever owns a vault-backed

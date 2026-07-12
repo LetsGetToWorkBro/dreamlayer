@@ -411,6 +411,24 @@
             glyph([[cx + w, cy - 0.05], [cx + w, cy + 0.05]], { color: col, width: "md" })];
   }
 
+  // Rosetta Live — what they're saying, in your language, AND what they said.
+  // The Brain detects + translates each utterance and streams three named slots
+  // (langs / translation / original). The figment-migration pilot's lens: it
+  // replaces the per-utterance SpokenCaptionCard on the translate path.
+  function shRosetta() {
+    var f = figment("Rosetta — live, both tongues", "listen");
+    addScene(f, scene("listen", {
+      lines: [line("{slot:langs}", { row: 0, size: "sm", color: "accent_memory" }),
+              line("{slot:translation}", { row: 1, size: "md", color: "text_primary" }),
+              line("{slot:original}", { row: 3, size: "sm", color: "text_secondary" })],
+      glyphs: [glyph([[0.16, 0.8], [0.36, 0.8]], { color: "accent_memory", width: "sm" }),
+               glyph([[0.64, 0.8], [0.84, 0.8]], { color: "accent_memory", width: "sm" })],
+      cadence: { in_s: 2, hold_s: 1, out_s: 2 },
+      on: { "text": { target: SELF }, "long": { target: END } },
+    }));
+    f.meta.requires = ["translate"];   // Brain streams the translation into the slots
+    return f;
+  }
   // Whisper — read/hear any language, live. Camera OCR + mic → Brain/cloud
   // translate → the words stream onto {slot}.
   function shWhisper() {
@@ -568,8 +586,8 @@
     return f;
   }
   var SHOWCASES = {
-    whisper: shWhisper, ask: shAsk, secondSight: shSecondSight, tethered: shTethered,
-    threshold: shThreshold, ember: shEmber, coach: shCoach,
+    whisper: shWhisper, rosetta: shRosetta, ask: shAsk, secondSight: shSecondSight,
+    tethered: shTethered, threshold: shThreshold, ember: shEmber, coach: shCoach,
     headControl: shHeadControl, mandala: shMandala, world: shWorld,
     keep: shKeep, fusion: shFusion,
   };
