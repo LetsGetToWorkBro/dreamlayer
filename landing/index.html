@@ -317,11 +317,18 @@ section{position:relative}
    otherwise saturates a phone's compositor and drags the whole hero to a low
    frame rate. A cheap translate-only float is all that stays. */
 @keyframes junoFloatLite{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-@media(max-width:900px){.hero .hero-juno{width:min(96vw,430px);left:50%;top:31%;
-  transform:translate(-50%,-50%);opacity:.6;filter:none}
+@media(max-width:900px){
+  /* Give Juno the top of the hero as a clear stage and drop the copy below her,
+     so she isn't buried under the text. Hide the decorative ring that otherwise
+     sits right on her face. */
+  .hero{align-items:end}
+  .hero-core{padding-bottom:5svh}
+  .hero-glass{display:none}
+  .hero .hero-juno{width:min(94vw,420px);left:50%;top:27%;
+    transform:translate(-50%,-50%);opacity:.82;filter:none}
   .hero .hero-juno .jshimmer{display:none}
   .hero .hero-juno .juno-media{animation:junoFloatLite 9s ease-in-out infinite}
-  .hero .hero-juno::before{filter:blur(12px);opacity:.5;animation:junoAura 6.5s ease-in-out infinite}}
+  .hero .hero-juno::before{filter:blur(12px);opacity:.6;animation:junoAura 6.5s ease-in-out infinite}}
 @media(prefers-reduced-motion:reduce){.hero .hero-juno .juno-media{animation:none}
   .hero .hero-juno::before{animation:none}.hero .hero-juno .jmote,.hero .hero-juno .jglyph,.hero .hero-juno .jshimmer{display:none}}
 .hero-ring{position:relative;width:clamp(150px,20svh,190px);height:clamp(150px,20svh,190px);margin:0 auto 40px}
