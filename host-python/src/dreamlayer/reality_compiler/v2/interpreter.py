@@ -19,6 +19,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
+from . import contracts
 from .figment import (
     Figment, Scene, Transition, GlyphSpec, SLOT_TOKEN_RE,
     END, SELF, EMIT_BURST, EMIT_REFILL_PER_S, MAX_TEXT_LEN, MAX_SLOTS,
@@ -102,8 +103,8 @@ class Stage:
     def _advance_clock(self, dt: float) -> None:
         self.clock += dt
         self.scene_elapsed += dt
-        self._tokens = min(float(EMIT_BURST),
-                           self._tokens + dt * EMIT_REFILL_PER_S)
+        self._tokens = contracts.refill_tokens(
+            self._tokens, dt, EMIT_REFILL_PER_S, float(EMIT_BURST))
         if self._battery_cooldown > 0:
             self._battery_cooldown -= dt
         if (self.fig.battery_below is not None
@@ -125,8 +126,9 @@ class Stage:
                 # bound the dict: accept the default slot and known names always;
                 # a new named slot only until MAX_SLOTS distinct named keys exist.
                 named = [k for k in self.slots if k]
-                if name == "" or name in self.slots or len(named) < MAX_SLOTS:
-                    self.slots[name] = text[:MAX_TEXT_LEN]
+                if contracts.accept_slot(
+                        name == "", name in self.slots, len(named), MAX_SLOTS):
+                    self.slots[name] = contracts.clamp_text(text, MAX_TEXT_LEN)
             return self._dispatch("text")
         return self._dispatch(event)
 
@@ -160,17 +162,11 @@ class Stage:
     def _take(self, t: Transition) -> None:
         for op in t.counter_ops:
             decl = self.fig.counters[op.counter]
-            cur = self.counters[op.counter]
-            if op.op == "inc":
-                cur += op.amount
-            elif op.op == "dec":
-                cur -= op.amount
-            else:
-                cur = op.amount
-            self.counters[op.counter] = max(decl.lo, min(decl.hi, cur))
+            self.counters[op.counter] = contracts.saturate(
+                self.counters[op.counter], op.op, op.amount, decl.lo, decl.hi)
         if t.emit is not None:
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
+            spent, self._tokens = contracts.spend_token(self._tokens)
+            if spent:
                 self.emits.append((self.clock, t.emit))
                 # 5.1 #5 ledger emits: a recorded emit is data you keep — the
                 # deployer drains `recorded` into the Vault performance log.
@@ -227,7 +223,7 @@ class Stage:
         out = SLOT_TOKEN_RE.sub(lambda m: self.slots.get(m.group(1), ""), out)
         for name, val in self.counters.items():
             out = out.replace("{count:%s}" % name, str(val))
-        return out[:MAX_TEXT_LEN]
+        return contracts.clamp_text(out, MAX_TEXT_LEN)
 
     def frame(self) -> DisplayFrame:
         if self.ended:
