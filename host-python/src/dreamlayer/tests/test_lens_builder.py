@@ -263,11 +263,15 @@ class TestBrainLensLoop:
         from dreamlayer.ai_brain.server import Brain
         return Brain(tmp_path)
 
-    def _deploy_slot_lens(self, brain):
-        # a minimal lens that shows {slot}: what the world-facing showcases are
+    def _deploy_slot_lens(self, brain, requires=("ask", "look", "translate")):
+        # a minimal lens that shows {slot}: what the world-facing showcases are.
+        # It declares the host powers it will be asked to exercise — the
+        # capability contract gates rc_emit on exactly this list.
         fig = Figment(name="Slotty", initial="show")
         fig.add_scene(F.Scene(id="show", lines=[F.TextLine("{slot}", row=1)],
                               on={"double": F.Transition(target=F.END)}))
+        if requires:
+            fig.meta["requires"] = list(requires)
         out = brain.rc_import(fig.to_dict())
         assert out["ok"] and brain._rc_active == out["id"]
         return out["id"]
@@ -319,6 +323,16 @@ class TestBrainLensLoop:
         assert brain.rc_emit("ask", "hi")["ok"] is False       # nothing on stage
         self._deploy_slot_lens(brain)
         assert brain.rc_emit("")["ok"] is False                # empty tag
+
+    def test_emit_refused_when_capability_undeclared(self, tmp_path):
+        # runtime twin of the author-time gate: a lens that never declared
+        # `ask` can't invoke it even if a forged emit reaches the Brain
+        brain = self._brain(tmp_path)
+        self._deploy_slot_lens(brain, requires=("look",))      # look only
+        r = brain.rc_emit("ask", "when is my lease due?")
+        assert r["ok"] is False and "capability" in r["error"]
+        # a free/local tag is still fine — it needs no declared power
+        assert brain.rc_emit("rep")["ok"] is True
 
 
 # -- the builder page itself --------------------------------------------------
@@ -551,6 +565,7 @@ class TestBuildRouteHttp:
             fig = Figment(name="Slotty", initial="show")
             fig.add_scene(F.Scene(id="show", lines=[F.TextLine("{slot}", row=1)],
                                   on={"double": F.Transition(target=F.END)}))
+            fig.meta["requires"] = ["look"]     # declares the power it invokes
             assert post("/dreamlayer/rc/import", {"figment": fig.to_dict()})["ok"]
             assert post("/dreamlayer/rc/feed", {"text": "Hola"})["text"] == "Hola"
             emitted = post("/dreamlayer/rc/emit", {"tag": "look", "text": "Monstera"})

@@ -32,6 +32,7 @@ from .figment import (
     MAX_GLYPHS, MAX_GLYPH_POINTS, MAX_SLOTS, named_slots,
     COLOR_TOKENS, SIZES, TICKS, END, SELF, _valid_event,
 )
+from .capabilities import emitted_capabilities, declared_requires, unknown_requires
 
 
 @dataclass
@@ -94,6 +95,18 @@ def verify(fig: Figment) -> BudgetReport:
     for name in slots:
         if len(name) > MAX_NAME_LEN:
             bad("slot_name", f"slot name {name!r} > {MAX_NAME_LEN} chars")
+    # -- capability contract: a lens must declare every host power it invokes
+    # via an emit (ask/look/…). It may also declare a power it consumes
+    # passively (translate fed into a slot), so declared ⊇ emitted. Unknown
+    # declarations are rejected so `requires` can't name a power that isn't
+    # real. Mirrors the plugin manifest's `requires` gate.
+    declared = set(declared_requires(fig))
+    for cap in emitted_capabilities(fig):
+        if cap not in declared:
+            bad("capability_undeclared",
+                f"lens emits {cap!r} but does not declare requires:[{cap}]")
+    for cap in unknown_requires(fig):
+        bad("capability_unknown", f"requires an unknown capability {cap!r}")
     if fig.initial not in fig.scenes:
         bad("initial", f"initial scene {fig.initial!r} does not exist")
     if fig.battery_below is not None and not 1 <= fig.battery_below <= 99:

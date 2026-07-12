@@ -38,6 +38,29 @@
     return Object.keys(seen).sort();
   }
   var END = "@end", SELF = "@self";
+  // Emit→reaction capabilities (mirror reality_compiler/v2/capabilities.py).
+  // A lens must declare in meta.requires every host power it invokes via an
+  // emit; it may also declare a power it consumes passively (translate fed
+  // into a slot). Tags not listed here are free/local emits (rep, round…).
+  var CAPABILITIES = {
+    ask: "answer a spoken question from your own memory (or the cloud, if you allow it)",
+    translate: "turn the words you hear into your language",
+    look: "name what the camera is looking at",
+  };
+  function _emittedCaps(fig) {
+    var seen = {};
+    (fig.scenes ? Object.keys(fig.scenes) : []).forEach(function (sid) {
+      var s = fig.scenes[sid], ts = (s.on_timeout || []).slice();
+      if (s.on) Object.keys(s.on).forEach(function (k) { ts.push(s.on[k]); });
+      ts.forEach(function (t) { if (t.emit && CAPABILITIES[t.emit]) seen[t.emit] = 1; });
+    });
+    return Object.keys(seen).sort();
+  }
+  function _declaredRequires(fig) {
+    return ((fig.meta && fig.meta.requires) || []).filter(function (r) {
+      return typeof r === "string" && CAPABILITIES[r];
+    });
+  }
   var COLORS = ["background", "surface", "text_primary", "text_secondary",
     "accent_memory", "accent_attention", "accent_success", "accent_error",
     "border_subtle", "status_paused"];
@@ -408,6 +431,7 @@
       cadence: { in_s: 2, hold_s: 1, out_s: 2 },
       on: { "text": { target: SELF }, "double": { target: END } },
     }));
+    f.meta.requires = ["translate"];   // Brain streams the translation into {slot}
     return f;
   }
   // Ask — your Brain, on glass. Double-tap & speak → emit "ask" → the Brain
@@ -437,6 +461,7 @@
       glyphs: [_check(0.5, 0.72, 0.05, "accent_success")],
       on: { "text": { target: SELF }, "double": { target: "idle" } },
     }));
+    f.meta.requires = ["ask"];    // emit "ask" → the Brain answers into {slot}
     return f;
   }
   // Tethered — feel a bonded partner across the world. Their presence fires
@@ -501,6 +526,7 @@
       glyphs: _reticle(0.5, 0.44, 0.11, "accent_success"),
       on: { "text": { target: SELF }, "long": { target: "look" }, "double": { target: END } },
     }));
+    f.meta.requires = ["look"];   // emit "look" → vision names it into {slot}
     return f;
   }
   // Ember — your own memory, handed back at the perfect moment. Standing where
@@ -658,6 +684,14 @@
     var slotNames = _namedSlots(fig);
     if (slotNames.length > B.MAX_SLOTS) bad("slot_count", slotNames.length + " named slots > max " + B.MAX_SLOTS);
     slotNames.forEach(function (n) { if (n.length > B.MAX_NAME_LEN) bad("slot_name", "slot name too long"); });
+    // capability contract: a lens must declare every host power it emits
+    var declared = {}; _declaredRequires(fig).forEach(function (r) { declared[r] = 1; });
+    _emittedCaps(fig).forEach(function (cap) {
+      if (!declared[cap]) bad("capability_undeclared", "lens emits '" + cap + "' but does not declare requires:['" + cap + "']");
+    });
+    ((fig.meta && fig.meta.requires) || []).forEach(function (r) {
+      if (!(typeof r === "string" && CAPABILITIES[r])) bad("capability_unknown", "requires an unknown capability '" + r + "'");
+    });
     if (ids.length && ids.indexOf(fig.initial) < 0) bad("initial", "start scene '" + fig.initial + "' doesn't exist");
     // Refuse the two glass-grammar features the browser engine (Stage) does not
     // model, so "valid here" strictly means "the preview/verifier runs it exactly
@@ -739,12 +773,20 @@
       if (s.pulse) worstHz = Math.max(worstHz, s.pulse.rate_hz);
       if (timed(s)) longest = Math.max(longest, s.duration_sec);
     });
+    // capabilities: host powers the lens delegates (ask/translate/look). The
+    // figment itself still can't touch the camera or your files — it emits a
+    // tag and the Brain does the work, but ONLY for a power the lens declared,
+    // so we name each one plainly rather than hide it behind "data, not code".
+    var asks = lensCapabilities(fig).map(function (c) {
+      return { name: c, summary: CAPABILITIES[c] };
+    });
     return {
       ok: rep.ok,
       violations: rep.violations,
+      asks: asks,
       cannot: [
         "flash faster than " + B.MAX_PULSE_HZ + " times a second — the eye-safety cap (this one: ≤ " + (worstHz || 0) + ")",
-        "reach the internet, your files, the camera, or the mic — it's data, not code",
+        "reach the internet, your files, the camera, or the mic on its own — it's data, not code (only the powers it names below, run by your Brain)",
         "show more than " + B.MAX_LINES + " lines at once",
         "block your exit — a press-and-hold always dismisses any lens",
       ],
@@ -1138,12 +1180,26 @@
       description: (meta.description || "").slice(0, 240),
       forwho: (meta.forwho || "").slice(0, 120),
       price: 0,                         // free; a paid tier is reserved (MARKETPLACE.md)
+      // the host powers this lens asks for, surfaced before you run it (each
+      // with its plain-words summary) — the figment twin of a plugin manifest's
+      // `requires`. Union of declared + emitted so nothing is hidden.
+      requires: lensCapabilities(fig).map(function (c) {
+        return { name: c, summary: CAPABILITIES[c] };
+      }),
       proof: {
         ok: card.ok,
         scenes: Object.keys(fig.scenes).length,
         cannot: card.cannot,
       },
     };
+  }
+  // Every host power a lens depends on: what it declares plus what it emits,
+  // deduped — so the gallery can never show fewer powers than it will invoke.
+  function lensCapabilities(fig) {
+    var seen = {};
+    _declaredRequires(fig).forEach(function (c) { seen[c] = 1; });
+    _emittedCaps(fig).forEach(function (c) { seen[c] = 1; });
+    return Object.keys(seen).sort();
   }
 
   return {
@@ -1155,6 +1211,7 @@
     newSceneId: newSceneId, setTransition: setTransition, removeTransition: removeTransition,
     listTransitions: listTransitions, graphEdges: graphEdges,
     validate: validate, safetyCard: safetyCard, canonical: canonical, listing: listing,
+    CAPABILITIES: CAPABILITIES, lensCapabilities: lensCapabilities,
     encodeShare: encodeShare, decodeShare: decodeShare, golfScore: golfScore,
     Stage: Stage, runChallenge: runChallenge, GOLF: GOLF,
     templates: { reps: tReps, focus: tFocus, score: tScore, breathing: tBreathing,

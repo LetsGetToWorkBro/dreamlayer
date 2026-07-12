@@ -719,6 +719,7 @@
     if(!card.ok){ h += card.violations.map(function(v){ return '<div class="viol">• '+esc(v.msg)+(v.scene?" ("+v.scene+")":"")+'</div>'; }).join(""); }
     else {
       if(card.will&&card.will.length){ h += '<div class="muted">This lens <b>WILL</b>:</div><ul class="will">'+card.will.map(function(w){return "<li>"+esc(w)+"</li>";}).join("")+'</ul>'; }
+      if(card.asks&&card.asks.length){ h += '<div class="muted">…and <b>ASKS YOUR BRAIN TO</b>:</div><ul class="will">'+card.asks.map(function(a){return "<li>"+esc(a.summary)+"</li>";}).join("")+'</ul>'; }
       h += '<div class="muted">…and <b>CANNOT</b>:</div><ul class="cannot">'+card.cannot.map(function(c){return "<li>"+esc(c)+"</li>";}).join("")+'</ul><div class="muted" style="margin-top:8px">Your device re-checks this — it is not a promise.</div>';
     }
     p.innerHTML = h;
