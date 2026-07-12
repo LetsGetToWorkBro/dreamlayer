@@ -21,3 +21,19 @@ jobs:
       - name: Lint the device Lua
         working-directory: halo-lua
         run: luacheck . --no-color
+
+  # selene is the actively-maintained (Rust) Lua linter; luacheck's last release
+  # was 2018. It runs as a second gate with the same std (halo-lua/dreamlayer.yml
+  # + selene.toml). Informational to start (continue-on-error) so a first run
+  # can't break main before the config is confirmed clean on the real binary;
+  # flip to blocking once green.
+  selene:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install selene
+        run: cargo install selene --locked
+      - name: Lint the device Lua (selene)
+        working-directory: halo-lua
+        run: selene .

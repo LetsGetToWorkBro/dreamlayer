@@ -1,0 +1,12 @@
+# selene standard-library definition for the device Lua.
+# Mirrors .luacheckrc's globals: the Halo runtime injects `frame` (read-only);
+# compat/frame_adapter.lua builds and owns `_G.halo`; main.lua exposes the tick
+# for the test harness. Everything else is base Lua 5.3.
+base: lua53
+globals:
+  frame:
+    property: read-only
+  halo:
+    property: new-fields
+  _dreamlayer_tick:
+    property: new-fields

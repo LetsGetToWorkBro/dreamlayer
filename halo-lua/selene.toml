@@ -1,0 +1,15 @@
+# selene (Rust, actively maintained) as a second, faster Lua gate alongside
+# luacheck — whose last release was 2018. Same bar: no undefined globals beyond
+# the device runtime's (dreamlayer.yml std), no shadowing. Cosmetic lints
+# (unused args in callback signatures, documented empty no-op arms) stay out of
+# the gate, mirroring .luacheckrc's ignore list. selene doesn't do whitespace/
+# line-length lints, so those luacheck ignores have no analogue here.
+std = "lua53+dreamlayer"
+
+exclude = ["display/cinema_v2_prototypes/*.lua"]
+
+[rules]
+# 211/212/213 in luacheck — intentional in callback signatures and prototypes
+unused_variable = "allow"
+# 542 in luacheck — documented no-op if arms
+empty_if = "allow"
