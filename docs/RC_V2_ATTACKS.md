@@ -156,3 +156,33 @@ proof system to share a spine. A bolted-on linter says "error: rate limit
 exceeded". **Moat: the beat-provenance thread through the whole stack —
 an architecture choice copiers must rebuild from zero, and the single
 biggest reason users trust the system enough to keep authoring.**
+
+---
+
+## D. The caps are *proven*, not just tested
+
+Every argument above leans on a handful of hard runtime caps: a counter
+never leaves its declared `[lo, hi]`; the emit token bucket never floods
+BLE (ceiling) nor goes negative (floor); no display line overruns the
+character budget; the named-slot dict never exceeds `MAX_SLOTS`. Unit tests
+show these hold *on the examples we thought of*. That is not the same as
+holding *for every input an adversary can reach* — and A4/A5/B3 are exactly
+"feed the interpreter an input we didn't think of."
+
+So the caps are lifted into pure functions carrying PEP-316 contracts
+(`reality_compiler/v2/contracts.py`: `saturate`, `spend_token`,
+`refill_tokens`, `clamp_text`, `accept_slot`). CrossHair symbolically
+executes each one over Z3 and **proves the postcondition holds for every
+input in the symbolic domain** — or returns a concrete counterexample. The
+interpreter imports and calls these exact functions (not a copy), and a
+wiring test pins the call sites, so the proof guards the real code path.
+
+- Discrete-logic caps (`saturate`, `spend_token`, `accept_slot`) get a full
+  CONFIRMED — an actual proof over all integers/booleans.
+- Float and symbolic-string caps (`refill_tokens`, `clamp_text`) live in SMT
+  theories CrossHair can't always fully close, so the honest claim there is
+  an exhaustive *refutation search that finds no violating input*.
+
+Tested: `test_contracts_crosshair.py` (proofs + a deliberately-broken
+contract the search must catch, so the suite can't pass vacuously). Runs in
+CI via the `verify` extra; skipped cleanly where `crosshair-tool` is absent.
