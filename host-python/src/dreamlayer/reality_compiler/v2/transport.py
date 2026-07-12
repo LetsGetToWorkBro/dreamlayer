@@ -9,7 +9,7 @@ message_types.lua — keep both files in sync):
     figment_put     {t, id, figment, hash}    stage stores it (inactive)
     figment_swap    {t, id}                   hot-swap between ticks
     figment_revoke  {t, id}                   stop + clear, go ambient
-    figment_text    {t, id, text}             push into the text slot
+    figment_text    {t, id, text, slot?}      push into the (named) text slot
     event           {t, name}                 a physical-world signal (e.g.
                                               "ble:3") delivered to the running
                                               figment's scene grammar
@@ -49,8 +49,14 @@ def revoke_envelope(figment_id: str) -> dict:
     return {"t": FIGMENT_REVOKE, "id": figment_id}
 
 
-def text_envelope(figment_id: str, text: str) -> dict:
-    return {"t": FIGMENT_TEXT, "id": figment_id, "text": text[:64]}
+def text_envelope(figment_id: str, text: str, slot: str = "") -> dict:
+    """Push host text into a figment's slot. The default (empty) slot fills
+    the `{slot}` token; a named slot fills `{slot:<name>}`. The stage bounds
+    both the value length and the number of distinct named slots."""
+    env = {"t": FIGMENT_TEXT, "id": figment_id, "text": text[:64]}
+    if slot:
+        env["slot"] = str(slot)[:32]
+    return env
 
 
 def event_envelope(name: str) -> dict:

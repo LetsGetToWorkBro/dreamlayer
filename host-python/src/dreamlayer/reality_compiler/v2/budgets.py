@@ -29,7 +29,7 @@ from .figment import (
     MAX_SCENES, MAX_COUNTERS, MAX_LINES, MAX_TEXT_LEN, MAX_COUNTER_OPS,
     MAX_BRANCHES, MAX_PULSE_HZ, MIN_SCENE_SEC, MAX_SCENE_SEC,
     EMIT_REFILL_PER_S, MAX_EMIT_TAG_LEN, MAX_NAME_LEN,
-    MAX_GLYPHS, MAX_GLYPH_POINTS,
+    MAX_GLYPHS, MAX_GLYPH_POINTS, MAX_SLOTS, named_slots,
     COLOR_TOKENS, SIZES, TICKS, END, SELF, _valid_event,
 )
 
@@ -88,6 +88,12 @@ def verify(fig: Figment) -> BudgetReport:
         bad("scene_count", f"{len(fig.scenes)} scenes > max {MAX_SCENES}")
     if len(fig.counters) > MAX_COUNTERS:
         bad("counter_count", f"{len(fig.counters)} counters > max {MAX_COUNTERS}")
+    slots = named_slots(fig)
+    if len(slots) > MAX_SLOTS:
+        bad("slot_count", f"{len(slots)} named slots > max {MAX_SLOTS}")
+    for name in slots:
+        if len(name) > MAX_NAME_LEN:
+            bad("slot_name", f"slot name {name!r} > {MAX_NAME_LEN} chars")
     if fig.initial not in fig.scenes:
         bad("initial", f"initial scene {fig.initial!r} does not exist")
     if fig.battery_below is not None and not 1 <= fig.battery_below <= 99:

@@ -14,7 +14,7 @@
 --   figment_put    {id, figment, hash}  -> stored inactive, ack'd
 --   figment_swap   {id}                 -> becomes active between ticks
 --   figment_revoke {id}                 -> stopped + cleared, ack'd
---   figment_text   {id, text}           -> fills the {slot} token
+--   figment_text   {id, text, slot?}    -> fills {slot} (or {slot:<slot>})
 --
 -- Dynamic clamps (defense in depth — the host proves these statically
 -- before signing, the stage enforces them again at runtime):
@@ -30,6 +30,7 @@ local MAX_SCENES     = 32
 local MAX_COUNTERS   = 8
 local MAX_LINES      = 5
 local MAX_TEXT_LEN   = 24
+local MAX_SLOTS      = 8      -- distinct {slot:<name>} names (excl. default)
 local MAX_PULSE_HZ   = 4.0
 local MIN_SCENE_SEC  = 0.5
 local EMIT_BURST     = 5
@@ -108,7 +109,9 @@ local function _start(fig)
   _active = fig
   _st = {
     counters = {},
-    slot = "",
+    -- host-pushed text. "" is the default {slot}; named {slot:<name>} slots
+    -- share the table, bounded to MAX_SLOTS distinct named keys.
+    slots = { [""] = "" },
     tokens = EMIT_BURST,
     battery_cd = 0,
     ended = false,
@@ -191,15 +194,28 @@ end
 -- ---------------------------------------------------------------------------
 
 -- ev: "single" | "double" | "long" | "imu_tap" | "ble" | "ble:<n>" |
---     "text" | "battery_low"
+--     "text" | "text:<slot>" | "battery_low"
+-- A "text[:<slot>]" event fills the (named) host slot and fires the base
+-- "text" trigger — mirrors interpreter.py's inject().
 function M.on_event(ev, text)
   if not _active or _st.ended then return false end
-  if ev == "text" and text then
-    _st.slot = string.sub(tostring(text), 1, MAX_TEXT_LEN)
+  local dispatch_ev = ev
+  if ev == "text" or string.sub(ev, 1, 5) == "text:" then
+    local name = string.sub(ev, 1, 5) == "text:" and string.sub(ev, 6) or ""
+    if text then
+      -- bound the table: default slot and known names always; a new named
+      -- slot only until MAX_SLOTS distinct named keys exist.
+      local n = 0
+      for k in pairs(_st.slots) do if k ~= "" then n = n + 1 end end
+      if name == "" or _st.slots[name] ~= nil or n < MAX_SLOTS then
+        _st.slots[name] = string.sub(tostring(text), 1, MAX_TEXT_LEN)
+      end
+    end
+    dispatch_ev = "text"
   end
   local scene = _active.scenes[_st.current]
-  local t = (scene.on or {})[ev]
-  if not t and string.sub(ev, 1, 4) == "ble:" then
+  local t = (scene.on or {})[dispatch_ev]
+  if not t and string.sub(dispatch_ev, 1, 4) == "ble:" then
     t = (scene.on or {})["ble"]
   end
   if not t then return false end
@@ -230,7 +246,10 @@ local function _resolve(scene, content)
   out = string.gsub(out, "{remaining_s}", tostring(math.ceil(remaining)))
   out = string.gsub(out, "{elapsed}", _fmt_clock(elapsed))
   out = string.gsub(out, "{elapsed_ms}", tostring(math.floor(elapsed * 1000)))
-  out = string.gsub(out, "{slot}", _st.slot or "")
+  out = string.gsub(out, "{slot}", _st.slots[""] or "")
+  out = string.gsub(out, "{slot:(%w+)}", function(name)
+    return _st.slots[name] or ""
+  end)
   for name, val in pairs(_st.counters) do
     out = string.gsub(out, "{count:" .. name .. "}", tostring(val))
   end
@@ -382,7 +401,7 @@ end
 
 local function _on_text(msg)
   if _active and (_active.id == msg.id or msg.id == nil) then
-    M.on_event("text", msg.text)
+    M.on_event(msg.slot and ("text:" .. msg.slot) or "text", msg.text)
   end
 end
 

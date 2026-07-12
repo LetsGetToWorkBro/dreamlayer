@@ -23,7 +23,20 @@
     MAX_NAME_LEN: 40, MAX_BRANCHES: 4,
     MAX_GLYPHS: 6, MAX_GLYPH_POINTS: 24,
     MAX_COUNTER_OPS: 4, MAX_EMIT_TAG_LEN: 16, COUNTER_HI: 9999,
+    MAX_SLOTS: 8,
   };
+  // {slot:<name>} — a named host slot (default {slot} is name "").
+  var SLOT_TOKEN_RE = /\{slot:(\w+)\}/g;
+  function _namedSlots(fig) {
+    var seen = {};
+    (fig.scenes ? Object.keys(fig.scenes) : []).forEach(function (sid) {
+      ((fig.scenes[sid].lines) || []).forEach(function (ln) {
+        var m, re = /\{slot:(\w+)\}/g;
+        while ((m = re.exec(String(ln.content || "")))) seen[m[1]] = 1;
+      });
+    });
+    return Object.keys(seen).sort();
+  }
   var END = "@end", SELF = "@self";
   var COLORS = ["background", "surface", "text_primary", "text_secondary",
     "accent_memory", "accent_attention", "accent_success", "accent_error",
@@ -642,6 +655,9 @@
     if (ids.length === 0) bad("empty", "a lens needs at least one scene");
     if (ids.length > B.MAX_SCENES) bad("scene_count", ids.length + " scenes > max " + B.MAX_SCENES);
     if (Object.keys(fig.counters || {}).length > B.MAX_COUNTERS) bad("counter_count", "too many counters");
+    var slotNames = _namedSlots(fig);
+    if (slotNames.length > B.MAX_SLOTS) bad("slot_count", slotNames.length + " named slots > max " + B.MAX_SLOTS);
+    slotNames.forEach(function (n) { if (n.length > B.MAX_NAME_LEN) bad("slot_name", "slot name too long"); });
     if (ids.length && ids.indexOf(fig.initial) < 0) bad("initial", "start scene '" + fig.initial + "' doesn't exist");
     // Refuse the two glass-grammar features the browser engine (Stage) does not
     // model, so "valid here" strictly means "the preview/verifier runs it exactly
@@ -817,7 +833,7 @@
     this.counters = {};
     var cs = fig.counters || {};
     Object.keys(cs).forEach((function (n) { this.counters[n] = cs[n].start || 0; }).bind(this));
-    this.slot = ""; this.emits = []; this.recorded = []; this.dropped = 0;
+    this.slots = { "": "" }; this.emits = []; this.recorded = []; this.dropped = 0;
     this.ended = false; this.clock = 0; this._tokens = EMIT_BURST;
     this.scene_elapsed = 0; this._lastElapsed = 0;
     this._enter(fig.initial);
@@ -848,7 +864,15 @@
   };
   Stage.prototype.inject = function (event, text) {
     if (this.ended) return false;
-    if (event === "text" && text != null) this.slot = String(text).slice(0, B.MAX_TEXT_LEN);
+    if (event === "text" || event.indexOf("text:") === 0) {
+      var name = event.indexOf("text:") === 0 ? event.slice(5) : "";
+      if (text != null) {
+        var named = Object.keys(this.slots).filter(function (k) { return k; });
+        if (name === "" || this.slots[name] != null || named.length < B.MAX_SLOTS)
+          this.slots[name] = String(text).slice(0, B.MAX_TEXT_LEN);
+      }
+      return this._dispatch("text");
+    }
     return this._dispatch(event);
   };
   Stage.prototype._dispatch = function (event) {
@@ -899,7 +923,8 @@
       .replace(/\{remaining_s\}/g, String(Math.ceil(this.remaining())))
       .replace(/\{elapsed\}/g, _fmtClock(el))
       .replace(/\{elapsed_ms\}/g, String(Math.floor(el * 1000)))
-      .replace(/\{slot\}/g, this.slot)
+      .replace(/\{slot\}/g, this.slots[""] || "")
+      .replace(SLOT_TOKEN_RE, function (_, n) { return self.slots[n] != null ? self.slots[n] : ""; })
       .replace(/\{count:(\w+)\}/g, function (_, n) { return String(self.counters[n] != null ? self.counters[n] : 0); });
     return out.slice(0, B.MAX_TEXT_LEN);
   };

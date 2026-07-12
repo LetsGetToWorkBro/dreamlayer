@@ -207,6 +207,58 @@ class TestHotSwapRevoke:
         assert st.frame().ended
 
 
+def slots_fig() -> Figment:
+    fig = Figment(name="s", initial="a")
+    a = fig.add_scene(Scene(id="a", lines=[
+        TextLine("{slot}", row=0),
+        TextLine("{slot:es}", row=1),
+        TextLine("{slot:en}", row=2),
+    ]))
+    a.on["text"] = Transition(target=SELF)
+    return fig
+
+
+class TestNamedSlots:
+    def test_default_slot(self):
+        st = Stage(slots_fig())
+        assert st.inject("text", "hi")
+        assert st.frame().lines[0].text == "hi"
+
+    def test_named_slots_independent(self):
+        st = Stage(slots_fig())
+        st.inject("text:es", "hola")
+        st.inject("text:en", "hello")
+        lines = [ln.text for ln in st.frame().lines]
+        assert lines == ["", "hola", "hello"]
+
+    def test_default_and_named_coexist(self):
+        st = Stage(slots_fig())
+        st.inject("text", "d")
+        st.inject("text:es", "e")
+        lines = [ln.text for ln in st.frame().lines]
+        assert lines == ["d", "e", ""]
+
+    def test_unknown_named_slot_empty(self):
+        st = Stage(slots_fig())
+        # {slot:en} never filled → renders empty, never the literal token
+        st.inject("text:es", "hola")
+        assert st.frame().lines[2].text == ""
+
+    def test_named_slot_cap(self):
+        st = Stage(slots_fig())
+        from dreamlayer.reality_compiler.v2.figment import MAX_SLOTS
+        for i in range(MAX_SLOTS + 4):
+            st.inject("text:s%d" % i, "v")
+        named = [k for k in st.slots if k]
+        assert len(named) == MAX_SLOTS
+
+    def test_text_len_bound(self):
+        st = Stage(slots_fig())
+        st.inject("text:es", "x" * 100)
+        from dreamlayer.reality_compiler.v2.figment import MAX_TEXT_LEN
+        assert len(st.slots["es"]) == MAX_TEXT_LEN
+
+
 class TestRandomDuration:
     def test_seeded_reproducible(self):
         fig = Figment(name="t", initial="a")

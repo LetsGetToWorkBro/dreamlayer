@@ -163,6 +163,43 @@ class TestParityWithPython:
                      if sent[i + 1]["t"] == "figment_event"]
         assert len(lua_emits) == len(py.emits) == 5     # burst cap on both
 
+    def test_named_slots_parity(self, lua):
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, Transition, SELF, TextLine,
+        )
+        fig = Figment(name="rosetta", initial="a")
+        a = fig.add_scene(Scene(id="a", lines=[
+            TextLine("{slot}", row=0),
+            TextLine("{slot:es}", row=1),
+            TextLine("{slot:en}", row=2),
+        ]))
+        a.on["text"] = Transition(target=SELF)
+        put_and_swap(lua, fig)
+        py = Stage(fig)
+
+        for slot, text in [("", "d"), ("es", "hola"), ("en", "hello")]:
+            deliver(lua, transport.text_envelope(fig.id, text, slot))
+            py.inject(("text:" + slot) if slot else "text", text)
+        lua["stage"].tick(0.05)
+        assert shown_texts(lua) == [ln.text for ln in py.frame().lines]
+        assert shown_texts(lua) == ["d", "hola", "hello"]
+
+    def test_named_slot_cap_parity(self, lua):
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, Transition, SELF, TextLine,
+        )
+        from dreamlayer.reality_compiler.v2.figment import MAX_SLOTS
+        fig = Figment(name="cap", initial="a")
+        a = fig.add_scene(Scene(id="a", lines=[TextLine("{slot:keep}", row=0)]))
+        a.on["text"] = Transition(target=SELF)
+        put_and_swap(lua, fig)
+        # fill 'keep' first, then overflow with new names: 'keep' survives
+        deliver(lua, transport.text_envelope(fig.id, "K", "keep"))
+        for i in range(MAX_SLOTS + 4):
+            deliver(lua, transport.text_envelope(fig.id, "v", "x%d" % i))
+        lua["stage"].tick(0.05)
+        assert shown_texts(lua) == ["K"]     # known slot never evicted
+
     def test_guarded_loop_parity(self, lua):
         # 3 rounds of 1 s work — both stages end after exactly 3 cycles
         from dreamlayer.reality_compiler.v2 import (

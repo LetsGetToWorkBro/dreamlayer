@@ -132,6 +132,7 @@ class TestUnderNode:
     _PARITY_SCRIPT = [
         ["step", 1], ["inject", "single"], ["inject", "double"], ["inject", "long"],
         ["inject", "imu:nod"], ["inject", "imu:shake"], ["inject", "text", "HOLA"],
+        ["inject", "text:es", "HOLA-ES"], ["inject", "text:en", "HI-EN"],
         ["step", 5], ["inject", "place:enter"], ["inject", "bond:near"],
         ["inject", "ble:3"], ["step", 30], ["step", 300],
     ]

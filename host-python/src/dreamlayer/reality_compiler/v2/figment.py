@@ -21,9 +21,24 @@ signatures are stable across host and device.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
+
+# `{slot:<name>}` — a named host slot. `\w+` keeps names to identifier chars.
+SLOT_TOKEN_RE = re.compile(r"\{slot:(\w+)\}")
+
+
+def named_slots(fig: "Figment") -> list[str]:
+    """Distinct named slots a lens addresses, inferred from its `{slot:<name>}`
+    tokens (the default unnamed `{slot}` is always available and not listed).
+    This is the lens' slot 'declaration' — there is no separate schema field."""
+    seen: set[str] = set()
+    for scene in fig.scenes.values():
+        for ln in scene.lines:
+            seen.update(SLOT_TOKEN_RE.findall(ln.content or ""))
+    return sorted(seen)
 
 # ---------------------------------------------------------------------------
 # Hard limits (mirrored by the Lua stage's dynamic clamps)
@@ -42,6 +57,15 @@ EMIT_BURST        = 5      # BLE token bucket capacity
 EMIT_REFILL_PER_S = 1.0    # BLE token bucket refill
 MAX_EMIT_TAG_LEN  = 16
 MAX_NAME_LEN      = 40
+# Named host slots. `{slot}` is the default (unnamed) slot; `{slot:<name>}`
+# addresses a named one, so a Brain-fed lens can stream several distinct
+# fields (e.g. a translation + its original) instead of packing one string.
+# Slot NAMES are inferred from the tokens the lens uses — there is no separate
+# declaration — and the count of distinct named slots is capped here and proven
+# at author time. Each slot value is still a single line clamped to MAX_TEXT_LEN,
+# and feeding a slot is a host-driven "text" event (no autonomous/emit cost), so
+# the BLE-flood bound is unchanged.
+MAX_SLOTS         = 8      # distinct {slot:<name>} names per lens (excl. default)
 
 # Paint layer (INNOVATION_SESSION 5, "draw on your lens"): a scene may carry
 # a handful of bounded vector strokes. Pure decoration — no time or emit cost —
@@ -117,7 +141,8 @@ def _valid_event(name: str) -> bool:
 @dataclass
 class TextLine:
     """One display line. `content` may use the tokens
-    {remaining} {remaining_s} {elapsed} {elapsed_ms} {count:<name>} {slot}."""
+    {remaining} {remaining_s} {elapsed} {elapsed_ms} {count:<name>} {slot}
+    {slot:<name>} (a named host slot; {slot} is the default one)."""
     content: str
     row: int = 0                 # 0 (top) .. MAX_LINES-1
     size: str = "md"

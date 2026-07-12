@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .figment import (
-    Figment, Scene, Transition, GlyphSpec,
-    END, SELF, EMIT_BURST, EMIT_REFILL_PER_S, MAX_TEXT_LEN,
+    Figment, Scene, Transition, GlyphSpec, SLOT_TOKEN_RE,
+    END, SELF, EMIT_BURST, EMIT_REFILL_PER_S, MAX_TEXT_LEN, MAX_SLOTS,
 )
 
 
@@ -64,7 +64,9 @@ class Stage:
         self.battery_level = battery_level
         self.counters: dict[str, int] = {
             n: c.start for n, c in fig.counters.items()}
-        self.slot: str = ""              # host-pushed text ("text" event)
+        # Host-pushed text ("text" event). "" is the default {slot}; named
+        # {slot:<name>} slots share the dict. Bounded to MAX_SLOTS named keys.
+        self.slots: dict[str, str] = {"": ""}
         self.emits: list[tuple[float, str]] = []   # (t, tag) delivered
         self.recorded: list[tuple[float, str]] = []  # (t, tag) flagged record=True
         self.dropped_emits: int = 0      # clamped by token bucket
@@ -111,12 +113,21 @@ class Stage:
             self._dispatch("battery_low")
 
     def inject(self, event: str, text: Optional[str] = None) -> bool:
-        """Deliver an external event ("single", "double", "long",
-        "imu_tap", "ble", "ble:<n>", "text"). Returns True if handled."""
+        """Deliver an external event ("single", "double", "long", "imu_tap",
+        "ble", "ble:<n>", "text", "text:<slot>"). A "text[:<slot>]" event feeds
+        the (named) host slot and fires the base "text" trigger. Returns True if
+        handled."""
         if self.ended:
             return False
-        if event == "text" and text is not None:
-            self.slot = text[:MAX_TEXT_LEN]
+        if event == "text" or event.startswith("text:"):
+            name = event[5:] if event.startswith("text:") else ""
+            if text is not None:
+                # bound the dict: accept the default slot and known names always;
+                # a new named slot only until MAX_SLOTS distinct named keys exist.
+                named = [k for k in self.slots if k]
+                if name == "" or name in self.slots or len(named) < MAX_SLOTS:
+                    self.slots[name] = text[:MAX_TEXT_LEN]
+            return self._dispatch("text")
         return self._dispatch(event)
 
     def _dispatch(self, event: str) -> bool:
@@ -212,7 +223,8 @@ class Stage:
                .replace("{remaining_s}", str(int(math.ceil(self.remaining()))))
                .replace("{elapsed}", _fmt_clock(elapsed))
                .replace("{elapsed_ms}", str(int(elapsed * 1000)))
-               .replace("{slot}", self.slot))
+               .replace("{slot}", self.slots.get("", "")))
+        out = SLOT_TOKEN_RE.sub(lambda m: self.slots.get(m.group(1), ""), out)
         for name, val in self.counters.items():
             out = out.replace("{count:%s}" % name, str(val))
         return out[:MAX_TEXT_LEN]

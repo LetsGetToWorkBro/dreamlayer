@@ -114,8 +114,9 @@ class StageDeployer:
         return DeployRecord(True, self._mode(), "revoke",
                             f"figment {figment_id} revoked", envelopes)
 
-    def push_text(self, figment_id: str, text: str) -> DeployRecord:
-        envelopes = [transport.text_envelope(figment_id, text)]
+    def push_text(self, figment_id: str, text: str,
+                  slot: str = "") -> DeployRecord:
+        envelopes = [transport.text_envelope(figment_id, text, slot)]
         self._send(envelopes)
         return DeployRecord(True, self._mode(), "text", "", envelopes)
 
