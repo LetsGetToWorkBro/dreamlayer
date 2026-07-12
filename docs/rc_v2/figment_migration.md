@@ -99,10 +99,27 @@ which is pinned in parity with `interpreter.py` and `figment.js`.
 
 ## What has migrated / what stays
 
-- **Migrated:** Rosetta Live (translate path) → `rosetta_figment`. Timers,
-  intervals, clock were already figments.
-- **Good next candidates** (text-shaped, screen-owning): `LiveCaptionCard`,
-  `UpcomingCard`, `HereCard`, `MorningBriefCard`.
+- **Migrated:** Rosetta Live (translate path) → `rosetta_figment`; the morning
+  brief (wake path) → `morning_brief_figment` (named slots + a separator glyph,
+  auto-clears after its window). Timers, intervals, clock were already figments.
+  In both cases the live product path runs on the stage; the original card is
+  kept only where a *second, non-product* consumer still needs it (the
+  SpokenCaptionCard for transcript; the MorningBriefCard as a cinema-golden /
+  demo showcase asset). Deleting a card's bespoke renderer pair outright is a
+  follow-up gated on that showcase decision — see below.
+- **Good next candidates** (text-shaped, screen-owning): `LiveCaptionCard`
+  (already on the shared layout renderer, so migrating it retires a card *type*
+  but no bespoke twin), `UpcomingCard`, `HereCard`.
+
+### On actually deleting a renderer twin
+
+Migrating the *live path* is safe and reversible. **Deleting** a card's bespoke
+Python+Lua renderer pair is a second, heavier step, because the cinema-golden
+regression set (`export_cinema_v2_golden.py`) renders every card type and the
+demo tour uses several as beats. So a full twin-deletion must also: remove the
+type from `SOLID_CARDS` + its committed golden PNG + the expected-golden list,
+and repoint any demo/catalog use. Do that only when the card has no remaining
+non-product consumer, or with an explicit call to drop it from the showcase.
 - **Stays a card** (custom geometry and/or overlay-over-focus): `PrivacyVeilCard`,
   `HarkCard`, the `TruthLensCard`/`FactCheckCard` gauges, `GlanceChoiceCard`,
   and `SpokenCaptionCard` in its remaining transcript role.

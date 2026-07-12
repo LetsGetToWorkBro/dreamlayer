@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .figment import (
-    END, SELF, Figment, Scene, TextLine, PulseSpec, Transition,
+    END, SELF, Figment, Scene, TextLine, PulseSpec, Transition, GlyphSpec,
     CounterDecl, CounterOp, Guard, MIN_SCENE_SEC,
 )
 from .capabilities import require
@@ -154,6 +154,38 @@ def rosetta_figment(label: str = "Rosetta") -> Figment:
         },
     ))
     return require(fig, "translate")
+
+
+def morning_brief_figment(label: str = "Morning brief") -> Figment:
+    """The day's brief as a figment (figment-migration, second card off the card
+    path — see docs/rc_v2/figment_migration.md). On wake the host streams the
+    Brain's synthesis + the first couple of points into named slots:
+
+        YOUR DAY            (a fixed eyebrow, with a separator rule beneath it)
+        {slot:synthesis}    the one-line read of the day (primary)
+        {slot:point1/2}     the first two points (secondary)
+
+    It owns the stage for ``dismiss`` seconds then clears itself, exactly like
+    the SpokenCaptionCard→figment pilot; a hold dismisses it early. It needs no
+    capability — the content is your own day, synthesized locally, not an
+    external power. Drawn by the whitelisted stage, so no per-card renderer twin."""
+    fig = Figment(name=label[:24] or "Morning brief", initial="brief")
+    fig.add_scene(Scene(
+        id="brief", duration_sec=8.0,
+        lines=[
+            TextLine("YOUR DAY", row=0, size="sm", color="accent_memory"),
+            TextLine("{slot:synthesis}", row=1, size="md"),
+            TextLine("{slot:point1}", row=3, size="sm", color="text_secondary"),
+            TextLine("{slot:point2}", row=4, size="sm", color="text_secondary"),
+        ],
+        # a thin separator rule under the eyebrow (the paint layer — pure
+        # decoration, drawn beneath the text), matching the card's separator
+        glyphs=[GlyphSpec(points=[(0.19, 0.30), (0.81, 0.30)],
+                          color="border_subtle", width="sm")],
+        on_timeout=[Transition(target=END)],   # auto-clears after its window
+        on={"long": Transition(target=END)},   # a hold dismisses it early
+    ))
+    return fig
 
 
 def clock_figment(label: str = "Clock") -> Figment:

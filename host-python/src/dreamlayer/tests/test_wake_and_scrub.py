@@ -19,17 +19,31 @@ def _cards(br, event=None):
 
 # -- brief to the glasses at wake --------------------------------------------
 
-def test_wake_flashes_the_latest_brief():
+def _brief_slots(br, fid):
+    slots = {}
+    for f in br.raw:
+        if f.get("t") == "figment_text" and f.get("id") == fid:
+            slots[f.get("slot", "")] = f.get("text")
+    return slots
+
+
+def test_wake_streams_the_latest_brief_into_a_figment():
     br = FakeBridge()
     orc = Orchestrator(br)
     orc.brain_url = "http://mac.local:7777"          # paired
     fake_get = lambda url, token="": {
         "text": "Two meetings; lease due Friday.",
         "bullets": ["Standup 9am", "1 new text"], "ts": time.time()}
-    card = orc.wake(http_get=fake_get)
-    assert card and card["type"] == "MorningBriefCard"
-    assert "lease" in card["primary"]
-    assert _cards(br)[-1]["type"] == "MorningBriefCard"
+    out = orc.wake(http_get=fake_get)
+    assert out and out["surface"] == "figment"
+    # the morning-brief figment was put + swapped onto the stage
+    assert any(f.get("t") == "figment_put" for f in br.raw)
+    assert orc._active_figment == out["figment_id"]
+    # and the day's synthesis + first points filled the named slots
+    slots = _brief_slots(br, out["figment_id"])
+    assert "lease" in slots["synthesis"]
+    assert slots["point1"] == "Standup 9am" and slots["point2"] == "1 new text"
+    assert _cards(br) == []                           # no card on this path anymore
 
 
 def test_wake_is_silent_without_a_brief_or_brain():

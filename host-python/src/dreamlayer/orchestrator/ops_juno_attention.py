@@ -217,8 +217,12 @@ class JunoAttentionOps:
     def wake(self, http_get=None) -> dict | None:
         """Put the Halo on → the day's brief is waiting. Fetches the brief the
         Brain's scheduler last delivered (GET /dreamlayer/brief/latest on the
-        paired Mac mini) and flashes it as a HUD card. Veil-gated; silent if
-        there's no brief or no Mac mini. `http_get` defaults to urllib."""
+        paired Mac mini) and flashes it. As of the figment-migration this rides a
+        budget-proven *figment* instead of a MorningBriefCard: the brief owns the
+        stage, its synthesis + first points stream into named slots, and it
+        clears itself after its window (no per-card renderer twin — the
+        whitelisted stage draws it). Veil-gated; silent without a brief or Mac
+        mini. Returns what was fed, or None. `http_get` defaults to urllib."""
         if not self.privacy.allow_capture() or not self.brain_url:
             return None
         get = http_get or _default_http_get
@@ -229,9 +233,24 @@ class JunoAttentionOps:
             return None
         if not latest or not latest.get("ts"):
             return None
-        card = cards.morning_brief(latest.get("text", ""), latest.get("bullets"))
-        self.bridge.send_card(card, event="wake")
-        return card
+        return self._brief_to_figment(latest)
+
+    def _brief_to_figment(self, latest: dict) -> dict:
+        """Put the morning-brief figment on stage and stream the day's synthesis
+        and first two points into its named slots."""
+        from ..reality_compiler.v2 import native, transport
+        fig = native.morning_brief_figment()
+        self.bridge.send_raw(transport.put_envelope(fig))
+        self.bridge.send_raw(transport.swap_envelope(fig.id))
+        self._active_figment = fig.id
+        synthesis = str(latest.get("text") or "A clear morning.")
+        points = [str(b) for b in (latest.get("bullets") or []) if b][:2]
+        for slot, val in (("synthesis", synthesis),
+                          ("point1", points[0] if points else ""),
+                          ("point2", points[1] if len(points) > 1 else "")):
+            self.bridge.send_raw(transport.text_envelope(fig.id, val, slot=slot))
+        return {"figment_id": fig.id, "synthesis": synthesis, "points": points,
+                "surface": "figment"}
 
 
     def hark(self, clue: str, detail: str = "", importance: str = "normal",

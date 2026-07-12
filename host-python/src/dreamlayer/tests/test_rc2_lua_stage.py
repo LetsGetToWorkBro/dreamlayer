@@ -220,6 +220,29 @@ class TestParityWithPython:
         assert "hola, gracias" in shown          # original, secondary line
         assert "ES → EN" in shown                # the language pair eyebrow
 
+    def test_morning_brief_figment_on_glass(self, lua):
+        # second card off the card path: the morning brief on the real Lua stage,
+        # fed named slots, draws the eyebrow + synthesis + points and auto-clears
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.morning_brief_figment()
+        put_and_swap(lua, fig)
+        py = Stage(fig)
+        for slot, val in (("synthesis", "A busy day ahead."),
+                          ("point1", "Standup 9am"),
+                          ("point2", "1 new text")):
+            deliver(lua, transport.text_envelope(fig.id, val, slot))
+            py.inject("text:" + slot, val)
+        lua["stage"].tick(0.05)
+        shown = shown_texts(lua)
+        assert shown == [ln.text for ln in py.frame().lines]
+        assert "YOUR DAY" in shown
+        assert "A busy day ahead." in shown
+        assert "Standup 9am" in shown and "1 new text" in shown
+        # auto-clears after its window (owns the stage, then returns to ambient)
+        for _ in range(20):
+            lua["stage"].tick(0.5)
+        assert not lua["stage"].is_running()
+
     def test_guarded_loop_parity(self, lua):
         # 3 rounds of 1 s work — both stages end after exactly 3 cycles
         from dreamlayer.reality_compiler.v2 import (
