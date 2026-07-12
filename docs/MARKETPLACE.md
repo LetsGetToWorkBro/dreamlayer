@@ -91,6 +91,18 @@ smoke test), not a jail for hostile code. The hardening path, now built:
   the health ledger, never fatal. Route through it with
   `PluginStore.load_installed(orchestrator, isolate="untrusted")`: signed/
   trusted packages still load in-process; everything else goes to the jail.
+- **Runtime-enforced capabilities (built)** — for a plugin shipped as a compiled
+  **WASM component**, `plugins/wasm_component_host.py` runs it *in-process* under
+  wasmtime with **zero ambient authority**: the guest can call only the host
+  functions its declared capabilities link. A denied capability is a host
+  function that is simply never provided, so a module that imports it **cannot
+  instantiate** — the host pre-scans the module's imports and refuses, with a
+  precise "imports X but did not declare requires:[cap]" error, before anything
+  runs. This closes manifest-vs-reality drift at the runtime layer (the
+  Extism / Wasmtime-Component-Model design): a forged plugin can't invoke a
+  power it never declared, because the power isn't in its address space. Complements
+  the subprocess jail (which confines from the outside); this enforces from the
+  inside. Available when `wasmtime` is installed (`platform` extra).
 
 ### API v2 — what a plugin may do
 
