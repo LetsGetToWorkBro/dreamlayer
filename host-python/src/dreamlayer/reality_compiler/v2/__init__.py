@@ -26,6 +26,7 @@ from .teach import TeachCard, teach_violations, teach_inference
 from .playback import run_through, render_png, transcript, PlaybackFrame
 from .signer import SessionSigner, SigningError, content_hash
 from .vault import Vault, VaultEntry
+from .vault_sync import VaultSync, SyncReport
 from .compat import lift, ALL_V1_TYPES
 from .transport import (
     FIGMENT_PUT, FIGMENT_SWAP, FIGMENT_REVOKE, FIGMENT_TEXT,
@@ -52,7 +53,7 @@ __all__ = [
     "TeachCard", "teach_violations", "teach_inference",
     "run_through", "render_png", "transcript", "PlaybackFrame",
     "SessionSigner", "SigningError", "content_hash",
-    "Vault", "VaultEntry",
+    "Vault", "VaultEntry", "VaultSync", "SyncReport",
     "lift", "ALL_V1_TYPES",
     "FIGMENT_PUT", "FIGMENT_SWAP", "FIGMENT_REVOKE", "FIGMENT_TEXT",
     "FIGMENT_ACK", "FIGMENT_EVENT",

@@ -46,12 +46,17 @@ class Vault:
     # Keep / load / list
     # ------------------------------------------------------------------
 
-    def keep(self, fig: Figment) -> VaultEntry:
-        """Sign and store. The Figment must already be budget-verified."""
+    def keep(self, fig: Figment, kept_at: Optional[float] = None) -> VaultEntry:
+        """Sign and store. The Figment must already be budget-verified.
+
+        `kept_at` defaults to now; sync passes the origin device's timestamp so
+        a figment's kept-time survives crossing to another of the user's devices
+        (the signature is always re-minted with *this* install's key)."""
         sig = self.signer.sign(fig)
-        entry = {"figment": fig.to_dict(), "sig": sig, "kept_at": time.time()}
+        when = time.time() if kept_at is None else kept_at
+        entry = {"figment": fig.to_dict(), "sig": sig, "kept_at": when}
         self._path(fig.id).write_text(json.dumps(entry, indent=2))
-        return VaultEntry(fig, sig, entry["kept_at"], revoked=False)
+        return VaultEntry(fig, sig, when, revoked=False)
 
     def load(self, figment_id: str) -> VaultEntry:
         path = self._path(figment_id)

@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -e ".[dev,verify]"   # verify → crosshair runs the safety proofs
+          pip install -e ".[dev,verify,sync]"   # verify→crosshair proofs, sync→loro CRDT
 
       - name: Run pytest
         # hardware/benchmark tests need a device or run only on demand.
