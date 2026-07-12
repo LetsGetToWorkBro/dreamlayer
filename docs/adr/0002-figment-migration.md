@@ -98,12 +98,23 @@ transcript (`ops_conversation`); its translate use is retired.
 - **New perception text output defaults to a figment.** Reviewers should push
   back on a new `*Card` whose content is "an eyebrow + a line or two of text"
   and no custom geometry.
-- **The card renderer twins shrink over time, never grow for text.** Candidates
-  that fit the figment shape (e.g. `LiveCaptionCard`, `UpcomingCard`,
-  `HereCard`, `MorningBriefCard`) can migrate incrementally; each migration
-  retires a Python+Lua pair. Cards with real custom geometry or hard overlay
-  semantics (`PrivacyVeilCard`, `HarkCard`, `TruthLensCard`/`FactCheckCard`
-  gauges, `GlanceChoiceCard`) stay cards.
+- **Migrate the live *path*; do not retire the card to chase a twin.** This is
+  the operating rule. Moving a feature's live glasses output onto the figment
+  stage is the win — it is safe, reversible, and needs no renderer change. A
+  card's bespoke renderer only truly *deletes for free* once that card type has
+  no remaining consumer at all. But most bespoke renderers exist precisely
+  because they do something the shared layout path can't (multiline wrap,
+  adaptive sizing, stagger animation, custom geometry) — and those same cards
+  are usually first-class `ALL_SAMPLES` gallery/demo/golden assets. So renderer
+  reduction is a *consequence* of a card genuinely falling out of use, **never a
+  goal worth degrading the product or dropping a showcase card for**. When in
+  doubt: migrate the path, keep the card. (Rosetta and the morning brief both
+  followed this — the live path is a figment; the card survives as showcase.)
+- **Cards that stay cards.** Transient overlays that must appear *over* focus
+  (`PrivacyVeilCard`, `HarkCard`, `UpcomingCard`, `HereCard`, `MessageCard`) and
+  cards with real custom geometry (`TruthLensCard`/`FactCheckCard` gauges,
+  `GlanceChoiceCard`, `PersonDossierCard`) are correct as cards — do not migrate
+  them.
 - **`SpokenCaptionCard` is now split by role.** Transcript keeps it; translation
   uses the figment. A future transcript migration is possible but out of scope
   for the pilot.

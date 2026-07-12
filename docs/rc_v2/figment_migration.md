@@ -111,15 +111,28 @@ which is pinned in parity with `interpreter.py` and `figment.js`.
   (already on the shared layout renderer, so migrating it retires a card *type*
   but no bespoke twin), `UpcomingCard`, `HereCard`.
 
-### On actually deleting a renderer twin
+### On actually deleting a renderer twin — the rule
 
-Migrating the *live path* is safe and reversible. **Deleting** a card's bespoke
-Python+Lua renderer pair is a second, heavier step, because the cinema-golden
-regression set (`export_cinema_v2_golden.py`) renders every card type and the
-demo tour uses several as beats. So a full twin-deletion must also: remove the
-type from `SOLID_CARDS` + its committed golden PNG + the expected-golden list,
-and repoint any demo/catalog use. Do that only when the card has no remaining
-non-product consumer, or with an explicit call to drop it from the showcase.
+**Migrate the live path; don't retire the card to chase a twin.** Moving a
+feature's live glasses output onto the figment stage is the whole win, and it is
+safe and reversible. *Deleting* a card's bespoke Python+Lua renderer is a
+separate, much heavier step with a wide blast radius: a card type is usually a
+first-class `ALL_SAMPLES` entry, so it feeds the marketing gallery export
+(`hud/export.py`), the golden-image regression (`golden_images.py`), the demo
+tour + feature catalog (`demo/`), the cinema-golden set
+(`export_cinema_v2_golden.py` + a committed PNG), and sometimes a panel
+marketing image. And the renderer is *bespoke for a reason* — multiline wrap,
+adaptive sizing, stagger animation, or geometry the shared layout path doesn't
+do — so removing it renders the card as a fallback, and collapsing it onto the
+shared renderer degrades how it looks.
+
+So: a renderer only deletes **for free** once its card type has genuinely no
+remaining consumer (product *and* showcase). Renderer reduction is a
+*consequence* of a card falling out of use — **never a goal worth degrading the
+product or dropping a showcase card for.** When in doubt, migrate the path and
+keep the card. If you ever do retire a card type outright, it must also: remove
+it from `ALL_SAMPLES`, the golden sets (+ committed PNGs), and any demo/catalog
+use — and that is a deliberate product decision, not a migration side-effect.
 - **Stays a card** (custom geometry and/or overlay-over-focus): `PrivacyVeilCard`,
   `HarkCard`, the `TruthLensCard`/`FactCheckCard` gauges, `GlanceChoiceCard`,
   and `SpokenCaptionCard` in its remaining transcript role.
