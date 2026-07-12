@@ -276,7 +276,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
      colour+matte clip to a <canvas> for true transparency and breathes the
      media; here we float the whole figure and drift a hue-shifting aura behind
      her, so the panel feels tended rather than static. */
-  .juno-hero{position:fixed;right:22px;bottom:20px;width:116px;z-index:15;pointer-events:none;
+  .juno-hero{position:fixed;right:18px;bottom:16px;width:200px;z-index:15;pointer-events:none;
     animation:jhFloat 10s ease-in-out infinite;will-change:transform}
   .juno-hero::before{content:"";position:absolute;left:50%;top:48%;width:150%;height:150%;
     transform:translate(-50%,-50%);border-radius:50%;z-index:-1;

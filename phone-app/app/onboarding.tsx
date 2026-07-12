@@ -81,7 +81,7 @@ export default function Onboarding() {
           {isPairStep
             ? <HaloPairingRing scanning={!connected} />
             : step.id === "welcome"
-              ? <Juno size={112} state="idle" />
+              ? <Juno width={Math.min(340, SW - 48)} state="idle" />
               : <StepGlyph stepId={step.id} accent={accent} />}
         </View>
         <Animated.View style={[styles.copy, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
