@@ -24,7 +24,7 @@
   // changes — the filenames stay stable, so without it browsers (esp. iOS
   // Safari) keep serving a stale clip. Keep it in sync with the ?v= on the
   // <script src="…/juno.js"> tags so the whole kit refreshes together.
-  var V = "?v=4";
+  var V = "?v=5";
 
   function base() {
     try {

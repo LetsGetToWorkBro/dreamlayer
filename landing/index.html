@@ -264,29 +264,29 @@ section{position:relative}
 .hero-core{position:relative;z-index:2;text-align:center;padding:0 var(--gutter);will-change:transform,opacity}
 /* Juno — the assistant sprite (true-alpha), a presence beside the hero.
    Scoped under .hero to beat juno.js's base `.juno{position:relative}`. */
-.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;top:50%;perspective:1000px;
-  width:clamp(190px,23vw,360px);right:max(1vw,calc(50% - 680px));
-  transform:translateY(-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0);
-  opacity:.96;filter:drop-shadow(0 8px 34px rgba(47,212,196,.16))}
+.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;perspective:1200px;
+  left:50%;top:44%;width:clamp(440px,54vw,780px);
+  transform:translate(-50%,-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0);
+  opacity:.85;filter:drop-shadow(0 10px 42px rgba(47,212,196,.14))}
 /* breathing aura behind her — pulses, and its hue drifts slowly through teal→cyan */
-.hero .hero-juno::before{content:"";position:absolute;left:50%;top:44%;width:88%;height:54%;
+.hero .hero-juno::before{content:"";position:absolute;left:50%;top:52%;width:66%;height:82%;
   transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
-  background:radial-gradient(closest-side,rgba(47,212,196,.26),rgba(120,180,255,.10) 55%,transparent 78%);
-  filter:blur(16px);animation:junoAura 6.5s ease-in-out infinite,junoHue 26s linear infinite}
-/* richer float — bob + sway + breathe + a slow 3D turn (overrides the base breathe) */
-.hero .hero-juno .juno-media,.hero .hero-juno .jshimmer{animation:junoFloat 10s ease-in-out infinite;will-change:transform}
+  background:radial-gradient(closest-side,rgba(47,212,196,.24),rgba(120,180,255,.09) 55%,transparent 78%);
+  filter:blur(18px);animation:junoAura 6.5s ease-in-out infinite,junoHue 26s linear infinite}
+/* gentle float — bob + a whisper of sway/turn (the clip carries the real motion) */
+.hero .hero-juno .juno-media,.hero .hero-juno .jshimmer{animation:junoFloat 11s ease-in-out infinite;will-change:transform}
 @keyframes junoFloat{
-  0%{transform:translateY(0) rotate(-1deg) rotateY(0deg) scale(1)}
-  30%{transform:translateY(-11px) rotate(.5deg) rotateY(-9deg) scale(1.012)}
-  55%{transform:translateY(-19px) rotate(1.3deg) rotateY(7deg) scale(1.024)}
-  100%{transform:translateY(0) rotate(-1deg) rotateY(0deg) scale(1)}}
+  0%{transform:translateY(0) rotate(-.6deg) rotateY(0deg)}
+  30%{transform:translateY(-7px) rotate(.3deg) rotateY(-4deg)}
+  55%{transform:translateY(-12px) rotate(.7deg) rotateY(3deg)}
+  100%{transform:translateY(0) rotate(-.6deg) rotateY(0deg)}}
 @keyframes junoAura{0%,100%{opacity:.42;transform:translate(-50%,-50%) scale(.9)}
   50%{opacity:.9;transform:translate(-50%,-50%) scale(1.08)}}
 @keyframes junoHue{0%,100%{filter:blur(16px) hue-rotate(-16deg)}50%{filter:blur(16px) hue-rotate(20deg)}}
 /* wing-shimmer — an iridescent highlight sweeps across her, clipped to her shape */
 .hero .hero-juno .jshimmer{position:absolute;inset:0;pointer-events:none;z-index:2;
-  -webkit-mask:url(./assets/juno/juno_idle.webp?v=4) center/contain no-repeat;
-  mask:url(./assets/juno/juno_idle.webp?v=4) center/contain no-repeat;
+  -webkit-mask:url(./assets/juno/juno_idle.webp?v=5) center/contain no-repeat;
+  mask:url(./assets/juno/juno_idle.webp?v=5) center/contain no-repeat;
   background:linear-gradient(115deg,transparent 40%,rgba(210,245,255,.45) 48%,rgba(255,255,255,.65) 50%,
     rgba(205,240,255,.45) 52%,transparent 60%);background-size:260% 100%;
   mix-blend-mode:screen;animation:junoFloat 10s ease-in-out infinite,junoShimmer 10s ease-in-out infinite}
@@ -317,11 +317,11 @@ section{position:relative}
    otherwise saturates a phone's compositor and drags the whole hero to a low
    frame rate. A cheap translate-only float is all that stays. */
 @keyframes junoFloatLite{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-@media(max-width:900px){.hero .hero-juno{width:min(66vw,300px);right:auto;left:50%;top:30%;
-  transform:translate(-50%,-50%);opacity:.92;filter:none}
+@media(max-width:900px){.hero .hero-juno{width:min(108vw,480px);left:50%;top:33%;
+  transform:translate(-50%,-50%);opacity:.9;filter:none}
   .hero .hero-juno .jshimmer{display:none}
   .hero .hero-juno .juno-media{animation:junoFloatLite 9s ease-in-out infinite}
-  .hero .hero-juno::before{filter:blur(10px);animation:junoAura 6.5s ease-in-out infinite}}
+  .hero .hero-juno::before{filter:blur(12px);animation:junoAura 6.5s ease-in-out infinite}}
 @media(prefers-reduced-motion:reduce){.hero .hero-juno .juno-media{animation:none}
   .hero .hero-juno::before{animation:none}.hero .hero-juno .jmote,.hero .hero-juno .jglyph,.hero .hero-juno .jshimmer{display:none}}
 .hero-ring{position:relative;width:clamp(150px,20svh,190px);height:clamp(150px,20svh,190px);margin:0 auto 40px}
@@ -1671,7 +1671,7 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
 <script src="./assets/vendor/ScrollTrigger.min.js" defer></script>
 <script src="./assets/vendor/lenis.min.js" defer></script>
 <script src="./assets/sim/halo-sim.js" defer></script>
-<script src="./assets/juno/juno.js?v=4" defer></script>
+<script src="./assets/juno/juno.js?v=5" defer></script>
 <script>
 /* Juno hero ambience — drifting fairy-dust + a smooth cursor parallax. Layered
    on top of the video/poster so she feels alive even when the clip is a still.
