@@ -35,7 +35,7 @@ class CapturePipeline:
     no transcript — same graceful-degradation contract as every seam."""
 
     def __init__(self, orch, vad=None, asr=None, speaker=None, wake=None,
-                 speaker_resolver=None,
+                 speaker_resolver=None, tagger=None,
                  sample_rate: int = SAMPLE_RATE,
                  silence_hang_ms: float = SILENCE_HANG_MS,
                  max_segment_ms: float = MAX_SEGMENT_MS,
@@ -44,6 +44,11 @@ class CapturePipeline:
         self.vad = vad
         self.asr = asr
         self.speaker = speaker           # ECAPASpeaker (embedding), optional
+        # acoustic-context tagger (SherpaAudioTagger), optional: the top non-
+        # speech events in a segment (doorbell/alarm/…) — the second brain
+        # understands sound, not just words. Routed to the hub if it accepts it.
+        self.tagger = tagger
+        self.last_acoustic = []          # last [(label, score)] tagged
         # embedding → diarization label ("them"/"me"/a name); None → unknown "".
         # Speaker embeddings identify; the ledger wants a label, so keep them
         # separate rather than mislabelling a caption with a raw vector.
@@ -141,8 +146,28 @@ class CapturePipeline:
             except Exception as exc:
                 if self._health() is not None:
                     self._health().record_failure("asr", exc)
+        self._acoustic_context(segment)
         self._route(text, label)
         return text
+
+    def _acoustic_context(self, segment) -> None:
+        """Tag the segment's non-speech sound (doorbell/alarm/…) and hand it to
+        the hub if it accepts one. Best-effort and optional — a tagger error or
+        a hub that doesn't implement `note_acoustic_context` is a no-op."""
+        if self.tagger is None:
+            return
+        try:
+            tags = self.tagger.tag(segment) or []
+        except Exception as exc:
+            self._record(exc)
+            return
+        self.last_acoustic = tags
+        note = getattr(self.orch, "note_acoustic_context", None)
+        if tags and callable(note):
+            try:
+                note(tags)
+            except Exception as exc:
+                self._record(exc)
 
     def _route(self, text: str, speaker_label: str) -> None:
         """Feed the hub: the wake/command path AND the conversation ledger.

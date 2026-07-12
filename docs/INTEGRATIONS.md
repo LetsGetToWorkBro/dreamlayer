@@ -60,6 +60,7 @@ external, with the exact install command per row. The operator's guide is
 | **silero-vad** | Crude energy-threshold VAD (fires on any loud sound) | Neural speech-vs-noise detection | ASR wakes only on real speech: fewer false triggers, less battery, more privacy |
 | **faster-whisper** | No in-host transcription (empty string) | Fast local speech-to-text | Transcription **without sending audio to the cloud** |
 | **whisperX** | No word-level timing | Word-aligned timestamps | Needed for prosody (*how* something was said) |
+| **sherpa-onnx** | Four models, four dependency stacks (whisper + silero + ECAPA + wake) | **One** Apache-licensed offline core backs ASR, VAD, speaker embedding, **acoustic wake-word (KWS)**, **diarization**, and **audio-event tagging** | One dependency instead of four; adds *who-said-what* across a segment and non-speech **acoustic context** (a doorbell, an alarm, running water) — the second brain understands sound, not just words. `orchestrator/sherpa_backend.py` exposes drop-in adapters for every existing seam; absent → each degrades to its current fallback |
 
 ### Structured output / LLM (`structured`, `llm`)
 | Library | Before | After | Why it matters |
