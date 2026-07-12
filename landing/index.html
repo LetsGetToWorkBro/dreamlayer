@@ -1939,8 +1939,7 @@ if(G && ST && !reduced){
   }
   ST.create({ trigger:"#top", start:"top top", end:"bottom top", scrub:true,
     onUpdate:function(self){ applyHero(self.progress); } });
-  ST.create({ start:function(){ return innerHeight*0.72; }, end:"max",
-    onToggle:function(self){ setBar(self.isActive); } });
+  setBar(true);   // header is present from the top, not only after scrolling
   ST.create({ trigger:"#veil", start:"top top", end:"bottom bottom", scrub:true,
     onUpdate:function(self){ applyVeil(self.progress); } });
   addEventListener("load", function(){ ST.refresh(); });
@@ -1951,7 +1950,7 @@ if(G && ST && !reduced){
     requestAnimationFrame(function(){
       ticking=false;
       var y=scrollY, vh=innerHeight;
-      setBar(y>vh*0.72);
+      setBar(true);   // header present from the top, not only after scrolling
       if(!reduced) applyHero(Math.min(1,y/(vh*0.9)));
       applyVeil();
     });
