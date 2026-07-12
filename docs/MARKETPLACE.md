@@ -178,6 +178,34 @@ to publish). Purchases produce signed install grants verified by the same
 validation gate. Sequenced as phase P4 of the hosted tier — full design in
 [`CLOUD.md`](CLOUD.md).
 
+### Compromise-resilient trust — TUF / Uptane (built: `plugins/registry_trust.py`)
+
+Whole-package Ed25519 signing proves *"signed by a key."* It has no answer to the
+attacks that actually take down plugin stores: a **stolen signing key**, a
+**rollback** to an old vulnerable version, a **freeze** pinning clients to stale
+listings, or **mix-and-match** of metadata. `registry_trust.py` implements the
+TUF (CNCF-graduated) model natively over the existing Ed25519 signer, with the
+**Uptane** two-repository specialization for our topology:
+
+- **Role separation with k-of-n thresholds** — a `root` trust anchor delegates
+  to `targets` / `snapshot` / `timestamp` roles; one stolen key below threshold
+  cannot forge, and root is rotatable (a new root must be signed by the old
+  root's threshold).
+- **`snapshot`** binds the exact current targets version+hash → kills
+  mix-and-match; **`timestamp`** is short-lived with an `expires` → kills freeze
+  (the client detects staleness).
+- **Uptane Director/Image split** — the offline-signed **Image repo** (`targets`)
+  is the catalog of blessed `{name/version → hash}`; the internet-facing
+  **Director** (our Cloudflare Worker, the most-compromisable component) only
+  *selects which* blessed target a client installs. A fully-owned Director can
+  misdirect among approved plugins but **cannot introduce a new malicious one** —
+  a selection naming a target the Image repo never signed is refused.
+
+`TrustClient` pins a root and verifies the whole chain (threshold → freshness →
+version monotonicity → hash binding) before any install. The attack suite —
+key-compromise, rollback, freeze, mix-and-match, root rotation, and the Director
+guarantee — is pinned in `test_registry_trust.py`.
+
 The contract:
 
 ```
