@@ -12,6 +12,7 @@ None so ObjectRecognizer transparently uses its built-in `_mock`.
 from __future__ import annotations
 import logging
 import math
+import sys as _sys
 from typing import Optional, Tuple
 
 log = logging.getLogger("dreamlayer.classify_backends")
@@ -175,6 +176,57 @@ class MoondreamClassifier:
             return None
 
 
+class MLXVisionClassifier:
+    """Apple-Silicon-native VLM via mlx-vlm (FastVLM / Qwen2.5-VL / Moondream in
+    MLX format). On a Mac-mini Brain this is the lowest time-to-first-token,
+    lowest-power path to open-vocabulary "what is this" — Apple's FastVLM claims
+    ~85× faster TTFT than comparable VLMs. Same ``classify_fn`` contract as the
+    others; Apple-only (``available`` False off macOS or without mlx-vlm), lazy
+    load, degrades to None. Inject ``_generate`` in tests."""
+    dep = "mlx_vlm"
+    available = _has("mlx_vlm") and _sys.platform == "darwin"
+
+    def __init__(self, model: str = "mlx-community/FastVLM-0.5B",
+                 prompt: str = "What is the main object? Answer in 1-3 words.",
+                 confidence: float = 0.6, _generate=None):
+        self.model_name = model
+        self.prompt = prompt
+        self.confidence = confidence
+        self._model = None
+        self._processor = None
+        self._generate = _generate         # (model, proc, prompt, img) -> str
+
+    def _ensure(self):
+        if self._generate is not None or self._model is not None:
+            return
+        if not self.available:
+            return
+        try:                               # pragma: no cover - Apple-only path
+            from mlx_vlm import load       # type: ignore
+            self._model, self._processor = load(self.model_name)
+        except Exception as exc:           # pragma: no cover
+            log.warning("[mlx-vlm] load failed: %s", exc)
+            self._model = None
+
+    def __call__(self, frame) -> Optional[Tuple[str, float]]:
+        if not (self.available or self._generate is not None):
+            return None
+        self._ensure()
+        try:
+            if self._generate is not None:
+                answer = self._generate(self._model, self._processor,
+                                        self.prompt, frame)
+            else:                          # pragma: no cover - Apple-only path
+                from mlx_vlm import generate  # type: ignore
+                answer = generate(self._model, self._processor, self.prompt,
+                                  frame, verbose=False)
+            label = str(answer or "").strip().strip(".").lower()
+            return (label, self.confidence) if label else None
+        except Exception as exc:
+            log.warning("[mlx-vlm] infer failed: %s", exc)
+            return None
+
+
 class CoreMLClassifier:
     """CoreML on-device inference (coremltools) — Apple Silicon path. Kept a
     thin seam: a real Vela/CoreML model plugs in here when the .mlmodel exists."""
@@ -274,6 +326,10 @@ def default_classifier(labels: Optional[list[str]] = None,
         y = YoloClassifier()
         if y._model is not None:
             return y
+    # on a Mac-mini Brain, the Apple-native VLM (mlx-vlm/FastVLM) is the
+    # lowest-TTFT open-vocabulary path — prefer it over the generic VLMs
+    if MLXVisionClassifier.available:
+        return MLXVisionClassifier()
     if MoondreamClassifier.available:
         return MoondreamClassifier()
     if ClipClassifier.available and labels:

@@ -691,6 +691,20 @@ class Brain:
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
                                    if self.config.semantic_search else None)
+        elif self.config.model == "mlx":
+            # Apple-Silicon-native answer path (mlx-lm). Same chat() contract as
+            # Ollama, so make_synthesizer works unchanged. Falls back to Ollama
+            # if MLX isn't actually available on this machine.
+            from ..mlx_backend import MLXBackend
+            if MLXBackend.available:
+                self._backend = MLXBackend(self.config)
+                self.index.synthesizer = make_synthesizer(self._backend)
+                self.index.embedder = None   # embeddings ride the embedder ladder
+            else:
+                self._backend = OllamaBackend(self.config)
+                self.index.synthesizer = make_synthesizer(self._backend)
+                self.index.embedder = (self._backend.embed
+                                       if self.config.semantic_search else None)
         else:
             self._backend = None
             self.index.synthesizer = None

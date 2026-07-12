@@ -64,9 +64,11 @@ external, with the exact install command per row. The operator's guide is
 
 | **model2vec** | Below MiniLM the ladder fell straight to lexical hashing (no synonyms) | Distilled **static** embeddings — no PyTorch, pure-CPU, ~30 MB, ~500× faster than the teacher, with a Rust port | The missing *middle* rung: a device that can't carry PyTorch still gets real semantics (*buy* ≈ *purchase*) instead of falling all the way back to lexical hashing |
 
-### Structured output / LLM (`structured`, `llm`)
+### Structured output / LLM (`structured`, `llm`, `platform`)
 | Library | Before | After | Why it matters |
 |---|---|---|---|
+| **mlx-lm** (Apple Silicon) | Answers synthesized via Ollama/llama.cpp | `model="mlx"` routes the answer path through Apple's MLX (same `chat()` contract) | ~30–50% faster + lower power for the 3B–8B models a Mac-mini Brain runs; falls back to Ollama off Apple |
+| **mlx-vlm** (Apple Silicon) | Empty Moondream/CLIP vision stubs | `MLXVisionClassifier` (FastVLM) sits near the top of the vision ladder | Lowest time-to-first-token, lowest-power open-vocabulary "what is this" on the Mac-mini Brain |
 | **outlines / instructor** | Regex intent parser, brittle to phrasing | LLM structured output constrained to a schema | Understands free-form speech, still returns valid typed intent |
 | **answer validation** **[live]** | Answers passed through unvalidated | A validation seam | Malformed answers caught before they reach the eye |
 | **litellm** | Hand-rolled OpenAI + a few presets | One interface to ~100 providers, routing/fallback | Swap or fail over providers without code changes |
