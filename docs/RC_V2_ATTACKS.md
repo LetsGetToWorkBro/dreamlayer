@@ -186,3 +186,16 @@ wiring test pins the call sites, so the proof guards the real code path.
 Tested: `test_contracts_crosshair.py` (proofs + a deliberately-broken
 contract the search must catch, so the suite can't pass vacuously). Runs in
 CI via the `verify` extra; skipped cleanly where `crosshair-tool` is absent.
+
+**And the tests are mutation-tested.** A proof shows a property holds; it does
+not show the *tests* would notice if the code broke. So mutmut mutates
+`contracts.py` — flips every operator, boundary, and constant in the caps — and
+confirms the suite kills every mutant. This surfaced a real gap: CrossHair is
+blind under mutmut (it swaps the body behind a dispatcher CrossHair's source
+read can't see), so the proofs killed nothing — only example-based tests do.
+`test_contracts_unit.py` adds boundary tests (spend at exactly one token, each
+counter op, the accept-slot truth table, refill direction) that take the score
+to **34/34 killed**. The proofs cover ∀-inputs; the boundary tests pin the exact
+edges; together they are belt and suspenders. Enforced on demand by
+`.github/workflows/mutation.yml` (config in `pyproject.toml [tool.mutmut]`,
+`mutation` extra) — a surviving mutant fails the job.

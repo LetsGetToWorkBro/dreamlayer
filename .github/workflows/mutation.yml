@@ -1,0 +1,55 @@
+name: mutation
+
+# Mutation testing for the on-glass safety core. The default `pytest` job proves
+# the tests PASS; this job proves they actually CATCH BUGS — mutmut mutates
+# reality_compiler/v2/contracts.py (the caps the whole "data, not code" safety
+# argument rests on: counter bounds, the emit token bucket, the text/slot
+# limits) and confirms the test suite kills every mutant. A surviving mutant is
+# a real hole in the tests and fails the job.
+#
+# Config lives in host-python/pyproject.toml [tool.mutmut]. Baseline: 34/34
+# killed. Not on every push (it copies + re-runs per mutant); on demand + weekly.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"   # Mondays 07:00 UTC
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'LetsGetToWorkBro'
+
+    defaults:
+      run:
+        working-directory: host-python
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: host-python/pyproject.toml
+
+      - name: Install with the mutation extra
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[dev,mutation]"
+
+      - name: Run mutation testing on the safety core
+        run: mutmut run
+
+      - name: Fail on any surviving mutant
+        run: |
+          # mutmut run exits 0 even with survivors; the gate is the results.
+          mutmut results
+          if mutmut results | grep -q ": survived"; then
+            echo "::error::A mutant survived — the safety-core tests have a hole."
+            mutmut results | grep ": survived"
+            exit 1
+          fi
+          echo "All safety-core mutants killed."

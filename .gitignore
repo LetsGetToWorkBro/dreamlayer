@@ -18,3 +18,7 @@ out/
 site/
 _site/
 test-results/
+
+# mutmut mutation-testing scratch (host-python/mutants copy + cache)
+mutants/
+.mutmut-cache

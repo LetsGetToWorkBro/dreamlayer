@@ -25,6 +25,9 @@ dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>
 # proofs: CrossHair symbolically verifies the on-glass safety caps in
 # reality_compiler/v2/contracts.py (skipped when crosshair-tool is absent).
 verify   = ["crosshair-tool>=0.0.60"]
+# mutation: mutmut mutation-tests the safety core — proves the tests actually
+# catch bugs, not just pass. Run on demand: see .github/workflows/mutation.yml.
+mutation = ["mutmut>=3.0"]
 hardware = ["brilliant-ble", "brilliant-msg"]
 dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
 
@@ -70,4 +73,17 @@ markers = [
     "hardware: needs a real Halo device / hardware deps (deselected in CI)",
     "benchmark: latency-budget test via pytest-benchmark (deselected in CI)",
     "real_model: needs heavy ML deps installed (MiniLM/CLIP/moondream); deselected in the default job, run by the real-models workflow",
+]
+
+[tool.mutmut]
+# Mutation-test the on-glass safety core: mutate contracts.py (the caps the
+# whole "data, not code" safety argument rests on) and confirm the tests kill
+# every mutant. The behavioral boundary tests in test_contracts_unit.py are the
+# mutant-killers; the CrossHair proofs are complementary but blind to mutmut
+# (it swaps the body behind a dispatcher CrossHair's source read can't see).
+# Baseline: 34/34 killed. Enforced on demand by .github/workflows/mutation.yml.
+source_paths = ["src/dreamlayer"]
+only_mutate = ["src/dreamlayer/reality_compiler/v2/contracts.py"]
+pytest_add_cli_args_test_selection = [
+    "src/dreamlayer/tests/test_contracts_unit.py",
 ]
