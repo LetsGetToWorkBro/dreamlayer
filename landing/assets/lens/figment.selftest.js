@@ -57,6 +57,22 @@ ok(K.validate(g).ok, "still valid after delete");
 var L = K.listing(K.templates.countdown(), { author: "Ada", description: "a timer" });
 ok(L.kind === "figment-listing" && L.author === "Ada" && L.proof.ok && L.price === 0, "listing packaged");
 
+// capability contract: a lens that emits "ask" must declare requires:[ask]
+var capbad = K.figment("Cap", "a");
+K.addScene(capbad, K.scene("a", { lines: [K.line("{slot}")], on: { double: { target: "b", emit: "ask" } } }));
+K.addScene(capbad, K.scene("b", { lines: [K.line("{slot}")], on: { double: { target: K.END } } }));
+ok(!K.validate(capbad).ok, "emitting an undeclared capability is rejected");
+capbad.meta.requires = ["ask"];
+ok(K.validate(capbad).ok, "declaring the capability passes");
+capbad.meta.requires = ["telepathy"];
+ok(!K.validate(capbad).ok, "an unknown capability is rejected");
+// the Ask showcase surfaces its power in the listing, with a summary
+var askL = K.listing(K.showcases.ask());
+ok(askL.requires.length === 1 && askL.requires[0].name === "ask" && !!askL.requires[0].summary,
+   "listing surfaces the ask capability with a summary");
+ok(K.safetyCard(K.showcases.secondSight()).asks.some(function (a) { return a.name === "look"; }),
+   "safety card surfaces the look capability");
+
 // an unknown on-event trigger is rejected (parity with the Python grammar)
 var evbad = K.figment("Ev", "a");
 K.addScene(evbad, K.scene("a", { lines: [K.line("x")], on: { wiggle: { target: K.END } } }));

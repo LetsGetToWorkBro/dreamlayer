@@ -307,8 +307,15 @@
     var chips = '<span class="chip safe" title="' +
         (proof && proof.cannot ? proof.cannot.join(" · ") : "budget-proven") +
         '">' + DLIcon("shield") + (guarantees ? guarantees + " guarantees" : "safe") + '</span>' +
-      '<span class="chip">' + it.scenes + (it.scenes === 1 ? " scene" : " scenes") + '</span>' +
-      (it._brain ? '<span class="chip brain">needs your Brain</span>' : '');
+      '<span class="chip">' + it.scenes + (it.scenes === 1 ? " scene" : " scenes") + '</span>';
+    // the exact host powers this lens asks for (ask/translate/look), each with
+    // its plain-words summary on hover — the capability contract, made visible
+    var asks = (proof && proof.asks) || [];
+    if(asks.length){
+      asks.forEach(function(a){ chips += '<span class="chip brain" title="' + escg(a.summary) + '">' + escg(a.name) + '</span>'; });
+    } else if(it._brain){
+      chips += '<span class="chip brain">needs your Brain</span>';
+    }
     try{
       var g = K.golfScore(it.fig);
       if(g && g.bytes) chips += '<span class="chip golf" title="Expressiveness per byte — the Figment Golf metric">' +

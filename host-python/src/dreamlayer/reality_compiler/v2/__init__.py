@@ -14,6 +14,10 @@ from .figment import (
     Guard, Transition, GlyphSpec, FigmentError, END, SELF,
 )
 from .budgets import verify, verify_or_raise, BudgetReport, Violation
+from .capabilities import (
+    Capability, CAPABILITIES, capability_for, declared_requires,
+    emitted_capabilities, require,
+)
 from .interpreter import Stage, DisplayFrame
 from .rehearsal import RehearsalSession, RehearsalResult, Beat, parse_utterance
 from .choreographer import Choreographer, InferenceError
@@ -38,6 +42,8 @@ __all__ = [
     "Figment", "Scene", "TextLine", "PulseSpec", "CounterDecl", "CounterOp",
     "Guard", "Transition", "GlyphSpec", "FigmentError", "END", "SELF",
     "verify", "verify_or_raise", "BudgetReport", "Violation",
+    "Capability", "CAPABILITIES", "capability_for", "declared_requires",
+    "emitted_capabilities", "require",
     "Stage", "DisplayFrame",
     "RehearsalSession", "RehearsalResult", "Beat", "parse_utterance",
     "Choreographer", "InferenceError",

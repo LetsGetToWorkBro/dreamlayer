@@ -176,6 +176,13 @@ class Brain:
         self.rc = RealityCompilerV2(vault_dir=self.cfg_dir / "vault")
         self._rc_pending: dict = {}          # figment_id → Figment awaiting keep
         self._rc_active: Optional[str] = None  # the figment on stage right now
+        # emit→reaction capability handlers. A lens emits a capability tag, the
+        # Brain runs the matching handler and streams the result back to the
+        # glass — but only for a capability the active lens actually declared
+        # (reality_compiler/v2/capabilities.py). `ask` is the one host-computed
+        # reaction; `translate`/`look` carry their own payload (the phone/hub
+        # did the work) and route straight to the slot.
+        self._capability_handlers: dict = {"ask": self._cap_ask}
         self._watch_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
@@ -495,35 +502,71 @@ class Brain:
         return {"ok": record.success, "text": text,
                 "active": self._rc_active, "mode": record.mode}
 
+    def _active_figment(self):
+        """The Figment on stage right now, loaded from the vault, or None."""
+        if self._rc_active is None:
+            return None
+        try:
+            return self.rc.vault.load(self._rc_active).figment
+        except Exception:
+            return None
+
+    def _cap_ask(self, text: str) -> tuple[str, dict]:
+        """The `ask` capability: run the Brain over the spoken question and hand
+        back the answer (+ which tier answered it) to stream onto the glass."""
+        ans = self.ask(text or "")
+        reply = (ans.text if ans and not ans.is_empty() else "") or "no answer yet"
+        self.activity.add("rc", "Lens asked → Brain answered")
+        return reply, {"answer": reply, "tier": ans.tier if ans else ""}
+
     def rc_emit(self, tag: str, text: str = "") -> dict:
         """Close the loop glass → Brain → glass. A running lens emits a tag and
-        the Brain acts on it, streaming the result back into the lens's slot:
+        the Brain acts on it, streaming the result back into the lens's slot.
 
-          ``ask``  → run your Brain over the spoken question, push the answer
-                     (from your own files/memory, or the cloud if you allow it)
-          other    → carry the tag's text payload straight to the slot (a camera
-                     label from ``look``, a translation the hub already made)
+        The reaction is gated by the **capability contract**
+        (reality_compiler/v2/capabilities.py): a tag that names a capability
+        (``ask``/``translate``/``look``) is honored only if the active lens
+        declared it in ``requires`` — the runtime twin of the author-time
+        validator, so a forged figment can't invoke a power it never asked for.
 
-        This is what makes the showcase lenses real on a paired Brain: the phone
-        relays a figment's emit here, and the answer lands back on the glass.
+          ``ask``            → host-computed: run your Brain over the question,
+                               push the answer (your files/memory, or cloud if
+                               allowed)
+          other capability   → carry the tag's own text payload to the slot (a
+                               camera label from ``look``, a hub translation)
+          free/local tag     → acknowledged, left for a plugin/hub to interpret
+
         Refused when no lens is on stage."""
         from ...reality_compiler.v2.figment import MAX_EMIT_TAG_LEN
+        from ...reality_compiler.v2.capabilities import (
+            capability_for, declared_requires,
+        )
         tag = str(tag or "")[:MAX_EMIT_TAG_LEN]
         if not tag:
             return {"ok": False, "error": "empty emit tag"}
         if self._rc_active is None:
             return {"ok": False, "error": "no lens on stage"}
-        if tag == "ask":
-            ans = self.ask(text or "")
-            reply = (ans.text if ans and not ans.is_empty() else "") or "no answer yet"
-            tier = ans.tier if ans else ""
-            out = self.rc_feed(reply, source="ask")
-            self.activity.add("rc", "Lens asked → Brain answered")
-            return {**out, "tag": tag, "answer": reply, "tier": tier}
+
+        cap = capability_for(tag)
+        if cap:
+            fig = self._active_figment()
+            if fig is None or cap not in declared_requires(fig):
+                return {"ok": False, "tag": tag, "active": self._rc_active,
+                        "error": f"lens did not declare capability {cap!r}"}
+            handler = self._capability_handlers.get(cap)
+            if handler:
+                reply, extra = handler(text or "")
+                return {**self.rc_feed(reply, source=cap), "tag": tag, **extra}
+            # a declared capability the phone/hub fulfills (translate/look):
+            # its payload is the result — route it straight to the slot
+            if text:
+                return {**self.rc_feed(text, source=f"emit:{tag}"), "tag": tag}
+            return {"ok": True, "tag": tag, "active": self._rc_active, "noted": True}
+
+        # a free/local emit with no built-in reaction: acknowledged, left for a
+        # plugin/hub to interpret, never an error
         if text:
             return {**self.rc_feed(text, source=f"emit:{tag}"), "tag": tag}
-        # a bare emit with no payload and no built-in reaction: acknowledged,
-        # left for a plugin/hub to interpret, never an error
         return {"ok": True, "tag": tag, "active": self._rc_active, "noted": True}
 
     # -- native behaviors Juno builds (timers, intervals, clock) -----------
