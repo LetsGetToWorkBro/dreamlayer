@@ -45,7 +45,7 @@ external, with the exact install command per row. The operator's guide is
 ### Vector search / memory store (`memory`)
 | Library | Before | After | Why it matters |
 |---|---|---|---|
-| **sqlite-vec** | Linear cosine scan in Python, O(n) per query | Indexed on-disk vector store | Recall stays fast as memory grows; persists across restarts |
+| **sqlite-vec** | Linear cosine scan in Python, O(n) per query | **Persistent, cosine-correct** `vec0` index living in the MemoryDB connection, synced incrementally (not rebuilt per query) | Recall stays fast as memory grows and the index is transactionally co-located with the data; the linear scan remains the exact reference the index is pinned against |
 | **chromadb** | Linear store, no metadata filtering | Embedded vector DB with collections + metadata filters | "Memories about Jordan, from last month" becomes a real query |
 | **lancedb** | Everything in RAM | Columnar on-disk ANN | Scales past RAM |
 | **usearch** | Linear cosine router | HNSW approximate-nearest-neighbour index | Sub-ms routing at scale |
