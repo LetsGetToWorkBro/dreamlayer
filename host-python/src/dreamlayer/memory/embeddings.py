@@ -186,15 +186,20 @@ def unpack_embedding(raw) -> list[float] | None:
 
 # ---------------------------------------------------------------------------
 # The default embedder ladder. Prefer real semantics whenever anything neural
-# is installed: local MiniLM (384-d, offline, no key) → OpenAI (needs a key).
-# With neither, the offline default is the real lexical HashingEmbeddingProvider
-# — NOT the 32-d md5 mock, which is only a test fixture.
+# is installed: local MiniLM (384-d, offline, no key, but needs PyTorch) →
+# Model2Vec static (256-d, offline, no key, no PyTorch, ~500× faster — the
+# middle rung, ideal on a device that can't carry torch) → OpenAI (needs a
+# key). With none, the offline default is the real lexical
+# HashingEmbeddingProvider — NOT the 32-d md5 mock, which is only a test fixture.
 # ---------------------------------------------------------------------------
 
 def default_embedder(config=None) -> EmbeddingProvider:
     from .embedder_local import LocalEmbeddingProvider
+    from .embedder_static import StaticEmbeddingProvider
     if LocalEmbeddingProvider.available:
         return LocalEmbeddingProvider(config)
+    if StaticEmbeddingProvider.available:
+        return StaticEmbeddingProvider(config)
     if getattr(config, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
         return OpenAIEmbeddingProvider(config)
     return HashingEmbeddingProvider()
@@ -205,8 +210,11 @@ def embedder_signature(embedder) -> str:
     Vectors from different spaces must never share one index — the ANN
     layer rebuilds when this signature changes."""
     from .embedder_local import LocalEmbeddingProvider
+    from .embedder_static import StaticEmbeddingProvider
     if isinstance(embedder, LocalEmbeddingProvider):
         return f"local:{embedder._model_name}"
+    if isinstance(embedder, StaticEmbeddingProvider):
+        return f"static:{embedder._model_name}"
     if isinstance(embedder, OpenAIEmbeddingProvider):
         model = (getattr(embedder._config, "embedding_model", "")
                  or embedder.DEFAULT_MODEL)

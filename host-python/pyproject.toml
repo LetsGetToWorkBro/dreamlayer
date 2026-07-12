@@ -27,7 +27,7 @@ dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
 
 # --- Optional integration groups (adapters lazy-import these; every one has a
 #     working fallback, so the core system runs with none of them installed) ---
-memory   = ["sqlite-vec", "chromadb", "sentence-transformers", "mem0ai", "lancedb", "usearch", "docarray", "networkx"]
+memory   = ["sqlite-vec", "chromadb", "sentence-transformers", "model2vec", "mem0ai", "lancedb", "usearch", "docarray", "networkx"]
 voice    = ["silero-vad", "faster-whisper", "openwakeword", "sounddevice", "sherpa-onnx"]
 asr-extra = ["whisperx"]
 structured = ["outlines", "instructor", "pydantic>=2", "pydantic-ai"]

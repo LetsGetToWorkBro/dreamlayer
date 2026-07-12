@@ -118,15 +118,20 @@ class TestPersistentAnn:
 
 class TestEmbedderLadder:
     def test_hashing_is_the_offline_default(self):
-        # with neither sentence-transformers nor a key, the offline default is
-        # the real lexical hashing embedder — NOT the 32-d mock fixture.
+        # with no neural model and no key, the offline default is a *real*
+        # semantic/lexical embedder — the Model2Vec static tier when it's
+        # installed, else the lexical hashing embedder — NEVER the 32-d mock.
         e = default_embedder(config=None)
         from dreamlayer.memory.embedder_local import LocalEmbeddingProvider
+        from dreamlayer.memory.embedder_static import StaticEmbeddingProvider
         from dreamlayer.memory.embeddings import HashingEmbeddingProvider
         if not LocalEmbeddingProvider.available:
             import os
             if not os.environ.get("OPENAI_API_KEY"):
-                assert isinstance(e, HashingEmbeddingProvider)
+                if StaticEmbeddingProvider.available:
+                    assert isinstance(e, StaticEmbeddingProvider)
+                else:
+                    assert isinstance(e, HashingEmbeddingProvider)
 
     def test_signature_distinguishes_spaces(self):
         from dreamlayer.memory.embeddings import HashingEmbeddingProvider

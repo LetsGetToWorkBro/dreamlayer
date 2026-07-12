@@ -62,6 +62,8 @@ external, with the exact install command per row. The operator's guide is
 | **whisperX** | No word-level timing | Word-aligned timestamps | Needed for prosody (*how* something was said) |
 | **sherpa-onnx** | Four models, four dependency stacks (whisper + silero + ECAPA + wake) | **One** Apache-licensed offline core backs ASR, VAD, speaker embedding, **acoustic wake-word (KWS)**, **diarization**, and **audio-event tagging** | One dependency instead of four; adds *who-said-what* across a segment and non-speech **acoustic context** (a doorbell, an alarm, running water) — the second brain understands sound, not just words. `orchestrator/sherpa_backend.py` exposes drop-in adapters for every existing seam; absent → each degrades to its current fallback |
 
+| **model2vec** | Below MiniLM the ladder fell straight to lexical hashing (no synonyms) | Distilled **static** embeddings — no PyTorch, pure-CPU, ~30 MB, ~500× faster than the teacher, with a Rust port | The missing *middle* rung: a device that can't carry PyTorch still gets real semantics (*buy* ≈ *purchase*) instead of falling all the way back to lexical hashing |
+
 ### Structured output / LLM (`structured`, `llm`)
 | Library | Before | After | Why it matters |
 |---|---|---|---|
