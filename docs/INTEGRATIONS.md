@@ -116,6 +116,7 @@ external, with the exact install command per row. The operator's guide is
 | **pydantic** **[live]** | No typed memory record at all | `MemoryEvent` makes the Privacy Veil a **type invariant** — a veiled memory cannot be constructed | Privacy enforced by the type system, not a forgettable check |
 | **cryptography** | Symmetric HMAC — anyone with the key can forge | Ed25519 asymmetric signatures (private sign, public verify) | Real provenance/authenticity; third parties verify without the secret |
 | **anyio** | Veil-stop used raw asyncio gather+cancel | Structured-concurrency task groups | Cleaner guarantee that no task outlives the Veil drop |
+| **c2pa-python** | Captured frames were unsigned, unprovable pixels | C2PA Content Credentials stamped at ingest (device identity + capture time + redaction) | A wearable camera that *hardware-signs* its captures — provenance and bystander-redaction become one signed act (`orchestrator/capture_provenance.py`). EgoBlur (Meta, egocentric-trained) is the redactor seam; the raw frame never persists when it runs |
 | **pydantic-ai** **[live fallback]** | RC stages ran with no inspectable trace | Typed stage pipeline recording what ran and where it failed | The compile→validate→deploy path is debuggable |
 | **pytest-benchmark, hypothesis** **[live]** | No latency budgets, no property tests | Latency-budget assertions + property tests | Perf regressions and edge-case bugs caught in CI |
 
