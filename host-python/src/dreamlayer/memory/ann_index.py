@@ -15,6 +15,13 @@ ADD-alongside, seam-with-fallback (the house pattern):
 - vectors from different embedding spaces must never share an index:
   the stored `signature` (memory.embeddings.embedder_signature) is checked
   by the owner and a mismatch triggers rebuild() from the DB rows.
+
+Recall is not just claimed: tests/test_ann_recall_at_scale.py builds a
+realistically-sized set (1.5k clustered memories), computes the exact linear
+top-k as ground truth, and enforces a recall@5 / top-1-agreement floor for the
+HNSW path — so a silent recall regression at scale fails the build. (The small
+parity tests in test_memory_lifecycle.py pin ANN == linear where exact and
+approximate must coincide.)
 """
 from __future__ import annotations
 
