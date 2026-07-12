@@ -266,3 +266,25 @@ class TestParityWithPython:
         py.step(5.0)
         assert py.ended
         assert not lua["stage"].is_running()
+
+
+class TestElapsedParityRegression:
+    """A differential-testing find (N3): a self-looping timed scene froze
+    {elapsed} at duration+overshoot on the Lua stage but at exactly duration in
+    the Python reference. The Lua tick loop now lands on the boundary first."""
+
+    def test_self_loop_frozen_elapsed_matches_reference(self, lua):
+        from dreamlayer.reality_compiler.v2 import Figment, Scene, TextLine, \
+            Transition, SELF, END
+        fig = Figment(name="loop", initial="a")
+        a = fig.add_scene(Scene(id="a", duration_sec=2.0,
+                                lines=[TextLine("{elapsed}", row=0)],
+                                on_timeout=[Transition(target=SELF)]))
+        a.on["double"] = Transition(target=END)
+        put_and_swap(lua, fig)
+        py = Stage(fig)
+        for _ in range(10):
+            lua["stage"].tick(3.0)     # 3s steps overshoot the 2s scene each time
+            py.step(3.0)
+        assert shown_texts(lua) == [ln.text for ln in py.frame().lines]
+        assert shown_texts(lua) == ["2"]     # frozen at the scene's duration

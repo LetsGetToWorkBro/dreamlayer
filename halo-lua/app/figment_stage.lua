@@ -349,6 +349,11 @@ function M.tick(dt)
   while _st.duration and _st.elapsed >= _st.duration
         and not _st.ended and hops < 8 do
     local overshoot = _st.elapsed - _st.duration
+    -- land exactly on the boundary before firing, so the outgoing scene's
+    -- frozen {elapsed}/{elapsed_ms} (captured in _enter as last_elapsed) is the
+    -- scene's duration, not duration+overshoot — matches interpreter.py's step()
+    -- which advances by exactly `left` before each _timeout.
+    _st.elapsed = _st.duration
     _timeout()
     if _st.ended then break end
     _st.elapsed = _st.elapsed + overshoot
