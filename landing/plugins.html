@@ -190,7 +190,25 @@
     padding:11px 20px;color:var(--text);font-size:14px;box-shadow:var(--shadow);
     opacity:0;pointer-events:none;transition:.3s var(--ease)}
   .toast.on{opacity:1;transform:translate(-50%,0)}
-  @media(max-width:560px){.grid{grid-template-columns:1fr}.toolbar{top:57px}}
+  @media(max-width:680px){
+    /* tighter vertical rhythm + a centred, non-ragged filter block */
+    .hero{padding:34px 0 4px}
+    h1{font-size:clamp(28px,8.5vw,40px)}
+    .hero p{font-size:15px;max-width:38ch}
+    .search{margin-top:18px}
+    .toolbar{margin-top:8px;padding:12px 0}
+    .toolrow{flex-direction:column;align-items:center;gap:12px}
+    /* one clean row: centres when the chips fit, scrolls when they don't —
+       no more ragged two-row wrap */
+    .tabs{flex-wrap:nowrap;max-width:100%;overflow-x:auto;overflow-y:hidden;gap:7px;
+      padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{flex:none;padding:8px 14px;font-size:11.5px}
+    .statusline{margin:12px 0 2px}
+    .grid{grid-template-columns:1fr;gap:14px;padding:4px 0 40px}
+    .toolbar{top:57px}
+  }
+  @media(max-width:400px){.tab{padding:7px 11px;font-size:11px;letter-spacing:.05em}}
   @media(prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
   }
@@ -506,8 +524,7 @@ function render(){
       </div>
       <div class="desc">${esc(p.description)}</div>
       <div class="meta"><span>${dl}</span><span>${ratingHtml(p)}</span></div>
-      <div class="chips">${tags}</div>
-      <div class="chips">${perms}</div>
+      <div class="chips">${tags}${perms}</div>
       <div class="actions">
         ${actionHtml(p)}
         ${p.homepage?`<a class="btn" href="${esc(p.homepage)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Source</a>`:""}
