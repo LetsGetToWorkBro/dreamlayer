@@ -1,20 +1,25 @@
 """Vector search inside SQLite via sqlite-vec — a Retriever-compatible store.
 
-ADD-alongside: new sibling to retrieval.py. Same `search(query, kind, top_k)`
-shape as Retriever, so it's a drop-in where a caller wants ANN over the same
-MemoryDB. Lazy-imports sqlite-vec (extras group `memory`); when absent it
-degrades to the exact linear-cosine scan Retriever already does — identical
-results, just without the index.
+ADD-alongside: sibling to retrieval.py with the same ``search(query, kind,
+top_k)`` shape as Retriever, so it's a drop-in where a caller wants ANN over the
+same MemoryDB. Lazy-imports sqlite-vec (extras group ``memory``); when absent —
+or on any error — it degrades to the exact linear-cosine scan Retriever does, so
+results are always correct, just without the index.
 
-Privacy: reads never need the guard; any write path must still be gated by an
-allow_capture() check by the caller (this store only indexes what MemoryDB
-already holds).
+What changed for AAA: the index is now **persistent and cosine-correct**. It
+lives in the MemoryDB's own connection as a ``vec0`` virtual table created with
+``distance_metric=cosine`` (so ``similarity = 1 - distance`` is exactly cosine,
+not the L2-vs-cosine mismatch the ephemeral version had), and it is synced
+incrementally instead of rebuilt on every query. The linear scan stays the
+reference the tests pin the index against.
+
+Privacy: reads never need the guard; the store only indexes what MemoryDB
+already holds, and writes are gated upstream by allow_capture().
 """
 from __future__ import annotations
-import json
 import logging
 
-from .embeddings import MockEmbeddingProvider, cosine
+from .embeddings import MockEmbeddingProvider, cosine, unpack_embedding
 
 log = logging.getLogger("dreamlayer.vector_store")
 
@@ -22,82 +27,123 @@ try:  # optional dep — extras group `memory`
     import sqlite_vec  # type: ignore
     _HAS_SQLITE_VEC = True
 except ImportError:
+    sqlite_vec = None                   # type: ignore
     _HAS_SQLITE_VEC = False
 
 
 class VectorStore:
     """Semantic search over MemoryDB rows.
 
-    Parameters mirror Retriever: `db` (a MemoryDB) and an optional `embedder`
-    (any EmbeddingProvider). With sqlite-vec present it builds a vec0 virtual
-    table for fast top-k; without it, it falls back to the linear scan.
-    """
+    Parameters mirror Retriever: ``db`` (a MemoryDB) and an optional
+    ``embedder``. With sqlite-vec present it maintains a persistent vec0 index
+    (cosine) in ``db.conn`` for fast top-k; without it, the linear scan."""
+
     available = _HAS_SQLITE_VEC
 
     def __init__(self, db, embedder=None):
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
-        self._indexed = False
+        self._loaded = False             # extension loaded into db.conn?
+        self._dim = None                 # dim the vec table was built for
+        self._indexed_ids: set[int] = set()
 
-    # -- linear fallback (identical to Retriever.search scoring) --------------
+    # -- linear fallback (the reference; identical to Retriever scoring) -------
+    def _emb_of(self, m):
+        # stored embeddings are packed float32 BLOBs (same read path as
+        # Retriever); fall back to re-embedding the summary when absent
+        if m.get("embedding"):
+            return unpack_embedding(m["embedding"])
+        return self.embedder.embed(m["summary"])
+
     def _linear(self, query, kind, top_k):
         qv = self.embedder.embed(query)
         scored = []
         for m in self.db.memories(kind=kind):
-            emb = json.loads(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
-            sim = cosine(qv, emb)
+            sim = cosine(qv, self._emb_of(m))
             score = 0.5 * sim + 0.5 * (m.get("confidence") or 0.5)
             scored.append((score, m))
         scored.sort(key=lambda x: x[0], reverse=True)
         return scored[:top_k]
 
     def search(self, query: str, kind=None, top_k: int = 3):
-        # sqlite-vec path is only worth it for large tables; for correctness and
-        # to keep MemoryDB untouched we compute candidates the same way and let
-        # the extension accelerate distance when available. The linear fallback
-        # is always correct, so we use it unless a real index is wired.
         if not _HAS_SQLITE_VEC:
             return self._linear(query, kind, top_k)
         try:
-            return self._search_indexed(query, kind, top_k)
+            out = self._search_indexed(query, kind, top_k)
+            if out is not None:
+                return out
         except Exception as exc:
-            log.error("[vector_store] indexed search failed: %s; linear fallback", exc)
-            return self._linear(query, kind, top_k)
+            log.error("[vector_store] indexed search failed: %s; linear", exc)
+        return self._linear(query, kind, top_k)
+
+    # -- persistent, cosine-correct vec0 index --------------------------------
+    def _ensure_loaded(self) -> bool:
+        if self._loaded:
+            return True
+        try:
+            self.db.conn.enable_load_extension(True)
+            sqlite_vec.load(self.db.conn)
+            self.db.conn.enable_load_extension(False)
+            self._loaded = True
+            return True
+        except Exception as exc:         # sqlite built without extension load
+            log.warning("[vector_store] cannot load sqlite-vec: %s", exc)
+            return False
+
+    def _ensure_table(self, dim: int) -> None:
+        # a dim change (embedder space changed) means a fresh table
+        if self._dim == dim:
+            return
+        self.db.conn.execute("DROP TABLE IF EXISTS memory_vec")
+        self.db.conn.execute(
+            "CREATE VIRTUAL TABLE memory_vec USING "
+            f"vec0(memory_id integer primary key, kind text, "
+            f"embedding float[{dim}] distance_metric=cosine)")
+        self._dim = dim
+        self._indexed_ids = set()
+
+    def _sync(self, dim: int) -> None:
+        """Index any memories not yet in the vec table (incremental)."""
+        for m in self.db.memories():
+            mid = m["id"]
+            if mid in self._indexed_ids:
+                continue
+            emb = self._emb_of(m)
+            if len(emb) != dim:
+                raise ValueError("embedding dim mismatch")
+            self.db.conn.execute(
+                "INSERT OR REPLACE INTO memory_vec(memory_id, kind, embedding) "
+                "VALUES (?, ?, ?)",
+                (mid, m.get("kind") or "", sqlite_vec.serialize_float32(emb)))
+            self._indexed_ids.add(mid)
 
     def _search_indexed(self, query, kind, top_k):
-        # Build an ephemeral vec0 table over current rows, query KNN, join back.
-        rows = list(self.db.memories(kind=kind))
-        if not rows:
-            return []
-        import sqlite3
-
-        conn = sqlite3.connect(":memory:")
-        conn.enable_load_extension(True)
-        sqlite_vec.load(conn)
-        conn.enable_load_extension(False)
+        if not self._ensure_loaded():
+            return None
         qv = self.embedder.embed(query)
         dim = len(qv)
-        conn.execute(f"CREATE VIRTUAL TABLE vec USING vec0(embedding float[{dim}])")
-        by_rowid = {}
-        for i, m in enumerate(rows, start=1):
-            emb = json.loads(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
-            if len(emb) != dim:  # embedder mismatch → give up to linear
-                raise ValueError("embedding dim mismatch")
-            conn.execute(
-                "INSERT INTO vec(rowid, embedding) VALUES (?, ?)",
-                (i, sqlite_vec.serialize_float32(emb)),
-            )
-            by_rowid[i] = m
-        cur = conn.execute(
-            "SELECT rowid, distance FROM vec WHERE embedding MATCH ? "
-            "ORDER BY distance LIMIT ?",
-            (sqlite_vec.serialize_float32(qv), top_k),
-        )
+        self._ensure_table(dim)
+        self._sync(dim)
+        if not self._indexed_ids:
+            return []
+        params = [sqlite_vec.serialize_float32(qv)]
+        where = "embedding MATCH ?"
+        if kind is not None:
+            where += " AND kind = ?"
+            params.append(kind)
+        params.append(top_k)
+        cur = self.db.conn.execute(
+            f"SELECT memory_id, distance FROM memory_vec WHERE {where} "
+            "ORDER BY distance LIMIT ?", params)
         out = []
-        for rowid, dist in cur.fetchall():
-            m = by_rowid[rowid]
-            sim = 1.0 - float(dist)  # cosine distance → similarity
+        for mid, dist in cur.fetchall():
+            m = self.db.get_memory(mid) if hasattr(self.db, "get_memory") else None
+            if m is None:
+                m = next((x for x in self.db.memories() if x["id"] == mid), None)
+            if m is None:
+                continue
+            sim = 1.0 - float(dist)      # cosine distance → cosine similarity
             score = 0.5 * sim + 0.5 * (m.get("confidence") or 0.5)
-            out.append((score, m))
-        conn.close()
+            out.append((score, dict(m)))
+        out.sort(key=lambda x: x[0], reverse=True)
         return out
