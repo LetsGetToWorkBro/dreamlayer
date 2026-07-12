@@ -167,9 +167,11 @@ def _rgb(token: str) -> tuple[int, int, int]:
     return ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
 
 
-def render_png(frame: DisplayFrame, path: str) -> Optional[str]:
-    """Draw one frame as the circular HUD card. Returns path, or None
-    when Pillow is unavailable (headless CI)."""
+def render_image(frame: DisplayFrame):
+    """Draw one frame as the circular HUD card and return the PIL Image (or
+    None when Pillow is unavailable). The single source of truth for what a
+    frame looks like — render_png saves this, and the flash-safety analyzer
+    reads its pixels."""
     try:
         from PIL import Image, ImageDraw
     except ImportError:
@@ -198,7 +200,15 @@ def render_png(frame: DisplayFrame, path: str) -> Optional[str]:
             font = _font(size)
             draw.text((DISPLAY_PX // 2, y), ln.text,
                       fill=_rgb(ln.color), anchor="mm", font=font)
+    return img
 
+
+def render_png(frame: DisplayFrame, path: str) -> Optional[str]:
+    """Draw one frame as the circular HUD card. Returns path, or None
+    when Pillow is unavailable (headless CI)."""
+    img = render_image(frame)
+    if img is None:
+        return None
     img.save(path)
     return path
 

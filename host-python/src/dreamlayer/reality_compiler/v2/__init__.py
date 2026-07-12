@@ -14,6 +14,7 @@ from .figment import (
     Guard, Transition, GlyphSpec, FigmentError, END, SELF,
 )
 from .budgets import verify, verify_or_raise, BudgetReport, Violation
+from .flash_safety import analyze_figment, FlashReport, count_flashes
 from .capabilities import (
     Capability, CAPABILITIES, capability_for, declared_requires,
     emitted_capabilities, require,
@@ -42,6 +43,7 @@ __all__ = [
     "Figment", "Scene", "TextLine", "PulseSpec", "CounterDecl", "CounterOp",
     "Guard", "Transition", "GlyphSpec", "FigmentError", "END", "SELF",
     "verify", "verify_or_raise", "BudgetReport", "Violation",
+    "analyze_figment", "FlashReport", "count_flashes",
     "Capability", "CAPABILITIES", "capability_for", "declared_requires",
     "emitted_capabilities", "require",
     "Stage", "DisplayFrame",
