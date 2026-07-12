@@ -69,3 +69,22 @@ class TestRegistrySummaries:
         for name, cap in CAPABILITIES.items():
             assert cap.name == name
             assert cap.summary and isinstance(cap.summary, str)
+
+
+class TestFigmentMigrationPilot:
+    """The decision recorded in ADR 0002 + the Rosetta pilot's core invariant."""
+
+    def test_rosetta_figment_declares_translate_and_verifies(self):
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.rosetta_figment()
+        assert verify(fig).ok
+        assert declared_requires(fig) == ["translate"]
+        assert emitted_capabilities(fig) == []      # fed passively, emits nothing
+
+    def test_decision_docs_exist(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[4]
+        adr = root / "docs" / "adr" / "0002-figment-migration.md"
+        guide = root / "docs" / "rc_v2" / "figment_migration.md"
+        assert adr.is_file() and "output-shape" in adr.read_text()
+        assert guide.is_file() and "requires" in guide.read_text()
