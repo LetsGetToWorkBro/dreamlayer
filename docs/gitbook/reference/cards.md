@@ -21,7 +21,7 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | ProactiveMemoryCard | arriving at a memory place | device | 3500 | — |
 | PersonContextCard | person cue (anticipation) | device | 3500 | chord arpeggio |
 | PersonDossierCard | greet / look at a known person | device | 5000 | earcon `look` |
-| SpokenCaptionCard | each caption line | device | rolling | — |
+| SpokenCaptionCard | each raw-transcript caption line (the translate path now rides the Rosetta figment instead) | device | rolling | — |
 | LiveCaptionCard | Puente / Rosetta translation | device | rolling | — |
 | MorningBriefCard | wake with a brief waiting | device | 8000 | — |
 | FactCheckCard | Veritas verdict | device | 7000 | chime / hark / hark_urgent by verdict; double haptic + flash on flags |

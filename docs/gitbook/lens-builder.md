@@ -31,7 +31,11 @@ It lives in two places, same page either way:
   painted lens re-proves safe exactly like any other.
 - **A live preview** — the page runs your lens through `figment.js`, a
   JavaScript twin of the Python stage interpreter, pinned to it
-  line-for-line by `test_lens_builder.py`.
+  line-for-line by `test_lens_builder.py`. A **background picker** (Black,
+  Street, Park, Desk, Room, Table, Dawn, Dim) sets the illustrative world
+  behind the preview glass — a viewing preference kept in your browser's
+  localStorage, deliberately *not* part of the lens: a share code carries
+  only the figment itself.
 
 ## Ask Juno
 
@@ -59,9 +63,13 @@ idea, the more this matters — and it still can't hurt anything."*
 Before anything ships, the **proof-carrying safety card** renders the
 machine-verified upper bound — the card literally begins "This behavior
 CANNOT:" — no pulsing faster than the strobe cap, no flooding emits, no
-extra lines, no network, files, camera, or microphone, and it can never
-swallow the kill switch (double-long-press banish lives below every
-figment). The same card is available from the command line:
+extra lines, and it can never swallow the kill switch (double-long-press
+banish lives below every figment). The network/files/camera/mic line is
+now precise about the boundary: a lens cannot reach any of them *on its
+own* — "only the powers it names below, run by your Brain" — and a new
+**"ASKS YOUR BRAIN TO"** section lists every declared capability in plain
+words ("answer a spoken question from your own memory (or the cloud, if
+you allow it)"). The same card is available from the command line:
 `dreamlayer figment safety <file>`.
 
 **Deploy to my Brain** posts the lens to `POST /dreamlayer/rc/import`. The
@@ -91,10 +99,19 @@ rate-limited wires connect it:
 
 - `POST /dreamlayer/rc/feed {text, source}` — the host streams one line
   into the lens's `{slot}` (a translation, a camera label, a resurfaced
-  memory).
-- `POST /dreamlayer/rc/emit {tag, text}` — the lens speaks back. The tag
-  `ask` runs the Brain over a spoken question and pushes the answer into
-  the slot; any other tag carries a payload.
+  memory). A lens can also carry up to eight **named slots**
+  (`{slot:translation}`, `{slot:langs}`...) so one screen holds several
+  live channels; the orchestrator's own bridge feeds each by name (the
+  HTTP route fills the default slot).
+- `POST /dreamlayer/rc/emit {tag, text}` — the lens speaks back, under a
+  **capability contract**: three tags are host powers — `ask` (answer
+  from your memory), `translate`, and `look` (name what the camera sees)
+  — and a lens may invoke one **only if it declared it** in its signed
+  `requires` list. The author-time verifier refuses an undeclared emit
+  before signing, and the Brain refuses it again at runtime, so a forged
+  figment cannot invoke a power it never asked for. Any other tag is a
+  free local signal (`rep`, `round`, a plugin's own beat) — acknowledged,
+  never an error.
 
 On the phone, `lensRelay.ts` closes the full circle — glass → Brain →
 glass — over the BLE bridge (pinned by `lens_relay.test.ts`). The named

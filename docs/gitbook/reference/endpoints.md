@@ -83,8 +83,8 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 | `/dreamlayer/memory/export` | **local** | `{dest}` → copy the memory SQLite to a path `{ok, dest, bytes}` |
 | `/dreamlayer/rc/compose` | token | `{prompt}` → "Ask Juno": the offline intent parser lifts plain English to a budget-verified figment, returned to the builder, never deployed |
 | `/dreamlayer/rc/import` | token | `{figment}` → the builder's deploy: safety re-screened, budgets re-verified, id re-minted, **re-signed** by this Brain, then staged |
-| `/dreamlayer/rc/feed` | token | `{text, source?}` → stream one line into the running lens's `{slot}`; refused with no lens on stage |
-| `/dreamlayer/rc/emit` | token | `{tag, text?}` → the lens speaks back; `tag: "ask"` runs the Brain and pushes the answer into the slot |
+| `/dreamlayer/rc/feed` | token | `{text, source?}` → stream one line into the running lens's default `{slot}`; refused with no lens on stage (named slots are fed by the orchestrator's bridge) |
+| `/dreamlayer/rc/emit` | token | `{tag, text?}` → the lens speaks back under the capability contract: `ask`/`translate`/`look` run only if the signed figment declared them in `requires` (refused by name otherwise); unregistered tags are acknowledged as free local signals |
 | `/dreamlayer/event/<name>` | token | the $6 physical-events kit: `/event/ble/<n>` or a named event, forwarded to the armed figment; `ok: false` when nothing is armed |
 | `/dreamlayer/message/draft` | token | `{channel, to, subject?, text}` → `{script}` — preview only, nothing sent |
 | `/dreamlayer/message/send` | **local** | same + `approved: true` → osascript send — **seam**; refused without approval |

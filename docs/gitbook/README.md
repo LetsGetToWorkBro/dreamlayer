@@ -44,9 +44,12 @@ is a fact-checker, after all:
    apps; nothing about the interface is a mockup. The dim, blurred environments
    now shown *behind* the glass are illustrative — the kind of moment a card
    appears in — exactly as on the website and simulator, where the interface is
-   real and the world behind it is a stand-in.
+   real and the world behind it is a stand-in. One further category is
+   labeled wherever it appears: **Juno's animated character is brand art**
+   (produced by an AI video pipeline, not the product's renderer),
+   decorative on every surface and never presented as interface output.
 2. **Built versus pending is always labeled.** DreamLayer is pre-hardware:
-   the software is complete and tested (2,278 passing tests), and the places
+   the software is complete and tested (2,302 passing tests), and the places
    where physical hardware plugs in are called out honestly wherever they
    matter.
 3. **Accuracy over hype.** Where the technical half states a number, it is

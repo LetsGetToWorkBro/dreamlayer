@@ -9,7 +9,12 @@ renderer. Card payloads are plain dicts built by
 structural safety net guarantees the rest: any card type without a bespoke
 draw routes through its layout table or a minimal titled fallback — no
 card, present or future, can ever render a black frame on the glass. No
-card is mirror-only anymore.
+card is mirror-only anymore. And the catalog is now deliberately slow to
+grow: under the platform's
+[output-shape rule](sdk.md#the-output-shape-rule-adr-0002), new
+text-shaped output ships as a figment (no renderer twin at all); a new
+card must earn its bespoke draw with custom geometry and overlay
+semantics.
 
 Each entry lists: when the card appears, what it shows, its materials
 ([Solid](meridian.md#solid--the-material-system)) and motion

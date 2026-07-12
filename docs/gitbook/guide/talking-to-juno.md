@@ -1,8 +1,11 @@
 # Talking to it
 
-The voice in DreamLayer is called the **Juno**. It is calm, brief, and
-honest — one or two plain sentences, and "I don't have that one" when it
-does not know, never a made-up answer.
+The voice in DreamLayer is called **Juno** — and these days she has a
+face too: the small winged figure you'll meet on the website, in the
+app's welcome screen, and in the corner of the Mac panel. The character
+is artwork; everything she actually *does* is below. She is calm, brief,
+and honest — one or two plain sentences, and "I don't have that one"
+when she does not know, never a made-up answer.
 
 ## Waking it
 
