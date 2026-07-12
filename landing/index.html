@@ -285,8 +285,8 @@ section{position:relative}
 @keyframes junoHue{0%,100%{filter:blur(16px) hue-rotate(-16deg)}50%{filter:blur(16px) hue-rotate(20deg)}}
 /* wing-shimmer — an iridescent highlight sweeps across her, clipped to her shape */
 .hero .hero-juno .jshimmer{position:absolute;inset:0;pointer-events:none;z-index:2;
-  -webkit-mask:url(./assets/juno/juno_idle.webp?v=5) center/contain no-repeat;
-  mask:url(./assets/juno/juno_idle.webp?v=5) center/contain no-repeat;
+  -webkit-mask:url(./assets/juno/juno_idle.webp?v=7) center/contain no-repeat;
+  mask:url(./assets/juno/juno_idle.webp?v=7) center/contain no-repeat;
   background:linear-gradient(115deg,transparent 40%,rgba(210,245,255,.45) 48%,rgba(255,255,255,.65) 50%,
     rgba(205,240,255,.45) 52%,transparent 60%);background-size:260% 100%;
   mix-blend-mode:screen;animation:junoFloat 10s ease-in-out infinite,junoShimmer 10s ease-in-out infinite}
@@ -1671,7 +1671,7 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
 <script src="./assets/vendor/ScrollTrigger.min.js" defer></script>
 <script src="./assets/vendor/lenis.min.js" defer></script>
 <script src="./assets/sim/halo-sim.js" defer></script>
-<script src="./assets/juno/juno.js?v=5" defer></script>
+<script src="./assets/juno/juno.js?v=7" defer></script>
 <script>
 /* Juno hero ambience — drifting fairy-dust + a smooth cursor parallax. Layered
    on top of the video/poster so she feels alive even when the clip is a still.
@@ -1683,37 +1683,9 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
     if(!el) return;
     if(!el.__juno) return setTimeout(init, 120);      // wait for juno.js to mount
     if(el.__jfx) return; el.__jfx = true;
-    if(!reduce){                                       // iridescent wing-shimmer + orbiting motes
+    if(!reduce){                                       // iridescent wing-shimmer only —
+      // the clip now carries its own orbiting glyphs/galaxy, so no CSS motes.
       var sh=document.createElement("div"); sh.className="jshimmer"; el.appendChild(sh);
-      // glowing motes that circle her — like the little lights in the source clip
-      for(var i=0;i<20;i++){
-        var m=document.createElement("div");
-        m.className="jmote "+(i%2?"front":"back");
-        m.style.setProperty("--ms",(2+Math.random()*3.6).toFixed(1)+"px");
-        m.style.setProperty("--or",(52+Math.random()*78).toFixed(0)+"px");   // orbit radius
-        m.style.setProperty("--od",(7+Math.random()*9).toFixed(2)+"s");      // period
-        m.style.setProperty("--odl",(-Math.random()*16).toFixed(2)+"s");     // phase
-        m.style.setProperty("--cx",(Math.random()*40-20).toFixed(0)+"px");   // centre jitter
-        m.style.setProperty("--cy",(Math.random()*30-16).toFixed(0)+"px");
-        m.style.setProperty("--tw",(2.4+Math.random()*3).toFixed(2)+"s");
-        m.style.setProperty("--twl",(-Math.random()*4).toFixed(2)+"s");
-        el.appendChild(m);
-      }
-      // a few drifting glyphs — memories orbiting her (the clip's floating symbols)
-      var GLY=["◇","✧","⬡","∿","♪","◇"];
-      for(var g=0;g<6;g++){
-        var y=document.createElement("div");
-        y.className="jglyph "+(g%2?"front":"back"); y.textContent=GLY[g%GLY.length];
-        y.style.setProperty("--gs",(11+Math.random()*9).toFixed(0)+"px");
-        y.style.setProperty("--or",(64+Math.random()*74).toFixed(0)+"px");
-        y.style.setProperty("--od",(13+Math.random()*10).toFixed(2)+"s");    // slower than motes
-        y.style.setProperty("--odl",(-Math.random()*22).toFixed(2)+"s");
-        y.style.setProperty("--cx",(Math.random()*40-20).toFixed(0)+"px");
-        y.style.setProperty("--cy",(Math.random()*40-26).toFixed(0)+"px");
-        y.style.setProperty("--tw",(3.5+Math.random()*3).toFixed(2)+"s");
-        y.style.setProperty("--twl",(-Math.random()*5).toFixed(2)+"s");
-        el.appendChild(y);
-      }
     }
     if(!reduce && matchMedia("(pointer:fine)").matches){   // smooth cursor parallax
       var hero=el.closest(".hero"), tx=0,ty=0,cx=0,cy=0,raf=null;
