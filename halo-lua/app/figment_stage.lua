@@ -68,10 +68,27 @@ local function _count(t)
   return n
 end
 
+-- Counter names must be plain identifiers (alphanumerics + underscore).
+-- Anything else is refused at load — otherwise the name is spliced raw into a
+-- Lua gsub *pattern* at render time, so a name like "a.b" would wrongly match
+-- {count:aXb} (diverging from the Python twin's str.replace) and a malformed
+-- pattern can error mid-frame. Belt: the render path also escapes the name.
+local function _valid_name(s)
+  return type(s) == "string" and s:match("^[%w_]+$") ~= nil
+end
+
+-- Escape Lua pattern magic so a name can be used literally in gsub.
+local function _esc_pat(s)
+  return (s:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"))
+end
+
 local function _clamp_ok(fig)
   if type(fig) ~= "table" or type(fig.scenes) ~= "table" then return false end
   if _count(fig.scenes) == 0 or _count(fig.scenes) > MAX_SCENES then return false end
   if _count(fig.counters) > MAX_COUNTERS then return false end
+  for name in pairs(fig.counters or {}) do
+    if not _valid_name(name) then return false end   -- keeps render's gsub safe
+  end
   if not fig.initial or not fig.scenes[fig.initial] then return false end
   for _, scene in pairs(fig.scenes) do
     if _count(scene.lines) > MAX_LINES then return false end
@@ -251,7 +268,10 @@ local function _resolve(scene, content)
     return _st.slots[name] or ""
   end)
   for name, val in pairs(_st.counters) do
-    out = string.gsub(out, "{count:" .. name .. "}", tostring(val))
+    -- escape the name for the pattern (defense-in-depth; _clamp_ok already
+    -- rejected non-%w names at load). Python's twin uses str.replace, so a
+    -- literal match here keeps the four interpreters in parity.
+    out = string.gsub(out, "{count:" .. _esc_pat(name) .. "}", (tostring(val):gsub("%%", "%%%%")))
   end
   return string.sub(out, 1, MAX_TEXT_LEN)
 end

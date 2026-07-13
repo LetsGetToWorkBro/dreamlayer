@@ -35,6 +35,13 @@ if type(_G.DREAMLAYER_THEME) == "table" then
   end
 end
 
+-- Monotonic tick clock (50ms/tick). Declared here, ahead of the BLE
+-- registrations below, so their closures can pass it to time-based handlers
+-- (Lua upvalues must be in lexical scope at the point the closure is defined).
+-- Without this, on_timbre/on_tincan received nil and computed until_ms = 0 + TTL,
+-- so every Timbre/TinCan frame expired on the first draw after ~2.5s uptime.
+local _tick_ms = 0
+
 -- figment_put/swap/revoke/text arrive as BLE envelopes → stage handlers
 Figment.register(HostComm)
 
@@ -43,14 +50,15 @@ HostComm.register(MT.HORIZON, function(msg) Horizon.on_frame(msg) end)
 -- Yesterlight scrub state rides the same plotter
 HostComm.register(MT.YESTERLIGHT,
                   function(msg) Horizon.on_yesterlight(msg) end)
--- Timbre: known-voice waveforms land in the dream renderer
+-- Timbre: known-voice waveforms land in the dream renderer (needs the tick
+-- clock so the frame's lifetime is measured from *now*, not from boot).
 HostComm.register(MT.TIMBRE,
-                  function(msg) DreamRend.on_timbre(msg) end)
+                  function(msg) DreamRend.on_timbre(msg, _tick_ms) end)
 -- Confluence: the entangled sky; TinCan: the partner's silent ping
 HostComm.register(MT.CONFLUENCE,
                   function(msg) DreamRend.on_confluence(msg) end)
 HostComm.register(MT.TINCAN,
-                  function(msg) DreamRend.on_tincan(msg) end)
+                  function(msg) DreamRend.on_tincan(msg, _tick_ms) end)
 -- Prism Lens: the psychedelic kaleidoscope overlay
 HostComm.register(MT.PRISM, function(msg) Prism.on_prism(msg) end)
 -- Lumen: live voice level drives the listening waveform
@@ -103,10 +111,9 @@ local CARD_PRIORITY = {
 }
 
 -- ---------------------------------------------------------------------------
--- Tick clock — declared ahead of process_inbound so the banish gesture can
--- close over it (Lua upvalues must be in scope at function definition).
+-- Tick clock (_tick_ms) is declared near the top so the BLE registrations can
+-- close over it; the banish gesture below closes over it too.
 -- ---------------------------------------------------------------------------
-local _tick_ms   = 0     -- monotonic tick clock (50ms per tick)
 local BANISH_WINDOW_MS = 2000
 local _last_long_ms = -BANISH_WINDOW_MS  -- last long-press (banish gesture)
 
