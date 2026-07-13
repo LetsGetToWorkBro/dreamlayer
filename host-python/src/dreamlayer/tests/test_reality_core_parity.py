@@ -24,10 +24,22 @@ OP = {"inc": 0, "dec": 1, "set": 2}
 CMP = {"ge": 0, "le": 1, "eq": 2}
 
 
+# The loadable cdylib per platform. NOT a glob: cargo also emits an .rlib in
+# the same directory (the crate builds both types), and a wildcard picks it up
+# — ctypes then fails with "invalid ELF header" (this broke CI; the local glob
+# happened to return the .so first).
+_DYLIB_NAMES = ("libreality_core.so", "libreality_core.dylib", "reality_core.dll")
+
+
+def _find_dylib():
+    release = CRATE / "target" / "release"
+    return next((release / n for n in _DYLIB_NAMES if (release / n).exists()), None)
+
+
 def _load_core():
     if not CRATE.exists():
         pytest.skip("reality-core crate not present")
-    so = next(iter((CRATE / "target" / "release").glob("libreality_core.*")), None)
+    so = _find_dylib()
     if so is None:
         if subprocess.run(["cargo", "--version"], capture_output=True).returncode:
             pytest.skip("cargo not available to build the Rust core")
@@ -35,7 +47,9 @@ def _load_core():
                             capture_output=True, text=True)
         if r.returncode:
             pytest.skip(f"cargo build failed: {r.stderr[-400:]}")
-        so = next(iter((CRATE / "target" / "release").glob("libreality_core.*")))
+        so = _find_dylib()
+        if so is None:
+            pytest.skip("cargo build produced no loadable cdylib")
     lib = ctypes.CDLL(str(so))
     lib.rc_saturate.restype = ctypes.c_int64
     lib.rc_saturate.argtypes = [ctypes.c_int64, ctypes.c_uint8, ctypes.c_int64,
