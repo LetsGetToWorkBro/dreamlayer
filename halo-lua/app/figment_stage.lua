@@ -280,7 +280,12 @@ local function _resolve(scene, content)
   out = string.gsub(out, "{remaining_s}", tostring(math.ceil(remaining)))
   out = string.gsub(out, "{elapsed}", _fmt_clock(elapsed))
   out = string.gsub(out, "{elapsed_ms}", tostring(math.floor(elapsed * 1000)))
-  out = string.gsub(out, "{slot}", _st.slots[""] or "")
+  -- Function replacements, NOT a string replacement: gsub treats a replacement
+  -- STRING's `%` as pattern magic (Lua 5.2+ raises on `%` not followed by a
+  -- digit/`%`), so host slot text like "100%" would crash _render every tick on
+  -- the device. A function return value is inserted literally — matching
+  -- Python's str.replace and keeping the four interpreters in parity.
+  out = string.gsub(out, "{slot}", function() return _st.slots[""] or "" end)
   out = string.gsub(out, "{slot:(%w+)}", function(name)
     return _st.slots[name] or ""
   end)
