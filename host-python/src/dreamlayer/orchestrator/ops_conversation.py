@@ -211,11 +211,16 @@ class ConversationOps:
         if not parsed:
             return
         person = self.conversation.last_other_speaker() or "someone"
+        # Only tell the wearer a promise was kept if it actually landed. This
+        # path runs off the capture daemon thread; a write that fails there
+        # (or anywhere) must surface on the health ledger, never a card that
+        # says "captured" over an empty database.
         try:
             self.db.add_commitment(person, parsed["task"], parsed.get("due") or None,
                                    None, 0.7)
-        except Exception:
-            pass
+        except Exception as exc:
+            self.health.record_failure("capture:commitment", exc)
+            return
         if not self.focus_active():
             self.bridge.send_card(
                 cards.commitment_recall({"person": person, "task": parsed["task"],
