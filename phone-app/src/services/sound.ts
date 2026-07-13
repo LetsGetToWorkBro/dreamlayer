@@ -30,17 +30,26 @@ const FAMILIES: Record<string, number[]> = {
   hey: [
     require("../../assets/sounds/hey1.mp3"), // "Hey"
     require("../../assets/sounds/hey2.mp3"), // "Hello"
+    require("../../assets/sounds/hey3.mp3"), // "Hey"
+    require("../../assets/sounds/hey4.mp3"), // "Hey"
+    require("../../assets/sounds/hey5.mp3"), // "Hey"
   ], // Juno greets on summon — hey or hello, rotated
   listen: [
     require("../../assets/sounds/listen1.mp3"),
-  ], // the "Listen!" tap (single take for now — add variants as recorded)
+    require("../../assets/sounds/listen2.mp3"),
+    require("../../assets/sounds/listen3.mp3"),
+    require("../../assets/sounds/listen4.mp3"),
+  ], // the "Listen!" tap
   look: [
     require("../../assets/sounds/look1.mp3"),
     require("../../assets/sounds/look2.mp3"),
+    require("../../assets/sounds/look3.mp3"),
   ], // "look at this"
   watchout: [
     require("../../assets/sounds/watchout1.mp3"),
     require("../../assets/sounds/watchout2.mp3"),
+    require("../../assets/sounds/watchout3.mp3"),
+    require("../../assets/sounds/watchout4.mp3"),
   ], // urgent heads-up
   sfx: [
     require("../../assets/sounds/sfx10.mp3"),

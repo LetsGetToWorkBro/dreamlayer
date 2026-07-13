@@ -27,10 +27,10 @@ EARCONS = {
 
 # earcon id -> the family of variant basenames (rotated at play time)
 FAMILIES = {
-    "wake":        ["hey1", "hey2"],   # "Hey" / "Hello" — the summon greeting
-    "hark":        ["listen1"],        # single take for now; add as recorded
-    "hark_urgent": ["watchout1", "watchout2"],
-    "look":        ["look1", "look2"],
+    "wake":        ["hey1", "hey2", "hey3", "hey4", "hey5"],  # "Hey"×4 / "Hello"
+    "hark":        ["listen1", "listen2", "listen3", "listen4"],
+    "hark_urgent": ["watchout1", "watchout2", "watchout3", "watchout4"],
+    "look":        ["look1", "look2", "look3"],
     "chime":       ["sfx10", "sfx13"],
 }
 
