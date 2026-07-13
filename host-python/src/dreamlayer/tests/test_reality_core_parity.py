@@ -51,7 +51,15 @@ def _load_core():
                                    ctypes.c_int64, ctypes.c_int64]
     lib.rc_guard_eval.restype = ctypes.c_int32
     lib.rc_guard_eval.argtypes = [ctypes.c_int64, ctypes.c_uint8, ctypes.c_int64]
+    lib.rc_fmt_clock.restype = ctypes.c_uint64
+    lib.rc_fmt_clock.argtypes = [ctypes.c_double, ctypes.c_char_p, ctypes.c_uint64]
     return lib
+
+
+def _core_fmt_clock(core, secs: float) -> str:
+    buf = ctypes.create_string_buffer(32)
+    n = core.rc_fmt_clock(secs, buf, 32)
+    return buf.raw[:n].decode("ascii")
 
 
 def _py_guard(val, cmp, threshold):
@@ -128,6 +136,36 @@ class TestGuardParity:
                     py = 1 if _py_guard(val, cmp, threshold) else 0
                     rs = core.rc_guard_eval(val, CMP[cmp], threshold)
                     assert py == rs, (val, cmp, threshold, py, rs)
+
+
+class TestFmtClockParity:
+    def test_swept(self, core):
+        from dreamlayer.reality_compiler.v2.interpreter import _fmt_clock
+        cases = ([0.0, 0.1, 0.5, 1.0, 47.9, 48.0, 59.0, 59.2, 59.999,
+                  60.0, 61.0, 90.0, 168.0, 179.5, 3599.0, 3600.0, 7261.0, -5.0]
+                 + [i * 0.7 for i in range(0, 300, 7)])
+        for secs in cases:
+            assert _core_fmt_clock(core, secs) == _fmt_clock(secs), secs
+
+    def test_through_the_real_render_path(self, core):
+        # a live countdown Stage: the {remaining} and {elapsed} text the frame
+        # actually shows must equal the core's formatting of the same clocks —
+        # the first string produced by the Rust core matching a real render
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, TextLine, Transition, Stage, END,
+        )
+        fig = Figment(name="clock", initial="a")
+        fig.add_scene(Scene(
+            id="a", duration_sec=180.0, tick="countdown",
+            lines=[TextLine("{remaining}", row=0), TextLine("{elapsed}", row=1)],
+            on_timeout=[Transition(target=END)]))
+        st = Stage(fig)
+        for dt in (0.0, 1.0, 11.5, 47.5, 59.7, 60.0):   # crosses the minute mark
+            if dt:
+                st.step(dt)
+            lines = st.frame().lines
+            assert lines[0].text == _core_fmt_clock(core, st.remaining())
+            assert lines[1].text == _core_fmt_clock(core, st.scene_elapsed)
 
 
 def test_bounded_loop_parity_against_the_real_stage(core):

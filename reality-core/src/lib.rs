@@ -156,6 +156,91 @@ pub extern "C" fn rc_accept_slot(
 }
 
 // ---------------------------------------------------------------------------
+// The first STRING across the ABI: the clock formatter under {remaining} and
+// {elapsed}. String output uses the canonical C protocol — the caller passes a
+// buffer, we write ASCII into it and return the length — which works unchanged
+// over ctypes (native) and wasm linear memory. No allocation: the digits are
+// composed in a stack array. (Trivia: this is the formatter whose "2:48"
+// output once became a colon filename that broke Windows clones — see #210.)
+// ---------------------------------------------------------------------------
+
+/// Write the decimal digits of `n` into `buf`; returns how many were written.
+#[inline]
+fn write_dec(mut n: u64, buf: &mut [u8]) -> usize {
+    let mut tmp = [0u8; 20];
+    let mut i = 0;
+    loop {
+        tmp[i] = b'0' + (n % 10) as u8;
+        i += 1;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    for k in 0..i {
+        buf[k] = tmp[i - 1 - k]; // digits were composed least-significant first
+    }
+    i
+}
+
+/// Format a clock the way both interpreters do: `secs = max(0, ceil(secs))`;
+/// under a minute a plain seconds string ("48"), otherwise minutes:seconds
+/// with zero-padded seconds ("2:48"; minutes are unpadded and never wrap to
+/// hours). Mirrors `interpreter._fmt_clock` and `figment.js` `_fmtClock`.
+///
+/// Writes ASCII into `out` (up to `cap` bytes) and returns the number written
+/// (the full formatted value is at most 23 bytes). A NaN reads as 0 — clock
+/// inputs are non-negative by construction; this is defensive only.
+///
+/// # Safety
+/// `out` must be valid for writes of `cap` bytes (or null, to just measure).
+#[no_mangle]
+pub extern "C" fn rc_fmt_clock(secs: f64, out: *mut u8, cap: u64) -> u64 {
+    let s = if secs.is_nan() || secs <= 0.0 {
+        0u64
+    } else {
+        secs.ceil() as u64
+    };
+    let mut tmp = [0u8; 24];
+    let mut len = 0usize;
+    if s >= 60 {
+        len += write_dec(s / 60, &mut tmp[len..]);
+        tmp[len] = b':';
+        len += 1;
+        let ss = s % 60;
+        tmp[len] = b'0' + (ss / 10) as u8;
+        len += 1;
+        tmp[len] = b'0' + (ss % 10) as u8;
+        len += 1;
+    } else {
+        len += write_dec(s, &mut tmp[len..]);
+    }
+    let n = core::cmp::min(len as u64, cap);
+    if !out.is_null() {
+        unsafe { core::ptr::copy_nonoverlapping(tmp.as_ptr(), out, n as usize) };
+    }
+    n
+}
+
+/// A small scratch buffer inside the module, so the wasm binding has a safe
+/// place for string output without an allocator: call `rc_scratch_ptr()`,
+/// pass it as `out` with `rc_scratch_len()` as `cap`, then read the returned
+/// number of bytes back out of linear memory. Single-threaded use only (the
+/// interpreter is), which is why the plain static is acceptable here.
+const SCRATCH_LEN: usize = 64;
+static mut SCRATCH: [u8; SCRATCH_LEN] = [0; SCRATCH_LEN];
+
+#[no_mangle]
+pub extern "C" fn rc_scratch_ptr() -> *mut u8 {
+    core::ptr::addr_of_mut!(SCRATCH) as *mut u8
+}
+
+#[no_mangle]
+pub extern "C" fn rc_scratch_len() -> u64 {
+    SCRATCH_LEN as u64
+}
+
+// ---------------------------------------------------------------------------
 // Rust-side unit tests: the same boundary cases the Python suite pins, so the
 // core is self-checking even before the cross-language parity harness runs.
 // ---------------------------------------------------------------------------
@@ -237,6 +322,36 @@ mod tests {
             assert_eq!(rc_spend_ok(t), ptr_spent);
             assert_eq!(rc_spend_after(t), out);
         }
+    }
+
+    #[test]
+    fn fmt_clock_matches_both_interpreters() {
+        fn fmt(secs: f64) -> String {
+            let mut buf = [0u8; 24];
+            let n = rc_fmt_clock(secs, buf.as_mut_ptr(), 24) as usize;
+            core::str::from_utf8(&buf[..n]).unwrap().to_string()
+        }
+        assert_eq!(fmt(0.0), "0");
+        assert_eq!(fmt(0.1), "1"); // ceil
+        assert_eq!(fmt(48.0), "48");
+        assert_eq!(fmt(59.0), "59");
+        assert_eq!(fmt(59.2), "1:00"); // ceil crosses the minute
+        assert_eq!(fmt(60.0), "1:00");
+        assert_eq!(fmt(61.0), "1:01");
+        assert_eq!(fmt(90.0), "1:30");
+        assert_eq!(fmt(168.0), "2:48"); // the #210 filename, alive and well
+        assert_eq!(fmt(3599.0), "59:59");
+        assert_eq!(fmt(3600.0), "60:00"); // minutes never wrap to hours
+        assert_eq!(fmt(-5.0), "0"); // clamped at zero
+    }
+
+    #[test]
+    fn fmt_clock_respects_the_cap_and_scratch_fits() {
+        let mut buf = [0u8; 2];
+        assert_eq!(rc_fmt_clock(168.0, buf.as_mut_ptr(), 2), 2); // truncated
+        assert_eq!(&buf, b"2:");
+        assert_eq!(rc_fmt_clock(168.0, core::ptr::null_mut(), 0), 0); // measure-only
+        assert!(rc_scratch_len() >= 24);
     }
 
     #[test]

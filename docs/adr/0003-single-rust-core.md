@@ -102,15 +102,24 @@ care about) is now backed by the one Rust core, on both shipping targets, not
 just leaf arithmetic. This is the first increment of the "timeout graph, guards"
 work, done the same verified way as the caps.
 
-**What is deliberately *not* here yet — slot resolution.** The remaining named
-piece of a scene step is `_resolve` (string templating: `{remaining}`,
-`{elapsed}`, `{slot:name}`, `{count:name}`, then clamp). It is intentionally
-deferred: strings do not cross the C ABI / wasm boundary as cleanly as integers
-(they need pointers into wasm linear memory and an owned-buffer protocol), so it
-is a heavier, separate increment rather than another pure-int function. Honest
-status: the *decision* half of the scene step is in the core and proven; the
-*string* half is not, and pretending otherwise would misstate how far this has
-gone.
+**The first string across the ABI — the clock formatter.** `_resolve`'s string
+templating splits into two very different pieces. The *value formatting* —
+`_fmt_clock`, the formatter under `{remaining}`/`{elapsed}` — is now in the core
+as `rc_fmt_clock`, using the canonical C string protocol (caller buffer + length
+return, plus an in-module scratch buffer so the wasm binding has a safe write
+target without an allocator). Both parity harnesses check it swept *and through
+the real render path*: the Python Stage's `frame().lines` text and the JS
+Stage's own `_resolve("{remaining}")` on a live countdown, stepped across the
+minute boundary, equal the core's output byte-for-byte. So the buffer protocol
+the whole string story depends on is proven on both targets.
+
+**What is deliberately *not* here yet — template substitution.** The other half
+of `_resolve` is the substitution engine itself: walking `{slot:name}` /
+`{count:name}` tokens against the slots/counters *maps*. That needs map state
+marshaled across the boundary (or held inside the core as the stateful `Stage`
+struct — the real end-state), which is the genuinely heavier increment. Honest
+status: decisions and value formatting are in the core and proven; the
+templating walk and the stateful `step()` are not.
 
 ## Options considered
 
@@ -172,13 +181,15 @@ first validation — a second binding target (wasm, checked against the shipped
 real language boundary. The next concrete steps, in order of decreasing
 certainty and increasing cost:
 
-1. **Grow the core past the caps** to a full scene *step*. Started: guard
-   evaluation (`rc_guard_eval`) is in the core and the bounded-loop control flow
-   is proven step-for-step on both the real Python and JS Stages (above). Still
-   to do here: **slot resolution** (`_resolve`'s string templating), which needs
-   the wasm/C-ABI string-buffer protocol and so is a heavier increment than the
-   pure-int decision core; and then the stateful `step()` clock subdivision that
-   ties them together. Each lands with the Python and wasm parity harnesses kept
+1. **Grow the core past the caps** to a full scene *step*. Progress: guard
+   evaluation (`rc_guard_eval`) is in and the bounded-loop control flow is
+   proven step-for-step on both real Stages; the clock formatter
+   (`rc_fmt_clock`) is in and proven through both real render paths, which
+   establishes the string-buffer protocol. Still to do here: the **template
+   substitution walk** (`{slot:name}`/`{count:name}` against the slots/counters
+   maps — needs map state across the boundary, or the stateful `Stage` struct
+   inside the core, which is the real end-state) and the stateful `step()`
+   clock subdivision. Each lands with the Python and wasm parity harnesses kept
    green. This is where the write-thrice savings actually start to land.
 2. **The Lua/device binding** (`mlua` + a `thumbv7em-none-eabi` build), which is
    where the memory-safety payoff lives but also the firmware-integration cost

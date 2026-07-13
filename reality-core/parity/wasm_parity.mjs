@@ -44,7 +44,20 @@ const ref = {
     isDefault || isKnown || named < max,
   guard: (v, cmp, threshold) =>                              // figment.js:952-955
     cmp === "ge" ? v >= threshold : cmp === "le" ? v <= threshold : v === threshold,
+  fmtClock: (secs) => {                                      // figment.js:887-890
+    secs = Math.max(0, Math.ceil(secs));
+    return secs >= 60 ? (Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2)) : String(secs);
+  },
 };
+
+// read a string result out of wasm linear memory via the module's scratch buffer
+const scratchPtr = Number(rc.rc_scratch_ptr());
+const scratchCap = rc.rc_scratch_len();
+function coreFmtClock(secs) {
+  const n = Number(rc.rc_fmt_clock(secs, scratchPtr, scratchCap));
+  return new TextDecoder("ascii").decode(
+    new Uint8Array(rc.memory.buffer, scratchPtr, n));
+}
 
 const OP = { inc: 0, dec: 1, set: 2 };
 const CMP = { ge: 0, le: 1, eq: 2 };
@@ -91,6 +104,14 @@ for (const cmp of ["ge", "le", "eq"]) {
       eq(rc.rc_guard_eval(BigInt(v), CMP[cmp], BigInt(threshold)),
          ref.guard(v, cmp, threshold) ? 1 : 0, `guard(${v},${cmp},${threshold})`);
     }
+  }
+}
+{
+  const cases = [0, 0.1, 0.5, 1, 47.9, 48, 59, 59.2, 59.999,
+                 60, 61, 90, 168, 179.5, 3599, 3600, 7261, -5];
+  for (let i = 0; i < 300; i += 7) cases.push(i * 0.7);
+  for (const secs of cases) {
+    eq(coreFmtClock(secs), ref.fmtClock(secs), `fmt_clock(${secs})`);
   }
 }
 
@@ -158,4 +179,25 @@ const { END, SELF } = F;                       // "@end" / "@self" — the modul
   eq(BigInt(st.counters.round), 3n, "loop final round");
 })();
 
-console.log(`OK — wasm/JS parity: ${checks} swept checks + 3 real-Stage scenarios agree`);
+// clock strings through the REAL render path: a live countdown Stage's own
+// _resolve of {remaining}/{elapsed} vs the wasm core's formatting — the first
+// string produced by the Rust core matching real shipped JS output.
+(function clockRenderParity() {
+  const fig = {
+    name: "clock", initial: "a",
+    counters: {},
+    scenes: { a: {
+      id: "a", duration_sec: 180.0, tick: "countdown",
+      lines: [{ content: "{remaining}", row: 0 }, { content: "{elapsed}", row: 1 }],
+      on: {}, on_timeout: [{ target: END }],
+    } },
+  };
+  const st = new F.Stage(fig);
+  for (const dt of [0, 1.0, 11.5, 47.5, 59.7, 60.0]) {   // crosses the minute mark
+    if (dt) st.step(dt);
+    eq(st._resolve("{remaining}"), coreFmtClock(st.remaining()), `render remaining @+${dt}`);
+    eq(st._resolve("{elapsed}"), coreFmtClock(st.scene_elapsed), `render elapsed @+${dt}`);
+  }
+})();
+
+console.log(`OK — wasm/JS parity: ${checks} swept checks + 4 real-Stage scenarios agree`);

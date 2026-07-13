@@ -21,8 +21,10 @@ proved with CrossHair and M4 mutation-hardened (`reality_compiler/v2/contracts.p
 | C ABI symbol    | mirrors               | role |
 |-----------------|-----------------------|------|
 | `rc_guard_eval` | `interpreter._guard`  | does `counter <cmp> threshold` hold? — the guarded-timeout decision that ends a bounded loop |
+| `rc_fmt_clock`  | `_fmt_clock` / `_fmtClock` | the `{remaining}`/`{elapsed}` clock string ("48", "2:48") — the first string across the ABI (caller buffer + `rc_scratch_ptr`/`rc_scratch_len` for wasm) |
 
-Pure integer/float math: no allocation, no deps, `no_std`-ready as written.
+No allocation, no deps, `no_std`-ready as written (strings compose in a stack
+array and copy into a caller/scratch buffer).
 
 ## Build & test
 
