@@ -91,8 +91,15 @@ def agent_path(label: str = AGENT_LABEL) -> Path:
 
 def install_launch_agent(directory: str | None = None, token: str = "",
                          port: int = DEFAULT_PORT) -> Path:
-    """Write (and return) a LaunchAgent plist that starts the Brain at login."""
-    args = [sys.executable, "-m", "dreamlayer.ai_brain.server", "--port", str(port)]
+    """Write (and return) a LaunchAgent plist that starts the Brain at login.
+
+    Binds 0.0.0.0 on purpose: the login agent IS the always-on appliance the
+    phone pairs with, so it must be LAN-reachable. Safety comes from the token —
+    a non-loopback bind with no token mints one on first run (server __main__).
+    (A bare `python -m …server` stays loopback-only; only this deployment path
+    opts into the LAN.)"""
+    args = [sys.executable, "-m", "dreamlayer.ai_brain.server",
+            "--host", "0.0.0.0", "--port", str(port)]
     if directory:
         args += ["--dir", directory]
     if token:

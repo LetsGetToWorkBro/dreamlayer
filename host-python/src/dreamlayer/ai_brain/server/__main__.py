@@ -40,7 +40,12 @@ def main(argv=None) -> int:
     ap.add_argument("--dir", default=os.environ.get(
         "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer")))
     ap.add_argument("--token", default=os.environ.get("DREAMLAYER_TOKEN", ""))
-    ap.add_argument("--host", default="0.0.0.0")
+    # Loopback by DEFAULT (re-audit 2026-07): a bare `python -m …server` must
+    # not expose the brain to the LAN. Reaching it from the phone is an opt-in —
+    # pass --host 0.0.0.0 (the login-agent installer and the pairing flow do),
+    # which then mandates a minted token below. The default was 0.0.0.0, so
+    # "localhost by default" was claimed but not true; this makes it true.
+    ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=7777)
     args = ap.parse_args(argv)
 

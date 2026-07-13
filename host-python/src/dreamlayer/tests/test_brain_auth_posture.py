@@ -66,3 +66,30 @@ class TestLauncherMintsTokenForNetworkBind:
     def test_existing_token_is_never_overwritten(self):
         token, minted = self._decide("chosen", "0.0.0.0")
         assert not minted and token == "chosen"
+
+
+class TestBareServerDefaultsToLoopback:
+    """`python -m …server` with no --host must bind loopback (re-audit 2026-07).
+    The old default was 0.0.0.0, so 'localhost by default' was claimed but not
+    true; the token-minting layer covered the LAN case but a bare launch still
+    exposed the panel. This exercises the REAL parser default, not a mirror."""
+
+    def test_bare_launch_binds_loopback(self, tmp_path, monkeypatch):
+        from dreamlayer.ai_brain.server import __main__ as srv_main
+
+        captured = {}
+
+        class _Stop(Exception):
+            pass
+
+        def _spy(brain, host, port):
+            captured["host"] = host
+            raise _Stop  # stop before serve_forever
+
+        monkeypatch.setattr(srv_main, "make_brain_server", _spy)
+        try:
+            srv_main.main(["--dir", str(tmp_path / "cfg")])
+        except _Stop:
+            pass
+        assert captured["host"] == "127.0.0.1"
+        assert _is_loopback_host(captured["host"]) is True

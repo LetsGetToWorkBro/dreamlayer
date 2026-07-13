@@ -151,6 +151,33 @@ class TestControls:
         finally:
             be.cloud_chat = orig
 
+    def test_cloud_egress_counted_even_when_call_fails(self, tmp_path):
+        """Re-audit 2026-07: the query LEAVES the device before the provider
+        answers. A call that errors or returns empty still egressed, so it must
+        be counted and logged — counting only successful answers under-reported
+        egress and broke the panel's 'every one is logged' promise."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", cloud_api_key="k", cloud_model="m",
+                    cloud_enabled=True).save(cfg)
+        brain = Brain(cfg)
+        import dreamlayer.ai_brain.server.backends as be
+        orig = be.cloud_chat
+
+        def boom(config, prompt, **k):
+            raise RuntimeError("provider 500")
+        be.cloud_chat = boom
+        try:
+            ans = brain.ask("something not in any file")
+            assert ans is None                              # errored → no answer
+            assert brain.config.cloud_calls == 1            # …but still egressed
+            assert any(i["kind"] == "cloud-egress" for i in brain.activity.recent())
+            # an empty (non-error) reply is egress too
+            be.cloud_chat = lambda config, prompt, **k: ""
+            assert brain.ask("also not in any file") is None
+            assert brain.config.cloud_calls == 2
+        finally:
+            be.cloud_chat = orig
+
     def test_messages_feed_gated_and_relayed(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t").save(cfg)

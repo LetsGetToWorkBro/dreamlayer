@@ -87,3 +87,7 @@ def test_install_launch_agent_writes_plist(tmp_path, monkeypatch):
     assert p.exists() and p.name == "vision.dreamlayer.brain.plist"
     body = p.read_text()
     assert "--token" in body and "rune" in body and "7778" in body
+    # The login agent IS the LAN appliance the phone pairs with, so it must
+    # opt into a network-reachable bind explicitly (re-audit 2026-07). A bare
+    # `python -m …server` stays loopback; only this deployment path binds 0.0.0.0.
+    assert "--host" in body and "0.0.0.0" in body

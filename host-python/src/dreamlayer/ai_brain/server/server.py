@@ -779,8 +779,18 @@ class Brain:
         return ans
 
     def _ask_cloud(self, query: str) -> Optional[Answer]:
-        """The one place data leaves the device — logged every single time."""
+        """The one place data leaves the device — logged every single time.
+
+        The count + egress-log happen BEFORE the request and BEFORE any
+        empty/error guard (re-audit 2026-07): reaching here means the query is
+        about to be sent to the provider, so a call that later errors or returns
+        empty STILL left the device and must be on the ledger. Counting only
+        successful answers silently under-reported egress — a real gap for a
+        product whose panel promises "every one is logged"."""
         from .backends import cloud_chat
+        self.config.cloud_calls += 1                    # the query is leaving now
+        self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
+        self.save()
         try:
             text = cloud_chat(self.config, query)
             self.health.record_ok("cloud")
@@ -789,9 +799,6 @@ class Brain:
             text = ""
         if not text:
             return None
-        self.config.cloud_calls += 1
-        self.save()
-        self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
         return Answer(text=text, tier="cloud", sources=["cloud"], confidence=0.6)
 
     def explain(self, label: str, image_b64, want: str) -> Optional[Answer]:
