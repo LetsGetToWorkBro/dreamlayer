@@ -168,13 +168,16 @@ Provenance can trace it.
 
 ## 8. Decisions (resolved)
 
-1. **Cloud posture** *(revised)* — **connected by default**: cloud is allowed
-   so the best answer wins wherever you are, and on-device is the airplane-mode
-   fallback (DreamLayer works phone-only, just more limited). The Mac mini
-   brain runs over the internet by default too. **Advanced users** flip
-   `set_private_mode()` / `network_mode="lan_only"` to keep everything
-   on-device and home-LAN, no cloud. (Privacy Veil and "private events never
-   leave" still hold in either mode.)
+1. **Cloud posture** *(re-revised 2026-07)* — **connected by default, cloud
+   opt-in**: your *own* brains are reachable wherever you are (the Mac mini
+   brain runs over the internet by default), but the third-party **cloud tier
+   starts off** and stays off until you flip it on (`use_cloud()` / the Cloud
+   switch) — a privacy-first product shouldn't send your hardest questions to
+   someone else's model by default. On-device remains the airplane-mode
+   fallback (DreamLayer works phone-only, just more limited). **Advanced
+   users** flip `set_private_mode()` / `network_mode="lan_only"` to keep
+   everything on-device and home-LAN. (Privacy Veil and "private events never
+   leave" still hold in every mode.)
 2. **Knowledge base** — the brain lives on an **always-on Mac mini (Apple
    Silicon)** and indexes **chosen directories** (a configurable watch-list),
    plus **email and iMessage read**. It can also **send** email/iMessage —

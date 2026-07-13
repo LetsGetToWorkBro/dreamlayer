@@ -281,7 +281,7 @@ function switchPatch(s: BrainState): Record<string, unknown> {
 export const useBrainStore = create<BrainState>((set, get) => ({
   macMini: { connected: false, url: "", token: "", relayUrl: "" },
   glasses: { connected: false, id: "" },
-  cloud: true,
+  cloud: false,
   incognito: false,
   capturePaused: false,
   notifyTexts: true,

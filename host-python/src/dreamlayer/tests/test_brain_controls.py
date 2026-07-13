@@ -50,11 +50,13 @@ class Live:
 
 class TestConfig:
     def test_cloud_ready_and_masking(self):
-        c = BrainConfig(cloud_api_key="secret", cloud_model="gpt-4o-mini")
+        c = BrainConfig(cloud_api_key="secret", cloud_model="gpt-4o-mini",
+                        cloud_enabled=True)
         assert c.cloud_ready() is True
         assert c.public()["cloud_api_key"] == "set"       # never leaks
         assert "secret" not in json.dumps(c.public())
-        assert BrainConfig().cloud_ready() is False        # no key → not ready
+        assert BrainConfig().cloud_ready() is False        # opt-in default: off
+        assert BrainConfig(cloud_enabled=True).cloud_ready() is False  # no key
         c.network_mode = "lan_only"
         assert c.cloud_ready() is False                    # incognito shuts it
 
@@ -134,7 +136,8 @@ class TestControls:
 
     def test_cloud_fallback_logs_egress(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
-        BrainConfig(token="t", cloud_api_key="k", cloud_model="m").save(cfg)
+        BrainConfig(token="t", cloud_api_key="k", cloud_model="m",
+                    cloud_enabled=True).save(cfg)
         brain = Brain(cfg)
         # inject a fake cloud call so nothing hits the network
         import dreamlayer.ai_brain.server.backends as be

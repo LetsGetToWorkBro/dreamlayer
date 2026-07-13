@@ -145,7 +145,9 @@ class TestOrchestratorWiring:
         ans = orc.ask_brain("what's the rent")
         assert ans is not None and "2400" in ans.text
         assert any(f.get("t") == "card" for f in orc.bridge.raw)
-        # connected by default (product posture); private mode is the opt-out
+        # cloud is opt-in (product posture); private mode still forces it off
+        assert orc.brain.cloud_opt_in is False
+        orc.opt_in_cloud(True)
         assert orc.brain.cloud_opt_in is True
         orc.set_private_mode(True)
         assert orc.brain.cloud_opt_in is False and orc.private_mode is True

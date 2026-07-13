@@ -71,7 +71,7 @@ just three independent switches, all on the Brain tab.
 | Switch | Plainly | Starts as |
 |---|---|---|
 | **Mac** | "Use my Mac's bigger brain and my files" | Off — phone is the brain |
-| **Cloud** | "For a rare hard question, ask the internet AI" | On — but easy to turn off, and it never gets your personal stuff |
+| **Cloud** | "For a rare hard question, ask the internet AI" | Off — opt in when you want it, and it never gets your personal stuff |
 | **Incognito** | "For the next stretch: remember nothing, and no cloud, period" | Off |
 
 That is the entire mental model. The [privacy chapter](privacy.md) covers

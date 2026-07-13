@@ -147,10 +147,10 @@ class Orchestrator(
         # health: tier failures are skipped-not-fatal AND recorded; each tier
         # call runs under the Juno-ask latency budget (budgets.py).
         from .budgets import JUNO_ASK_MS
-        self.brain = BrainRouter(cloud_opt_in=True, local_only=True,
+        self.brain = BrainRouter(cloud_opt_in=False, local_only=True,
                                  health=self.health,
                                  deadline_ms=JUNO_ASK_MS)
-        self._cloud_pref = True               # remembered across incognito
+        self._cloud_pref = False              # cloud is opt-in; remembered across incognito
         self.mac_mini_connected = False       # phone is the brain until paired
         self.incognito = False
         self.glasses_id = None                # set at pairing

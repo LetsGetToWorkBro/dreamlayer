@@ -56,6 +56,5 @@ back to keyword answers, so it never breaks.
 - Ollama and the Brain both run on the Mac mini; the phone only ever talks to
   the Brain (token-paired), never to Ollama directly.
 - First model load is slow (cold start); after that it's warm.
-- Nothing in this setup leaves the machine — Ollama is local. The **cloud**
-  tier (for the hardest asks) is a separate switch, on by default; turn it
-  off (or go incognito / `lan_only`) to keep everything local.
+- Nothing leaves the machine. The opt-in **cloud** tier (for the hardest
+  asks) is separate and off until you enable it.

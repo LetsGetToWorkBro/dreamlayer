@@ -68,19 +68,23 @@ class TestFacets:
 
 
 class TestNetworkPosture:
-    def test_config_default_is_connected(self):
+    def test_config_default_is_connected_but_cloud_is_opt_in(self):
         c = BrainConfig()
-        assert c.network_mode == "connected" and c.cloud_enabled is True
+        assert c.network_mode == "connected" and c.cloud_enabled is False
         assert c.lan_only is False
 
     def test_lan_only_is_the_advanced_opt_out(self):
         c = BrainConfig(network_mode="lan_only")
         assert c.lan_only is True
 
-    def test_orchestrator_connected_by_default(self):
+    def test_orchestrator_cloud_off_until_opted_in(self):
         from dreamlayer.tests.test_integration_dream_suite import FakeBridge
         from dreamlayer.orchestrator.orchestrator import Orchestrator
         orc = Orchestrator(FakeBridge())
-        assert orc.brain.cloud_opt_in is True and orc.private_mode is False
-        orc.set_private_mode(True)
+        assert orc.brain.cloud_opt_in is False and orc.private_mode is False
+        orc.opt_in_cloud(True)
+        assert orc.brain.cloud_opt_in is True
+        orc.set_private_mode(True)                 # incognito forces cloud off…
         assert orc.brain.cloud_opt_in is False
+        orc.set_private_mode(False)                # …and restores the opt-in after
+        assert orc.brain.cloud_opt_in is True

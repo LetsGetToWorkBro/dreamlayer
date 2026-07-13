@@ -14,7 +14,7 @@ Settings screens (placement). Persisted to AsyncStorage unless noted.
 |---|---|---|---|
 | Mac mini connected | Brain | off | phone-vs-Mac brain; gates all Brain-backed screens; `connectMacMini` |
 | Glasses connected | Brain / onboarding | off | pairing state for the Halo |
-| Use cloud for hard cases | Brain | **on** | `POST /dreamlayer/config {cloud_enabled}`; disabled while incognito |
+| Use cloud for hard cases | Brain | **off** (opt-in) | `POST /dreamlayer/config {cloud_enabled}`; disabled while incognito |
 | Incognito | Brain, Settings | off | forces cloud off and pauses capture; `POST /dreamlayer/config {network_mode}` |
 | Pause memory capture | Brain, Now, Settings | off | the capture pause; drives the Now tab's Live/Paused pill |
 | Proactive cards | Settings | on | master switch for anticipatory cards |
@@ -76,7 +76,7 @@ persisted as `brain_config.json`, secrets masked on read:
 | `email_enabled` | false | fold Messages/Mail into the index |
 | `summarize_emails` | false | one-line email glances |
 | `network_mode` | `"connected"` | `lan_only` = incognito |
-| `cloud_enabled` | **true** | the cloud switch |
+| `cloud_enabled` | **false** | the cloud switch — opt-in |
 | `cloud_provider` | `openai` | `openai` / `anthropic` / `gemini` / `openrouter` / `ollama` / `dreamlayer` / `custom` preset |
 | `cloud_base_url` | `https://api.openai.com` | any OpenAI-compatible provider |
 | `cloud_api_key` | empty | masked to "set" on read |

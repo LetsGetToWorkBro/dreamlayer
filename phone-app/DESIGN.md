@@ -162,7 +162,8 @@ export default function Example() {
 ## 7. Principles
 
 1. **Frictionless beats featureful.** One code to pair the trio. One switch per
-   idea. The default (phone is the brain, cloud on) works before any setup.
+   idea. The default (phone is the brain, cloud off until you opt in) works
+   before any setup.
 2. **Nothing pops, everything arrives.** Entrance motion + press feedback are not
    decoration — they're how the app tells you it heard you.
 3. **One accent per surface.** Color is meaning, not garnish.

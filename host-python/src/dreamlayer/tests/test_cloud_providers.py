@@ -81,14 +81,15 @@ class TestParseResponse:
 
 class TestCloudReady:
     def test_ollama_ready_without_key(self):
-        c = BrainConfig(cloud_provider="ollama", cloud_model="llama3.2", cloud_api_key="")
+        c = BrainConfig(cloud_provider="ollama", cloud_model="llama3.2",
+                        cloud_api_key="", cloud_enabled=True)
         assert c.cloud_ready() is True
 
     def test_openai_needs_key(self):
         assert BrainConfig(cloud_provider="openai", cloud_model="gpt-4o-mini",
-                           cloud_api_key="").cloud_ready() is False
+                           cloud_api_key="", cloud_enabled=True).cloud_ready() is False
         assert BrainConfig(cloud_provider="openai", cloud_model="gpt-4o-mini",
-                           cloud_api_key="k").cloud_ready() is True
+                           cloud_api_key="k", cloud_enabled=True).cloud_ready() is True
 
     def test_lan_only_shuts_even_ollama(self):
         c = BrainConfig(cloud_provider="ollama", cloud_model="llama3.2",

@@ -70,6 +70,8 @@ LENSES: list[Lens] = [
                 "dreamlayer.object_lens"),
         Feature("label", "Label Lens", "your own facts about a product: dietary rules, ownership, returns",
                 "dreamlayer.object_lens.label"),
+        Feature("taste", "TasteLens", "a shelf or menu → the pick, ranked by your rules (vetoes, budget, rating)",
+                "dreamlayer.orchestrator.taste"),
         Feature("ai_brain", "AI Brain", "name/explain anything; ask your own files",
                 "dreamlayer.ai_brain"),
         Feature("rosetta", "Rosetta Lens", "translate text you look at (the eye)",

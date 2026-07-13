@@ -31,7 +31,7 @@ class BrainConfig:
     # network posture (product default = connected): "connected" reaches the
     # internet + cloud; "lan_only" is the advanced home-only mode.
     network_mode: str = "connected"
-    cloud_enabled: bool = True      # cloud tier allowed by default
+    cloud_enabled: bool = False     # cloud tier is opt-in — off until enabled
     token: str = ""                 # pairing secret the phone must send
     # billing tier (seam only — no paywall). "free" = local & open, grants
     # everything today. A future "cloud" plan is where hosted capabilities

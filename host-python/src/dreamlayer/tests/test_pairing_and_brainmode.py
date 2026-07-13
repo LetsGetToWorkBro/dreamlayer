@@ -76,12 +76,12 @@ class TestBrainModes:
         from dreamlayer.orchestrator.orchestrator import Orchestrator
         return Orchestrator(FakeBridge())
 
-    def test_default_is_phone_brain_cloud_on(self):
+    def test_default_is_phone_brain_cloud_opt_in(self):
         orc = self._orc()
-        # the phone is the brain until a Mac mini is paired; cloud on by default
-        assert orc.brain.local_only and orc.brain.cloud_opt_in
+        # the phone is the brain until a Mac mini is paired; cloud is opt-in
+        assert orc.brain.local_only and not orc.brain.cloud_opt_in
         assert not orc.incognito
-        assert orc.brain_status() == {"brain": "phone", "cloud": True,
+        assert orc.brain_status() == {"brain": "phone", "cloud": False,
                                       "incognito": False, "glasses": False}
 
     def test_connect_mac_mini_upgrades_the_local_brain(self):
@@ -101,6 +101,7 @@ class TestBrainModes:
 
     def test_incognito_forces_cloud_off_and_restores(self):
         orc = self._orc()
+        orc.use_cloud(True)                          # opt in first
         assert orc.brain.cloud_opt_in                # remembered preference: on
         orc.set_incognito(True)
         assert orc.incognito and not orc.brain.cloud_opt_in
