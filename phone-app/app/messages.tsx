@@ -85,7 +85,7 @@ export default function Messages() {
       setText("");
       refresh();
     } else {
-      Alert.alert("Not sent", r.error || "Something went wrong.");
+      Alert.alert(t("messages.notSent"), r.error || t("messages.sendFailed"));
     }
   };
 
@@ -96,19 +96,19 @@ export default function Messages() {
       {!macConnected ? (
         <EmptyState
           glyph="✉"
-          title="Connect your Mac mini"
-          hint="Your Messages & Mail live on your Mac. Pair it (Brain tab) so the Brain can relay them to your glasses and phone."
+          title={t("messages.connectMacTitle")}
+          hint={t("messages.connectMacHint")}
         />
       ) : !enabled ? (
         <EmptyState
           glyph="✉"
-          title="Turn on message relay"
-          hint="In the Brain panel on your Mac mini, enable “Read email & iMessage”. Then they show up here and on your glasses."
+          title={t("messages.relayOffTitle")}
+          hint={t("messages.relayOffHint")}
         />
       ) : loading ? (
         <ActivityIndicator color={colors.accentMemory} style={{ marginTop: space.huge }} />
       ) : items.length === 0 ? (
-        <EmptyState glyph="✉" title="No recent messages" hint="Nothing to relay right now — new messages will appear here and on your glasses." />
+        <EmptyState glyph="✉" title={t("messages.noneTitle")} hint={t("messages.noneHint")} />
       ) : (
         <>
           <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: space.md }]}>
@@ -157,7 +157,7 @@ export default function Messages() {
                         <ActivityIndicator color={colors.accentMemory} />
                       ) : (
                         <Tappable onPress={send} style={[s.sendBtn, !text.trim() && { opacity: 0.4 }]} disabled={!text.trim()}>
-                          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>Approve &amp; send</Text>
+                          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>{t("messages.approveSend")}</Text>
                         </Tappable>
                       )}
                     </View>

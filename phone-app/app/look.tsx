@@ -19,6 +19,7 @@ import { Card } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { play } from "../src/services/haptics";
+import { t } from "../src/i18n";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
@@ -53,8 +54,8 @@ function LiveLook() {
   if (!permission?.granted) {
     return (
       <View style={{ gap: space.md }}>
-        <EmptyState title="Camera permission" hint="Look needs the camera to see what you see." />
-        <PrimaryButton label="Allow camera" onPress={requestPermission} />
+        <EmptyState title={t("look.permTitle")} hint={t("look.permHint")} />
+        <PrimaryButton label={t("look.allowCamera")} onPress={requestPermission} />
       </View>
     );
   }
@@ -74,7 +75,7 @@ function LiveLook() {
       setAnswer(res);
       play(res && res.text ? "success" : "warn");
     } catch {
-      setAnswer({ text: "Couldn't take that picture — try again.", tier: "", sources: [] });
+      setAnswer({ text: t("look.captureFailed"), tier: "", sources: [] });
       play("warn");
     } finally {
       setBusy(false);
@@ -87,7 +88,7 @@ function LiveLook() {
       <View style={s.viewport}>
         <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing="back" />
       </View>
-      <PrimaryButton label={busy ? "Looking…" : "Look"} onPress={snap} />
+      <PrimaryButton label={busy ? t("look.looking") : t("look.look")} onPress={snap} />
       {busy && <ActivityIndicator color={colors.accentSuccess} />}
       {answer && (
         <Card>
@@ -109,14 +110,14 @@ export default function Look() {
       <ScreenHeader
         title="Look"
         eyebrow="Juno"
-        subtitle="Point the phone at anything — same pipeline as the glasses"
+        subtitle={t("look.subtitle")}
       />
       {kit ? (
         <LiveLook />
       ) : (
         <EmptyState
-          title="No camera here"
-          hint="Look uses the device camera. On web or in tests this screen stays quiet."
+          title={t("look.noCameraTitle")}
+          hint={t("look.noCameraHint")}
         />
       )}
     </Screen>

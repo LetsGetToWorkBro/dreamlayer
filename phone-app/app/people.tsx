@@ -51,7 +51,7 @@ export default function People() {
 
       {!macConnected ? (
         <Card>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>Connect your Brain to see your people.</Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>{t("people.connectBrain")}</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.xs }]}>
             The names you're told and the notes you jot on the glasses sync here.
           </Text>
@@ -59,7 +59,7 @@ export default function People() {
       ) : (
         <TextInput
           style={s.search}
-          placeholder="Search people…"
+          placeholder={t("people.searchPlaceholder")}
           placeholderTextColor={colors.statusPaused}
           value={query}
           onChangeText={setQuery}
@@ -70,11 +70,11 @@ export default function People() {
       {macConnected &&
         (list.length === 0 ? (
           <EmptyState
-            title={loading || !loaded ? "Loading…" : "No one yet"}
+            title={loading || !loaded ? t("people.loading") : t("people.noneTitle")}
             hint={
               loading || !loaded
-                ? "Fetching your people."
-                : "Meet someone and their card shows up here."
+                ? t("people.fetching")
+                : t("people.meetSomeone")
             }
           />
         ) : (
@@ -148,7 +148,7 @@ function PersonCard({
             </Text>
           ))}
           <Tappable onPress={() => settle(person.contact_id)} style={s.settleBtn}>
-            <Text style={s.settleText}>Settle up</Text>
+            <Text style={s.settleText}>{t("people.settleUp")}</Text>
           </Tappable>
         </View>
       ) : null}
@@ -175,7 +175,7 @@ function PersonCard({
           <View style={s.addRow}>
             <TextInput
               style={s.noteInput}
-              placeholder="Add a note…"
+              placeholder={t("people.addNote")}
               placeholderTextColor={colors.statusPaused}
               value={draft}
               onChangeText={setDraft}

@@ -21,7 +21,7 @@ export default function Now() {
   const router = useRouter();
   const { paused, connected, togglePause, connect, service } = useHaloStore();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
-  const brainKind = macConnected ? "Mac mini" : "phone";
+  const brainKind = macConnected ? "Mac mini" : t("now.phone");
   const getBrief = useBrainStore((s) => s.getBrief);
   const getLatestBrief = useBrainStore((s) => s.getLatestBrief);
   const sendVoice = useBrainStore((s) => s.sendVoice);
@@ -45,7 +45,7 @@ export default function Now() {
       setBrief(b.text);
       if (!first) {
         playListen(); // Juno: "Listen!" — a fresh brief just landed
-        pushLocal("Morning brief", b.text);
+        pushLocal(t("now.morningBrief"), b.text);
       }
     };
     pull();
@@ -59,7 +59,7 @@ export default function Now() {
   const doBrief = async () => {
     setBriefing(true);
     const r = await getBrief();
-    setBrief(r?.text ?? "Connect your Mac mini for a brief from your messages & mail.");
+    setBrief(r?.text ?? t("now.briefFallback"));
     setBriefing(false);
   };
 
@@ -70,7 +70,7 @@ export default function Now() {
     if (r.intent === "brief") setBrief(r.text ?? "");
     else if (r.answer) setVoiceOut(r.answer);
     else if (r.say) setVoiceOut(r.say); // timers, notes, debts, meet — Juno's confirmation
-    else if (r.intent === "reply") setVoiceOut(`Reply to ${r.to}: “${r.text}” — open Messages to send.`);
+    else if (r.intent === "reply") setVoiceOut(t("now.replyPreview", { to: r.to, text: r.text }));
     else setVoiceOut(`(${r.intent})`);
   };
 
@@ -86,17 +86,17 @@ export default function Now() {
           </Tappable>
         ) : (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.lg }]}>
-            Brain: {brainKind}{paused ? " · capture paused" : " · listening for what matters"}
+            {t("now.brainLabel", { kind: brainKind })}{paused ? t("now.capturePaused") : t("now.listening")}
           </Text>
         )}
       </Animated.View>
 
       {brief ? (
         <View style={s.briefCard}>
-          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>Morning brief</Text>
+          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>{t("now.morningBrief")}</Text>
           <Text style={[typography.body, { color: colors.textPrimary }]}>{brief}</Text>
           <Tappable onPress={() => router.push("/brief")} style={{ marginTop: space.md }}>
-            <Text style={[typography.caption, { color: colors.accentMemory }]}>Read the full brief →</Text>
+            <Text style={[typography.caption, { color: colors.accentMemory }]}>{t("now.readFull")}</Text>
           </Tappable>
         </View>
       ) : null}
@@ -105,13 +105,13 @@ export default function Now() {
         <TextInput
           value={cmd}
           onChangeText={setCmd}
-          placeholder="Say a command… “what did Marcus need?”"
+          placeholder={t("now.commandPlaceholder")}
           placeholderTextColor={colors.textSecondary}
           style={s.voiceInput}
           onSubmitEditing={doVoice}
           returnKeyType="send"
         />
-        <Tappable onPress={doVoice} style={s.voiceBtn}>
+        <Tappable onPress={doVoice} style={s.voiceBtn} accessibilityLabel={t("now.ask")}>
           <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>↳</Text>
         </Tappable>
       </View>
