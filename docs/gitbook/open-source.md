@@ -46,9 +46,10 @@ contribution slots in without touching the core.
 
 ## Status, honestly
 
-The repository is license-complete and public-*intent*: every file, policy,
-and piece of site copy is written to be true the moment the visibility
-flips, and `docs/OPEN_SOURCE.md` carries the remaining go-public checklist
-(the flip itself, the DCO app, sponsors, standing good-first-issues). Until
-that switch, "open source" describes the licensing and the architecture —
-both already real — rather than a public repo you can clone today.
+The repository is **public** — clone it, fork it, PR it. The switch flipped
+in July 2026 with full history, and the claim held up in practice: external
+PRs are arriving and merging, DCO sign-off is enforced by CI on every
+outside PR, and a standing set of `good first issue`s keeps the front door
+open. `docs/OPEN_SOURCE.md` records the go-public checklist as it landed,
+plus the few remaining owner-console items (Discussions, Sponsors, the
+`security@` alias) — none of which block a contributor today.

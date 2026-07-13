@@ -62,11 +62,14 @@ Roughly half the lens catalogue consumes transcribed speech
 - [ ] decide the per-jurisdiction face-matching opt-in default
 
 ## 4. Go-public checklist (docs/OPEN_SOURCE.md)
-Everything there stands; two items the audit sharpened:
-- [ ] decide fresh-history vs full-history BEFORE flipping visibility
-      (the strategy docs live in the history either way)
-- [ ] install the DCO GitHub App (the new dco.yml workflow enforces
-      trailers on PRs; the app adds the reviewer-facing UX)
+The flip happened (July 2026, full history — strategy docs published with
+it), so both sharpened items are resolved or downgraded:
+- [x] fresh-history vs full-history — decided by doing: full history
+- [ ] (optional) install the DCO GitHub App for its reviewer-facing UX;
+      dco.yml already enforces trailers on external PRs
+Remaining owner-console items live in OPEN_SOURCE.md's checklist: the
+`security@`/`conduct@` aliases, Sponsors enrollment, branch protection,
+Discussions, topics + website field.
 
 ## 5. Trademark
 NOTICE asserts rights in the DreamLayer name and mark; unregistered,

@@ -2,7 +2,8 @@
 
 DreamLayer is licensed **Apache-2.0**, whole-repo ([`LICENSE`](../LICENSE),
 [`NOTICE`](../NOTICE)). This page records why, how the project is governed,
-and the checklist that takes the repository public.
+and where the go-public checklist stands — the repository went **public in
+July 2026**, and the first external contributions have already landed.
 
 ## Why Apache-2.0, whole repo
 
@@ -51,45 +52,50 @@ not by accident. (Historical context: relicensing was trivially possible
 while every line was the copyright holder's; the trade was considered and
 declined before significant external work landed.)
 
-## The go-public checklist
+## The go-public checklist — where it stands
 
-The repo is license-complete but still private. Making every public claim
-true takes one pass through this list:
+The switch was flipped in July 2026. What each item became:
 
 1. ~~**Secrets scan**~~ — done (2026-07): no keys, tokens, or credentials in
    tracked files; workflow files reference GitHub Actions secrets by name
    only; `.env.example` is a template.
-2. **Decide the strategy docs' fate.** The monorepo contains business
-   artifacts (`phone-app/APP_STORE.md`, store listings, `docs/CINEMA_*`
-   risk/strategy notes). Two options:
-   - *Publish them* — they're good reading and signal seriousness; or
-   - *Keep them private* — then flipping visibility is NOT enough, because
-     git history retains moved/deleted files. The clean route is a
-     fresh-history public repo (single squashed initial commit) with the
-     private monorepo retired or kept as archive.
-   Default recommendation: publish; nothing in them is secret, only early.
+2. ~~**Decide the strategy docs' fate**~~ — decided by doing: the repo went
+   public **full-history, strategy docs included** (`phone-app/APP_STORE.md`,
+   store listings, `docs/CINEMA_*`). Nothing in them was secret, only early —
+   the "publish" recommendation is what happened.
 3. **Configure `security@dreamlayer.app`** (Cloudflare Email Routing →
-   forward to the maintainer inbox) so SECURITY.md is answerable.
-4. **GitHub hygiene** — branch protection on `main` (require the pytest
-   check), enable Discussions, add topics (`smart-glasses`, `ar`,
-   `brilliant-labs`, `memory`, `python`), set the repo description and
-   website to dreamlayer.app.
-5. **DCO enforcement** — install the DCO GitHub App
-   (github.com/apps/dco) so the sign-off rule in CONTRIBUTING.md is checked
-   automatically on external PRs (kept out of our own CI so maintainer
-   automation isn't blocked).
+   forward to the maintainer inbox) so SECURITY.md is answerable. *Owner
+   action — not verifiable from the repo; confirm and strike.*
+4. **GitHub hygiene** — partial. Description is set; still open: branch
+   protection on `main` (require the pytest check), **enable Discussions**
+   (verified off as of 2026-07-13), topics (`smart-glasses`, `ar`,
+   `brilliant-labs`, `memory`, `python`), and the website field
+   (dreamlayer.app).
+5. ~~**DCO enforcement**~~ — done, differently than planned: instead of the
+   DCO GitHub App, the in-repo workflow
+   [`.github/workflows/dco.yml`](../.github/workflows/dco.yml) checks every
+   PR commit for a `Signed-off-by:` trailer. It runs only on
+   `pull_request`, so maintainer automation pushing to branches isn't
+   blocked — same exemption the App plan wanted. The App remains an
+   optional add-on for its reviewer-facing UX.
 6. **Enroll GitHub Sponsors** (github.com/sponsors) so `.github/FUNDING.yml`
    lights up the Sponsor button; set `conduct@` and `security@` aliases in
-   Cloudflare Email Routing.
-7. **Keep 3–5 `good first issue`s open at all times** — they are the front
-   door for new contributors; the plugin-submission and lens-idea templates
-   feed the pipeline.
-8. **Flip visibility** — Settings → Danger Zone → Change visibility →
-   Public.
-9. **Verify the claims** — the landing page's "open source — Apache-2.0"
-   line, the panel's "code you can read", and the FAQ all become literally
-   true the moment step 8 completes. Check the LICENSE renders on the repo
-   front page.
+   Cloudflare Email Routing. *Owner action — unverified.*
+7. ~~**Keep 3–5 `good first issue`s open at all times**~~ — live and
+   working: five scoped issues (#199 Open Library lens, #201 simulator
+   scenario, #280 watchdog, #281 zeroconf, #282 ChromaStore real-path
+   tests) plus the evergreen umbrella (#200). The first external PR is
+   merged (#210) and another is in review (#236). Keep restocking as they
+   close.
+8. ~~**Flip visibility**~~ — done: the repo is public, forked, and
+   receiving outside PRs.
+9. ~~**Verify the claims**~~ — the landing page's "open source —
+   Apache-2.0" line, the panel's "code you can read", and the FAQ are now
+   literally true; GitHub detects and renders the Apache-2.0 LICENSE on the
+   repo front page.
+
+Still open from the list: items 3, 6, and the remainder of 4 — all
+owner-console actions, none of them blocking contributors today.
 
 ## What stays outside the license
 
