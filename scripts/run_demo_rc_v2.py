@@ -35,6 +35,16 @@ from dreamlayer.reality_compiler.v2 import (           # noqa: E402
 
 OUT = REPO_ROOT / "out" / "rc_v2"
 
+# Windows forbids  < > : " / \ | ? *  in filenames, so a frame label carrying a
+# clock ("2:48") would emit a colon filename that can't be cloned on Windows
+# (fixed once in #210; sanitize here so a regeneration can't reintroduce it).
+# Space -> "_" preserves the existing golden naming; the illegal set -> "-".
+_LABEL_SANITIZE = str.maketrans({" ": "_", **{c: "-" for c in '<>:"/\\|?*'}})
+
+
+def _safe_label(label: str) -> str:
+    return label.translate(_LABEL_SANITIZE)
+
 
 def banner(title: str) -> None:
     print("\n" + "=" * 72)
@@ -46,7 +56,7 @@ def export_playback(frames, outdir: Path) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     n = 0
     for i, pf in enumerate(frames):
-        path = outdir / f"{i:03d}_{pf.label[:28].replace(' ', '_').replace('/', '-')}.png"
+        path = outdir / f"{i:03d}_{_safe_label(pf.label[:28])}.png"
         if render_png(pf.frame, str(path)):
             n += 1
     (outdir / "transcript.txt").write_text(transcript(frames) + "\n")
@@ -75,7 +85,7 @@ def run_30s(fig, outdir: Path, events=(), seed: int = 7,
         key = (frame.scene, tuple((l.text, l.color) for l in frame.lines),
                frame.pulse_on)
         if key != last_render and saved < 24:
-            path = outdir / f"run_{sec:02d}s_{frame.scene}.png"
+            path = outdir / f"run_{sec:02d}s_{_safe_label(frame.scene)}.png"
             render_png(frame, str(path))
             saved += 1
             last_render = key
