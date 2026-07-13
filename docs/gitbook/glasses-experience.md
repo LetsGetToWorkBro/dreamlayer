@@ -96,10 +96,12 @@ repo they are exercised by tests feeding synthetic accelerometer traces.
 ## Sound and touch
 
 Every significant moment has a matched earcon and haptic, chosen host-side and
-carried on the card payload: the wake chirp when Juno starts listening, the
-"Listen!" and "Watch out!" hark tones, the look cue when a dossier surfaces,
-the neutral chime on a verified claim. Answer-ahead is deliberately silent —
-its whole point is not to interrupt. The full map, including the audio files
+carried on the card payload: Juno's recorded "Hey" (or "Hello") when she
+starts listening, her spoken "Listen!" and "Watch out!" harks, the look cue
+when a dossier surfaces, the neutral chime on a verified claim — each cue a
+small family of takes, rotated so you never hear the same clip twice in a
+row. Answer-ahead is deliberately silent — its whole point is not to
+interrupt. The full map, including the audio files
 that ship in the phone app, is in [Earcons and haptics](reference/earcons.md).
 **Seam:** the speaker/actuator that plays them; the device Lua draws matching
 visual "acoustics" (chime ring, chord arpeggio, pre-slam rumble) today.

@@ -87,7 +87,8 @@ runtime source of truth; the flag is the deliberate override on top.
    the `DL_DISABLE_*` lines, if any).
 
 Fallback drill (should always pass — it's what CI runs):
-`pytest -q -m "not hardware and not benchmark"` with no extras installed.
+`pytest -q -m "not hardware and not benchmark and not real_model"` with no
+extras installed.
 
 ## 5 · CI
 
@@ -102,7 +103,7 @@ strategy:
 steps:
   - run: pip install -e "host-python[${{ matrix.profile }},dev]"
   - run: cd host-python && python -m dreamlayer.capabilities
-  - run: cd host-python && pytest -q -m "not hardware and not benchmark"
+  - run: cd host-python && pytest -q -m "not hardware and not benchmark and not real_model"
 ```
 
 ## Design notes (why it's built this way)

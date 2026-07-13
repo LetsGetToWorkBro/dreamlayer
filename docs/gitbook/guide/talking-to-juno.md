@@ -16,7 +16,8 @@ Four ways, all optional and all switchable in Settings:
 - **Look up and hold** for a moment.
 - **Raise** the glasses to your face as you start speaking.
 
-When it wakes you get a small ring, a soft chime, and a tiny vibration — each
+When it wakes you get a small ring, a soft spoken "hey" (or "hello") in
+Juno's own voice — a different take each time — and a tiny vibration; each
 one can be turned off if you prefer a silent wake. Then it listens for about
 twenty seconds, so follow-up questions need no wake word. Just keep talking.
 

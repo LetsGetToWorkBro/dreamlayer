@@ -55,7 +55,7 @@ Roughly half the lens catalogue consumes transcribed speech
 - [ ] secondarily: snapshot camera API shape + JPEG size envelope, and
       whether LE Coded PHY group transport (GhostMode) is reachable
 
-## 3. Privacy counsel review (before going public)
+## 3. Privacy counsel review (now overdue — the repo is public)
 `PRIVACY_MODEL.md` now states the bystander-biometrics legal theory
 (introduction-as-consent, transient probe embeddings, CUBI/BIPA/GDPR).
 - [ ] one hour with an actual privacy lawyer on that section
@@ -140,10 +140,11 @@ now exist (B10), but a radio mesh cannot be demoed in a rasterizer.
 - [ ] the mesh itself lights up only with silicon on the desk
 
 ### 8.5 ESP32 physical-events kit (1.6)
-The figment event grammar accepts `ble:<n>` exits; a `$6 reed switch → your
-retina` demo needs the two physical halves. The host injection route is a small
-code addition (a follow-on, not blocked); the rest is hardware.
-- [ ] a 30-line MicroPython sketch (ESP32 + reed switch/thermistor) under
-      `examples/esp32/`
-- [ ] (code-half, optional) a `POST /dreamlayer/event/ble/<n>` Brain route that
-      forwards to the active figment — buildable now if wanted
+The figment event grammar accepts `ble:<n>` exits; both code halves of the
+`$6 reed switch → your retina` demo now ship. What's left is the hardware on
+the desk.
+- [x] a MicroPython sketch (ESP32 + reed switch) — **done**:
+      `examples/esp32/mailbox.py`
+- [x] the `POST /dreamlayer/event/ble/<n>` Brain route that forwards to the
+      active figment — **done**, covered by `test_physical_events.py`
+- [ ] flash it to a physical ESP32 and close the loop for real

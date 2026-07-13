@@ -4,7 +4,7 @@
 > catalogs the optional *library* adapters. This doc is about wiring to
 > *hardware and the API*.
 
-The map for wiring DreamLayer onto real hardware: the full **Brain HTTP API**,
+The map for wiring DreamLayer onto real hardware: the core **Brain HTTP API**,
 the **hub (orchestrator)** capabilities the phone drives, and the **seams** —
 the handful of places where a real microphone, radio, or OS reader plugs in.
 Everything not listed as a seam is built and tested; the seams are where the
@@ -220,7 +220,7 @@ Everything above is code; here is the short list of what a real build supplies.
 | Seam | Where it plugs in | What to wire |
 |---|---|---|
 | **BLE render + input** | `bridge/` (Lua ↔ phone) → `halo-lua/` | Send the card dicts to the Halo; deliver taps/gestures back. Cards are plain dicts (`hud/cards.py`). |
-| **Microphone + ASR** | feeds `orchestrator.handle_voice(text)` | On-device speech-to-text → text; wake-word ("Hey DreamLayer") spotting. |
+| **Microphone + ASR** | feeds `orchestrator.handle_voice(text)` | On-device speech-to-text → text; wake-word ("Hey Juno") spotting. |
 | **macOS Messages/Mail reader** | `ai_brain/server/macos_sources.py: recent_messages()` (`messages_fn` seam on `Brain`) | Real read of `chat.db` / Mail (returns structured items; `[]` off macOS today). |
 | **macOS send** | `macos_sources.send_message(draft, approved=True)` | `osascript` dispatch — only ever on explicit approval. |
 | **Calendar sync** | `macos_sources.read_calendar_events` / `list_calendars` (`calendar_reader_fn` / `calendar_list_fn` seams on `Brain`) | Reads Calendar.app via AppleScript and merges into `agenda.json` (keeps hand-added events; synced ones carry `source:"calendar"`). Toggle + calendar picker in the panel; `[]` off macOS. Swap the reader for EventKit if preferred. |

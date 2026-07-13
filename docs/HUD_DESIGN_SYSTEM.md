@@ -28,14 +28,14 @@ more than 4×/sec — tested); every timing constant lives in
 |------------------|----------|------|
 | background       | #000000  | full black canvas |
 | surface          | #0E1416  | card shell fill (subtle) |
-| text_primary     | #FFFFFF  | the one thing that matters |
-| text_secondary   | #8A9BA3  | cool slate, supporting lines |
-| accent_memory    | #2FD4C4  | teal — trusted memory / info |
-| accent_attention | #FF6B5E  | coral — active / proactive |
+| text_primary     | #ECF0F1  | the one thing that matters |
+| text_secondary   | #A8B8C0  | cool slate, supporting lines |
+| accent_memory    | #2CC79A  | teal — trusted memory / info |
+| accent_attention | #E06B52  | coral — active / proactive |
 | accent_success   | #56D364  | confirmations (memory saved) |
-| accent_error     | #FF5C5C  | errors |
-| border_subtle    | #1F2A2E  | hairline outlines |
-| status_paused    | #6B7A82  | muted blue-gray paused state |
+| accent_error     | #E05252  | errors |
+| border_subtle    | #2A3C44  | hairline outlines |
+| status_paused    | #8FA8B2  | muted blue-gray paused state |
 
 Never scatter raw hex in logic — use `palette.lua` / `themes.py` tokens.
 
@@ -54,20 +54,22 @@ Never scatter raw hex in logic — use `palette.lua` / `themes.py` tokens.
 
 ## Spacing
 - Outer safe inset: 16px
-- Line spacing: 1.35× cap height
+- Line spacing: 1.55× cap height (`typography.LINE_SPACING`)
 - Min legible body size abstraction: `typography.SIZE_SM`
 
 ## Motion rules
-- fade in/out: ~180ms
-- slide up: ~220ms, small travel (8–12px)
-- idle breathing: 2.4s ease-in-out loop, opacity 0.55→1.0
+- fade in: ~180ms; fade out: ~120ms
+- enter scale: 0.94→1.0 with the fade (the v1 slide-up was retired in Cinema v2)
+- idle breathing: 3.2s ease-in-out loop (`BREATHE_CYCLE_MS`)
 - No flashy sci-fi. Motion supports confidence, never distracts.
 - All motion can be disabled (`settings.reduce_motion`).
 
-## All HUD states (cards)
+## Core HUD states (cards)
 ReadyCard, SavedMemoryCard, QueryListeningCard, LoadingCard, ObjectRecallCard,
 CommitmentRecallCard, ProactiveMemoryCard, PersonContextCard, PrivacyVeilCard,
-ErrorCard, LowConfidenceCard.
+ErrorCard, LowConfidenceCard. The family has since grown (Scholar, Taste,
+Truth Lens, Glance, Quest, …) — `hud/cards.py` (`ALL_SAMPLES`) is the
+canonical list.
 
 ## Do / Don't
 - DO: "Keys / Kitchen table / Beside blue notebook / 7:42 PM"

@@ -33,12 +33,13 @@ integration conventions in [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 
 ```bash
 pip install -e "host-python[dev]"
-cd host-python && python -m pytest -q -m "not hardware and not benchmark"
+cd host-python && python -m pytest -q -m "not hardware and not benchmark and not real_model"
 ```
 
 That command must be green with zero optional dependencies installed — it's
 the invariant the whole optional-capability system rests on. Device-needing
-tests are marked `hardware`; latency budgets are marked `benchmark`.
+tests are marked `hardware`; latency budgets are marked `benchmark`;
+heavy-model tests are marked `real_model`.
 
 ## Good first contributions
 

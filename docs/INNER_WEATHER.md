@@ -20,5 +20,5 @@ churning core under a settled sky. Hysteresis-gated (±0.05): a steady mood
 costs no radio, an empty context costs none at all. The Privacy Veil
 silences the estimator completely.
 
-Tests: `src/dreamlayer/tests/test_inner_weather.py` (14, incl. the renderer
+Tests: `src/dreamlayer/tests/test_inner_weather.py` (19, incl. the renderer
 channel isolation under lupa).

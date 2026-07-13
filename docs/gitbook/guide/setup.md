@@ -5,9 +5,10 @@ optionally set up the Mac, scan one QR code, put the glasses on.
 
 ## 1. The phone app
 
-Install the DreamLayer app and open it. It starts on the **Brain** tab — the
-home screen for your whole setup. A short welcome walks you through what the
-product does and ends at pairing.
+Install the DreamLayer app and open it. A short welcome walks you through
+what the product does and ends at pairing. After that, the app opens on the
+**Now** tab; the **Brain** tab — the home for your whole setup — is one tap
+away.
 
 ![The Brain tab — pairing and the main switches live here](../assets/phone/brain.png)
 

@@ -8,7 +8,8 @@ hasn't passed the gate.
 This document is the design and the phased plan. The **core** (package format,
 validation gate, store client) is built and tested (`plugins/package.py`,
 `validate.py`, `store.py`; `tests/test_plugin_store.py`). The **surfaces** (web
-store, phone screen, Mac tab) and the **hosted social layer** come next.
+store, phone screen, Mac tab) are built, and the **hosted social layer** is
+deployed.
 
 ---
 
@@ -248,13 +249,14 @@ pulls the package from the entry's `url`.
 
 ---
 
-## The three surfaces (next)
+## The three surfaces
 
 All read the same index; all install through the same gate.
 
 - **Website** — a browsable store: featured, top-rated, most-downloaded, search,
   a plugin page with the manifest, permissions, ratings, and comments, and a
-  "Build a plugin" guide. Static against `registry/index.json` today.
+  "Build a plugin" guide. Reads live stats from the hosted social API, falling
+  back to the bundled `registry/index.json`.
 - **Phone app** — a **Plugins** screen: browse, install/remove, a permissions
   prompt on install, and "manage installed."
 - **Mac Brain panel** — a **Plugins** tab in the existing control panel, where

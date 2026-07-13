@@ -18,7 +18,7 @@ engine.
   dependencies in core — which is also why every integration is an
   *optional* adapter); the add-alongside seam convention; and the one
   command that must stay green:
-  `pytest -q -m "not hardware and not benchmark"`.
+  `pytest -q -m "not hardware and not benchmark and not real_model"`.
 - **SECURITY.md** — private disclosure to security@dreamlayer.app, 72-hour
   acknowledgment, 90-day coordinated window; the plugin capability gate and
   the Veil contract are explicitly in scope.

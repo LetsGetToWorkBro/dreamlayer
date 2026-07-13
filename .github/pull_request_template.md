@@ -4,7 +4,7 @@
 
 ## Testing
 
-<!-- `cd host-python && python -m pytest -q -m "not hardware and not benchmark"`
+<!-- `cd host-python && python -m pytest -q -m "not hardware and not benchmark and not real_model"`
      must be green with zero optional deps installed. Say what you ran. -->
 
 ## Checklist

@@ -8,9 +8,8 @@ secrets, the filesystem, or outbound action. Any token-bearing off-box
 request also stamps the "phone last seen" heartbeat.
 
 Source: `host-python/src/dreamlayer/ai_brain/server/server.py`. This table
-is the complete surface — including three endpoints
-(`/dreamlayer/voice`, the profile pair, `/dreamlayer/brief/latest`) that
-exist in code beyond the summary tables in `docs/INTEGRATION.md`.
+is the complete surface; `docs/INTEGRATION.md` carries the same tables with
+the seams marked.
 
 ## Read (GET)
 
@@ -109,6 +108,7 @@ exist in code beyond the summary tables in `docs/INTEGRATION.md`.
 - The **plugin social API** is a separate public service at
   `https://api.dreamlayer.app` (Cloudflare Worker, `registry-api/`):
   `GET /api/plugins`, `GET /api/plugins/<name>`, and
-  `POST /api/plugins/<name>/{rate|comment|download}`. It serves only
-  ratings/downloads/comments — never plugin code — and clients fall back to
+  `POST /api/plugins/<name>/{rate|comment|download}`, plus the community
+  routes (`/api/waitlist`, `/api/figments`, `/api/golf`, `/api/jams`). It
+  serves only social data — never plugin code — and clients fall back to
   their bundled catalog when it is unreachable.

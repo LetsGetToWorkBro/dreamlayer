@@ -60,8 +60,8 @@ the device retain about last March?"* is: entity summaries, nothing else.
 The Veil protects the **wearer**; biometric-privacy law protects **everyone
 else**, and a face embedding is the regulated artifact even though no image
 is stored. This section states the design's legal theory so it can be
-reviewed by an actual privacy lawyer **before** the project goes public —
-that review is a tracked owner action (docs/AUDIT_ACTIONS.md).
+reviewed by an actual privacy lawyer — the repo is public now, and that
+review is still a tracked owner action (docs/AUDIT_ACTIONS.md).
 
 - **The laws that bite.** Texas CUBI (Tex. Bus. & Com. Code §503.001)
   requires informed consent from the *individual whose* biometric identifier

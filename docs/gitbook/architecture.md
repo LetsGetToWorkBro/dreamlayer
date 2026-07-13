@@ -73,7 +73,8 @@ Brain.
 
 Framed JSON: a 4-byte big-endian length prefix, then UTF-8 JSON, reassembled
 across MTU fragments (`halo-lua/ble/protocol.lua`, mirrored by
-`host-python/src/dreamlayer/bridge/`). Every message has a `t` type field.
+`host-python/src/dreamlayer/bridge/` and the phone's pure-TS BLE core,
+`phone-app/src/ble/framing.ts` + `bridge.ts`). Every message has a `t` type field.
 Downstream: `card`, `command` (`show_ready`, `pause`, `resume`, `ask`, `wake`,
 `reset`), `horizon` frames, dream frames, `amp` (a ~15-byte live microphone
 amplitude used only while the listening card is up), palettes, sprites, and
@@ -158,9 +159,10 @@ dreamlayer/
 │       ├── bridge/        BLE bridge + the Lua raster harness (lupa)
 │       ├── simulator/     the Python Halo Simulator (the real stack, no glasses)
 │       ├── social_lens/ truth_lens/ object_lens/ lucid_recall/ ...
-│       └── tests/         2,302 collected tests
+│       └── tests/         2,623 collected tests
 │   └── packaging/         the macOS .dmg app (py2app, entitlements)
 ├── phone-app/             Expo / React Native app + the App Store kit
+├── reality-core/          the Rust figment interpreter core (native + wasm bindings)
 ├── laptop-companion/      minimal context agent + macOS Brain installer
 ├── examples/              hello-lens, the CI-tested plugin tutorial
 ├── registry/              the plugin marketplace catalog

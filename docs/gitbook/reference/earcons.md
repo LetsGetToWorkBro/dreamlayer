@@ -1,8 +1,8 @@
 # Reference — earcons and haptics
 
 DreamLayer's sound design is small on purpose: five earcon identities, each
-with two rotating variants so repetition never grates, plus two haptic
-patterns. The map lives host-side in `host-python/src/dreamlayer/hud/audio.py`;
+with a small family of rotating variants (two to five) so repetition never
+grates, plus two haptic patterns. The map lives host-side in `host-python/src/dreamlayer/hud/audio.py`;
 the actual audio files ship in the phone app (`phone-app/assets/sounds/`),
 and the phone's sound service applies the same never-repeat-back-to-back
 rotation.
@@ -11,10 +11,10 @@ rotation.
 
 | Earcon id | Means | Variant files | Fired by |
 |---|---|---|---|
-| `wake` | Juno woke / greeting | `hey1`, `hey2` | ListeningCard (any wake source) |
-| `hark` | "Listen!" | `listen1`, `listen2` | normal harks; self-contradiction and unverified fact-checks |
-| `hark_urgent` | "Watch out!" | `watchout1`, `watchout2` | urgent watch-out harks; disputed fact-checks |
-| `look` | "look at this" | `look1`, `look2` | person dossier surfacing |
+| `wake` | Juno woke / greeting | `hey1`–`hey5` (real recorded voice — "Hey"×4 / "Hello") | ListeningCard (any wake source) |
+| `hark` | "Listen!" | `listen1`–`listen4` | normal harks; self-contradiction and unverified fact-checks |
+| `hark_urgent` | "Watch out!" | `watchout1`–`watchout4` | urgent watch-out harks; disputed fact-checks |
+| `look` | "look at this" | `look1`–`look3` | person dossier surfacing |
 | `chime` | neutral confirmation | `sfx10`, `sfx13` | verified (supported) fact-checks |
 
 Deliberate silence: **AnswerAheadCard carries no earcon** — the copilot must

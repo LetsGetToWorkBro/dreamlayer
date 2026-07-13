@@ -18,8 +18,9 @@ reporters (unless you prefer otherwise) in the release notes.
   (pairing, token auth, capture guards, the Veil contract)
 - `phone-app/` — the iOS/Expo hub
 - `registry-api/` — the Cloudflare Worker
-- `plugins/` — the package format and validation gate (a plugin escaping its
-  declared capabilities is a vulnerability)
+- `host-python/src/dreamlayer/plugins/` and the git-backed `registry/` — the
+  package format and validation gate (a plugin escaping its declared
+  capabilities is a vulnerability)
 - `landing/`, `web/` — the sites
 
 Especially interesting: anything that lets a memory be written while the

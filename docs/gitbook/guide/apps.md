@@ -11,8 +11,9 @@ labeled sample data with a banner that never leaves the screen — so you can
 explore the whole app before owning any hardware; that is exactly how the
 screenshots in this book were taken.)
 
-**Brain** — the home tab. Pairing, the three switches (Mac, Cloud,
-Incognito), and a box to ask your brain anything from your pocket.
+**Brain** — the first tab, home for your setup. Pairing, the three switches
+(Mac, Cloud, Incognito), and a box to ask your brain anything from your
+pocket.
 
 ![Brain tab](../assets/phone/brain.png)
 

@@ -11,7 +11,7 @@ control panel) live here as one installable package, `dreamlayer`.
 
 ```bash
 pip install -e .[dev]       # editable install + pytest, pytest-asyncio, lupa
-python -m pytest -q         # the full suite (2,302 tests)
+python -m pytest -q         # the full suite (2,600+ tests)
 ```
 
 Requires Python 3.11+. The runtime is largely standard-library; heavier
@@ -53,6 +53,8 @@ bridge/             BLE protocol, hardware translation, the Lua raster harness
 simulator/          a host-side stand-in for the glasses
 rosetta.py          visual translation (Rosetta = eye; Puente = ear/voice)
 lenses.py           the six-lens registry (the mental model, in code)
+plugins/            lens plugins: capability gate, store validation, subprocess/WASM isolation
+sdk/ · cli.py       the plugin-author SDK and the `dreamlayer` CLI (new/validate/pack/install)
 pairing.py          one code → phone + Brain + glasses
 ```
 

@@ -1,5 +1,10 @@
 # Focus (Condensation / Recession)
 
+*(Status 2026-07: shipped as specced, with later retunes — `SIG_RECEDE_MS`
+is now 200ms (Lumen pass, see `lumen.md`; the 160ms below is the Phase 2
+value) and the travel/landing gained spring physics. `display/animations.lua`
+is authoritative for all constants.)*
+
 ## Pitch
 
 One motion law replaces four signatures: things are drawn inward into

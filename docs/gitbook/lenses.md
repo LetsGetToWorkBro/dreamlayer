@@ -210,7 +210,7 @@ illustrative.
 | ![Retrace](assets/cards/retrace.webp) | **Retrace** — where you last saw a thing, by place and time ("north rack, 8:12am"). Ambient-sighting recall; veil-gated. |
 | ![Ember](assets/cards/ember.webp) | **Ember** — a memory you *chose to keep*, handed back a year later, where it happened. At most one, never an ambush, storm-suppressed. |
 | ![Docent](assets/cards/docent.webp) | **Docent** — a venue's own knowledge, grounded in a local collection and read from what you look at. |
-| ![Rosetta Live](assets/cards/rosetta_live.webp) | **Rosetta Live** — the ear: offline live translation, one subtitle card per utterance. |
+| ![Rosetta Live](assets/cards/rosetta_live.webp) | **Rosetta Live** — the ear: offline live translation, each utterance streamed into the named slots of a single on-stage figment. |
 | ![Candor](assets/cards/candor.webp) | **Candor Mirror** — the self-coach: after a conversation, your own pace, fillers, and narrative drift — never pointed at anyone else. |
 | ![Waypath](assets/cards/waypath.webp) | **Waypath** — "that way": one bright dot on a faint ring, a distance, and nothing else. No map app. |
 | ![Thread](assets/cards/thread.webp) | **Thread** — steal a palette from the light in a room and keep it as a memory (the image is never stored). |

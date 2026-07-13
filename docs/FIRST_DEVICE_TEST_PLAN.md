@@ -15,7 +15,7 @@ Run top-to-bottom the moment Halo arrives. Log every result in the issue table.
 5. [ ] **State machine boot** — boot→ready transition observed, ReadyCard shows
 6. [ ] **Button events** — single / double / long-press reach state machine
 7. [ ] **Paused state** — long-press shows PrivacyVeilCard; capture blocked
-8. [ ] **Card rendering** — render all 11 card types via `export` parity check
+8. [ ] **Card rendering** — render every `ALL_SAMPLES` card type via `export` parity check
 9. [ ] **Camera probe** — single still capture round-trips
 10. [ ] **Microphone probe** — short mic stream round-trips
 11. [ ] **IMU probe** — tap event detected
