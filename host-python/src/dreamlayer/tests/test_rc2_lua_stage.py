@@ -98,6 +98,27 @@ class TestLifecycle:
         deliver(lua, {"t": "figment_swap", "id": "evil"})
         assert not lua["stage"].is_running()
 
+    def test_magic_char_counter_name_refused(self, lua):
+        # Counter names are word-chars only. Otherwise the name is spliced raw
+        # into a Lua gsub *pattern* at render time — so "a.b" would wrongly
+        # match {count:aXb}, diverging from the Python twin's str.replace (and a
+        # malformed pattern can error mid-frame). The stage refuses them at load.
+        for i, bad in enumerate(("%", "(", "a.b", "x y")):
+            deliver(lua, {"t": "figment_put", "id": f"evil{i}",
+                          "figment": {"initial": "s",
+                                      "scenes": {"s": {"lines": []}},
+                                      "counters": {bad: {"start": 0}}},
+                          "hash": "h"})
+            assert lua["sent"]()[i + 1]["ok"] is False, f"name {bad!r} not refused"
+
+    def test_word_char_counter_name_accepted(self, lua):
+        deliver(lua, {"t": "figment_put", "id": "good",
+                      "figment": {"initial": "s",
+                                  "scenes": {"s": {"lines": []}},
+                                  "counters": {"hits_1": {"start": 0}}},
+                      "hash": "h"})
+        assert lua["sent"]()[1]["ok"] is True
+
     def test_over_budget_pulse_refused_on_device(self, lua):
         # defense in depth: even if the host were bypassed, the stage's
         # own clamps reject a strobing figment at load
