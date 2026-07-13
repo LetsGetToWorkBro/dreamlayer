@@ -69,7 +69,7 @@ confusing "mode." See [`docs/AI_BRAIN.md`](docs/AI_BRAIN.md) for the full model.
 | Switch | What it does | Default |
 |---|---|---|
 | **Mac mini** | upgrades the local brain to a bigger model **+ your indexed files** | off → *the phone is the brain* |
-| **Cloud** | frontier reach for the hardest, non-personal asks | on |
+| **Cloud** | frontier reach for the hardest, non-personal asks | off — opt-in |
 | **Incognito** | forces cloud off and pauses capture for the session | off |
 
 Pairing the whole trio — phone + Brain + glasses — is **one code**, scanned or
@@ -107,7 +107,7 @@ Two things run **underneath** all of them:
 Privacy isn't a setting here; it's the architecture.
 
 - **On-device by default.** The phone is the brain; a Mac mini stays on your
-  LAN; the cloud is an explicit, per-session opt-in. Nothing marked private ever
+  LAN; the cloud is off until you explicitly opt in. Nothing marked private ever
   leaves, in any mode.
 - **No stranger identification.** The People lens only matches — and only
   remembers — people you were introduced to and chose to keep. No public
