@@ -196,7 +196,8 @@ class PluginStore:
 
     # -- load installed into a running host ----------------------------------
 
-    def load_installed(self, orchestrator, isolate: str = "untrusted") -> list:
+    def load_installed(self, orchestrator, isolate: str = "untrusted",
+                       require_sandbox: Optional[bool] = None) -> list:
         """Validate-then-load every installed plugin into the orchestrator.
         Re-validates on load (defence in depth), skips any that no longer pass.
 
@@ -210,10 +211,26 @@ class PluginStore:
         load in-process via Orchestrator.load_plugins as reviewed code.)
         isolate="trusted": everything runs in-process — the curated deployment
         where every installed package has been read and vouched for.
+
+        Honest isolation posture (re-audit 2026-07): the subprocess jail confines
+        by *process* + a thin RPC surface, but the child still executes the
+        plugin's module code with the host user's OS authority *unless* a kernel
+        sandbox (bwrap/nsjail) or the WASM tier wraps it. When neither is present
+        the boundary silently degraded to "just a subprocess." Now it is loud:
+        every degraded load is recorded to health + the capability log, exposed
+        on `self.isolation_notices`, and — when `require_sandbox` is true
+        (param, or env DL_REQUIRE_SANDBOX=1) — it FAILS CLOSED: the plugin is not
+        loaded at all rather than run without the kernel boundary the deployment
+        demanded.
+
         Returns the in-process LoadResult; the isolated hosts are stored on
         `self.isolated` (call .stop() to reclaim)."""
+        import os as _os
+        if require_sandbox is None:
+            require_sandbox = _os.environ.get("DL_REQUIRE_SANDBOX", "") == "1"
         plugins = []
         self.isolated = []
+        self.isolation_notices: list = []      # degraded-posture load records
         for name in self.installed():
             try:
                 package = PluginPackage.load(self.dir / name)
@@ -228,21 +245,38 @@ class PluginStore:
                 # the WASM jail when a runtime is configured (no ambient
                 # authority); else the capability-mediated subprocess jail.
                 from .isolation import SubprocessPluginHost
-                from . import wasm_host
-                Host = wasm_host.WasmPluginHost if wasm_host.available() \
-                    else SubprocessPluginHost
-                host = Host(
-                    self.dir / name, package.manifest.requires,
-                    health=getattr(orchestrator, "health", None),
-                    name=package.manifest.name,
-                    caplog=getattr(orchestrator, "capability_log", None))
+                from . import wasm_host, os_sandbox
+                is_wasm = wasm_host.available()
+                Host = wasm_host.WasmPluginHost if is_wasm else SubprocessPluginHost
+                pname = package.manifest.name
+                health = getattr(orchestrator, "health", None)
+                caplog = getattr(orchestrator, "capability_log", None)
+
+                # Decide the isolation posture BEFORE launching anything: a bare
+                # subprocess would run the plugin's module code with the host
+                # user's OS authority. When require_sandbox is set and no kernel
+                # boundary is available, we must not even start the child — fail
+                # closed means the untrusted code never executes at all.
+                kernel_boundary = is_wasm or bool(os_sandbox.available())
+                if not kernel_boundary:
+                    note = (f"plugin '{pname}' isolated by process only — no "
+                            "OS/WASM sandbox present (no kernel boundary)")
+                    self.isolation_notices.append(note)
+                    if health is not None:
+                        health.record_failure(f"plugin:{pname}", RuntimeError(note))
+                    if caplog is not None:
+                        caplog.record(pname, "degraded:no-os-sandbox")
+                    if require_sandbox:
+                        continue             # fail closed — never launch the child
+
+                host = Host(self.dir / name, package.manifest.requires,
+                            health=health, name=pname, caplog=caplog)
                 try:
                     if host.start():
                         host.register_into(orchestrator)
                         self.isolated.append(host)
-                        caplog = getattr(orchestrator, "capability_log", None)
                         if caplog is not None:
-                            caplog.grant(package.manifest.name, package.manifest.requires)
+                            caplog.grant(pname, package.manifest.requires)
                 except Exception:
                     host.stop()
                 continue

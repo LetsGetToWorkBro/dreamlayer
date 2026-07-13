@@ -278,3 +278,59 @@ def test_default_isolates_unsigned_installed_plugin(tmp_path):
     finally:
         for h in store.isolated:
             h.stop()
+
+
+# -- honest isolation posture (re-audit 2026-07) -----------------------------
+# In CI there is no bwrap/nsjail and no WASM runtime, so the untrusted jail is a
+# plain subprocess: process isolation, but no kernel boundary. That degradation
+# used to be silent; these pin that it is now loud, and fail-closable.
+
+def _no_kernel_sandbox(monkeypatch):
+    """Force the 'no OS/WASM sandbox available' posture regardless of host."""
+    import dreamlayer.plugins.os_sandbox as osb
+    import dreamlayer.plugins.wasm_host as wh
+    monkeypatch.setattr(osb, "available", lambda: None)
+    monkeypatch.setattr(wh, "available", lambda: False)
+
+
+def test_degraded_isolation_is_recorded_not_silent(tmp_path, monkeypatch):
+    _no_kernel_sandbox(monkeypatch)
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(_jailable_package()).ok
+    orc = Orchestrator(FakeBridge())
+    store.load_installed(orc)                       # permissive default
+    try:
+        # still loaded (permissive), but the degraded posture is on the record
+        assert len(store.isolated) == 1
+        assert store.isolation_notices, "degraded load must be surfaced"
+        assert any("no OS/WASM sandbox" in n for n in store.isolation_notices)
+    finally:
+        for h in store.isolated:
+            h.stop()
+
+
+def test_require_sandbox_fails_closed_without_kernel_boundary(tmp_path, monkeypatch):
+    _no_kernel_sandbox(monkeypatch)
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(_jailable_package()).ok
+    orc = Orchestrator(FakeBridge())
+    result = store.load_installed(orc, require_sandbox=True)
+    # fail closed: the plugin is NOT run at all without a real kernel boundary
+    assert result.loaded == []
+    assert store.isolated == []
+    assert any("no OS/WASM sandbox" in n for n in store.isolation_notices)
+    # and its rows never reached the panel
+    from dreamlayer.object_lens.schema import ObjectSighting
+    panel = orc.object_lens.registry.build_panel(
+        ObjectSighting(label="mug", confidence=0.9, attributes={}))
+    assert "from the jail" not in [r.label for r in panel.rows]
+
+
+def test_require_sandbox_honors_env(tmp_path, monkeypatch):
+    _no_kernel_sandbox(monkeypatch)
+    monkeypatch.setenv("DL_REQUIRE_SANDBOX", "1")
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(_jailable_package()).ok
+    orc = Orchestrator(FakeBridge())
+    store.load_installed(orc)                        # env drives fail-closed
+    assert store.isolated == []

@@ -54,6 +54,47 @@ class TestAliasBypassIsClosed:
         # aliasing a harmless module must not raise a false positive
         assert scan_source("import json as j\nj.dumps({})\n", ()) == []
 
+    # -- rebind forms the import-alias map alone would miss (re-audit 2026-07) --
+
+    def test_value_rebind_of_module(self):
+        # `o = os` is an assignment, not an import — the old scanner only
+        # followed `import os as o`, so this rename slipped past.
+        issues = scan_source("import os\no = os\no.system('id')\n", ())
+        assert any("os.system" in i for i in issues), issues
+
+    def test_chained_value_rebind_of_module(self):
+        issues = scan_source(
+            "import os\na = os\nb = a\nb.system('id')\n", ())
+        assert any("os.system" in i for i in issues), issues
+
+    def test_callable_rebind(self):
+        # `run = os.system` binds the callable itself under a bare name.
+        issues = scan_source("import os\nrun = os.system\nrun('id')\n", ())
+        assert any("os.system" in i for i in issues), issues
+
+    def test_getattr_constant_attr_resolves(self):
+        issues = scan_source(
+            "import os\ngetattr(os, 'system')('id')\n", ())
+        assert any("os" in i and "system" in i for i in issues), issues
+
+    def test_getattr_dynamic_attr_is_forbidden(self):
+        # the attribute is not statically knowable, so no declared capability
+        # could cover it — flagged even when subprocess IS granted.
+        issues = scan_source(
+            "import os\nname = 'sys' + 'tem'\ngetattr(os, name)('id')\n",
+            {"subprocess", "fs", "network"})
+        assert any("dynamic getattr" in i for i in issues), issues
+
+    def test_getattr_on_harmless_module_is_clean(self):
+        assert scan_source(
+            "import json\ngetattr(json, 'dumps')({})\n", ()) == []
+
+    def test_rebind_is_still_capability_gated(self):
+        # declaring the capability makes the rebound call legal — proof this is
+        # mediation, not a blanket ban a rename could never satisfy.
+        assert scan_source(
+            "import os\no = os\no.system('id')\n", {"subprocess"}) == []
+
     def test_full_validate_rejects_the_aliased_bypass(self):
         src = ("from dreamlayer.plugins import make_plugin\n"
                "import os as o\n"

@@ -48,11 +48,20 @@ _DANGER_CALLS = {
     ("os", "remove"): "fs",
     ("os", "unlink"): "fs",
     ("os", "rmdir"): "fs",
+    ("os", "execv"): "subprocess",
+    ("os", "execve"): "subprocess",
+    ("os", "execvp"): "subprocess",
+    ("os", "spawnv"): "subprocess",
+    ("os", "spawnl"): "subprocess",
     ("subprocess", "*"): "subprocess",
     ("socket", "*"): "network",
     ("ctypes", "*"): "subprocess",
     ("shutil", "rmtree"): "fs",
 }
+# modules any of whose attributes reaching a dynamic name (getattr(mod, x)) we
+# can't resolve statically — treated as a sensitive receiver so a dynamic
+# attribute grab can't launder a call past the (module, attr) table.
+_SENSITIVE_MODULES = {m for (m, _) in _DANGER_CALLS}
 # bare builtins that are dangerous regardless of import
 _DANGER_BUILTINS = {
     "eval": None, "exec": None, "compile": None,
@@ -122,23 +131,71 @@ class _DangerScanner(ast.NodeVisitor):
                 self._need(cap, f"from {top} import {a.name}")
         self.generic_visit(node)
 
+    def _resolve_mod(self, name: str) -> str:
+        """Follow a local name back to a real module through both import aliases
+        (`import os as o`) and value rebinds (`o = os`)."""
+        return self._mod_alias.get(name, name)
+
+    def visit_Assign(self, node):
+        # Track two rebind forms the call table would otherwise miss:
+        #   o = os            → `o` becomes an alias of the module
+        #   run = os.system   → `run` becomes an alias of the callable
+        # Straight-line only (no dataflow) — defence-in-depth, not a proof.
+        val = node.value
+        for tgt in node.targets:
+            if not isinstance(tgt, ast.Name):
+                continue
+            if isinstance(val, ast.Name) and val.id in self._mod_alias:
+                self._mod_alias[tgt.id] = self._mod_alias[val.id]
+            elif (isinstance(val, ast.Attribute)
+                  and isinstance(val.value, ast.Name)):
+                mod = self._resolve_mod(val.value.id)
+                if (mod, val.attr) in _DANGER_CALLS or (mod, "*") in _DANGER_CALLS:
+                    self._call_alias[tgt.id] = (mod, val.attr)
+        self.generic_visit(node)
+
+    def _flag_modattr(self, mod, attr, shown):
+        cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
+        if cap is not None or (mod, attr) in _DANGER_CALLS:
+            self._need(cap, shown)
+
     def visit_Call(self, node):
         f = node.func
         if isinstance(f, ast.Name):
             if f.id in _DANGER_BUILTINS:
                 self._need(_DANGER_BUILTINS[f.id], f"{f.id}()")
+            elif f.id == "getattr":
+                self._scan_getattr(node)
             elif f.id in self._call_alias:         # renamed `from … import x`
                 mod, attr = self._call_alias[f.id]
-                cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
-                self._need(cap, f"{mod}.{attr}()")
+                self._flag_modattr(mod, attr, f"{mod}.{attr}()")
         elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-            # resolve the receiver through the import-alias map (o -> os)
-            mod = self._mod_alias.get(f.value.id, f.value.id)
-            attr = f.attr
-            cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
-            if cap is not None or (mod, attr) in _DANGER_CALLS:
-                self._need(cap, f"{mod}.{attr}()")
+            # resolve the receiver through the alias map (o -> os)
+            mod = self._resolve_mod(f.value.id)
+            self._flag_modattr(mod, f.attr, f"{mod}.{f.attr}()")
         self.generic_visit(node)
+
+    def _scan_getattr(self, node):
+        """`getattr(os, 'system')(…)` and `getattr(os, name)` launder an
+        attribute grab past the (module, attr) table. Resolve a constant attr
+        through the table; a dynamic attr on a sensitive module is forbidden
+        (its target is unknowable, so no capability can cover it)."""
+        if not node.args:
+            return
+        recv = node.args[0]
+        if not isinstance(recv, ast.Name):
+            return
+        mod = self._resolve_mod(recv.id)
+        if mod not in _SENSITIVE_MODULES:
+            return
+        attr_node = node.args[1] if len(node.args) > 1 else None
+        if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
+            self._flag_modattr(mod, attr_node.value,
+                               f"getattr({mod}, {attr_node.value!r})")
+        else:
+            self.issues.append(
+                f"forbidden operation: dynamic getattr on '{mod}' "
+                "(attribute not statically knowable)")
 
 
 def scan_source(source: str, allowed_capabilities) -> list:
