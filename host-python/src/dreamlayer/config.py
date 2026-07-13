@@ -34,6 +34,8 @@ class Config:
     # Passive recall primitives
     passive_ring_capacity:      int   = 64
     passive_min_confidence:     float = 0.55
+    # enforced by PassiveEventInjector itself (P2-15): however often the host
+    # calls Orchestrator.tick(), the ring is scanned at most once per interval
     passive_tick_interval_ms:   int   = 250
 
     # Retention lifecycle (memory/retention.py): hot ring → warm store →

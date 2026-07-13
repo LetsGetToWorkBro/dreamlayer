@@ -24,6 +24,10 @@ class DreamRemOps:
         self.dream.start()
         self.bridge.send_raw({"t": "dream_enter"})
         self.publish_plugin_event("dream_enter", {})
+        # the day's capture is over — persist any batch-buffered ANN adds now
+        ann = getattr(self.retriever, "ann", None)
+        if ann is not None and hasattr(ann, "flush"):
+            ann.flush()
 
 
     def exit_dream(self) -> None:

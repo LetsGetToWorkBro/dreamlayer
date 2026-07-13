@@ -120,7 +120,13 @@ class Orchestrator(
         # Passive recall primitives
         self.ring = SemanticRingBuffer(cfg.passive_ring_capacity)
         self.silent_capture = SilentCapture(self, self.ring, self.privacy, cfg.capture_min_interval_ms)
-        self.passive = PassiveEventInjector(self.bridge, self.ring, cfg.passive_min_confidence)
+        self.passive = PassiveEventInjector(
+            self.bridge, self.ring, cfg.passive_min_confidence,
+            # the config knob is the cadence authority now, not a comment in
+            # tick(); the late-binding clock follows a swapped self._clock
+            # (the DST harness drives it with a SimClock)
+            tick_interval_ms=cfg.passive_tick_interval_ms,
+            clock=lambda: self._clock())
 
         # Drift / scrub / tell engines
         self.drift_engine = CommitmentDriftEngine(self.ring)
@@ -388,8 +394,9 @@ class Orchestrator(
 
 
     def tick(self) -> dict | None:
-        """Drive passive event injection (~4 Hz) and the Horizon Frame
-        stream (rate-limited inside the composer)."""
+        """Drive passive event injection and the Horizon Frame stream. Call as
+        often as you like: the injector self-throttles to the configured
+        passive_tick_interval_ms and the composer rate-limits the stream."""
         self._premonition_sweep()
         self._tincan_sweep()
         self.tick_horizon()

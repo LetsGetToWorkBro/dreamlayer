@@ -8,16 +8,23 @@ the memory engine stops surfacing cards the user consistently ignores.
 
 Algorithm
 ---------
-- Maintain a deque of (card_type, event) pairs capped at WINDOW_SIZE.
-- dismissal_rate(card_type) = dismissed / (shown) for that type in window.
+- Maintain a PER-CARD-TYPE deque of events, each capped at WINDOW_SIZE
+  (P2-15: one shared window let a chatty card type evict every other
+  type's history, so a rarely-shown type could never accumulate the
+  MIN_SAMPLES it needs to adapt — each type now remembers its own last
+  WINDOW_SIZE events, and a burst of one type cannot erase another's).
+- dismissal_rate(card_type) = dismissed / shown for that type's window.
 - suggested_threshold(card_type, base) lifts the base threshold by up to
   MAX_LIFT when dismissal_rate >= HIGH_DISMISS_RATE.
 - Threshold is never lowered below base (only raised) — conservative.
+- Distinct types are bounded at MAX_TYPES (LRU-evicted) so a hostile or
+  buggy stream of unique card_type strings cannot grow memory unboundedly.
 
 Persistence
 -----------
-Writes the raw event deque to ~/.dreamlayer/dismissal_log.json on every
-update so the window survives process restarts.  Uses an atomic rename.
+Writes the per-type windows to ~/.dreamlayer/dismissal_log.json on every
+update so they survive process restarts (atomic rename). Loads either the
+v2 per-type format or the legacy flat list, folding the latter per type.
 
 Usage
 -----
@@ -40,7 +47,8 @@ from typing import Callable, Deque, Optional
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-WINDOW_SIZE        = 20      # sliding window depth
+WINDOW_SIZE        = 20      # sliding window depth (PER card type)
+MAX_TYPES          = 32      # distinct card types remembered (LRU-evicted)
 HIGH_DISMISS_RATE  = 0.60    # >= 60% dismissed → start lifting threshold
 MAX_LIFT           = 0.25    # maximum threshold increase (absolute)
 MIN_SAMPLES        = 3       # need at least this many shown before adjusting
@@ -71,14 +79,27 @@ class DismissalTracker:
         window_size: int = WINDOW_SIZE,
         log_path: Optional[Path] = None,
         persist: bool = True,
+        max_types: int = MAX_TYPES,
     ) -> None:
-        self._window: Deque[_Event] = deque(maxlen=window_size)
+        # insertion order doubles as LRU order: appending to a type moves it
+        # to the end (see _window_for), so the first key is the stalest type
+        self._windows: dict[str, Deque[_Event]] = {}
         self._window_size = window_size
+        self._max_types = max(1, int(max_types))
         self._log_path = Path(log_path) if log_path else _DEFAULT_LOG_PATH
         self._persist = persist
         self._listeners: list[Callable[[str, float], None]] = []
         if persist:
             self._load()
+
+    def _window_for(self, card_type: str) -> Deque[_Event]:
+        w = self._windows.pop(card_type, None)
+        if w is None:
+            w = deque(maxlen=self._window_size)
+            while len(self._windows) >= self._max_types:
+                self._windows.pop(next(iter(self._windows)))   # LRU evict
+        self._windows[card_type] = w                            # move to MRU
+        return w
 
     # ------------------------------------------------------------------
     # Ingestion
@@ -101,7 +122,7 @@ class DismissalTracker:
         if not card_type:
             return
 
-        self._window.append(_Event(card_type=card_type, event=ev))
+        self._window_for(card_type).append(_Event(card_type=card_type, event=ev))
         if self._persist:
             self._save()
 
@@ -122,11 +143,10 @@ class DismissalTracker:
     # ------------------------------------------------------------------
 
     def dismissal_rate(self, card_type: str) -> float:
-        """Fraction of shown cards of this type that were dismissed, in window."""
+        """Fraction of shown cards of this type that were dismissed, in
+        this type's own window."""
         shown = dismissed = 0
-        for ev in self._window:
-            if ev.card_type != card_type:
-                continue
+        for ev in self._windows.get(card_type, ()):
             if ev.event == _EV_SHOWN:
                 shown += 1
             elif ev.event == _EV_DISMISSED:
@@ -136,8 +156,9 @@ class DismissalTracker:
         return dismissed / shown
 
     def shown_count(self, card_type: str) -> int:
-        """Number of CARD_SHOWN events for this type in the window."""
-        return sum(1 for e in self._window if e.card_type == card_type and e.event == _EV_SHOWN)
+        """Number of CARD_SHOWN events for this type in its window."""
+        return sum(1 for e in self._windows.get(card_type, ())
+                   if e.event == _EV_SHOWN)
 
     def suggested_threshold(self, card_type: str, base: float) -> float:
         """Return an adjusted confidence threshold for card_type.
@@ -156,12 +177,13 @@ class DismissalTracker:
         return min(base + lift, 0.95)  # hard cap so we never block everything
 
     def window_snapshot(self) -> list[dict]:
-        """Return window as a list of dicts (useful for debugging / tests)."""
-        return [{"card_type": e.card_type, "event": e.event} for e in self._window]
+        """All windows flattened to a list of dicts (debugging / tests)."""
+        return [{"card_type": e.card_type, "event": e.event}
+                for w in self._windows.values() for e in w]
 
     def clear(self) -> None:
-        """Reset the window and delete persisted log."""
-        self._window.clear()
+        """Reset every window and delete the persisted log."""
+        self._windows.clear()
         if self._persist and self._log_path.exists():
             self._log_path.unlink()
 
@@ -172,7 +194,11 @@ class DismissalTracker:
     def _save(self) -> None:
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps([{"c": e.card_type, "e": e.event} for e in self._window])
+            payload = json.dumps({
+                "v": 2,
+                "windows": {t: [{"e": e.event} for e in w]
+                            for t, w in self._windows.items()},
+            })
             # atomic write via temp file + rename
             fd, tmp = tempfile.mkstemp(dir=self._log_path.parent, suffix=".tmp")
             try:
@@ -192,8 +218,16 @@ class DismissalTracker:
             if not self._log_path.exists():
                 return
             raw = json.loads(self._log_path.read_text())
-            for item in raw[-(self._window_size):]:
-                self._window.append(_Event(card_type=item["c"], event=item["e"]))
+            if isinstance(raw, dict) and raw.get("v") == 2:
+                for t, events in (raw.get("windows") or {}).items():
+                    w = self._window_for(str(t))
+                    for item in events[-(self._window_size):]:
+                        w.append(_Event(card_type=str(t), event=item["e"]))
+            elif isinstance(raw, list):
+                # legacy flat list: fold per type, newest-last order preserved
+                for item in raw:
+                    self._window_for(item["c"]).append(
+                        _Event(card_type=item["c"], event=item["e"]))
         except Exception:
             pass
 

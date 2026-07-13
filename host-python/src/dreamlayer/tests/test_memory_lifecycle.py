@@ -77,6 +77,7 @@ class TestPersistentAnn:
         idx = PersistentAnnIndex(path, emb.DIM)
         idx.add(1, emb.embed("keys at the door"))
         idx.add(2, emb.embed("wine on the shelf"))
+        idx.flush()   # adds batch (P2-15); flush is the persistence boundary
         idx2 = PersistentAnnIndex(path, emb.DIM)      # reopen from disk
         hits = idx2.search(emb.embed("keys"), k=1)
         assert hits and hits[0][0] == 1

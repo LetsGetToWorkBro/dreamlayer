@@ -69,6 +69,19 @@ class IngestOps:
             ann.rebuild(self.db)
             self.db.set_setting("embedder_signature", sig)
             self.db.set_setting("embedder_dim", str(dim))
+        else:
+            # Boot drift check (P2-15): adds are batch-persisted, so a hard
+            # kill can leave the on-disk index missing the last few vectors
+            # the DB has. When the counts disagree, rebuild — O(rows) once at
+            # boot — so recall never silently misses recent memories.
+            from ..memory.embeddings import unpack_embedding
+            embedded = 0
+            for m in self.db.memories():
+                vec = unpack_embedding(m.get("embedding"))
+                if vec and len(vec) == dim:
+                    embedded += 1
+            if len(ann) != embedded:
+                ann.rebuild(self.db)
         return ann
 
 

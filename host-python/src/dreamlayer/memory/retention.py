@@ -94,6 +94,10 @@ class RetentionSweep:
             if self.ann is not None:
                 self.ann.remove(m["id"])      # don't leave the vector behind
             report.expired.append(m["id"])
+        if self.ann is not None and hasattr(self.ann, "flush"):
+            # the sweep is a natural quiet point: persist any batched adds so
+            # the crash window for recent vectors stays one sweep wide
+            self.ann.flush()
         return report
 
     def purge_hot(self, ring) -> int:

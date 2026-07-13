@@ -42,13 +42,28 @@ class PersistentAnnIndex:
 
     Keys are memory row ids. `dim` is fixed at construction; add() refuses
     a vector of any other length (a dimension mix would silently poison
-    every search)."""
+    every search).
+
+    Persistence is BATCHED on the hot path (P2-15): add() used to serialize
+    the whole index file on every single ingest — at 50–150k memories that is
+    tens of MB rewritten per captured moment. add() now marks the index dirty
+    and saves once every `save_every` mutations; flush() forces a save and is
+    called at the natural quiet points (the retention sweep, dream entry).
+    Deletions stay IMMEDIATE: remove() saves on the spot, because a purged
+    memory must never resurrect from a stale index file after a crash — purge
+    honesty outranks write amortization, and purges are rare anyway. The
+    honest crash window on the add side: at most save_every-1 recent vectors
+    can be missing from the on-disk index after a hard kill; the rows are
+    still in the DB, and the owner's boot check (ops_ingest._build_ann)
+    rebuilds when the index disagrees with the DB."""
 
     available = _HAS_USEARCH
 
-    def __init__(self, path: str | Path | None, dim: int):
+    def __init__(self, path: str | Path | None, dim: int, save_every: int = 64):
         self.path = Path(path) if path else None
         self.dim = int(dim)
+        self.save_every = max(1, int(save_every))
+        self._dirty = 0
         self._index = None
         if not _HAS_USEARCH or dim <= 0:
             return
@@ -83,13 +98,17 @@ class PersistentAnnIndex:
             if self._index.contains(key):
                 self._index.remove(key)
             self._index.add(key, np.asarray(vec, dtype=np.float32))
-            self._save()
+            self._dirty += 1
+            if self._dirty >= self.save_every:
+                self._save()
             return True
         except Exception as exc:
             log.error("[ann_index] add failed: %s", exc)
             return False
 
     def remove(self, memory_id: int) -> None:
+        # immediate save: an erased memory must not resurrect from a stale
+        # index file after a crash (see class docstring)
         if self._index is None:
             return
         try:
@@ -97,6 +116,11 @@ class PersistentAnnIndex:
             self._save()
         except Exception:
             pass
+
+    def flush(self) -> None:
+        """Persist any batched adds now. Cheap no-op when nothing is dirty."""
+        if self._dirty:
+            self._save()
 
     def search(self, vector, k: int = 10) -> list[tuple[int, float]]:
         """Return [(memory_id, cosine_similarity)] best-first, or [] when
@@ -140,7 +164,10 @@ class PersistentAnnIndex:
     # ------------------------------------------------------------------
 
     def _save(self) -> None:
-        if self._index is None or self.path is None:
+        if self._index is None:
+            return
+        self._dirty = 0
+        if self.path is None:
             return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
