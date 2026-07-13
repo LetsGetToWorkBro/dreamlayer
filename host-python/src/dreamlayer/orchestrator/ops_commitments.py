@@ -288,6 +288,14 @@ class CommitmentRecallOps:
 
     def ask(self, query):
         self.bridge.send_command("ask")
+        # recall-gated like every other recall surface (P1-7 / re-audit): a full
+        # pause veil blocks recall, so we must not touch retriever/db or draw a
+        # memory card here. Incognito still allows recall (it blocks capture,
+        # not looking back at what you already know).
+        if not self.privacy.allow_recall():
+            veil = cards.privacy_veil()
+            self.bridge.send_card(veil)
+            return veil
         intent = intents.classify(query)
         source = None
         if intent["intent"] == "object_recall":

@@ -1020,7 +1020,11 @@
       .replace(/\{remaining_s\}/g, String(Math.ceil(this.remaining())))
       .replace(/\{elapsed\}/g, _fmtClock(el))
       .replace(/\{elapsed_ms\}/g, String(Math.floor(el * 1000)))
-      .replace(/\{slot\}/g, this.slots[""] || "")
+      // function replacer, NOT a string: a replacement STRING lets host slot
+      // text's `$&`/`$1`/`$$` act as JS special patterns, silently corrupting
+      // the line and diverging from Python's literal str.replace and Lua. A
+      // function return is inserted verbatim. (Named slots below already do this.)
+      .replace(/\{slot\}/g, function () { return self.slots[""] || ""; })
       .replace(SLOT_TOKEN_RE, function (_, n) { return self.slots[n] != null ? self.slots[n] : ""; });
     // Only substitute DECLARED counters, literal-matched — an undeclared
     // {count:cN} (e.g. arriving inside an inert slot value) stays literal, the

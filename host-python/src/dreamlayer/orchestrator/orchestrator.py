@@ -396,10 +396,17 @@ class Orchestrator(
     def tick(self) -> dict | None:
         """Drive passive event injection and the Horizon Frame stream. Call as
         often as you like: the injector self-throttles to the configured
-        passive_tick_interval_ms and the composer rate-limits the stream."""
+        passive_tick_interval_ms and the composer rate-limits the stream.
+
+        Recall-gated (P1-7 / re-audit): the passive loop *proactively surfaces*
+        memory, so a full pause veil must silence it — otherwise pre-pause
+        hot-ring events keep being drawn while the wearer believes capture and
+        recall are both off. Incognito still allows it (recall, not capture)."""
         self._premonition_sweep()
         self._tincan_sweep()
         self.tick_horizon()
+        if not self.privacy.allow_recall():
+            return None
         return self.passive.tick()
 
 

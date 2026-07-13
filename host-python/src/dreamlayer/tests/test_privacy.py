@@ -126,3 +126,38 @@ def test_orchestrator_on_place_blocked_during_pause():
     o.pause()
     result = o.on_place(place_data["place"]["signature"])
     assert result is None
+
+
+# Re-audit 2026-07: two recall surfaces bypassed the veil. Pin them shut.
+
+def test_ask_is_veiled_during_pause():
+    """orch.ask() is a recall surface — a full pause veil must block it, drawing
+    the Privacy Veil card instead of recalling from memory."""
+    from dreamlayer.simulator.scenarios import new_orch
+    o = new_orch()
+    o.bridge.connect()
+    o.db.add_memory("object", "keys on the piano", confidence=0.9,
+                    meta={"object": "Keys", "place": "piano"})
+    # sanity: unpaused, ask recalls (some card that isn't the veil)
+    assert o.ask("where are my keys").get("type") != "PrivacyVeilCard"
+    o.pause()
+    card = o.ask("where are my keys")
+    assert card.get("type") == "PrivacyVeilCard"   # veiled, no recall drawn
+
+
+def test_passive_tick_is_silent_during_pause():
+    """The passive loop proactively surfaces memory — a full pause veil must
+    silence it, or pre-pause hot-ring events keep being drawn while the wearer
+    believes recall is off."""
+    from dreamlayer.simulator.scenarios import new_orch
+    from dreamlayer.pipelines.ingest import MemoryEvent
+    o = new_orch()
+    o.bridge.connect()
+    ev = MemoryEvent(
+        kind="object", summary="keys at kitchen counter", confidence=0.95,
+        meta={"object": "Keys", "place": "Kitchen counter", "detail": ""},
+        source="passive", db_id=99)
+    # unpaused, this event would surface; paused, tick() must stay silent
+    o.ring.append(ev)
+    o.pause()
+    assert o.tick() is None                         # nothing surfaced under the veil

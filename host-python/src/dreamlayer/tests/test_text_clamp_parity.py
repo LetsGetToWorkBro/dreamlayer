@@ -46,6 +46,15 @@ VECTORS = [
     "café" * 9,
     "日" * 20,
     "a😀b日c",
+    # substitution-magic in host slot text: `%` is Lua gsub-replacement magic
+    # (raises on the device's 5.3), `$&`/`$1`/`$$` are JS String.replace magic
+    # (silently corrupt). Python's str.replace treats all literally — so these
+    # pin that the default {slot} render is a literal insert in every
+    # interpreter, not a pattern-replacement. (Re-audit 2026-07 found both.)
+    "100% sure",
+    "20% off today",
+    "$5 and $&1 or $$x",
+    "a\\1b",
     "",
 ]
 
