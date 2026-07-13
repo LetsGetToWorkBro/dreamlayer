@@ -54,7 +54,8 @@ class DreamRemOps:
             policy = RetentionPolicy(
                 hot_hours=getattr(self.config, "retention_hot_hours", 24.0),
                 warm_days=getattr(self.config, "retention_warm_days", 90.0))
-            sweep = RetentionSweep(self.db, policy, bias=self.rem_bias)
+            sweep = RetentionSweep(self.db, policy, bias=self.rem_bias,
+                                   ann=self.retriever.ann)
             self.last_retention = sweep.sweep()
             sweep.purge_hot(self.ring)
         return reel

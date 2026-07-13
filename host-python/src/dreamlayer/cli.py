@@ -574,6 +574,11 @@ def cmd_mem_burn(args) -> int:
              f"your memory)")
         return 2
     db.unlink()
+    # the ANN index is a sibling file (<db>.usearch) — burn it too, or the
+    # vectors outlive the memories they point at.
+    ann = db.with_name(db.name + ".usearch")
+    if ann.exists():
+        ann.unlink()
     _p(f"{OK} burned your memory — {db} is gone")
     return 0
 
