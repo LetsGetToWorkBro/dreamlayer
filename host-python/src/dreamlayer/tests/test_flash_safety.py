@@ -86,6 +86,55 @@ class TestFigmentAnalysis:
         rep = analyze_figment(self._strobe(2.0, "accent_error"), area_min=0.0)
         assert rep.ok and rep.red_hz <= FLASH_LIMIT
 
+    def test_general_flash_path_fires_for_a_bright_non_red_strobe(self):
+        # P2-13: the general-flash branch used to be vacuous — it measured the
+        # whole-glass mean, which a small flasher can never move 10%, so no
+        # figment could ever trip it. It now measures the flashing component
+        # (the changed pixels), WCAG's actual form. A white 4/s strobe trips
+        # it — through the GENERAL path, since white is nowhere near the
+        # red-ratio threshold — proving the branch is reachable and counted.
+        rep = analyze_figment(self._strobe(4.0, "text_primary"), area_min=0.0)
+        assert not rep.ok and rep.general_hz > FLASH_LIMIT
+        assert any(kind == "general" for _, kind, _ in rep.offenders)
+        assert rep.red_hz == 0.0                    # white is not a red flash
+
+    def test_general_flash_boundary_is_inclusive_at_the_limit(self):
+        # worst == FLASH_LIMIT is still ok (<=, not <): a 3/s white strobe passes
+        rep = analyze_figment(self._strobe(3.0, "text_primary"), area_min=0.0)
+        assert rep.ok and rep.general_hz == 3.0
+
+    def test_general_flash_still_exempt_by_area_at_the_default_bar(self):
+        # the same white strobe at the DEFAULT area threshold: the ~6% pulse
+        # ring stays under the near-eye exemption, so real figments are
+        # unaffected by the component-scoped measurement
+        rep = analyze_figment(self._strobe(4.0, "text_primary"))
+        assert rep.ok and rep.general_hz == 0.0
+
+    def _ring_area(self, fig):
+        # the ring's exact changed-pixel fraction, measured the same way the
+        # analyzer measures it (render on/off, diff the pixels)
+        import numpy as np
+        from dreamlayer.reality_compiler.v2.flash_safety import (
+            _pulse_frames, _measure,
+        )
+        from dreamlayer.reality_compiler.v2.playback import render_image
+        sid, scene = next(iter(fig.scenes.items()))
+        on, off = _pulse_frames(sid, scene)
+        rgb_on, _ = _measure(render_image(on))
+        rgb_off, _ = _measure(render_image(off))
+        return float(np.any(rgb_on != rgb_off, axis=-1).mean())
+
+    def test_area_exemption_is_inclusive_at_the_exact_threshold(self):
+        # area_min set to the ring's EXACT measured area: >= means the flash
+        # qualifies (both the general and the red accounting) — a strict >
+        # would silently exempt content sitting exactly at the bar
+        fig = self._strobe(4.0, "accent_error")
+        exact = self._ring_area(fig)
+        rep = analyze_figment(fig, area_min=exact)
+        assert not rep.ok
+        kinds = {kind for _, kind, _ in rep.offenders}
+        assert kinds == {"general", "red"}          # both paths count at ==
+
 
 class TestGate:
     """The flash golden: every built-in figment must pass at the default bar."""

@@ -96,14 +96,35 @@ markers = [
 ]
 
 [tool.mutmut]
-# Mutation-test the on-glass safety core: mutate contracts.py (the caps the
-# whole "data, not code" safety argument rests on) and confirm the tests kill
-# every mutant. The behavioral boundary tests in test_contracts_unit.py are the
-# mutant-killers; the CrossHair proofs are complementary but blind to mutmut
-# (it swaps the body behind a dispatcher CrossHair's source read can't see).
-# Baseline: 34/34 killed. Enforced on demand by .github/workflows/mutation.yml.
+# Mutation-test the whole on-glass safety core (P2-13 widened this from
+# contracts.py alone): the caps the "data, not code" argument rests on
+# (contracts.py), the static prover (budgets.py), the WCAG eye-safety analyzer
+# (flash_safety.py), and the deploy trust anchor (signer.py). Each file has a
+# dedicated killer suite listed below; the CrossHair proofs are complementary
+# but blind to mutmut (it swaps the body behind a dispatcher CrossHair's
+# source read can't see). vault_sync.py stays out: it needs the loro extra,
+# which the mutation runner doesn't install.
+#
+# Enforcement (.github/workflows/mutation.yml) is per-file survivor CEILINGS,
+# not a blanket zero: contracts.py and signer.py hold at zero survivors, while
+# budgets.py and flash_safety.py carry documented non-behavioral residuals
+# (mutants of diagnostic message strings and provably-equivalent forms — see
+# test_budgets_boundaries.py / test_flash_safety_unit.py docstrings). The
+# ceilings are the measured residual counts, so any NEW test hole still fails
+# the job while the documented residue doesn't ratchet.
 source_paths = ["src/dreamlayer"]
-only_mutate = ["src/dreamlayer/reality_compiler/v2/contracts.py"]
+only_mutate = [
+    "src/dreamlayer/reality_compiler/v2/contracts.py",
+    "src/dreamlayer/reality_compiler/v2/budgets.py",
+    "src/dreamlayer/reality_compiler/v2/flash_safety.py",
+    "src/dreamlayer/reality_compiler/v2/signer.py",
+]
 pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_contracts_unit.py",
+    "src/dreamlayer/tests/test_budgets_boundaries.py",
+    "src/dreamlayer/tests/test_rc2_budgets.py",
+    "src/dreamlayer/tests/test_flash_safety_unit.py",
+    "src/dreamlayer/tests/test_flash_safety.py",
+    "src/dreamlayer/tests/test_signer_boundaries.py",
+    "src/dreamlayer/tests/test_rc2_vault.py",
 ]

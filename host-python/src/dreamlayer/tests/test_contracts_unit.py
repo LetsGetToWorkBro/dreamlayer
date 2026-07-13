@@ -93,6 +93,35 @@ class TestClampText:
     def test_exact_length_untouched(self):
         assert contracts.clamp_text("abc", 3) == "abc"
 
+    # -- the canonical unit is UTF-8 BYTES, cut on a codepoint boundary (P2-12).
+    # These non-ASCII pairs are the mutant-killers for the boundary walk: each
+    # pins the continuation-byte test (& 0xC0 == 0x80) and the backward step
+    # (n -= 1) with a cut that lands mid-sequence, where any mutation either
+    # returns too many bytes or splits a codepoint (decode error).
+
+    def test_two_byte_char_cut_mid_sequence_drops_the_char(self):
+        # "é" is C3 A9; max_len=1 lands on the continuation byte → back off to ""
+        assert contracts.clamp_text("é", 1) == ""
+
+    def test_three_byte_chars_cut_on_and_off_boundary(self):
+        # "日本語" is 3 bytes per char: 3 keeps exactly one, 4 must NOT split 本
+        assert contracts.clamp_text("日本語", 3) == "日"
+        assert contracts.clamp_text("日本語", 4) == "日"
+        assert contracts.clamp_text("日本語", 6) == "日本"
+
+    def test_four_byte_emoji_kept_whole_or_dropped_whole(self):
+        assert contracts.clamp_text("😀", 3) == ""       # can't fit 4 bytes in 3
+        assert contracts.clamp_text("😀", 4) == "😀"
+
+    def test_result_never_exceeds_max_bytes_and_stays_valid_utf8(self):
+        # kills the walk-direction mutants (n += 1 walks past the cut) and any
+        # relaxed comparison: the kept prefix must fit AND round-trip cleanly
+        for s in ("héllo wörld", "日本語のテキスト", "a😀b日c", "café" * 9):
+            for max_len in (0, 1, 2, 3, 4, 5, 7, 24):
+                out = contracts.clamp_text(s, max_len)
+                assert len(out.encode()) <= max_len
+                assert s.startswith(out)             # a prefix, never rewritten
+
 
 class TestAcceptSlot:
     # accept_slot(is_default, is_known, named_count, max_slots)

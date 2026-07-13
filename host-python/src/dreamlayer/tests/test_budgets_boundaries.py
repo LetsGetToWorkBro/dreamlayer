@@ -27,9 +27,10 @@ per-check scene-tag assertions), plus three _cycle_analysis mutants of which two
 are provably equivalent (a zero-time cycle is impossible given MIN_SCENE_SEC≥0.5
 — the code says as much; and ``target >= start`` equals ``target > start`` since
 ``target == start`` is handled by the branch above) and one is a cycle-
-enumeration reshuffle that doesn't change the flood verdict. The enforced
-zero-survivor mutmut gate stays on contracts.py; this is coverage hardening
-verified by mutation testing."""
+enumeration reshuffle that doesn't change the flood verdict. That residue (213
+measured) is now ENFORCED as a per-file ceiling by
+.github/workflows/mutation.yml — a new survivor beyond it fails the weekly job —
+while contracts.py and signer.py hold at zero survivors."""
 from dreamlayer.reality_compiler.v2 import (
     Figment, Scene, TextLine, PulseSpec,
     CounterDecl, CounterOp, Guard, Transition, END, SELF, verify,
@@ -652,3 +653,24 @@ class TestReport:
         fig.scenes["a"].pulse = PulseSpec(window_sec=5, rate_hz=30.0)
         fig.meta["scene_beats"] = {"a": 7}
         assert verify(fig).violations[0].beat == 7
+
+
+class TestVerifyOrRaise:
+    """The raising wrapper the deploy path leans on — previously the one
+    budgets.py entry point with zero mutation coverage (5 'no tests' mutants)."""
+
+    def test_clean_figment_passes_through_with_its_report(self):
+        from dreamlayer.reality_compiler.v2.budgets import verify_or_raise
+        report = verify_or_raise(base())
+        assert report.ok and not report.violations
+
+    def test_violating_figment_raises_with_the_report_text(self):
+        from dreamlayer.reality_compiler.v2.budgets import verify_or_raise
+        from dreamlayer.reality_compiler.v2.figment import FigmentError
+        import pytest
+        fig = base()
+        fig.scenes["a"].pulse = PulseSpec(window_sec=5, rate_hz=30.0)  # > cap
+        with pytest.raises(FigmentError) as e:
+            verify_or_raise(fig)
+        # the exception carries the report string (codes visible to the author)
+        assert "pulse" in str(e.value)

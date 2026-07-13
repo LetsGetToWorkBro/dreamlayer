@@ -138,9 +138,20 @@ def analyze_figment(fig: Figment, area_min: float = DEFAULT_AREA_MIN) -> FlashRe
         area = float(changed.mean())
         rate = min(scene.pulse.rate_hz, MAX_PULSE_HZ)
 
-        # general flash: mean-luminance change over the whole glass
-        dl = abs(float(lum_on.mean()) - float(lum_off.mean()))
-        darker = min(float(lum_on.mean()), float(lum_off.mean()))
+        # general flash: luminance change of the FLASHING COMPONENT — the
+        # pixels that actually change between the on and off frames. This is
+        # WCAG's form: the luminance test and the area test are separate.
+        # Measuring the whole-glass mean instead conflated them (a small
+        # bright flasher can never move the global mean 10%), which made this
+        # branch unreachable for any real figment — a vacuous check. Area
+        # weighs in exactly once, at the exemption clause.
+        if area > 0.0:
+            on_mean = float(lum_on[changed].mean())
+            off_mean = float(lum_off[changed].mean())
+            dl = abs(on_mean - off_mean)
+            darker = min(on_mean, off_mean)
+        else:
+            dl, darker = 0.0, 1.0        # nothing changes → nothing flashes
         if dl >= LUM_DELTA and darker < DARK_MAX and area >= area_min:
             worst_general = max(worst_general, rate)
             offenders.append((sid, "general", rate))
