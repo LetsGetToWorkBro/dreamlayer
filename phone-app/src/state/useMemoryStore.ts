@@ -6,8 +6,9 @@
  * GET /dreamlayer/memories: places you saved (Waypath), people you've met and
  * favors owed (Social Lens), and dated reminders — and replaces the list.
  * Exposes `service.lastCard` (the last card the glasses drew) and `purgeAll()`
- * for the danger zone. It ships with a few sample memories so the surface is
- * alive before a Halo has ever been worn / before a Brain is paired.
+ * for the danger zone. Sample memories exist but belong to DEMO MODE only:
+ * enableDemo() seeds them, disableDemo() removes them (real entries survive),
+ * and a fresh real-mode install starts honestly empty.
  */
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -78,19 +79,53 @@ type MemoryState = {
 const HOUR = 3_600_000;
 const now = Date.now();
 
-const SEED: Memory[] = [
-  { id: "m1", kind: "Promise", summary: "Send Marcus the signed lease by Friday", createdAt: "9:42 AM", ts: now - 2 * HOUR },
-  { id: "m2", kind: "Object", summary: "Snake plant on the sill — water every 2 weeks", createdAt: "9:10 AM", ts: now - 3 * HOUR },
-  { id: "m3", kind: "Person", summary: "Priya — you met at the Overpass show, she teaches ceramics", createdAt: "Yesterday, 7:20 PM", ts: now - 26 * HOUR },
-  { id: "m4", kind: "Place", summary: "Left the bike locked on 4th & Alder, north rack", createdAt: "Yesterday, 5:03 PM", ts: now - 28 * HOUR },
-  { id: "m5", kind: "Note", summary: "Café on Pine takes cash only — bring some next time", createdAt: "Mon, 1:15 PM", ts: now - 74 * HOUR },
+// Demo-mode fixtures ONLY (P2-14). These are fiction — Marcus, Priya, and the
+// bike on 4th & Alder do not exist — so they may appear exactly when the app
+// says "demo" and never otherwise. They are seeded by enableDemo(), removed by
+// disableDemo() (by these ids, so real ingested/fetched memories survive), and
+// are absent from a fresh real-mode install: an empty memory list is the
+// honest state before a Halo has captured anything.
+const DEMO_ID_PREFIX = "demo-";
+const DEMO_SEED: Memory[] = [
+  { id: "demo-m1", kind: "Promise", summary: "Send Marcus the signed lease by Friday", createdAt: "9:42 AM", ts: now - 2 * HOUR },
+  { id: "demo-m2", kind: "Object", summary: "Snake plant on the sill — water every 2 weeks", createdAt: "9:10 AM", ts: now - 3 * HOUR },
+  { id: "demo-m3", kind: "Person", summary: "Priya — you met at the Overpass show, she teaches ceramics", createdAt: "Yesterday, 7:20 PM", ts: now - 26 * HOUR },
+  { id: "demo-m4", kind: "Place", summary: "Left the bike locked on 4th & Alder, north rack", createdAt: "Yesterday, 5:03 PM", ts: now - 28 * HOUR },
+  { id: "demo-m5", kind: "Note", summary: "Café on Pine takes cash only — bring some next time", createdAt: "Mon, 1:15 PM", ts: now - 74 * HOUR },
 ];
+const DEMO_LAST_CARD: HaloCard = {
+  kind: "Promise", primary: "You owe Marcus the signed lease",
+  lines: ["due Friday", "tap to open the thread"],
+};
+
+/** Seed the demo fixtures (called by useBrainStore.enableDemo). Idempotent. */
+export function seedDemoMemories(): void {
+  useMemoryStore.setState((s) => ({
+    memories: [
+      ...DEMO_SEED.filter((d) => !s.memories.some((m) => m.id === d.id)),
+      ...s.memories,
+    ],
+    service: { ...s.service, lastCard: s.service.lastCard ?? DEMO_LAST_CARD },
+  }));
+}
+
+/** Remove ONLY the demo fixtures (called by useBrainStore.disableDemo):
+ * real ingested/fetched memories survive demo-off untouched. */
+export function clearDemoMemories(): void {
+  useMemoryStore.setState((s) => ({
+    memories: s.memories.filter((m) => !m.id.startsWith(DEMO_ID_PREFIX)),
+    service: {
+      ...s.service,
+      lastCard: s.service.lastCard === DEMO_LAST_CARD ? null : s.service.lastCard,
+    },
+  }));
+}
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
-  memories: SEED,
+  memories: [],
   fetchedAt: 0,
   service: {
-    lastCard: { kind: "Promise", primary: "You owe Marcus the signed lease", lines: ["due Friday", "tap to open the thread"] },
+    lastCard: null,
     purgeAll: () => {
       // "This cannot be undone." Honor it in all three places the memories
       // live: in-memory state, the Brain's kept anchors, AND the on-disk
@@ -105,7 +140,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
   refresh: async () => {
     // Pull the paired Brain's kept memory. With no Brain, keep whatever's local
-    // (the seed, or what's been ingested) so the surface stays alive offline.
+    // (ingested entries, the offline cache, or demo fixtures) so the surface
+    // stays alive offline.
     const m = target();
     if (!m) return;
     try {

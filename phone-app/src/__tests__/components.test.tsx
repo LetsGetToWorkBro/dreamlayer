@@ -44,6 +44,37 @@ describe("Tappable", () => {
     fireEvent(screen.getByText("quiet"), "pressIn");
     expect(tapLight).not.toHaveBeenCalled();
   });
+
+  // P2-14: the one touch primitive is what makes (or breaks) screen-reader
+  // access app-wide — every Tappable must be a labeled, stateful button.
+  it("announces itself as a button to screen readers", () => {
+    render(
+      <Tappable onPress={() => {}}>
+        <Text>go</Text>
+      </Tappable>
+    );
+    expect(screen.getByRole("button")).toBeTruthy();
+  });
+
+  it("carries an explicit label for icon-only surfaces", () => {
+    render(
+      <Tappable onPress={() => {}} accessibilityLabel="Ask your Brain">
+        <Text>{"↳"}</Text>
+      </Tappable>
+    );
+    expect(screen.getByRole("button", { name: "Ask your Brain" })).toBeTruthy();
+  });
+
+  it("reports its disabled state", () => {
+    render(
+      <Tappable onPress={() => {}} disabled>
+        <Text>held</Text>
+      </Tappable>
+    );
+    // RNTL's role query honours accessibilityState — a disabled-aware query
+    // only matches when the state is actually exposed to the a11y tree
+    expect(screen.getByRole("button", { disabled: true })).toBeTruthy();
+  });
 });
 
 
