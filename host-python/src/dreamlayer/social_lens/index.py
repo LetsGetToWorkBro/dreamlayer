@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
 
 from .schema import ContactRecord, MatchResult
 from .embedder import cosine_similarity

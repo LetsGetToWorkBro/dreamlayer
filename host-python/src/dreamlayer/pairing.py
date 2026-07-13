@@ -20,7 +20,6 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass, asdict
-from typing import Optional
 
 SCHEME = "dreamlayer"          # dreamlayer:<base64> for deep-link / QR
 

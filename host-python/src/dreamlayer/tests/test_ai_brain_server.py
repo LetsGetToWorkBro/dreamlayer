@@ -11,15 +11,14 @@ import threading
 import urllib.request
 from pathlib import Path
 
-import pytest
 
 from dreamlayer.ai_brain import (
-    BrainRouter, RemoteKnowledgeBrain, RemoteVisionBrain, connect_brain,
+    BrainRouter, RemoteKnowledgeBrain, connect_brain,
     CloudKnowledgeBrain, CloudVisionBrain,
 )
 from dreamlayer.ai_brain.server import (
     BrainConfig, QueryHistory, FileIndex, Brain, make_brain_server,
-    OllamaBackend, make_synthesizer, vision_answer,
+    OllamaBackend, vision_answer,
 )
 
 

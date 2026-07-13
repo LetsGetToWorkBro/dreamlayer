@@ -6,9 +6,12 @@ here we provide a deterministic stub that is fully testable.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:                       # AUFrame is imported lazily at call time
+    from .schema import AUFrame         # (real import lives inside process_frame)
 
 EMBEDDING_DIM = 512
 DETECTION_THRESHOLD = 0.50      # minimum face detection confidence

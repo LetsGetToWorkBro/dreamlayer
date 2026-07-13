@@ -10,7 +10,6 @@ import numpy as np
 
 from dreamlayer.orchestrator.orchestrator import Orchestrator
 from dreamlayer.bridge.emulator_bridge import EmulatorBridge
-from dreamlayer.social_lens.schema import ContactRecord
 from dreamlayer.truth_lens.face_embed import FaceEmbedder
 
 

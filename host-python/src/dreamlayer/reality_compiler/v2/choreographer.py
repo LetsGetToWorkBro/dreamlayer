@@ -248,7 +248,7 @@ class Choreographer:
             tag_, per_second, beat_idx = pending_emit
             period = 1.0 / per_second
             sid = _slug("beacon", set(fig.scenes))
-            beacon = fig.add_scene(Scene(
+            fig.add_scene(Scene(
                 id=sid,
                 duration_sec=max(period, 0.5),
                 lines=[TextLine("sending " + tag_, row=1, size="sm",

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import io
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.capture_provenance")

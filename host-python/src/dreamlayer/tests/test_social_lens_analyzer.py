@@ -1,6 +1,5 @@
 """Integration tests for SocialLens orchestrator."""
 import numpy as np
-import pytest
 from dreamlayer.social_lens import SocialLens
 from dreamlayer.social_lens.schema import ContactRecord
 from dreamlayer.truth_lens.face_embed import FaceEmbedder

@@ -6,7 +6,7 @@ when absent it exposes an equivalent plain @dataclass with the same fields and
 `.to_row()`, so callers get a stable schema either way.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Optional, List
 
 try:  # optional dep — extras group `memory`

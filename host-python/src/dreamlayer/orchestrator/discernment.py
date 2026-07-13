@@ -21,7 +21,6 @@ Pure and deterministic. Veritas' `FactCheck` is required; the Truth Lens
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 # content verdict → base concern (before folding in confidence)
 _CONTENT_CONCERN = {

@@ -1,14 +1,11 @@
 from __future__ import annotations
-import json
 import os
 from ..memory.db import MemoryDB
 from ..memory.retrieval import Retriever
 from ..memory.proactive import ProactiveEngine
 from ..memory.privacy import PrivacyGate
 from ..memory.ring_buffer import SemanticRingBuffer
-from ..pipelines import vision, speech
 from ..pipelines.ingest import IngestPipeline
-from ..pipelines.extraction import extract_commitments
 from ..config import CONFIG
 from .passive_capture import SilentCapture
 from .passive_injector import PassiveEventInjector
@@ -30,10 +27,8 @@ from .state import HostState
 from ..dream_mode import DreamEngine
 from ..dream_mode.premonition import RecurrenceModel
 from ..rem import RetrievalBias
-from ..rem.bias import event_key
 from ..rem.nightly import NightWatch
 from ..confluence.taps import TapCollector
-from . import intents, answer_builder
 from ..hud import cards
 # The module-level helpers moved to ._ops_helpers to break the mixin import
 # cycle; re-exported here so `from ...orchestrator import _parse_scene_reply`

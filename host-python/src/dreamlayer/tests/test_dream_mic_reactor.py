@@ -1,5 +1,4 @@
 """Tests for MicReactor FFT → palette shift mapping."""
-import pytest
 from dreamlayer.dream_mode.mic_reactor import MicReactor
 from dreamlayer.orchestrator.recall_context import RecallContext
 

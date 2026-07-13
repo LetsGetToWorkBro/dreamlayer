@@ -47,7 +47,7 @@ TALLY_FILE = "quest_log.json"
 # leveling + ranks are shared with the Brain-hosted Saga profile (saga.py),
 # so the glasses reward cards and the phone profile speak the same language.
 from ..saga import (level_for_xp, xp_floor as _xp_floor, rank_for_level,
-                    MAX_LEVEL, _BY_ID as _SAGA_BY_ID)
+                    _BY_ID as _SAGA_BY_ID)
 
 # quest-category achievements the completion RPG can award (themed in saga.py)
 ACHIEVEMENTS_ORDER = ["keeper", "from_the_brink", "unbroken", "relentless", "devoted"]

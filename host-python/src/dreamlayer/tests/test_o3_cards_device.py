@@ -7,7 +7,6 @@ drive the *actual* device code on the raster harness — the same path the golde
 use — asserting they draw, stay in budget, are materially rich, and hold still
 under reduce_motion.
 """
-import pathlib
 
 import pytest
 

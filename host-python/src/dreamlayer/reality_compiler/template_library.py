@@ -9,7 +9,6 @@ Each template has:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from string import Template
 from typing import Any
 
 

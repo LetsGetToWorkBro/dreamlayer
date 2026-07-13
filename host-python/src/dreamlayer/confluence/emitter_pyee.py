@@ -14,7 +14,7 @@ in-house emitter with the same on/emit surface is used, so the bus always works.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 log = logging.getLogger("dreamlayer.emitter_pyee")
 

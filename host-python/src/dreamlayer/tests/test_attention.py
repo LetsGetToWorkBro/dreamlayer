@@ -5,7 +5,7 @@ moment, ranks urgency, and — crucially — never nags.
 """
 from __future__ import annotations
 
-from dreamlayer.orchestrator.attention import AttentionPolicy, Alert
+from dreamlayer.orchestrator.attention import AttentionPolicy
 from dreamlayer.orchestrator.anticipation import Context, Event, Anchor, Commitment
 from dreamlayer.orchestrator.orchestrator import Orchestrator
 from dreamlayer.tests.test_integration_dream_suite import FakeBridge

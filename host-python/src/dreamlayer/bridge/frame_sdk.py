@@ -15,7 +15,7 @@ what it *would* have shown into `sent` (useful for tests/demos) and reports
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List
 
 log = logging.getLogger("dreamlayer.frame_sdk")
 

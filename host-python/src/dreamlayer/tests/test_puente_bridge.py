@@ -1,5 +1,4 @@
 """Tests for PuenteBridge Puente → LiveCaptionCard pipeline."""
-import pytest
 from dreamlayer.orchestrator.puente_bridge import PuenteBridge, _detect_language
 
 

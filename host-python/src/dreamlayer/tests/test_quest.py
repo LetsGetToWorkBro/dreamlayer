@@ -1,7 +1,6 @@
 """test_quest.py — the Life Quest Engine over Commitment Drift."""
 from __future__ import annotations
 
-import pytest
 
 from dreamlayer.memory.ring_buffer import SemanticRingBuffer
 from dreamlayer.pipelines.ingest import MemoryEvent

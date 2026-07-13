@@ -1,6 +1,5 @@
 """REM — the sleep cycle is functional: deterministic dreams, honest
 consolidation, privacy at the door, and a brighter morning Horizon."""
-import time
 
 import pytest
 

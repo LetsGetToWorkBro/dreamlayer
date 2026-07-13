@@ -12,7 +12,6 @@ import pytest
 loro = pytest.importorskip("loro")
 
 from dreamlayer.reality_compiler.v2 import native            # noqa: E402
-from dreamlayer.reality_compiler.v2.figment import Figment   # noqa: E402
 from dreamlayer.reality_compiler.v2.signer import content_hash  # noqa: E402
 from dreamlayer.reality_compiler.v2.vault import Vault        # noqa: E402
 from dreamlayer.reality_compiler.v2.vault_sync import (       # noqa: E402

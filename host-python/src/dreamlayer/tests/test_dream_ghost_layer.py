@@ -1,6 +1,5 @@
 """Tests for GhostLayer place anchor -> WorldAnchorCard."""
 import time
-import pytest
 from dreamlayer.dream_mode.ghost_layer import GhostLayer, GHOST_COOLDOWN_S
 from dreamlayer.orchestrator.recall_context import RecallContext
 

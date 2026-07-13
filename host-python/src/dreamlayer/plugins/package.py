@@ -28,7 +28,6 @@ import json
 import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
 
 API_VERSION = "1"                    # default a manifest gets if it omits `api`
 SUPPORTED_API = frozenset({"1", "2"})  # v1 (register-only) and v2 (lifecycle+events)

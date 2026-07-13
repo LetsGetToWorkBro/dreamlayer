@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from dreamlayer.memory.db import MemoryDB
 from dreamlayer.memory.retrieval import Retriever
-from dreamlayer.pipelines.ingest import IngestPipeline, MemoryEvent
+from dreamlayer.pipelines.ingest import IngestPipeline
 
 
 @pytest.fixture

@@ -1,5 +1,4 @@
 """Tests for TruthLens fusion engine."""
-import pytest
 from dreamlayer.truth_lens.schema import (
     AUFrame, ProsodyFrame, LinguisticFrame, ContactBaseline,
 )

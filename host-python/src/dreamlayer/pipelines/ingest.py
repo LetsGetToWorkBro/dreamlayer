@@ -33,7 +33,7 @@ from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .llm_client import LLMClient
+    pass
 
 
 # ---------------------------------------------------------------------------

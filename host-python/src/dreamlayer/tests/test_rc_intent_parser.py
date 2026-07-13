@@ -2,11 +2,9 @@
 import pytest
 from dreamlayer.reality_compiler.intent_parser import IntentParser
 from dreamlayer.reality_compiler.schema import (
-    RoundTimerIntent, OvertimeTimerIntent, StopwatchIntent,
+    RoundTimerIntent, StopwatchIntent,
     IntervalTimerIntent, SimpleCounterIntent, BatteryWarningIntent,
-    TeleprompterIntent, CoachingCueIntent, PointsMarkerIntent,
-    HabitReminderIntent, ReactTimerIntent, GestureRepeaterIntent,
-    SpeakerIndicatorIntent,
+    TeleprompterIntent, CoachingCueIntent, HabitReminderIntent, ReactTimerIntent,
 )
 
 

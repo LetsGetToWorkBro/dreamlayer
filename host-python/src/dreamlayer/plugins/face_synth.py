@@ -18,7 +18,7 @@ Everything here is pure and offline-testable. The one seam is `midi_out(event)`
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 # a few scales as semitone offsets from the root

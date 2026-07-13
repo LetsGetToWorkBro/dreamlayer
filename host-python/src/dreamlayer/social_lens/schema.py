@@ -1,6 +1,6 @@
 """social_lens/schema.py — Data structures for SocialLens."""
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 

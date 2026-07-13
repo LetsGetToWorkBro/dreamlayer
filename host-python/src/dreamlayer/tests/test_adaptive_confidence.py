@@ -1,15 +1,9 @@
 """Tests for DismissalTracker adaptive confidence feedback loop."""
-import json
 import tempfile
 from pathlib import Path
 
-import pytest
 from dreamlayer.orchestrator.adaptive_confidence import (
     DismissalTracker,
-    WINDOW_SIZE,
-    HIGH_DISMISS_RATE,
-    MAX_LIFT,
-    MIN_SAMPLES,
     reset_global_tracker,
     get_tracker,
 )

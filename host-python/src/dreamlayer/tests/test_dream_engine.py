@@ -1,10 +1,7 @@
 """Tests for DreamEngine lifecycle and sensor feed."""
-import asyncio
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 from dreamlayer.dream_mode.engine import DreamEngine
-from dreamlayer.orchestrator.recall_context import RecallContext
 
 
 class FakeBridge:

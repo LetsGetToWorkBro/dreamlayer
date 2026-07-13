@@ -386,14 +386,14 @@ def encode_matrix(text: str) -> List[List[int]]:
     matrix.place_function_patterns()
     matrix.place_data(bitstream)
 
-    best_grid, best_mask, best_score = None, 0, None
+    best_grid, best_score = None, None
     for mask in range(8):
         grid = _apply_mask(matrix, mask)
         _place_format(grid, mask)
         _place_version(grid, version)
         s = _penalty(grid)
         if best_score is None or s < best_score:
-            best_score, best_grid, best_mask = s, grid, mask
+            best_score, best_grid = s, grid
     return best_grid
 
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from dreamlayer.memory.ring_buffer import SemanticRingBuffer
 from dreamlayer.pipelines.ingest import MemoryEvent

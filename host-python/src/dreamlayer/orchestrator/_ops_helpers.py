@@ -11,8 +11,6 @@ import urllib.request
 
 def _default_http_get(url: str, token: str = "") -> dict:
     """Minimal GET the message poller uses to reach the paired Mac mini Brain."""
-    import json
-    import urllib.request
     headers = {"X-DreamLayer-Token": token} if token else {}
     req = urllib.request.Request(url, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -22,8 +20,6 @@ def _default_http_get(url: str, token: str = "") -> dict:
 
 def _default_http_post(url: str, body: dict, token: str = "") -> dict:
     """Minimal POST used to push the Juno profile to the paired Mac mini Brain."""
-    import json
-    import urllib.request
     headers = {"Content-Type": "application/json"}
     if token:
         headers["X-DreamLayer-Token"] = token
@@ -79,7 +75,6 @@ def _parse_taste_reply(text: str):
             continue
         text_field = parts[1] if len(parts) > 1 and parts[1] not in ("?", "") else ""
         price = rating = None
-        rest = " ".join(parts[2:]) if len(parts) > 2 else ""
         pm = re.search(r"\$?\s*(\d+(?:\.\d{1,2})?)", parts[2]) if len(parts) > 2 else None
         if pm:
             price = float(pm.group(1))

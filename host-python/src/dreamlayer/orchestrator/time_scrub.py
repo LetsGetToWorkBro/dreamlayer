@@ -8,7 +8,6 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from ..memory.ring_buffer import SemanticRingBuffer, RingBucket
-from ..hud import cards
 
 
 @dataclass

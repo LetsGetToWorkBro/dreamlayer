@@ -10,7 +10,6 @@ from __future__ import annotations
 from ..rem import RetrievalBias
 from ..rem.bias import event_key
 from .time_scrub import TimeScrubSession
-import json
 
 
 class DreamRemOps:

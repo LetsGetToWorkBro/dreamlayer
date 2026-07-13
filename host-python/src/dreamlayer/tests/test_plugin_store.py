@@ -11,7 +11,7 @@ import json
 
 from dreamlayer.plugins import (
     PluginManifest, PluginPackage, sha256_of, validate, scan_source,
-    ValidationReport, RegistryIndex, StoreEntry, PluginStore,
+    RegistryIndex, StoreEntry, PluginStore,
 )
 from dreamlayer.orchestrator.orchestrator import Orchestrator
 from dreamlayer.orchestrator.glance import GlanceReading

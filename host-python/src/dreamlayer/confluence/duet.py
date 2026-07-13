@@ -14,10 +14,9 @@ is whose; the compiled machine doesn't care.
 """
 from __future__ import annotations
 
-from typing import Optional
 
 from ..reality_compiler.v2.rehearsal import (
-    Beat, RehearsalSession, RehearsalResult, parse_utterance,
+    Beat, RehearsalSession, RehearsalResult,
 )
 
 

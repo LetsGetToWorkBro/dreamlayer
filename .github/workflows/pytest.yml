@@ -28,6 +28,28 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -e ".[dev,verify,sync]"   # verify→crosshair proofs, sync→loro CRDT
 
+      - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
+        # The high-signal static-analysis gate. Config in pyproject
+        # [tool.ruff.lint]: pyflakes + syntax, house-style rules off. A
+        # contributor can't quietly land dead code or an undefined name.
+        run: ruff check src/dreamlayer
+
+      - name: Typecheck — mypy on the safety core
+        # The formal-methods surface — the caps (contracts), the flood/timeout
+        # prover (budgets), the flash analyzer (flash_safety), and the
+        # integrity signer — is fully typed and held to it. --follow-imports=skip
+        # keeps the gate on these files rather than cascading into the
+        # deliberately-untyped internals (a repo-wide typing pass is tracked
+        # separately). vault_sync is out on purpose: its types come from loro's
+        # LoroValue union, so that's a CRDT-plumbing typing task, not part of
+        # the "data, not code" proof these four carry.
+        run: >
+          mypy --follow-imports=skip --ignore-missing-imports
+          src/dreamlayer/reality_compiler/v2/contracts.py
+          src/dreamlayer/reality_compiler/v2/budgets.py
+          src/dreamlayer/reality_compiler/v2/flash_safety.py
+          src/dreamlayer/reality_compiler/v2/signer.py
+
       - name: Run pytest
         # hardware/benchmark tests need a device or run only on demand.
         # --cov-fail-under is set 5 points below the measured total (90%) so

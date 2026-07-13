@@ -7,7 +7,6 @@ degrades, and that a wearer who asks and gets nothing sees an honest card
 instead of silence."""
 import time
 
-import pytest
 
 from dreamlayer.ai_brain.router import BrainRouter
 from dreamlayer.ai_brain.schema import Answer

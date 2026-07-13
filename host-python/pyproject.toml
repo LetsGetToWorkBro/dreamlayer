@@ -21,7 +21,7 @@ dreamlayer = "dreamlayer.cli:main"
 
 [project.optional-dependencies]
 # lupa runs the halo-lua test suites (pinned to lupa.lua53 = device Lua)
-dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6", "pytest-cov>=4", "qrcode>=7"]
+dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6", "pytest-cov>=4", "qrcode>=7", "ruff>=0.5", "mypy>=1.8"]
 # proofs: CrossHair symbolically verifies the on-glass safety caps in
 # reality_compiler/v2/contracts.py (skipped when crosshair-tool is absent).
 verify   = ["crosshair-tool>=0.0.60"]
@@ -66,6 +66,26 @@ dreamlayer = [
     "ai_brain/server/assets/*.woff2",
     "py.typed",                       # PEP 561: ship inline types to SDK consumers
 ]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Gate on the rules that catch real defects, not house style. The codebase
+# deliberately uses compact one-liners (semicolons, colon-bodies) in the data
+# layer, so the E7-series style rules are out; pyflakes (F) is the signal —
+# unused imports/vars, redefinitions, undefined names, f-strings with no
+# placeholder — plus E9 (syntax/IO errors). A clean tree here means a
+# contributor can't quietly land dead code.
+select = ["F", "E9"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__.py files re-export their public surface; those imports are
+# "unused" only to a linter.
+"__init__.py" = ["F401"]
+# Tests routinely bind an intermediate to name a step (`before = count()`), so
+# unused-local (F841) is noise there; the source tree is held to it.
+"src/dreamlayer/tests/*" = ["F841"]
 
 [tool.pytest.ini_options]
 testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]

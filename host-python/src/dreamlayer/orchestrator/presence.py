@@ -18,7 +18,7 @@ capture is disallowed, dwell is not recorded.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 

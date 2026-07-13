@@ -13,6 +13,10 @@ on:
   push:
     paths:
       - "reality-core/**"
+      # the Python reference the parity proof runs *against* — a change here
+      # (the caps, the interpreter, the grammar) must retrigger the proof, or a
+      # parity break lands green.
+      - "host-python/src/dreamlayer/reality_compiler/**"
       - "host-python/src/dreamlayer/tests/test_reality_core_parity.py"
       - "host-python/src/dreamlayer/tests/test_reality_core_wasm_parity.py"
       - "landing/assets/lens/figment.js"
@@ -20,6 +24,7 @@ on:
   pull_request:
     paths:
       - "reality-core/**"
+      - "host-python/src/dreamlayer/reality_compiler/**"
       - "host-python/src/dreamlayer/tests/test_reality_core_parity.py"
       - "host-python/src/dreamlayer/tests/test_reality_core_wasm_parity.py"
       - "landing/assets/lens/figment.js"

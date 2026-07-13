@@ -28,7 +28,7 @@ import hmac
 import json
 import secrets
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 BOND_TTL_S = 8 * 3600.0        # a bond is an evening, not a surveillance

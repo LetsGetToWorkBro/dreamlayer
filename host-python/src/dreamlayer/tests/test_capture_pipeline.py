@@ -1,7 +1,6 @@
 """The capture path: PCM → VAD-gated segments → ASR → the hub, veil-gated, with
 failures recorded; the synthetic mic source drains a fixture; real vision
 backends fall back cleanly; dismissal telemetry lifts the proactive floor."""
-import pytest
 
 from dreamlayer.bridge.emulator_bridge import EmulatorBridge
 from dreamlayer.orchestrator.capture import (

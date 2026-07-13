@@ -38,7 +38,7 @@ def test_event_callback_fires():
     assert "privacy_pause" in received
 
 def test_lua_bundle_requires_main():
-    import os, tempfile, pytest
+    import tempfile, pytest
     from dreamlayer.bridge.lua_loader import collect_lua
     with tempfile.TemporaryDirectory() as d:
         with pytest.raises(FileNotFoundError, match="main.lua"):

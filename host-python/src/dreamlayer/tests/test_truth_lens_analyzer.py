@@ -1,6 +1,5 @@
 """Integration tests for TruthLens orchestrator."""
 import numpy as np
-import pytest
 from dreamlayer.truth_lens import TruthLens
 from dreamlayer.truth_lens.prosody import BIN_HZ
 
@@ -80,7 +79,6 @@ class TestTruthLensAnalyzer:
         assert ll.tick() is None
 
     def test_contact_matched_when_registry_provided(self):
-        import numpy as np
         # Build a known embedding from a bright frame
         frame = make_frame(0.9)
         from dreamlayer.truth_lens.face_embed import FaceEmbedder

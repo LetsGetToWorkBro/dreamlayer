@@ -1,7 +1,5 @@
 """test_time_scrub.py — tests for TimeScrubSession."""
 from __future__ import annotations
-import time
-import pytest
 from dreamlayer.orchestrator.time_scrub import TimeScrubSession
 from dreamlayer.memory.ring_buffer import SemanticRingBuffer
 from dreamlayer.pipelines.ingest import MemoryEvent

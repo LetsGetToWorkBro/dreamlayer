@@ -5,7 +5,7 @@ Codegen reads the fields directly — no dict access, no key errors.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 
 class ValidationError(ValueError):

@@ -408,7 +408,6 @@ def test_golf_page_is_wired():
 def test_golf_challenges_carry_icon_keys_not_emoji():
     # the challenge data drives SVG icons now, not emoji glyphs
     js = JS.read_text(encoding="utf-8")
-    import re
     block = js[js.index("var GOLF ="):]
     assert 'icon: "timer"' in block and 'icon: "score"' in block
     assert "emoji:" not in block, "GOLF should not carry emoji fields any more"

@@ -13,7 +13,7 @@ from dreamlayer.memory.embeddings import (
     pack_embedding, unpack_embedding,
 )
 from dreamlayer.memory.retention import (
-    RetentionPolicy, RetentionSweep,
+    RetentionSweep,
 )
 from dreamlayer.memory.retrieval import Retriever
 from dreamlayer.memory.ring_buffer import SemanticRingBuffer

@@ -11,7 +11,7 @@ from dreamlayer.reality_compiler.v2.figment import (
 )
 from dreamlayer.reality_compiler.v2.flash_safety import (
     analyze_figment, count_flashes, relative_luminance, FlashReport,
-    FLASH_LIMIT, DEFAULT_AREA_MIN,
+    FLASH_LIMIT,
 )
 
 

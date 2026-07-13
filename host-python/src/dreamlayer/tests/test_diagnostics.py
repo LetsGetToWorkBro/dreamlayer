@@ -5,12 +5,10 @@ we test the stateful API surface via lupa (same pattern as test_gestures.py).
 All frame.display.* draw calls are no-ops when HAS_FRAME is false,
 so these tests run without any display hardware or emulator.
 """
-import os
 import pathlib
 import pytest
 
 try:
-    import lupa
     from lupa import LuaRuntime
     LUPA_AVAILABLE = True
 except ImportError:

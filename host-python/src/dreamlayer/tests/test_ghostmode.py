@@ -8,7 +8,7 @@ card. Transport rides the in-memory bus standing in for coded PHY.
 from __future__ import annotations
 
 from dreamlayer.confluence.mesh import (
-    MeshManager, MeshPacket, InMemoryBus, GROUP_TTL_S, QUIET_FADE_S,
+    MeshManager, GROUP_TTL_S, QUIET_FADE_S,
 )
 from dreamlayer.confluence.beacon import Beacon, dist_band, _bearing_word
 
@@ -27,7 +27,7 @@ class Veil:
 
 def _circle(n, clock):
     """n managers in one group, wired over a shared in-memory bus."""
-    a = MeshManager(now_fn=clock, me=f"m0")
+    a = MeshManager(now_fn=clock, me="m0")
     gid, code = a.form("party")
     mgrs = [a] + [MeshManager(now_fn=clock, me=f"m{i}") for i in range(1, n)]
     for i, m in enumerate(mgrs):

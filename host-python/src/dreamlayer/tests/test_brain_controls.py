@@ -10,7 +10,7 @@ import urllib.request
 
 from dreamlayer.ai_brain.server import Brain, make_brain_server
 from dreamlayer.ai_brain.server.store import (
-    BrainConfig, ActivityLog, QueryHistory, in_quiet_hours, _prune_jsonl,
+    BrainConfig, in_quiet_hours, _prune_jsonl,
 )
 from dreamlayer.ai_brain.server.index import FileIndex
 

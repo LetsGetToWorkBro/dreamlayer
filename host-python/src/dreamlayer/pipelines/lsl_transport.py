@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from typing import Deque, List, Optional, Sequence
+from typing import Deque, List, Sequence
 
 log = logging.getLogger("dreamlayer.lsl_transport")
 

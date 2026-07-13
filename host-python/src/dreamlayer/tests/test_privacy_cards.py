@@ -1,5 +1,4 @@
 """Tests for the three new privacy card factories and LiveCaptionCard."""
-import pytest
 from dreamlayer.hud.cards import (
     forget_last_card,
     private_zone_card,

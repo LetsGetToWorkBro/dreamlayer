@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .figment import (
-    Figment, Scene, Transition, FigmentError,
+    Figment, Transition, FigmentError,
     MAX_SCENES, MAX_COUNTERS, MAX_LINES, MAX_TEXT_LEN, MAX_COUNTER_OPS,
     MAX_BRANCHES, MAX_PULSE_HZ, MIN_SCENE_SEC, MAX_SCENE_SEC,
     EMIT_REFILL_PER_S, MAX_EMIT_TAG_LEN, MAX_NAME_LEN,

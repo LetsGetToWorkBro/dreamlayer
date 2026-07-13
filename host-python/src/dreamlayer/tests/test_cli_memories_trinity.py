@@ -3,7 +3,6 @@
 it. Burn is guarded behind --yes; import refuses to clobber without --force."""
 from __future__ import annotations
 
-from pathlib import Path
 
 from dreamlayer import cli
 

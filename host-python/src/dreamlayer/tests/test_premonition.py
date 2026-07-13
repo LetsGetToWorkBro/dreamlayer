@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dreamlayer.dream_mode.premonition import (
-    RecurrenceModel, CONFIRM_TOL_S, MIN_DAYS,
+    RecurrenceModel,
 )
 from dreamlayer.memory.ring_buffer import SemanticRingBuffer
 from dreamlayer.orchestrator.horizon_composer import (
