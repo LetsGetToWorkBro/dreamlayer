@@ -28,7 +28,9 @@ The screenshots are composited from the real app UI captured in Demo Mode:
 1. Serve the web export and capture app screens (`shot-hires.mjs`, banner hidden via `#dl-demo-banner`).
 2. Composite with captions on the cinematic backdrop (`gen-store.mjs` for 6.9", `gen-shots.mjs`
    for 6.5", `gen-poster.mjs` for the poster).
-Re-run after UI changes so the store art stays truthful to the app.
+Re-run after UI changes so the store art stays truthful to the app. Note: the
+`shot-hires.mjs`/`gen-*.mjs` compositing scripts are not currently checked into the repo —
+only their output (this directory) is.
 
 ## Upload sizes (App Store Connect)
 - iPhone 6.9" display: 1290×2796 (this set is accepted here; 1320×2868 also allowed).

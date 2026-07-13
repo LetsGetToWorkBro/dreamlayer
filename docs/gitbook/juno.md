@@ -15,8 +15,6 @@ three places: floating behind the landing page's hero, greeting you on
 the phone app's first onboarding step, and resting in the corner of the
 Mac panel.
 
-![Juno on the landing hero](assets/site/juno_hero.png)
-
 One clip serves all three surfaces (a 10-second, 20 fps idle loop as a
 true-alpha animated WebP; the phone ships the identical bytes), and it
 degrades deliberately: reduced-motion swaps in a still, small panel
@@ -148,9 +146,11 @@ The stash grammar (`voice.py: _parse_stash`) is deliberately past-tense
 and thing-shaped: only *left / put / stashed / dropped / stowed / set*
 (plus the parked forms) parse, and person, event, time, and idiom subjects
 are refused — so "I'm leaving at nine" and "my mom is in the hospital"
-degrade safely to a plain ask instead of becoming a bogus anchor. Both
-halves respect the Veil: incognito refuses the write ("Not while you're
-incognito.") and holds the on-glass answer too. A thing you never stashed
+degrade safely to a plain ask instead of becoming a bogus anchor. The two
+halves are gated differently on purpose: incognito refuses the write ("Not
+while you're incognito.") but a read of your own anchors still answers —
+incognito blocks keeping, not recalling. Only the full Veil (capture
+paused) holds the on-glass answer too. A thing you never stashed
 gets the honest miss: "I don't have a spot saved for your bike yet."
 More on the anchors themselves in
 [Perception and memory](perception-memory.md#stashes-and-the-waypath).

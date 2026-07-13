@@ -35,8 +35,9 @@ Settings screens (placement). Persisted to AsyncStorage unless noted.
 
 ## Orchestrator setters
 
-The hub's programmatic surface (`orchestrator/orchestrator.py`), for
-completeness — the phone toggles above map onto these:
+The hub's programmatic surface (the `Orchestrator` class in
+`orchestrator/orchestrator.py`, assembled from the `orchestrator/ops_*.py`
+mixins), for completeness — the phone toggles above map onto these:
 
 | Setter | Default | Notes |
 |---|---|---|
@@ -67,7 +68,7 @@ persisted as `brain_config.json`, secrets masked on read:
 | Key | Default | Meaning |
 |---|---|---|
 | `folders` | `[]` | watched directories |
-| `model` | `"keyword"` | `keyword` or `ollama` |
+| `model` | `"keyword"` | `keyword`, `ollama`, or `mlx` (Apple-Silicon-native, falls back to Ollama) |
 | `ollama_url` | `http://127.0.0.1:11434` | |
 | `ollama_chat_model` | `llama3.2` | answers, brief, replies, summaries |
 | `ollama_vision_model` | `llama3.2-vision` | object explain |
@@ -76,6 +77,7 @@ persisted as `brain_config.json`, secrets masked on read:
 | `summarize_emails` | false | one-line email glances |
 | `network_mode` | `"connected"` | `lan_only` = incognito |
 | `cloud_enabled` | **true** | the cloud switch |
+| `cloud_provider` | `openai` | `openai` / `anthropic` / `gemini` / `openrouter` / `ollama` / `dreamlayer` / `custom` preset |
 | `cloud_base_url` | `https://api.openai.com` | any OpenAI-compatible provider |
 | `cloud_api_key` | empty | masked to "set" on read |
 | `cloud_model` | `gpt-4o-mini` | |
@@ -91,6 +93,8 @@ persisted as `brain_config.json`, secrets masked on read:
 | `calendar_sync` / `calendar_names` / `calendar_days` | off / all / 14 | macOS Calendar seam |
 | `contacts_sync` | off | macOS Contacts seam |
 | `reminders_sync` / `reminder_lists` | off / all | macOS Reminders seam |
+| `plan` | `"free"` | billing-tier seam (no paywall today; see `server.PLAN_CAPS`) |
+| `disabled_caps` | `[]` | capabilities the panel switched off (persisted twin of `DL_DISABLE_<KEY>`) |
 
 ## Modes, disambiguated
 

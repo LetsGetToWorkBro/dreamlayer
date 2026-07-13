@@ -178,9 +178,9 @@ the design system (see [phone-app/DESIGN.md](../phone-app/DESIGN.md)).
 #   pip install -e ./host-python[dev]   (pytest, pytest-asyncio, lupa)
 cd host-python && python -m pytest -q
 
-# Phone app type/lint (needs deps installed)
-cd phone-app && npm install && npx tsc --noEmit
+# Phone app tests + type check (needs deps installed)
+cd phone-app && npm install && npm test && npx tsc --noEmit
 ```
 
-The host suite (2,302 tests) covers the Brain server, the router/switches, the
+The host suite (2,600+ tests) covers the Brain server, the router/switches, the
 pairing codec, and every lens.

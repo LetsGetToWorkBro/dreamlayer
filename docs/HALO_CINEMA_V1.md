@@ -4,6 +4,14 @@
 > Successor to the "premium and calm" pass. One atomic upgrade: renderer,
 > dream engine, card library, phone companion.
 
+*(Status 2026-07: historical — superseded by Cinema v2 "Meridian". S1 Iris
+Bloom, S3 Prism Slide, S4 Confidence Halo, S6 Memory Comet, and the Truth Lens
+9-ring gauge described below were removed from `transitions.lua`/`renderer.lua`
+in favor of the Focus law, Horizon, and Testimony Thread; see
+`docs/CINEMA_V2_THESIS.md` and `docs/CINEMA_V2_MIGRATION.md`. S2 Ghost Wake,
+S5 Truth Ripple, the acoustics analogs, and the Air/Ghost/Solid material
+system survive.)*
+
 Hardware ground truth (non-negotiable):
 
 - 256×256 **circular** color display, 16px safe inset (`lib/constants.lua: SAFE_RADIUS = 112`)

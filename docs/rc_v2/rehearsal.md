@@ -59,8 +59,8 @@ matchable by the on-phone recognizer with no network:
 duration   := NUMBER ("minute"|"minutes"|"min"|"second"|"seconds"|"sec") 
              | spelled number ("one".."ten") + unit
 label      := leading words before a duration ("rolling — three minutes")
-mark       := "pulse" | "flash" | "warn me" | "quietly" | "big" | "count this"
-             | "show" <short text>
+mark       := "pulse" | "flash" | "strobe" | "blink" | "warn me" | "count this"
+             | "send <tag>" | "log <tag>" | "show" <short text>
 loop       := "again" | "it repeats" | "keeps going"
 until      := "until I" ("double-tap"|"tap"|"hold")
 control    := "rehearse" | "done" | "keep it" | "no — <beat> again" | "forget it"

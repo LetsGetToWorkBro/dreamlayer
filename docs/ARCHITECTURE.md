@@ -7,7 +7,7 @@ memory engine; Halo renders cards and emits input events over BLE.
 ```
 +------------------+        BLE         +-----------------------+
 |   Host (Python   | <----------------> |   Halo (Lua 5.3 VM)   |
-|   / future phone)|   typed messages   |   main.lua + modules  |
+|   / phone app)   |   typed messages   |   main.lua + modules  |
 |                  |                    |                       |
 |  memory engine   |   cards / commands |  state machine        |
 |  pipelines       |   events / acks    |  display renderer      |

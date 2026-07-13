@@ -30,7 +30,7 @@ dreamlayer/
 ├── host-python/
 │   └── src/dreamlayer/
 │       ├── orchestrator/  the hub (see the mind chapters)
-│       ├── ai_brain/      router, verify, saga; server/ = the Mac Brain
+│       ├── ai_brain/      router, verify; server/ = the Mac Brain
 │       ├── hud/           Python mirror renderer, cards, goldens, motion math
 │       ├── bridge/        BLE bridge + the Lua raster harness
 │       ├── demo/          the emissive overlay / film pipeline
@@ -44,6 +44,8 @@ dreamlayer/
 │       └── tests/         the whole suite lives here
 │   └── packaging/       the macOS .dmg app (py2app, entitlements, launch shim)
 ├── phone-app/           Expo / React Native (plus the App Store kit: fastlane, i18n)
+├── reality-core/        the Rust Figment core — the safety caps and interpreter,
+│                        once, for Python / JS (wasm) / Lua bindings (ADR 0003)
 ├── laptop-companion/    the minimal context agent + macOS installer
 ├── examples/            hello-lens — the ten-minute plugin tutorial, CI-tested
 ├── registry/            the plugin marketplace catalog (index + packages)
@@ -80,7 +82,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 2,302 passing at time of writing
+cd host-python && python -m pytest -q     # 2,600+ passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain
@@ -95,8 +97,9 @@ cd host-python && python -m pytest -q     # 2,302 passing at time of writing
   (settled frames pixel-identical), Solid richness floors (at least 1.25x
   pre-Solid lit pixels), typography metrics (glyph advances within +-2 px of
   the reference face), and Lua-to-Python motion-constant parity.
-- **Phone**: `npx tsc --noEmit` (strict TypeScript). No test runner in the
-  package today.
+- **Phone**: `npm test` — Jest as two projects, "logic" (ts-jest over the
+  pure-TS stores, services, and BLE core) and "component" (jest-expo over
+  the screens); `npx tsc --noEmit` (strict TypeScript) stands alongside it.
 
 ## Golden images — every card as a still
 

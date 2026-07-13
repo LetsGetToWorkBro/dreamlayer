@@ -8,7 +8,7 @@ texture of the world directly onto the glasses display.
 ## Architecture
 
 ```
-OrchestratorDreamMode
+Orchestrator (dream ops mixin: orchestrator/ops_dream_rem.py)
   double_tap event
     └─ enter_dream() / exit_dream()
          └─ DreamEngine.start() / .stop()
@@ -27,15 +27,16 @@ BLE frames sent to Halo:
   {t: "dream_enter"}          clears display, starts dream render loop
   {t: "palette", colors: [...]}  reassigns 16-color palette slots in real time
   {t: "geometry", mode, intensity, yaw_rate, pitch_rate}
+  {t: "line_field", v: [...]}   12 streamed curl-noise line-field vectors
   {t: "sprite", data: <packed TxSprite>}   4bpp indexed bitmap
   {t: "dream_exit"}           restores normal card UI
 
 Halo Lua (dream_renderer.lua):
   apply_palette_shift(colors)  — frame.display.assign_color_ycbcr()
-  draw_frame()                 — 24-particle system + 8-vector line field
+  draw_frame()                 — 24-particle system + streamed 12-vector line field
   render_world_anchor(card)    — ghost text at bottom of display
   render_synesthesia(card)     — 6-word VLM hero text
-  on_sprite(msg)               — frame.display.bitmap() via TxSprite
+  on_sprite(msg)               — frame.display.bitmap() via TxSprite (host_comm_dream.lua)
 ```
 
 ## Quick Start
@@ -81,7 +82,7 @@ available and the 4-second scene interval has elapsed.
 
 ## Adding a New Dream Reactor
 
-1. Create `host-python/src/dreamlayer/app/dream/my_reactor.py`
+1. Create `host-python/src/dreamlayer/dream_mode/my_reactor.py`
 2. Implement `tick(ctx: RecallContext) -> Optional[dict]` returning a BLE command dict or card dict
 3. Import and instantiate in `DreamEngine.__init__`
 4. Call `my_reactor.tick(ctx)` in `DreamEngine._tick()`
@@ -98,6 +99,6 @@ available and the 4-second scene interval has elapsed.
 
 - `frame.display.bitmap()` confirmed via Halo SDK sprite pipeline (`TxSprite.from_indexed_png_bytes`)
 - Max sprite size: 256×256 px, 4bpp (16 colors)
-- BLE MTU: 240 bytes; `brilliant-msg` handles chunking + ACK flow control automatically
+- BLE MTU: 240 bytes; the host chunks frames itself at 128 bytes (`_MTU_PAYLOAD_BYTES` in `bridge/real_bridge.py`) rather than relying on `brilliant-msg` fragmentation
 - Target round-trip: camera → LFM2-VL → sprite → display ≤ 3s on modern phone
 - Swap `gpt-4o-mini` for `liquid/lfm2-vl-450m` in `vision.py` once Liquid API is stable

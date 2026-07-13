@@ -5,7 +5,7 @@ Run this checklist the first time a real Halo unit is available.
 ## 0. Pre-flight (host machine)
 
 - [ ] `pip install brilliant-ble brilliant-msg`
-- [ ] Confirm `brilliant_msg.MessageKind.FILE_WRITE` constant name matches SDK
+- [ ] Confirm `real_bridge._resolve_kind` finds a `FILE_WRITE`-style `MessageKind` in the installed SDK (constants are resolved at import time, no fixed name assumed)
 - [ ] Note Halo BLE address from Brilliant companion app or iOS BLE scanner
 
 ## 1. Connection
@@ -72,6 +72,6 @@ print("Card:", card)
 ## 6. Calibration TODOs to resolve on device day
 
 - MTU fragmentation: tune in `real_bridge._async_upload` and `_send_raw`
-- `MessageKind.FILE_WRITE` — verify exact API name
+- `MessageKind` resolution — confirm `_resolve_kind` picked the right members for file-write / command / data
 - Halo display colour profile — adjust theme hex values if needed
 - `get_device_info()` response keys — update `_async_connect` parsing

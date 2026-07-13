@@ -1,5 +1,11 @@
 # The Horizon
 
+*(Status 2026-07: shipped with Phase 3 geometry retunes — marks lengthened
+to 3/6/9px by tier, notch breathe 6→9px, rim anchor `MER_RIM_R = 105`; the
+smaller figures below are the Phase 2 values. See
+`docs/CINEMA_V2_PROTOTYPE_REVIEW.md`; `display/animations.lua` `MER_*` is
+authoritative.)*
+
 ## Pitch
 
 The resting display is the wearer's day drawn as a thin ring of marks at

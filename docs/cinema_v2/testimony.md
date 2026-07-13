@@ -1,5 +1,10 @@
 # The Testimony Thread
 
+*(Status 2026-07: shipped with the thread at r=64, not the r=48 below — the
+Phase 3 prototype pass found the verdict capsule erased the thread at r=48;
+`TESTIMONY_R = 64` in `display/animations.lua` is authoritative. See
+`docs/CINEMA_V2_PROTOTYPE_REVIEW.md`.)*
+
 ## Pitch
 
 The Truth Lens verdict is one line that either holds, tears, or runs

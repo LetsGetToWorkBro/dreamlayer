@@ -26,8 +26,8 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | MorningBriefCard | wake with a brief waiting | device | 8000 | — |
 | FactCheckCard | Veritas verdict | device | 7000 | chime / hark / hark_urgent by verdict; double haptic + flash on flags |
 | AnswerAheadCard | copilot pre-answer | device | 8000 | **silent**; tick haptic |
-| HarkCard | attention policy | device | 6500 (9000 urgent) | `hark` / `hark_urgent`; tick / double; flash urgent |
-| TruthLensCard (testimony/gauge) | delivery read | device | — | — |
+| HarkCard | attention policy | device | 6000 (9000 urgent) | `hark` / `hark_urgent`; tick / double; flash urgent |
+| TruthLensCard (testimony/gauge) | delivery read | device | 5000 | — |
 | DeviationAlertCard | tell_check contradiction | device | 5000 | — |
 | TimeScrubNodeCard | rewind scrub | device | 0 | — |
 | PrivacyVeilCard | the veil lands | device | 0 | rumble + slam |
@@ -63,7 +63,11 @@ From other modules:
 Notes for implementers: cards are plain dicts — the BLE path delivers them
 straight to the device dispatch table, which is why verdict tone for the
 conversation cards is resolved in the renderer (`card_tone` / `FACT_COLOR`)
-rather than trusted from the constructor. The sample payloads used for every
+rather than trusted from the constructor. Cards can also carry a `spatial`
+payload — pan / gain / ITD / ILD / behind, computed by
+`hud/spatial_audio.py: spatial_payload` and attached by Waypath's
+`attach_spatial` — so any device renders the cue positioned at whatever
+fidelity it has. The sample payloads used for every
 image in this book live in `cards.py: ALL_SAMPLES` (31 keys), and
 `hud/golden_images.py` renders any of them with
 `generate_golden(card_key, golden_dir)`.

@@ -1,6 +1,6 @@
 # Progression — the Saga
 
-The Saga (`host-python/src/dreamlayer/ai_brain/saga.py`, quests in
+The Saga (`host-python/src/dreamlayer/saga.py`, quests in
 `orchestrator/quest.py`) is DreamLayer's progression system: a rank, a level,
 XP, and a set of achievements that unlock as you actually *use* the
 ecosystem. It is durable (`saga.json` beside the Brain's config), served by

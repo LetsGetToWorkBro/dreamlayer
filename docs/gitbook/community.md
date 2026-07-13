@@ -10,8 +10,6 @@ proofs, never executable trust.**
 
 ## The gallery — a remixable wall
 
-![The gallery — every lens previews live on its own ring](assets/site/gallery.png)
-
 [dreamlayer.app/gallery.html](https://dreamlayer.app/gallery.html) renders
 every published lens *live* — each card is a real canvas running the real
 interpreter, not a thumbnail, now drawn as a see-through glass lens over
@@ -30,8 +28,6 @@ after the Python gate re-checks the budget proof. The gallery itself is
 bounded at 500 entries.
 
 ## Figment Golf — verified, not voted
-
-![Figment Golf — four challenges, server-verified leaderboards](assets/site/golf.png)
 
 [dreamlayer.app/golf.html](https://dreamlayer.app/golf.html) is code golf
 for lenses: build the described behavior in the fewest bytes. Four launch

@@ -6,7 +6,7 @@ toggle, message approval, and a phone-sized view of everything the Brain
 knows. Seven tabs — **Brain, Now, Look, Messages, People, Memories,
 Settings** — plus hidden screens reached from Settings and Now (Brief,
 Plugins, Waypath, Capabilities, Device Vitals, Feel, Rewind, Saga, Profile,
-Rehearsal, Confluence, and the Cloud and Brain-tier views) and a five-step
+Rehearsal, Confluence, and the Cloud and Brain-tier views) and a six-step
 onboarding.
 
 *Every screenshot in this chapter is the real app: the repository's code
@@ -66,7 +66,8 @@ Three newer pieces make that connection honest under real-world networks:
 
 ![Brain tab](assets/phone/brain.png)
 
-The default landing tab:
+The first tab in the bar, and the home for your setup (day to day, a cold
+launch lands on **Now**):
 
 - **Pair a device** — scan the panel's QR (expo-camera, with a paste
   fallback) or paste the `dreamlayer:` code; one code wires Mac mini and
@@ -249,9 +250,9 @@ is in [Settings and modes](reference/settings.md).
 
 ![Onboarding](assets/phone/onboarding.png)
 
-Five steps — welcome, how it works, recall, privacy, pair — with animated
-transitions, the pairing ring, and QR scan. Finishing (or skipping) lands on
-the Brain tab.
+Six steps — welcome, how it works, recall, privacy, a try-the-camera look,
+pair — with animated transitions, the pairing ring, and QR scan. Finishing
+(or skipping) lands on the Now tab.
 
 ## Services and design system
 
@@ -261,9 +262,10 @@ the Brain tab.
   permission granted.
 - **Pairing codec** (`src/services/pairing.ts`) — the `dreamlayer:` code,
   byte-compatible with the Python implementation.
-- **Earcons** (`src/services/sound.ts`) — the app ships the actual sound
-  files (`assets/sounds/`: two "hey" wakes, two listens, two watch-outs, two
-  looks, two chimes) with variant rotation that never repeats back-to-back.
+- **Earcons** (`src/services/sound.ts`) — the app ships the actual recorded
+  clips (`assets/sounds/`: five "hey"/"hello" greetings, four listens, four
+  watch-outs, three looks, two chimes) with variant rotation that never
+  repeats back-to-back.
 - **Haptics** (`src/services/haptics.ts`) — no longer four buzzes but a
   **data-driven vocabulary** of fourteen named signals (confirm, action,
   attention, interrupt, veil_on/veil_off ramps, commitment_crack and
@@ -340,7 +342,7 @@ npm test              # the phone's own test suite
 The package finally has its own test suite: **Jest, run as two projects** —
 "logic" (ts-jest over the pure-TS stores, services, BLE framing/bridge,
 pairing) and "component" (jest-expo with React Native Testing Library over
-the screens) — 103 test cases across 19 files at time of writing,
+the screens) — 119 test cases across 21 files at time of writing,
 covering the framing parity vectors, the reconnect state machine, the
 connection store's hysteresis, the outbox, Waypath geometry and routing,
 the pack gate, and the new screens. `tsc --noEmit` remains the standing

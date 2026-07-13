@@ -42,10 +42,12 @@ is covered by the host test suite).
 ## Layout
 
 ```
-app/                 expo-router screens — five tabs + Labs
+app/                 expo-router screens — seven tabs + Labs
   brain.tsx          the hub (default tab): pairing, connections, cloud, incognito, ask
   now.tsx            live Halo mirror, morning brief, voice box, quick actions
+  look.tsx           the deliberate camera tier: one photo → Juno's vision stack
   messages.tsx       Messages/Mail relay: suggested replies, approve-and-send
+  people.tsx         your social memory: people, notes, debts (Social Lens)
   memories.tsx       your recall, grouped by day (+ ask-your-files when paired)
   settings.tsx       every toggle: privacy, Juno, wake, Labs, danger zone
   rewind.tsx         (Labs) today's hour blocks from the Brain
@@ -56,7 +58,8 @@ app/                 expo-router screens — five tabs + Labs
   onboarding.tsx     first-run flow
 src/
   state/             zustand stores (useBrainStore is the source of truth)
-  services/          pairing codec, notifications, earcons, haptics
+  ble/               the glasses link — framing + HaloBridge, pure TS (see below)
+  services/          pairing codec, notifications, earcons + spatial audio, haptics
   ui/                the design system — see DESIGN.md
 ```
 

@@ -79,4 +79,4 @@ First release. Meet DreamLayer — your private memory layer for the real world.
 
 These were rendered from the app's real UI in Demo Mode (the "Sample data" banner is hidden so
 they show the paired-app experience) and composited on the brand's cinematic backdrop. To
-regenerate after UI changes: re-run the capture + `gen-store.mjs` pipeline (see the repo).
+regenerate after UI changes: re-run the capture + `gen-store.mjs` pipeline (see `store/README.md`).

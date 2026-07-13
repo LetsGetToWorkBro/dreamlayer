@@ -1,5 +1,13 @@
 # The Promise Arc
 
+*(Status 2026-07: shipped with revisions to the glyph table below — shattered
+renders as a *fractured* tick (two segments with a gap, Phase 3), radial
+stack pitch is 7px, anchors are r=105/slip 95, and the Lumen pass later added
+bounded state micro-motion (blooming breathes, cracking trembles, a one-shot
+shatter transition), superseding the "no device animation" rule. See
+`docs/CINEMA_V2_PROTOTYPE_REVIEW.md`, `lumen.md`; `MER_PROMISE_*` in
+`display/animations.lua` is authoritative.)*
+
 ## Pitch
 
 Every open commitment is a mark on the future side of the horizon that

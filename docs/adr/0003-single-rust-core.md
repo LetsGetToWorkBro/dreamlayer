@@ -11,7 +11,7 @@ are three hand-written interpreters:
 
 - `host-python/…/reality_compiler/v2/interpreter.py` — the reference, and the
   engine behind playback/preview and the demo renderer.
-- `phone-app/…/figment.js` — the phone/web preview twin.
+- `landing/…/lens/figment.js` — the phone/web preview twin.
 - `halo-lua/app/figment_stage.lua` — the on-glass stage, the real thing, on an
   nRF52840-class MCU.
 
@@ -212,8 +212,10 @@ the `thumbv7em-none-eabi` build, and firmware integration.
 - Migrating the full interpreter. This PoC is the safety caps only — enough to
   prove the seam, not to replace `interpreter.py`/`figment.js`/`figment_stage.lua`.
 - The device firmware integration and the Cortex-M build (owner/hardware work).
-- Flipping the parity test to enforced-in-CI (needs Rust standard in the CI image
-  first). It runs on demand and skips cleanly where cargo is absent.
+- Flipping the parity test to enforced-in-CI. *(Since done:
+  `.github/workflows/rust-core.yml` builds the crate and runs the parity suite,
+  path-filtered to core changes; locally the test still skips cleanly where
+  cargo is absent.)*
 
 ## Recommendation
 

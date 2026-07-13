@@ -159,8 +159,9 @@ into them from outside core:
   brings down the layer.
 - **Sandbox posture (v1):** plugins are trusted in-process Python (the
   open-source ethos: read the code you run). A capability gate keeps a plugin
-  that only asked for `midi` from quietly using `vision`. A real sandbox
-  (subprocess / wasm) is a later hardening, noted not built.
+  that only asked for `midi` from quietly using `vision`. The real sandbox
+  (subprocess / wasm) has since been built — `plugins/isolation.py` +
+  `plugins/wasm_host.py`/`wasm_component_host.py` (see `MARKETPLACE.md`).
 
 **Core vs plugin — the rule this encodes.** A *feature* is first-party,
 on-thesis, on by default, and may touch privileged state (Veil, Brain, core

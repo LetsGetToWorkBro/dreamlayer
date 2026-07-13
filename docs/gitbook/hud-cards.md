@@ -285,7 +285,7 @@ The device-Lua render of the same card:
   urgent, memory-teal otherwise.
 - **Motion:** the ring breathes on hold (1100 ms; 700 ms when urgent).
   Earcon `hark` / `hark_urgent`, tick / double haptic, flash on urgent.
-- **Dismiss:** 6500.
+- **Dismiss:** 6000 (9000 urgent).
 
 ### TruthLensCard — the testimony thread
 

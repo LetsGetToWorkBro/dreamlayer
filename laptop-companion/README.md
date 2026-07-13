@@ -112,7 +112,7 @@ can draft → approve → send.
 ## How it fits DreamLayer
 
 The phone side is already built: `object_lens.integrations.laptop_data_source`
-wrapped in a `PolledSource`, feeding `LaptopProvider` (an Juno provider).
+wrapped in a `PolledSource`, feeding `LaptopProvider` (a Juno provider).
 This agent is the other end of that contract. Anything else that answers those
 three lines — a different language, a soil sensor, an OBD dongle — plugs into
 the exact same phone-side machinery; only the reader changes.

@@ -70,6 +70,9 @@ counts) is pinned by `test_rc2_compat.py::TestSemanticEquivalence`. The v1
 pipeline itself remains in-tree and untouched, and all v1 tests pass
 unchanged, so a byte-identical escape hatch exists during the deprecation
 window. **Tripwire:** any v1 test modified to accommodate v2.
+*(Status 2026-07: the deprecation window has since closed — the v1
+codegen/deploy pipeline was removed; only the v1 parser survives, lifted to
+Figments via `compile_text()`. See `reality_compiler/__init__.py`.)*
 
 ## R9 — Scope: the demo proves the loop, not the polish
 **Mostly closed.** The live phone bridge is now real: `rehearsal.tsx` drives
