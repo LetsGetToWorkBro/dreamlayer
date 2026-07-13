@@ -267,8 +267,10 @@ class WorldLensOps:
 
     def find_way(self, subject: str, heading_deg: float = 0.0):
         """Waypath Lens: where is my <thing> / where do I go, as a direction
-        + distance from your own anchors. Veil-gated."""
-        if not self.privacy.allow_capture():
+        + distance from your own anchors. Gated on the explicit veil only:
+        a *read* of your own anchors still works in incognito (which blocks
+        capture/writes, not recall — pinned by test_waypath_voice)."""
+        if self.privacy.paused:
             return None
         cue = self.waypath.locate(subject, heading_deg)
         card = self.waypath.to_hud_card(cue)

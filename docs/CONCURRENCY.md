@@ -75,3 +75,37 @@ decomposition changed no clocks.
 (`dreamlayer/logging_setup.py`, wired in the Brain's `__main__`). Off by default;
 purely a formatting change, so it's safe to leave on in a service/CI context to
 get machine-parseable logs across all these threads.
+
+## Verifying it — the DST-lite harness
+
+The inventory above used to be *documentation*; `dreamlayer.testkit` makes it
+*tested*. The marquee deterministic-simulation tools (madsim/shuttle/turmoil)
+are Rust-only, so this is the pragmatic Python equivalent, in two honest
+layers (`testkit/dst.py`):
+
+1. **Seeded interleaving (deterministic).** Each concurrent party is an
+   *actor* — an ordered queue of the very calls its real thread makes
+   (`ingest_caption`, `poll_messages`, `tick`, `set_incognito`, …). The
+   `Interleaver` merges the queues into one serial schedule chosen by a seeded
+   RNG: per-actor order preserved, cross-actor order explored. Every run is a
+   `Trace`; the same seed gives the same schedule; a failing schedule
+   `replay()`s exactly. Invariants are checked after **every step**, so a
+   violation names the exact prefix that caused it.
+2. **True-thread stress (non-deterministic, labelled as such).** The same
+   queues on real threads behind a barrier — a smoke test for races *below*
+   operation granularity, with thread exceptions collected and re-raised.
+
+`SimClock` completes the rig: a thread-safe virtual clock installed over the
+hub's `_clock` seam, so cooldowns and session windows are advanced, not slept.
+
+`tests/test_dst_orchestrator.py` proves the harness on a planted lost-update
+race (exploration finds the seed, replay reproduces the identical wrong
+value), then runs the three race surfaces this document names — capture vs
+veil vs tick, message polling vs pause/resume, a hear() storm vs the attention
+pulse — across 40 seeded schedules each plus a true-thread pass.
+
+**First catch:** the capture-vs-veil scenario exposed that `set_incognito()`
+promised "capture is paused" but never drove the `PrivacyGate` — only the
+phone app's cooperation enforced it. The gate now takes incognito as an
+independent veil input (so leaving incognito can't clear an explicit pause),
+and the scenario is the regression test.

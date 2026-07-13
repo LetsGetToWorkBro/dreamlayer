@@ -55,10 +55,14 @@ class BrainSwitchOps:
 
     def set_incognito(self, on: bool = True) -> None:
         """Privacy shield for a session: forces the cloud off (restoring your
-        preference when you leave) and marks the session private. Capture is
-        paused at the app layer. Replaces the old 'home'/private mode."""
+        preference when you leave), marks the session private, and drops the
+        capture veil hub-side — ingest keeps nothing while incognito holds,
+        even if a capture pipeline is still feeding. (The explicit pause is an
+        independent veil input, so leaving incognito never clears a pause the
+        user set themselves.) Replaces the old 'home'/private mode."""
         self.incognito = on
         self.brain.opt_in_cloud(False if on else self._cloud_pref)
+        self.privacy.set_incognito(on)
 
 
     def brain_status(self) -> dict:
