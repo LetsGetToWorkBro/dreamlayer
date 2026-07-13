@@ -66,11 +66,13 @@ The switch was flipped in July 2026. What each item became:
 3. **Configure `security@dreamlayer.app`** (Cloudflare Email Routing →
    forward to the maintainer inbox) so SECURITY.md is answerable. *Owner
    action — not verifiable from the repo; confirm and strike.*
-4. **GitHub hygiene** — partial. Description is set and **Discussions is
-   enabled** (2026-07-13, verified via the API); still open: branch
-   protection on `main` (require the pytest check), topics (`smart-glasses`,
-   `ar`, `brilliant-labs`, `memory`, `python`), and the website field
-   (dreamlayer.app).
+4. **GitHub hygiene** — mostly done. Description is set, **Discussions is
+   enabled**, and **`main` is branch-protected** (2026-07-13, verified via
+   the API + a rejected direct push): all changes must go through a pull
+   request, and the `pytest` status check must pass before merge — the same
+   gate applies to maintainer automation, no bypass. Still open: topics
+   (`smart-glasses`, `ar`, `brilliant-labs`, `memory`, `python`) and the
+   website field (dreamlayer.app).
 5. ~~**DCO enforcement**~~ — done, differently than planned: instead of the
    DCO GitHub App, the in-repo workflow
    [`.github/workflows/dco.yml`](../.github/workflows/dco.yml) checks every
