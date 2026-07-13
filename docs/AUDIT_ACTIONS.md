@@ -28,6 +28,25 @@ in three passes:
   was recalibrated to the better-behaved embedder, object-memory summaries
   are natural language rather than stringified dicts, and a non-blocking
   `real-models` CI workflow exercises MiniLM/CLIP for real.
+- **Pass 4 (the 2026-07 re-audit's P0–P2 findings, all fifteen closed,
+  PRs #292–#305):** the Mac brain binds localhost with an auto-generated
+  token; capture is thread-safe and never confirms an unsaved commitment;
+  phone purge clears the offline cache; the Timbre/TinCan clock and the
+  figment clamp bypass are fixed on-glass; CI runs every test with a
+  ruff+mypy gate in the required job; the incognito/pause recall contract
+  is one gate applied everywhere; forget evicts the vector; the cloud
+  embedder fails loud; plugin security defaults on (alias-following AST
+  scan, no-exec validation, untrusted-by-default isolation); the menu bar
+  respects the cloud opt-in; all four interpreters clamp text by one
+  canonical unit (codepoint-safe UTF-8 bytes) with a non-ASCII parity
+  sweep; the mutation gate covers the whole safety core under per-file
+  survivor ceilings, the flash check measures the flashing component per
+  WCAG, and the flaky float proof is reclassified honestly; the phone
+  ships a11y roles/labels, demo fiction is contained to demo mode, the BLE
+  transport is attached at startup, and the Memories body is localized in
+  nine locales; ANN writes batch with purge-honest immediate deletes and a
+  boot drift rebuild, dismissal windows are per card type, and the passive
+  cadence knob is enforced.
 
 What remains is, by nature, **owner action** — things a terminal cannot
 do. This file is the tracked list; delete entries as they land. Note that

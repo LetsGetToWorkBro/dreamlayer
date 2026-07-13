@@ -27,6 +27,13 @@ jobs:
   # + selene.toml). Informational to start (continue-on-error) so a first run
   # can't break main before the config is confirmed clean on the real binary;
   # flip to blocking once green.
+  #
+  # Known drift (observed 2026-07): `cargo install selene` now pulls a version
+  # that errors with "lua version lua52 in standard library, but feature for it
+  # is not enabled" against our dreamlayer.yml std — a binary-vs-config version
+  # mismatch, not a lint finding. Before flipping this job to blocking, pin the
+  # selene version here (cargo install selene --version <known-good> --locked)
+  # or migrate dreamlayer.yml to the std format the new binary expects.
   selene:
     runs-on: ubuntu-latest
     continue-on-error: true
