@@ -71,13 +71,16 @@ class Orchestrator(
         # Embedder ladder: local MiniLM → OpenAI (key) → hashing lexical model,
         # first available (memory.embeddings.default_embedder). The offline
         # default is a real char-ngram embedder, not the 32-d mock fixture.
-        from ..memory.embeddings import default_embedder
-        self.embedder = default_embedder(cfg)
-
         # Per-seam failure ledger: every degrading except records here first —
         # silent for the wearer, visible to the builder (health_snapshot()).
         from .health import HealthLedger
         self.health = HealthLedger()
+
+        from ..memory.embeddings import default_embedder
+        # a real-embedder degrade (network/quota) is recorded, not silent — and
+        # never poisons the store with a wrong-dimension vector (see the provider)
+        self.embedder = default_embedder(
+            cfg, on_error=lambda e: self.health.record_failure("embed", e))
         from .capability_log import CapabilityLedger
         # what each plugin actually does with its capabilities — a log the
         # wearer can inspect (see ops_plugins.capability_report).

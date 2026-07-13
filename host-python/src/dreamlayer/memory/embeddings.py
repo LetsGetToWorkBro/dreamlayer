@@ -110,11 +110,27 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         Environment variable OPENAI_API_KEY is used as fallback.
     """
     DEFAULT_MODEL = "text-embedding-3-small"
+    DIM = 1536                       # text-embedding-3-small output width
 
-    def __init__(self, config=None):
-        self._config  = config
-        self._client  = None
-        self._mock    = MockEmbeddingProvider()  # fallback
+    def __init__(self, config=None, on_error=None):
+        self._config   = config
+        self._client   = None
+        self._on_error = on_error    # e.g. health.record_failure("embed", exc)
+
+    def _degrade(self, exc) -> list[float]:
+        """A real-embedder failure must not silently poison the store with a
+        different-dimension vector (the old code returned the 32-d mock, which
+        then zip-truncated against 1536-d rows). Return a same-dimension zero
+        vector — dimensionally consistent, cosine 0 so it can't false-match —
+        and surface the failure loudly (log + optional health hook)."""
+        log.error("[embeddings] OpenAI embed failed: %s; degraded (zero-vector, "
+                  "recall falls back to confidence)", exc)
+        if self._on_error is not None:
+            try:
+                self._on_error(exc)
+            except Exception:        # a broken hook must never mask the degrade
+                pass
+        return [0.0] * self.DIM
 
     def _get_client(self):
         if self._client is not None:
@@ -140,7 +156,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def embed(self, text: str) -> list[float]:
         client = self._get_client()
         if client is None:
-            return self._mock.embed(text)
+            # selected but not usable (key vanished, package gone): degrade to a
+            # same-dimension zero vector, never the 32-d mock.
+            return self._degrade(RuntimeError("openai client unavailable"))
 
         model = (
             getattr(self._config, "embedding_model", self.DEFAULT_MODEL)
@@ -148,13 +166,22 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         )
         try:
             resp = client.embeddings.create(input=text, model=model)
-            return resp.data[0].embedding
+            vec = resp.data[0].embedding
+            if len(vec) != self.DIM:          # a model swap changed the width
+                return self._degrade(
+                    ValueError(f"embedding width {len(vec)} != {self.DIM}"))
+            return vec
         except Exception as exc:
-            log.error("[embeddings] OpenAI call failed: %s; using mock", exc)
-            return self._mock.embed(text)
+            return self._degrade(exc)
 
 
 def cosine(a: list[float], b: list[float]) -> float:
+    # Vectors from different embedding spaces must never be compared: a naive
+    # zip() truncates to the shorter and returns a *garbage* score with no
+    # error (e.g. a 1536-d query vs a stray 32-d row). Refuse the mismatch —
+    # 0.0 means "no signal", so a dimension-mixed row simply can't false-match.
+    if len(a) != len(b):
+        return 0.0
     return sum(x * y for x, y in zip(a, b))
 
 
@@ -193,7 +220,7 @@ def unpack_embedding(raw) -> list[float] | None:
 # HashingEmbeddingProvider — NOT the 32-d md5 mock, which is only a test fixture.
 # ---------------------------------------------------------------------------
 
-def default_embedder(config=None) -> EmbeddingProvider:
+def default_embedder(config=None, on_error=None) -> EmbeddingProvider:
     from .embedder_local import LocalEmbeddingProvider
     from .embedder_static import StaticEmbeddingProvider
     if LocalEmbeddingProvider.available:
@@ -201,7 +228,8 @@ def default_embedder(config=None) -> EmbeddingProvider:
     if StaticEmbeddingProvider.available:
         return StaticEmbeddingProvider(config)
     if getattr(config, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
-        return OpenAIEmbeddingProvider(config)
+        # on_error records a degrade to the health ledger (see the provider)
+        return OpenAIEmbeddingProvider(config, on_error=on_error)
     return HashingEmbeddingProvider()
 
 
