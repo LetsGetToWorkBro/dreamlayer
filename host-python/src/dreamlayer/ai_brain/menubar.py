@@ -188,9 +188,14 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         def toggle_incognito(self, sender):
             want = not sender.state
             try:
+                # Only flip the network posture. lan_only already forces cloud
+                # off (BrainConfig.cloud_ready), and leaving incognito restores
+                # the remembered cloud_enabled preference. The menu bar isn't a
+                # cloud-preference authority, so it must NOT post cloud_enabled:
+                # doing so force-enabled the opt-in-off cloud on incognito-off.
                 self._api("/dreamlayer/config", "POST", json.dumps(
-                    {"network_mode": "lan_only" if want else "connected",
-                     "cloud_enabled": not want}).encode())
+                    {"network_mode": "lan_only" if want else "connected"}
+                ).encode())
             except Exception:
                 pass
             self.refresh(None)
