@@ -53,6 +53,8 @@ class WaypathCue:
     direction: str = ""         # human relative direction, given your heading
     place: str = ""
     text: str = ""              # "12m to your left" or "at the north rack"
+    rel_bearing_deg: Optional[float] = None   # 0 = ahead, clockwise; feeds the
+                                              # audible cue (hud/spatial_audio)
 
 
 class WaypathLens:
@@ -112,7 +114,8 @@ class WaypathLens:
             dist = round(anchor.distance_m)
             return WaypathCue(
                 found=True, subject=anchor.subject, distance_m=anchor.distance_m,
-                direction=direction, place=anchor.place, text=f"{dist}m {direction}")
+                direction=direction, place=anchor.place,
+                text=f"{dist}m {direction}", rel_bearing_deg=rel)
         # place-only anchor — the spoken capture path
         text = f"at {anchor.place}" if anchor.place else "somewhere you saved it"
         return WaypathCue(found=True, subject=anchor.subject, place=anchor.place,
@@ -121,14 +124,21 @@ class WaypathLens:
     def to_hud_card(self, cue: WaypathCue) -> Optional[dict]:
         if not cue.found:
             return None
-        return {
+        from ..hud.spatial_audio import attach_spatial
+        card = {
             "type": "WaypathCard",
             "dismiss_ms": 5000,
             "eyebrow": "WAYPATH",
             "primary": cue.subject,
             "detail": cue.text,
             "footer": cue.place,
-            "bearing_deg": None,
+            "bearing_deg": cue.rel_bearing_deg,
             "color": "accent_memory",
             "lines": ["WAYPATH", cue.subject, cue.text],
         }
+        # the audible memory palace: a cue with geometry carries its own
+        # positioned-sound parameters, so the phone/buds can render "your bike
+        # is behind-left, 11 m" as a sound that comes from there
+        return attach_spatial(card, cue.rel_bearing_deg,
+                              cue.distance_m if cue.rel_bearing_deg is not None
+                              else None)

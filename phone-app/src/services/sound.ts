@@ -10,6 +10,11 @@
  * (web/tests) is a silent no-op. Metro needs static require()s, so variants are
  * listed explicitly — add a file, drop its require() in the right family.
  */
+import { SpatialCue, spatialLevels } from "./spatial";
+
+export type { SpatialCue };
+export { spatialLevels };
+
 let Audio: any = null;
 let tried = false;
 
@@ -107,4 +112,42 @@ export async function playEarcon(name: string): Promise<void> {
 /** Juno's "Listen!" — the shoulder tap (Listen 1/2, rotated). */
 export function playListen(): void {
   playEarcon("listen");
+}
+
+// ---------------------------------------------------------------------------
+// The audible memory palace: cards can carry a `spatial` payload (computed
+// host-side by hud/spatial_audio.py from a Waypath cue's bearing+distance).
+// The phone renders it at whatever fidelity the platform has — volume from
+// the distance gain always; stereo pan when the player exposes it. Degrade
+// order and payload shape are pinned by the host tests.
+// ---------------------------------------------------------------------------
+
+/** Play a cue positioned by a card's `spatial` payload. Volume always applies;
+ * pan is set only where the platform player supports it. Never throws. */
+export async function playSpatial(name: string, cue: SpatialCue = {}): Promise<void> {
+  const family = EARCON_FAMILY[name] ?? name;
+  const clip = pick(family);
+  if (clip == null) return;
+  const A = mod();
+  if (!A?.createAudioPlayer) return;
+  const { volume, pan } = spatialLevels(cue);
+  try {
+    const player = A.createAudioPlayer(clip);
+    try {
+      player.volume = volume;
+      if ("pan" in player) (player as { pan: number }).pan = pan;
+    } catch {
+      /* levels unsupported — play centered at full */
+    }
+    player.play();
+    setTimeout(() => {
+      try {
+        player.remove();
+      } catch {
+        /* ignore */
+      }
+    }, 4000);
+  } catch {
+    /* audio unavailable — ignore */
+  }
 }
