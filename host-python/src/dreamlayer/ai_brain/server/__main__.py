@@ -10,10 +10,19 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets
 import socket
 from pathlib import Path
 
 from .server import Brain, make_brain_server
+
+# A bind that only loopback can reach may run tokenless (local dev); anything
+# else is reachable by other devices on the network and must be authenticated.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"})
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host in _LOOPBACK_HOSTS
 
 
 def _lan_ip() -> str:
@@ -45,6 +54,16 @@ def main(argv=None) -> int:
         brain.config.token = args.token
         brain.save()
 
+    # Security: never serve an unauthenticated brain on a network-reachable
+    # interface. If the bind isn't loopback-only and no token was set (or
+    # persisted from a previous run), mint one now and show it so the phone
+    # can pair. A loopback-only bind may stay tokenless for local dev.
+    minted_token = False
+    if not brain.config.token and not _is_loopback_host(args.host):
+        brain.config.token = secrets.token_hex(16)
+        brain.save()
+        minted_token = True
+
     brain.start_watching()            # auto-reindex when watched folders change
     brain.start_brief_scheduler()     # deliver the morning brief at brief_hour
     brain.start_calendar_sync()       # pull macOS Calendar.app into the agenda
@@ -53,8 +72,13 @@ def main(argv=None) -> int:
     print(f"DreamLayer Brain — control panel at http://{ip}:{args.port}/")
     print(f"  watching {len(brain.config.folders)} folder(s), "
           f"{brain.index.stats()['files']} files indexed")
-    print(f"  token: {'set' if brain.config.token else '(none)'}   "
-          f"model: {brain.config.model}")
+    if minted_token:
+        print(f"  ⚠ network-reachable bind with no token — generated one:")
+        print(f"    token: {brain.config.token}")
+        print(f"    enter it on the phone to pair (or pass --token next time).")
+    else:
+        print(f"  token: {'set' if brain.config.token else '(none — loopback only)'}   "
+              f"model: {brain.config.model}")
     print("  Ctrl-C to stop.")
     try:
         server.serve_forever()
