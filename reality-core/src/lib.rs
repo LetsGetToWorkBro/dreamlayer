@@ -25,6 +25,9 @@
 //! `thumbv7em-none-eabi` unchanged. Kept as std here so the crate builds and
 //! the parity harness runs in this environment.
 
+mod stage;
+pub use stage::*;
+
 /// Counter op codes (the string op is encoded to an int across the C ABI).
 pub const OP_INC: u8 = 0;
 pub const OP_DEC: u8 = 1;
@@ -88,7 +91,7 @@ pub extern "C" fn rc_refill_tokens(tokens: f64, dt: f64, refill_per_s: f64, burs
 /// The one definition of a token spend, shared by every export below so the
 /// pointer form and the pure wasm-friendly forms can never disagree.
 #[inline]
-fn spend(tokens: f64) -> (i32, f64) {
+pub(crate) fn spend(tokens: f64) -> (i32, f64) {
     if tokens >= 1.0 {
         (1, tokens - 1.0)
     } else {

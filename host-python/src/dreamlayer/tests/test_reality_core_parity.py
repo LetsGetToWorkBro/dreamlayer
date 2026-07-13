@@ -62,6 +62,130 @@ def _core_fmt_clock(core, secs: float) -> str:
     return buf.raw[:n].decode("ascii")
 
 
+def _bind_stage_abi(lib):
+    for name, res, args in [
+        ("rc_stage_new", ctypes.c_int32, []),
+        ("rc_stage_free", None, [ctypes.c_int32]),
+        ("rc_stage_add_counter", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64]),
+        ("rc_stage_add_scene", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_double]),
+        ("rc_tx_begin", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_tx_guard", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_uint8, ctypes.c_int64]),
+        ("rc_tx_op", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_uint8, ctypes.c_int64]),
+        ("rc_tx_emit", ctypes.c_int32, [ctypes.c_int32]),
+        ("rc_tx_commit_timeout", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_tx_commit_event", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_uint32]),
+        ("rc_stage_start", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_stage_step", ctypes.c_int32, [ctypes.c_int32, ctypes.c_double]),
+        ("rc_stage_inject", ctypes.c_int32, [ctypes.c_int32, ctypes.c_uint32]),
+        ("rc_stage_counter", ctypes.c_int64, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_stage_clock", ctypes.c_double, [ctypes.c_int32]),
+        ("rc_stage_elapsed", ctypes.c_double, [ctypes.c_int32]),
+        ("rc_stage_remaining", ctypes.c_double, [ctypes.c_int32]),
+        ("rc_stage_current", ctypes.c_int32, [ctypes.c_int32]),
+        ("rc_stage_ended", ctypes.c_int32, [ctypes.c_int32]),
+        ("rc_stage_emits", ctypes.c_int64, [ctypes.c_int32]),
+        ("rc_stage_dropped", ctypes.c_int64, [ctypes.c_int32]),
+        ("rc_stage_tokens", ctypes.c_double, [ctypes.c_int32]),
+    ]:
+        fn = getattr(lib, name)
+        fn.restype = res
+        fn.argtypes = args
+
+
+TARGET_SELF, TARGET_END = -1, -2
+
+
+class CoreStage:
+    """The Python-binding prototype: intern a real Figment's strings (scene
+    ids, counter names, event names) to indices/codes and load it into the
+    Rust core Stage. All state-machine behavior comes back over the ABI."""
+
+    def __init__(self, core, fig):
+        from dreamlayer.reality_compiler.v2.figment import END, SELF
+        _bind_stage_abi(core)
+        self.core = core
+        self.h = core.rc_stage_new()
+        assert self.h >= 0, "stage pool exhausted"
+        self.counter_idx = {}
+        for name, decl in fig.counters.items():
+            self.counter_idx[name] = core.rc_stage_add_counter(
+                self.h, decl.start, decl.lo, decl.hi)
+        self.scene_idx = {sid: core.rc_stage_add_scene(
+            self.h, 1 if s.duration_sec is not None else 0,
+            float(s.duration_sec or 0.0)) for sid, s in fig.scenes.items()}
+        self.event_code = {}
+
+        def target_of(t):
+            if t.target == END:
+                return TARGET_END
+            if t.target == SELF:
+                return TARGET_SELF
+            return self.scene_idx[t.target]
+
+        def build_tx(t):
+            core.rc_tx_begin(self.h, target_of(t))
+            if t.when is not None:
+                core.rc_tx_guard(self.h, self.counter_idx[t.when.counter],
+                                 CMP[t.when.cmp], t.when.value)
+            for op in t.counter_ops:
+                core.rc_tx_op(self.h, self.counter_idx[op.counter],
+                              OP[op.op], op.amount)
+            if t.emit is not None:
+                core.rc_tx_emit(self.h)
+
+        for sid, s in fig.scenes.items():
+            for ev, t in s.on.items():
+                code = self.event_code.setdefault(ev, len(self.event_code) + 1)
+                build_tx(t)
+                core.rc_tx_commit_event(self.h, self.scene_idx[sid], code)
+            for t in s.on_timeout:
+                build_tx(t)
+                core.rc_tx_commit_timeout(self.h, self.scene_idx[sid])
+        core.rc_stage_start(self.h, self.scene_idx[fig.initial])
+
+    def step(self, dt):
+        self.core.rc_stage_step(self.h, dt)
+
+    def inject(self, event):
+        return self.core.rc_stage_inject(self.h, self.event_code.get(event, 0))
+
+    def state(self, counters):
+        c = self.core
+        return {
+            "clock": c.rc_stage_clock(self.h),
+            "elapsed": c.rc_stage_elapsed(self.h),
+            "remaining": c.rc_stage_remaining(self.h),
+            "ended": bool(c.rc_stage_ended(self.h)),
+            "emits": c.rc_stage_emits(self.h),
+            "dropped": c.rc_stage_dropped(self.h),
+            "tokens": c.rc_stage_tokens(self.h),
+            "counters": {n: c.rc_stage_counter(self.h, i)
+                         for n, i in self.counter_idx.items()
+                         if n in counters},
+        }
+
+    def close(self):
+        self.core.rc_stage_free(self.h)
+
+
+def _py_state(st, counters):
+    return {
+        "clock": st.clock,
+        "elapsed": st.scene_elapsed,
+        "remaining": st.remaining(),
+        "ended": st.ended,
+        "emits": len(st.emits),
+        "dropped": st.dropped_emits,
+        "tokens": st._tokens,
+        "counters": {n: v for n, v in st.counters.items() if n in counters},
+    }
+
+
 def _py_guard(val, cmp, threshold):
     # mirrors interpreter._guard
     if cmp == "ge":
@@ -201,6 +325,87 @@ def test_bounded_loop_parity_against_the_real_stage(core):
         assert st.ended == ended_core, (st.ended, ended_core)
     assert st.ended and ended_core
     assert st.counters["round"] == round_core == 3
+
+
+class TestStageStateMachineParity:
+    """The full state machine, in the core: real figments run side-by-side on
+    the actual Python Stage and the core Stage, every observable compared
+    exactly (floats bit-for-bit — same f64 ops in the same order) at every
+    step, through to termination."""
+
+    def _run_schedule(self, core, fig, schedule, counters=()):
+        from dreamlayer.reality_compiler.v2 import Stage
+        py = Stage(fig)
+        rs = CoreStage(core, fig)
+        try:
+            for i, (kind, arg) in enumerate(schedule):
+                if kind == "step":
+                    py.step(arg)
+                    rs.step(arg)
+                else:
+                    py.inject(arg)
+                    rs.inject(arg)
+                assert _py_state(py, counters) == rs.state(counters), (i, kind, arg)
+            return _py_state(py, counters)
+        finally:
+            rs.close()
+
+    def test_guarded_loop_odd_steps(self, core):
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, CounterDecl, CounterOp, Guard, Transition, END,
+            SELF, TextLine,
+        )
+        fig = Figment(name="t", initial="work")
+        fig.add_counter(CounterDecl("round", start=1, lo=1, hi=3))
+        fig.add_scene(Scene(
+            id="work", duration_sec=1.0,
+            lines=[TextLine("{count:round}", row=1)],
+            on_timeout=[
+                Transition(target=END, when=Guard("round", "ge", 3)),
+                Transition(target=SELF,
+                           counter_ops=[CounterOp("round", "inc", 1)]),
+            ]))
+        # odd fractional steps force the epsilon subdivision to matter
+        final = self._run_schedule(
+            core, fig, [("step", d) for d in (0.3, 0.7, 0.35, 1.9, 0.05, 2.6)],
+            counters=("round",))
+        assert final["ended"] and final["counters"]["round"] == 3
+
+    def test_native_timer_figment(self, core):
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.timer_figment(30)
+        final = self._run_schedule(
+            core, fig, [("step", d) for d in (10.0, 10.0, 9.5, 0.4, 0.2, 5.0)])
+        assert final["ended"]
+
+    def test_native_interval_figment(self, core):
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.interval_figment(20, 10, rounds=3)
+        counters = tuple(fig.counters)
+        schedule = [("step", 7.3)] * 16          # 116.8 s of ragged ticks
+        final = self._run_schedule(core, fig, schedule, counters=counters)
+        assert final["ended"]                     # 3×(20+10)=90 s, well past
+
+    def test_event_flood_and_mixed_schedule(self, core):
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, CounterDecl, CounterOp, Transition, SELF, TextLine,
+        )
+        fig = Figment(name="tap", initial="count")
+        fig.add_counter(CounterDecl("n", start=0, lo=0, hi=99))
+        fig.add_scene(Scene(id="count", lines=[TextLine("{count:n}", row=1)]))
+        fig.scenes["count"].on["single"] = Transition(
+            target=SELF, emit="tap", counter_ops=[CounterOp("n", "inc", 1)])
+        # 12 instant taps flood the bucket, then time passes, then more taps —
+        # spends, drops, refills, and the counter all tracked in lockstep
+        schedule = ([("inject", "single")] * 12 + [("step", 3.5)]
+                    + [("inject", "single")] * 6 + [("step", 0.25),
+                       ("inject", "single")])
+        final = self._run_schedule(core, fig, schedule, counters=("n",))
+        assert final["counters"]["n"] == 19
+        # burst of 5, then 3.5 s refill buys 3 more; the 0.25 s refill leaves
+        # 0.75 tokens, so the last tap drops
+        assert final["emits"] == 5 + 3
+        assert final["dropped"] == 19 - final["emits"]
 
 
 def test_core_is_exhaustively_equivalent_on_the_hot_path(core):

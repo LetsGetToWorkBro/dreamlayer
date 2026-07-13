@@ -179,6 +179,99 @@ const { END, SELF } = F;                       // "@end" / "@self" — the modul
   eq(BigInt(st.counters.round), 3n, "loop final round");
 })();
 
+// ---- the full state machine: core Stage vs the real figment.js Stage --------
+// The JS-binding prototype: intern a figment table's strings to indices/codes
+// and load it into the core Stage; then run identical schedules on both and
+// compare every observable (floats bit-for-bit) at every step.
+const TARGET_SELF_C = -1n, TARGET_END_C = -2n;
+function loadCoreStage(fig) {
+  const h = rc.rc_stage_new();
+  if (h < 0) throw new Error("stage pool exhausted");
+  const counterIdx = {}, sceneIdx = {}, eventCode = {};
+  for (const [name, d] of Object.entries(fig.counters || {})) {
+    counterIdx[name] = rc.rc_stage_add_counter(
+      h, BigInt(d.start || 0), BigInt(d.lo == null ? 0 : d.lo), BigInt(d.hi == null ? 9999 : d.hi));
+  }
+  for (const [sid, s] of Object.entries(fig.scenes)) {
+    sceneIdx[sid] = rc.rc_stage_add_scene(h, s.duration_sec != null ? 1 : 0, s.duration_sec || 0);
+  }
+  const targetOf = (t) => t.target === END ? Number(TARGET_END_C)
+    : t.target === SELF ? Number(TARGET_SELF_C) : sceneIdx[t.target];
+  const buildTx = (t) => {
+    rc.rc_tx_begin(h, targetOf(t));
+    if (t.when) rc.rc_tx_guard(h, counterIdx[t.when.counter], CMP[t.when.cmp], BigInt(t.when.value));
+    for (const op of t.counter_ops || []) rc.rc_tx_op(h, counterIdx[op.counter], OP[op.op], BigInt(op.amount));
+    if (t.emit != null) rc.rc_tx_emit(h);
+  };
+  for (const [sid, s] of Object.entries(fig.scenes)) {
+    for (const [ev, t] of Object.entries(s.on || {})) {
+      if (!(ev in eventCode)) eventCode[ev] = Object.keys(eventCode).length + 1;
+      buildTx(t); rc.rc_tx_commit_event(h, sceneIdx[sid], eventCode[ev]);
+    }
+    for (const t of s.on_timeout || []) { buildTx(t); rc.rc_tx_commit_timeout(h, sceneIdx[sid]); }
+  }
+  rc.rc_stage_start(h, sceneIdx[fig.initial]);
+  return { h, counterIdx, eventCode };
+}
+
+function runScheduleParity(fig, schedule, counters, label) {
+  const st = new F.Stage(fig);
+  const cs = loadCoreStage(fig);
+  schedule.forEach(([kind, arg], i) => {
+    if (kind === "step") { st.step(arg); rc.rc_stage_step(cs.h, arg); }
+    else { st.inject(arg); rc.rc_stage_inject(cs.h, cs.eventCode[arg] || 0); }
+    eq(rc.rc_stage_clock(cs.h), st.clock, `${label} clock @${i}`);
+    eq(rc.rc_stage_elapsed(cs.h), st.scene_elapsed, `${label} elapsed @${i}`);
+    eq(rc.rc_stage_ended(cs.h), st.ended ? 1 : 0, `${label} ended @${i}`);
+    eq(Number(rc.rc_stage_emits(cs.h)), st.emits.length, `${label} emits @${i}`);
+    eq(Number(rc.rc_stage_dropped(cs.h)), st.dropped, `${label} dropped @${i}`);
+    eq(rc.rc_stage_tokens(cs.h), st._tokens, `${label} tokens @${i}`);
+    for (const n of counters) {
+      eq(Number(rc.rc_stage_counter(cs.h, cs.counterIdx[n])), st.counters[n] || 0,
+         `${label} counter ${n} @${i}`);
+    }
+  });
+  rc.rc_stage_free(cs.h);
+  return st;
+}
+
+// guarded bounded loop, ragged fractional steps that force the subdivision
+(function stageLoopTrajectoryParity() {
+  const fig = {
+    name: "loop", initial: "work",
+    counters: { round: { start: 1, lo: 1, hi: 3 } },
+    scenes: { work: {
+      id: "work", duration_sec: 1.0, lines: [], on: {},
+      on_timeout: [
+        { target: END, when: { counter: "round", cmp: "ge", value: 3 } },
+        { target: SELF, counter_ops: [{ counter: "round", op: "inc", amount: 1 }] },
+      ],
+    } },
+  };
+  const st = runScheduleParity(
+    fig, [0.3, 0.7, 0.35, 1.9, 0.05, 2.6].map((d) => ["step", d]),
+    ["round"], "loop-traj");
+  eq(st.ended, true, "loop-traj terminated");
+})();
+
+// mixed schedule: instant tap flood, refill, more taps — spends/drops/counter
+(function stageFloodTrajectoryParity() {
+  const fig = {
+    name: "tap", initial: "count",
+    counters: { n: { start: 0, lo: 0, hi: 99 } },
+    scenes: { count: {
+      id: "count", lines: [],
+      on: { single: { target: SELF, emit: "tap", counter_ops: [{ counter: "n", op: "inc", amount: 1 }] } },
+      on_timeout: [],
+    } },
+  };
+  const schedule = [...Array(12).fill(["inject", "single"]), ["step", 3.5],
+                    ...Array(6).fill(["inject", "single"]), ["step", 0.25], ["inject", "single"]];
+  const st = runScheduleParity(fig, schedule, ["n"], "flood-traj");
+  eq(st.emits.length, 8, "flood-traj total emits");   // burst 5 + 3 refilled
+  eq(st.counters.n, 19, "flood-traj counter");
+})();
+
 // clock strings through the REAL render path: a live countdown Stage's own
 // _resolve of {remaining}/{elapsed} vs the wasm core's formatting — the first
 // string produced by the Rust core matching real shipped JS output.
@@ -200,4 +293,4 @@ const { END, SELF } = F;                       // "@end" / "@self" — the modul
   }
 })();
 
-console.log(`OK — wasm/JS parity: ${checks} swept checks + 4 real-Stage scenarios agree`);
+console.log(`OK — wasm/JS parity: ${checks} swept checks + 6 real-Stage scenarios agree`);

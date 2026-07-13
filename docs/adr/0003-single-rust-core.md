@@ -113,13 +113,32 @@ Stage's own `_resolve("{remaining}")` on a live countdown, stepped across the
 minute boundary, equal the core's output byte-for-byte. So the buffer protocol
 the whole string story depends on is proven on both targets.
 
-**What is deliberately *not* here yet — template substitution.** The other half
-of `_resolve` is the substitution engine itself: walking `{slot:name}` /
-`{count:name}` tokens against the slots/counters *maps*. That needs map state
-marshaled across the boundary (or held inside the core as the stateful `Stage`
-struct — the real end-state), which is the genuinely heavier increment. Honest
-status: decisions and value formatting are in the core and proven; the
-templating walk and the stateful `step()` are not.
+**The state machine itself — the core becomes the interpreter.** The stateful
+`Stage` now lives inside the core (`reality-core/src/stage.rs`): scene stepping
+with the exact float-epsilon subdivision both Stages use, the timeout graph
+with guarded branches, counter ops through `rc_saturate`, event dispatch, and
+the emit token bucket — behind a builder ABI (`rc_stage_*`/`rc_tx_*`). Fixed
+capacity, zero allocation, and that is *faithful*: the figment grammar is
+statically bounded by construction (the `budgets.verify()` proof envelope), so
+a bounded struct is exactly the device model. The core speaks integers only —
+bindings intern their strings (scene ids/counter names → indices, event names →
+codes), which is a legitimate binding-layer job and keeps the ABI clean on
+native and wasm alike. Both parity harnesses now run **identical schedules on
+the real Python/JS Stages and the core Stage side-by-side** — ragged fractional
+steps across timeout boundaries, guarded bounded loops to termination, tap
+floods with refills between — comparing every observable (clock, elapsed,
+ended, counters, emits, drops, tokens) **bit-for-bit at every step**, including
+the shipped `native` timer and interval figments on the Python side. A language
+Stage that drives this holds no state-machine logic of its own.
+
+**What is deliberately *not* in the core yet.** Text: the slot store and the
+`_resolve` substitution walk (`{slot:name}`/`{count:name}`) — the remaining
+string-heavy piece, now buildable on the proven buffer protocol. Periphery:
+`battery_below` dispatch and random-duration scenes (`duration_range`), which
+bindings keep for now. Rendering stays binding-side by design (it is
+display-hardware-specific). Honest status: the state machine, decisions, and
+value formatting are in the core and proven on both shipping targets; the text
+path is not.
 
 ## Options considered
 
@@ -181,16 +200,15 @@ first validation — a second binding target (wasm, checked against the shipped
 real language boundary. The next concrete steps, in order of decreasing
 certainty and increasing cost:
 
-1. **Grow the core past the caps** to a full scene *step*. Progress: guard
-   evaluation (`rc_guard_eval`) is in and the bounded-loop control flow is
-   proven step-for-step on both real Stages; the clock formatter
-   (`rc_fmt_clock`) is in and proven through both real render paths, which
-   establishes the string-buffer protocol. Still to do here: the **template
-   substitution walk** (`{slot:name}`/`{count:name}` against the slots/counters
-   maps — needs map state across the boundary, or the stateful `Stage` struct
-   inside the core, which is the real end-state) and the stateful `step()`
-   clock subdivision. Each lands with the Python and wasm parity harnesses kept
-   green. This is where the write-thrice savings actually start to land.
+1. **Grow the core past the caps** to a full scene *step*. **Substantially
+   done**: the stateful `Stage` (stepping, timeout graph, guards, counter ops,
+   event dispatch, token bucket) is in the core and trajectory-proven
+   bit-for-bit against both real Stages, on real figments. Remaining in this
+   lane: the **slot store + `_resolve` substitution walk** (string-heavy, rides
+   the proven buffer protocol), and the `battery_below`/`duration_range`
+   periphery. Each lands with the Python and wasm parity harnesses kept green.
+   With the state machine in the core, the write-thrice savings are no longer
+   prospective — a semantic change to stepping/guards/budget now has ONE home.
 2. **The Lua/device binding** (`mlua` + a `thumbv7em-none-eabi` build), which is
    where the memory-safety payoff lives but also the firmware-integration cost
    (owner/hardware work).
