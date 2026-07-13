@@ -99,10 +99,10 @@ def test_reduce_motion_hold_is_perfectly_still(ctype):
     _show(h, CARDS[ctype], at=1000)
     for t in range(1050, 2600, 50):
         _tick(h, t)
-    a = list(h.display.last_frame().getdata())
+    a = h.display.last_frame().tobytes()
     for t in range(2600, 3600, 50):
         _tick(h, t)
-    b = list(h.display.last_frame().getdata())
+    b = h.display.last_frame().tobytes()
     diff = sum(1 for x, y in zip(a, b) if x != y)
     assert diff == 0, f"{ctype}: {diff} pixels moved under reduce_motion"
 
@@ -140,7 +140,7 @@ def _lua_literal(v):
 
 def _lit_in(h, box):
     img = h.display.last_frame().convert("L").crop(box)
-    return sum(1 for px in img.getdata() if px >= 12)
+    return sum(1 for px in img.tobytes() if px >= 12)  # 'L' image → one byte/pixel
 
 
 def test_ble_scholar_reaches_pixels():

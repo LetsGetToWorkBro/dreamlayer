@@ -79,7 +79,7 @@ def _boot():
 def _render(h, at=2000):
     h.execute(f"__now = {at}")
     h.execute("frame.display.clear(0x000000); _dr.draw_frame(__now); frame.display.show()")
-    return list(h.display.last_frame().convert("RGB").getdata())
+    return h.display.last_frame().convert("RGB").tobytes()
 
 
 def _diff(a, b):

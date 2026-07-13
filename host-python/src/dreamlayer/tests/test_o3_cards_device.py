@@ -102,10 +102,10 @@ def test_reduce_motion_hold_is_perfectly_still(ctype):
     # settle deep into hold, past enter + any one-shot settle
     for t in range(1050, 2600, 50):
         _tick(h, t)
-    a = list(h.display.last_frame().getdata())
+    a = h.display.last_frame().tobytes()
     for t in range(2600, 3600, 50):
         _tick(h, t)
-    b = list(h.display.last_frame().getdata())
+    b = h.display.last_frame().tobytes()
     diff = sum(1 for x, y in zip(a, b) if x != y)
     assert diff == 0, f"{ctype}: {diff} pixels moved under reduce_motion"
 
@@ -114,7 +114,8 @@ def _ring_band(h):
     # the "Listen!" cue lives in the top band; crop it so the check isolates
     # the ring from the horizon notch elsewhere on the frame
     img = h.display.last_frame().convert("RGB").crop((96, 42, 160, 76))
-    return list(img.getdata())
+    raw = img.tobytes()
+    return [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
 
 
 def test_hark_breathes_under_motion():
@@ -160,7 +161,9 @@ def _rgb(hexval):
 
 def _has_color(h, hexval, box):
     img = h.display.last_frame().convert("RGB").crop(box)
-    return _rgb(hexval) in set(img.getdata())
+    raw = img.tobytes()
+    px = {tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)}
+    return _rgb(hexval) in px
 
 
 @pytest.mark.parametrize("verdict,tone", [

@@ -180,7 +180,9 @@ def diff_against_golden(
             current_img = current_img.resize(golden_img.size, Image.LANCZOS)
 
         diff = ImageChops.difference(golden_img, current_img)
-        pixels = list(diff.getdata())   # list of (r,g,b) tuples
+        # (r,g,b) per pixel via tobytes() — getdata() is removed in Pillow 14
+        raw = diff.tobytes()
+        pixels = [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
         total_px = len(pixels)
 
         max_delta = 0.0

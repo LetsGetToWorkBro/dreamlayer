@@ -61,14 +61,14 @@ def test_avatar_generated_once_and_cached():
 def test_avatar_is_deterministic_per_contact():
     a = AvatarCache().add_contact(make_contact())
     b = AvatarCache().add_contact(make_contact())
-    assert list(a.getdata()) == list(b.getdata())
+    assert a.tobytes() == b.tobytes()
 
 
 def test_different_contacts_get_different_avatars():
     cache = AvatarCache()
     a = cache.add_contact(make_contact("c-1", "Ada"))
     b = cache.add_contact(make_contact("c-2", "Bo"))
-    assert list(a.getdata()) != list(b.getdata())
+    assert a.tobytes() != b.tobytes()
 
 
 # ---------------------------------------------------------------------------

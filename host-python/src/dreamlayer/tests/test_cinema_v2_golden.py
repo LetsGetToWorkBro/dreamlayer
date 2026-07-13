@@ -102,7 +102,7 @@ def test_deterministic_goldens_regenerate_identically(tmp_path):
         committed = Image.open(golden_root / rel).convert("RGB")
         fresh = Image.open(tmp_path / rel).convert("RGB")
         assert committed.size == fresh.size, rel
-        diff = sum(1 for a, b in zip(committed.getdata(), fresh.getdata())
+        diff = sum(1 for a, b in zip(committed.tobytes(), fresh.tobytes())
                    if a != b)
         assert diff == 0, f"{rel}: {diff} pixels drifted from the device code"
 

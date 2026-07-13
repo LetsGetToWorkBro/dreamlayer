@@ -240,7 +240,7 @@ def test_reduce_motion_settled_hold_is_perfectly_still(card_type):
     for t in range(3500, 5000, 50):
         h.execute(f"__now = {t}; _r.tick()")
     b = h.display.last_frame()
-    diff = sum(1 for x, y in zip(a.getdata(), b.getdata()) if x != y)
+    diff = sum(1 for x, y in zip(a.tobytes(), b.tobytes()) if x != y)
     assert diff == 0, f"{card_type}: {diff} pixels moved under reduce_motion"
 
 

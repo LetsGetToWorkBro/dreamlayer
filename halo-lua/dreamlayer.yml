@@ -1,12 +1,84 @@
-# selene standard-library definition for the device Lua.
-# Mirrors .luacheckrc's globals: the Halo runtime injects `frame` (read-only);
-# compat/frame_adapter.lua builds and owns `_G.halo`; main.lua exposes the tick
-# for the test harness. Everything else is base Lua 5.3.
+# selene standard-library definition for the device Lua (Brilliant Labs Frame
+# runtime). Mirrors .luacheckrc's globals AND describes the `frame` device API
+# surface the code actually uses, so a typo like `frame.dispay.line` would be
+# caught as an unknown field rather than passing silently.
+#
+# STAGED, NOT WIRED: no CI job consumes this today. Published `selene` binaries
+# ship full-moon's Luau parser, which cannot parse the device code's Lua 5.3
+# bitwise operators (`>>`, `&`, `//`) — so selene can't lint this codebase yet
+# (see .github/workflows/lua.yml for the full reasoning; luacheck is the gate).
+# This file is kept complete and accurate for the day selene can parse 5.3.
 base: lua53
 globals:
-  frame:
-    property: read-only
+  # main.lua exposes the tick for the test harness; frame_adapter owns _G.halo
   halo:
     property: new-fields
   _dreamlayer_tick:
     property: new-fields
+
+  # --- the Frame device runtime (injected read-only by the firmware) --------
+  frame:
+    property: read-only
+  frame.sleep:
+    args:
+      - type: number
+  frame.runloop:
+    property: read-only
+  frame.imu_data:
+    args: []
+  frame.imu.tap_callback:
+    args:
+      - type: function
+  frame.time.utc:
+    args: []
+
+  # display surface
+  frame.display.line:
+    args:
+      - type: "..."
+  frame.display.circle:
+    args:
+      - type: "..."
+  frame.display.rect:
+    args:
+      - type: "..."
+  frame.display.polygon:
+    args:
+      - type: "..."
+  frame.display.text:
+    args:
+      - type: "..."
+  frame.display.bitmap:
+    args:
+      - type: "..."
+  frame.display.set_pixel:
+    args:
+      - type: "..."
+  frame.display.set_font:
+    args:
+      - type: "..."
+  frame.display.assign_color_ycbcr:
+    args:
+      - type: "..."
+  frame.display.clear:
+    args: []
+  frame.display.show:
+    args: []
+  frame.display.width:
+    property: read-only
+  frame.display.height:
+    property: read-only
+
+  # buttons + radio
+  frame.button.single:
+    property: read-only
+  frame.button.double:
+    property: read-only
+  frame.button.long:
+    property: read-only
+  frame.bluetooth.send:
+    args:
+      - type: string
+  frame.bluetooth.receive_callback:
+    args:
+      - type: function

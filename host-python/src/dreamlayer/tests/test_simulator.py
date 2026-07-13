@@ -18,7 +18,8 @@ def _png(b: bytes) -> bool:
 
 
 def _lit(img) -> bool:
-    return any(p != (0, 0, 0) for p in img.convert("RGB").getdata())
+    rgb = img.convert("RGB")
+    return rgb.tobytes() != bytes(3 * rgb.width * rgb.height)  # any non-black pixel
 
 
 # -- the glass ------------------------------------------------------------

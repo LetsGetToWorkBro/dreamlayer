@@ -2,6 +2,18 @@
 # undefined globals beyond the device runtime's, no shadowing, no syntax
 # drift. Behavior is still covered by the lupa raster harness in pytest;
 # this catches what only a Lua-aware tool sees.
+#
+# Why luacheck and not selene: selene is the more actively maintained linter,
+# but every published `selene` binary ships full-moon's Luau/Roblox parser,
+# which cannot parse Lua 5.3 bitwise operators (`>>`, `&`, `//`) — and the
+# device code uses them (e.g. display/palette.lua: `(hex >> 16) & 0xFF`). The
+# lua53 syntax feature is not forwarded by the selene crate, so no
+# `cargo install selene` can lint this codebase; it produced 13 hard parse
+# errors on the 5.3 files regardless of version or feature flags. A selene std
+# for the Frame device API is staged in halo-lua/{selene.toml,dreamlayer.yml}
+# for the day selene can parse 5.3, but the CI job is intentionally not wired:
+# a permanently-red, can-never-pass job is worse than none. luacheck handles
+# 5.3 natively and is the gate.
 name: lua
 
 on:
@@ -21,26 +33,3 @@ jobs:
       - name: Lint the device Lua
         working-directory: halo-lua
         run: luacheck . --no-color
-
-  # selene is the actively-maintained (Rust) Lua linter; luacheck's last release
-  # was 2018. It runs as a second gate with the same std (halo-lua/dreamlayer.yml
-  # + selene.toml). Informational to start (continue-on-error) so a first run
-  # can't break main before the config is confirmed clean on the real binary;
-  # flip to blocking once green.
-  #
-  # Known drift (observed 2026-07): `cargo install selene` now pulls a version
-  # that errors with "lua version lua52 in standard library, but feature for it
-  # is not enabled" against our dreamlayer.yml std — a binary-vs-config version
-  # mismatch, not a lint finding. Before flipping this job to blocking, pin the
-  # selene version here (cargo install selene --version <known-good> --locked)
-  # or migrate dreamlayer.yml to the std format the new binary expects.
-  selene:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install selene
-        run: cargo install selene --locked
-      - name: Lint the device Lua (selene)
-        working-directory: halo-lua
-        run: selene .

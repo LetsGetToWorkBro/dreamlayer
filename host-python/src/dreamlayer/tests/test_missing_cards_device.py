@@ -111,10 +111,10 @@ def test_reduce_motion_hold_is_perfectly_still(ctype):
     _show(h, CARDS[ctype], at=1000)
     for t in range(1050, 2600, 50):
         _tick(h, t)
-    a = list(h.display.last_frame().getdata())
+    a = h.display.last_frame().tobytes()
     for t in range(2600, 3600, 50):
         _tick(h, t)
-    b = list(h.display.last_frame().getdata())
+    b = h.display.last_frame().tobytes()
     diff = sum(1 for x, y in zip(a, b) if x != y)
     assert diff == 0, f"{ctype}: {diff} pixels moved under reduce_motion"
 
@@ -123,9 +123,9 @@ def test_listening_pulse_breathes_under_motion():
     h = _session(reduce=False)
     _show(h, CARDS["ListeningCard"], at=1000)
     _tick(h, 2000)
-    a = list(h.display.last_frame().convert("RGB").crop((90, 66, 166, 142)).getdata())
+    a = h.display.last_frame().convert("RGB").crop((90, 66, 166, 142)).tobytes()
     _tick(h, 2350)
-    b = list(h.display.last_frame().convert("RGB").crop((90, 66, 166, 142)).getdata())
+    b = h.display.last_frame().convert("RGB").crop((90, 66, 166, 142)).tobytes()
     assert a != b, "the listening wake ring did not breathe on hold"
 
 
@@ -194,4 +194,4 @@ def test_ble_host_payload_reaches_pixels(fn, kwargs):
     # not a black disc, and the content band is lit
     assert h.display.bright_pixel_count() > 900, f"{fn}: black/near-black"
     band = h.display.last_frame().convert("L").crop((30, 90, 226, 210))
-    assert sum(1 for px in band.getdata() if px >= 12) > 150, f"{fn}: empty body"
+    assert sum(1 for px in band.tobytes() if px >= 12) > 150, f"{fn}: empty body"
