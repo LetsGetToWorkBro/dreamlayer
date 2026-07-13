@@ -154,8 +154,14 @@ class TestOrchestratorWiring:
         orc.set_private_mode(False)
         assert orc.brain.cloud_opt_in is True
 
-    def test_ask_brain_is_veil_gated(self):
+    def test_ask_brain_is_recall_gated(self):
+        # the pinned contract: the full pause veil holds recall (deaf/blind),
+        # but incognito blocks capture/writes only — you can still ask your own
+        # knowledge while incognito (asking isn't keeping).
         orc = self._orc()
         orc.brain.add_knowledge(MockKnowledgeBrain({"x": "secret 42"}))
         orc.privacy.pause()
-        assert orc.ask_brain("secret") is None
+        assert orc.ask_brain("secret") is None            # pause holds recall
+        orc.privacy.resume()
+        orc.set_incognito(True)
+        assert orc.ask_brain("secret") is not None        # incognito allows it

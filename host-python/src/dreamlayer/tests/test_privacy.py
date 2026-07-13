@@ -19,6 +19,27 @@ def test_gate_logic():
     assert g.allow_capture() is True
 
 
+def test_capture_vs_recall_gates():
+    # The pinned two-veil contract, as one truth table:
+    #   capture blocked by EITHER veil; recall blocked ONLY by pause.
+    g = PrivacyGate()
+    assert g.allow_capture() and g.allow_recall()          # both open
+
+    g.set_incognito(True)
+    assert not g.allow_capture()                           # incognito stops keeping
+    assert g.allow_recall()                                # …but recall still works
+
+    g.set_incognito(False)
+    g.pause()
+    assert not g.allow_capture() and not g.allow_recall()  # full veil: deaf+blind
+
+    g.set_incognito(True)                                  # both down
+    assert not g.allow_capture() and not g.allow_recall()
+    g.resume()                                             # lift pause, incognito holds
+    assert not g.allow_capture()                           # incognito still stops keeping
+    assert g.allow_recall()                                # recall back
+
+
 def test_paused_card_renders():
     orch, _ = scenarios.privacy_pause()
     assert orch.bridge.last_card["type"] == "PrivacyVeilCard"

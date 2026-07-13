@@ -18,8 +18,11 @@ class BrainSwitchOps:
 
     def ask_brain(self, query: str):
         """Ask your own knowledge (files/mail on the Mac mini brain). Returns
-        an Answer, attributed to the tier that answered. Veil-gated."""
-        if not self.privacy.allow_capture():
+        an Answer, attributed to the tier that answered. Recall-gated: blocked
+        by a full pause veil, but allowed while incognito — asking what you
+        already know isn't *keeping* anything. (Cloud escalation stays off
+        while incognito via the brain's own opt-in, so nothing leaves.)"""
+        if not self.privacy.allow_recall():
             return None
         answer = self.brain.ask(query)
         if answer is not None and not answer.is_empty():

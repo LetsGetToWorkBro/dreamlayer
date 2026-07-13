@@ -104,12 +104,19 @@ def test_captions_toggle_keeps_ledger_but_hides_hud():
     assert _cards(br) == []                            # but not on the glasses
 
 
-def test_recall_and_rewind_are_not_veil_gated():
+def test_recall_is_incognito_friendly_but_pause_holds_it():
+    # Pinned privacy contract: incognito blocks capture/writes, NOT recall —
+    # you can still ask what you already know. The full pause veil is deaf and
+    # blind, so even an explicit query is held until you lift it.
     br = FakeBridge()
     orc = Orchestrator(br)
     orc.ingest_caption("the lease renewal is Friday", speaker="Marcus", ts=100.0)
-    orc.privacy.pause()                                # user asks while paused
-    assert orc.recall_conversation("lease")            # explicit query still works
+    orc.set_incognito(True)
+    assert orc.recall_conversation("lease")            # incognito: recall works
+    orc.set_incognito(False)
+    orc.privacy.pause()                                # full veil down
+    assert orc.recall_conversation("lease") == []      # pause holds recall
+    assert orc.rewind_day() == []
 
 
 def test_greet_surfaces_a_known_person_dossier():

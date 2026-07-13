@@ -42,12 +42,19 @@ def test_retrace_not_found_when_never_seen():
     assert r["found"] is False
 
 
-def test_retrace_is_veil_gated():
+def test_retrace_is_recall_gated():
+    # retrace is a *read* of past sightings: the full pause veil holds it (and
+    # the copy says so — not the old "incognito" line, which was wrong since it
+    # only ever triggered on pause), but incognito allows recall.
     orch = build(":memory:")
     _sighting(orch, "keys", "kitchen counter")
     orch.privacy.pause()
     r = orch.retrace("keys")
-    assert r["found"] is False and "incognito" in r["say"].lower()
+    assert r["found"] is False and "veil" in r["say"].lower()
+    assert "incognito" not in r["say"].lower()
+    orch.privacy.resume()
+    orch.set_incognito(True)
+    assert orch.retrace("keys")["found"] is True      # incognito allows recall
 
 
 def test_locate_falls_back_to_retrace_without_an_anchor():

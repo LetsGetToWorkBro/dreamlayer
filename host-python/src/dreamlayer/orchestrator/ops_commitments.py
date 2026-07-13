@@ -106,11 +106,12 @@ class CommitmentRecallOps:
         subject = (subject or "").strip()
         if not subject:
             return {"intent": "retrace", "ok": False, "found": False, "say": "Find what?"}
-        # a read of past sightings: gated on the explicit veil only (incognito
-        # blocks capture/writes, not recall — pinned by test_waypath_voice)
-        if self.privacy.paused:
+        # a read of past sightings: recall-gated (incognito blocks capture/
+        # writes, not recall — pinned by test_waypath_voice; only the full
+        # pause veil holds recall too)
+        if not self.privacy.allow_recall():
             return {"intent": "retrace", "ok": False, "found": False,
-                    "say": "Not while you're incognito."}
+                    "say": "Not while the veil is down."}
         scored = self.retriever.search(subject, kind="object", top_k=5)
         strong = [(s, m) for s, m in scored if s >= CONFIG.recall_min_confidence]
         if not strong:

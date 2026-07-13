@@ -27,7 +27,17 @@ class PrivacyGate:
         self._incognito = bool(on)
 
     def allow_capture(self) -> bool:
+        """May we *keep* what we perceive right now? Blocked by either veil —
+        an explicit pause or incognito. Use this on capture/write paths."""
         return not (self._paused or self._incognito)
+
+    def allow_recall(self) -> bool:
+        """May we *read back* what we already know? Blocked only by the full
+        pause veil ("deaf and blind"). Incognito stops keeping new memories,
+        not recalling old ones — you can still ask what you already know while
+        incognito. Use this on recall/read paths (ask_brain, retrace, find_way,
+        recall_conversation, rewind_day)."""
+        return not self._paused
 
 
 def purge_memory(db, mid):

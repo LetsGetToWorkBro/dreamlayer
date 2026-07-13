@@ -235,12 +235,19 @@ class ConversationOps:
 
     def recall_conversation(self, topic: str, person: str | None = None,
                             limit: int = 8) -> list:
-        """'What did they say about X?' — user-initiated, so not Veil-gated."""
+        """'What did they say about X?' — user-initiated recall. Allowed while
+        incognito (reading, not keeping), but the full pause veil is deaf and
+        blind, so even an explicit query is held until you lift it."""
+        if not self.privacy.allow_recall():
+            return []
         return self.conversation.recall(topic, person, limit)
 
 
     def rewind_day(self, now: float | None = None) -> list:
-        """A digest of today's conversation, grouped into hour blocks."""
+        """A digest of today's conversation, grouped into hour blocks.
+        Recall-gated: held while the full pause veil is down."""
+        if not self.privacy.allow_recall():
+            return []
         import time
         now = now if now is not None else time.time()
         lt = time.localtime(now)
