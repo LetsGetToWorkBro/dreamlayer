@@ -222,9 +222,9 @@ ratings, rate limits, moderation) is noted in `registry-api/README.md`.
 
 **Deployed.** The Worker is live at
 `https://api.dreamlayer.app` (KV-backed),
-and the web + phone clients point at it. Because the registry repo is private,
-the *catalogue* lives with the clients (a bundled snapshot, overlaid by the git
-index when it's public) and the API supplies only the numbers — `GET
+and the web + phone clients point at it. The *catalogue* lives with the
+clients (a bundled snapshot; now that the repo is public the git index can
+overlay it) and the API supplies only the numbers — `GET
 /api/plugins` returns stats for every plugin it has seen activity on, and the
 client **merges by name**. So a brand-new plugin shows immediately (from the
 client's catalogue) and picks up its numbers once someone rates or installs it.

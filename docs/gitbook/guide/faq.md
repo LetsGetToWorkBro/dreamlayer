@@ -98,11 +98,12 @@ the phone and Mac apps work now, but retail glasses are still ahead. Every
 image in this guide is produced by the real software.
 
 **Is it open source?**
-The code is licensed Apache-2.0 and built to be opened — license, trademark
-policy, contributor process, and a tested ten-minute plugin tutorial are
-all in place — but the repository is still private today. When it opens,
-nothing about your privacy changes: the product never depended on secrecy,
-only on where your data lives.
+Yes — the repository is public at
+[github.com/LetsGetToWorkBro/dreamlayer](https://github.com/LetsGetToWorkBro/dreamlayer),
+licensed Apache-2.0, with a trademark policy, a contributor process (DCO),
+a tested ten-minute plugin tutorial, and outside contributions already
+merged. Opening it changed nothing about your privacy: the product never
+depended on secrecy, only on where your data lives.
 
 **Where is the deeply technical version of all this?**
 The whole second half of this book — start at
