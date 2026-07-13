@@ -25,12 +25,18 @@ export function useHaloStore() {
     togglePause: () => setCapturePaused(!capturePaused),
     connect: async () => {
       // A dev build attaches a real BLE transport to useGlassesStore; when one
-      // exists we scan + handshake over it and record the real device id.
-      // Without a transport (Expo Go / tests) we mark the demo Halo paired, so
-      // every existing flow is unchanged.
+      // exists we scan + handshake over it and record the real device id. A
+      // FAILED scan on a real radio stays failed — it must not fall back to
+      // marking a demo Halo paired (that would be demo fiction leaking into
+      // real mode). Only the no-transport path (Expo Go / tests) uses the
+      // demo id, so every existing demo flow is unchanged.
       const gs = useGlassesStore.getState();
-      const id = gs.bridge ? await gs.connect() : null;
-      connectGlasses(id || glasses.id || "HALO-DEMO");
+      if (gs.bridge) {
+        const id = await gs.connect();
+        if (id) connectGlasses(id);
+        return;
+      }
+      connectGlasses(glasses.id || "HALO-DEMO");
     },
   };
 }

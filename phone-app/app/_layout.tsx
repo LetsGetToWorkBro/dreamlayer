@@ -41,6 +41,22 @@ export default function Layout() {
   React.useEffect(() => {
     usePackStore.getState().hydrate();
   }, []);
+  // BLE: attach the native transport once at startup (P2-14). On a dev build
+  // react-native-ble-plx is present, makeBlePlxTransport() returns a real
+  // transport, and the glasses store drives the radio; in Expo Go / tests it
+  // returns null and everything stays inert — demo behaviour unchanged.
+  React.useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { makeBlePlxTransport } = require("../src/ble/transport.blePlx");
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { useGlassesStore } = require("../src/state/useGlassesStore");
+      const transport = makeBlePlxTransport();
+      if (transport) useGlassesStore.getState().attachTransport(transport);
+    } catch {
+      /* no native BLE module in this runtime — the link stays demo-only */
+    }
+  }, []);
   React.useEffect(() => {
     if (!hydrated) {
       hydrate();

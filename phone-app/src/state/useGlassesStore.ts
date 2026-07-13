@@ -32,15 +32,24 @@ export const useGlassesStore = create<GlassesState>((set, get) => ({
   bridge: null,
 
   label: () => {
+    // lazy require: keep this store importable in plain node tests where the
+    // expo-localization native module behind src/i18n isn't available
+    let tr: (k: string) => string;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      tr = require("../i18n").t;
+    } catch {
+      tr = (k) => k;
+    }
     switch (get().state) {
       case "scanning":
-        return "Looking for your glasses…";
+        return tr("glasses.scanning");
       case "connected":
-        return "Glasses: connected";
+        return tr("glasses.connected");
       case "reconnecting":
-        return "Glasses: reconnecting…";
+        return tr("glasses.reconnecting");
       default:
-        return "Glasses: not paired";
+        return tr("glasses.notPaired");
     }
   },
 

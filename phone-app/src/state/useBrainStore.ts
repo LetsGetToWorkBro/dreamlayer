@@ -367,16 +367,27 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   enableDemo: () => {
     // mark a demo Halo paired (no network) so device-gated screens light up;
-    // the store getters below serve fixtures whenever demoMode is on.
+    // the store getters below serve fixtures whenever demoMode is on, and the
+    // memory store gets its demo seed (lazy require: no load-order dependency).
     set((s) => ({ demoMode: true, glasses: { connected: true, id: s.glasses.id || "HALO-DEMO" } }));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require("./useMemoryStore").seedDemoMemories();
+    } catch { /* memory store unavailable — nothing to seed */ }
     persist(get());
   },
 
   disableDemo: () => {
+    // demo-off must LEAVE no fiction behind: unpair the demo Halo and strip
+    // the seeded demo memories/card (real ingested/fetched entries survive).
     set((s) => ({
       demoMode: false,
       glasses: s.glasses.id === "HALO-DEMO" ? { connected: false, id: "" } : s.glasses,
     }));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require("./useMemoryStore").clearDemoMemories();
+    } catch { /* memory store unavailable — nothing to clear */ }
     persist(get());
   },
 

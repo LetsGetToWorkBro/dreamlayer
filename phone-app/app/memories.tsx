@@ -75,9 +75,9 @@ export default function Memories() {
         eyebrow={macConnected ? t("memories.eyebrowConnected") : t("memories.eyebrowIdle")}
         subtitle={
           macConnected
-            ? "Kept moments + your files & mail"
+            ? t("memories.subConnected")
             : memories.length
-            ? `${memories.length} kept`
+            ? t("memories.kept", { count: memories.length })
             : undefined
         }
       />
@@ -89,7 +89,7 @@ export default function Memories() {
             setQ(t);
             if (!t.trim()) setRecall(null);
           }}
-          placeholder={macConnected ? "Search memories · ask your Brain…" : "Search your memories…"}
+          placeholder={macConnected ? t("memories.searchPlaceholderConnected") : t("memories.searchPlaceholder")}
           placeholderTextColor={colors.textSecondary}
           style={s.searchInput}
           returnKeyType="search"
@@ -97,7 +97,12 @@ export default function Memories() {
           autoCorrect={false}
         />
         {macConnected ? (
-          <Tappable onPress={doRecall} style={s.searchBtn}>
+          <Tappable
+            onPress={doRecall}
+            style={s.searchBtn}
+            accessibilityLabel={t("memories.ask")}
+            accessibilityHint={t("memories.askHint")}
+          >
             <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>
               {asking ? "…" : "↳"}
             </Text>
@@ -107,7 +112,7 @@ export default function Memories() {
 
       {recall ? (
         <>
-          <Section label="From your Brain · files & mail" first accent={colors.accentMemory} />
+          <Section label={t("memories.fromBrain")} first accent={colors.accentMemory} />
           <Card>
             <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>
               {recall.tier ? recall.tier : "answer"}
@@ -119,23 +124,27 @@ export default function Memories() {
               </Text>
             ) : null}
           </Card>
-          {groups.length ? <Section label="In your memories" accent={colors.textSecondary} /> : null}
+          {groups.length ? <Section label={t("memories.inYours")} accent={colors.textSecondary} /> : null}
         </>
       ) : null}
 
       {groups.length === 0 ? (
         query ? (
           <EmptyState
-            title={`Nothing kept matches “${q.trim()}”`}
-            hint={macConnected ? "Tap ↳ to ask your Brain to search your files and mail." : "Connect your Mac mini to search your files and mail too."}
+            title={t("memories.noMatch", { q: q.trim() })}
+            hint={macConnected ? t("memories.noMatchHintConnected") : t("memories.noMatchHintIdle")}
           />
         ) : (
-          <EmptyState title="No memories yet" hint="Put on your Halo and live — the moments that matter get kept here, never raw recordings." />
+          <EmptyState title={t("memories.emptyTitle")} hint={t("memories.emptyHint")} />
         )
       ) : (
         groups.map((g, gi) => (
           <View key={g.label}>
-            <Section label={g.label} first={gi === 0} accent={colors.textSecondary} />
+            <Section
+              label={t("memories." + g.label.toLowerCase())}
+              first={gi === 0}
+              accent={colors.textSecondary}
+            />
             {g.items.map((m, i) => {
               const tint = KIND_COLOR[m.kind] ?? colors.textSecondary;
               return (
