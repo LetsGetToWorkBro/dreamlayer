@@ -42,9 +42,12 @@ const ref = {
   clampLen: (len, max) => Math.min(len, max),                // figment.js:989 (.slice)
   acceptSlot: (isDefault, isKnown, named, max) =>            // figment.js:931
     isDefault || isKnown || named < max,
+  guard: (v, cmp, threshold) =>                              // figment.js:952-955
+    cmp === "ge" ? v >= threshold : cmp === "le" ? v <= threshold : v === threshold,
 };
 
 const OP = { inc: 0, dec: 1, set: 2 };
+const CMP = { ge: 0, le: 1, eq: 2 };
 let checks = 0;
 function eq(a, b, msg) {
   checks++;
@@ -81,6 +84,14 @@ for (let len = 0; len < 40; len++) {
 for (const d of [0, 1]) for (const k of [0, 1]) for (let named = 0; named < 12; named++) for (const mx of [0, 1, 8]) {
   eq(rc.rc_accept_slot(d, k, BigInt(named), BigInt(mx)), (ref.acceptSlot(!!d, !!k, named, mx) ? 1 : 0),
      `accept(${d},${k},${named},${mx})`);
+}
+for (const cmp of ["ge", "le", "eq"]) {
+  for (const threshold of [-3, 0, 1, 3, 9999]) {
+    for (let v = threshold - 3; v <= threshold + 3; v++) {
+      eq(rc.rc_guard_eval(BigInt(v), CMP[cmp], BigInt(threshold)),
+         ref.guard(v, cmp, threshold) ? 1 : 0, `guard(${v},${cmp},${threshold})`);
+    }
+  }
 }
 
 // ---- (B) the REAL figment.js Stage vs the wasm core -------------------------
@@ -120,4 +131,31 @@ const { END, SELF } = F;                       // "@end" / "@self" — the modul
   eq(st.emits.length, EMIT_BURST, "real-Stage flood capped at burst");
 })();
 
-console.log(`OK — wasm/JS parity: ${checks} swept checks + 2 real-Stage scenarios agree`);
+// bounded loop: "3 rounds then END" — the real Stage's timeout graph vs the
+// wasm core's guard_eval + saturate, matched step-for-step to termination.
+(function boundedLoopParity() {
+  const fig = {
+    name: "loop", initial: "work",
+    counters: { round: { start: 1, lo: 1, hi: 3 } },
+    scenes: { work: {
+      id: "work", duration_sec: 1.0, lines: [{ content: "{count:round}", row: 1 }], on: {},
+      on_timeout: [
+        { target: END, when: { counter: "round", cmp: "ge", value: 3 } },
+        { target: SELF, counter_ops: [{ counter: "round", op: "inc", amount: 1 }] },
+      ],
+    } },
+  };
+  const st = new F.Stage(fig);
+  let roundCore = 1n, endedCore = false;
+  for (let i = 0; i < 10 && !st.ended; i++) {
+    st.step(1.0);                              // fire one timeout on the real Stage
+    if (rc.rc_guard_eval(roundCore, CMP.ge, 3n)) endedCore = true;
+    else roundCore = rc.rc_saturate(roundCore, OP.inc, 1n, 1n, 3n);
+    eq(BigInt(st.counters.round), roundCore, `loop round @${i}`);
+    eq(st.ended, endedCore, `loop ended @${i}`);
+  }
+  eq(st.ended, true, "loop terminated");
+  eq(BigInt(st.counters.round), 3n, "loop final round");
+})();
+
+console.log(`OK — wasm/JS parity: ${checks} swept checks + 3 real-Stage scenarios agree`);

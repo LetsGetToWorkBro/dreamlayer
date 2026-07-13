@@ -21,6 +21,7 @@ from dreamlayer.reality_compiler.v2 import contracts
 
 CRATE = Path(__file__).resolve().parents[4] / "reality-core"
 OP = {"inc": 0, "dec": 1, "set": 2}
+CMP = {"ge": 0, "le": 1, "eq": 2}
 
 
 def _load_core():
@@ -48,7 +49,18 @@ def _load_core():
     lib.rc_accept_slot.restype = ctypes.c_int32
     lib.rc_accept_slot.argtypes = [ctypes.c_int32, ctypes.c_int32,
                                    ctypes.c_int64, ctypes.c_int64]
+    lib.rc_guard_eval.restype = ctypes.c_int32
+    lib.rc_guard_eval.argtypes = [ctypes.c_int64, ctypes.c_uint8, ctypes.c_int64]
     return lib
+
+
+def _py_guard(val, cmp, threshold):
+    # mirrors interpreter._guard
+    if cmp == "ge":
+        return val >= threshold
+    if cmp == "le":
+        return val <= threshold
+    return val == threshold
 
 
 @pytest.fixture(scope="module")
@@ -106,6 +118,51 @@ class TestAcceptSlotParity:
                         py = contracts.accept_slot(bool(d), bool(k), named, mx)
                         rs = core.rc_accept_slot(d, k, named, mx)
                         assert int(py) == rs, (d, k, named, mx, py, rs)
+
+
+class TestGuardParity:
+    def test_swept(self, core):
+        for cmp in ("ge", "le", "eq"):
+            for threshold in (-3, 0, 1, 3, 9999):
+                for val in range(threshold - 3, threshold + 4):
+                    py = 1 if _py_guard(val, cmp, threshold) else 0
+                    rs = core.rc_guard_eval(val, CMP[cmp], threshold)
+                    assert py == rs, (val, cmp, threshold, py, rs)
+
+
+def test_bounded_loop_parity_against_the_real_stage(core):
+    """The control-flow step, end to end: a real "3 rounds then END" figment run
+    on the actual Python Stage, its counter trajectory + termination matched
+    step-for-step by the core's guard_eval + saturate — the decision that makes
+    a bounded loop terminate, now backed by the Rust core."""
+    from dreamlayer.reality_compiler.v2 import (
+        Figment, Scene, TextLine, CounterDecl, CounterOp, Guard, Transition,
+        Stage, END, SELF,
+    )
+    fig = Figment(name="loop", initial="work")
+    fig.add_counter(CounterDecl("round", start=1, lo=1, hi=3))
+    fig.add_scene(Scene(
+        id="work", duration_sec=1.0, lines=[TextLine("{count:round}", row=1)],
+        on_timeout=[
+            Transition(target=END, when=Guard("round", "ge", 3)),
+            Transition(target=SELF, counter_ops=[CounterOp("round", "inc", 1)]),
+        ]))
+    st = Stage(fig)
+    # the core's independent replica of the timeout decision
+    round_core, ended_core, lo, hi = 1, False, 1, 3
+    for _ in range(10):
+        if st.ended:
+            break
+        st.step(1.0)                         # fire exactly one timeout
+        # mirror it with the core: guard on the pre-step round, else inc
+        if core.rc_guard_eval(round_core, CMP["ge"], 3):
+            ended_core = True
+        else:
+            round_core = core.rc_saturate(round_core, OP["inc"], 1, lo, hi)
+        assert st.counters["round"] == round_core, (st.counters["round"], round_core)
+        assert st.ended == ended_core, (st.ended, ended_core)
+    assert st.ended and ended_core
+    assert st.counters["round"] == round_core == 3
 
 
 def test_core_is_exhaustively_equivalent_on_the_hot_path(core):

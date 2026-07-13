@@ -16,6 +16,12 @@ proved with CrossHair and M4 mutation-hardened (`reality_compiler/v2/contracts.p
 | `rc_clamp_len`     | `clamp_text` (length)| no display line overruns the budget |
 | `rc_accept_slot`   | `accept_slot`        | named slots never exceed `MAX_SLOTS` |
 
+…plus the first slice of the *control-flow* decision (ADR 0003's next step):
+
+| C ABI symbol    | mirrors               | role |
+|-----------------|-----------------------|------|
+| `rc_guard_eval` | `interpreter._guard`  | does `counter <cmp> threshold` hold? — the guarded-timeout decision that ends a bounded loop |
+
 Pure integer/float math: no allocation, no deps, `no_std`-ready as written.
 
 ## Build & test

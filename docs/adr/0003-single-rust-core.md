@@ -88,6 +88,30 @@ over this core rather than a hand-written copy. Two of the four targets
 (Python cdylib, JS wasm) are now demonstrated end to end; the two device targets
 (mlua, Cortex-M) are the remaining staged work.
 
+**First step past the leaf caps — the control-flow decision.** Growing the core
+toward a full scene *step* begins with the piece that governs a bounded loop's
+termination: `rc_guard_eval` (does `counter <cmp> threshold` hold?), the exact
+comparison `interpreter._guard` / `figment.js._guard` make. With it, a scene's
+`_timeout` is "take the first branch that is unguarded or whose `rc_guard_eval`
+is 1", and the counter update is the existing `rc_saturate`. Both parity
+harnesses now run a **real "3 rounds then END" figment** through the *actual*
+Python and JS Stages and match the counter trajectory and termination
+**step-for-step** against the core's `guard_eval` + `saturate` — so the decision
+that makes a bounded loop end (the thing the livelock/BLE-budget analysis and N3
+care about) is now backed by the one Rust core, on both shipping targets, not
+just leaf arithmetic. This is the first increment of the "timeout graph, guards"
+work, done the same verified way as the caps.
+
+**What is deliberately *not* here yet — slot resolution.** The remaining named
+piece of a scene step is `_resolve` (string templating: `{remaining}`,
+`{elapsed}`, `{slot:name}`, `{count:name}`, then clamp). It is intentionally
+deferred: strings do not cross the C ABI / wasm boundary as cleanly as integers
+(they need pointers into wasm linear memory and an owned-buffer protocol), so it
+is a heavier, separate increment rather than another pure-int function. Honest
+status: the *decision* half of the scene step is in the core and proven; the
+*string* half is not, and pretending otherwise would misstate how far this has
+gone.
+
 ## Options considered
 
 1. **Status quo — three interpreters + N3 differential testing.** Cheap to keep,
@@ -148,10 +172,14 @@ first validation — a second binding target (wasm, checked against the shipped
 real language boundary. The next concrete steps, in order of decreasing
 certainty and increasing cost:
 
-1. **Grow the core past the caps** to a full scene *step* — the timeout graph,
-   guard evaluation, slot resolution — keeping the Python and wasm parity
-   harnesses green at each addition. This is where the write-thrice savings
-   actually start to land.
+1. **Grow the core past the caps** to a full scene *step*. Started: guard
+   evaluation (`rc_guard_eval`) is in the core and the bounded-loop control flow
+   is proven step-for-step on both the real Python and JS Stages (above). Still
+   to do here: **slot resolution** (`_resolve`'s string templating), which needs
+   the wasm/C-ABI string-buffer protocol and so is a heavier increment than the
+   pure-int decision core; and then the stateful `step()` clock subdivision that
+   ties them together. Each lands with the Python and wasm parity harnesses kept
+   green. This is where the write-thrice savings actually start to land.
 2. **The Lua/device binding** (`mlua` + a `thumbv7em-none-eabi` build), which is
    where the memory-safety payoff lives but also the firmware-integration cost
    (owner/hardware work).

@@ -49,6 +49,29 @@ pub extern "C" fn rc_saturate(cur: i64, op: u8, amount: i64, lo: i64, hi: i64) -
     }
 }
 
+/// Guard comparators (the string cmp is encoded to an int across the C ABI).
+pub const CMP_GE: u8 = 0;
+pub const CMP_LE: u8 = 1;
+pub const CMP_EQ: u8 = 2;
+
+/// Evaluate a transition guard: does `counter_value <cmp> threshold` hold?
+/// This is the decision at the heart of every guarded timeout branch — the one
+/// that decides whether a bounded loop takes another lap or ends. It is the
+/// first step of the interpreter's *control flow* moving into the core (ADR
+/// 0003): a scene's `_timeout` becomes "take the first branch that is unguarded
+/// or whose `rc_guard_eval` is 1". Mirrors `interpreter._guard` /
+/// `figment.js` `_guard` exactly (ge → `>=`, le → `<=`, eq → `==`; an absent
+/// counter reads as 0, which the caller passes as `counter_value`).
+#[no_mangle]
+pub extern "C" fn rc_guard_eval(counter_value: i64, cmp: u8, threshold: i64) -> i32 {
+    let pass = match cmp {
+        CMP_GE => counter_value >= threshold,
+        CMP_LE => counter_value <= threshold,
+        _ => counter_value == threshold, // CMP_EQ (and, defensively, unknown)
+    };
+    pass as i32
+}
+
 /// Refill the emit token bucket over `dt` seconds. Never exceeds `burst`, never
 /// loses tokens over time — the ceiling of the "no BLE flood" guarantee.
 /// Mirrors `contracts.refill_tokens`.
@@ -150,6 +173,39 @@ mod tests {
         assert_eq!(rc_saturate(5, OP_INC, 3, 0, 100), 8);
         assert_eq!(rc_saturate(5, OP_DEC, 3, 0, 100), 2);
         assert_eq!(rc_saturate(5, OP_SET, 3, 0, 100), 3);
+    }
+
+    #[test]
+    fn guard_eval_matches_the_three_comparators() {
+        // ge
+        assert_eq!(rc_guard_eval(3, CMP_GE, 3), 1);
+        assert_eq!(rc_guard_eval(4, CMP_GE, 3), 1);
+        assert_eq!(rc_guard_eval(2, CMP_GE, 3), 0);
+        // le
+        assert_eq!(rc_guard_eval(3, CMP_LE, 3), 1);
+        assert_eq!(rc_guard_eval(2, CMP_LE, 3), 1);
+        assert_eq!(rc_guard_eval(4, CMP_LE, 3), 0);
+        // eq
+        assert_eq!(rc_guard_eval(3, CMP_EQ, 3), 1);
+        assert_eq!(rc_guard_eval(2, CMP_EQ, 3), 0);
+    }
+
+    #[test]
+    fn bounded_loop_terminates_via_guard_and_saturate() {
+        // the "3 rounds then END" loop expressed with only the core primitives:
+        // each lap, if round >= 3 stop, else inc (saturating at hi=3)
+        let (lo, hi) = (1, 3);
+        let mut round = 1;
+        let mut laps = 0;
+        loop {
+            if rc_guard_eval(round, CMP_GE, 3) == 1 {
+                break;
+            }
+            round = rc_saturate(round, OP_INC, 1, lo, hi);
+            laps += 1;
+        }
+        assert_eq!(round, 3);
+        assert_eq!(laps, 2); // 1 -> 2 -> 3, then the guard fires
     }
 
     #[test]
