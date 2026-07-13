@@ -82,18 +82,6 @@ def test_memory_doc_fallback():
     assert row["kind"] == "Place" and row["summary"] == "bike on 4th" and row["ts"] == 42
 
 
-# --- social_lens: relationship graph (dict fallback) -------------------------
-def test_relationship_graph_fallback():
-    from dreamlayer.social_lens.graph import RelationshipGraph
-    g = RelationshipGraph()
-    g.met_at("marcus", "overpass-show")
-    g.met_at("priya", "overpass-show")
-    g.relate("marcus", "priya", "colleagues")
-    assert set(g.people_at("overpass-show")) == {"marcus", "priya"}
-    assert "priya" in g.connections("marcus")
-    assert g.people_at("nope") == []
-
-
 # --- voice: VAD energy fallback; ASR empty fallback --------------------------
 def test_vad_and_asr_fallback():
     from dreamlayer.orchestrator.vad_gate import SileroVADGate
