@@ -24,7 +24,6 @@ from pathlib import Path
 
 import pytest
 
-from dreamlayer.reality_compiler.v2 import contracts
 from dreamlayer.reality_compiler.v2 import figment as F, transport
 from dreamlayer.reality_compiler.v2.interpreter import Stage
 from dreamlayer.reality_compiler.v2.figment import MAX_TEXT_LEN
