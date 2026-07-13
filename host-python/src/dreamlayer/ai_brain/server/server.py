@@ -40,6 +40,24 @@ from .panel import render_panel
 
 TOKEN_HEADER = "X-DreamLayer-Token"
 
+
+def authorize(token: str, provided, from_localhost: bool) -> bool:
+    """The Brain's access policy, as one pure decision.
+
+    * A token is configured → every caller must present exactly it, on-box or
+      off (constant-time compare so a wrong token can't be timed out byte by
+      byte).
+    * No token is configured → a tokenless brain is a *local dev* brain, so
+      only loopback callers are trusted. A LAN peer is never let in through an
+      empty token — the launcher mints one for any network-reachable bind
+      (ai_brain/server/__main__.py), so in practice the empty-token case only
+      happens on a deliberately loopback-only run.
+    """
+    if token:
+        import hmac
+        return isinstance(provided, str) and hmac.compare_digest(provided, token)
+    return bool(from_localhost)
+
 # Billing-tier seam (no paywall). Extra capabilities each plan grants ON TOP OF
 # the always-free base set in Brain.plugin_capabilities(). `free` adds nothing —
 # everything works locally & open. A future hosted plan (managed AI, sync,
@@ -1922,14 +1940,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _authed(self) -> bool:
             tok = brain.config.token        # read live so token rotation applies
-            ok = not tok or self.headers.get(TOKEN_HEADER) == tok
+            ok = authorize(tok, self.headers.get(TOKEN_HEADER),
+                           self._from_localhost())
             # a successful token-carrying request from off-box is the phone
             if ok and tok and not self._from_localhost():
                 brain._last_phone_ts = time.time()
             return ok
 
         def _from_localhost(self) -> bool:
-            return self.client_address[0] in ("127.0.0.1", "::1")
+            return self.client_address[0] in ("127.0.0.1", "::1",
+                                              "::ffff:127.0.0.1")
 
         def _body(self) -> dict:
             n = int(self.headers.get("Content-Length", 0) or 0)
