@@ -1,0 +1,19 @@
+[package]
+name = "reality-core"
+version = "0.1.0"
+edition = "2021"
+description = "PoC: the on-glass Figment safety caps as one Rust core, C-ABI exposed so Python / JS (wasm) / Lua (mlua) become bindings over a single implementation instead of three hand-written interpreters."
+license = "Apache-2.0"
+
+# A cdylib is loadable from Python via ctypes/cffi today, and is the same crate
+# that compiles to wasm32 (JS) and links via mlua (Lua/device) — one core, three
+# targets. No dependencies: the safety core is pure integer/float logic, so the
+# crate builds fully offline and cross-compiles cleanly to Cortex-M later.
+[lib]
+name = "reality_core"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"      # size-first: this is destined for a 256KB-class MCU
+lto = true
+panic = "abort"      # no unwinding on the device; a cap can never panic anyway
