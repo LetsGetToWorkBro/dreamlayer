@@ -25,23 +25,34 @@ cargo build --release      # produces target/release/libreality_core.{so,dylib}
 cargo test                 # the Rust-side boundary unit tests
 ```
 
-The **cross-language parity proof** lives on the Python side and drives this
-compiled library against the reference over a swept input space, asserting
-bit-for-bit agreement:
+## Two targets, two proven parities
+
+**Python (native cdylib).** Drives this compiled library against
+`contracts.py` over a swept input space, bit-for-bit:
 
 ```sh
 cd ../host-python && python -m pytest src/dreamlayer/tests/test_reality_core_parity.py
 ```
 
-It builds the crate on demand and skips cleanly where `cargo` is absent.
+**JS (wasm).** The *same crate* compiled to `wasm32-unknown-unknown`, checked in
+Node against figment.js — (A) bit-for-bit vs its transcribed cap expressions and
+(B) against the real shipped figment.js `Stage`:
 
-## Why a cdylib
+```sh
+rustup target add wasm32-unknown-unknown
+cargo build --release --target wasm32-unknown-unknown
+node parity/wasm_parity.mjs        # or: pytest test_reality_core_wasm_parity.py
+```
 
-The same crate that loads from Python via `ctypes` today compiles to
-`wasm32-unknown-unknown` for JS and links via `mlua` for Lua, and cross-compiles
-to `thumbv7em-none-eabi` (`#![no_std]`) for the glasses — **one source, four
-targets.** This PoC exercises the Python target; the next step (per the ADR) is
-the wasm target with a JS-vs-core parity check.
+Both build on demand and skip cleanly where the toolchain is absent.
 
-Not on the release path yet — see the ADR for the staged-migration plan and the
-explicit costs.
+## One source, four targets
+
+The same crate that loads from Python via `ctypes` and compiles to wasm for JS
+(both proven above) also links via `mlua` for Lua and cross-compiles to
+`thumbv7em-none-eabi` (`#![no_std]`) for the glasses. Two of the four targets
+are now demonstrated end-to-end; the device targets are the ADR's remaining
+staged work.
+
+Not on the release path yet — see [ADR 0003](../docs/adr/0003-single-rust-core.md)
+for the staged-migration plan and the explicit costs.

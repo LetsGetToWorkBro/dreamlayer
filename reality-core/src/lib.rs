@@ -62,24 +62,46 @@ pub extern "C" fn rc_refill_tokens(tokens: f64, dt: f64, refill_per_s: f64, burs
     }
 }
 
+/// The one definition of a token spend, shared by every export below so the
+/// pointer form and the pure wasm-friendly forms can never disagree.
+#[inline]
+fn spend(tokens: f64) -> (i32, f64) {
+    if tokens >= 1.0 {
+        (1, tokens - 1.0)
+    } else {
+        (0, tokens)
+    }
+}
+
 /// Try to spend one token for an emit. The bucket never goes negative — the
 /// floor of the "no BLE flood" guarantee. Writes the post-spend balance to
 /// `out_tokens` and returns 1 if a token was spent, else 0. Mirrors
-/// `contracts.spend_token`.
+/// `contracts.spend_token`. (Pointer form, for the Python cdylib.)
 ///
 /// # Safety
 /// `out_tokens` must be a valid, non-null pointer to a writable `f64`.
 #[no_mangle]
 pub extern "C" fn rc_spend_token(tokens: f64, out_tokens: *mut f64) -> i32 {
-    let (spent, after) = if tokens >= 1.0 {
-        (1, tokens - 1.0)
-    } else {
-        (0, tokens)
-    };
+    let (spent, after) = spend(tokens);
     if !out_tokens.is_null() {
         unsafe { *out_tokens = after };
     }
     spent
+}
+
+/// Whether a token can be spent (1/0). Pure, pointer-free — the form the wasm
+/// binding calls, since wasm has no natural out-parameter. Composes with
+/// `rc_spend_after` to the same result as `rc_spend_token`.
+#[no_mangle]
+pub extern "C" fn rc_spend_ok(tokens: f64) -> i32 {
+    spend(tokens).0
+}
+
+/// The token balance after a spend attempt. Pure, pointer-free companion to
+/// `rc_spend_ok`.
+#[no_mangle]
+pub extern "C" fn rc_spend_after(tokens: f64) -> f64 {
+    spend(tokens).1
 }
 
 /// Clamp a resolved display line to `max_len` *bytes*. Returns the clamped byte
@@ -149,6 +171,16 @@ mod tests {
         assert_eq!(out, 0.0);
         assert_eq!(rc_spend_token(2.5, &mut out), 1);
         assert_eq!(out, 1.5);
+    }
+
+    #[test]
+    fn pure_spend_wrappers_match_the_pointer_form() {
+        let mut out = 0.0;
+        for &t in &[0.0, 0.5, 0.999, 1.0, 1.0001, 2.5, 5.0] {
+            let ptr_spent = rc_spend_token(t, &mut out);
+            assert_eq!(rc_spend_ok(t), ptr_spent);
+            assert_eq!(rc_spend_after(t), out);
+        }
     }
 
     #[test]

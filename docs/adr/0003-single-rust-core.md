@@ -75,6 +75,19 @@ central claim:
 That closes the risk that mattered: "can one core actually be identical to the
 reference the proofs are written against?" Yes, demonstrably.
 
+**Second target — wasm, checked against JS.** The same crate now also compiles
+to `wasm32-unknown-unknown`, and `reality-core/parity/wasm_parity.mjs` loads that
+wasm in Node and checks it two ways: (A) bit-for-bit against `figment.js`'s cap
+expressions transcribed with line citations, and (B) against the **real shipped
+`figment.js` Stage** driven through counter saturation and a token-bucket flood.
+Green (4,852 swept checks + 2 real-Stage scenarios). This is the load-bearing
+step: it proves "one source, many targets" across a language boundary that
+actually ships — the same Rust source is simultaneously the Python reference
+*and* the JS semantics, so the phone/web `figment.js` caps could become a binding
+over this core rather than a hand-written copy. Two of the four targets
+(Python cdylib, JS wasm) are now demonstrated end to end; the two device targets
+(mlua, Cortex-M) are the remaining staged work.
+
 ## Options considered
 
 1. **Status quo — three interpreters + N3 differential testing.** Cheap to keep,
@@ -130,7 +143,20 @@ reference the proofs are written against?" Yes, demonstrably.
 
 Adopt the direction, funded as a **staged migration** behind the binding seam,
 starting from this proven core. Do **not** treat it as a big-bang rewrite. The
-next concrete step is a second binding target — compile the same crate to wasm
-and add a JS-vs-core parity check — which validates the "one source, many
-targets" claim across a language boundary that actually ships, before committing
-to the interpreter-wide migration.
+first validation — a second binding target (wasm, checked against the shipped
+`figment.js`) — is **done** (above): "one source, many targets" holds across a
+real language boundary. The next concrete steps, in order of decreasing
+certainty and increasing cost:
+
+1. **Grow the core past the caps** to a full scene *step* — the timeout graph,
+   guard evaluation, slot resolution — keeping the Python and wasm parity
+   harnesses green at each addition. This is where the write-thrice savings
+   actually start to land.
+2. **The Lua/device binding** (`mlua` + a `thumbv7em-none-eabi` build), which is
+   where the memory-safety payoff lives but also the firmware-integration cost
+   (owner/hardware work).
+3. **Per-target float determinism** re-checked on the wasm and Cortex-M FPUs, not
+   assumed from host-vs-host.
+
+Only after (1) is comfortable should the interpreter-wide migration be
+committed to.
