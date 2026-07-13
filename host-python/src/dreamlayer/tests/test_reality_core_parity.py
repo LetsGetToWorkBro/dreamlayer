@@ -60,6 +60,9 @@ def _load_core():
     lib.rc_spend_token.argtypes = [ctypes.c_double, ctypes.POINTER(ctypes.c_double)]
     lib.rc_clamp_len.restype = ctypes.c_uint64
     lib.rc_clamp_len.argtypes = [ctypes.c_uint64, ctypes.c_uint64]
+    lib.rc_clamp_text_len.restype = ctypes.c_uint64
+    lib.rc_clamp_text_len.argtypes = [ctypes.c_char_p, ctypes.c_uint64,
+                                      ctypes.c_uint64]
     lib.rc_accept_slot.restype = ctypes.c_int32
     lib.rc_accept_slot.argtypes = [ctypes.c_int32, ctypes.c_int32,
                                    ctypes.c_int64, ctypes.c_int64]
@@ -377,6 +380,23 @@ class TestClampParity:
                 py = len(contracts.clamp_text("x" * length, max_len))
                 rs = core.rc_clamp_len(length, max_len)
                 assert py == rs, (length, max_len, py, rs)
+
+    def test_non_ascii_swept(self, core):
+        # The input class the four interpreters provably disagreed on before
+        # P2-12: multi-byte UTF-8, where a byte-count min() splits a codepoint.
+        # rc_clamp_text_len is the codepoint-boundary-aware form; it must return
+        # the same kept-byte count as contracts.clamp_text (now byte-canonical),
+        # and — the safety property — never a length that lands mid-sequence.
+        samples = ["héllo wörld", "café" * 8, "日本語のテキスト", "emoji😀🎉run",
+                   "égalité", "a" * 30, "ünîcodé", "\U0001F600" * 6, ""]
+        for s in samples:
+            b = s.encode("utf-8")
+            for max_len in (0, 1, 2, 3, 4, 5, 23, 24, 25, 64):
+                py = len(contracts.clamp_text(s, max_len).encode("utf-8"))
+                rs = core.rc_clamp_text_len(b, len(b), max_len)
+                assert py == rs, (s, max_len, py, rs)
+                # kept prefix is valid UTF-8 (never a split codepoint)
+                b[:rs].decode("utf-8")
 
 
 class TestAcceptSlotParity:

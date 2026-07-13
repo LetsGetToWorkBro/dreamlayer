@@ -94,6 +94,24 @@ def figments(draw):
     return fig
 
 
+# Host-pushed slot values, incl. the two input classes the four interpreters
+# provably disagreed on before P2-12: non-ASCII (accented / CJK / astral emoji,
+# where byte vs code-point vs UTF-16 clamping diverges and a naive byte cut
+# splits a codepoint) and token-in-slot (a value that *looks* like a figment
+# token — slot values are inert data, never re-parsed). Over-long values also
+# exercise the codepoint-boundary clamp at MAX_TEXT_LEN.
+TEXT_VALUES = [
+    "HI",
+    "héllo wörld ünîcodé",           # accented Latin (2-byte sequences)
+    "日本語のテキスト表示です",        # CJK (3-byte sequences)
+    "emoji 😀🎉🚀 run",               # astral plane (4-byte / surrogate pairs)
+    "{slot}{count:c0}{remaining}",   # token-in-slot: must stay literal
+    "égalité",           # combining marks
+    "x" * 40,                        # over-long → clamp
+    "café" * 8,                      # over-long non-ASCII → boundary clamp
+]
+
+
 @st.composite
 def scripts(draw):
     ops = []
@@ -102,7 +120,10 @@ def scripts(draw):
             ops.append(["step", draw(st.integers(1, 6)) * 1.0])
         else:
             ev = draw(st.sampled_from(EVENTS))
-            ops.append(["inject", ev, "HI"] if ev == "text" else ["inject", ev])
+            if ev == "text":
+                ops.append(["inject", ev, draw(st.sampled_from(TEXT_VALUES))])
+            else:
+                ops.append(["inject", ev])
     ops.append(["step", draw(st.integers(1, 4)) * 1.0])   # end on a render
     return ops
 

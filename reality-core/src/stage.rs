@@ -41,7 +41,10 @@
 //! Rendering geometry (rows/sizes/colors) stays binding-side by design: it is
 //! static per line and display-hardware-specific.
 
-use crate::{rc_fmt_clock, rc_refill_tokens, rc_saturate, spend, CMP_EQ, CMP_GE, CMP_LE};
+use crate::{
+    clamp_utf8_boundary, rc_fmt_clock, rc_refill_tokens, rc_saturate, spend, CMP_EQ, CMP_GE,
+    CMP_LE,
+};
 
 pub const MAX_SCENES: usize = 32; // grammar caps, budgets.verify() enforced
 pub const MAX_BRANCHES: usize = 4;
@@ -694,7 +697,11 @@ pub extern "C" fn rc_stage_text(h: i32, slot_code: u32, ptr: *const u8, len: u64
     if !s.started || s.ended || ptr.is_null() {
         return 0;
     }
-    let len = core::cmp::min(len as usize, MAX_TEXT);
+    // Clamp to MAX_TEXT bytes on a codepoint boundary (contracts.clamp_text's
+    // rule) — a bare min() could store half a UTF-8 sequence and diverge from
+    // the other interpreters on non-ASCII slot pushes.
+    let full = unsafe { core::slice::from_raw_parts(ptr, len as usize) };
+    let len = clamp_utf8_boundary(full, MAX_TEXT);
     if slot_code == 0 {
         unsafe { core::ptr::copy_nonoverlapping(ptr, s.default_val.as_mut_ptr(), len) };
         s.default_len = len as u8;
@@ -823,7 +830,10 @@ pub extern "C" fn rc_stage_render_line(h: i32, line: i32, out: *mut u8, cap: u64
             _ => 0,
         };
     }
-    let n = pos.min(MAX_TEXT).min(cap as usize);
+    // Final line cap: MAX_TEXT bytes (and the caller's buffer), on a codepoint
+    // boundary — the render-path twin of contracts.clamp_text(out, MAX_TEXT).
+    let limit = MAX_TEXT.min(cap as usize);
+    let n = clamp_utf8_boundary(&buf[..pos], limit);
     unsafe { core::ptr::copy_nonoverlapping(buf.as_ptr(), out, n) };
     n as i64
 }

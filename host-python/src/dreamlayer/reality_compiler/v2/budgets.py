@@ -138,8 +138,12 @@ def verify(fig: Figment) -> BudgetReport:
             bad("lines", f"{len(s.lines)} lines > max {MAX_LINES}", sid)
         rows_seen: set[int] = set()
         for ln in s.lines:
-            if len(ln.content) > MAX_TEXT_LEN:
-                bad("text_len", f"line {ln.content!r} > {MAX_TEXT_LEN} chars", sid)
+            # canonical text-length unit: UTF-8 bytes (see contracts.clamp_text)
+            # — the same unit the runtime clamp and the embedded core enforce, so
+            # an authored line that would be silently truncated on-glass is
+            # rejected here instead. figment.js's validator mirrors this.
+            if len(ln.content.encode("utf-8")) > MAX_TEXT_LEN:
+                bad("text_len", f"line {ln.content!r} > {MAX_TEXT_LEN} bytes", sid)
             if ln.row < 0 or ln.row >= MAX_LINES:
                 bad("row", f"row {ln.row} out of range", sid)
             elif ln.row in rows_seen:

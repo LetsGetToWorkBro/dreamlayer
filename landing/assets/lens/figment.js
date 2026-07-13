@@ -25,6 +25,43 @@
     MAX_COUNTER_OPS: 4, MAX_EMIT_TAG_LEN: 16, COUNTER_HI: 9999,
     MAX_SLOTS: 8,
   };
+  // The one canonical text-length unit shared by all four interpreters
+  // (Python contracts.clamp_text, Lua figment_stage, Rust reality-core): UTF-8
+  // *bytes*, truncated on a codepoint boundary. The embedded core stores slots
+  // in fixed 24-byte buffers, so bytes is the only unit that fits; never
+  // splitting a codepoint is what keeps the four byte-identical on non-ASCII
+  // (a mid-sequence cut would make the Rust core emit invalid UTF-8). ES5-safe:
+  // decode surrogate pairs by hand rather than relying on for..of / Array.from.
+  function _cpAt(s, i) {                       // -> [codepoint, unitsConsumed]
+    var hi = s.charCodeAt(i);
+    if (hi >= 0xD800 && hi <= 0xDBFF && i + 1 < s.length) {
+      var lo = s.charCodeAt(i + 1);
+      if (lo >= 0xDC00 && lo <= 0xDFFF)
+        return [0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00), 2];
+    }
+    return [hi, 1];
+  }
+  function _cpBytes(cp) {
+    return cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
+  }
+  function _utf8Len(s) {
+    s = String(s);
+    var n = 0, i = 0;
+    while (i < s.length) { var c = _cpAt(s, i); n += _cpBytes(c[0]); i += c[1]; }
+    return n;
+  }
+  function _clampText(s, max) {
+    s = String(s);
+    if (max == null) max = B.MAX_TEXT_LEN;
+    var used = 0, i = 0, out = "";
+    while (i < s.length) {
+      var c = _cpAt(s, i), nb = _cpBytes(c[0]);
+      if (used + nb > max) break;              // adding this codepoint overflows
+      used += nb; out += s.substr(i, c[1]); i += c[1];
+    }
+    return out;
+  }
+
   // {slot:<name>} — a named host slot (default {slot} is name "").
   var SLOT_TOKEN_RE = /\{slot:(\w+)\}/g;
   function _namedSlots(fig) {
@@ -76,7 +113,7 @@
   // -- model -----------------------------------------------------------------
   function line(content, opts) {
     opts = opts || {};
-    return { content: String(content).slice(0, B.MAX_TEXT_LEN),
+    return { content: _clampText(content),
              row: opts.row || 0, size: opts.size || "md",
              color: opts.color || "text_primary" };
   }
@@ -150,7 +187,7 @@
     for (var i = 0; i < steps.length; i++) {
       var next = i + 1 < steps.length ? "s" + (i + 1) : END;
       addScene(f, scene("s" + i, {
-        lines: [line(String(steps[i]).slice(0, B.MAX_TEXT_LEN), { row: 0, size: "md" }),
+        lines: [line(steps[i], { row: 0, size: "md" }),
                 line("nod / double-tap →", { row: 2, size: "sm", color: "text_secondary" })],
         on: { double: { target: next }, "imu:nod": { target: next } },
       }));
@@ -649,7 +686,7 @@
         "stretch", "hydrate", "drink water", "skincare", "morning routine", "night routine"],
         make: function () {
           var steps = t.replace(/^.*?:/, "").split(/,|\bthen\b|;/).map(function (s) { return s.trim(); })
-                       .filter(Boolean).map(function (s) { return s.slice(0, B.MAX_TEXT_LEN); });
+                       .filter(Boolean).map(function (s) { return _clampText(s); });
           return tChecklist({ steps: steps.length ? steps.slice(0, B.MAX_SCENES) : undefined });
         } },
       { k: "countdown", kw: ["countdown", "count down", "timer", "count up", "stopwatch", "egg timer"],
@@ -723,7 +760,7 @@
       if ((s.lines || []).length > B.MAX_LINES) bad("lines", s.lines.length + " lines > max " + B.MAX_LINES, sid);
       var rows = {};
       (s.lines || []).forEach(function (ln) {
-        if ((ln.content || "").length > B.MAX_TEXT_LEN) bad("text_len", "a line is > " + B.MAX_TEXT_LEN + " chars", sid);
+        if (_utf8Len(ln.content || "") > B.MAX_TEXT_LEN) bad("text_len", "a line is > " + B.MAX_TEXT_LEN + " bytes", sid);
         if (ln.row < 0 || ln.row >= B.MAX_LINES) bad("row", "row " + ln.row + " out of range", sid);
         if (rows[ln.row]) bad("row", "two lines on row " + ln.row, sid); rows[ln.row] = 1;
         if (COLORS.indexOf(ln.color) < 0) bad("color", "'" + ln.color + "' is not a palette color", sid);
@@ -929,7 +966,7 @@
       if (text != null) {
         var named = Object.keys(this.slots).filter(function (k) { return k; });
         if (name === "" || this.slots[name] != null || named.length < B.MAX_SLOTS)
-          this.slots[name] = String(text).slice(0, B.MAX_TEXT_LEN);
+          this.slots[name] = _clampText(text);
       }
       return this._dispatch("text");
     }
@@ -984,9 +1021,15 @@
       .replace(/\{elapsed\}/g, _fmtClock(el))
       .replace(/\{elapsed_ms\}/g, String(Math.floor(el * 1000)))
       .replace(/\{slot\}/g, this.slots[""] || "")
-      .replace(SLOT_TOKEN_RE, function (_, n) { return self.slots[n] != null ? self.slots[n] : ""; })
-      .replace(/\{count:(\w+)\}/g, function (_, n) { return String(self.counters[n] != null ? self.counters[n] : 0); });
-    return out.slice(0, B.MAX_TEXT_LEN);
+      .replace(SLOT_TOKEN_RE, function (_, n) { return self.slots[n] != null ? self.slots[n] : ""; });
+    // Only substitute DECLARED counters, literal-matched — an undeclared
+    // {count:cN} (e.g. arriving inside an inert slot value) stays literal, the
+    // same as interpreter.py and figment_stage.lua. The old regex defaulted
+    // any {count:*} to "0", a 3-vs-1 divergence the token-in-slot sweep caught.
+    Object.keys(this.counters).forEach(function (n) {
+      out = out.split("{count:" + n + "}").join(String(self.counters[n]));
+    });
+    return _clampText(out);
   };
   Stage.prototype._cadence = function () {
     var cad = this._scene().cadence;

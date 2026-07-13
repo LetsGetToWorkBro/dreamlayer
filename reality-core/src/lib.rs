@@ -133,7 +133,10 @@ pub extern "C" fn rc_spend_after(tokens: f64) -> f64 {
 /// Clamp a resolved display line to `max_len` *bytes*. Returns the clamped byte
 /// length (the caller already holds the buffer; the cap is on the length). No
 /// line ever exceeds the display's character budget. Mirrors
-/// `contracts.clamp_text` at the length level (byte-accurate for ASCII HUD text).
+/// `contracts.clamp_text` at the length level — exact for ASCII HUD text. The
+/// non-ASCII, codepoint-boundary-aware clamp is `rc_clamp_text_len`, which needs
+/// the bytes; this length-only form is the fast path when the caller knows the
+/// text is ASCII (one byte per code point, so no sequence can be split).
 #[no_mangle]
 pub extern "C" fn rc_clamp_len(len: u64, max_len: u64) -> u64 {
     if len < max_len {
@@ -141,6 +144,40 @@ pub extern "C" fn rc_clamp_len(len: u64, max_len: u64) -> u64 {
     } else {
         max_len
     }
+}
+
+/// How many leading bytes of `s` to keep so the result is `<= max` bytes and
+/// never splits a UTF-8 codepoint. This is the one canonical text-length rule
+/// shared by all four interpreters — Python `contracts.clamp_text`, JS
+/// `figment.js`, Lua `figment_stage.lua`, and this core: the unit is UTF-8
+/// bytes, truncated on a codepoint boundary. Backs out of any trailing
+/// continuation byte (`0b10xx_xxxx`, `0x80..=0xBF`) so a multi-byte sequence is
+/// kept whole or dropped whole — never half-emitted (which would make this core
+/// produce invalid UTF-8 and the parity harness raise instead of diff).
+pub(crate) fn clamp_utf8_boundary(s: &[u8], max: usize) -> usize {
+    if s.len() <= max {
+        return s.len();
+    }
+    let mut n = max;
+    while n > 0 && (s[n] & 0xC0) == 0x80 {
+        n -= 1;
+    }
+    n
+}
+
+/// Codepoint-safe byte clamp over an actual UTF-8 payload: how many leading
+/// bytes fit in `max_len` without splitting a codepoint. This is the non-ASCII
+/// companion to `rc_clamp_len` and the one the non-ASCII parity sweep drives.
+///
+/// # Safety
+/// `ptr` must be valid for reads of `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn rc_clamp_text_len(ptr: *const u8, len: u64, max_len: u64) -> u64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let s = core::slice::from_raw_parts(ptr, len as usize);
+    clamp_utf8_boundary(s, max_len as usize) as u64
 }
 
 /// Decide whether to accept a host text push into a slot. Accepting a genuinely

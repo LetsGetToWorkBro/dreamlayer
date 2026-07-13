@@ -47,7 +47,10 @@ def named_slots(fig: "Figment") -> list[str]:
 MAX_SCENES        = 32
 MAX_COUNTERS      = 8
 MAX_LINES         = 5      # HUD rule: max ~5 short lines
-MAX_TEXT_LEN      = 24     # chars per line on the 256px circular display
+MAX_TEXT_LEN      = 24     # UTF-8 bytes per line (the canonical unit shared by
+                           # all 4 interpreters; ASCII = 24 chars, less for
+                           # multi-byte scripts — matches the embedded core's
+                           # 24-byte slot buffers) on the 256px circular display
 MAX_COUNTER_OPS   = 4      # per transition
 MAX_BRANCHES      = 4      # guarded timeout branches per scene
 MAX_PULSE_HZ      = 4.0    # display breathe cap

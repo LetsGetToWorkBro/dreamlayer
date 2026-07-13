@@ -68,13 +68,29 @@ def spend_token(tokens: float):
 
 
 def clamp_text(s: str, max_len: int) -> str:
-    """Clamp a resolved display line. The proof: no line ever exceeds the
-    display's character budget, regardless of the host-pushed slot content.
+    """Clamp a resolved display line to `max_len` **UTF-8 bytes**, never
+    splitting a codepoint. This is the one canonical text-length unit shared by
+    all four interpreters (Python here, JS figment.js, Lua figment_stage.lua,
+    Rust reality-core): the embedded core stores slot values in fixed
+    ``[u8; MAX_TEXT]`` buffers, so bytes — not code points or UTF-16 units — is
+    the only unit that fits that memory and lets a byte-clamp never overflow.
+    Truncating on a codepoint boundary is what keeps the four byte-identical on
+    non-ASCII input (a mid-sequence cut would make the Rust core emit invalid
+    UTF-8 and the parity harness raise instead of diff).
 
     pre: max_len >= 0
-    post: len(__return__) <= max_len
+    post: len(__return__.encode("utf-8")) <= max_len
     """
-    return s[:max_len]
+    b = s.encode("utf-8")
+    if len(b) <= max_len:
+        return s
+    n = max_len
+    # back off out of the middle of a multi-byte sequence: a UTF-8 continuation
+    # byte is 0b10xxxxxx (0x80..0xBF); the first non-continuation byte at or
+    # below max_len is the start of the codepoint we must not split.
+    while n > 0 and (b[n] & 0xC0) == 0x80:
+        n -= 1
+    return b[:n].decode("utf-8")
 
 
 def accept_slot(is_default: bool, is_known: bool, named_count: int,

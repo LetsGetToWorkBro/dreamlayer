@@ -82,6 +82,23 @@ local function _esc_pat(s)
   return (s:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"))
 end
 
+-- The one canonical text-length unit, shared with contracts.clamp_text (Python),
+-- figment.js (JS) and reality-core (Rust): clamp to MAX_TEXT_LEN *UTF-8 bytes*,
+-- never splitting a codepoint. A bare string.sub(s,1,MAX_TEXT_LEN) cuts by bytes
+-- and could leave a partial multi-byte sequence, diverging from the other three
+-- on non-ASCII. Here we back off out of any trailing continuation byte
+-- (0x80..0xBF). Pure Lua 5.1+ (no utf8 library) so it runs on-glass.
+local function _clamp_text(s, max)
+  max = max or MAX_TEXT_LEN
+  if #s <= max then return s end
+  local n = max
+  while n > 0 do
+    local b = string.byte(s, n + 1)         -- first excluded byte
+    if b and b >= 0x80 and b < 0xC0 then n = n - 1 else break end
+  end
+  return string.sub(s, 1, n)
+end
+
 local function _clamp_ok(fig)
   if type(fig) ~= "table" or type(fig.scenes) ~= "table" then return false end
   if _count(fig.scenes) == 0 or _count(fig.scenes) > MAX_SCENES then return false end
@@ -225,7 +242,7 @@ function M.on_event(ev, text)
       local n = 0
       for k in pairs(_st.slots) do if k ~= "" then n = n + 1 end end
       if name == "" or _st.slots[name] ~= nil or n < MAX_SLOTS then
-        _st.slots[name] = string.sub(tostring(text), 1, MAX_TEXT_LEN)
+        _st.slots[name] = _clamp_text(tostring(text), MAX_TEXT_LEN)
       end
     end
     dispatch_ev = "text"
@@ -273,7 +290,7 @@ local function _resolve(scene, content)
     -- literal match here keeps the four interpreters in parity.
     out = string.gsub(out, "{count:" .. _esc_pat(name) .. "}", (tostring(val):gsub("%%", "%%%%")))
   end
-  return string.sub(out, 1, MAX_TEXT_LEN)
+  return _clamp_text(out, MAX_TEXT_LEN)
 end
 
 local function _render()
