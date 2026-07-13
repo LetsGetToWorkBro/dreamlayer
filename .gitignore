@@ -22,3 +22,6 @@ test-results/
 # mutmut mutation-testing scratch (host-python/mutants copy + cache)
 mutants/
 .mutmut-cache
+
+# local Claude Code overrides (personal, not shared)
+.claude/settings.local.json
