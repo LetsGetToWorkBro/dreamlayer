@@ -28,13 +28,12 @@ function mod(): any {
 // A cue family → its variant clips. Add more as you record them.
 const FAMILIES: Record<string, number[]> = {
   hey: [
-    require("../../assets/sounds/hey1.mp3"),
-    require("../../assets/sounds/hey2.mp3"),
-  ], // Juno wakes ("Hey Juno")
+    require("../../assets/sounds/hey1.mp3"), // "Hey"
+    require("../../assets/sounds/hey2.mp3"), // "Hello"
+  ], // Juno greets on summon — hey or hello, rotated
   listen: [
     require("../../assets/sounds/listen1.mp3"),
-    require("../../assets/sounds/listen2.mp3"),
-  ], // the "Listen!" tap
+  ], // the "Listen!" tap (single take for now — add variants as recorded)
   look: [
     require("../../assets/sounds/look1.mp3"),
     require("../../assets/sounds/look2.mp3"),
