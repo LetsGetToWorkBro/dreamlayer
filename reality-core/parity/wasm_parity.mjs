@@ -193,7 +193,8 @@ function loadCoreStage(fig) {
       h, BigInt(d.start || 0), BigInt(d.lo == null ? 0 : d.lo), BigInt(d.hi == null ? 9999 : d.hi));
   }
   for (const [sid, s] of Object.entries(fig.scenes)) {
-    sceneIdx[sid] = rc.rc_stage_add_scene(h, s.duration_sec != null ? 1 : 0, s.duration_sec || 0);
+    sceneIdx[sid] = rc.rc_stage_add_scene(h, s.duration_sec != null ? 1 : 0, s.duration_sec || 0,
+                                          s.tick ? 1 : 0);
   }
   const targetOf = (t) => t.target === END ? Number(TARGET_END_C)
     : t.target === SELF ? Number(TARGET_SELF_C) : sceneIdx[t.target];
@@ -272,6 +273,82 @@ function runScheduleParity(fig, schedule, counters, label) {
   eq(st.counters.n, 19, "flood-traj counter");
 })();
 
+// ---- the text path: slots + tokenized templates + core rendering ------------
+// Inbound strings ride the same scratch buffer used for output: write the
+// bytes into wasm memory, hand the core the pointer (it copies before return).
+const TOKK = { remaining: 1, remaining_s: 2, elapsed: 3, elapsed_ms: 4, slot: 5, count: 6 };
+const TOKEN_RE = /\{remaining_s\}|\{remaining\}|\{elapsed_ms\}|\{elapsed\}|\{slot:(\w+)\}|\{slot\}|\{count:(\w+)\}/g;
+function putBytes(str) {
+  const bytes = new TextEncoder().encode(str);
+  new Uint8Array(rc.memory.buffer, scratchPtr, bytes.length).set(bytes);
+  return bytes.length;
+}
+function coreRenderLine(h, line) {
+  const n = Number(rc.rc_stage_render_line(h, line, scratchPtr, scratchCap));
+  if (n < 0) return null;
+  return new TextDecoder().decode(new Uint8Array(rc.memory.buffer, scratchPtr, n));
+}
+
+(function textRenderParity() {
+  const fig = {
+    name: "mix", initial: "a",
+    counters: { n: { start: 0, lo: 0, hi: 99 } },
+    scenes: { a: {
+      id: "a", duration_sec: 90.0, tick: "countdown",
+      lines: [{ content: "n={count:n} t={remaining}", row: 0 },
+              { content: "{slot} {slot:tag}", row: 1 }],
+      on: { single: { target: SELF, counter_ops: [{ counter: "n", op: "inc", amount: 1 }] },
+            text: { target: SELF } },
+      on_timeout: [{ target: SELF }],
+    } },
+  };
+  const st = new F.Stage(fig);
+  const cs = loadCoreStage(fig);
+  const slotCode = { tag: 1 };  // the binding's interner: named slots -> 1..
+
+  // load the two line templates into the core, tokenized once
+  for (const [li, line] of fig.scenes.a.lines.entries()) {
+    rc.rc_stage_add_line(cs.h, 0);
+    let pos = 0;
+    for (const m of line.content.matchAll(TOKEN_RE)) {
+      const litRun = line.content.slice(pos, m.index);
+      if (litRun) rc.rc_line_lit(cs.h, 0, li, scratchPtr, BigInt(putBytes(litRun)));
+      const t = m[0];
+      if (t === "{remaining}") rc.rc_line_tok(cs.h, 0, li, TOKK.remaining, 0);
+      else if (t === "{elapsed}") rc.rc_line_tok(cs.h, 0, li, TOKK.elapsed, 0);
+      else if (t === "{slot}") rc.rc_line_tok(cs.h, 0, li, TOKK.slot, 0);
+      else if (m[1] != null) rc.rc_line_tok(cs.h, 0, li, TOKK.slot, slotCode[m[1]]);
+      else if (m[2] != null) rc.rc_line_tok(cs.h, 0, li, TOKK.count, cs.counterIdx[m[2]]);
+      pos = m.index + t.length;
+    }
+    const tailRun = line.content.slice(pos);
+    if (tailRun) rc.rc_line_lit(cs.h, 0, li, scratchPtr, BigInt(putBytes(tailRun)));
+  }
+
+  const compareFrames = (label) => {
+    fig.scenes.a.lines.forEach((line, li) => {
+      eq(coreRenderLine(cs.h, li), st._resolve(line.content), `${label} line ${li}`);
+    });
+  };
+  const injectText = (name, val) => {
+    st.inject(name ? `text:${name}` : "text", val);
+    rc.rc_stage_text(cs.h, name ? slotCode[name] : 0, scratchPtr, BigInt(putBytes(val)));
+    rc.rc_stage_inject(cs.h, cs.eventCode.text);
+  };
+
+  compareFrames("t0");                                     // empty slots, n=0
+  st.inject("single"); rc.rc_stage_inject(cs.h, cs.eventCode.single);
+  st.inject("single"); rc.rc_stage_inject(cs.h, cs.eventCode.single);
+  injectText("tag", "T");
+  injectText("", "dflt");
+  compareFrames("after taps+slots");
+  st.step(33.3); rc.rc_stage_step(cs.h, 33.3);             // 56.7 s left → "57"
+  compareFrames("mid-countdown");
+  st.step(59.0); rc.rc_stage_step(cs.h, 59.0);             // crosses the loop boundary
+  compareFrames("after self-loop");
+  rc.rc_stage_free(cs.h);
+})();
+
 // clock strings through the REAL render path: a live countdown Stage's own
 // _resolve of {remaining}/{elapsed} vs the wasm core's formatting — the first
 // string produced by the Rust core matching real shipped JS output.
@@ -293,4 +370,4 @@ function runScheduleParity(fig, schedule, counters, label) {
   }
 })();
 
-console.log(`OK — wasm/JS parity: ${checks} swept checks + 6 real-Stage scenarios agree`);
+console.log(`OK — wasm/JS parity: ${checks} swept checks + 7 real-Stage scenarios agree`);

@@ -83,7 +83,13 @@ def _bind_stage_abi(lib):
         ("rc_stage_add_counter", ctypes.c_int32,
          [ctypes.c_int32, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64]),
         ("rc_stage_add_scene", ctypes.c_int32,
-         [ctypes.c_int32, ctypes.c_int32, ctypes.c_double]),
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_double, ctypes.c_int32]),
+        ("rc_stage_scene_range", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_double, ctypes.c_double]),
+        ("rc_stage_set_battery", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_uint32]),
+        ("rc_stage_battery_level", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_stage_seed", ctypes.c_int32, [ctypes.c_int32, ctypes.c_uint64]),
         ("rc_tx_begin", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
         ("rc_tx_guard", ctypes.c_int32,
          [ctypes.c_int32, ctypes.c_int32, ctypes.c_uint8, ctypes.c_int64]),
@@ -93,12 +99,25 @@ def _bind_stage_abi(lib):
         ("rc_tx_commit_timeout", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
         ("rc_tx_commit_event", ctypes.c_int32,
          [ctypes.c_int32, ctypes.c_int32, ctypes.c_uint32]),
+        ("rc_stage_add_line", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
+        ("rc_line_lit", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_char_p,
+          ctypes.c_uint64]),
+        ("rc_line_tok", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_uint8,
+          ctypes.c_uint32]),
+        ("rc_stage_text", ctypes.c_int32,
+         [ctypes.c_int32, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint64]),
+        ("rc_stage_render_line", ctypes.c_int64,
+         [ctypes.c_int32, ctypes.c_int32, ctypes.c_char_p, ctypes.c_uint64]),
+        ("rc_stage_line_count", ctypes.c_int32, [ctypes.c_int32]),
         ("rc_stage_start", ctypes.c_int32, [ctypes.c_int32, ctypes.c_int32]),
         ("rc_stage_step", ctypes.c_int32, [ctypes.c_int32, ctypes.c_double]),
         ("rc_stage_inject", ctypes.c_int32, [ctypes.c_int32, ctypes.c_uint32]),
         ("rc_stage_counter", ctypes.c_int64, [ctypes.c_int32, ctypes.c_int32]),
         ("rc_stage_clock", ctypes.c_double, [ctypes.c_int32]),
         ("rc_stage_elapsed", ctypes.c_double, [ctypes.c_int32]),
+        ("rc_stage_last_elapsed", ctypes.c_double, [ctypes.c_int32]),
         ("rc_stage_remaining", ctypes.c_double, [ctypes.c_int32]),
         ("rc_stage_current", ctypes.c_int32, [ctypes.c_int32]),
         ("rc_stage_ended", ctypes.c_int32, [ctypes.c_int32]),
@@ -112,14 +131,22 @@ def _bind_stage_abi(lib):
 
 
 TARGET_SELF, TARGET_END = -1, -2
+TOK = {"remaining": 1, "remaining_s": 2, "elapsed": 3, "elapsed_ms": 4,
+       "slot": 5, "count": 6}
+# order matters: remaining_s before remaining, elapsed_ms before elapsed
+_TOKEN_RE = __import__("re").compile(
+    r"\{remaining_s\}|\{remaining\}|\{elapsed_ms\}|\{elapsed\}"
+    r"|\{slot:(\w+)\}|\{slot\}|\{count:(\w+)\}")
 
 
 class CoreStage:
     """The Python-binding prototype: intern a real Figment's strings (scene
-    ids, counter names, event names) to indices/codes and load it into the
-    Rust core Stage. All state-machine behavior comes back over the ABI."""
+    ids, counter names, event names, slot names) to indices/codes, tokenize
+    its line templates, and load everything into the Rust core Stage. All
+    interpreter behavior — stepping, guards, slots, rendering — comes back
+    over the ABI."""
 
-    def __init__(self, core, fig):
+    def __init__(self, core, fig, battery_level=100, seed=None):
         from dreamlayer.reality_compiler.v2.figment import END, SELF
         _bind_stage_abi(core)
         self.core = core
@@ -129,10 +156,16 @@ class CoreStage:
         for name, decl in fig.counters.items():
             self.counter_idx[name] = core.rc_stage_add_counter(
                 self.h, decl.start, decl.lo, decl.hi)
-        self.scene_idx = {sid: core.rc_stage_add_scene(
-            self.h, 1 if s.duration_sec is not None else 0,
-            float(s.duration_sec or 0.0)) for sid, s in fig.scenes.items()}
+        self.scene_idx = {}
+        for sid, s in fig.scenes.items():
+            self.scene_idx[sid] = core.rc_stage_add_scene(
+                self.h, 1 if s.duration_sec is not None else 0,
+                float(s.duration_sec or 0.0), 1 if s.tick else 0)
+            if s.duration_range is not None:
+                lo, hi = s.duration_range
+                core.rc_stage_scene_range(self.h, self.scene_idx[sid], lo, hi)
         self.event_code = {}
+        self.slot_code = {}   # named slots; "" (default) is code 0 in the core
 
         def target_of(t):
             if t.target == END:
@@ -160,19 +193,93 @@ class CoreStage:
             for t in s.on_timeout:
                 build_tx(t)
                 core.rc_tx_commit_timeout(self.h, self.scene_idx[sid])
+            for ln in s.lines:
+                self._load_line(sid, ln.content)
+        if fig.battery_below is not None:
+            code = self.event_code.setdefault(
+                "battery_low", len(self.event_code) + 1)
+            core.rc_stage_set_battery(
+                self.h, fig.battery_below, battery_level, code)
+        if seed is not None:
+            core.rc_stage_seed(self.h, seed)
         core.rc_stage_start(self.h, self.scene_idx[fig.initial])
+
+    def _slot(self, name):
+        if name == "":
+            return 0
+        return self.slot_code.setdefault(name, len(self.slot_code) + 1)
+
+    def _load_line(self, sid, content):
+        """Tokenize one authored template into core segments — the parse the
+        interpreters redo per frame happens exactly once here."""
+        core, sc = self.core, self.scene_idx[sid]
+        li = core.rc_stage_add_line(self.h, sc)
+
+        def lit(text):
+            if text:
+                b = text.encode("utf-8")
+                core.rc_line_lit(self.h, sc, li, b, len(b))
+
+        pos = 0
+        for m in _TOKEN_RE.finditer(content):
+            lit(content[pos:m.start()])
+            tok = m.group(0)
+            if tok == "{remaining}":
+                core.rc_line_tok(self.h, sc, li, TOK["remaining"], 0)
+            elif tok == "{remaining_s}":
+                core.rc_line_tok(self.h, sc, li, TOK["remaining_s"], 0)
+            elif tok == "{elapsed}":
+                core.rc_line_tok(self.h, sc, li, TOK["elapsed"], 0)
+            elif tok == "{elapsed_ms}":
+                core.rc_line_tok(self.h, sc, li, TOK["elapsed_ms"], 0)
+            elif tok == "{slot}":
+                core.rc_line_tok(self.h, sc, li, TOK["slot"], 0)
+            elif m.group(1) is not None:      # {slot:name}
+                core.rc_line_tok(self.h, sc, li, TOK["slot"], self._slot(m.group(1)))
+            elif m.group(2) is not None:      # {count:name}
+                if m.group(2) in self.counter_idx:
+                    core.rc_line_tok(self.h, sc, li, TOK["count"],
+                                     self.counter_idx[m.group(2)])
+                else:
+                    lit(tok)   # undeclared counter stays literal (reference semantics)
+            pos = m.end()
+        lit(content[pos:])
 
     def step(self, dt):
         self.core.rc_stage_step(self.h, dt)
 
-    def inject(self, event):
+    def inject(self, event, text=None):
+        """Mirror Stage.inject: a text[:name] event stores the slot value,
+        then fires the base "text" trigger; everything else dispatches."""
+        if event == "text" or event.startswith("text:"):
+            name = event[5:] if event.startswith("text:") else ""
+            if text is not None:
+                b = text.encode("utf-8")
+                self.core.rc_stage_text(self.h, self._slot(name), b, len(b))
+            return self.core.rc_stage_inject(
+                self.h, self.event_code.get("text", 0))
         return self.core.rc_stage_inject(self.h, self.event_code.get(event, 0))
+
+    def render_lines(self):
+        # frame-assembly policy mirrors Stage.frame(): after END the display
+        # clears (an empty ended frame) — presentation, so it lives here in
+        # the binding, like pulse phase and cadence do
+        if self.core.rc_stage_ended(self.h):
+            return []
+        n = self.core.rc_stage_line_count(self.h)
+        out = []
+        for i in range(max(0, n)):
+            buf = ctypes.create_string_buffer(64)
+            ln = self.core.rc_stage_render_line(self.h, i, buf, 64)
+            out.append(buf.raw[:ln].decode("utf-8") if ln >= 0 else None)
+        return out
 
     def state(self, counters):
         c = self.core
         return {
             "clock": c.rc_stage_clock(self.h),
             "elapsed": c.rc_stage_elapsed(self.h),
+            "last_elapsed": c.rc_stage_last_elapsed(self.h),
             "remaining": c.rc_stage_remaining(self.h),
             "ended": bool(c.rc_stage_ended(self.h)),
             "emits": c.rc_stage_emits(self.h),
@@ -191,6 +298,7 @@ def _py_state(st, counters):
     return {
         "clock": st.clock,
         "elapsed": st.scene_elapsed,
+        "last_elapsed": st._last_elapsed,
         "remaining": st.remaining(),
         "ended": st.ended,
         "emits": len(st.emits),
@@ -198,6 +306,22 @@ def _py_state(st, counters):
         "tokens": st._tokens,
         "counters": {n: v for n, v in st.counters.items() if n in counters},
     }
+
+
+class SplitMix:
+    """The core's duration_range stream, mirrored: hand this to the reference
+    Stage as its rng and seed the core identically — bit-identical rolls."""
+
+    def __init__(self, seed):
+        self.s = seed & (2**64 - 1)
+
+    def uniform(self, lo, hi):
+        self.s = (self.s + 0x9E3779B97F4A7C15) % 2**64
+        z = self.s
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) % 2**64
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) % 2**64
+        z ^= z >> 31
+        return lo + (hi - lo) * ((z >> 11) * (1.0 / 9007199254740992.0))
 
 
 def _py_guard(val, cmp, threshold):
@@ -347,19 +471,26 @@ class TestStageStateMachineParity:
     exactly (floats bit-for-bit — same f64 ops in the same order) at every
     step, through to termination."""
 
-    def _run_schedule(self, core, fig, schedule, counters=()):
+    def _run_schedule(self, core, fig, schedule, counters=(), render=False,
+                      battery_level=100, seed=None):
         from dreamlayer.reality_compiler.v2 import Stage
-        py = Stage(fig)
-        rs = CoreStage(core, fig)
+        py = Stage(fig, rng=SplitMix(seed) if seed is not None else None,
+                   battery_level=battery_level)
+        rs = CoreStage(core, fig, battery_level=battery_level, seed=seed)
         try:
-            for i, (kind, arg) in enumerate(schedule):
+            for i, item in enumerate(schedule):
+                kind, arg = item[0], item[1]
                 if kind == "step":
                     py.step(arg)
                     rs.step(arg)
                 else:
-                    py.inject(arg)
-                    rs.inject(arg)
-                assert _py_state(py, counters) == rs.state(counters), (i, kind, arg)
+                    text = item[2] if len(item) > 2 else None
+                    py.inject(arg, text) if text is not None else py.inject(arg)
+                    rs.inject(arg, text)
+                assert _py_state(py, counters) == rs.state(counters), (i, item)
+                if render:
+                    py_lines = [ln.text for ln in py.frame().lines]
+                    assert py_lines == rs.render_lines(), (i, item)
             return _py_state(py, counters)
         finally:
             rs.close()
@@ -420,6 +551,101 @@ class TestStageStateMachineParity:
         # 0.75 tokens, so the last tap drops
         assert final["emits"] == 5 + 3
         assert final["dropped"] == 19 - final["emits"]
+
+
+class TestTextAndRenderParity:
+    """The text path in the core: slot store, tokenized templates, and line
+    rendering — checked frame-for-frame against the real Stage's frame()."""
+
+    _run = TestStageStateMachineParity._run_schedule
+
+    def test_rosetta_named_slots_render(self, core):
+        # the migration pilot itself: the shipped Rosetta figment, fed named
+        # slots, its three lines rendered by the core identically to frame()
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.rosetta_figment()
+        schedule = [("inject", "text:langs", "ES → EN"),
+                    ("inject", "text:translation", "hello, thanks"),
+                    ("inject", "text:original", "hola, gracias"),
+                    ("step", 0.05),
+                    ("inject", "text:translation", "see you tomorrow"),
+                    ("step", 1.0)]
+        self._run(core, fig, schedule, render=True)
+
+    def test_timer_countdown_renders_identically(self, core):
+        # {remaining}/{elapsed} through ragged steps across the minute boundary
+        from dreamlayer.reality_compiler.v2 import native
+        fig = native.timer_figment(180)
+        schedule = [("step", d) for d in (0.4, 11.6, 47.5, 59.7, 60.0, 5.3)]
+        self._run(core, fig, schedule, render=True)
+
+    def test_slot_cap_parity(self, core):
+        # fill 'keep' first, overflow with new names: 'keep' survives on both,
+        # and the rendered line agrees at every push
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, Transition, SELF, TextLine,
+        )
+        from dreamlayer.reality_compiler.v2.figment import MAX_SLOTS
+        fig = Figment(name="cap", initial="a")
+        a = fig.add_scene(Scene(id="a", lines=[TextLine("{slot:keep}", row=0)]))
+        a.on["text"] = Transition(target=SELF)
+        schedule = [("inject", "text:keep", "K")]
+        schedule += [("inject", "text:x%d" % i, "v") for i in range(MAX_SLOTS + 4)]
+        schedule += [("inject", "text:keep", "K2"), ("step", 0.05)]
+        self._run(core, fig, schedule, render=True)
+
+    def test_count_and_mixed_tokens_render(self, core):
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, CounterDecl, CounterOp, Transition, SELF, TextLine,
+        )
+        fig = Figment(name="mix", initial="a")
+        fig.add_counter(CounterDecl("n", start=0, lo=0, hi=99))
+        a = fig.add_scene(Scene(id="a", duration_sec=90.0, tick="countdown",
+                                lines=[TextLine("n={count:n} t={remaining}", row=0),
+                                       TextLine("{slot} {slot:tag}", row=1)],
+                                on_timeout=[Transition(target=SELF)]))
+        a.on["single"] = Transition(
+            target=SELF, counter_ops=[CounterOp("n", "inc", 1)])
+        a.on["text"] = Transition(target=SELF)
+        schedule = ([("inject", "single")] * 3
+                    + [("inject", "text", "dflt"), ("inject", "text:tag", "T"),
+                       ("step", 33.3), ("inject", "single"), ("step", 66.6)])
+        self._run(core, fig, schedule, counters=("n",), render=True)
+
+
+class TestPeripheryParity:
+    _run = TestStageStateMachineParity._run_schedule
+
+    def test_battery_low_dispatch_and_cooldown(self, core):
+        # level below the threshold: battery_low fires on the first advance,
+        # then again only after the 60 s cooldown — counter tracked in lockstep
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, CounterDecl, CounterOp, Transition, SELF, TextLine,
+        )
+        fig = Figment(name="batt", initial="a")
+        fig.battery_below = 30
+        fig.add_counter(CounterDecl("warn", start=0, lo=0, hi=99))
+        a = fig.add_scene(Scene(id="a", lines=[TextLine("{count:warn}", row=0)]))
+        a.on["battery_low"] = Transition(
+            target=SELF, counter_ops=[CounterOp("warn", "inc", 1)])
+        schedule = [("step", d) for d in (1.0, 30.0, 30.5, 10.0, 55.0)]
+        final = self._run(core, fig, schedule, counters=("warn",),
+                          render=True, battery_level=20)
+        assert final["counters"]["warn"] == 3    # t≈0, ≈61.5, ≈126.5
+
+    def test_duration_range_trajectory_with_mirrored_rng(self, core):
+        # a self-looping random-duration scene: the reference Stage rolls via
+        # the mirrored SplitMix rng, the core via its own seeded stream —
+        # identical rolls, identical trajectories, bit for bit
+        from dreamlayer.reality_compiler.v2 import (
+            Figment, Scene, Transition, SELF, TextLine,
+        )
+        fig = Figment(name="rng", initial="a")
+        fig.add_scene(Scene(id="a", duration_range=(1.0, 3.0), tick="countup",
+                            lines=[TextLine("{elapsed}", row=0)],
+                            on_timeout=[Transition(target=SELF)]))
+        schedule = [("step", 2.2)] * 8
+        self._run(core, fig, schedule, render=True, seed=42)
 
 
 def test_core_is_exhaustively_equivalent_on_the_hot_path(core):

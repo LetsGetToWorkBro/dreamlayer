@@ -131,14 +131,38 @@ ended, counters, emits, drops, tokens) **bit-for-bit at every step**, including
 the shipped `native` timer and interval figments on the Python side. A language
 Stage that drives this holds no state-machine logic of its own.
 
-**What is deliberately *not* in the core yet.** Text: the slot store and the
-`_resolve` substitution walk (`{slot:name}`/`{count:name}`) — the remaining
-string-heavy piece, now buildable on the proven buffer protocol. Periphery:
-`battery_below` dispatch and random-duration scenes (`duration_range`), which
-bindings keep for now. Rendering stays binding-side by design (it is
-display-hardware-specific). Honest status: the state machine, decisions, and
-value formatting are in the core and proven on both shipping targets; the text
-path is not.
+**The text path — slots, templates, rendering.** The remaining string-heavy
+half of `_resolve` is now in the core: the slot store (default + up to
+`MAX_SLOTS` named values, accepted by exactly the `accept_slot` rule, clamped
+to `MAX_TEXT_LEN`), line templates loaded **pre-tokenized** by the binding
+(`rc_line_lit`/`rc_line_tok` — the parse the interpreters redo per frame
+happens once at load), and `rc_stage_render_line`, which composes
+literals + `{remaining}`/`{elapsed}`/`{slot:x}`/`{count:n}` from the core's own
+state and clamps like the interpreter does. One deliberate, documented
+improvement over the chained-replace interpreters: slot *values* are inert
+data — a pushed value containing `{count:n}` renders literally instead of
+being re-substituted, so host text can never smuggle tokens into the display
+(in-grammar content, which is all the N3 generator emits, behaves
+identically). Inbound strings ride the same scratch-buffer protocol as
+outbound on wasm.
+
+**The periphery.** `battery_below` dispatch (level-below-threshold with the
+60 s cooldown, mid-`_advance_clock`, exactly as the reference) and
+random-duration scenes (`duration_range`) are in the core too. Randomness is a
+seedable splitmix64 → 53-bit-uniform stream (`rc_stage_seed`); the reference
+Stage accepts any `rng` object, so a binding that mirrors the stream gets
+**bit-identical trajectories** — the Python parity suite does exactly that.
+
+**Code-reachable migration: complete.** Every part of the interpreter that can
+be proven from this repo now lives in the core and is parity-locked on both
+shipping targets — the Python suite compares full state *and rendered frames*
+per step (including the shipped Rosetta and timer figments; render parity runs
+frame-for-frame against `Stage.frame()`), the wasm harness does the same
+against the real `figment.js` including its own `_resolve`. What stays
+binding-side is presentation policy, by design: frame assembly (the empty
+ended-frame, pulse phase, cadence envelope, rows/sizes/colors) and string
+interning. What remains for the ADR is the device work: the `mlua` binding,
+the `thumbv7em-none-eabi` build, and firmware integration.
 
 ## Options considered
 
@@ -200,15 +224,14 @@ first validation — a second binding target (wasm, checked against the shipped
 real language boundary. The next concrete steps, in order of decreasing
 certainty and increasing cost:
 
-1. **Grow the core past the caps** to a full scene *step*. **Substantially
-   done**: the stateful `Stage` (stepping, timeout graph, guards, counter ops,
-   event dispatch, token bucket) is in the core and trajectory-proven
-   bit-for-bit against both real Stages, on real figments. Remaining in this
-   lane: the **slot store + `_resolve` substitution walk** (string-heavy, rides
-   the proven buffer protocol), and the `battery_below`/`duration_range`
-   periphery. Each lands with the Python and wasm parity harnesses kept green.
-   With the state machine in the core, the write-thrice savings are no longer
-   prospective — a semantic change to stepping/guards/budget now has ONE home.
+1. **Grow the core past the caps** to a full scene *step*. **Done** — the
+   stateful `Stage` (stepping, timeout graph, guards, counter ops, event
+   dispatch, token bucket), the text path (slot store, tokenized templates,
+   line rendering), and the periphery (battery dispatch, seeded
+   `duration_range`) are all in the core, trajectory- and frame-proven
+   bit-for-bit against both real Stages on real figments. A semantic change to
+   the interpreter now has ONE home; the language Stages are reducible to
+   bindings (interning, transport, presentation).
 2. **The Lua/device binding** (`mlua` + a `thumbv7em-none-eabi` build), which is
    where the memory-safety payoff lives but also the firmware-integration cost
    (owner/hardware work).

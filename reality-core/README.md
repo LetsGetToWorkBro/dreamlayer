@@ -23,14 +23,20 @@ proved with CrossHair and M4 mutation-hardened (`reality_compiler/v2/contracts.p
 | `rc_guard_eval` | `interpreter._guard`  | does `counter <cmp> threshold` hold? — the guarded-timeout decision that ends a bounded loop |
 | `rc_fmt_clock`  | `_fmt_clock` / `_fmtClock` | the `{remaining}`/`{elapsed}` clock string ("48", "2:48") — the first string across the ABI (caller buffer + `rc_scratch_ptr`/`rc_scratch_len` for wasm) |
 
-…and, the big one, **the state machine itself** (`src/stage.rs`): a stateful
+…and, the big one, **the interpreter itself** (`src/stage.rs`): a stateful
 `Stage` behind a builder ABI (`rc_stage_new/add_counter/add_scene`,
-`rc_tx_begin/guard/op/emit/commit_*`, then `start/step/inject` + state
-readers). Scene stepping with the exact float-epsilon subdivision, the guarded
-timeout graph, counter ops, event dispatch, and the emit token bucket — fixed
-capacity (the grammar's own proof envelope), zero allocation, a static pool of
-4 (the glass runs one figment at a time). Bindings intern strings to
-indices/codes; the ABI speaks integers.
+`rc_tx_begin/guard/op/emit/commit_*`, line templates via
+`rc_stage_add_line`/`rc_line_lit`/`rc_line_tok`, then
+`start/step/inject/text/render_line` + state readers). Scene stepping with the
+exact float-epsilon subdivision, the guarded timeout graph, counter ops, event
+dispatch, the emit token bucket, the slot store, per-frame line rendering,
+battery-low dispatch with its 60 s cooldown, and seeded random-duration scenes
+(splitmix64) — fixed capacity (the grammar's own proof envelope), zero
+allocation, a static pool of 4 (the glass runs one figment at a time).
+Bindings intern strings to indices/codes and keep presentation policy (frame
+assembly, pulse phase, cadence, rows/colors); the ABI speaks integers plus the
+scratch-buffer string protocol. Slot values are inert data by construction —
+pushed text can't smuggle `{tokens}` back into a template.
 
 No allocation, no deps, `no_std`-ready as written (strings compose in a stack
 array and copy into a caller/scratch buffer). Both parity harnesses run
