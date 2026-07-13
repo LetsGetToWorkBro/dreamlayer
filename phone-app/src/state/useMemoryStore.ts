@@ -92,10 +92,12 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   service: {
     lastCard: { kind: "Promise", primary: "You owe Marcus the signed lease", lines: ["due Friday", "tap to open the thread"] },
     purgeAll: () => {
-      // Honor the erase where the memories actually live: tell the Brain to
-      // drop its kept anchors too, so the next refresh() can't quietly
-      // resurrect what the user just erased ("This cannot be undone.").
-      set({ memories: [] });
+      // "This cannot be undone." Honor it in all three places the memories
+      // live: in-memory state, the Brain's kept anchors, AND the on-disk
+      // cache — otherwise hydrateCache() resurrects the erased list on the
+      // next launch and the promise is a lie.
+      set({ memories: [], fetchedAt: 0 });
+      AsyncStorage.removeItem(CACHE_KEY).catch(() => {});
       const m = target();
       if (m) req(m, "/dreamlayer/memories/purge", { method: "POST", body: "{}" }).catch(() => {});
     },
