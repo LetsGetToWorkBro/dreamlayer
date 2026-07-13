@@ -59,11 +59,12 @@ class RetentionSweep:
     positive bias is the dreamer's vote to keep a memory past its window."""
 
     def __init__(self, db, policy: RetentionPolicy | None = None,
-                 bias=None, now_fn=None) -> None:
+                 bias=None, now_fn=None, ann=None) -> None:
         self.db = db
         self.policy = policy or RetentionPolicy()
         self.bias = bias
         self._now = now_fn or time.time
+        self.ann = ann          # evict expired vectors too, if an index is wired
 
     def sweep(self) -> RetentionReport:
         report = RetentionReport()
@@ -90,6 +91,8 @@ class RetentionSweep:
                 report.kept_promoted += 1     # the nights kept voting for it
                 continue
             self.db.purge_memory(m["id"])
+            if self.ann is not None:
+                self.ann.remove(m["id"])      # don't leave the vector behind
             report.expired.append(m["id"])
         return report
 

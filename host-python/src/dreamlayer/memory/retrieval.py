@@ -24,6 +24,21 @@ class Retriever:
         if self.ann is not None and embedding:
             self.ann.add(memory_id, embedding)
 
+    def purge_memory(self, memory_id: int) -> None:
+        """Forget one memory *everywhere* — the row and its vector. Without
+        the ANN eviction, a "forget that" left the embedding in the .usearch
+        index forever: recall could still surface it and the index grew with
+        the dead. Keep the two stores in step."""
+        self.db.purge_memory(memory_id)
+        if self.ann is not None:
+            self.ann.remove(memory_id)
+
+    def purge_all(self) -> None:
+        """Forget everything — rows and the whole index."""
+        self.db.purge_all()
+        if self.ann is not None:
+            self.ann.rebuild(self.db)        # db is now empty → index cleared
+
     def search(self, query: str, kind=None, top_k=3):
         qv = self.embedder.embed(query)
 
