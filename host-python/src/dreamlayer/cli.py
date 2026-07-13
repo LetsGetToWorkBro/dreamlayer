@@ -239,7 +239,10 @@ def cmd_validate(args) -> int:
         _err(f"{BAD} {e}")
         return 2
     # validate as if the host can grant everything, so only real problems fail.
-    report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES))
+    # run_smoke=True: this is the author asking to run their own code — the
+    # smoke load catches an import/register break here, not on the glasses.
+    report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES),
+                      run_smoke=True)
     _p(f"{pkg.manifest.name} v{pkg.manifest.version} (api {pkg.manifest.api})")
     return _print_report(pkg.manifest.name, report)
 
@@ -386,7 +389,9 @@ def _dev_pass(path: str, brain_url: str, tok: str) -> None:
     except Exception as e:
         _p(f"  {BAD} {e}")
         return
-    report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES))
+    # author's own code in the dev loop — smoke-load it to catch a break early.
+    report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES),
+                      run_smoke=True)
     if not report.ok:
         for e in report.errors:
             _p(f"  {BAD} {e}")

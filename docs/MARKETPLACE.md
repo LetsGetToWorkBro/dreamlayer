@@ -70,8 +70,13 @@ grants it; a device that can't grant a capability refuses the plugin outright.
 
 In-process Python **cannot be fully sandboxed** — a determined author can hide
 intent from a static scan. The static gate is real defence-in-depth for a
-**curated, reviewed** registry (integrity + declared capabilities + screen +
-smoke test), not a jail for hostile code. The hardening path, now built:
+**curated, reviewed** registry (integrity + declared capabilities + AST screen),
+not a jail for hostile code. The screen follows import aliases, so `import os as
+o; o.system(...)` and `from os import system as run` resolve to the real call
+and are caught — a rename is not a bypass. The gate **never executes** the
+package it is deciding whether to install; the optional smoke load (which does
+run the code, in a mock context) is an author-side check (`dreamlayer plugins
+validate`), off on the install path. The hardening path, now built:
 
 - **Curated registry** — every plugin lands by reviewed PR + CI gate (below).
 - **Signatures** — authors sign packages (Ed25519); clients verify against a
@@ -89,9 +94,12 @@ smoke test), not a jail for hostile code. The hardening path, now built:
   renderers, glance candidates, perceptors, brain tiers) **cannot** be proxied
   and are *rejected* for isolated loading — that refusal is the guarantee, not a
   gap. A hung child is killed at the deadline; a crashed child is recorded to
-  the health ledger, never fatal. Route through it with
-  `PluginStore.load_installed(orchestrator, isolate="untrusted")`: signed/
-  trusted packages still load in-process; everything else goes to the jail.
+  the health ledger, never fatal. This is the **default** for user-installed
+  packages: `PluginStore.load_installed(orchestrator)` runs unsigned/untrusted
+  code in the jail, and only a signed-by-a-trusted-key package (or an explicit
+  `isolate="trusted"` on a curated deployment) loads in-process. Installing a
+  plugin no longer grants it host authority by default. (First-party bundled
+  plugins don't come through this path — they load in-process as reviewed code.)
 - **Runtime-enforced capabilities (built)** — for a plugin shipped as a compiled
   **WASM component**, `plugins/wasm_component_host.py` runs it *in-process* under
   wasmtime with **zero ambient authority**: the guest can call only the host

@@ -196,17 +196,22 @@ class PluginStore:
 
     # -- load installed into a running host ----------------------------------
 
-    def load_installed(self, orchestrator, isolate: str = "trusted") -> list:
+    def load_installed(self, orchestrator, isolate: str = "untrusted") -> list:
         """Validate-then-load every installed plugin into the orchestrator.
         Re-validates on load (defence in depth), skips any that no longer pass.
 
-        isolate="trusted" (default): everything runs in-process (the curated-
-        registry model — reviewed code you read).
-        isolate="untrusted": packages NOT signed by a trusted key are run in a
-        capability-mediated subprocess (plugins/isolation.py) instead of the
-        host; only their pure-data providers cross the jail. Signed/trusted
-        packages still load in-process. Returns the in-process LoadResult; the
-        isolated hosts are stored on `self.isolated` (call .stop() to reclaim)."""
+        isolate="untrusted" (default): packages NOT signed by a trusted key run
+        in a capability-mediated jail (WASM when a runtime is present, else the
+        subprocess host in plugins/isolation.py) instead of the host; only their
+        pure-data providers cross the jail. This is the secure default for
+        user-installed third-party code — it never gets ambient authority on the
+        host just for being installed. Signed/trusted packages still load
+        in-process. (First-party bundled plugins don't come through here; they
+        load in-process via Orchestrator.load_plugins as reviewed code.)
+        isolate="trusted": everything runs in-process — the curated deployment
+        where every installed package has been read and vouched for.
+        Returns the in-process LoadResult; the isolated hosts are stored on
+        `self.isolated` (call .stop() to reclaim)."""
         plugins = []
         self.isolated = []
         for name in self.installed():

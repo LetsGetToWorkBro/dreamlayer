@@ -15,13 +15,16 @@ lines of defence, cheapest first:
      dangerous operations (subprocess, eval/exec, raw sockets, file writes,
      ctypes, dynamic import…). Each is allowed *only* if the manifest declared
      the matching capability — no undeclared reach. Nothing is executed.
-  4. **Smoke load** — the module is imported in a fresh namespace and its
-     factory is built and registered against a *mock* context. If it fails to
-     import, its entry factory is missing, or `register()` raises, it fails
+  4. **Smoke load** (opt-in) — the module is imported in a fresh namespace and
+     its factory is built and registered against a *mock* context. If it fails
+     to import, its entry factory is missing, or `register()` raises, it fails
      here — not on your glasses. (The mock grants only the declared capabilities
      plus the always-open extension surfaces, so a plugin that reaches for a
      host capability it didn't declare has already been caught by the static
-     scan in step 3.)
+     scan in step 3.) This step *executes plugin code*, so it is **off by
+     default** and runs only when the caller passes `run_smoke=True`. Author
+     tooling opts in to test its own code; the store install/load path never
+     does — validating an untrusted package must not run it.
 
 Honest limit: in-process Python cannot be *fully* sandboxed — a determined
 author can hide intent from a static scan. This gate is defence-in-depth
@@ -83,6 +86,11 @@ class _DangerScanner(ast.NodeVisitor):
     def __init__(self, allowed: set):
         self.allowed = allowed
         self.issues: list = []
+        # alias → real module, so `import os as o` (then `o.system(…)`) and
+        # `from os import system as run` don't slip past the call table under a
+        # renamed binding. Without this, aliasing was a trivial bypass.
+        self._mod_alias: dict = {}      # local name -> dangerous module
+        self._call_alias: dict = {}     # local name -> (module, attr)
 
     def _need(self, cap, what):
         if cap is None:
@@ -93,6 +101,8 @@ class _DangerScanner(ast.NodeVisitor):
     def visit_Import(self, node):
         for a in node.names:
             top = a.name.split(".")[0]
+            local = (a.asname or a.name).split(".")[0]
+            self._mod_alias[local] = top           # remember the (aliased) name
             if top in _DANGER_IMPORTS:
                 self._need(_DANGER_IMPORTS[top], f"import {top}")
         self.generic_visit(node)
@@ -104,19 +114,27 @@ class _DangerScanner(ast.NodeVisitor):
         # `from os import system` / `from shutil import rmtree` / `from
         # subprocess import run` bind a dangerous callable under a bare name the
         # attribute scan (os.system(…)) would never see — screen the imported
-        # names against the same call table.
+        # names against the same call table, following any `as` rename.
         for a in node.names:
             cap = _DANGER_CALLS.get((top, a.name)) or _DANGER_CALLS.get((top, "*"))
             if cap is not None or (top, a.name) in _DANGER_CALLS:
+                self._call_alias[a.asname or a.name] = (top, a.name)
                 self._need(cap, f"from {top} import {a.name}")
         self.generic_visit(node)
 
     def visit_Call(self, node):
         f = node.func
-        if isinstance(f, ast.Name) and f.id in _DANGER_BUILTINS:
-            self._need(_DANGER_BUILTINS[f.id], f"{f.id}()")
+        if isinstance(f, ast.Name):
+            if f.id in _DANGER_BUILTINS:
+                self._need(_DANGER_BUILTINS[f.id], f"{f.id}()")
+            elif f.id in self._call_alias:         # renamed `from … import x`
+                mod, attr = self._call_alias[f.id]
+                cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
+                self._need(cap, f"{mod}.{attr}()")
         elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-            mod, attr = f.value.id, f.attr
+            # resolve the receiver through the import-alias map (o -> os)
+            mod = self._mod_alias.get(f.value.id, f.value.id)
+            attr = f.attr
             cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
             if cap is not None or (mod, attr) in _DANGER_CALLS:
                 self._need(cap, f"{mod}.{attr}()")
@@ -215,12 +233,19 @@ def check_signature(package: PluginPackage,
 
 
 def validate(package: PluginPackage, host_capabilities=frozenset(),
-             run_smoke: bool = True,
+             run_smoke: bool = False,
              trusted_keys: Optional[dict] = None) -> ValidationReport:
     """The whole gate. `host_capabilities` are what this device can grant; a
     plugin requiring more is a hard error (it can't run here safely).
     `trusted_keys` maps publisher name → Ed25519 pubkey hex (registry/keys.json);
-    when provided, signed packages must be signed by a registered key."""
+    when provided, signed packages must be signed by a registered key.
+
+    `run_smoke` defaults to **False**: the smoke load in step 4 *executes* the
+    plugin's module code, so the install/load path (`PluginStore`) must never
+    turn it on for code it hasn't already decided to trust — validating a
+    package is not consent to run it. Author tooling (`dreamlayer plugins
+    validate`, `dev --watch`) sets `run_smoke=True` explicitly: that's the
+    author asking to run their own code to see that it imports and registers."""
     m = package.manifest
     report = ValidationReport(capabilities=tuple(m.requires))
 

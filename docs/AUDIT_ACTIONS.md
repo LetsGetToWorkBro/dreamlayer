@@ -114,6 +114,22 @@ the "350ms Club" seam ship; the model does not.
       candidate model, so day-one silicon has a day-one model
 - [ ] wire the Vela compile step (needs the vendor toolchain + real silicon)
 
+### 8.1b Plugin signing: sign the first-party catalogue (P1-10)
+The gate now defaults to the secure posture — the validation gate never
+executes a package on the install path (smoke is author-opt-in), its AST
+screen follows import aliases (`import os as o; o.system(...)` is caught),
+and `load_installed` defaults to `isolate="untrusted"` so unsigned
+third-party code runs in the capability jail, not the host. The one part
+a terminal cannot do is mint the trust root: the first-party catalogue
+ships under the curated-registry model, unsigned, because signing it needs
+a private key that must never touch the repo.
+- [ ] generate the `DreamLayer Team` Ed25519 keypair off-repo; register
+      ONLY the public key in `registry/keys.json` (`publishers` is empty by
+      design until then); sign the first-party packages; keep the private
+      key off every machine that pushes to the repo. Once signed, the
+      first-party plugins take the in-process trusted path and the
+      untrusted-by-default jail applies to everyone else.
+
 ### 8.2 WASM tier: an operator-provided runtime (3.4)
 `plugins/wasm_host.py` is wired as the strongest jail — capability→WASI grant
 mapping and tier selection are tested; the store falls back to the OS-sandboxed

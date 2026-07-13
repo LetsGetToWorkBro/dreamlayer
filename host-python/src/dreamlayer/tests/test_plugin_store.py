@@ -162,7 +162,9 @@ def test_validate_catches_a_plugin_that_throws_on_register():
                                source="from dreamlayer.plugins import make_plugin\n"
                                       "def _r(c):\n raise RuntimeError('boom')\n"
                                       "def p():\n return make_plugin('boom', _r)")
-    r = validate(boom, host_capabilities=frozenset())
+    # smoke load is opt-in (it runs plugin code); the author-facing gate turns
+    # it on. Without run_smoke the register() break wouldn't be exercised.
+    r = validate(boom, host_capabilities=frozenset(), run_smoke=True)
     assert not r.ok and any("register()" in e for e in r.errors)
 
 
@@ -219,8 +221,60 @@ def test_sideload_and_load_into_orchestrator(tmp_path):
     store = PluginStore(tmp_path, host_capabilities=frozenset({"glance"}))
     assert store.install_package(good_package()).ok
     orc = Orchestrator(FakeBridge())
-    result = store.load_installed(orc)
+    # isolate="trusted": the curated in-process path (this package was reviewed).
+    # The secure default (isolate="untrusted") routes unsigned code to the jail
+    # instead — see test_default_isolates_unsigned_installed_plugin below.
+    result = store.load_installed(orc, isolate="trusted")
     assert result.loaded == ["gadget"]
     # the installed plugin's lens is now live in the arbiter
     d = orc.glance_arbiter.arbitrate(GlanceReading("object", 0.8, {}))
     assert d.winner is not None and d.winner.lens == "gadget"
+
+
+# an unsigned object-provider plugin — a pure-data extension point the jail can
+# proxy (matches/build → panel rows), so it demonstrably crosses into isolation.
+JAILABLE_SRC = '''
+from dreamlayer.plugins import make_plugin
+from dreamlayer.object_lens.schema import PanelRow
+
+class MugProvider:
+    facet, name = "own", "jailed-mug"
+    def matches(self, s):
+        return getattr(s, "label", "") == "mug"
+    def build(self, s, now=None):
+        return [PanelRow(label="from the jail", detail="ok", kind="note",
+                         value=None, source="jailed-mug")]
+
+def obj_plugin():
+    return make_plugin("jailed-mug",
+                       lambda c: c.add_object_provider(MugProvider()),
+                       requires=("object_lens",))
+'''
+
+
+def _jailable_package():
+    return PluginPackage.build(name="jailed-mug", version="1.0.0",
+                               entry="plugin:obj_plugin", source=JAILABLE_SRC,
+                               requires=("object_lens",))
+
+
+def test_default_isolates_unsigned_installed_plugin(tmp_path):
+    # P1-10: an installed, unsigned third-party package must NOT get in-process
+    # authority just for being installed. The default routes it to the jail, so
+    # it never appears in the in-process LoadResult — it lives in store.isolated,
+    # and only its pure-data rows cross back.
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(_jailable_package()).ok
+    orc = Orchestrator(FakeBridge())
+    result = store.load_installed(orc)              # default = "untrusted"
+    try:
+        assert result.loaded == []                  # never ran in-process
+        assert len(store.isolated) == 1             # jailed instead
+        # the provider's rows still reach the panel — through the jail, not in-process
+        from dreamlayer.object_lens.schema import ObjectSighting
+        panel = orc.object_lens.registry.build_panel(
+            ObjectSighting(label="mug", confidence=0.9, attributes={}))
+        assert "from the jail" in [r.label for r in panel.rows]
+    finally:
+        for h in store.isolated:
+            h.stop()

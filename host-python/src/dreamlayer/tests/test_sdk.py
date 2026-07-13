@@ -162,6 +162,8 @@ def test_sdk_only_plugin_validates_and_loads(tmp_path):
     store = PluginStore(tmp_path, host_capabilities=frozenset({"glance"}))
     assert store.install_package(pkg).ok
     orc = Orchestrator(FakeBridge())
-    assert store.load_installed(orc).loaded == ["widget"]
+    # isolate="trusted": load this reviewed package in-process (the secure
+    # default jails unsigned code — covered in test_plugin_store.py).
+    assert store.load_installed(orc, isolate="trusted").loaded == ["widget"]
     decision = orc.glance_arbiter.arbitrate(GlanceReading("object", 0.8, {}))
     assert decision.winner is not None and decision.winner.lens == "widget"
