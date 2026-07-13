@@ -1,7 +1,6 @@
 """Tests for TruthLens feature extractors: prosody + linguistic."""
 import numpy as np
-import pytest
-from dreamlayer.truth_lens.prosody import ProsodyAnalyzer, BIN_HZ, SILENCE_THRESHOLD
+from dreamlayer.truth_lens.prosody import ProsodyAnalyzer, BIN_HZ
 from dreamlayer.truth_lens.linguistic import LinguisticAnalyzer
 
 

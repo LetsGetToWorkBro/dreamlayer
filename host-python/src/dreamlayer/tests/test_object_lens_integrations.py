@@ -15,7 +15,7 @@ from dreamlayer.object_lens import (
     ProviderRegistry, LaptopProvider, CarProvider, ObjectSighting,
 )
 from dreamlayer.object_lens.integrations import (
-    laptop_data_source, serve_companion, CONTEXT_PATH, TOKEN_HEADER,
+    laptop_data_source, serve_companion,
 )
 
 

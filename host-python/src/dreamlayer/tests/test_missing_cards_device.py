@@ -10,7 +10,6 @@ MorningBrief were all constructed in the orchestrator and sent over BLE
 on the raster harness, and (the test class that would have caught the gap)
 build payloads with the HOST constructors and assert content reaches pixels.
 """
-import pathlib
 
 import pytest
 

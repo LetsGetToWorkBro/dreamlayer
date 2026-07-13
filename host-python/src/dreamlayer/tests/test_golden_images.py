@@ -21,8 +21,6 @@ from dreamlayer.hud.golden_images import (
     run_regression_suite,
     DiffResult,
     DEFAULT_CARD_KEYS,
-    PIXEL_TOLERANCE,
-    CHANGED_PX_THRESHOLD,
 )
 
 

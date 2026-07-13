@@ -8,7 +8,6 @@ was changed in the move.
 from __future__ import annotations
 
 from ..hud import cards
-from ..pipelines import vision
 from ._ops_helpers import _parse_scene_reply
 from ._ops_helpers import _parse_taste_reply
 
@@ -135,7 +134,7 @@ class WorldLensOps:
         cheap signals); when it can't tell a form from a question from prose,
         escalate to the Brain's vision tier for a fine read — spending the big
         model only when it changes the answer."""
-        from .glance import classify_coarse, GlanceReading
+        from .glance import classify_coarse
         lang = getattr(self.config, "user_language", "en") or "en"
         signals = {}
         try:
@@ -159,7 +158,6 @@ class WorldLensOps:
         """Fine scene classification via the Brain's vision tier (Mac / cloud).
         Returns a GlanceReading or None. The vision model is the seam Ollama
         plugs into; offline this simply returns None and the coarse read stands."""
-        from .glance import GlanceReading, SCENES
         prompt = ("Classify what is in this image for a glasses assistant. Reply "
                   "on one line: SCENE: <object|text|form|question|foreign_text|"
                   "person|screen> — then optional tags density=<0-1> "

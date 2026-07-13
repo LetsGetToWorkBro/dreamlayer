@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .anticipation import Context, Event, Anchor, Commitment, _norm, _match_place
+from .anticipation import Context, _norm, _match_place
 
 
 @dataclass

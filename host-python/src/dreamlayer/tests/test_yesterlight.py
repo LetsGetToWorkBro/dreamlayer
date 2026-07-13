@@ -8,7 +8,7 @@ from dreamlayer.dream_mode.weather_ledger import (
 )
 from dreamlayer.dream_mode.yesterlight import (
     YesterlightController, scrub_angle, freshness,
-    ENTER_PITCH, ENTER_TICKS, EXIT_PITCH, MSG_YESTERLIGHT,
+    ENTER_TICKS, MSG_YESTERLIGHT,
 )
 from dreamlayer.orchestrator.recall_context import RecallContext
 

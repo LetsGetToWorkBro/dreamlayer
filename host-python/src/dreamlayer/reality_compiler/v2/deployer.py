@@ -16,11 +16,9 @@ would be sent, which the demo and tests inspect.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from . import transport
 from .budgets import verify
-from .figment import Figment
 from .signer import SigningError
 from .vault import Vault
 

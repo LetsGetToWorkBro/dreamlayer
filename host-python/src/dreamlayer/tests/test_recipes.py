@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from dreamlayer.reality_compiler.v2.budgets import verify
-from dreamlayer.reality_compiler.v2.figment import END, Figment
+from dreamlayer.reality_compiler.v2.figment import Figment
 from dreamlayer.reality_compiler.v2.interpreter import Stage
 from dreamlayer.reality_compiler.v2.recipes import kiln_figment, sous_sear_figment
 

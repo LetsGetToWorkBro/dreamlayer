@@ -10,7 +10,6 @@ path the goldens use — asserting they draw, stay in budget, are materially ric
 hold still under reduce_motion, and (the test class that would have caught the
 gap) that a HOST-built payload reaches pixels over the BLE path.
 """
-import pathlib
 
 import pytest
 

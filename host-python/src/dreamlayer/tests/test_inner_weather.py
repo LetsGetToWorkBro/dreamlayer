@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dreamlayer.dream_mode.inner_weather import (
-    InnerWeather, EMIT_HYSTERESIS, WARN_COOLDOWN_S, WARN_SUSTAIN_TICKS, WARN_STATE,
+    InnerWeather, EMIT_HYSTERESIS, WARN_COOLDOWN_S, WARN_STATE,
 )
 from dreamlayer.orchestrator.recall_context import RecallContext
 

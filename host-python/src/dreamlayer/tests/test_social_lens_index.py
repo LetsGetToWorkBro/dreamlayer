@@ -1,6 +1,5 @@
 """Tests for SocialLens contact index."""
 import numpy as np
-import pytest
 from dreamlayer.social_lens.schema import ContactRecord
 from dreamlayer.social_lens.index import ContactIndex
 from dreamlayer.truth_lens.face_embed import cosine_similarity

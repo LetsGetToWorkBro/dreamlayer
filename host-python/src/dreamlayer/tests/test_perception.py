@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from dreamlayer.ai_brain.perception import (
-    PerceptSignals, AudioPercept, HeuristicPerceptor, NpuPerceptor,
+    AudioPercept, HeuristicPerceptor, NpuPerceptor,
     PerceptionRouter, text_density,
 )
 from dreamlayer.ai_brain import Perceptor

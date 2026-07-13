@@ -7,8 +7,6 @@ was changed in the move.
 """
 from __future__ import annotations
 
-from ..hud import cards
-from ..pipelines import vision
 
 
 class PluginOps:

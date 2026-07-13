@@ -16,7 +16,7 @@ system to run.
 from __future__ import annotations
 
 import logging
-from typing import Callable, List
+from typing import List
 
 log = logging.getLogger("dreamlayer.plugins.hookspecs")
 

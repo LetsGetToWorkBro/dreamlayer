@@ -37,7 +37,7 @@ simply living near the promise keeps it alive. Private events
 from __future__ import annotations
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from ..memory.ring_buffer import SemanticRingBuffer
 from ..pipelines.ingest import MemoryEvent
 

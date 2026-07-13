@@ -36,7 +36,7 @@ from .budgets import BudgetReport
 from .deployer import DeployRecord, StageDeployer
 from .figment import Figment
 from .playback import PlaybackFrame, run_through
-from .rehearsal import RehearsalResult, RehearsalSession
+from .rehearsal import RehearsalSession
 from .grammar_mine import GrammarMiner
 from .repertoire_ranker import RepertoireRanker
 from .vault import Vault, VaultEntry

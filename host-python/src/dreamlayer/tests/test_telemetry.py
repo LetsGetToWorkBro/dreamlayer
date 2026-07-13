@@ -8,7 +8,6 @@ import pathlib
 import pytest
 
 try:
-    import lupa
     from lupa import LuaRuntime
     LUPA_AVAILABLE = True
 except ImportError:

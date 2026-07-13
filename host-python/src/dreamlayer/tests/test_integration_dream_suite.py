@@ -1,9 +1,7 @@
 """The build-out, plugged in: NightWatch gating, the TinCan tap path,
 orchestrator plumbing for REM/Premonition/Confluence, and every new BLE
 channel driven through the real booted device loop."""
-import json
 import time
-from pathlib import Path
 
 import pytest
 

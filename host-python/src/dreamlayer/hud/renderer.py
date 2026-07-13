@@ -698,7 +698,7 @@ class CardRenderer:
         self._dot(draw, 128, 198, 3, T.MEMORY_TRACE, alpha=255)
         bloom_ring(draw, 128, 198, 3, T.MEMORY_TRACE)
 
-        # type: time eyebrow, object label, HERO place, bracketed detail
+        # layout: time eyebrow, object label, HERO place, bracketed detail
         self._text_rgba(draw, CX, 50, footer, "xs", T.TEXT_GHOST, alpha=255)
         self._text_rgba(draw, CX, 66, obj_name, "md", T.MEMORY_TRACE,
                         alpha=255)

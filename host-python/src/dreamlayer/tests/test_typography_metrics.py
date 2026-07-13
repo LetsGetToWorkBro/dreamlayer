@@ -13,7 +13,7 @@ except ImportError:
     LUPA_AVAILABLE = False
 
 try:
-    from PIL import ImageFont
+    from PIL import ImageFont  # noqa: F401  (availability probe)
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False

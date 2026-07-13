@@ -7,7 +7,6 @@ candidate the arbiter then routes to.
 """
 from __future__ import annotations
 
-import numpy as np
 
 from dreamlayer.plugins import make_plugin, PluginContext, PluginRegistry
 from dreamlayer.object_lens import ProviderRegistry, ObjectSighting

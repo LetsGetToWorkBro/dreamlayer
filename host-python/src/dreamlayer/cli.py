@@ -435,8 +435,8 @@ def cmd_list(args) -> int:
         from dreamlayer.sdk import discover
         found = discover()
         if not found:
-            _p(f"no entry-point plugins found (declare "
-               f'[project.entry-points."dreamlayer.plugins"] in a plugin package)')
+            _p("no entry-point plugins found (declare "
+               '[project.entry-points."dreamlayer.plugins"] in a plugin package)')
             return 0
         for d in found:
             _p(f"  {d.name}  → {d.value}" + (f"  ({d.dist} {d.version})" if d.dist else ""))

@@ -6,7 +6,6 @@ the proof envelope needs only count/vertex/coordinate caps. These tests pin
 that the caps are enforced, the layer round-trips through canonical JSON and
 the signature, and the interpreter surfaces the strokes to the renderer.
 """
-import pytest
 
 from dreamlayer.reality_compiler.v2 import (
     Figment, Scene, TextLine, GlyphSpec, Transition, Stage, verify, END,

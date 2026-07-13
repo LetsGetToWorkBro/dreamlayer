@@ -73,9 +73,9 @@ def main(argv=None) -> int:
     print(f"  watching {len(brain.config.folders)} folder(s), "
           f"{brain.index.stats()['files']} files indexed")
     if minted_token:
-        print(f"  ⚠ network-reachable bind with no token — generated one:")
+        print("  ⚠ network-reachable bind with no token — generated one:")
         print(f"    token: {brain.config.token}")
-        print(f"    enter it on the phone to pair (or pass --token next time).")
+        print("    enter it on the phone to pair (or pass --token next time).")
     else:
         print(f"  token: {'set' if brain.config.token else '(none — loopback only)'}   "
               f"model: {brain.config.model}")

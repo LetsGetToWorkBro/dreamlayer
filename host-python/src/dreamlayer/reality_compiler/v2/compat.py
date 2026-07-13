@@ -98,7 +98,7 @@ def _round_timer(i: RoundTimerIntent) -> Figment:
         ot.on_timeout = [Transition(target="over")]
     else:
         rnd.on_timeout = [Transition(target="over")]
-    over = fig.add_scene(Scene(id="over", duration_sec=3.0,
+    fig.add_scene(Scene(id="over", duration_sec=3.0,
                                lines=[TextLine("OVER", row=1, size="lg",
                                                color="accent_attention")],
                                on_timeout=[Transition(target="armed")]))
@@ -158,7 +158,6 @@ def _interval_timer(i: IntervalTimerIntent) -> Figment:
                         size="sm", color="accent_attention"),
                TextLine("{remaining}", row=1, size="lg")],
     ))
-    after_work = "rest" if i.rest_sec > 0 else "work"
     if i.rest_sec > 0:
         rest = fig.add_scene(Scene(
             id="rest", duration_sec=float(i.rest_sec), tick="countdown",

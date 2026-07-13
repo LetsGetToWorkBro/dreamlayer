@@ -11,7 +11,7 @@ import numpy as np
 
 from dreamlayer.orchestrator.taste import TasteLens, TasteItem
 from dreamlayer.orchestrator.orchestrator import Orchestrator, _parse_taste_reply
-from dreamlayer.orchestrator.glance import classify_coarse, GlanceArbiter, GlanceReading
+from dreamlayer.orchestrator.glance import classify_coarse, GlanceArbiter
 from dreamlayer.object_lens.label import DietaryProfile
 from dreamlayer.hud import cards
 from dreamlayer.tests.test_integration_dream_suite import FakeBridge

@@ -8,7 +8,7 @@ phone's Score view.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from .budgets import BudgetReport, Violation

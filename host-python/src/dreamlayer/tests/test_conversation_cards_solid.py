@@ -52,7 +52,6 @@ def test_fit_ladder_drops_size_never_clips():
 
 
 def test_urgent_hark_burns_amber_plain_stays_teal():
-    from dreamlayer.hud import themes as T
     urgent = R.render({"type": "HarkCard", "primary": "Leave now", "importance": "urgent"})
     plain = R.render({"type": "HarkCard", "primary": "Marcus is near", "importance": "normal"})
     ua = np.asarray(urgent.convert("RGB")).reshape(-1, 3)

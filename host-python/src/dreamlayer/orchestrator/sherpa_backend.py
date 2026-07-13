@@ -34,7 +34,7 @@ local model dir on the Mac-mini Brain. See docs/PERCEPTION_BACKENDS.md.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 log = logging.getLogger(__name__)

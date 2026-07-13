@@ -1,0 +1,27 @@
+# The registry API is a deployed Cloudflare Worker (api.dreamlayer.app) that
+# serves plugin/figment stats, ratings, comments, the golf leaderboard, and the
+# submission queue. It had thorough tests (worker.*.test.mjs) that no workflow
+# ran — deployed production code with a green board it never touched. This gate
+# runs them on every change so a route regression can't ship.
+name: registry
+
+on:
+  push:
+    branches: [main]
+    paths: ["registry-api/**", ".github/workflows/registry.yml"]
+  pull_request:
+    paths: ["registry-api/**", ".github/workflows/registry.yml"]
+
+jobs:
+  worker-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Worker route tests (plugins, figments, golf)
+        run: npm test

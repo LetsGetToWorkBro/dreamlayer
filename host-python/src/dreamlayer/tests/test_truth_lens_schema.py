@@ -2,7 +2,7 @@
 import pytest
 from dreamlayer.truth_lens.schema import (
     AUFrame, ProsodyFrame, LinguisticFrame,
-    ContactBaseline, CredibilityVector, TruthLensResult,
+    CredibilityVector, TruthLensResult,
 )
 
 

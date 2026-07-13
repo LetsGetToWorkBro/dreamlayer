@@ -4,7 +4,6 @@ the guarded install/list paths. Exercises main() directly (exit codes + output).
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from dreamlayer import cli
 

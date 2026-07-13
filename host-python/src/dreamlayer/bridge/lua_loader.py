@@ -9,8 +9,6 @@ failing loudly with a diff if there are unreachable or missing modules.
 """
 from __future__ import annotations
 import os
-import re
-from typing import Optional
 
 # All require() strings found in halo-lua/main.lua top-level imports.
 # These are the modules the device MUST be able to resolve at boot.

@@ -1915,7 +1915,8 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                       port: int = 7777) -> ThreadingHTTPServer:
-    token = brain.config.token
+    # the token is read live in _authed (via authorize) so rotation applies;
+    # nothing here needs to close over it.
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -2086,7 +2087,6 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     self._json(403, {"error": "backup is local-only"}); return
                 self._json(200, brain.export_backup())
             elif path == "/dreamlayer/health":
-                import shutil
                 try:
                     du = sum(f.stat().st_size for f in brain.cfg_dir.rglob("*") if f.is_file())
                 except OSError:

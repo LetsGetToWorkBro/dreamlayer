@@ -7,7 +7,7 @@ state listing, and removal — the endpoints the panel and phone drive.
 from __future__ import annotations
 
 from dreamlayer.ai_brain.server import Brain
-from dreamlayer.plugins import PluginPackage, sha256_of
+from dreamlayer.plugins import PluginPackage
 
 GOOD_SRC = ("from dreamlayer.plugins import make_plugin\n"
             "def p():\n return make_plugin('tidy', lambda c: None)\n")

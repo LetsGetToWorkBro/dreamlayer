@@ -2,7 +2,6 @@
 dogfood migrations, and the subprocess isolation jail (with a hostile plugin)."""
 import json
 
-import pytest
 
 from dreamlayer.bridge.emulator_bridge import EmulatorBridge
 from dreamlayer.memory.db import MemoryDB

@@ -15,7 +15,7 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-from .figment import Figment, END
+from .figment import Figment
 from .interpreter import Stage, DisplayFrame, ResolvedLine, _fmt_clock
 
 MAX_FRAMES = 72          # a run-through is seconds long, never minutes
@@ -82,7 +82,6 @@ def run_through(fig: Figment, seed: int = 7,
             break
 
         scene = fig.scenes[stage.current]
-        entries = seen_scene_entries.get(stage.current, 0)
 
         if not scene.timed():
             # event-only scene with nothing scheduled: the run-through is over

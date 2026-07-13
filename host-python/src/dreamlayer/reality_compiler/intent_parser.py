@@ -21,7 +21,7 @@ from .schema import (
     BatteryWarningIntent, TeleprompterIntent, CoachingCueIntent,
     PointsMarkerIntent, NextClassIntent, TextSubtitlesIntent,
     HabitReminderIntent, ReactTimerIntent, GestureRepeaterIntent,
-    SpeakerIndicatorIntent, ValidationError,
+    SpeakerIndicatorIntent,
 )
 
 
