@@ -81,16 +81,19 @@ def clamp_text(s: str, max_len: int) -> str:
     pre: max_len >= 0
     post: len(__return__.encode("utf-8")) <= max_len
     """
-    b = s.encode("utf-8")
+    b = s.encode()                      # utf-8, the default codec
     if len(b) <= max_len:
         return s
     n = max_len
     # back off out of the middle of a multi-byte sequence: a UTF-8 continuation
     # byte is 0b10xxxxxx (0x80..0xBF); the first non-continuation byte at or
-    # below max_len is the start of the codepoint we must not split.
-    while n > 0 and (b[n] & 0xC0) == 0x80:
+    # below max_len is the start of the codepoint we must not split. encode()
+    # emits valid UTF-8, so b[0] is always a lead/ASCII byte and the walk
+    # terminates at n >= 0 — a lower-bound guard would be dead code (and an
+    # unkillable equivalent mutant for the mutation gate).
+    while (b[n] & 0xC0) == 0x80:
         n -= 1
-    return b[:n].decode("utf-8")
+    return b[:n].decode()
 
 
 def accept_slot(is_default: bool, is_known: bool, named_count: int,

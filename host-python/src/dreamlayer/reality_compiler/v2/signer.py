@@ -12,12 +12,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import secrets
 from pathlib import Path
 
 from .figment import Figment
 
 KEY_FILE = "session.key"
+KEY_BYTES = 32          # 256-bit session key, HMAC-SHA256's natural size
 
 
 class SigningError(ValueError):
@@ -35,21 +35,26 @@ class SessionSigner:
         if self._key_path.exists():
             return bytes.fromhex(self._key_path.read_text().strip())
         self._key_path.parent.mkdir(parents=True, exist_ok=True)
-        key = secrets.token_bytes(32)
+        # os.urandom (which secrets.token_bytes wraps) — called directly so a
+        # dropped/None size argument is a TypeError the tests catch, not a
+        # silent fall-through to some default
+        key = os.urandom(KEY_BYTES)
         self._key_path.write_text(key.hex())
         os.chmod(self._key_path, 0o600)
         return key
 
     def sign(self, fig: Figment) -> str:
-        payload = fig.canonical_json().encode("utf-8")
+        payload = fig.canonical_json().encode()        # utf-8, the default
         return hmac.new(self._key, payload, hashlib.sha256).hexdigest()
 
     def verify(self, fig: Figment, signature: str) -> bool:
+        if not signature:               # unsigned/None: refuse before comparing
+            return False
         try:
             expected = self.sign(fig)
         except Exception:
             return False
-        return hmac.compare_digest(expected, signature or "")
+        return hmac.compare_digest(expected, signature)
 
     def verify_or_raise(self, fig: Figment, signature: str) -> None:
         if not self.verify(fig, signature):
@@ -60,4 +65,4 @@ class SessionSigner:
 
 def content_hash(fig: Figment) -> str:
     """Key-independent digest, echoed by the device in figment_ack."""
-    return hashlib.sha256(fig.canonical_json().encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(fig.canonical_json().encode()).hexdigest()[:16]

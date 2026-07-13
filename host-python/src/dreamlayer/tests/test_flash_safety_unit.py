@@ -13,17 +13,21 @@ qualifiers (≥10% luminance delta, darker state <0.80, strict 1-second window),
 and the red-flash ratio. A flipped operator or a nudged constant in the
 analyzer now fails a test. Needs numpy; skipped headlessly when absent.
 
-Result: the mutation score rose from 62% to 88% (203/230). The residual 27 are
-not test holes but unreachable-or-equivalent mutants: (a) the *general-flash*
-accounting path in analyze_figment never fires because a figment's only flasher
-is the ~6%-area pulse ring, which cannot move mean luminance the ≥10% a general
-flash needs — only the red path triggers (count_flashes stays fully covered here
-for the future full-frame sampler the module anticipates); (b) the numpy-absent
-and renderer-returned-None degradation branches can't be hit with the deps
-present; (c) a couple are equivalent (l1>=l0 where equality is already excluded
-by the delta gate; a/256 vs a/255 inside a branch predicate that never flips for
-byte inputs). The enforced zero-survivor gate stays on contracts.py; this is a
-coverage-hardening pass, verified by mutation testing, not a new blocking gate."""
+P2-13 closed the biggest residue class: the *general-flash* accounting path in
+analyze_figment used to be unreachable (it measured whole-glass mean luminance,
+which the ~6%-area pulse ring can never move 10%) — it now measures the flashing
+component per WCAG's actual form, and test_flash_safety.py trips it for real
+through rendered frames. The remaining survivors are itemized residue, enforced
+as a per-file CEILING by .github/workflows/mutation.yml: (a) the numpy-absent
+and renderer-returned-None degradation branches can't execute with the deps
+installed; (b) boundary-exact forms that need a rendered luminance to land
+precisely ON a threshold (dl == 0.10, darker == 0.80, red_ratio == 0.5), which
+no palette token or rendered frame can produce — count_flashes pins those same
+boundaries directly with synthetic series above; (c) provably-equivalent forms
+(l1>=l0 where equality is already excluded by the delta gate; the off-frame's
+explicit pulse_on=False vs the dataclass default; sum-vs-difference of the
+changed region's means when the off frame there is near-black). flash_safety.py
+sits under that measured ceiling; contracts.py and signer.py hold at zero."""
 import pytest
 
 np = pytest.importorskip("numpy")
@@ -176,6 +180,16 @@ class TestMeasure:
         img = np.full((1, 1, 3), knee, dtype=np.float32)
         _r, lum = _measure(img)
         assert float(lum.mean()) == pytest.approx(0.03928 / 12.92, rel=1e-5)
+
+    def test_knee_predicate_divides_by_255_not_256(self):
+        # v=10.05: v/255 = 0.03941 > knee (gamma branch) but v/256 = 0.03926 ≤
+        # knee — the one window where a mutated ÷256 in the *predicate* flips
+        # the branch. The two curves nearly touch at the knee (that's why the
+        # knee exists), so a tight tolerance is needed to tell them apart.
+        img = np.full((1, 1, 3), np.float32(10.05), dtype=np.float32)
+        _r, lum = _measure(img)
+        expect_gamma = ((10.05 / 255.0 + 0.055) / 1.055) ** 2.4
+        assert float(lum.mean()) == pytest.approx(expect_gamma, rel=1e-4)
 
 
 class TestPulseFrames:
