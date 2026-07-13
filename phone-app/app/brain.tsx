@@ -63,19 +63,19 @@ export default function Brain() {
   const applyCode = (raw: string) => {
     try {
       const r = b.pairFromCode(raw.trim());
-      const bits = [r.brain ? "Mac mini" : "", r.glasses ? "glasses" : ""].filter(Boolean);
+      const bits = [r.brain ? "Mac mini" : "", r.glasses ? t("brain.glassesWord") : ""].filter(Boolean);
       if (bits.length) {
         tapSuccess();
-        setPairMsg(`Paired ${bits.join(" + ")}.`);
+        setPairMsg(t("brain.paired", { what: bits.join(" + ") }));
       } else {
         tapWarn();
-        setPairMsg("That code carried nothing to pair.");
+        setPairMsg(t("brain.pairEmpty"));
       }
       setCode("");
       setPairOpen(false);
     } catch {
       tapWarn();
-      setPairMsg("That doesn't look like a DreamLayer pairing code.");
+      setPairMsg(t("brain.pairBad"));
     }
   };
 
@@ -102,26 +102,23 @@ export default function Brain() {
         <Text style={[typography.eyebrow, { color: colors.accentMemory }]}>DreamLayer</Text>
         <Text style={[typography.display, { color: colors.textPrimary }]}>{t("brain.title")}</Text>
         <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
-          {brainKind === "mac_mini"
-            ? "Your Mac mini is the brain — bigger local model, your files, richest answers."
-            : "The phone is your hub — pair the Halo glasses to capture, and a Mac mini for a bigger brain over your own files."}
-          {cloudOn ? "  Cloud is on for the hardest asks." : "  Cloud is off — everything stays with you."}
+          {brainKind === "mac_mini" ? t("brain.descMac") : t("brain.descPhone")}
+          {cloudOn ? t("brain.cloudOnSuffix") : t("brain.cloudOffSuffix")}
         </Text>
 
         {/* pair a device */}
         <View style={s.pairBar}>
-          <PillButton label={pairOpen ? "Cancel" : "＋ Pair a device"} onPress={() => setPairOpen(!pairOpen)} ghost={pairOpen} />
+          <PillButton label={pairOpen ? t("brain.cancel") : "＋ " + t("brain.pairDevice")} onPress={() => setPairOpen(!pairOpen)} ghost={pairOpen} />
           {pairMsg ? <Text style={[typography.caption, { color: colors.accentSuccess, marginTop: 8 }]}>{pairMsg}</Text> : null}
         </View>
         {pairOpen ? (
           <View style={s.pairBox}>
             <Text style={[typography.caption, { color: colors.textSecondary }]}>
-              Open the Brain panel on your Mac mini → “Pair a phone”, then scan or paste the code. One code brings the Mac
-              mini and your glasses together.
+              {t("brain.pairInstructions")}
             </Text>
-            <PillButton label="⃞ Scan QR" onPress={() => setScanOpen(true)} />
+            <PillButton label={"⃞ " + t("brain.scanQr")} onPress={() => setScanOpen(true)} />
             <Text style={[typography.caption, { color: colors.textSecondary, textAlign: "center", marginVertical: 6 }]}>
-              — or paste the code —
+              {t("brain.orPaste")}
             </Text>
             <TextInput
               value={code}
@@ -132,58 +129,57 @@ export default function Brain() {
               autoCorrect={false}
               style={s.input}
             />
-            <PillButton label="Connect" onPress={doPair} />
+            <PillButton label={t("brain.connect")} onPress={doPair} />
           </View>
         ) : null}
         <QrScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={onScanned} />
 
         {/* glasses */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>Devices</Text>
+        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.devices")}</Text>
         <ConnectorCard
-          title="Glasses"
+          title={t("brain.glasses")}
           accent={colors.accentMemory}
           on={b.glasses.connected}
-          status={b.glasses.connected ? b.glasses.id || "Connected" : "Not connected"}
+          status={b.glasses.connected ? b.glasses.id || t("brain.connected") : t("brain.notConnected")}
         >
           <Text style={[typography.caption, { color: colors.textSecondary }]}>
-            The Halo display — where every lens is drawn. Pair with the code above, or over Bluetooth from onboarding.
+            {t("brain.glassesDesc")}
           </Text>
           {b.glasses.connected ? (
-            <PillButton label="Forget glasses" ghost onPress={b.disconnectGlasses} />
+            <PillButton label={t("brain.forgetGlasses")} ghost onPress={b.disconnectGlasses} />
           ) : null}
         </ConnectorCard>
 
         {/* mac mini */}
         <ConnectorCard
-          title="Mac mini brain"
+          title={t("brain.macTitle")}
           accent={colors.accentMemory}
           on={b.macMini.connected}
-          status={b.macMini.connected ? "Connected" : "Optional upgrade"}
+          status={b.macMini.connected ? t("brain.connected") : t("brain.optionalUpgrade")}
         >
           {b.macMini.connected ? (
             <>
               <Text style={[typography.caption, { color: colors.textSecondary }]}>
                 {b.macMini.url}
               </Text>
-              <Bullet>Searches your own files & mail (Lucid Recall)</Bullet>
-              <Bullet>Richer object explanations than the phone alone</Bullet>
-              <Bullet>Runs on your LAN — no internet required</Bullet>
-              <PillButton label="Use phone as brain instead" ghost onPress={() => b.connectMacMini(false)} />
+              <Bullet>{t("brain.macBullet1")}</Bullet>
+              <Bullet>{t("brain.macBullet2")}</Bullet>
+              <Bullet>{t("brain.macBullet3")}</Bullet>
+              <PillButton label={t("brain.usePhone")} ghost onPress={() => b.connectMacMini(false)} />
             </>
           ) : (
             <>
               <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                Connect an always-on Mac mini and it becomes the brain: a bigger local model plus everything in your chosen
-                folders and mail — smart and private, on your own network.
+                {t("brain.macDesc")}
               </Text>
-              <Bullet>Bigger local model, still fully private</Bullet>
-              <Bullet>Answers from your files, notes & mail</Bullet>
-              <Bullet>Works on your home Wi-Fi with no internet</Bullet>
+              <Bullet>{t("brain.macOffBullet1")}</Bullet>
+              <Bullet>{t("brain.macOffBullet2")}</Bullet>
+              <Bullet>{t("brain.macOffBullet3")}</Bullet>
               {b.macMini.url ? (
-                <PillButton label="Reconnect Mac mini" onPress={() => b.connectMacMini(true)} />
+                <PillButton label={t("brain.reconnectMac")} onPress={() => b.connectMacMini(true)} />
               ) : (
                 <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 12, fontStyle: "italic" }]}>
-                  Pair one with the code above to enable this.
+                  {t("brain.pairToEnable")}
                 </Text>
               )}
             </>
@@ -191,44 +187,44 @@ export default function Brain() {
         </ConnectorCard>
 
         {/* cloud — its own switch */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>Reach</Text>
-        <ConnectorCard title="Cloud" accent={colors.accentMemory} on={cloudOn} status={cloudOn ? "On" : "Off"}>
+        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.reach")}</Text>
+        <ConnectorCard title={t("brain.cloud")} accent={colors.accentMemory} on={cloudOn} status={cloudOn ? t("brain.on") : t("brain.off")}>
           <SwitchRow
-            label="Use cloud for hard cases"
+            label={t("brain.cloudLabel")}
             sub={
               b.incognito
-                ? "Held off while Incognito is on"
-                : "An independent switch — works whether the brain is your phone or your Mac mini"
+                ? t("brain.cloudHeld")
+                : t("brain.cloudSub")
             }
             value={cloudOn}
             disabled={b.incognito}
             onValueChange={b.setCloud}
           />
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 10, marginBottom: 4 }]}>
-            Turning cloud on adds, only for the hardest, non-personal asks:
+            {t("brain.cloudAdds")}
           </Text>
-          <Bullet>Obscure facts that aren’t in your own files</Bullet>
-          <Bullet>The richest object explanations (frontier vision)</Bullet>
-          <Bullet>Widest translation coverage (Rosetta & Puente)</Bullet>
-          <Bullet muted>Needs a connection — off in airplane mode</Bullet>
-          <Bullet muted>Anything marked private never leaves, cloud or not</Bullet>
+          <Bullet>{t("brain.cloudBullet1")}</Bullet>
+          <Bullet>{t("brain.cloudBullet2")}</Bullet>
+          <Bullet>{t("brain.cloudBullet3")}</Bullet>
+          <Bullet muted>{t("brain.cloudBullet4")}</Bullet>
+          <Bullet muted>{t("brain.cloudBullet5")}</Bullet>
         </ConnectorCard>
 
         {/* incognito */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>Privacy</Text>
-        <ConnectorCard title="Incognito" accent={colors.accentAttention} on={b.incognito} status={b.incognito ? "On" : "Off"}>
+        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.privacy")}</Text>
+        <ConnectorCard title={t("brain.incognito")} accent={colors.accentAttention} on={b.incognito} status={b.incognito ? t("brain.on") : t("brain.off")}>
           <SwitchRow
-            label="Incognito mode"
-            sub="Forces cloud off and pauses capture for this session"
+            label={t("brain.incognitoLabel")}
+            sub={t("brain.incognitoSub")}
             value={b.incognito}
             accent={colors.accentAttention}
             onValueChange={b.setIncognito}
           />
         </ConnectorCard>
-        <ConnectorCard title="Capture" on={!b.capturePaused} status={b.capturePaused ? "Paused" : "Recording"}>
+        <ConnectorCard title={t("brain.capture")} on={!b.capturePaused} status={b.capturePaused ? t("brain.paused") : t("brain.recording")}>
           <SwitchRow
-            label="Pause memory capture"
-            sub="Nothing is remembered while paused"
+            label={t("brain.pauseLabel")}
+            sub={t("brain.pauseSub")}
             value={b.capturePaused}
             accent={colors.statusPaused}
             onValueChange={b.setCapturePaused}
@@ -236,21 +232,21 @@ export default function Brain() {
         </ConnectorCard>
 
         {/* recall from the phone */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>Ask your brain</Text>
+        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.askEyebrow")}</Text>
         <View style={s.askCard}>
           <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 8 }]}>
-            The same brain your glasses use — ask it from your pocket.
+            {t("brain.askDesc")}
           </Text>
           <TextInput
             value={q}
             onChangeText={setQ}
-            placeholder="where’s the lease? what does Marcus owe me?"
+            placeholder={t("brain.askPlaceholder")}
             placeholderTextColor={colors.textSecondary}
             style={s.input}
             onSubmitEditing={doAsk}
             returnKeyType="search"
           />
-          <PillButton label="Ask" onPress={doAsk} />
+          <PillButton label={t("brain.ask")} onPress={doAsk} />
           {asking ? <ActivityIndicator color={colors.accentMemory} style={{ marginTop: 14 }} /> : null}
           {answer ? (
             <View style={s.answer}>
@@ -266,19 +262,19 @@ export default function Brain() {
         {b.macMini.connected ? (
           <>
             <View style={s.evHead}>
-              <Text style={[typography.eyebrow, s.eyebrow]}>Upcoming</Text>
-              <PillButton label={syncing ? "Syncing…" : "Sync calendar"} ghost onPress={syncCalendar} />
+              <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.upcoming")}</Text>
+              <PillButton label={syncing ? t("brain.syncing") : t("brain.syncCalendar")} ghost onPress={syncCalendar} />
             </View>
             <View style={s.card}>
               {events.length === 0 ? (
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>No events yet — add one or sync your Mac Calendar.</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.noEvents")}</Text>
               ) : (
                 events.map((e, i) => (
                   <View key={i} style={s.evRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={[typography.body, { color: colors.textPrimary }]}>
                         {e.title}
-                        {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || "Calendar")}</Text> : null}
+                        {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || t("brain.calendar"))}</Text> : null}
                       </Text>
                     </View>
                     <Text style={[typography.caption, { color: colors.textSecondary }]}>
@@ -291,19 +287,19 @@ export default function Brain() {
                 <TextInput
                   value={evTitle}
                   onChangeText={setEvTitle}
-                  placeholder="add an event…"
+                  placeholder={t("brain.addEventPlaceholder")}
                   placeholderTextColor={colors.textSecondary}
                   style={s.input}
                   onSubmitEditing={addEvent}
                 />
-                <PillButton label="Add" onPress={addEvent} />
+                <PillButton label={t("brain.add")} onPress={addEvent} />
               </View>
             </View>
 
-            <Text style={[typography.eyebrow, s.eyebrow]}>Recent activity</Text>
+            <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.recentActivity")}</Text>
             <View style={s.card}>
               {activity.length === 0 ? (
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>Nothing yet.</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.nothingYet")}</Text>
               ) : (
                 activity.slice(0, 8).map((a, i) => (
                   <View key={i} style={s.actRow}>
@@ -321,12 +317,12 @@ export default function Brain() {
         ) : null}
 
         {/* what your brain can do */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>What your brain can do</Text>
+        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.canDo")}</Text>
         <View style={s.lensGrid}>
           {LENSES.map((l) => (
             <View key={l.name} style={s.lens}>
               <Text style={[typography.body, { color: colors.textPrimary }]}>{l.name}</Text>
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>{l.blurb}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{t(l.blurbKey)}</Text>
             </View>
           ))}
         </View>
@@ -337,12 +333,12 @@ export default function Brain() {
 }
 
 const LENSES = [
-  { name: "Lucid Recall", blurb: "Your memory, files & mail — ask anything" },
-  { name: "Juno", blurb: "Look at a thing, know what it is" },
-  { name: "People", blurb: "Names, faces you chose to remember, what you owe" },
-  { name: "Waypath", blurb: "Where you left it, how to get back" },
-  { name: "Rosetta & Puente", blurb: "Read and hear the world in your language" },
-  { name: "Prism", blurb: "Turn the ordinary luminous" },
+  { name: "Lucid Recall", blurbKey: "brain.lucidRecallBlurb" },
+  { name: "Juno", blurbKey: "brain.junoBlurb" },
+  { name: "People", blurbKey: "brain.peopleBlurb" },
+  { name: "Waypath", blurbKey: "brain.waypathBlurb" },
+  { name: "Rosetta & Puente", blurbKey: "brain.rosettaBlurb" },
+  { name: "Prism", blurbKey: "brain.prismBlurb" },
 ];
 
 const s = StyleSheet.create({
