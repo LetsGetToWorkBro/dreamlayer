@@ -3,8 +3,8 @@ name: dependency-audit
 # Supply-chain gate (audit 2026-07-14): the repo had NO automated CVE scanning,
 # while ~50 optional deps (including security-critical `cryptography`) were
 # declared as unpinned names. pip-audit flags known-vulnerable resolved
-# versions; osv-scanner cross-checks the lockfile. Runs on PRs touching deps and
-# weekly, so a newly-disclosed CVE surfaces even with no code change.
+# versions. Runs on PRs touching deps and weekly, so a newly-disclosed CVE
+# surfaces even with no code change.
 
 on:
   push:
@@ -35,11 +35,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install the package (base + security-relevant extras)
+      - name: Install the security-relevant dependency surface
         run: |
           python -m pip install --upgrade pip
-          # audit the surface that actually ships secrets/crypto/network paths
-          pip install -e ".[privacy,llm,platform]"
+          # pip-audit matches *resolved installed versions* against advisory
+          # DBs, so we install the deps that actually ship secrets/crypto/
+          # network paths: the `privacy` (crypto + PII) and `llm` (provider
+          # network) extras, plus the HTTP server (fastapi/uvicorn).
+          #
+          # We deliberately do NOT install the whole `platform` extra. It drags
+          # in native-build device/rendering deps (frame-sdk→simpleaudio→ALSA,
+          # pylsl, skia-python) that require system libraries absent on the
+          # runner — the build failed there before pip-audit could run, and
+          # those deps aren't part of the CVE surface this job exists to guard.
+          # Add new crypto/network deps to this line as they're introduced.
+          pip install -e ".[privacy,llm]" fastapi uvicorn
       - name: pip-audit — report known-vulnerable resolved dependencies
         run: |
           pip install pip-audit
