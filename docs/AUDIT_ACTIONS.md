@@ -47,6 +47,27 @@ in three passes:
   nine locales; ANN writes batch with purge-honest immediate deletes and a
   boot drift rebuild, dismissal windows are per card type, and the passive
   cadence knob is enforced.
+- **Pass 5 (a second full-system re-audit's live-input findings, PRs
+  #309–#313):** every finding was a "looks wired, breaks or lies on live
+  input" defect. The default `{slot}` render used raw substitution in two
+  interpreters — a `%` in host slot text *raised* on the device's Lua 5.3
+  (figment fell to the fallback ring every tick) and `$&`/`$1`/`$$`
+  *silently corrupted* the JS line; both default paths now use
+  verbatim-insert function replacement, matching Python, with `%`/`$`/backref
+  parity vectors so the class can't hide again. Two recall surfaces bypassed
+  the pause veil (`ask()` and the passive `tick()` loop) — both are now
+  recall-gated. The Mac brain server binds `127.0.0.1` by default (the old
+  `0.0.0.0` made "localhost by default" a claim, not a fact); the login-agent
+  appliance opts into the LAN explicitly and mints a token. The cloud-egress
+  ledger counts what *leaves* the device, not only what returns non-empty
+  (an errored/empty call still egressed). The plugin AST scan now follows
+  value rebinds (`o = os`), callable rebinds (`run = os.system`), and
+  `getattr(os, …)` — constant and dynamic — as defence-in-depth; the untrusted
+  isolation tier is loud when no OS/WASM kernel sandbox is present and
+  fails closed under `DL_REQUIRE_SANDBOX`, deciding before it launches the
+  child. The phone's last English strings are localized: the People screen's
+  live literals and the entire Settings screen (~60 strings) now carry all
+  nine locales, and icon-only ✕ controls are labelled for VoiceOver/TalkBack.
 
 What remains is, by nature, **owner action** — things a terminal cannot
 do. This file is the tracked list; delete entries as they land. Note that
