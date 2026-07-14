@@ -54,9 +54,9 @@ export default function Settings() {
   const disableDemo = useBrainStore((s) => s.disableDemo);
 
   const confirmPurge = () =>
-    Alert.alert("Erase all memories?", "This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Erase", style: "destructive", onPress: () => service.purgeAll() },
+    Alert.alert(t("settings.erasePrompt"), t("settings.erasePromptBody"), [
+      { text: t("settings.cancel"), style: "cancel" },
+      { text: t("settings.erase"), style: "destructive", onPress: () => service.purgeAll() },
     ]);
 
   return (
@@ -68,10 +68,10 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.privacy")}</Text>
         <Row
-          label="Proactive cards"
-          sub="Let the glasses surface the right card unasked — events, arrivals, people"
+          label={t("settings.proactiveCards")}
+          sub={t("settings.proactiveCardsSub")}
           right={
             <Switch
               value={proactiveCards}
@@ -85,9 +85,9 @@ export default function Settings() {
           <View style={s.subGroup}>
             {(
               [
-                ["event", "Events — “leave in 8 min”"],
-                ["person", "People — who’s in front of you"],
-                ["place", "Places — what you left here"],
+                ["event", t("settings.cueEvent")],
+                ["person", t("settings.cuePerson")],
+                ["place", t("settings.cuePlace")],
               ] as const
             ).map(([kind, label]) => (
               <Row
@@ -106,8 +106,8 @@ export default function Settings() {
           </View>
         ) : null}
         <Row
-          label="Focus mode"
-          sub="Turn the interruptions down — cards, captions, and pop-ups hush; capture keeps running (unlike incognito)"
+          label={t("settings.focus")}
+          sub={t("settings.focusSub")}
           right={
             <Switch
               value={focus}
@@ -118,8 +118,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Incognito mode"
-          sub="Cloud off + capture paused for this session"
+          label={t("settings.incognito")}
+          sub={t("settings.incognitoSub")}
           right={
             <Switch
               value={incognito}
@@ -130,8 +130,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Text pop-ups on glasses"
-          sub="New texts flash on the Halo (silenced by the Privacy Veil)"
+          label={t("settings.textPopups")}
+          sub={t("settings.textPopupsSub")}
           right={
             <Switch
               value={notifyTexts}
@@ -142,8 +142,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Email pop-ups on glasses"
-          sub="New emails flash too — separate from texts"
+          label={t("settings.emailPopups")}
+          sub={t("settings.emailPopupsSub")}
           right={
             <Switch
               value={notifyEmails}
@@ -154,8 +154,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Summarize long emails"
-          sub="The Brain shortens long emails to a one-line glance"
+          label={t("settings.summarize")}
+          sub={t("settings.summarizeSub")}
           right={
             <Switch
               value={summarizeEmails}
@@ -166,8 +166,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Pause memory capture"
-          sub="Nothing is captured while paused"
+          label={t("settings.pauseCapture")}
+          sub={t("settings.pauseCaptureSub")}
           right={
             <Switch
               value={paused}
@@ -180,15 +180,15 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Juno</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.juno")}</Text>
         <Row
-          label="Wake word"
-          sub="Say “Hey Juno” to wake your assistant, then just keep talking — follow-ups need no wake word"
-          right={<Text style={[typography.caption, { color: colors.accentMemory }]}>“Hey Juno”</Text>}
+          label={t("settings.wakeWord")}
+          sub={t("settings.wakeWordSub")}
+          right={<Text style={[typography.caption, { color: colors.accentMemory }]}>{t("settings.wakeWordValue")}</Text>}
         />
         <Row
-          label="Proactive alerts"
-          sub="Let Juno speak up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now"
+          label={t("settings.proactiveAlerts")}
+          sub={t("settings.proactiveAlertsSub")}
           right={
             <Switch
               value={proactiveAlerts}
@@ -199,8 +199,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Live fact-checker"
-          sub="As people talk, Juno quietly checks what’s said — flagging when someone contradicts what they told you before, or when a claim doesn’t hold up. On-device first; reaches the cloud only if you’ve allowed it"
+          label={t("settings.factCheck")}
+          sub={t("settings.factCheckSub")}
           right={
             <Switch
               value={factCheck}
@@ -211,8 +211,8 @@ export default function Settings() {
           }
         />
         <Row
-          label="Answer-ahead"
-          sub="When someone asks you something, Juno pulls the answer from what you know and shows it in time to say it yourself — no wake word"
+          label={t("settings.answerAhead")}
+          sub={t("settings.answerAheadSub")}
           right={
             <Switch
               value={answerAhead}
@@ -223,14 +223,14 @@ export default function Settings() {
           }
         />
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
-          Also wake it by
+          {t("settings.alsoWakeBy")}
         </Text>
         {(
           [
-            ["voice", "Voice — “Hey Juno”"],
-            ["tap", "Tap the temple"],
-            ["gaze", "Look & hold (gaze)"],
-            ["raise", "Raise to speak"],
+            ["voice", t("settings.wakeVoice")],
+            ["tap", t("settings.wakeTap")],
+            ["gaze", t("settings.wakeGaze")],
+            ["raise", t("settings.wakeRaise")],
           ] as const
         ).map(([src, label]) => (
           <Row
@@ -247,13 +247,13 @@ export default function Settings() {
           />
         ))}
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
-          Show it’s listening with
+          {t("settings.showListening")}
         </Text>
         {(
           [
-            ["visual", "A ring in the glasses"],
-            ["audio", "A soft chime"],
-            ["haptic", "A haptic tick"],
+            ["visual", t("settings.fbVisual")],
+            ["audio", t("settings.fbAudio")],
+            ["haptic", t("settings.fbHaptic")],
           ] as const
         ).map(([kind, label]) => (
           <Row
@@ -272,10 +272,10 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Devices & brain</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.devicesBrain")}</Text>
         <Row
-          label="Glasses"
-          sub={connected ? "Connected" : "Not connected"}
+          label={t("settings.glasses")}
+          sub={connected ? t("settings.connected") : t("settings.notConnected")}
           right={
             <Text style={[typography.caption, { color: connected ? colors.accentSuccess : colors.textSecondary }]}>
               {connected ? "●" : "○"}
@@ -283,18 +283,18 @@ export default function Settings() {
           }
         />
         <TouchableOpacity onPress={() => router.push("/brain")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Pair devices, connect your Mac mini, cloud →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.pairLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/brain-tiers")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Brain — the tier ladder, live latency & swap →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.brainTierLink")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Try it</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.tryIt")}</Text>
         <Row
-          label="Demo Mode"
-          sub="Explore the whole app with labeled sample data — no glasses or Mac needed"
+          label={t("settings.demoMode")}
+          sub={t("settings.demoModeSub")}
           right={
             <Switch
               value={demoMode}
@@ -305,56 +305,55 @@ export default function Settings() {
           }
         />
         <TouchableOpacity onPress={() => router.push("/onboarding")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Take the tour again →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.tourAgain")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Labs</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.labs")}</Text>
         <TouchableOpacity onPress={() => router.push("/saga")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Saga — your rank, level & badges →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.sagaLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/profile")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>What Juno knows about you →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.profileLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Rewind your day — one timeline →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.rewindLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/plugins")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Plugins — build on the layer →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.pluginsLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/capabilities")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Capabilities — what your Brain can learn →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.capabilitiesLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/vitals")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Device vitals — what your glasses report →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.vitalsLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/cloud")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>What the cloud can see — the byte-shapes →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.cloudLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/waypath")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Waypath — one point of light, no map →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.waypathLink")}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/packs")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Feel — pick an earcon & haptic pack →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.feelLink")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>Privacy & legal</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.privacyLegal")}</Text>
         <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 8 }]}>
-          On-device by default. No account, no tracking. Cloud AI is opt-in — only then does a request’s text
-          reach the provider you choose.
+          {t("settings.privacyBlurb")}
         </Text>
         <TouchableOpacity onPress={() => Linking.openURL("https://dreamlayer.app/privacy.html")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>Privacy policy →</Text>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.privacyPolicy")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentError, marginBottom: 14 }]}>Danger zone</Text>
+        <Text style={[typography.eyebrow, { color: colors.accentError, marginBottom: 14 }]}>{t("settings.dangerZone")}</Text>
         <TouchableOpacity onPress={confirmPurge} style={s.danger}>
-          <Text style={[typography.body, { color: colors.accentError }]}>Erase all memories</Text>
+          <Text style={[typography.body, { color: colors.accentError }]}>{t("settings.eraseAll")}</Text>
         </TouchableOpacity>
       </View>
       </ScrollView>
