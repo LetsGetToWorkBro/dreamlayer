@@ -38,7 +38,10 @@ jobs:
           python-version: "3.11"
       - name: Install the security-relevant dependency surface
         run: |
-          python -m pip install --upgrade pip
+          # setuptools is a build-env tool, not a shipped dep; upgrade it so the
+          # runner uses the advisory-clear version (>=83 clears PYSEC-2026-3447)
+          # rather than the older setuptools setup-python happens to pre-install.
+          python -m pip install --upgrade pip setuptools
           # pip-audit matches *resolved installed versions* against advisory
           # DBs, so we install the deps that actually ship secrets/crypto/
           # network paths: the `privacy` (crypto + PII) and `llm` (provider
