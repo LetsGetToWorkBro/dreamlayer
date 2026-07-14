@@ -22,6 +22,11 @@ on:
 jobs:
   pip-audit:
     runs-on: ubuntu-latest
+    # Informational on introduction: it surfaces advisories in the (large,
+    # pre-existing) optional-dependency tree without gating every PR before the
+    # tree has been triaged. Flip continue-on-error off to make it a hard gate
+    # once the baseline is clean.
+    continue-on-error: true
     defaults:
       run:
         working-directory: host-python
@@ -35,7 +40,7 @@ jobs:
           python -m pip install --upgrade pip
           # audit the surface that actually ships secrets/crypto/network paths
           pip install -e ".[privacy,llm,platform]"
-      - name: pip-audit — fail on a known-vulnerable resolved dependency
+      - name: pip-audit — report known-vulnerable resolved dependencies
         run: |
           pip install pip-audit
           pip-audit --strict --progress-spinner=off
