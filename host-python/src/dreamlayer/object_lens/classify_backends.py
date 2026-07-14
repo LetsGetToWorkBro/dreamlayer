@@ -309,9 +309,15 @@ class HeuristicVisionClassifier:
                 best_label, best_dist = label, dist
         if best_label is None or best_dist > self.MAX_DISTANCE:
             return None
-        # confidence falls off with distance to the matched prototype
+        # Confidence falls off with distance to the matched prototype, mapped
+        # HONESTLY to [0, 1): a match right at MAX_DISTANCE scores ~0, a perfect
+        # match ~1. The old `0.5 + 0.49*conf` floored every match at ≥0.5, so a
+        # wall or sensor noise that landed just inside MAX_DISTANCE returned 0.5
+        # and sailed through the recognizer's `confidence < min_confidence`
+        # (default 0.5) gate — walls became "book", noise became "screen". With
+        # the true range, a loose match scores below the floor and is rejected.
         conf = max(0.0, 1.0 - best_dist / self.MAX_DISTANCE)
-        return (best_label, round(0.5 + 0.49 * conf, 4))
+        return (best_label, round(conf, 4))
 
 
 def default_classifier(labels: Optional[list[str]] = None,

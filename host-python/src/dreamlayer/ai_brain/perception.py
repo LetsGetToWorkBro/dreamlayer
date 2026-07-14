@@ -94,15 +94,21 @@ def _as_gray(frame) -> np.ndarray:
 
 def text_density(frame) -> float:
     """A model-free density estimate: mean gradient magnitude normalised by the
-    frame's dynamic range. Text and dense edges score high; a flat wall scores
-    ~0. Cheap, deterministic, and honest about what a heuristic can know."""
+    frame's FULL intensity scale. Text and dense edges score high; a flat wall
+    scores ~0. Cheap, deterministic, and honest about what a heuristic can know.
+
+    Normalising by the per-frame dynamic range (max-min) was the bug: a flat
+    wall with a single LSB of sensor noise has range 1 and gradient ~1, so the
+    ratio SATURATED to 1.0 — noise read as maximal text. Dividing by the fixed
+    full scale (255 for int frames, 1.0 for float) makes absolute contrast the
+    signal, so a near-flat frame scores near 0 as the docstring promises."""
     a = _as_gray(frame)
     if a.size == 0 or a.shape[0] < 2 or a.shape[1] < 2:
         return 0.0
     gx = float(np.abs(np.diff(a, axis=1)).mean())
     gy = float(np.abs(np.diff(a, axis=0)).mean())
-    rng = float(a.max() - a.min()) or 1.0
-    return max(0.0, min(1.0, 1.5 * (gx + gy) / rng))
+    full = 255.0 if float(a.max()) > 1.0 else 1.0
+    return max(0.0, min(1.0, 1.5 * (gx + gy) / full))
 
 
 # --- Tier 0 today: a heuristic, no model ------------------------------------
