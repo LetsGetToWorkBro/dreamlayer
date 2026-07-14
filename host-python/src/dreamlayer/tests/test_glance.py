@@ -146,6 +146,10 @@ def test_is_ambiguous_flags_when_the_cheap_read_cant_tell():
     assert arb.is_ambiguous(GlanceReading("unknown", 0.2, {}))
     assert arb.is_ambiguous(GlanceReading("text", 0.4, {"text_density": 0.6}))
     assert not arb.is_ambiguous(GlanceReading("person", 0.8, {"has_face": True}))
+    # Re-audit: a 0.0 confidence is the MOST ambiguous read — the old
+    # `reading.confidence and ...` short-circuited on falsy 0.0 and called it
+    # unambiguous, skipping the fine read exactly when it was needed.
+    assert arb.is_ambiguous(GlanceReading("object", 0.0, {}))
 
 
 def test_fine_scene_reply_parses():

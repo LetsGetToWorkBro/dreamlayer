@@ -362,12 +362,15 @@ class CommitmentRecallOps:
         if self.state.is_dream():
             anchors = []
             if p:
+                # on_place returns a DICT ({summary, person, confidence}); the
+                # old getattr() reads always hit the default, so every dream
+                # anchor carried an empty summary. Use dict access.
                 anchors = [{
-                    "id":         str(getattr(p, "id", signature)),
-                    "summary":    getattr(p, "summary",  ""),
-                    "place":      getattr(p, "place",    ""),
-                    "ts_label":   getattr(p, "ts_label", ""),
-                    "confidence": getattr(p, "confidence", None),
+                    "id":         str(p.get("id", signature)),
+                    "summary":    p.get("summary",  ""),
+                    "place":      p.get("place",    ""),
+                    "ts_label":   p.get("ts_label", ""),
+                    "confidence": p.get("confidence", None),
                 }]
             self.dream.feed_place(signature, anchors)
             return None

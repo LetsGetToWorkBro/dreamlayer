@@ -334,7 +334,11 @@ class GlanceArbiter:
         cue to escalate to fine (Mac/cloud) vision before arbitrating."""
         if reading.scene == "unknown":
             return True
-        if reading.confidence and reading.confidence < 0.5:
+        # A 0.0 (or unset) confidence is the MOST ambiguous read, not the least
+        # — the old `reading.confidence and ...` short-circuited on falsy 0.0 and
+        # declared it unambiguous, skipping the fine read exactly when it was
+        # needed most. Treat missing/zero confidence as ambiguous.
+        if (reading.confidence or 0.0) < 0.5:
             return True
         # dense text that might be a form OR a question OR prose is the classic
         # case worth a fine read.

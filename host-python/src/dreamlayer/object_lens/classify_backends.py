@@ -3,7 +3,11 @@
 ADD-alongside: new siblings. Each is a `classify_fn(frame) -> (label, conf)`
 callable for `ObjectRecognizer(classify_fn=...)` (recognizer.py untouched). All
 lazy-import their dep (extras group `vision`); when absent, `__call__` returns
-None so ObjectRecognizer transparently uses its built-in `_mock`.
+None, meaning "no recognition for this frame" — the recognizer's built-in
+`_mock` is used only when `classify_fn is None` (no backend wired at all), NOT
+when a wired backend declines a frame. The orchestrator therefore wires the
+dependency-free HeuristicVisionClassifier as the base rung so a no-deps install
+still gets real (gated) recognition rather than silence.
 
     from dreamlayer.object_lens.recognizer import ObjectRecognizer
     from dreamlayer.object_lens.classify_backends import ClipClassifier

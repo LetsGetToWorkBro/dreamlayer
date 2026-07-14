@@ -117,6 +117,16 @@ class VectorStore:
                 (mid, m.get("kind") or "", sqlite_vec.serialize_float32(emb)))
             self._indexed_ids.add(mid)
 
+    def evict(self, memory_id: int) -> None:
+        """Drop a purged memory's vector so it can never be recalled again and
+        never occupies a top-k slot. Without this the vec table only ever grew:
+        a forgotten memory's row survived, and a search that fetched it (its DB
+        row gone) silently returned fewer than top_k live matches."""
+        if not self._ensure_loaded():
+            return
+        self.db.conn.execute("DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
+        self._indexed_ids.discard(memory_id)
+
     def _search_indexed(self, query, kind, top_k):
         if not self._ensure_loaded():
             return None
@@ -131,7 +141,11 @@ class VectorStore:
         if kind is not None:
             where += " AND kind = ?"
             params.append(kind)
-        params.append(top_k)
+        # Over-fetch so stale rows (a memory purged from the DB but not yet
+        # evicted here) can't starve the result below top_k — we refill from
+        # the wider candidate set, keeping "results are always correct" true
+        # even if a caller forgot to evict().
+        params.append(max(top_k * 4, 16))
         cur = self.db.conn.execute(
             f"SELECT memory_id, distance FROM memory_vec WHERE {where} "
             "ORDER BY distance LIMIT ?", params)
@@ -141,9 +155,11 @@ class VectorStore:
             if m is None:
                 m = next((x for x in self.db.memories() if x["id"] == mid), None)
             if m is None:
-                continue
+                continue           # dead row (purged) — skip, don't count it
             sim = 1.0 - float(dist)      # cosine distance → cosine similarity
-            score = 0.5 * sim + 0.5 * (m.get("confidence") or 0.5)
+            conf = m.get("confidence")
+            conf = 0.5 if conf is None else float(conf)   # 0.0 stays 0.0
+            score = 0.5 * sim + 0.5 * conf
             out.append((score, dict(m)))
         out.sort(key=lambda x: x[0], reverse=True)
-        return out
+        return out[:top_k]
