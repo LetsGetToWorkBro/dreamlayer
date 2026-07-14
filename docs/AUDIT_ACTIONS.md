@@ -68,6 +68,34 @@ in three passes:
   child. The phone's last English strings are localized: the People screen's
   live literals and the entire Settings screen (~60 strings) now carry all
   nine locales, and icon-only ✕ controls are labelled for VoiceOver/TalkBack.
+- **Pass 6 (adversarial deep-dive on Intelligence + Memory, PRs #315–#318):**
+  two adversarial auditors swept the perception/answer paths and the storage/
+  index/recall lifecycle for code-reachable "lies on live input" defects on the
+  default (no-ML-deps) configuration. Privacy/veil: `purge_all` now erases the
+  `places`/`entities` tables (a place row is a location signature — a residue
+  after a full wipe), the capture veil fails CLOSED when the privacy gate
+  errors, and the index-skipping purge helpers in `memory/privacy.py` are gone.
+  Recall truth: the "Nod to Remember" gesture now embeds AND indexes its row
+  (it was invisible to ANN recall), a structured conversation writes each
+  promise ONCE (was double-written by the legacy + tier-1 extractors), a
+  kind-filtered ANN query falls through to the exact scan instead of starving
+  `top_k`, and a genuine `0.0` confidence is no longer coerced to `0.5`.
+  Perception default paths: the Veritas verdict parser handles negation ("not
+  correct" is DISPUTED, not SUPPORTED), the energy-VAD normalises by dtype
+  full-scale so near-silence isn't "speech", the offline vision rung maps
+  confidence to `[0,1)` so a wall/noise is gated out rather than labelled, the
+  text-density heuristic normalises by full scale (a flat wall scores ~0), the
+  LucidRecall router matches on word boundaries and routes fact questions to
+  memory, and tier-1 ingest stops minting "Person: Tomorrow/Thursday" from
+  sentence-initial capitals. Concurrency/durability: lock-guarded DB backfills,
+  a locked ring buffer, an ANN dirty counter that survives a failed save, a
+  batched retention sweep, and a maturity gate that earns RESIDENT on observed
+  cards (not vacuously) and counts an expired card as a dismissal. Plus the
+  minor tail (glance `0.0`-ambiguity, empty dream anchors, sqlite-vec eviction,
+  a stale classifier docstring). Documented, NOT faked: without a speaker
+  diarizer, capture cannot tell the wearer's voice from a bystander's, so the
+  `speaker=""`-means-wearer contract stays and the attribution question is
+  gated on the diarizer rather than papered over.
 
 What remains is, by nature, **owner action** — things a terminal cannot
 do. This file is the tracked list; delete entries as they land. Note that
