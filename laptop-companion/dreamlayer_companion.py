@@ -24,6 +24,7 @@ launch-at-login). macOS / Windows / Linux.
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import platform
@@ -119,7 +120,10 @@ def make_server(token: str, host: str, port: int,
         def do_GET(self):
             if self.path.rstrip("/") != CONTEXT_PATH:
                 self.send_response(404); self.end_headers(); return
-            if token and self.headers.get(TOKEN_HEADER) != token:
+            # constant-time compare so the token can't be recovered byte-by-byte
+            # by timing the 401 (audit 2026-07-14).
+            provided = self.headers.get(TOKEN_HEADER) or ""
+            if token and not hmac.compare_digest(provided, token):
                 self.send_response(401); self.end_headers(); return
             try:
                 body = json.dumps(context_fn()).encode("utf-8")

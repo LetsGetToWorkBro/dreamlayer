@@ -41,8 +41,20 @@ echo "→ installing the dreamlayer package"
 
 # 3. Config dir + a first folder to index
 mkdir -p "$CFG_DIR"
+chmod 700 "$CFG_DIR" 2>/dev/null || true       # the config holds a secret
 DEFAULT_FOLDER="$HOME/Documents/DreamLayer"
 mkdir -p "$DEFAULT_FOLDER"
+
+# The launch agent binds the Brain on the LAN so the phone can pair, so it MUST
+# be authenticated — never serve the control panel + API (and your indexed
+# files / mail) token-less on the network. If no --token was given, mint a
+# strong one now (mirrors the server's own guard for a network bind).
+if [[ -z "$TOKEN" ]]; then
+  TOKEN="$("$PY" -c 'import secrets; print(secrets.token_hex(16))')"
+  echo "  ⚠ no --token given — generated one (needed to pair the phone):"
+  echo "      $TOKEN"
+fi
+
 if [[ ! -f "$CFG_DIR/brain_config.json" ]]; then
   cat > "$CFG_DIR/brain_config.json" <<JSON
 { "folders": ["$DEFAULT_FOLDER"], "model": "ollama",
@@ -51,7 +63,9 @@ if [[ ! -f "$CFG_DIR/brain_config.json" ]]; then
   "ollama_vision_model": "llama3.2-vision",
   "token": "${TOKEN}" }
 JSON
-  echo "  wrote $CFG_DIR/brain_config.json (watching $DEFAULT_FOLDER)"
+  # the token lives here — make it readable only by this user, not world/group
+  chmod 600 "$CFG_DIR/brain_config.json"
+  echo "  wrote $CFG_DIR/brain_config.json (0600, watching $DEFAULT_FOLDER)"
 fi
 
 # 4. Launch-at-login agent
@@ -68,6 +82,10 @@ cat > "$PLIST" <<PL
     <string>$PY</string><string>-m</string>
     <string>dreamlayer.ai_brain.server</string>
     <string>--dir</string><string>$CFG_DIR</string>
+    <!-- Bind the LAN so the phone can pair. Safe: the config above always
+         carries a token (minted if none was given), and the token is read
+         from --dir, never passed on the command line (no `ps` exposure). -->
+    <string>--host</string><string>0.0.0.0</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict><key>DREAMLAYER_DIR</key><string>$CFG_DIR</string></dict>

@@ -119,4 +119,21 @@ describe("relay service forwards to the Brain", () => {
     expect(await relayEmit({ tag: "" })).toBeNull();
     expect((global as any).fetch).not.toHaveBeenCalled();
   });
+
+  it("the Veil silences captured content at the relay chokepoint", async () => {
+    // Audit 2026-07-14: the phone must ENFORCE the veil, not trust upstream ASR.
+    // With capture paused (Veil/incognito), a spoken 'ask' and host feed text
+    // never reach the Brain.
+    (global as any).fetch = jest.fn();
+    useBrainStore.setState({ capturePaused: true });
+    setQuestionProvider(() => "a private question");
+    expect(await relayEmit({ tag: "ask", id: "z" })).toBeNull();
+    expect(await feed("translated overheard speech", "whisper")).toBe(false);
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    // an inert non-capture lens tag still passes (carries no captured payload)
+    mockBrain({ ok: true, tag: "look", text: "Monstera" });
+    useBrainStore.setState({ capturePaused: true });
+    await relayEmit({ tag: "look" });
+    expect(calls.length).toBe(1);
+  });
 });

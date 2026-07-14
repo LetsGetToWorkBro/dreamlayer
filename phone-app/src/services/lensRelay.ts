@@ -29,17 +29,28 @@ export function setQuestionProvider(fn: () => string): void {
 }
 
 /** Forward a lens emit to the Brain. Returns the Brain's reply (for "ask") or
- *  null when nothing was reachable/actionable. Never throws. */
+ *  null when nothing was reachable/actionable. Never throws.
+ *
+ *  Veil-enforcing chokepoint (audit 2026-07-14): the `emit "ask"` payload is the
+ *  wearer's spoken question — captured speech — so while capture is paused (the
+ *  Veil, or incognito, which forces capturePaused) the phone refuses to forward
+ *  it rather than trusting the upstream ASR layer to have stopped. Other tags
+ *  carry no captured payload and are inert lens control signals. */
 export async function relayEmit(emit: { tag: string; id?: string }): Promise<AskResult> {
   const tag = (emit && emit.tag) || "";
   if (!tag) return null;
+  if (tag === "ask" && useBrainStore.getState().capturePaused) return null;
   const text = tag === "ask" ? questionProvider() : "";
   return useBrainStore.getState().emitLens(tag, text);
 }
 
 /** Stream a line of host text (translation / camera label / memory) into the
- *  running lens's `{slot}`. Returns whether the Brain accepted it. */
+ *  running lens's `{slot}`. Returns whether the Brain accepted it.
+ *
+ *  Veil-gated: this text is host capture (translated speech, a camera label, a
+ *  resurfaced memory), so the Veil / incognito silences it here on the phone. */
 export async function feed(text: string, source = ""): Promise<boolean> {
   if (!text) return false;
+  if (useBrainStore.getState().capturePaused) return false;
   return useBrainStore.getState().feedLens(text, source);
 }
