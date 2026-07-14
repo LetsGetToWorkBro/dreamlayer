@@ -80,6 +80,18 @@ _STOPWORDS = frozenset({
     "I", "The", "A", "An", "It", "He", "She", "They", "We", "You",
     "This", "That", "These", "Those", "OK", "Oh", "So", "And", "But",
     "Or", "If", "Then", "When", "Where", "What", "How", "Why",
+    # sentence-lead verbs/adverbs that are capitalised by grammar, not because
+    # they name a person — these fabricated "Person: Remember / Please / Call"
+    # rows before (re-audit).
+    "Remember", "Please", "Let", "Call", "Send", "Meet", "Go", "Take", "Get",
+    "Add", "Set", "Also", "Now", "Maybe", "Just", "Make", "Ask", "Tell", "Give",
+    "Bring", "Buy", "Book", "Pick", "Check", "Keep", "Try", "Do", "Don",
+    "Yes", "No", "Well", "Here", "There", "Every", "Next", "Last", "Once",
+    # day/time words that lead sentences and were minted as "Person: Thursday"
+    "Today", "Tonight", "Tomorrow", "Yesterday", "Monday", "Tuesday",
+    "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Morning",
+    "Afternoon", "Evening", "January", "February", "March", "April", "May",
+    "June", "July", "August", "September", "October", "November", "December",
 })
 _NAME_RE = re.compile(r"\b([A-Z][a-z]{1,20})(?:\s+[A-Z][a-z]{1,20})?\b")
 
@@ -151,7 +163,15 @@ def _extract_tier1(text: str, context: dict) -> list[MemoryEvent]:
             name = nm.group(0)
             if name in _STOPWORDS:
                 continue
-            conf = 0.85 if name.lower() in known_people else 0.75
+            known = name.lower() in known_people
+            # A single capitalised token at the START of a sentence is almost
+            # always grammatical capitalisation, not a name ("Tomorrow I fly to
+            # Paris" is not about a person named Tomorrow). Skip it unless it is
+            # a known person or a stronger two-word "First Last" match. Names
+            # mid-sentence, and multi-word names anywhere, still register.
+            if nm.start() == 0 and " " not in name and not known:
+                continue
+            conf = 0.85 if known else 0.75
             events.append(MemoryEvent(
                 kind="person", summary=f"Person: {name}",
                 confidence=conf,

@@ -4,19 +4,23 @@ Routes incoming queries to SocialLens, MemoryIndex, or both,
 then assembles a LucidRecallResult for HUD display.
 """
 from __future__ import annotations
+import re
 from typing import Optional
 import numpy as np
 from .schema import LucidRecallResult, QueryType
 
-# Keywords that route to face/person identification
-FACE_KEYWORDS = {
-    "who", "who's", "whos", "name", "person", "this person",
-    "do i know", "have we met", "remind me",
-}
-FACT_KEYWORDS = {
-    "what", "when", "where", "how", "why", "tell me", "recall",
-    "last time", "talked about", "discussed",
-}
+# Single-word cues, matched on WORD BOUNDARIES (not substrings): the old
+# `k in lower` matched "name" inside "tour-name-nt" and "who" inside "whole",
+# so ordinary fact questions were misrouted to face-ID and then dead-ended.
+FACE_WORDS = {"who", "whos", "name", "person"}
+FACT_WORDS = {"what", "when", "where", "how", "why", "recall", "discussed"}
+# Multi-word cues, matched as phrases.
+FACE_PHRASES = ("who's", "this person", "do i know", "have we met", "remind me")
+FACT_PHRASES = ("tell me", "last time", "talked about")
+
+# retained for backwards-compatible imports
+FACE_KEYWORDS = FACE_WORDS | set(FACE_PHRASES)
+FACT_KEYWORDS = FACT_WORDS | set(FACT_PHRASES)
 
 
 class LucidRecall:
@@ -60,8 +64,13 @@ class LucidRecall:
                 source="social_lens",
             )
 
-        # Fact query: use MemoryIndex
-        if qtype in (QueryType.FACT, QueryType.CONTEXT) and self._memory:
+        # Fact query — OR a face query with no camera to consume: fall through
+        # to memory rather than returning a dead "No result". A face question
+        # ("who did I meet") with nothing to look at is still worth a memory
+        # lookup ("you met Sarah at the expo").
+        if self._memory and (
+                qtype in (QueryType.FACT, QueryType.CONTEXT)
+                or (qtype == QueryType.FACE and camera_frame is None)):
             answer = self._memory.get(text or "")
             if answer:
                 return LucidRecallResult(
@@ -83,8 +92,14 @@ class LucidRecall:
         if not text:
             return QueryType.FACE  # default: camera trigger
         lower = text.lower()
-        if any(k in lower for k in FACE_KEYWORDS):
-            return QueryType.FACE
-        if any(k in lower for k in FACT_KEYWORDS):
+        tokens = set(re.findall(r"[a-z']+", lower))
+        face = bool(tokens & FACE_WORDS) or any(p in lower for p in FACE_PHRASES)
+        fact = bool(tokens & FACT_WORDS) or any(p in lower for p in FACT_PHRASES)
+        # Prefer FACT when a query carries both cues (e.g. "who did I talk to
+        # about the lease") — it is answerable from memory; the query() layer
+        # still routes to the camera first when a frame is present.
+        if fact:
             return QueryType.FACT
+        if face:
+            return QueryType.FACE
         return QueryType.UNKNOWN

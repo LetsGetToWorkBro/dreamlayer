@@ -45,6 +45,15 @@ _HEDGES = ("might", "may be", "maybe", "possibly", "perhaps", "unclear",
 _LEAD = re.compile(r"\bverdict\b\s*[:\-]?\s*", re.IGNORECASE)
 _WORD = re.compile(r"[a-z]+")
 
+# a negation in the two tokens before a verdict word flips its polarity:
+# "not correct" / "isn't accurate" / "that is not true" are DISPUTED, not
+# SUPPORTED. Without this, the parser took the first verdict-ish word and
+# ignored the negation — flashing a green "supported" card on a refuted claim.
+_NEGATORS = frozenset({"not", "never", "no", "cannot", "nor", "without",
+                       "hardly", "isnt", "wasnt", "arent", "aint", "dont",
+                       "doesnt", "didnt", "cant", "couldnt", "wouldnt", "nt"})
+_FLIP = {"supported": "disputed", "disputed": "supported"}
+
 
 def parse_verdict(text: str) -> Optional[dict]:
     """Parse a tier's reply into {verdict, basis, confidence}, or None if it
@@ -53,10 +62,16 @@ def parse_verdict(text: str) -> Optional[dict]:
     if not t:
         return None
     head = _LEAD.sub("", t, count=1)          # drop a leading "VERDICT:" if present
+    # normalize contractions so "isn't"/"doesn't" surface a negation token
+    norm = re.sub(r"n['’]t\b", " nt", head.lower())
+    words = _WORD.findall(norm)
     verdict = None
-    for w in _WORD.findall(head.lower()):
+    for i, w in enumerate(words):
         if w in _VERDICT_WORDS:
             verdict = _VERDICT_WORDS[w]
+            # a negation in the preceding two tokens flips supported<->disputed
+            if any(n in _NEGATORS for n in words[max(0, i - 2):i]):
+                verdict = _FLIP.get(verdict, verdict)
             break
     if verdict is None:
         return None

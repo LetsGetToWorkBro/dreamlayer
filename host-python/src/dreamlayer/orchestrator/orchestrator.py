@@ -267,8 +267,11 @@ class Orchestrator(
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
         # Tier-1 recognizer: the best real vision backend that's installed
-        # (YOLO → moondream → CLIP), else None so the recognizer's deterministic
-        # mock stays authoritative — the suite runs unchanged with no vision deps.
+        # (YOLO → MLX → moondream → CLIP), else the dependency-free
+        # HeuristicVisionClassifier as the offline base rung. That heuristic maps
+        # confidence honestly to [0,1), so a wall or noise scores below the
+        # recognizer's min_confidence gate and is rejected rather than labelled —
+        # real pixel-reading recognition with no ML deps, without false objects.
         from ..object_lens.recognizer import ObjectRecognizer
         from ..object_lens.classify_backends import default_classifier
         _clf = default_classifier()

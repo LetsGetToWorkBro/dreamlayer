@@ -56,8 +56,12 @@ class SileroVADGate:
         vals = list(samples) if not isinstance(samples, (list, tuple)) else samples
         if not vals:
             return False
-        # normalize ints to [-1,1] if needed
-        peak = max(abs(float(v)) for v in vals) or 1.0
-        scale = 1.0 if peak <= 1.0 else peak
+        # Normalize by the dtype's FULL SCALE, not the window's own peak.
+        # Dividing by the window peak made RMS/peak a crest-factor ratio (~0.7
+        # for any tone regardless of loudness), so ±3-LSB near-silence read as
+        # speech and the gate never saw silence. int PCM (peak > 1) → int16
+        # full-scale; float PCM (already in [-1,1]) stays as-is.
+        peak = max(abs(float(v)) for v in vals)
+        scale = 32768.0 if peak > 1.0 else 1.0
         rms = (sum((float(v) / scale) ** 2 for v in vals) / len(vals)) ** 0.5
         return rms >= self.threshold
