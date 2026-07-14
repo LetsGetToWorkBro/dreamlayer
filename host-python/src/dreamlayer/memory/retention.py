@@ -92,7 +92,9 @@ class RetentionSweep:
                 continue
             self.db.purge_memory(m["id"])
             if self.ann is not None:
-                self.ann.remove(m["id"])      # don't leave the vector behind
+                # save=False: defer persistence to the single flush() below, so
+                # a large sweep rewrites the index file once, not once per row
+                self.ann.remove(m["id"], save=False)
             report.expired.append(m["id"])
         if self.ann is not None and hasattr(self.ann, "flush"):
             # the sweep is a natural quiet point: persist any batched adds so

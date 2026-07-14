@@ -92,9 +92,7 @@ class DreamRemOps:
             if meta.get("no_dream"):
                 continue
             meta["no_dream"] = True
-            self.db.conn.execute("UPDATE memories SET meta=? WHERE id=?",
-                                 (_json.dumps(meta), m["id"]))
-            self.db.conn.commit()
+            self.db.update_meta(m["id"], meta)        # lock-guarded, not a bare conn.execute
             tagged += 1
         # the live ring too — tonight's dream draws from it directly
         words = {w.lower() for w in topic.split() if len(w) > 2}

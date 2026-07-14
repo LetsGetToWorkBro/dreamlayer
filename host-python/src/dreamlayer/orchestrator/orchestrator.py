@@ -636,7 +636,13 @@ class Orchestrator(
             # the sliding window; on_telemetry_event wants the raw TEL shape)
             self.dismissals.on_telemetry_event({"t": "TEL", **p})
             if p.get("event") == "CARD_DISMISSED":
-                self.maturity.observe_card(dismissed=p.get("method") == "tap")
+                # Both a tap-away AND a silent expire are the wearer NOT
+                # engaging — the maturity docstring and adaptive_confidence both
+                # treat expire as a dismissal. Counting only 'tap' let an ignored
+                # (expired) card lower the dismiss rate, promoting the very
+                # wearer who tuned it out. Match the two signals.
+                self.maturity.observe_card(
+                    dismissed=p.get("method") in ("tap", "expire"))
             elif p.get("event") == "CARD_SHOWN":
                 # a card actually reached the glass — the moment plugins react to
                 self.publish_plugin_event(

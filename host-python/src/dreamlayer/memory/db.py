@@ -34,6 +34,20 @@ class MemoryDB:
         with self._lock:
             r = self.conn.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
         return dict(r) if r else None
+    def update_embedding(self, memory_id: int, embedding) -> None:
+        # a lock-guarded backfill: capture runs off-thread, so a bare
+        # self.conn.execute(...) from an ops mixin raced the writer lock and
+        # could interleave commits (the exact hazard the class lock exists for).
+        from .embeddings import pack_embedding
+        with self._lock:
+            self.conn.execute("UPDATE memories SET embedding=? WHERE id=?",
+                              (pack_embedding(embedding) if embedding else None, memory_id))
+            self.conn.commit()
+    def update_meta(self, memory_id: int, meta) -> None:
+        with self._lock:
+            self.conn.execute("UPDATE memories SET meta=? WHERE id=?",
+                              (json.dumps(meta or {}), memory_id))
+            self.conn.commit()
     def get_setting(self, key: str, default=None):
         with self._lock:
             r = self.conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()

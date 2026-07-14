@@ -35,6 +35,11 @@ OBSERVER_MIN_EVENTS = 200
 APPRENTICE_MIN_S = 7 * 86400.0
 APPRENTICE_WINDOW = 50
 APPRENTICE_MAX_DISMISS = 0.40
+# RESIDENT (audible harks) must be EARNED on evidence, not just time. With an
+# empty card history _dismiss_rate() is 0.0, which cleared the dismissal gate
+# vacuously — a wearer who never engaged (or was never shown) a card got
+# promoted to audible interruptions. Require a minimum of resolved cards first.
+RESIDENT_MIN_CARDS = 10
 APPRENTICE_MIN_CONFIDENCE = 0.85
 APPRENTICE_DAILY_CAP = 3
 APPRENTICE_KINDS = frozenset({"commitment", "event"})
@@ -94,6 +99,7 @@ class MaturityGate:
         # streak expresses itself through REGRESSION, not double-demotion.
         if earned == APPRENTICE and not self._resident \
                 and age >= APPRENTICE_MIN_S \
+                and len(self._cards) >= RESIDENT_MIN_CARDS \
                 and self._dismiss_rate() < APPRENTICE_MAX_DISMISS:
             self._resident = True
             self._save()

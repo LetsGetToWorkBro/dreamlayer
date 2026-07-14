@@ -234,7 +234,9 @@ class TestMaturityArc:
         g = MaturityGate(now_fn=lambda: clock["t"])
         g.paired_at = 0.0
         g.observe_event(OBSERVER_MIN_EVENTS)
-        assert g.state() == RESIDENT            # earned it (sticky)
+        for _ in range(10):
+            g.observe_card(dismissed=False)     # RESIDENT is earned on evidence,
+        assert g.state() == RESIDENT            # not time alone (sticky)
         for _ in range(20):
             g.observe_card(dismissed=True)      # the wearer swats everything
         assert g.state() == APPRENTICE          # dropped one state

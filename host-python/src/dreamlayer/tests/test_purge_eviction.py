@@ -27,7 +27,7 @@ class StubAnn:
     def add(self, mid, vec):
         self.added.append(mid)
 
-    def remove(self, mid):
+    def remove(self, mid, save=True):
         self.removed.append(mid)
 
     def rebuild(self, db):

@@ -144,13 +144,11 @@ class IngestOps:
                 wrote_commitments = True
         events = self.pipeline.ingest(transcript, context=context,
                                       write_commitments=not wrote_commitments)
-        from ..memory.embeddings import pack_embedding
         for ev in events:
             emb = self.embedder.embed(ev.summary)
-            self.db.conn.execute("UPDATE memories SET embedding=? WHERE id=?", (pack_embedding(emb), ev.db_id))
+            self.db.update_embedding(ev.db_id, emb)   # lock-guarded backfill
             self.retriever.index_memory(ev.db_id, emb)
             db_ids.append(ev.db_id)
-        self.db.conn.commit()
         self.bridge.send_card(cards.saved_memory(""), event="memory_saved")
         return db_ids
 

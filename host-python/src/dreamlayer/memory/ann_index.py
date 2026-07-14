@@ -106,14 +106,21 @@ class PersistentAnnIndex:
             log.error("[ann_index] add failed: %s", exc)
             return False
 
-    def remove(self, memory_id: int) -> None:
-        # immediate save: an erased memory must not resurrect from a stale
-        # index file after a crash (see class docstring)
+    def remove(self, memory_id: int, save: bool = True) -> None:
+        # immediate save by default: a single "forget that" must not resurrect
+        # from a stale index file after a crash (see class docstring). A BULK
+        # caller (RetentionSweep) passes save=False and flushes ONCE at the end,
+        # so a 1000-row sweep rewrites the index file once, not 1000 times; a
+        # crash mid-sweep is harmless because retrieval skips any indexed id
+        # whose DB row is already gone.
         if self._index is None:
             return
         try:
             self._index.remove(int(memory_id))
-            self._save()
+            if save:
+                self._save()
+            else:
+                self._dirty += 1
         except Exception:
             pass
 
@@ -166,11 +173,17 @@ class PersistentAnnIndex:
     def _save(self) -> None:
         if self._index is None:
             return
-        self._dirty = 0
         if self.path is None:
+            self._dirty = 0            # in-memory: nothing to persist
             return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._index.save(str(self.path))
+            # Clear the dirty counter ONLY after a durable save. Zeroing it
+            # first (the old order) meant a save that threw — disk full —
+            # marked the batch clean, so flush() became a no-op and up to
+            # save_every unsaved adds could vanish on the next crash, breaking
+            # the bound the class docstring promises.
+            self._dirty = 0
         except Exception as exc:
-            log.error("[ann_index] save failed: %s", exc)
+            log.error("[ann_index] save failed: %s; batch stays dirty", exc)
