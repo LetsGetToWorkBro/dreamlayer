@@ -55,6 +55,39 @@ class TestRetrieverPurge:
         assert ann.rebuilt and db.memories() == []
 
 
+class TestRetrieverPurgeWipesEmber:
+    """The residual Ember edge: erase-everything must reach the ember practice
+    too, and it must do so at the primitive — not bolted onto each call-site
+    (phone endpoint, CLI) that a future caller could forget to mirror. A
+    Retriever wired with an ember store wipes engrams (answers included) and
+    scrubs their bytes from the sidecar via purge_all() ALONE."""
+
+    def test_purge_all_wipes_wired_ember_store(self, tmp_path):
+        from dreamlayer.ember import EmberStore
+
+        db = MemoryDB(":memory:")
+        ember_path = tmp_path / "dreamlayer.db.ember"
+        embers = EmberStore(str(ember_path))
+        embers.keep("k1", "What did Maya say?",
+                    "Maya said her first full sentence in Spanish", 1.0)
+        assert embers.engrams(include_burned=True) != []
+
+        r = Retriever(db, ember_store=embers)
+        r.purge_all()                          # the primitive alone
+
+        assert embers.engrams(include_burned=True) == []   # engrams gone
+        raw = ember_path.read_bytes()
+        assert b"Spanish" not in raw, "erased must mean the answer bytes left the file"
+
+    def test_purge_all_without_an_ember_store_is_a_noop(self):
+        # a Retriever with no ember wired must not raise — the wipe is
+        # duck-typed and simply absent when ember_store is None
+        db = MemoryDB(":memory:")
+        db.add_memory("scene", "a", embedding=VEC)
+        Retriever(db).purge_all()
+        assert db.memories() == []
+
+
 class TestPurgeLeavesNoLocationResidue:
     """Re-audit: purge_all deleted memories/commitments/conversations/events but
     left `places` and `entities`. A place row is a location SIGNATURE (the

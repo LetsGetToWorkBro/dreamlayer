@@ -133,11 +133,16 @@ class Orchestrator(
 
         # Ember: memories you tend until they live in you (docs/EMBER.md).
         # Its own DB file beside the memory DB — engrams are records of what
-        # the WEARER knows, so they must survive memory lifecycle events
-        # (retention sweeps, purge_all) by construction, not by exemption.
+        # the WEARER knows, so they survive the retention *lifecycle* (nightly
+        # sweeps, hot-ring purge) by construction. They do NOT survive the
+        # wearer's explicit erase-everything: that reaches the ember file too,
+        # and it does so through the retrieval primitive below — wiring the
+        # store into the Retriever means purge_all() wipes engrams by
+        # construction, never by a caller remembering to.
         from ..ember import EmberStore
         self.embers = EmberStore(":memory:" if db_path == ":memory:"
                                 else db_path + ".ember")
+        self.retriever.ember_store = self.embers
         self._ember_active = None   # (engram_id, prompted_ts) while a glow holds
 
         # Drift / scrub / tell engines
