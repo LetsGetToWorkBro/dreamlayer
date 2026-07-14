@@ -33,10 +33,17 @@ class Retriever:
     # blend is less likely to promote a row from outside the shortlist.
     ANN_CANDIDATES = 8
 
-    def __init__(self, db, embedder=None, ann=None):
+    def __init__(self, db, embedder=None, ann=None, ember_store=None):
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
         self.ann = ann                       # PersistentAnnIndex or None
+        # The ember practice is a separate SQLite file that holds consolidated
+        # cue+answer engrams. It is retention-immune by design, but the
+        # wearer's erase-everything must reach it too — so purge_all() wipes it
+        # here, at the primitive, not bolted onto each call-site. Duck-typed:
+        # anything exposing purge_all() (an EmberStore) plugs in. None = no
+        # ember file wired (the engram wipe is then a no-op).
+        self.ember_store = ember_store
 
     def index_memory(self, memory_id: int, embedding) -> None:
         """Keep the ANN index in step with an ingest (no-op without one)."""
@@ -53,10 +60,18 @@ class Retriever:
             self.ann.remove(memory_id)
 
     def purge_all(self) -> None:
-        """Forget everything — rows and the whole index."""
+        """Forget everything — rows, the whole index, and the ember practice.
+
+        Erase-everything must erase everything, by construction: a caller that
+        reaches for the retrieval primitive to wipe memory must not have to
+        remember to also wipe the ember sidecar. Whatever ember store is wired
+        goes with the rows (its own purge_all VACUUMs, so answer bytes leave
+        the file, not just the pages)."""
         self.db.purge_all()
         if self.ann is not None:
             self.ann.rebuild(self.db)        # db is now empty → index cleared
+        if self.ember_store is not None:
+            self.ember_store.purge_all()     # engrams + staged offers, VACUUMed
 
     def search(self, query: str, kind=None, top_k=3):
         qv = self.embedder.embed(query)
