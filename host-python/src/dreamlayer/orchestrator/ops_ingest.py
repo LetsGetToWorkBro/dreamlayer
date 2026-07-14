@@ -115,6 +115,7 @@ class IngestOps:
         if not self.privacy.allow_capture():
             return []
         db_ids = []
+        wrote_commitments = False
         if isinstance(conv, str):
             transcript = conv
         else:
@@ -131,10 +132,18 @@ class IngestOps:
             )
             db_ids.append(conv_mid)
             self.retriever.index_memory(conv_mid, emb)
+            # A structured conversation can carry curated commitments
+            # (turns[].commitment, high confidence) that the text pipeline would
+            # only re-derive at lower confidence. Write those here — and then
+            # tell the pipeline NOT to also write commitments for this same
+            # conversation, or one promise lands as TWO rows (the double-write
+            # the re-audit found). Exactly one commitment writer per conversation.
             for c in extract_commitments(conv):
                 cid = self.db.add_commitment(c["person"], c["task"], c["due"], conv_mid, c["confidence"])
                 db_ids.append(cid)
-        events = self.pipeline.ingest(transcript, context=context)
+                wrote_commitments = True
+        events = self.pipeline.ingest(transcript, context=context,
+                                      write_commitments=not wrote_commitments)
         from ..memory.embeddings import pack_embedding
         for ev in events:
             emb = self.embedder.embed(ev.summary)
@@ -228,13 +237,22 @@ class IngestOps:
         ev = latest[0].event
         ev.meta = dict(getattr(ev, "meta", None) or {})
         ev.meta["pinned"] = True
+        summary = getattr(ev, "summary", "")
         try:
+            # Embed AND index, exactly as every other ingest path does. Without
+            # this the flagship "Nod to Remember" gesture stored a row the ANN
+            # recall path could never return — pinned, but invisible to fast
+            # recall, and the boot drift-rebuild (which counts only embedded
+            # rows) never healed it.
+            emb = self.embedder.embed(summary)
             mid = self.db.add_memory(
                 kind=getattr(ev, "kind", "memory"),
-                summary=getattr(ev, "summary", ""),
+                summary=summary,
+                embedding=emb,
                 confidence=max(float(getattr(ev, "confidence", 0.5)),
                                float(confidence or 0.0)),
                 meta=ev.meta)
+            self.retriever.index_memory(mid, emb)
         except Exception as exc:
             self.health.record_failure("pin", exc)
             return {"pinned": False, "reason": "persist failed"}

@@ -281,13 +281,19 @@ class IngestPipeline:
             return True
         return False
 
-    def ingest(self, transcript: str, context: dict | None = None) -> list[MemoryEvent]:
+    def ingest(self, transcript: str, context: dict | None = None,
+               write_commitments: bool = True) -> list[MemoryEvent]:
         """Extract memory events from *transcript* and persist to DB.
 
         Parameters
         ----------
         transcript : str   raw speech-to-text or typed input
         context    : dict  optional keys: location, people, timestamp
+        write_commitments : bool  when False, `promise` events still persist as
+            memories but do NOT also write a commitment row. The caller sets this
+            when it has already written the conversation's commitments from a
+            more authoritative source (structured turns[].commitment), so one
+            promise doesn't land as two commitment rows.
 
         Returns
         -------
@@ -320,7 +326,7 @@ class IngestPipeline:
             meta["timestamp"] = timestamp
             meta["source"]    = ev.source
 
-            if ev.kind == "promise":
+            if ev.kind == "promise" and write_commitments:
                 self.db.add_commitment(
                     person=ev.meta.get("person", ""),
                     task=ev.meta.get("task", ev.summary),
