@@ -37,6 +37,12 @@ class Mem0Layer:
         p = self._privacy
         return not (p is not None and hasattr(p, "allow_capture") and not p.allow_capture())
 
+    def _recall_allowed(self) -> bool:
+        # read-back is silenced only by a full pause (not incognito), matching
+        # the memory/privacy allow_recall contract (audit 2026-07-14).
+        p = self._privacy
+        return not (p is not None and hasattr(p, "allow_recall") and not p.allow_recall())
+
     def add(self, text: str, user_id: str = "me", meta: dict | None = None) -> bool:
         if not self._allowed():
             return False
@@ -52,6 +58,8 @@ class Mem0Layer:
         return True
 
     def search(self, query: str, user_id: str = "me", limit: int = 5) -> list[dict]:
+        if not self._recall_allowed():
+            return []                         # veiled: read-back is silenced
         if self._mem is not None:
             try:
                 res = self._mem.search(query, user_id=user_id, limit=limit)

@@ -18,14 +18,35 @@ the Object Lens is for things.
 """
 from __future__ import annotations
 
+import re
 from typing import Callable, Optional
 
 import numpy as np
 
 from .schema import ObjectSighting
 
-# a person is never an "object" here — defer to Social Lens
-PERSON_LABELS = frozenset({"person", "face", "man", "woman", "child", "people"})
+# A person is never an "object" here — defer to Social Lens. A fixed 6-word
+# exact-match set let an open-vocabulary VLM slip a human through as a described
+# object ("man in a suit", "young boy") — so this is now a broad set of
+# person-indicating TOKENS, matched against any word in the label, not the whole
+# label (audit 2026-07-14). Better to decline a rare true object than to
+# describe a person.
+PERSON_TOKENS = frozenset({
+    "person", "people", "face", "faces", "man", "men", "woman", "women",
+    "child", "children", "kid", "kids", "boy", "boys", "girl", "girls",
+    "toddler", "baby", "infant", "human", "humans", "lady", "ladies",
+    "gentleman", "guy", "guys", "adult", "teenager", "teen", "pedestrian",
+    "someone", "somebody", "crowd", "portrait", "selfie",
+})
+# kept for back-compat with anything importing the old name
+PERSON_LABELS = PERSON_TOKENS
+
+_WORD_RE = re.compile(r"[a-z]+")
+
+
+def _names_a_person(label: str) -> bool:
+    """True if any word in the label is a person token."""
+    return any(w in PERSON_TOKENS for w in _WORD_RE.findall((label or "").lower()))
 
 DEFAULT_TAXONOMY = [
     "laptop", "mug", "book", "houseplant", "phone", "keys",
@@ -59,7 +80,7 @@ class ObjectRecognizer:
                 return None
             label, confidence, attrs = got
 
-        if label.strip().lower() in PERSON_LABELS:
+        if _names_a_person(label):
             return None                       # people belong to Social Lens
         if confidence < self.min_confidence:
             return None

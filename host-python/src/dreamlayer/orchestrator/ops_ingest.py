@@ -33,7 +33,17 @@ class IngestOps:
 
         Calls the existing vision pipeline in poetic mode: returns a
         short evocative description rather than a structured memory.
-        """
+
+        describe_poetic sends the raw camera JPEG to a cloud VLM, so it is
+        gated by the wearer's switches — NOT merely by whether an API key
+        exists (audit 2026-07-14 CRITICAL). It runs only when capture is
+        allowed AND the Cloud switch is on; with cloud off, or while the veil
+        or incognito is up, the frame never leaves the device (empty string,
+        so Dream Mode simply skips the scene card)."""
+        if not self.privacy.allow_capture():
+            return ""
+        if not getattr(self.brain, "cloud_opt_in", False):
+            return ""                         # Cloud switch off → no raw frame egress
         try:
             result = await vision.describe_poetic(jpeg_bytes, prompt, config=self.config)
             return result
@@ -178,11 +188,16 @@ class IngestOps:
                     scene = dict(scene)
                     key = "camera_jpeg" if scene.get("camera_jpeg") else "camera_frame"
                     scene[key] = res.jpeg
+        # Dream Mode's camera path transmits the frame to the vision tier, so it
+        # is capture and must honor the Veil at this seam — not only inside the
+        # engine. IMU pose is inert motion, so it may still drive the ambient
+        # geometry while veiled.
         if self.state.is_dream():
-            jpeg = scene.get("camera_jpeg") or scene.get("camera_frame")
-            if jpeg and self.frame_budget.allow_ambient(
-                    (now_ms / 1000.0) if now_ms is not None else None):
-                self.dream.feed_camera(jpeg)
+            if self.privacy.allow_capture():
+                jpeg = scene.get("camera_jpeg") or scene.get("camera_frame")
+                if jpeg and self.frame_budget.allow_ambient(
+                        (now_ms / 1000.0) if now_ms is not None else None):
+                    self.dream.feed_camera(jpeg)
             imu_pose  = scene.get("imu_pose")
             imu_delta = scene.get("imu_delta")
             if imu_pose:
@@ -192,7 +207,7 @@ class IngestOps:
 
     def on_audio_frame(self, transcript: str, *, context: dict | None = None, now_ms: int | None = None):
         """Process an audio frame — feeds mic data to Dream Mode if active."""
-        if self.state.is_dream() and context:
+        if self.state.is_dream() and context and self.privacy.allow_capture():
             fft       = context.get("mic_fft")
             amplitude = context.get("mic_amplitude", 0.0)
             if fft is not None:

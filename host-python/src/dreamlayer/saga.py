@@ -183,7 +183,13 @@ class SagaProfile:
         of any achievements newly unlocked."""
         fresh: list[str] = []
         cur = count if count is not None else self.progress.get(event, 0) + n
-        self.progress[event] = max(self.progress.get(event, 0), cur)
+        # Cap the stored count at the highest target this event can unlock, so
+        # saga.json stops accumulating an uncapped usage-frequency trail of
+        # privacy-sensitive events (how many times you went incognito / recalled
+        # / opened a dossier) that rides along in a Brain backup (audit
+        # 2026-07-14). Past the max target the achievement is already earned.
+        cap = max((a.target for a in _BY_EVENT.get(event, [])), default=1)
+        self.progress[event] = min(cap, max(self.progress.get(event, 0), cur))
         for a in _BY_EVENT.get(event, []):
             if a.id not in self.unlocked and self.progress[event] >= a.target:
                 self._unlock(a, fresh)
@@ -260,7 +266,15 @@ class SagaProfile:
         if not self._vault:
             return
         self._vault.mkdir(parents=True, exist_ok=True)
-        self._path().write_text(json.dumps({
+        # atomic write (temp + os.replace) so a crash mid-write — or the hub
+        # quest engine and the Brain profile writing at once — can't leave a
+        # truncated saga.json that _load silently resets to zero (audit
+        # 2026-07-14).
+        import os
+        path = self._path()
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps({
             "xp": self.xp, "level": level_for_xp(self.xp),
             "rank": rank_for_level(level_for_xp(self.xp)),
             "unlocked": sorted(self.unlocked), "progress": self.progress}))
+        os.replace(tmp, path)

@@ -28,9 +28,16 @@ class RhythmClaim:
 
 
 def export_claims(model, bond_key: bytes,
-                  min_days: int = 2) -> list[dict]:
+                  min_days: int = 2, privacy=None) -> list[dict]:
     """A Premonition model's predictable slots, anonymized for the bond.
-    Suppressed and thin slots never leave the phone."""
+    Suppressed and thin slots never leave the phone.
+
+    Veil-gated (audit 2026-07-14): while capture is paused the veil must silence
+    YOUR side completely — nothing sent — so a veiled/paused wearer exports no
+    claims at all. This was the one confluence path that touched predictive
+    memory without a gate."""
+    if privacy is not None and not privacy.allow_capture():
+        return []
     claims = []
     for slot, stats in model._slots.items():
         weekday, hour, _kind, _head, place = slot
@@ -52,10 +59,11 @@ def export_claims(model, bond_key: bytes,
 
 
 def crossings(my_model, peer_claims: list[dict],
-              bond_key: bytes) -> list[RhythmClaim]:
-    """Hours where both rhythms predict the same salted place."""
+              bond_key: bytes, privacy=None) -> list[RhythmClaim]:
+    """Hours where both rhythms predict the same salted place. Veiled → no
+    crossings (my side exports nothing, so there is nothing to intersect)."""
     mine = {(c["wd"], c["h"], c["p"])
-            for c in export_claims(my_model, bond_key)}
+            for c in export_claims(my_model, bond_key, privacy=privacy)}
     out = []
     for c in peer_claims or []:
         key = (int(c.get("wd", -1)), int(c.get("h", -1)),
@@ -71,18 +79,23 @@ class SharedRhythms:
     crossings render as future ghosts on both rings, through the exact
     kind-6 path Premonition already ships."""
 
-    def __init__(self, my_model, bond_key: bytes) -> None:
+    def __init__(self, my_model, bond_key: bytes, privacy=None) -> None:
         self._model = my_model
         self._key = bond_key
+        self._privacy = privacy
         self._crossings: list[RhythmClaim] = []
 
     def update(self, peer_claims: list[dict]) -> list[RhythmClaim]:
-        self._crossings = crossings(self._model, peer_claims, self._key)
+        self._crossings = crossings(self._model, peer_claims, self._key,
+                                    privacy=self._privacy)
         return list(self._crossings)
 
     def predict(self, now):
         """Only the predictions of MY model that fall on a crossing —
-        a shared ghost is my own rhythm, confirmed by yours."""
+        a shared ghost is my own rhythm, confirmed by yours. Silenced while the
+        full pause veil is up (a shared ghost is a read-back of memory)."""
+        if self._privacy is not None and not self._privacy.allow_recall():
+            return []
         crossing_keys = {(c.weekday, c.hour) for c in self._crossings}
         return [p for p in self._model.predict(now)
                 if (p.slot[0], p.slot[1]) in crossing_keys]

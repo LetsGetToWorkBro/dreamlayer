@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 
 log = logging.getLogger("dreamlayer.sign_crypto")
 
@@ -39,7 +40,13 @@ class Signer:
     available = _HAS_CRYPTO
 
     def __init__(self, key: bytes | None = None):
-        self._key = key or hashlib.sha256(b"dreamlayer-session").digest()
+        # A missing key gets a PER-INSTANCE RANDOM secret, never a baked-in
+        # constant. The old default — sha256(b"dreamlayer-session") — is public
+        # in this source, so on the HMAC fallback (no `cryptography` extra)
+        # anyone could forge a signature that verifies. No caller constructs
+        # Signer() without a key today, so this only closes the latent footgun
+        # (audit 2026-07-14): a future keyless Signer can no longer be forged.
+        self._key = key or os.urandom(32)
         self._priv = None
         self._pub = None
         if _HAS_CRYPTO:

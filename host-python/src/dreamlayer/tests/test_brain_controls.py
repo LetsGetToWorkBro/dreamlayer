@@ -151,6 +151,74 @@ class TestControls:
         finally:
             be.cloud_chat = orig
 
+    def test_concurrent_people_writes_do_not_lose_updates(self, tmp_path):
+        """Audit 2026-07-14: the cfg_dir JSON stores are hit by concurrent authed
+        POSTs on the threaded server. A locked read-modify-write + atomic write
+        means N parallel add_person calls all land — no lost or corrupt data."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        errors = []
+
+        def add(i):
+            try:
+                brain.add_person(f"Person{i}", note=f"n{i}")
+            except Exception as e:      # a torn read would raise here
+                errors.append(e)
+
+        ts = [threading.Thread(target=add, args=(i,)) for i in range(40)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        assert not errors
+        names = {p["name"] for p in brain.people()}
+        assert names == {f"Person{i}" for i in range(40)}     # none lost
+
+    def test_hub_no_cloud_blocks_brain_cloud_escalation(self, tmp_path):
+        """Audit 2026-07-14 CRITICAL: the wearer's Incognito (or hub-cloud-off)
+        must reach the paired Brain's OWN cloud escalation. A cloud-ready Brain
+        that is told no_cloud by the hub must NOT egress — even though its own
+        config would."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", cloud_api_key="k", cloud_model="m",
+                    cloud_enabled=True).save(cfg)
+        brain = Brain(cfg)
+        import dreamlayer.ai_brain.server.backends as be
+        orig = be.cloud_chat
+        be.cloud_chat = lambda config, prompt, **k: "the cloud answer"
+        try:
+            # hub says no_cloud → no egress, no matter how cloud-ready the Brain
+            ans = brain.ask("something not in any file", no_cloud=True)
+            assert ans is None
+            assert brain.config.cloud_calls == 0
+            assert not any(i["kind"] == "cloud-egress"
+                           for i in brain.activity.recent())
+            # default (direct panel / hub-cloud-on) still escalates as before
+            ans = brain.ask("something not in any file")
+            assert ans is not None and ans.tier == "cloud"
+            assert brain.config.cloud_calls == 1
+        finally:
+            be.cloud_chat = orig
+
+    def test_remote_tier_sends_hub_cloud_posture(self):
+        """The remote (phone→Brain) tier must state the hub's cloud posture on
+        every request, read live from the router, so a switch flipped mid-session
+        applies to the next ask with no restore race."""
+        from dreamlayer.ai_brain.router import BrainRouter
+        from dreamlayer.ai_brain.remote import connect_brain
+        seen = []
+        def fake_post(url, payload, headers):
+            seen.append(dict(payload))
+            return {"text": "ok", "tier": "laptop"}
+        router = BrainRouter(cloud_opt_in=False)
+        connect_brain(router, "http://brain.local", token="t", http_post=fake_post)
+        router.ask("what does Marcus owe me?")
+        assert seen and seen[-1]["no_cloud"] is True     # hub cloud off → no_cloud
+        router.opt_in_cloud(True)
+        router.ask("again")
+        assert seen[-1]["no_cloud"] is False             # hub cloud on → allowed
+
     def test_cloud_egress_counted_even_when_call_fails(self, tmp_path):
         """Re-audit 2026-07: the query LEAVES the device before the provider
         answers. A call that errors or returns empty still egressed, so it must

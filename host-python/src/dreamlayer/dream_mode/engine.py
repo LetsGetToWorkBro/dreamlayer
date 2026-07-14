@@ -136,7 +136,14 @@ class DreamEngine:
     # Sensor feed  (called by Orchestrator on every sensor event)
     # ------------------------------------------------------------------
 
+    def _veiled(self) -> bool:
+        """True when capture is paused (Veil) or incognito. Fail-safe: a gate
+        that is wired is honored; no gate wired means legacy behaviour."""
+        return self.privacy is not None and not self.privacy.allow_capture()
+
     def feed_mic(self, fft: list[float], amplitude: float) -> None:
+        if self._veiled():
+            return                          # the ear is closed; process no audio
         self._ctx.mic_fft = fft
         self._ctx.mic_amplitude = amplitude
 
@@ -145,6 +152,8 @@ class DreamEngine:
         self._ctx.imu_delta = delta
 
     def feed_camera(self, jpeg_bytes: bytes) -> None:
+        if self._veiled():
+            return                          # veiled: no frame enters, none is sent
         self._ctx.camera_frame = jpeg_bytes
 
     def feed_place(self, signature: str, anchors: list[dict]) -> None:
@@ -168,6 +177,15 @@ class DreamEngine:
 
     async def _tick(self) -> None:
         ctx = self._ctx
+
+        # Veil dropped while a frame/audio was already staged: drop the residue
+        # before anything reads it, so a pre-veil camera frame is never sent to
+        # the vision tier and pre-veil audio is never processed once capture is
+        # paused. New capture is already blocked at feed_camera/feed_mic.
+        if self._veiled():
+            ctx.camera_frame = None
+            ctx.mic_fft = None
+            ctx.mic_amplitude = 0.0
 
         palette_cmd = self.mic.tick(ctx)
         if palette_cmd:

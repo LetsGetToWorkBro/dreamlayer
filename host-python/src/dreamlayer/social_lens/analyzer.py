@@ -29,6 +29,7 @@ from typing import Optional
 
 import numpy as np
 
+from ..memory.privacy import AlwaysOnGate, requires_capture
 from .embedder import FaceEmbedder, embed_frame
 from .index import ContactIndex
 from .enricher import ContactEnricher
@@ -68,7 +69,7 @@ class SocialLens:
         self._enricher = ContactEnricher(memory_backend)
         self._renderer = SocialLensRenderer()
 
-        self._privacy = privacy or _AlwaysOn()
+        self._privacy = privacy or AlwaysOnGate()
 
         # Name-you-were-told capture shares this instance's index,
         # enricher, embedder, and privacy gate, so a kept introduction
@@ -155,12 +156,14 @@ class SocialLens:
         """Let the current offer go, unremembered."""
         self.introductions.dismiss()
 
+    @requires_capture
     def add_note(self, note: str, who: Optional[str] = None):
         """Jot a note about a person, on the spot. `who` is a name; omit it to
         note whoever you just looked at (the last identify() match). The note is
         appended to that contact's own record — it shows on the recall card the
         next time you see them. Returns the ContactRecord it landed on, or None
-        if the person couldn't be resolved (unknown name / nobody in view)."""
+        if the person couldn't be resolved (unknown name / nobody in view), or
+        while the veil is up (writing about a person is capture)."""
         contact = None
         if who:
             contact = self._index.find_by_name(who)
@@ -171,13 +174,16 @@ class SocialLens:
         self._enricher.append_note(contact.contact_id, note)
         return self._enricher.enrich(contact)
 
+    @requires_capture
     def meet(self, name: str, frame=None, note: Optional[str] = None,
              relation: Optional[str] = None):
         """Meet someone on the spot — "this is Sarah" while looking at them.
         If a contact by that name already exists, the note/relation is added to
         them; otherwise a new contact is created from the face in view (or
         name-only if no face). Sets last_identified so a follow-up "remember
-        she…" attaches. Returns the enriched record, or None (veiled / no name)."""
+        she…" attaches. Returns the enriched record, or None (veiled / no name).
+        Veil-gated: meeting/annotating a person is capture, so the existing-
+        contact branch is now silenced by the veil too, not just enroll()."""
         if not name:
             return None
         existing = self._index.find_by_name(name)
@@ -196,9 +202,11 @@ class SocialLens:
         self._last_identified = record.contact_id
         return self._enricher.enrich(record)
 
+    @requires_capture
     def add_debt(self, direction: str, what: str, who: Optional[str] = None):
         """Track a debt/favor with a person — by name, or (who=None) whoever you
-        just looked at. Returns the enriched record, or None if unresolved."""
+        just looked at. Returns the enriched record, or None if unresolved or
+        while the veil is up."""
         contact = self._index.find_by_name(who) if who else (
             self._index.get(self._last_identified) if self._last_identified else None)
         if contact is None:
@@ -211,8 +219,10 @@ class SocialLens:
         contact = self._index.get(contact_id)
         return self._enricher.enrich(contact) if contact is not None else None
 
+    @requires_capture
     def settle(self, who: Optional[str] = None):
-        """Clear all debts with a person (settled up). Returns the record."""
+        """Clear all debts with a person (settled up). Returns the record, or
+        None while the veil is up."""
         contact = self._index.find_by_name(who) if who else (
             self._index.get(self._last_identified) if self._last_identified else None)
         if contact is None:
@@ -243,8 +253,14 @@ class SocialLens:
         self._index.add(contact)
 
     def remove_contact(self, contact_id: str) -> None:
-        """Remove a contact from the live index."""
+        """Forget a contact EVERYWHERE — the face vector AND the whole dossier
+        (notes, relation, debts, last-met). Dropping only the index vector left
+        the enricher-backed dossier resident, so "forget that" didn't actually
+        forget them (audit 2026-07-14)."""
         self._index.remove(contact_id)
+        self._enricher.purge(contact_id)
+        if self._last_identified == contact_id:
+            self._last_identified = None
 
     @property
     def contact_count(self) -> int:
@@ -287,7 +303,3 @@ class SocialLens:
                     ))
             self._index.load(records)
 
-
-class _AlwaysOn:
-    def allow_capture(self) -> bool:
-        return True

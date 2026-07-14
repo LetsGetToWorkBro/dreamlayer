@@ -98,6 +98,22 @@ class ContactEnricher:
     def clear_debts(self, contact_id: str) -> None:
         self._backend.set(f"social_lens_debts_{contact_id}", json.dumps([]))
 
+    def purge(self, contact_id: str) -> None:
+        """Erase the WHOLE dossier for a contact — notes, relation, debts, and
+        last-met. "Forget that" must reach the enricher, not just drop the face
+        vector, or a deleted contact leaves a resident dossier (audit
+        2026-07-14). Uses the backend's delete() when it has one, else writes
+        None so a read returns nothing."""
+        for key in (f"social_lens_notes_{contact_id}",
+                    f"social_lens_relation_{contact_id}",
+                    f"social_lens_debts_{contact_id}",
+                    f"social_lens_last_met_{contact_id}"):
+            deleter = getattr(self._backend, "delete", None)
+            if callable(deleter):
+                deleter(key)
+            else:
+                self._backend.set(key, None)
+
     @staticmethod
     def latest_note(notes: Optional[str]) -> str:
         """The most recent note (what the recall card highlights)."""
@@ -141,3 +157,6 @@ class _DictBackend:
 
     def set(self, key: str, value) -> None:
         self._data[key] = value
+
+    def delete(self, key: str) -> None:
+        self._data.pop(key, None)

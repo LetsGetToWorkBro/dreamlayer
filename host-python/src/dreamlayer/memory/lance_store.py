@@ -4,10 +4,9 @@ ADD-alongside: new sibling, Retriever-compatible. Lazy-imports lancedb (extras
 group `memory`); when absent it delegates to VectorStore (linear fallback).
 """
 from __future__ import annotations
-import json
 import logging
 
-from .embeddings import MockEmbeddingProvider
+from .embeddings import MockEmbeddingProvider, unpack_embedding
 from .vector_store import VectorStore
 
 log = logging.getLogger("dreamlayer.lance_store")
@@ -38,7 +37,7 @@ class LanceStore:
                 return []
             data = []
             for i, m in enumerate(rows):
-                emb = json.loads(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
+                emb = unpack_embedding(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
                 data.append({"idx": i, "vector": emb, "conf": m.get("confidence") or 0.5})
             conn = lancedb.connect(self._uri)
             tbl = conn.create_table(self._table, data=data, mode="overwrite")

@@ -76,6 +76,8 @@ def make_simulator_server(sim: HaloSimulator | None = None,
 
 def main(argv: list[str] | None = None) -> None:
     import argparse
+    from ..logging_setup import configure_logging
+    configure_logging()
     ap = argparse.ArgumentParser(description="DreamLayer Halo simulator")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)

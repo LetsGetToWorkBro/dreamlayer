@@ -22,6 +22,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.cloud_sync")
@@ -43,12 +44,22 @@ class SyncUnavailable(RuntimeError):
     """Raised when encrypted sync can't be provided (no cryptography lib)."""
 
 
-def _key_from_passphrase(passphrase: str) -> bytes:
-    """Deterministic Fernet key from the user's passphrase. scrypt keeps a
-    weak passphrase expensive to grind; the salt is fixed app-wide because the
-    passphrase is per-user and the blob format needs to be openable on a brand
-    new device with nothing but the passphrase."""
-    raw = hashlib.scrypt(passphrase.encode(), salt=b"dreamlayer-sync-v1",
+# Blob framing: a per-user random salt rides in a small unencrypted header so
+# the blob is still openable on a brand-new device with nothing but the
+# passphrase, while defeating the cross-user precomputation a single app-wide
+# salt allowed (audit 2026-07-14). Legacy blobs (no magic) fall back to the old
+# fixed salt so anything already synced still opens.
+_MAGIC = b"DLS1"
+_SALT_LEN = 16
+_LEGACY_SALT = b"dreamlayer-sync-v1"
+
+
+def _key_from_passphrase(passphrase: str, salt: bytes) -> bytes:
+    """Deterministic Fernet key from the user's passphrase + a per-blob salt.
+    scrypt keeps a weak passphrase expensive to grind; a per-user salt means an
+    attacker who steals the ciphertext store cannot precompute one table against
+    the whole userbase."""
+    raw = hashlib.scrypt(passphrase.encode(), salt=salt,
                          n=2**14, r=8, p=1, dklen=32)
     return base64.urlsafe_b64encode(raw)
 
@@ -74,7 +85,9 @@ def prepare_sync_blob(brain, passphrase: str) -> bytes:
         raise ValueError("sync passphrase must be at least 8 characters")
     snapshot = strip_secrets(brain.export_backup())
     payload = json.dumps({"v": 1, "snapshot": snapshot}).encode()
-    return Fernet(_key_from_passphrase(passphrase)).encrypt(payload)
+    salt = os.urandom(_SALT_LEN)
+    token = Fernet(_key_from_passphrase(passphrase, salt)).encrypt(payload)
+    return _MAGIC + salt + token          # salt is public; the key is not
 
 
 def open_sync_blob(blob: bytes, passphrase: str) -> Optional[dict]:
@@ -86,7 +99,12 @@ def open_sync_blob(blob: bytes, passphrase: str) -> Optional[dict]:
             "encrypted sync needs the 'cryptography' package "
             "(pip install \"dreamlayer[privacy]\")")
     try:
-        payload = Fernet(_key_from_passphrase(passphrase)).decrypt(blob)
+        if blob[:len(_MAGIC)] == _MAGIC:
+            salt = blob[len(_MAGIC):len(_MAGIC) + _SALT_LEN]
+            token = blob[len(_MAGIC) + _SALT_LEN:]
+        else:
+            salt, token = _LEGACY_SALT, blob      # pre-header blob
+        payload = Fernet(_key_from_passphrase(passphrase, salt)).decrypt(token)
         data = json.loads(payload.decode())
     except (InvalidToken, ValueError, KeyError):
         return None

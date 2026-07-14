@@ -91,14 +91,19 @@ class VectorStore:
             return False
 
     def _ensure_table(self, dim: int) -> None:
-        # a dim change (embedder space changed) means a fresh table
+        # a dim change (embedder space changed) means a fresh table. Every write
+        # to the shared db.conn rides the MemoryDB RLock — this table lives in
+        # the same connection as the memories table, so an unlocked write here
+        # would race the off-thread capture writer the lock exists to serialize
+        # (audit 2026-07-14).
         if self._dim == dim:
             return
-        self.db.conn.execute("DROP TABLE IF EXISTS memory_vec")
-        self.db.conn.execute(
-            "CREATE VIRTUAL TABLE memory_vec USING "
-            f"vec0(memory_id integer primary key, kind text, "
-            f"embedding float[{dim}] distance_metric=cosine)")
+        with self.db._lock:
+            self.db.conn.execute("DROP TABLE IF EXISTS memory_vec")
+            self.db.conn.execute(
+                "CREATE VIRTUAL TABLE memory_vec USING "
+                f"vec0(memory_id integer primary key, kind text, "
+                f"embedding float[{dim}] distance_metric=cosine)")
         self._dim = dim
         self._indexed_ids = set()
 
@@ -111,10 +116,11 @@ class VectorStore:
             emb = self._emb_of(m)
             if len(emb) != dim:
                 raise ValueError("embedding dim mismatch")
-            self.db.conn.execute(
-                "INSERT OR REPLACE INTO memory_vec(memory_id, kind, embedding) "
-                "VALUES (?, ?, ?)",
-                (mid, m.get("kind") or "", sqlite_vec.serialize_float32(emb)))
+            with self.db._lock:
+                self.db.conn.execute(
+                    "INSERT OR REPLACE INTO memory_vec(memory_id, kind, embedding) "
+                    "VALUES (?, ?, ?)",
+                    (mid, m.get("kind") or "", sqlite_vec.serialize_float32(emb)))
             self._indexed_ids.add(mid)
 
     def evict(self, memory_id: int) -> None:
@@ -124,7 +130,9 @@ class VectorStore:
         row gone) silently returned fewer than top_k live matches."""
         if not self._ensure_loaded():
             return
-        self.db.conn.execute("DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
+        with self.db._lock:
+            self.db.conn.execute(
+                "DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
         self._indexed_ids.discard(memory_id)
 
     def _search_indexed(self, query, kind, top_k):
@@ -146,11 +154,13 @@ class VectorStore:
         # the wider candidate set, keeping "results are always correct" true
         # even if a caller forgot to evict().
         params.append(max(top_k * 4, 16))
-        cur = self.db.conn.execute(
-            f"SELECT memory_id, distance FROM memory_vec WHERE {where} "
-            "ORDER BY distance LIMIT ?", params)
+        with self.db._lock:
+            cur = self.db.conn.execute(
+                f"SELECT memory_id, distance FROM memory_vec WHERE {where} "
+                "ORDER BY distance LIMIT ?", params)
+            rows = cur.fetchall()
         out = []
-        for mid, dist in cur.fetchall():
+        for mid, dist in rows:
             m = self.db.get_memory(mid) if hasattr(self.db, "get_memory") else None
             if m is None:
                 m = next((x for x in self.db.memories() if x["id"] == mid), None)

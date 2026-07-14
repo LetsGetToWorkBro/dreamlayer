@@ -129,3 +129,14 @@ def test_probe_service_never_raises():
     exo = next(c for c in C.CAPABILITIES if c.key == "exo_cluster")
     assert C.probe_service(exo, timeout=0.2) in (True, False)
     assert C.probe_service(_cap(kind="service", modules=())) is False  # unknown key
+
+
+def test_disabled_service_reports_off_not_external():
+    """Audit 2026-07-14: DL_DISABLE_* must be honored for service caps too."""
+    from dreamlayer import capabilities as caps
+    svc = next((c for c in caps.CAPABILITIES if c.kind == "service"), None)
+    if svc is None:
+        return
+    assert caps.state(svc, env={}) == "external"
+    assert caps.state(svc, env={svc.flag_env: "1"}) == "off"
+    assert caps.enabled("definitely-not-a-real-key") is False   # no KeyError

@@ -86,6 +86,19 @@ class NarrativeStore:
     def get_anomaly_log(self, contact_id: str) -> list:
         return self._backend.get(f"truth_lens_anomaly_{contact_id}") or []
 
+    def forget(self, contact_id: str) -> None:
+        """Erase everything stored ABOUT a person — their deception baseline and
+        their anomaly log. Structured judgments about known people must die with
+        "forget that" like any other memory; without this hook they persisted
+        indefinitely with no erase path (audit 2026-07-14)."""
+        for key in (f"truth_lens_baseline_{contact_id}",
+                    f"truth_lens_anomaly_{contact_id}"):
+            deleter = getattr(self._backend, "delete", None)
+            if callable(deleter):
+                deleter(key)
+            else:
+                self._backend.set(key, None)
+
     def contact_count(self) -> int:
         return self._backend.count()
 
@@ -106,6 +119,9 @@ class _DictStore:
         if key not in self._data:
             self._data[key] = []
         self._data[key].append(value)
+
+    def delete(self, key: str) -> None:
+        self._data.pop(key, None)
 
     def count(self) -> int:
         return len([k for k in self._data if k.startswith("truth_lens_baseline_")])

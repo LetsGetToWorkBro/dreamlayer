@@ -269,15 +269,23 @@ class IngestPipeline:
         llm=None,
         llm_confidence_threshold: float = 0.60,
         llm_word_threshold: int = 40,
+        cloud_ok=None,
     ):
         self.db = db
         self.use_spacy = use_spacy
         self.llm = llm
         self.llm_confidence_threshold = llm_confidence_threshold
         self.llm_word_threshold = llm_word_threshold
+        # cloud_ok() -> bool: a live gate for the tier-3 LLM, which is a CLOUD
+        # call that ships the raw transcript off-device. None = no dynamic gate
+        # (direct/offline use). The orchestrator wires this to the Cloud switch
+        # so a mere API key can no longer send transcripts to the cloud with the
+        # Cloud switch off (audit 2026-07-14 CRITICAL).
+        self.cloud_ok = cloud_ok
 
     @classmethod
-    def with_llm(cls, db, config, use_spacy: bool = True) -> "IngestPipeline":
+    def with_llm(cls, db, config, use_spacy: bool = True,
+                 cloud_ok=None) -> "IngestPipeline":
         """Convenience constructor that wires LLMClient from config."""
         from .llm_client import LLMClient
         return cls(
@@ -286,11 +294,16 @@ class IngestPipeline:
             llm=LLMClient(config),
             llm_confidence_threshold=getattr(config, "llm_confidence_threshold", 0.60),
             llm_word_threshold=getattr(config, "llm_word_threshold", 40),
+            cloud_ok=cloud_ok,
         )
 
     def _should_use_llm(self, transcript: str, events: list[MemoryEvent]) -> bool:
         """Return True if tier-3 LLM call is warranted."""
         if self.llm is None:
+            return False
+        # tier-3 is a cloud egress of the raw transcript — refuse it when the
+        # wearer's Cloud switch is off (or incognito), regardless of API key.
+        if self.cloud_ok is not None and not self.cloud_ok():
             return False
         word_count = len(transcript.split())
         if word_count > self.llm_word_threshold:

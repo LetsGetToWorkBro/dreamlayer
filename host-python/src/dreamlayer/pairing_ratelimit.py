@@ -30,6 +30,11 @@ class _Bucket:
 class LockoutLimiter:
     """Sliding-window failure counter with a cooldown lock, keyed by any string."""
 
+    # cap the bucket table so key-rotation (a new IP/id per attempt) cannot grow
+    # it without bound — a memory-DoS the audit flagged. When full, expired
+    # buckets (not locked, no recent fails) are pruned before inserting a new one.
+    _MAX_BUCKETS = 4096
+
     def __init__(self, max_attempts: int = 5, window_s: float = 60.0,
                  lockout_s: float = 300.0, now_fn: Callable[[], float] | None = None):
         self.max_attempts = max_attempts
@@ -38,7 +43,18 @@ class LockoutLimiter:
         self._now = now_fn or time.monotonic
         self._buckets: Dict[str, _Bucket] = {}
 
+    def _prune(self) -> None:
+        """Drop buckets that are neither locked nor holding a recent failure."""
+        now = self._now()
+        dead = [k for k, b in self._buckets.items()
+                if now >= b.locked_until
+                and not any(now - t < self.window_s for t in b.fails)]
+        for k in dead:
+            self._buckets.pop(k, None)
+
     def _bucket(self, key: str) -> _Bucket:
+        if key not in self._buckets and len(self._buckets) >= self._MAX_BUCKETS:
+            self._prune()
         return self._buckets.setdefault(key, _Bucket())
 
     def allow(self, key: str) -> bool:

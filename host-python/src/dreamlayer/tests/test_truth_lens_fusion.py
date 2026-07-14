@@ -96,3 +96,26 @@ class TestFusionEngine:
         b = calibrated_baseline()
         cv = self.fe.fuse(stressed_au(), stressed_prosody(), deceptive_ling(), b)
         assert 0.0 <= cv.confidence <= 1.0
+
+
+class TestSyntheticAUChannelExcluded:
+    """Audit 2026-07-14 HIGH: the micro-expression channel is fabricated noise
+    today, so it must NOT drive a deception verdict or inflate confidence."""
+
+    def setup_method(self):
+        self.fe = FusionEngine()
+
+    def test_noisy_au_alone_does_not_produce_a_verdict(self):
+        # calm voice + calm words, but a wildly "stressed" AU frame (noise):
+        # the verdict must stay low because AU carries zero weight.
+        b = calibrated_baseline()
+        v = self.fe.fuse(stressed_au(), calm_prosody(), calm_ling(), b)
+        assert v.deception_prob < 0.34         # AU noise cannot push it up
+        # the two real channels still move the verdict
+        v2 = self.fe.fuse(calm_au(), stressed_prosody(), deceptive_ling(), b)
+        assert v2.deception_prob > v.deception_prob
+
+    def test_au_does_not_count_toward_confidence(self):
+        b = calibrated_baseline()
+        only_au = self.fe.fuse(stressed_au(), None, None, b)
+        assert only_au.confidence == 0.0       # a lone synthetic channel earns nothing

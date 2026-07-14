@@ -23,6 +23,7 @@ burned, when, and what remains.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from .engram import Engram
@@ -63,21 +64,36 @@ def burn(store: EmberStore, engram_id: int, *, consent: bool,
     if not e.state.graduated:
         raise ValueError(f"engram {engram_id} has not graduated")
 
+    # An irreversible privacy action — log it so a partial burn is diagnosable
+    # (audit 2026-07-14: this emitted zero log lines).
+    log = logging.getLogger("dreamlayer.ember")
+    log.info("ember burn: engram=%s cue=%r reps=%s", e.id, e.cue, e.state.reps)
+
     purged = 0
     if e.source_memory_id and retriever is not None:
         # ANN-safe purge — row and vector together, or it isn't forgetting
         retriever.purge_memory(e.source_memory_id)
         purged = e.source_memory_id
 
+    # Blank the engram's answer NEXT — this is the privacy-critical step, so it
+    # must run before the (cosmetic) tombstone. Previously a tombstone write
+    # that raised left the source purged but the engram still advertising its
+    # answer — a silent partial burn (audit 2026-07-14).
+    store.mark_burned(engram_id, now)
+
     tombstone = 0
     if db is not None:
-        # cue only — the answer's absence from disk is the entire point
-        tombstone = db.add_memory(
-            kind=TOMBSTONE_KIND, summary=e.cue, confidence=1.0,
-            meta={"pinned": True, "ember_tombstone": True,
-                  "kept_at": e.kept_at, "reps": e.state.reps})
+        try:
+            # cue only — the answer's absence from disk is the entire point
+            tombstone = db.add_memory(
+                kind=TOMBSTONE_KIND, summary=e.cue, confidence=1.0,
+                meta={"pinned": True, "ember_tombstone": True,
+                      "kept_at": e.kept_at, "reps": e.state.reps})
+        except Exception as exc:
+            # the answer is already gone; the tombstone is a record, not the
+            # guarantee — log and continue rather than leaving a half-burn.
+            log.warning("ember burn: tombstone write failed for %s: %s", e.id, exc)
 
-    store.mark_burned(engram_id, now)
     return BurnReceipt(engram_id=e.id, cue=e.cue, burned_at=now,
                        purged_memory_id=purged,
                        tombstone_memory_id=tombstone, reps=e.state.reps)

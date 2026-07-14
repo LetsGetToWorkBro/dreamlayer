@@ -160,6 +160,19 @@ def test_lockout_limiter():
     assert lim.retry_after("ip1") == 0
 
 
+def test_lockout_limiter_buckets_are_bounded():
+    """Audit 2026-07-14: key-rotation (a fresh IP per attempt) must not grow the
+    bucket table without bound — expired buckets are pruned at the cap."""
+    from dreamlayer.pairing_ratelimit import LockoutLimiter
+    clk = _Clock()
+    lim = LockoutLimiter(max_attempts=3, window_s=1.0, lockout_s=1.0, now_fn=clk)
+    lim._MAX_BUCKETS = 50
+    for i in range(500):
+        lim.record_failure(f"ip-{i}")
+        clk.tick(2.0)                               # each failure ages out
+    assert len(lim._buckets) <= lim._MAX_BUCKETS
+
+
 # --- orchestrator/presence: gaze dwell accumulates; veil silences -------------
 def test_presence_ledger():
     from dreamlayer.orchestrator.presence import PresenceLedger

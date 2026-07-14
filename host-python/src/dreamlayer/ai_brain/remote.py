@@ -32,14 +32,28 @@ class _RemoteBrain:
     is_remote = True             # reachable over the network, not on-device
 
     def __init__(self, base_url: str, token: str = "",
-                 http_post: Optional[Callable] = None, timeout: float = 30.0):
+                 http_post: Optional[Callable] = None, timeout: float = 30.0,
+                 posture_fn: Optional[Callable[[], dict]] = None):
         self._url = base_url.rstrip("/")
         self._headers = {TOKEN_HEADER: token} if token else {}
         self._post = http_post or (lambda u, p, h: _urllib_post(u, p, h, timeout))
+        # posture_fn() -> extra request fields carrying the wearer's SESSION
+        # posture to the Brain (e.g. {"no_cloud": True} while the hub is
+        # incognito or hub-cloud is off). The Mac mini runs its OWN cloud
+        # escalation, so the hub's Incognito/Cloud switches only reach it if
+        # every request states the posture — read live, per call, so a switch
+        # flipped mid-session applies to the very next ask with no restore race.
+        self._posture = posture_fn
 
     def _call(self, path: str, payload: dict) -> Optional[Answer]:
+        body = dict(payload)
+        if self._posture is not None:
+            try:
+                body.update(self._posture() or {})
+            except Exception:
+                pass                          # posture unavailable → send as-is
         try:
-            out = self._post(self._url + path, payload, self._headers) or {}
+            out = self._post(self._url + path, body, self._headers) or {}
         except Exception:
             return None
         text = (out.get("text") or "").strip()
@@ -57,8 +71,9 @@ class RemoteKnowledgeBrain(_RemoteBrain):
 
 class RemoteVisionBrain(_RemoteBrain):
     def __init__(self, base_url, token="", http_post=None, timeout=30.0,
-                 encode_frame: Optional[Callable] = None):
-        super().__init__(base_url, token, http_post, timeout)
+                 encode_frame: Optional[Callable] = None,
+                 posture_fn: Optional[Callable[[], dict]] = None):
+        super().__init__(base_url, token, http_post, timeout, posture_fn=posture_fn)
         # encode_frame(frame) -> base64 JPEG string; without it, the Brain
         # explains from the label alone (still useful, less precise).
         self._encode = encode_frame
@@ -76,7 +91,18 @@ class RemoteVisionBrain(_RemoteBrain):
 def connect_brain(router, base_url: str, token: str = "",
                   http_post: Optional[Callable] = None,
                   encode_frame: Optional[Callable] = None) -> None:
-    """Register the Mac mini Brain as the laptop tier on a router."""
+    """Register the Mac mini Brain as the laptop tier on a router.
+
+    The remote tiers carry the hub's session cloud posture on every request:
+    when the router's cloud is opted out — which set_incognito() and a
+    hub-cloud-off both force — each ask/explain tells the Brain ``no_cloud``,
+    so the Brain's OWN cloud escalation is governed by the wearer's switches,
+    not just the Mac's local config. This closes the gap where Incognito
+    silenced the hub's cloud tier but never reached the paired Brain."""
+    def _posture() -> dict:
+        return {"no_cloud": not bool(getattr(router, "cloud_opt_in", False))}
     router.add_vision(RemoteVisionBrain(base_url, token, http_post,
-                                        encode_frame=encode_frame))
-    router.add_knowledge(RemoteKnowledgeBrain(base_url, token, http_post))
+                                        encode_frame=encode_frame,
+                                        posture_fn=_posture))
+    router.add_knowledge(RemoteKnowledgeBrain(base_url, token, http_post,
+                                              posture_fn=_posture))

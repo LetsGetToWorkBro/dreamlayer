@@ -258,6 +258,25 @@ class TestCrossing:
         p2 = export_claims(model, b"bond-two")[0]["p"]
         assert p1 != p2
 
+    def test_veil_silences_the_crossing_export(self):
+        """Audit 2026-07-14: the one confluence path touching predictive memory
+        must honor the veil — a veiled/paused wearer exports NO claims, so
+        nothing crosses the bond and no shared ghost is computed."""
+        class Veiled:
+            def allow_capture(self): return False
+            def allow_recall(self): return False
+        model = RecurrenceModel()
+        tuesday_rhythm(model, "cafe")
+        assert export_claims(model, b"bondkey") != []          # open: exports
+        assert export_claims(model, b"bondkey", privacy=Veiled()) == []
+        # and the local crossing computation is silenced too
+        peer = RecurrenceModel(); tuesday_rhythm(peer, "cafe")
+        assert crossings(model, export_claims(peer, b"k"), b"k",
+                         privacy=Veiled()) == []
+        sr = SharedRhythms(model, b"k", privacy=Veiled())
+        sr.update(export_claims(peer, b"k"))
+        assert sr.predict(0.0) == []
+
     def test_shared_ghosts_render_through_kind6(self):
         a_model, b_model = RecurrenceModel(), RecurrenceModel()
         tuesday_rhythm(a_model, "cafe")

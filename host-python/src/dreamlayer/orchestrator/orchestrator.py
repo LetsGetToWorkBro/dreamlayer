@@ -119,7 +119,14 @@ class Orchestrator(
             ambient_interval_ms=cfg.capture_min_interval_ms)
 
         if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
-            self.pipeline = IngestPipeline.with_llm(self.db, cfg)
+            # tier-3 LLM extraction ships the raw transcript to the cloud, so it
+            # is governed by the Cloud switch, not merely by an API key being
+            # present (audit 2026-07-14 CRITICAL). cloud_opt_in is forced off by
+            # incognito, so this one predicate honors both switches. Late-bound:
+            # self.brain is created below, but cloud_ok() only runs at ingest.
+            self.pipeline = IngestPipeline.with_llm(
+                self.db, cfg,
+                cloud_ok=lambda: bool(getattr(self.brain, "cloud_opt_in", False)))
         else:
             self.pipeline = IngestPipeline(self.db)
 
@@ -377,6 +384,11 @@ class Orchestrator(
         self.quest = QuestLog(self.drift_engine, vault_dir=vault_dir)
         self.rem_bias = (RetrievalBias.load(vault_dir) if vault_dir
                          else RetrievalBias())
+        # forget-that / erase-everything must reach the consolidation bias too,
+        # by construction — wire it into the retrieval purge primitive the same
+        # way the ember sidecar is, so no caller has to remember (audit 2026-07-14).
+        self.retriever.bias_store = self.rem_bias
+        self.retriever.bias_dir = vault_dir
         self.nightwatch = NightWatch(vault_dir) if vault_dir else None
         self.premonition = RecurrenceModel()
         self._premonition_seen_ts = 0.0

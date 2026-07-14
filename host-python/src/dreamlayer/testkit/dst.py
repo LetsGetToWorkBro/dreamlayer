@@ -132,6 +132,13 @@ class Interleaver:
         reproduce-then-fix half of the workflow. The actors must be a fresh
         scenario with the same shape (same names, same op counts)."""
         queues = {name: list(ops) for name, ops in actors.items()}
+        # shape check up front so a mismatched fresh scenario fails clearly,
+        # not with an opaque IndexError/KeyError deep in replay (audit 2026-07-14).
+        for name, i in trace.steps:
+            if name not in queues or i >= len(queues[name]):
+                raise InterleavingFailure(
+                    f"replay shape mismatch: trace step {name}[{i}] has no "
+                    f"matching op in the supplied scenario", trace)
         for name, i in trace.steps:
             try:
                 queues[name][i]()
@@ -183,4 +190,9 @@ def run_threads(actors: Actors, joins_after: float = 10.0) -> None:
     if alive:
         raise AssertionError(f"{len(alive)} actor thread(s) hung")
     if errors:
-        raise errors[0]
+        # surface EVERY concurrent failure, not just the first — dropping the
+        # rest hid simultaneous races on other actors (audit 2026-07-14).
+        if len(errors) == 1:
+            raise errors[0]
+        raise BaseExceptionGroup(
+            f"{len(errors)} actor thread(s) failed concurrently", errors)

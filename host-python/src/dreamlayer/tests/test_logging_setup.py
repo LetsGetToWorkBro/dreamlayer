@@ -58,3 +58,20 @@ class TestConfigure:
         h = next(h for h in logging.getLogger().handlers
                  if getattr(h, "_dreamlayer_handler", False))
         assert not isinstance(h.formatter, JsonLineFormatter)
+
+    def test_falsy_env_spellings_disable_json(self, monkeypatch):
+        """Audit 2026-07-14: DL_LOG_JSON=False/FALSE/off/no must DISABLE json,
+        not enable it (the old case-sensitive check let 'False' through)."""
+        import dreamlayer.logging_setup as ls
+        for val in ("False", "FALSE", "off", "No", "0", ""):
+            monkeypatch.setenv("DL_LOG_JSON", val)
+            configure_logging()
+            h = next(h for h in logging.getLogger().handlers
+                     if getattr(h, "_dreamlayer_handler", False))
+            assert not isinstance(h.formatter, ls.JsonLineFormatter), val
+        for val in ("1", "true", "yes", "on"):
+            monkeypatch.setenv("DL_LOG_JSON", val)
+            configure_logging()
+            h = next(h for h in logging.getLogger().handlers
+                     if getattr(h, "_dreamlayer_handler", False))
+            assert isinstance(h.formatter, ls.JsonLineFormatter), val

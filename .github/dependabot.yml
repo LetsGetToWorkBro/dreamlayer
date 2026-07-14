@@ -1,0 +1,36 @@
+# Automated dependency-update PRs (audit 2026-07-14: the repo had no
+# supply-chain automation). Weekly, grouped, so a CVE fix or a floating-dep
+# bump arrives as a reviewable PR rather than a silent latest-resolve.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/host-python"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "npm"
+    directory: "/phone-app"
+    schedule:
+      interval: "weekly"
+    groups:
+      phone-deps:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    groups:
+      web-deps:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
