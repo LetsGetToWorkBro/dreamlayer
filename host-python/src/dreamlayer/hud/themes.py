@@ -27,6 +27,13 @@ PRIVACY_DANGER    = 0xFF4444
 PRIVACY_CAUTION   = 0xFF8800
 WARNING_AMBER     = 0xFF6600
 
+# --- Ember (memories you tend; docs/EMBER.md) ---
+# A hearth gold, deliberately outside the alarm family (WARNING_AMBER is a
+# siren; an ember prompt is an invitation) and outside the memory teal
+# (recall the system does for you vs. recall you do yourself).
+EMBER_GLOW        = 0xE8A13D
+EMBER_GLOW_DIM    = 0x8A5E20
+
 # --- Meridian Solid (docs/cinema_v2/solid.md) ---
 # ACCENT_MEMORY / TEXT_GHOST are dynamic-slot bases (fx / ghost_text):
 # static ramps and fills use the one-LSB static twin + dim twins instead.

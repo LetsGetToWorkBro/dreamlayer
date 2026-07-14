@@ -183,3 +183,25 @@ export const demoSaga: SagaSnapshot = {
     { id: "explorer", name: "Cartographer", what: "Saved 5 places", how: "Mark 5 spots worth remembering", category: "explore", unlocked: true, progress: 5, target: 5, xp: 120 },
   ],
 };
+
+// Ember (docs/EMBER.md): the same cast, mid-practice. One morning offer set,
+// two engrams on the curve, one graduated recording awaiting its ceremony.
+// Note what ISN'T here: engram answers — the real Brain never ships them to
+// the phone, so the fixture doesn't either.
+export const demoEmber = {
+  status: { tended: 3, due: 1, graduated: 1, burned: 2, candidates: 3 },
+  keptToday: 0,
+  candidates: [
+    { id: 1, kind: "conversation", summary: "Marcus told the story of the lake house — the winter the ice sang", cue: "What did Marcus say about the ice?", salience: 1.42 },
+    { id: 2, kind: "person", summary: "Priya's glaze recipe — ash from the studio kiln, sieved twice", cue: "What did Priya say?", salience: 1.18 },
+    { id: 3, kind: "memory", summary: "The café on Pine finally has the corner table free before 8", cue: "About café on Pine… — what happened?", salience: 0.87 },
+  ],
+  engrams: [
+    { id: 11, cue: "What did Dad say about the ice?", stability_days: 27.6, reps: 5, lapses: 1, due_in_days: 8.2, kept_days: 61, graduated: false, burned: false, anchored: true },
+    { id: 12, cue: "What did you promise Marcus?", stability_days: 6.9, reps: 2, lapses: 0, due_in_days: -0.4, kept_days: 12, graduated: false, burned: false, anchored: true },
+    { id: 13, cue: "What did Maya say?", stability_days: 101.2, reps: 7, lapses: 0, due_in_days: 44.0, kept_days: 94, graduated: true, burned: false, anchored: false },
+  ],
+  offers: [
+    { id: 13, cue: "What did Maya say?", stability_days: 101.2, reps: 7, lapses: 0, due_in_days: 44.0, kept_days: 94, graduated: true, burned: false, anchored: false },
+  ],
+};

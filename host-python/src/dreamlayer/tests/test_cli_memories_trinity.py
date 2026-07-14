@@ -47,5 +47,22 @@ def test_burn_requires_yes(tmp_path, capsys):
     assert not db.exists()
 
 
+def test_burn_takes_the_sidecars_with_it(tmp_path):
+    """A burn must not leave siblings that outlive the memories they point
+    at: the .usearch vectors, and the .ember practice file — whose engrams
+    hold verbatim ANSWERS (docs/EMBER.md)."""
+    db = _db(tmp_path)
+    ann = tmp_path / "dreamlayer.db.usearch"
+    ann.write_bytes(b"vectors")
+    from dreamlayer.ember import EmberStore
+    ember = tmp_path / "dreamlayer.db.ember"
+    EmberStore(str(ember)).keep(
+        "k1", "What did Maya say?",
+        "Maya said her first full sentence in Spanish", 1_700_000_000.0)
+    assert cli.main(["memories", "burn", "--db", str(db), "--yes"]) == 0
+    assert not db.exists() and not ann.exists()
+    assert not ember.exists(), "the answers must not outlive the burn"
+
+
 def test_burn_already_gone_is_ok(tmp_path):
     assert cli.main(["memories", "burn", "--db", str(tmp_path / "gone.db"), "--yes"]) == 0

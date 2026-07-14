@@ -1306,11 +1306,28 @@ class Brain:
         live: every Waypath anchor is dropped and the store rewritten, so a
         later refresh can't quietly resurrect what the user erased. People and
         reminders are mirrors of their own surfaces (People tab, Reminders) and
-        are not deleted here — erasing memories is not deleting your contacts."""
+        are not deleted here — erasing memories is not deleting your contacts.
+
+        The Ember practice goes too: engrams hold verbatim ANSWERS (and cues
+        and staged offers carry memory content), so erase-everything empties
+        the <db>.ember sidecar — purged and VACUUMed so the bytes leave the
+        disk, not deleted as a file (the hub may hold it open). Surviving the
+        retention lifecycle is Ember's design; surviving the owner's explicit
+        wipe would be a privacy residue (docs/EMBER.md)."""
+        import os as _os
         n = self.waypath.forget_all()
         self._save_waypath()
-        self.activity.add("privacy", f"Erased kept memories ({n} anchor(s))")
-        return {"ok": True, "purged": n}
+        n_ember = 0
+        ember_path = _ember_store_path(self)
+        if _os.path.exists(ember_path):
+            from ...ember import EmberStore
+            store = EmberStore(ember_path)
+            n_ember = len(store.engrams(include_burned=True))
+            store.purge_all()
+        self.activity.add("privacy",
+                          f"Erased kept memories ({n} anchor(s), "
+                          f"{n_ember} ember(s))")
+        return {"ok": True, "purged": n, "embers_purged": n_ember}
 
     def waypath_stash(self, subject: str, place: str) -> dict:
         subject = (subject or "").strip()
@@ -1654,6 +1671,125 @@ def _memory_db_path(brain: Brain) -> Path:
     import os
     raw = os.environ.get("DREAMLAYER_DB") or str(Path(brain.cfg_dir) / "dreamlayer.db")
     return Path(raw).expanduser()
+
+
+# --- Ember (docs/EMBER.md): the phone's tending ritual + ceremony -------------
+
+def _ember_store_path(brain: Brain):
+    """The Ember store lives beside the memory DB (orchestrator convention:
+    <db>.ember) — same resolution as the CLI's `dreamlayer ember`."""
+    return str(_memory_db_path(brain)) + ".ember"
+
+
+def _ember_state(brain: Brain) -> dict:
+    """GET /dreamlayer/ember — the practice, for the phone. Engram rows ship
+    cue + curve only: the ANSWER never leaves the hub. The reveal card on the
+    glasses is the single surface that renders it; the phone shows the cue
+    and how the wearer's own memory is doing. Tending candidates DO carry
+    their summaries — the wearer can't choose what to keep unseen."""
+    import os as _os
+    import time as _time
+    path = _ember_store_path(brain)
+    if not _os.path.exists(path):
+        return {"ok": True, "exists": False, "status": {}, "candidates": [],
+                "engrams": [], "offers": []}
+    from ...ember import EmberStore
+    store = EmberStore(path)
+    now = _time.time()
+    day = 86400.0
+
+    def row(e):
+        return {"id": e.id, "cue": e.cue,
+                "stability_days": round(e.state.stability, 1),
+                "reps": e.state.reps, "lapses": e.state.lapses,
+                "due_in_days": round((e.state.due_ts - now) / day, 1),
+                "kept_days": int((now - e.kept_at) / day),
+                "graduated": e.state.graduated, "burned": e.burned,
+                "anchored": bool(e.place_signature)}
+
+    return {
+        "ok": True, "exists": True,
+        "status": store.status(now),
+        "candidates": [{"id": c.id, "kind": c.kind, "summary": c.summary,
+                        "cue": c.cue, "salience": c.salience}
+                       for c in store.candidates()],
+        "engrams": [row(e) for e in store.engrams(include_burned=True)],
+        "offers": [row(e) for e in store.graduated_unburned()],
+    }
+
+
+def _ember_tend(brain: Brain, body: dict) -> dict:
+    """POST /dreamlayer/ember/tend {candidate_id, keep} — the morning choice.
+    Keeps are capped per day here too (the ritual's contract holds no matter
+    which surface makes the choice)."""
+    import os as _os
+    import time as _time
+    path = _ember_store_path(brain)
+    if not _os.path.exists(path):
+        return {"ok": False, "error": "no ember store yet"}
+    from ...ember import EmberStore
+    from ...ember.tending import MAX_KEEPS_PER_DAY
+    from ...rem.bias import event_key
+    store = EmberStore(path)
+    cid = int(body.get("candidate_id") or 0)
+    keep = bool(body.get("keep"))
+    now = _time.time()
+    if not keep:
+        ok = store.resolve_candidate(cid, kept=False) is not None
+        return {"ok": ok}
+    kept_today = sum(1 for e in store.engrams() if now - e.kept_at < 86400.0)
+    if kept_today >= MAX_KEEPS_PER_DAY:
+        return {"ok": False, "error": "tending is a ritual, not an inbox",
+                "kept_today": kept_today}
+    c = store.resolve_candidate(cid, kept=True)
+    if c is None:
+        return {"ok": False, "error": "offer already resolved"}
+    e = store.keep(event_key(c.kind, c.summary), c.cue, c.summary, now,
+                   place_signature=c.place_signature,
+                   source_memory_id=c.source_memory_id,
+                   meta={"kind": c.kind})
+    return {"ok": True, "engram_id": e.id, "cue": e.cue,
+            "kept_today": kept_today + 1}
+
+
+def _ember_burn(brain: Brain, body: dict) -> dict:
+    """POST /dreamlayer/ember/burn {engram_id, consent: true} — the ceremony,
+    honored where the recording actually lives. The purge goes through the
+    Retriever so the ANN vector dies with the row (a burn that leaves the
+    moment recallable by similarity would be a lie), and the cue-only pinned
+    tombstone is planted for the anniversary Ember lens."""
+    import os as _os
+    import time as _time
+    path = _ember_store_path(brain)
+    if not _os.path.exists(path):
+        return {"ok": False, "error": "no ember store yet"}
+    from ...ember import EmberStore, ceremony
+    from ...memory.ann_index import PersistentAnnIndex
+    from ...memory.db import MemoryDB
+    from ...memory.retrieval import Retriever
+    store = EmberStore(path)
+    db_path = str(_memory_db_path(brain))
+    db = MemoryDB(db_path) if _os.path.exists(db_path) else None
+    retriever = None
+    if db is not None:
+        ann = None
+        dim = db.get_setting("embedder_dim")
+        if PersistentAnnIndex.available and dim:
+            ann = PersistentAnnIndex(db_path + ".usearch", int(dim))
+        retriever = Retriever(db, None, ann)
+    try:
+        receipt = ceremony.burn(
+            store, int(body.get("engram_id") or 0),
+            consent=(body.get("consent") is True),
+            now=_time.time(), retriever=retriever, db=db)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    brain.activity.add("privacy",
+                       f"Ember burned a graduated recording ({receipt.cue!r})")
+    return {"ok": True, "engram_id": receipt.engram_id, "cue": receipt.cue,
+            "reps": receipt.reps,
+            "purged_memory_id": receipt.purged_memory_id,
+            "tombstone_memory_id": receipt.tombstone_memory_id}
 
 
 def _memory_file(brain: Brain) -> dict:
@@ -2140,6 +2276,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, brain.rewind())
             elif path == "/dreamlayer/saga":
                 self._json(200, brain.saga.snapshot())
+            elif path == "/dreamlayer/ember":
+                # the practice, cue + curve only — answers never leave the hub
+                self._json(200, _ember_state(brain))
             elif path == "/dreamlayer/plugins":
                 self._json(200, brain.plugins_state())
             elif path == "/dreamlayer/rc/repertoire":
@@ -2334,6 +2473,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # "Erase all memories" from the phone's danger zone — honored
                 # here so a later refresh can't resurrect what was erased
                 self._json(200, brain.purge_memories())
+            elif path == "/dreamlayer/ember/tend":
+                # the morning choice: keep an offer (capped) or let it go
+                self._json(200, _ember_tend(brain, self._body()))
+            elif path == "/dreamlayer/ember/burn":
+                # the ceremony — explicit consent only, ANN-safe purge,
+                # cue-only tombstone (docs/EMBER.md)
+                self._json(200, _ember_burn(brain, self._body()))
             elif path == "/dreamlayer/brief":
                 b = self._body()
                 out = brain.brief(agenda=b.get("agenda"),

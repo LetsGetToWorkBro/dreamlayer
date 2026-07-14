@@ -24,6 +24,15 @@ The resting state and everything about recall.
 - **Premonition** — your rhythms shimmer just ahead of the now-notch.
 - **Waypath Lens** — "where is it / where do I go": your keys are 12m to your
   left, the exit is behind you — direction + distance from your own anchors.
+- **Ember** — the inverse of all of the above: memories you tend until they
+  live in *you*. Keep up to three of yesterday's moments over coffee; the
+  glasses glow a cue (never the answer) at the place it happened, at
+  spacing-effect intervals; you retrieve it yourself, out loud. When the
+  trace is stable enough to live without the machine, the recording becomes
+  an offer to burn — the archive that empties itself into you. The old
+  anniversary Ember card is this feature's afterglow: a burned recording
+  leaves a cue-only tombstone it resurfaces a year later.
+  ([docs/EMBER.md](EMBER.md))
 
 ## 👤 People — *who's around you*
 

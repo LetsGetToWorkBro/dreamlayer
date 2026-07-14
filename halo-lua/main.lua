@@ -108,6 +108,13 @@ local CARD_PRIORITY = {
   PersonDossierCard    = CardQueue.CONTEXT,   -- who this is + your ledger
   SpokenCaptionCard    = CardQueue.CONTEXT,   -- live caption of a familiar voice
   MorningBriefCard     = CardQueue.CONTEXT,   -- the wake brief
+  -- Ember (docs/EMBER.md) — the practice is calm by contract: the glow and
+  -- the flare are ambient (they never pre-empt anything), the reveal and
+  -- the graduation are context (the wearer just spoke; they're waiting)
+  EmberPromptCard      = CardQueue.AMBIENT,   -- the glow at the doorway
+  EmberFlareCard       = CardQueue.AMBIENT,   -- you reached it; one breath
+  EmberRevealCard      = CardQueue.CONTEXT,   -- the gentle answer
+  EmberGraduatedCard   = CardQueue.CONTEXT,   -- it lives in you now
 }
 
 -- ---------------------------------------------------------------------------

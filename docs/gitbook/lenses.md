@@ -106,7 +106,11 @@ real), hardening the model when a predicted event lands.
 - **Ember** (`ember()`) — the gentle anniversary layer, sensitive by
   design: at most **one** memory, only one you *chose to keep* (pinned),
   from about a year ago today — and it stays silent entirely when your
-  inner weather reads storm.
+  inner weather reads storm. It is now the *afterglow* of the full Ember
+  practice (`dreamlayer.ember`, docs/EMBER.md): tend a moment until it
+  lives in you, burn the recording with explicit consent, and the cue-only
+  tombstone left behind is exactly what this card resurfaces a year on —
+  for you to answer from memory alone.
 
 ## Truth's siblings
 

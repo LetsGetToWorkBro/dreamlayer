@@ -47,6 +47,7 @@ from .ops_conversation import ConversationOps
 from .ops_juno_attention import JunoAttentionOps
 from .ops_commitments import CommitmentRecallOps
 from .ops_plugins import PluginOps
+from .ops_ember import EmberOps
 
 
 class Orchestrator(
@@ -60,6 +61,7 @@ class Orchestrator(
     JunoAttentionOps,
     CommitmentRecallOps,
     PluginOps,
+    EmberOps,
 ):
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
@@ -98,6 +100,7 @@ class Orchestrator(
         self.maturity = (MaturityGate(self.db) if db_path != ":memory:"
                          else ResidentGate())
         self.last_retention = None      # last nightly RetentionReport
+        self.last_tending = []          # last night's staged Ember offers
 
         # Adaptive confidence: per-card-type dismissal tracking. Real installs
         # persist the window; ephemeral (:memory:) sessions keep it in RAM so
@@ -127,6 +130,15 @@ class Orchestrator(
             # (the DST harness drives it with a SimClock)
             tick_interval_ms=cfg.passive_tick_interval_ms,
             clock=lambda: self._clock())
+
+        # Ember: memories you tend until they live in you (docs/EMBER.md).
+        # Its own DB file beside the memory DB — engrams are records of what
+        # the WEARER knows, so they must survive memory lifecycle events
+        # (retention sweeps, purge_all) by construction, not by exemption.
+        from ..ember import EmberStore
+        self.embers = EmberStore(":memory:" if db_path == ":memory:"
+                                else db_path + ".ember")
+        self._ember_active = None   # (engram_id, prompted_ts) while a glow holds
 
         # Drift / scrub / tell engines
         self.drift_engine = CommitmentDriftEngine(self.ring)
@@ -517,7 +529,12 @@ class Orchestrator(
         intent reads what you're looking at (needs the current `frame`); the
         rest come back as a structured intent for the hub to execute (reply,
         locate, brief, missed). The mic + speech-to-text is a device seam."""
-        from .voice import parse_intent
+        from .voice import detect_wake, parse_intent
+        # While an Ember prompt holds the floor, un-wake-worded speech is the
+        # reach (graded, never judged aloud); a wake word always bypasses —
+        # addressing Juno wins over the glow (ops_ember.ember_attempt).
+        if self.ember_prompt_active() and not detect_wake(text)[0]:
+            return self.ember_attempt(text)
         it = parse_intent(text)
         if it.kind in ("ask", "recall"):
             ans = None

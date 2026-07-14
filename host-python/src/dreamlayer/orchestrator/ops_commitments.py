@@ -375,6 +375,14 @@ class CommitmentRecallOps:
             self.dream.feed_place(signature, anchors)
             return None
 
+        # Ember first: a due engram anchored HERE is the method of loci
+        # firing — rarer and more deliberate than a generic proactive card,
+        # so when both want the glass, the ember takes the tick and the
+        # proactive card waits for the next visit (never two interruptions).
+        ember_card = self.tick_ember(place_signature=signature)
+        if ember_card is not None:
+            return ember_card
+
         # a proactive place card is an interruption — the maturity arc gates
         # it (the ambient dream ghost-layer above is not, and never is)
         conf = float((p or {}).get("confidence") or 1.0) if p else 1.0

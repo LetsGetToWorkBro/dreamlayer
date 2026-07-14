@@ -977,6 +977,102 @@ def deviation_alert(
     }
 
 
+# ------------------------------------------------------------------ Ember
+# Memories you tend until they live in you (docs/EMBER.md). Four moments in
+# the practice, four cards. The prompt shows the cue and NEVER the answer —
+# the reveal card is the single place the answer may render, and only after
+# the wearer reached and missed (or asked to be shown).
+
+def ember_prompt(cue: str = "", place: str = "", reps: int = 0) -> dict:
+    """The glow at the doorway: an invitation to retrieve, not a replay.
+    Ambient priority, generous auto-dismiss — walking on costs nothing
+    (the scheduler treats an unanswered prompt as MISSED, never a lapse)."""
+    return {
+        "type":       "EmberPromptCard",
+        "dismiss_ms": 12000,
+        "cue":        cue,
+        "place":      place,
+        "reps":       reps,
+        "primary":    cue,
+        "eyebrow":    "EMBER",
+        "footer":     place,
+        "lines":      ["EMBER", cue, place],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.EMBER_GLOW, "tracking": 3},
+            "separator": {"x1": 48, "x2": 208, "y": 80},
+            "primary":   {"x": 128, "y": 112, "size": "md",   "color": T.TEXT_PRIMARY},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+        },
+    }
+
+
+def ember_flare(cue: str = "", reps: int = 0, next_days: float = 0.0) -> dict:
+    """You reached and it was there. One flare, gone in a breath — the
+    reward is the recall itself; the card only confirms it landed."""
+    footer = f"next in ~{int(round(next_days))}d" if next_days >= 1 else "soon"
+    return {
+        "type":       "EmberFlareCard",
+        "dismiss_ms": 2600,
+        "cue":        cue,
+        "reps":       reps,
+        "next_days":  round(next_days, 1),
+        "primary":    "It's yours.",
+        "eyebrow":    "EMBER",
+        "footer":     footer,
+        "lines":      ["EMBER", "It's yours.", footer],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.EMBER_GLOW, "tracking": 3},
+            "primary":   {"x": 128, "y": 112, "size": "hero", "color": T.EMBER_GLOW},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+        },
+    }
+
+
+def ember_reveal(cue: str = "", answer: str = "") -> dict:
+    """You reached and it wasn't there. The answer, gently — no score, no
+    streak, no shame; the curve reschedules and forgetting stays kind."""
+    return {
+        "type":       "EmberRevealCard",
+        "dismiss_ms": 9000,
+        "cue":        cue,
+        "answer":     answer,
+        "primary":    answer,
+        "eyebrow":    cue,
+        "footer":     "it will come back around",
+        "lines":      [cue, answer, "it will come back around"],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.EMBER_GLOW_DIM, "tracking": 2},
+            "separator": {"x1": 48, "x2": 208, "y": 80},
+            "primary":   {"x": 128, "y": 112, "size": "md",   "color": T.TEXT_PRIMARY},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+        },
+    }
+
+
+def ember_graduated(cue: str = "", kept_days: int = 0, reps: int = 0) -> dict:
+    """Stability crossed the consolidation threshold: the moment lives in
+    the wearer now. This card announces the standing offer; the burn itself
+    happens only on the phone, with explicit consent (ember/ceremony.py)."""
+    footer = f"kept {kept_days}d · recalled ×{reps}"
+    return {
+        "type":       "EmberGraduatedCard",
+        "dismiss_ms": 9000,
+        "cue":        cue,
+        "kept_days":  kept_days,
+        "reps":       reps,
+        "primary":    "This memory lives in you.",
+        "eyebrow":    cue,
+        "footer":     footer,
+        "lines":      [cue, "This memory lives in you.", footer],
+        "layout": {
+            "eyebrow":   {"x": 128, "y": 64,  "size": "sm",   "color": T.EMBER_GLOW, "tracking": 2},
+            "separator": {"x1": 48, "x2": 208, "y": 80},
+            "primary":   {"x": 128, "y": 112, "size": "md",   "color": T.EMBER_GLOW},
+            "footer":    {"x": 128, "y": 168, "size": "sm",   "color": T.TEXT_GHOST},
+        },
+    }
+
+
 def amp_message(level: float) -> dict:
     """Live voice level for the listening waveform (Meridian Lumen).
 
@@ -1106,6 +1202,26 @@ ALL_SAMPLES: dict[str, dict] = {
         dst_lang="en",
         confidence=0.92,
         speaker="Jordan",
+    ),
+    # --- ember (docs/EMBER.md) ---
+    "ember_prompt":        ember_prompt(
+        cue="What did Dad say about the ice?",
+        place="Kitchen doorway",
+        reps=3,
+    ),
+    "ember_flare":         ember_flare(
+        cue="What did Dad say about the ice?",
+        reps=4,
+        next_days=12.0,
+    ),
+    "ember_reveal":        ember_reveal(
+        cue="What did Maya say?",
+        answer="Her first full sentence in Spanish",
+    ),
+    "ember_graduated":     ember_graduated(
+        cue="What did Dad say about the ice?",
+        kept_days=94,
+        reps=7,
     ),
     # --- dream mode ---
     "world_anchor":        world_anchor_card(

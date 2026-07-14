@@ -52,6 +52,13 @@ M.privacy_danger    = 0xFF4444
 M.privacy_caution   = 0xFF8800
 M.warning_amber     = 0xFF6600
 
+-- Ember (memories you tend; docs/EMBER.md) — a hearth gold, deliberately
+-- outside the alarm family (warning_amber is a siren; an ember prompt is
+-- an invitation) and outside the memory teal (recall the system does for
+-- you vs. recall you do yourself). Mirrors themes.py EMBER_GLOW*.
+M.ember_glow        = 0xE8A13D
+M.ember_glow_dim    = 0x8A5E20
+
 -- Meridian Solid additions (docs/cinema_v2/solid.md). accent_memory and
 -- text_ghost are dynamic-slot BASES (fx / ghost_text): static gradient
 -- ramps and fills must never use them or they'd follow live slot luma —

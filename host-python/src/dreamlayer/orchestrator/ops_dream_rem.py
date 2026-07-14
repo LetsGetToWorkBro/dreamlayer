@@ -54,6 +54,11 @@ class DreamRemOps:
         if reel is not None:
             self.rem_bias = RetrievalBias.load(self.nightwatch.vault_dir)
             self.horizon._rem = self.rem_bias
+            # Ember tending rides the same night: stage the morning's offers
+            # from the ring BEFORE the retention sweep purges it below —
+            # what the night dreamed loudest is what the morning offers
+            # (ember/tending.py reads reel.dream_counts).
+            self.last_tending = self.morning_tending(reel=reel)
             from ..memory.retention import RetentionPolicy, RetentionSweep
             policy = RetentionPolicy(
                 hot_hours=getattr(self.config, "retention_hot_hours", 24.0),

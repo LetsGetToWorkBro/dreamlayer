@@ -584,7 +584,90 @@ def cmd_mem_burn(args) -> int:
     ann = db.with_name(db.name + ".usearch")
     if ann.exists():
         ann.unlink()
+    # Ember's practice file is a sibling too (<db>.ember) — its engrams hold
+    # verbatim ANSWERS, which must not outlive the memory they came from.
+    # Engrams survive the automatic retention lifecycle by design; the
+    # owner's explicit burn is the opposite case (docs/EMBER.md).
+    ember = db.with_name(db.name + ".ember")
+    if ember.exists():
+        ember.unlink()
     _p(f"{OK} burned your memory — {db} is gone")
+    return 0
+
+
+# --- ember: the readout of what your own memory is doing ---------------------
+
+def _ember_store(args):
+    """Resolve the Ember store beside the memory DB (the orchestrator keeps
+    it at <db>.ember — see orchestrator.py). Read-only surface: the burn
+    ceremony deliberately does NOT exist here. A detached CLI can't purge
+    the ANN index of a live Brain, and a 'burn' that leaves the moment
+    recallable by similarity would be a lie — burns happen on surfaces
+    attached to the running orchestrator (the phone's ceremony screen)."""
+    path = _mem_db(args) + ".ember"
+    if not Path(path).exists():
+        return None, path
+    from dreamlayer.ember import EmberStore
+    return EmberStore(path), path
+
+
+def cmd_ember_status(args) -> int:
+    """One line: how the practice is going."""
+    import time as _time
+    store, path = _ember_store(args)
+    if store is None:
+        _p(f"{path}  (no embers yet — keep a moment from the morning reel)")
+        return 0
+    s = store.status(_time.time())
+    _p(f"{ARROW} tending {s['tended']}  ·  due {s['due']}  ·  "
+       f"graduated {s['graduated']}  ·  burned {s['burned']}  ·  "
+       f"offers waiting {s['candidates']}")
+    return 0
+
+
+def cmd_ember_log(args) -> int:
+    """Every engram's curve — the trustworthy readout. Cues only by default;
+    --answers additionally prints what each cue guards (veil-gated, like
+    `memories browse`: reading answers is reading memory)."""
+    import time as _time
+    store, path = _ember_store(args)
+    if store is None:
+        _p(f"{path}  (no embers yet)")
+        return 0
+    if getattr(args, "answers", False):
+        blocked, reason = _veil_blocked(_mem_db(args))
+        if blocked:
+            _err(f"{BAD} not printing answers: {reason}. Lower the veil first.")
+            return 2
+    now = _time.time()
+    day = 86400.0
+    for e in store.engrams(include_burned=True):
+        if e.burned:
+            _p(f"  🔥 {e.cue!r}  — burned; lives in you")
+            continue
+        flag = "★" if e.state.graduated else " "
+        due_d = (e.state.due_ts - now) / day
+        when = f"due {abs(due_d):.1f}d ago" if due_d < 0 else f"due in {due_d:.1f}d"
+        _p(f"  {flag} {e.cue!r}  S={e.state.stability:.1f}d "
+           f"reps={e.state.reps} lapses={e.state.lapses}  {when}")
+        if getattr(args, "answers", False):
+            _p(f"      ↳ {e.answer!r}")
+    return 0
+
+
+def cmd_ember_offers(args) -> int:
+    """The standing offers: graduated engrams whose recordings still exist."""
+    store, path = _ember_store(args)
+    if store is None:
+        _p(f"{path}  (no embers yet)")
+        return 0
+    offers = store.graduated_unburned()
+    if not offers:
+        _p("no standing offers — nothing has graduated yet")
+        return 0
+    for e in offers:
+        _p(f"  ★ #{e.id}  {e.cue!r}  (recalled ×{e.state.reps}) — "
+           f"burn it from the phone's ceremony screen")
     return 0
 
 
@@ -696,6 +779,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  packs     validate an earcon/haptic pack against the sensory gate\n"
             "  bench     race a perceptor inside the 350ms glance budget\n"
             "  memories  browse/export your memory (it's just a file)\n"
+            "  ember     the readout of memories you're tending yourself\n"
             "\nno code? build a figment in the browser: landing/lens-builder.html"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -789,6 +873,21 @@ def build_parser() -> argparse.ArgumentParser:
     mburn.add_argument("--db", help="memory sqlite path (or set DREAMLAYER_DB)")
     mburn.add_argument("--yes", action="store_true", help="confirm the deletion")
     mburn.set_defaults(func=cmd_mem_burn)
+
+    # ember — the readout of what your own memory is doing (docs/EMBER.md)
+    ember = groups.add_parser("ember", help="memories you tend until they live in you")
+    esub = ember.add_subparsers(dest="ember_cmd")
+    est = esub.add_parser("status", help="one line: how the practice is going")
+    est.add_argument("--db", help="memory DB path (ember store lives beside it)")
+    est.set_defaults(func=cmd_ember_status)
+    elog = esub.add_parser("log", help="every engram's curve — the trustworthy readout")
+    elog.add_argument("--db", help="memory DB path (ember store lives beside it)")
+    elog.add_argument("--answers", action="store_true",
+                      help="also print what each cue guards (veil-gated)")
+    elog.set_defaults(func=cmd_ember_log)
+    eoff = esub.add_parser("offers", help="graduated engrams whose recordings still exist")
+    eoff.add_argument("--db", help="memory DB path (ember store lives beside it)")
+    eoff.set_defaults(func=cmd_ember_offers)
 
     # golf — score a figment's expressiveness per byte; the compiler referees
     golf = groups.add_parser("golf", help="score a figment's expressiveness per byte (budgets are the referee)")
