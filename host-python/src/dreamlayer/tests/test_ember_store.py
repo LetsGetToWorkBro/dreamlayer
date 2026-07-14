@@ -124,3 +124,29 @@ class TestPersistence:
         reopened = EmberStore(p)
         back = reopened.get(e.id)
         assert back.state.reps == 2 and back.cue == "cue"
+
+
+class TestPurgeAll:
+    def test_erase_everything_leaves_nothing_not_even_bytes(self, tmp_path):
+        # the wearer's erase-everything: rows gone AND the answer text gone
+        # from the file's raw bytes (DELETE alone frees pages, VACUUM scrubs)
+        p = tmp_path / "dreamlayer.db.ember"
+        st = EmberStore(str(p))
+        st.keep("k1", "What did Maya say?",
+                "Maya said her first full sentence in Spanish", NOW)
+        st.add_candidates([TendingCandidate(
+            id=0, kind="memory", summary="a secret picnic at the reservoir",
+            cue="About secret picnic… — what happened?", salience=1.0)], NOW)
+        st.purge_all()
+        assert st.engrams(include_burned=True) == []
+        assert st.candidates() == []
+        raw = p.read_bytes()
+        assert b"Spanish" not in raw and b"reservoir" not in raw, \
+            "erased must mean the bytes left the disk"
+
+    def test_the_store_still_works_after_a_wipe(self):
+        st = EmberStore()
+        st.keep("k1", "cue", "answer", NOW)
+        st.purge_all()
+        e = st.keep("k2", "cue2", "answer2", NOW)
+        assert st.get(e.id) is not None and st.status(NOW)["tended"] == 1

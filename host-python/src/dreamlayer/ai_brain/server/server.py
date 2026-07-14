@@ -1306,11 +1306,28 @@ class Brain:
         live: every Waypath anchor is dropped and the store rewritten, so a
         later refresh can't quietly resurrect what the user erased. People and
         reminders are mirrors of their own surfaces (People tab, Reminders) and
-        are not deleted here — erasing memories is not deleting your contacts."""
+        are not deleted here — erasing memories is not deleting your contacts.
+
+        The Ember practice goes too: engrams hold verbatim ANSWERS (and cues
+        and staged offers carry memory content), so erase-everything empties
+        the <db>.ember sidecar — purged and VACUUMed so the bytes leave the
+        disk, not deleted as a file (the hub may hold it open). Surviving the
+        retention lifecycle is Ember's design; surviving the owner's explicit
+        wipe would be a privacy residue (docs/EMBER.md)."""
+        import os as _os
         n = self.waypath.forget_all()
         self._save_waypath()
-        self.activity.add("privacy", f"Erased kept memories ({n} anchor(s))")
-        return {"ok": True, "purged": n}
+        n_ember = 0
+        ember_path = _ember_store_path(self)
+        if _os.path.exists(ember_path):
+            from ...ember import EmberStore
+            store = EmberStore(ember_path)
+            n_ember = len(store.engrams(include_burned=True))
+            store.purge_all()
+        self.activity.add("privacy",
+                          f"Erased kept memories ({n} anchor(s), "
+                          f"{n_ember} ember(s))")
+        return {"ok": True, "purged": n, "embers_purged": n_ember}
 
     def waypath_stash(self, subject: str, place: str) -> dict:
         subject = (subject or "").strip()

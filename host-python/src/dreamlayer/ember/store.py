@@ -182,6 +182,21 @@ class EmberStore:
             self.conn.commit()
         return self.get(engram_id)
 
+    def purge_all(self) -> None:
+        """Erase the whole practice: every engram (answers included) and
+        every staged offer. This is the wearer's erase-everything, which is
+        a different thing from the retention lifecycle (which never touches
+        this file — see the module docstring): surviving an automatic sweep
+        is the design; surviving the owner's explicit wipe would be a
+        privacy residue. VACUUM afterwards, because a bare DELETE only
+        frees SQLite pages without scrubbing them — "erased" must mean the
+        answer text is no longer in the file's bytes."""
+        with self._lock:
+            self.conn.execute("DELETE FROM engrams")
+            self.conn.execute("DELETE FROM tending")
+            self.conn.commit()
+            self.conn.execute("VACUUM")
+
     # -- tending candidates --------------------------------------------------
 
     def add_candidates(self, candidates: list[TendingCandidate],

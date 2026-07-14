@@ -163,17 +163,27 @@ class TestTendingRitual:
             "tending is a ritual, not an inbox"
 
     def test_the_night_stages_before_the_ring_is_swept(self, tmp_path):
+        import time as _t
+
         import dreamlayer.config as C
         from dreamlayer.bridge.emulator_bridge import EmulatorBridge
         from dreamlayer.orchestrator.orchestrator import Orchestrator
-        import time as _t
-        if not (_t.localtime(NOW).tm_hour >= 22 or _t.localtime(NOW).tm_hour < 6):
-            pytest.skip("NightWatch gate needs a night-local hour")
+        from dreamlayer.rem.nightly import NightWatch
+
+        # a deterministic night: shift NOW so the local hour is 23, and give
+        # the NightWatch the same frozen clock (its default is wall time,
+        # which made this test hostage to when the suite happened to run)
+        night = NOW + (23 - _t.localtime(NOW).tm_hour) * 3600.0
         cfg = C.Config()
         cfg.vault_dir = str(tmp_path)
         orc = Orchestrator(EmulatorBridge(), config=cfg)
-        orc._clock = lambda: NOW
-        self.a_ring(orc)
+        orc._clock = lambda: night
+        orc.nightwatch = NightWatch(tmp_path, now_fn=lambda: night)
+        orc.ring.append(MemoryEvent(kind="promise",
+                                    summary="send Marcus the lease by Friday",
+                                    confidence=0.9), ts=night - 10 * 3600)
+        orc.ring.append(MemoryEvent(kind="conversation", summary=ANSWER,
+                                    confidence=0.9), ts=night - 7 * 3600)
         reel = orc.maybe_dream_tonight(charging=True)
         assert reel is not None
         assert orc.last_tending, "offers must stage before purge_hot"

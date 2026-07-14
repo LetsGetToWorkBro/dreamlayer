@@ -66,6 +66,33 @@ def test_tend_keep_and_let_go_and_the_daily_cap(tmp_path):
     assert any("ritual" in (r.get("error") or "") for r in kept if not r["ok"])
 
 
+def test_erase_all_memories_erases_the_practice_too(tmp_path):
+    """The phone's 'Erase all memories' must not leave engram answers behind:
+    rows purged, offers purged, and the answer text gone from the file's raw
+    bytes (purge_all VACUUMs — DELETE alone leaves scrubbed-out pages)."""
+    import time
+    b, store = brain_with_store(tmp_path)
+    store.keep("k1", "What did Maya say?", ANSWER, time.time())
+    store.add_candidates([TendingCandidate(
+        id=0, kind="memory", summary="a secret picnic at the reservoir",
+        cue="About secret picnic… — what happened?", salience=1.0)],
+        time.time())
+
+    r = b.purge_memories()
+    assert r["ok"] and r["embers_purged"] == 1
+
+    path = _ember_store_path(b)
+    fresh = EmberStore(path)
+    assert fresh.engrams(include_burned=True) == []
+    assert fresh.candidates() == []
+    import pathlib
+    raw = pathlib.Path(path).read_bytes()
+    assert b"Spanish" not in raw and b"reservoir" not in raw
+    # a brain with no ember store yet purges cleanly too
+    b2 = Brain(tmp_path / "other")
+    assert b2.purge_memories()["embers_purged"] == 0
+
+
 def test_burn_needs_consent_and_actually_burns(tmp_path):
     import time
     b, store = brain_with_store(tmp_path)

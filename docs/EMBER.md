@@ -132,9 +132,19 @@ The grades, and the two that carry the product's values:
   layer: ceremony, endpoint, and phone store all refuse anything truthy-but-
   not-true.
 - **Engrams outlive memory lifecycle events by construction**: the store is
-  its own SQLite file (`<db>.ember`), invisible to `RetentionSweep` and
-  `purge_all` — an engram is a record of what *you* know, not what the
-  glasses know.
+  its own SQLite file (`<db>.ember`), invisible to `RetentionSweep` — an
+  engram is a record of what *you* know, not what the glasses know.
+- **But the owner's erase-everything takes the practice with it.** Surviving
+  an automatic sweep is the design; surviving your explicit wipe would be a
+  privacy residue, because engrams hold verbatim answers. `dreamlayer
+  memories burn` deletes `<db>.ember` beside the DB and the ANN index; the
+  phone's "Erase all memories" calls `EmberStore.purge_all()`, which VACUUMs
+  after deleting so the answer text leaves the file's actual bytes.
+- **Forgetting one memory does not un-keep its ember.** `purge_memory` on a
+  single row leaves an engram it seeded intact — keeping was its own,
+  separate act of consent, and the practice is about *your* trace, not the
+  recording. This is deliberate; erase-everything is the lever that takes
+  both.
 
 ## What Ember refuses to be
 

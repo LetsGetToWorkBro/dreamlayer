@@ -584,6 +584,13 @@ def cmd_mem_burn(args) -> int:
     ann = db.with_name(db.name + ".usearch")
     if ann.exists():
         ann.unlink()
+    # Ember's practice file is a sibling too (<db>.ember) — its engrams hold
+    # verbatim ANSWERS, which must not outlive the memory they came from.
+    # Engrams survive the automatic retention lifecycle by design; the
+    # owner's explicit burn is the opposite case (docs/EMBER.md).
+    ember = db.with_name(db.name + ".ember")
+    if ember.exists():
+        ember.unlink()
     _p(f"{OK} burned your memory — {db} is gone")
     return 0
 
