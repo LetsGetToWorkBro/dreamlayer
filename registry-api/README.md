@@ -14,6 +14,7 @@ Worker mirrors it exactly.
 
 ```
 GET  /api/plugins                 → {plugins:[{name, ...stats}]}   index + live stats
+GET  /api/plugins/search?q=…      → {query, tokens, count, results:[…]}   ranked search
 GET  /api/plugins/<name>          → {name, ...stats, comments:[…]}
 POST /api/plugins/<name>/rate     {stars, user} → stats            one vote/user, updatable
 POST /api/plugins/<name>/comment  {text, user}  → comment
@@ -21,6 +22,27 @@ POST /api/plugins/<name>/download                → {downloads}
 ```
 
 `stats` = `{downloads, rating, ratings_count, comments_count}`.
+
+## Search
+
+`GET /api/plugins/search?q=crypto+prices&limit=10` ranks the public catalogue
+(`INDEX_URL`, KV-cached for 5 minutes, stale-served when the fetch flakes)
+with **the same engine the store page and phone app run locally**:
+`landing/assets/store/search.js` — the figment.js pattern, one module for
+browser and Worker. It understands store-speak ("find me a plugin for crypto
+prices on my HUD" → `currency-converter`) through three deliberate mechanisms:
+fielded keyword weights (name > tags > blurb), a curated concept map
+(`crypto`→currency/money, `calories`→food/nutrition — grow it alongside the
+catalogue), and one-edit typo tolerance. Each result row carries the ranking
+signals (`score`, `matched`) plus live social stats folded over the
+catalogue's placeholders.
+
+Deliberately **not** a search server (no Typesense, no embeddings box): the
+catalogue is a few KB of git-backed JSON and the clients own their copy — a
+pure scorer that runs wherever the catalogue is beats infrastructure the
+numbers don't need. `search` is a reserved plugin name. If the registry goes
+private and no cached copy exists, the route answers `503` and clients keep
+ranking locally — same graceful-degradation contract as everything else here.
 
 ## Deploy
 

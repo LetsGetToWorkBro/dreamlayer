@@ -320,6 +320,10 @@
     <a href="./index.html">dreamlayer.app</a></div>
 </footer>
 
+<!-- The store's search brain — the same module the Worker's /api/plugins/search
+     ranks with, so typing here and asking the API give identical results. The
+     page keeps a plain substring fallback if this fails to load. -->
+<script src="assets/store/search.js"></script>
 <script>
 // ---------------------------------------------------------------------------
 // The registry is git-backed (docs/MARKETPLACE.md). This page ships a snapshot
@@ -493,9 +497,23 @@ function render(){
     if(priceFilter==="free" && isPaid(p)) return false;
     if(priceFilter==="paid" && !isPaid(p)) return false;
     if(tagFilter && !(p.tags||[]).includes(tagFilter)) return false;
-    return !q || (p.name+" "+p.description+" "+p.author+" "+(p.tags||[]).join(" ")).toLowerCase().includes(q);
+    return true;
   });
-  if(sort==="featured") list.sort((a,b)=>((b.tags||[]).includes("featured")-(a.tags||[]).includes("featured")) || (!!b.official-!!a.official) || b.downloads-a.downloads);
+  // Ranked search (assets/store/search.js — concept expansion, typo tolerance,
+  // fielded weights): "crypto prices" finds currency-converter. On the default
+  // "featured" sort a query means relevance order; an explicit sort still
+  // applies over the matched set. Substring is the fallback if the module
+  // didn't load — the store must search even when an asset 404s.
+  let ranked = null;
+  if(q){
+    if(typeof StoreSearch !== "undefined"){
+      ranked = StoreSearch.rank(list, q);
+      list = ranked.map(r => r.plugin);
+    } else {
+      list = list.filter(p => (p.name+" "+p.description+" "+p.author+" "+(p.tags||[]).join(" ")).toLowerCase().includes(q));
+    }
+  }
+  if(sort==="featured"){ if(!ranked) list.sort((a,b)=>((b.tags||[]).includes("featured")-(a.tags||[]).includes("featured")) || (!!b.official-!!a.official) || b.downloads-a.downloads); }
   else if(sort==="rating") list.sort((a,b)=> b.rating-a.rating || b.ratings_count-a.ratings_count);
   else if(sort==="downloads") list.sort((a,b)=> b.downloads-a.downloads);
   else list.sort((a,b)=> a.name.localeCompare(b.name));

@@ -7,13 +7,15 @@
  * Python reference contract in host-python/.../plugins/social.py exactly.
  *
  *   GET  /api/plugins                 -> {plugins:[{name, ...stats}]}  (index + live stats)
+ *   GET  /api/plugins/search?q=…      -> {query, tokens, count, results:[…]}  (ranked search)
  *   GET  /api/plugins/:name           -> {name, ...stats, comments:[…]}
  *   POST /api/plugins/:name/rate      {stars, user} -> stats           (one vote/user)
  *   POST /api/plugins/:name/comment   {text, user}  -> comment
  *   POST /api/plugins/:name/download                 -> {downloads}
  *
  * Binding: a KV namespace `SOCIAL`. Optional var `INDEX_URL` (the raw
- * registry/index.json) so GET /api/plugins can fold stats into the catalogue.
+ * registry/index.json) so GET /api/plugins can fold stats into the catalogue
+ * and /search has a catalogue to rank.
  */
 
 // The lens engine — the SAME module the browser builder runs on. Importing it
@@ -22,6 +24,13 @@
 // proven solutions, and recompute the byte score server-side so it can't be
 // gamed. Wrangler bundles it at deploy; Node resolves it in the test harness.
 import LensKit from "../landing/assets/lens/figment.js";
+
+// The store's search brain — the SAME module the store page and phone app rank
+// their local catalogue with (concept expansion, fielded weights, typo
+// tolerance). Importing it here gives headless callers (CLI, Mac panel,
+// third-party tooling) the identical ranking over the public index — one
+// scorer, three surfaces, zero search servers.
+import StoreSearch from "../landing/assets/store/search.js";
 
 const INDEX_URL_DEFAULT =
   "https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/registry/index.json";
@@ -157,6 +166,53 @@ async function trackName(env, name) {
     names.push(name);
     await env.SOCIAL.put("index:names", JSON.stringify(names));
   }
+}
+
+// -- the catalogue, for /search ----------------------------------------------
+// The clients own the catalogue (the registry may be private) and rank it
+// locally; this cache exists so headless callers get the same ranking over
+// the *public* index without hammering raw.githubusercontent.com. Fresh for
+// INDEX_TTL_S; a stale copy is better than a 503 when the fetch flakes, and
+// no copy at all degrades to an honest 503 that points at the local module.
+const INDEX_TTL_S = 300;
+
+async function catalogue(env) {
+  const cached = await readJSON(env.SOCIAL, "cache:index", null);
+  const now = Date.now() / 1000;
+  if (cached && Array.isArray(cached.plugins) && now - cached.at < INDEX_TTL_S) {
+    return { plugins: cached.plugins, stale: false };
+  }
+  try {
+    const res = await fetch(env.INDEX_URL || INDEX_URL_DEFAULT,
+      { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("index fetch: " + res.status);
+    const idx = await res.json();
+    const plugins = Array.isArray(idx.plugins) ? idx.plugins : [];
+    await env.SOCIAL.put("cache:index", JSON.stringify({ at: now, plugins }),
+      { expirationTtl: 86400 });   // stale-serve window, not the freshness TTL
+    return { plugins, stale: false };
+  } catch {
+    if (cached && Array.isArray(cached.plugins)) return { plugins: cached.plugins, stale: true };
+    return null;
+  }
+}
+
+// A search result row: the catalogue fields a store list renders, the ranking
+// signals (score + which words matched), and the live social numbers folded
+// over the catalogue's placeholders — same merge contract as GET /api/plugins.
+async function searchRow(env, r) {
+  const p = r.plugin;
+  const live = validName(p.name) ? await stats(env, p.name) : null;
+  return {
+    name: p.name, version: p.version, author: p.author, official: !!p.official,
+    description: p.description, tags: p.tags || [], requires: p.requires || [],
+    pricing: p.pricing || { model: "free" }, homepage: p.homepage,
+    screenshot: p.screenshot, forwho: p.forwho,
+    score: r.score, matched: r.matched,
+    downloads: (live && live.downloads) || p.downloads || 0,
+    rating: (live && live.ratings_count ? live.rating : p.rating) || 0,
+    ratings_count: (live && live.ratings_count) || p.ratings_count || 0,
+  };
 }
 
 async function stats(env, name) {
@@ -385,6 +441,30 @@ export default {
 
     if (parts[0] !== "api" || parts[1] !== "plugins") {
       return json({ error: "not found", store: "https://dreamlayer.app/plugins" }, 404);
+    }
+
+    // GET /api/plugins/search?q=crypto+prices&limit=10 — ranked catalogue
+    // search. "search" is a reserved plugin name from here on (validName would
+    // accept it, so this must run before the :name routes). The ranking is
+    // StoreSearch.rank — identical to what the store page runs locally — over
+    // the KV-cached public index, with live stats folded onto each row.
+    if (parts[2] === "search") {
+      if (request.method !== "GET" || parts.length !== 3) {
+        return json({ error: "method not allowed" }, 405);
+      }
+      const q = (url.searchParams.get("q") || "").trim().slice(0, 200);
+      if (!q) return json({ error: "missing query — try ?q=crypto+prices" }, 400);
+      const limit = Math.max(1, Math.min(25, Number(url.searchParams.get("limit")) || 10));
+      const cat = await catalogue(env);
+      if (!cat) {
+        return json({ error: "catalogue unreachable",
+          note: "the registry may be private — clients own the catalogue and rank it locally with landing/assets/store/search.js" }, 503);
+      }
+      const ranked = StoreSearch.rank(cat.plugins, q).slice(0, limit);
+      const results = await Promise.all(ranked.map((r) => searchRow(env, r)));
+      const body = { query: q, tokens: StoreSearch.tokenize(q), count: results.length, results };
+      if (cat.stale) body.note = "catalogue is a cached copy — the live index was unreachable";
+      return json(body);
     }
 
     let name = "";

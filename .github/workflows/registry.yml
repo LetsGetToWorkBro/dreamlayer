@@ -5,12 +5,19 @@
 # runs them on every change so a route regression can't ship.
 name: registry
 
+# The Worker imports shared modules from landing/ (figment.js, search.js) and
+# the search tests pin against the real registry/index.json — a change to any
+# of those can break a route, so they gate too.
 on:
   push:
     branches: [main]
-    paths: ["registry-api/**", ".github/workflows/registry.yml"]
+    paths: ["registry-api/**", ".github/workflows/registry.yml",
+            "landing/assets/lens/figment.js", "landing/assets/store/search.js",
+            "registry/index.json"]
   pull_request:
-    paths: ["registry-api/**", ".github/workflows/registry.yml"]
+    paths: ["registry-api/**", ".github/workflows/registry.yml",
+            "landing/assets/lens/figment.js", "landing/assets/store/search.js",
+            "registry/index.json"]
 
 jobs:
   worker-tests:
@@ -23,5 +30,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Worker route tests (plugins, figments, golf)
+      - name: Worker route tests (plugins, figments, golf, search)
         run: npm test
