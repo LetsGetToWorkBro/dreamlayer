@@ -111,6 +111,12 @@ real), hardening the model when a predicted event lands.
   lives in you, burn the recording with explicit consent, and the cue-only
   tombstone left behind is exactly what this card resurfaces a year on —
   for you to answer from memory alone.
+- **Stasis** (`stasis`, docs/STASIS.md) — save states for your mind. A
+  double-nod (or *"hold that thought"*) freezes the moment you were
+  interrupted — the last thing you were saying, held **verbatim** — and
+  offers to put you back inside the doing when you return. It never
+  summarizes and never finishes your sentence; it returns your own cues
+  and trusts your cognition. No LLM in the loop, ever.
 
 ## Truth's siblings
 
@@ -203,16 +209,16 @@ index and the tiered brain) and returns one HUD card. The AI knowledge tier
 folds into it — "ask about your own stuff" *is* Lucid Recall extended from
 memory to your files and mail.
 
-## The Innovation pass — ten more lenses
+## The newer lenses
 
-Ten lenses added in the latest build. Each card below is the real renderer's
+The lenses added in recent builds. Each card below is the real renderer's
 output, shown through the glass — the interface is real; the world behind it is
 illustrative.
 
 | | |
 |---|---|
 | ![Retrace](assets/cards/retrace.webp) | **Retrace** — where you last saw a thing, by place and time ("north rack, 8:12am"). Ambient-sighting recall; veil-gated. |
-| ![Ember](assets/cards/ember.webp) | **Ember** — a memory you *chose to keep*, handed back a year later, where it happened. At most one, never an ambush, storm-suppressed. |
+| ![Ember](assets/cards/ember_flare.webp) | **Ember** — spaced repetition for the moments you keep: an invitation to retrieve where it happened, then a flare when you reach and it's there. Detailed below. |
 | ![Docent](assets/cards/docent.webp) | **Docent** — a venue's own knowledge, grounded in a local collection and read from what you look at. |
 | ![Rosetta Live](assets/cards/rosetta_live.webp) | **Rosetta Live** — the ear: offline live translation, each utterance streamed into the named slots of a single on-stage figment. |
 | ![Candor](assets/cards/candor.webp) | **Candor Mirror** — the self-coach: after a conversation, your own pace, fillers, and narrative drift — never pointed at anyone else. |
@@ -221,3 +227,28 @@ illustrative.
 | ![Sous](assets/cards/sous.webp) | **Sous** — hands-free kitchen timers as on-glass figments: "flip in ninety," every pan its own clock. |
 | ![Session](assets/cards/session.webp) | **Session** — a musician's companion: tempo on the rim, pitch in the luma, a practice log that writes itself. |
 | ![Kiln](assets/cards/kiln.webp) | **Kiln** — an offline-total firing companion; the Brain absent by design, the log kept as a lab notebook. |
+| ![Stasis](assets/cards/stasis.webp) | **Stasis** — save states for your mind: a double-nod holds the exact thought you were interrupted in, verbatim, and puts you back inside it later. No summary, no LLM. |
+
+### Ember — the four states of tending a memory
+
+Ember is spaced repetition for the moments you *choose* to keep. The flame
+grows as the memory takes hold — an invitation, a reward, a kind answer, and
+finally consolidation:
+
+| | |
+|---|---|
+| ![Ember prompt](assets/cards/ember_prompt.webp) | **Prompt** — the glow at the doorway: an invitation to retrieve, right where it happened. Walk on and it costs nothing — an unanswered prompt is *missed*, never a lapse. |
+| ![Ember flare](assets/cards/ember_flare.webp) | **Flare** — you reached and it was there. One flare, gone in a breath; the reward is the recall itself, and the curve schedules the next glimpse. |
+| ![Ember reveal](assets/cards/ember_reveal.webp) | **Reveal** — you reached and it wasn't there. The answer, gently — no score, no streak, no shame. The curve reschedules and forgetting stays kind. |
+| ![Ember graduated](assets/cards/ember_graduated.webp) | **Graduated** — stability crossed the threshold: the moment lives in you now. The recording can be burned, with explicit consent; the memory stays. |
+
+### Stasis — save states for your mind
+
+Interrupted mid-thought? Three things die at once — what you were doing, the
+half-formed idea, and where you stood. A **double-nod** (or *"hold that
+thought"*) freezes all three: the ring buffer already holds your last minute of
+thinking out loud, so the gesture costs zero words. Come back — tilt to settle
+in, or say *"where was I"* — and the ribbon re-lights and offers your own words
+back, ending on the dash your brain finishes:
+
+![Stasis — the held moment, returned verbatim](assets/cards/stasis.webp)
