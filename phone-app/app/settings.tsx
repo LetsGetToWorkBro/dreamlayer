@@ -320,6 +320,9 @@ export default function Settings() {
         <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.rewindLink")}</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/ember")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.emberLink")}</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/plugins")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.pluginsLink")}</Text>
         </TouchableOpacity>
