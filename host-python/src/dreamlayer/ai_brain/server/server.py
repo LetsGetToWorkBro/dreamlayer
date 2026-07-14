@@ -769,9 +769,15 @@ class Brain:
         return [f for f in self.config.folders
                 if not Path(f).expanduser().is_dir()]
 
-    def ask(self, query: str) -> Optional[Answer]:
+    def ask(self, query: str, no_cloud: bool = False) -> Optional[Answer]:
+        # no_cloud carries the WEARER's session posture from the hub (incognito,
+        # or hub-cloud switched off). It is authoritative over the Brain's own
+        # cloud config: a paired hub that says no_cloud must never egress to the
+        # cloud here, even if this Mac is configured cloud_ready(). Direct panel
+        # callers pass no_cloud=False and keep the Brain's own config.
         ans = self.index.ask(query)
-        if ans is None and self.config.cloud_ready() and not self.incognito_now():
+        if ans is None and not no_cloud \
+                and self.config.cloud_ready() and not self.incognito_now():
             ans = self._ask_cloud(query)
         if ans is not None:
             self.history.add(query, ans.text, ans.tier, ans.sources)
@@ -2418,7 +2424,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200 if ok else 400,
                            {"ok": ok, "stats": brain.index.stats()})
             elif path == "/dreamlayer/brain/ask":
-                ans = brain.ask(self._body().get("query", ""))
+                b = self._body()
+                # a paired hub that is incognito / hub-cloud-off sends no_cloud;
+                # honor it over this Brain's own cloud config (privacy posture
+                # is the wearer's, not the Mac's).
+                ans = brain.ask(b.get("query", ""), no_cloud=bool(b.get("no_cloud")))
                 self._json(200, _answer_json(ans))
             elif path == "/dreamlayer/plugins/install":
                 self._json(200, brain.install_plugin(self._body()))

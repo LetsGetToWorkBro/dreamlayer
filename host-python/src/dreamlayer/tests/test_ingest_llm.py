@@ -173,6 +173,22 @@ class TestTier3Trigger:
         pipeline.ingest("I left my keys on the kitchen counter.")
         pipeline.llm.extract.assert_not_called()
 
+    def test_cloud_off_never_calls_the_tier3_llm(self, db, cfg):
+        """Audit 2026-07-14 CRITICAL: tier-3 ships the raw transcript to the
+        cloud, so it must be gated by the Cloud switch, not merely by an API
+        key. With cloud_ok()->False the LLM is never called even for a long
+        transcript that would otherwise trigger it."""
+        pipeline = self._pipeline_with_mock_llm(db, cfg, [{
+            "kind": "task", "summary": "Task: do something", "confidence": 0.80
+        }])
+        pipeline.cloud_ok = lambda: False
+        pipeline.ingest(("word " * 45).strip())
+        pipeline.llm.extract.assert_not_called()
+        # flip the switch on → tier-3 fires as before
+        pipeline.cloud_ok = lambda: True
+        pipeline.ingest(("word " * 45).strip())
+        pipeline.llm.extract.assert_called_once()
+
     def test_llm_triggered_when_zero_tier1_events(self, db, cfg):
         """Tier-3 fires when tier-1 produces nothing on a non-trivial transcript.
 

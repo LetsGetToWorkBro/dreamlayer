@@ -107,6 +107,42 @@ def test_on_scene_frame_feeds_imu_in_dream_mode():
     assert orc.dream._ctx.imu_delta == delta
 
 
+def test_veiled_dream_never_ingests_camera_or_mic():
+    """Audit 2026-07-14 CRITICAL: the Dream Mode camera/mic path transmits to
+    the vision tier and processes audio, so the Veil must stop the frame ever
+    entering — at both the orchestrator seam and the engine. Under pause OR
+    incognito no camera frame reaches the describer and no audio is processed."""
+    for shut in ("pause", "incognito"):
+        orc, _ = make_orc()
+        orc.enter_dream()
+        if shut == "pause":
+            orc.privacy.pause()
+        else:
+            orc.set_incognito(True)
+        orc.on_scene_frame({"camera_jpeg": b"\xff\xd8\xff", "imu_pose": {}})
+        orc.on_audio_frame("", context={"mic_fft": [0.5] * 32,
+                                        "mic_amplitude": 0.7})
+        assert orc.dream._ctx.camera_frame is None, shut
+        assert orc.dream._ctx.mic_fft is None, shut
+        # direct engine feed is also gated (defense in depth)
+        orc.dream.feed_camera(b"\xff\xd8\xff")
+        orc.dream.feed_mic([0.1] * 32, 0.9)
+        assert orc.dream._ctx.camera_frame is None, shut
+        assert orc.dream._ctx.mic_fft is None, shut
+
+
+def test_dream_drops_prefed_frame_when_veil_drops_before_tick():
+    """A frame staged before the veil dropped must be cleared before _tick reads
+    it, so it is never described to the vision tier once capture is paused."""
+    import asyncio
+    orc, _ = make_orc()
+    orc.enter_dream()
+    orc.dream._ctx.camera_frame = b"\xff\xd8\xff"     # staged pre-veil
+    orc.privacy.pause()
+    asyncio.run(orc.dream._tick())
+    assert orc.dream._ctx.camera_frame is None
+
+
 def test_on_place_feeds_ghost_layer_in_dream_mode():
     orc, _ = make_orc()
     orc.enter_dream()

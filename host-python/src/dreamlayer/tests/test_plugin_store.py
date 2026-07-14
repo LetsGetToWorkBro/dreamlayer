@@ -280,6 +280,48 @@ def test_default_isolates_unsigned_installed_plugin(tmp_path):
             h.stop()
 
 
+def test_self_signed_plugin_is_jailed_not_run_in_process(tmp_path):
+    """Audit 2026-07-14 CRITICAL: a self-signature (the attacker's own key) must
+    NOT buy in-process host authority. With trusted_keys=None (the production
+    default) a validly self-signed package must still go to the jail, never the
+    host — only a REGISTERED publisher key earns in-process execution."""
+    from dreamlayer.reality_compiler.sign_crypto import Signer
+    signed_pkg = _jailable_package().sign_with(Signer(b"\x21" * 32))
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(signed_pkg).ok
+    # sanity: the package really is self-signed (valid signature, no registry)
+    from dreamlayer.plugins.validate import validate
+    rep = validate(signed_pkg, frozenset({"object_lens"}))
+    assert rep.signed is True and rep.publisher == ""
+    orc = Orchestrator(FakeBridge())
+    result = store.load_installed(orc)              # default = "untrusted", no keys
+    try:
+        assert result.loaded == []                  # never ran in-process
+        assert len(store.isolated) == 1             # jailed instead
+    finally:
+        for h in store.isolated:
+            h.stop()
+
+
+def test_registered_publisher_runs_in_process(tmp_path):
+    """The counterpart: a package signed by a key in trusted_keys IS trusted to
+    run in-process, so the registry model still works for vetted publishers."""
+    from dreamlayer.reality_compiler.sign_crypto import Signer
+    s = Signer(b"\x33" * 32)
+    signed_pkg = _jailable_package().sign_with(s)
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}),
+                        trusted_keys={"vetted": s.public_key_hex})
+    assert store.install_package(signed_pkg).ok
+    orc = Orchestrator(FakeBridge())
+    result = store.load_installed(orc)
+    try:
+        assert len(result.loaded) == 1              # trusted → in-process
+        assert store.isolated == []
+    finally:
+        for h in store.isolated:
+            h.stop()
+
+
 # -- honest isolation posture (re-audit 2026-07) -----------------------------
 # In CI there is no bwrap/nsjail and no WASM runtime, so the untrusted jail is a
 # plain subprocess: process isolation, but no kernel boundary. That degradation

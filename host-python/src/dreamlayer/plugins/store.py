@@ -206,8 +206,9 @@ class PluginStore:
         subprocess host in plugins/isolation.py) instead of the host; only their
         pure-data providers cross the jail. This is the secure default for
         user-installed third-party code — it never gets ambient authority on the
-        host just for being installed. Signed/trusted packages still load
-        in-process. (First-party bundled plugins don't come through here; they
+        host just for being installed. Only packages signed by a REGISTERED
+        publisher (a key in trusted_keys) load in-process; a self-signature
+        alone does not earn host authority. (First-party bundled plugins don't come through here; they
         load in-process via Orchestrator.load_plugins as reviewed code.)
         isolate="trusted": everything runs in-process — the curated deployment
         where every installed package has been read and vouched for.
@@ -240,8 +241,18 @@ class PluginStore:
                               trusted_keys=self.trusted_keys)
             if not report.ok:
                 continue                       # was fine at install, isn't now
-            if isolate == "untrusted" and not report.signed:
-                # unreviewed/unsigned → an isolation tier, not the host. Prefer
+            # Trust to run IN-PROCESS (host authority + the real ctx) requires a
+            # REGISTERED publisher — report.publisher is non-empty only when the
+            # signature verifies against a key in trusted_keys. A mere valid
+            # self-signature is NOT enough (audit 2026-07-14 CRITICAL): with
+            # trusted_keys=None every self-signed package would otherwise earn
+            # host authority and read the whole MemoryDB in-process. "Signed"
+            # proves the author signed their own code; only an allowlisted key
+            # proves *we* chose to trust it. trusted_keys=None therefore means
+            # "trust nothing in-process" — everything unreviewed goes to the jail.
+            trusted_inproc = bool(report.publisher)
+            if isolate == "untrusted" and not trusted_inproc:
+                # unreviewed / not-registered → an isolation tier, not the host. Prefer
                 # the WASM jail when a runtime is configured (no ambient
                 # authority); else the capability-mediated subprocess jail.
                 from .isolation import SubprocessPluginHost
