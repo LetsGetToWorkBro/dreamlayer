@@ -49,6 +49,22 @@ class TestCapturePipeline:
         assert cap.push_pcm([0.5] * 100, ts=0.0) is None
         assert cap._seg == []                             # nothing accumulated
 
+    def test_veil_fails_closed_when_gate_raises(self):
+        # Re-audit: _veiled() returned False (capture ON) if the privacy gate
+        # raised or was missing — failing OPEN on the one path that must never
+        # leak. A broken gate must veil, not un-veil, and the failure is recorded.
+        orch = self._orch()
+
+        class BoomGate:
+            def allow_capture(self):
+                raise RuntimeError("gate exploded")
+
+        orch.privacy = BoomGate()
+        cap = CapturePipeline(orch, vad=FakeVAD(), asr=FakeASR("should not route"))
+        assert cap.push_pcm([0.5] * 100, ts=0.0) is None   # veiled, dropped
+        assert cap._seg == []                               # nothing accumulated
+        assert orch.health.failures("asr") >= 1             # broken gate is visible
+
     def test_max_segment_endpoints_a_monologue(self):
         orch = self._orch()
         orch.hear = lambda text, now=None: {}

@@ -55,6 +55,26 @@ class TestRetrieverPurge:
         assert ann.rebuilt and db.memories() == []
 
 
+class TestPurgeLeavesNoLocationResidue:
+    """Re-audit: purge_all deleted memories/commitments/conversations/events but
+    left `places` and `entities`. A place row is a location SIGNATURE (the
+    wifi/BLE fingerprint ProactiveEngine.on_place matches on), so leaving it
+    behind is a privacy residue after a full wipe. `settings` stays — it is
+    device config, not a trace of the wearer's world."""
+
+    def test_purge_all_erases_places_and_entities(self):
+        db = MemoryDB(":memory:")
+        pid = db.add_place("home kitchen", signature="wifi:aa:bb:cc")
+        db.add_memory("scene", "keys on the counter", place_id=pid)
+        db.set_setting("model", "keyword")          # config, must survive
+        db.purge_all()
+        assert db.memories() == []
+        assert db.places() == []                    # location signature gone
+        with db._lock:
+            assert db.conn.execute("SELECT COUNT(*) c FROM entities").fetchone()["c"] == 0
+        assert db.get_setting("model") == "keyword"  # config preserved
+
+
 class TestRetentionSweepEviction:
     def test_expired_memory_leaves_the_index(self):
         db, ann = MemoryDB(":memory:"), StubAnn()

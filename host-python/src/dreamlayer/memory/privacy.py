@@ -39,10 +39,9 @@ class PrivacyGate:
         recall_conversation, rewind_day)."""
         return not self._paused
 
-
-def purge_memory(db, mid):
-    db.purge_memory(mid)
-
-
-def purge_all(db):
-    db.purge_all()
+# NB: there is deliberately no purge_* helper here. Forgetting must go through
+# memory.retrieval.Retriever.purge_memory / purge_all, which delete the row AND
+# evict the vector from the ANN index. Two free functions used to live here that
+# called db.purge_* directly — they skipped the index, so a "forget" routed
+# through them left the memory recallable by similarity. They had no callers;
+# rather than leave the trap in the module named "privacy", they are removed.

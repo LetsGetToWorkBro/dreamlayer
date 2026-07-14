@@ -77,10 +77,16 @@ class CapturePipeline:
             h.record_failure("asr", exc)
 
     def _veiled(self) -> bool:
+        # Fail CLOSED: if the privacy gate is missing or raises, treat the
+        # session as veiled and capture NOTHING. The module contract is
+        # "veil-gated at the door"; a gate that errors must not silently open
+        # the door and let audio through. The failure is recorded so a broken
+        # gate is visible, not just quietly safe.
         try:
             return not self.orch.privacy.allow_capture()
-        except Exception:
-            return False
+        except Exception as exc:
+            self._record(exc)
+            return True
 
     def push_pcm(self, samples, ts: float | None = None) -> str | None:
         """Feed one PCM window. Returns the transcript when this window

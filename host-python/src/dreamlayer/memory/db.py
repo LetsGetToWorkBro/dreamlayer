@@ -66,6 +66,12 @@ class MemoryDB:
         with self._lock:
             self.conn.execute("DELETE FROM memories WHERE id=?", (memory_id,)); self.conn.commit()
     def purge_all(self):
+        # Erase every stored trace of the wearer's world. `places` and
+        # `entities` were skipped before — but a place row is a location
+        # SIGNATURE (wifi/BLE fingerprint) that ProactiveEngine.on_place
+        # matches on, so leaving it behind is a privacy residue after a full
+        # wipe. `settings` is kept on purpose: it is device config, not memory.
         with self._lock:
-            for t in ("memories","commitments","conversations","events"): self.conn.execute(f"DELETE FROM {t}")
+            for t in ("memories","commitments","conversations","events","places","entities"):
+                self.conn.execute(f"DELETE FROM {t}")
             self.conn.commit()
