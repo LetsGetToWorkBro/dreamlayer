@@ -1498,6 +1498,124 @@ local function draw_morning_brief(card, sc, enter_t, exit_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- Ember (docs/EMBER.md) — memories you tend until they live in you.
+-- Four moments, one visual grammar: a hearth-gold ember dot that breathes.
+-- The prompt is an invitation (dim, patient); the flare is one bright
+-- breath; the reveal is the answer with no judgement attached; graduation
+-- closes the ring. The prompt card never receives the answer at all —
+-- that guarantee is upstream in the payload (hud/cards.py), so nothing
+-- drawn here can leak it.
+-- ---------------------------------------------------------------------------
+
+--- The breathing ember: a small filled dot whose bloom swells and settles
+--- on a slow cycle (~2.4s) — firelight, not a notification LED.
+local function ember_breath(x, y, idle_t, base_r, col)
+  local pulse = ease_in_out_sine((math.sin(idle_t / 1200 * math.pi) + 1) / 2)
+  local r = floor(lerp(base_r, base_r + 2, pulse))
+  frame.display.circle(x, y, r, col, true)
+  MAT.bloom_ring(x, y, r, col)
+end
+
+-- EmberPromptCard: the glow at the doorway. Cue only, hearth gold, and a
+-- patient breathing ember beneath — walking on costs nothing.
+local function draw_ember_prompt(card, sc, enter_t, exit_t, idle_t)
+  local cue   = card.primary or card.cue or ""
+  local place = card.footer  or card.place or ""
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text("EMBER", CX, 72, P.ember_glow, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #cue <= 22 then
+      text(cue, CX, CY - 8, P.text_primary, T.fit_size(cue, 196))
+    else
+      text_block(cue, CX, CY - 10, P.text_primary, "md", 190, 2)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and place ~= "" then
+    text(place, CX, 176, P.text_ghost, "sm")
+  end
+  if enter_t >= 1.0 and exit_t == 0 then
+    ember_breath(CX, 198, idle_t, 3, P.ember_glow)
+  else
+    frame.display.circle(CX, 198, 3, P.ember_glow_dim, true)
+  end
+end
+
+-- EmberFlareCard: you reached and it was there. One bright breath —
+-- an expanding ring that thins as it grows, then the card is gone.
+local function draw_ember_flare(card, sc, enter_t, exit_t, idle_t)
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text("EMBER", CX, 72, P.ember_glow, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text(card.primary or "It's yours.", CX, CY - 4, P.ember_glow,
+         T.fit_size(card.primary or "It's yours.", 200, {"xl","lg","md"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and (card.footer or "") ~= "" then
+    text(card.footer, CX, 172, P.text_ghost, "sm")
+  end
+  -- the flare: one ring, born at the ember and released outward
+  local ft = clamp(enter_t + (exit_t > 0 and 1 or (idle_t / 800)), 0, 2)
+  local fr = floor(lerp(3, 34, clamp(ft - 0.5, 0, 1)))
+  if fr > 3 then
+    frame.display.circle(CX, 198, fr, P.ember_glow_dim, false)
+  end
+  frame.display.circle(CX, 198, 3, P.ember_glow, true)
+  MAT.bloom_ring(CX, 198, 3, P.ember_glow)
+end
+
+-- EmberRevealCard: you reached and it wasn't there. The cue dims to the
+-- eyebrow, the answer takes the center, the footer promises another pass.
+-- No score, no streak — forgetting stays kind.
+local function draw_ember_reveal(card, sc, enter_t, exit_t, idle_t)
+  local cue    = card.eyebrow or card.cue or ""
+  local answer = card.primary or card.answer or ""
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) and cue ~= "" then
+    text(cue, CX, 70, P.ember_glow_dim,
+         T.fit_size(cue, 200, {"sm"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    if #answer <= 22 then
+      text(answer, CX, CY - 4, P.text_primary, T.fit_size(answer, 196))
+    else
+      text_block(answer, CX, CY - 6, P.text_primary, "md", 190, 3)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) then
+    text(card.footer or "it will come back around", CX, 176,
+         P.text_ghost, "sm")
+  end
+  if enter_t >= 1.0 and exit_t == 0 then
+    ember_breath(CX, 198, idle_t, 2, P.ember_glow_dim)
+  end
+end
+
+-- EmberGraduatedCard: the curve is complete — a closed ring around the
+-- ember. The card only announces the standing offer; the burn ceremony
+-- lives on the phone, behind explicit consent, never here.
+local function draw_ember_graduated(card, sc, enter_t, exit_t, idle_t)
+  local cue = card.eyebrow or card.cue or ""
+  -- the ring closes with ENTER: an arc that completes as enter_t → 1
+  local ring_r = floor(88 * sc)
+  if ring_r > 2 then
+    frame.display.circle(CX, CY, ring_r, P.ember_glow_dim, false)
+  end
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) and cue ~= "" then
+    text(cue, CX, 74, P.ember_glow, T.fit_size(cue, 190, {"sm"}))
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    text_block(card.primary or "This memory lives in you.",
+               CX, CY - 2, P.text_primary, "md", 176, 2)
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and (card.footer or "") ~= "" then
+    text(card.footer, CX, 170, P.text_ghost, "sm")
+  end
+  if enter_t >= 1.0 and exit_t == 0 then
+    ember_breath(CX, 196, idle_t, 3, P.ember_glow)
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -1540,6 +1658,11 @@ local DRAW = {
   PersonDossierCard     = function(c,sc,et,xt,it) draw_person_dossier(c,sc,et,xt)        end,
   SpokenCaptionCard     = function(c,sc,et,xt,it) draw_spoken_caption(c,sc,et,xt)        end,
   MorningBriefCard      = function(c,sc,et,xt,it) draw_morning_brief(c,sc,et,xt)         end,
+  -- Ember (docs/EMBER.md)
+  EmberPromptCard       = function(c,sc,et,xt,it) draw_ember_prompt(c,sc,et,xt,it)       end,
+  EmberFlareCard        = function(c,sc,et,xt,it) draw_ember_flare(c,sc,et,xt,it)        end,
+  EmberRevealCard       = function(c,sc,et,xt,it) draw_ember_reveal(c,sc,et,xt,it)       end,
+  EmberGraduatedCard    = function(c,sc,et,xt,it) draw_ember_graduated(c,sc,et,xt,it)    end,
   -- layout-driven cards (v1 queued these and drew nothing — see
   -- draw_layout_card)
   ForgetLastCard        = function(c,sc,et,xt,it) draw_layout_card(c,sc,et,xt)            end,

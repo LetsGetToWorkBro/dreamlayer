@@ -333,4 +333,61 @@ function M.morning_brief(c)
   }
 end
 
+-- Ember (docs/EMBER.md): the cue-only prompt, the flare, the gentle reveal,
+-- the graduation. Mirrors hud/cards.py — the prompt constructor NEVER takes
+-- an answer field; the reveal is the single card that carries one.
+
+function M.ember_prompt(c)
+  return {
+    type       = "EmberPromptCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.EmberPromptCard or 12000,
+    eyebrow    = "EMBER",
+    primary    = c.cue or c.primary or "",
+    cue        = c.cue or c.primary or "",
+    footer     = c.place or c.footer or "",
+    reps       = c.reps or 0,
+    -- Visual: hearth-gold ember dot breathing under the cue (renderer.lua)
+  }
+end
+
+function M.ember_flare(c)
+  return {
+    type       = "EmberFlareCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.EmberFlareCard or 2600,
+    eyebrow    = "EMBER",
+    primary    = c.primary or "It's yours.",
+    cue        = c.cue or "",
+    footer     = c.footer or "",
+    reps       = c.reps or 0,
+    -- Visual: one bloom flare and gone — the reward was the recall itself
+  }
+end
+
+function M.ember_reveal(c)
+  return {
+    type       = "EmberRevealCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.EmberRevealCard or 9000,
+    eyebrow    = c.cue or c.eyebrow or "",
+    primary    = c.answer or c.primary or "",
+    answer     = c.answer or c.primary or "",
+    cue        = c.cue or "",
+    footer     = c.footer or "it will come back around",
+    -- Visual: dim ember; no score, no streak — forgetting stays kind
+  }
+end
+
+function M.ember_graduated(c)
+  return {
+    type       = "EmberGraduatedCard",
+    dismiss_ms = A.DISMISS_MS and A.DISMISS_MS.EmberGraduatedCard or 9000,
+    eyebrow    = c.cue or c.eyebrow or "",
+    primary    = c.primary or "This memory lives in you.",
+    cue        = c.cue or "",
+    footer     = c.footer or "",
+    kept_days  = c.kept_days or 0,
+    reps       = c.reps or 0,
+    -- Visual: closed ring — the curve is complete; the burn is phone-side
+  }
+end
+
 return M

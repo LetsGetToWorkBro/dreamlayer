@@ -79,6 +79,13 @@ M.DISMISS_MS = {
   GlanceChoiceCard     = 6000,
   TasteCard            = 9000,
   -- Missing frames — match host constructors (cards.py)
+  -- Ember (docs/EMBER.md) — match host constructors (cards.py). The prompt
+  -- lingers: walking on must cost nothing, so it gets time to be declined
+  -- by simply not answering. The flare is one breath.
+  EmberPromptCard      = 12000,
+  EmberFlareCard       = 2600,
+  EmberRevealCard      = 9000,
+  EmberGraduatedCard   = 9000,
   ListeningCard        =    0,
   MessageCard          = 6000,
   UpcomingCard         = 6000,
