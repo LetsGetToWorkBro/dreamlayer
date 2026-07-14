@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from dreamlayer.reality_compiler import sign_crypto
 from dreamlayer.plugins import (
     PluginManifest, PluginPackage, sha256_of, validate, scan_source,
     RegistryIndex, StoreEntry, PluginStore,
@@ -320,6 +323,8 @@ def test_default_isolates_unsigned_installed_plugin(tmp_path):
             h.stop()
 
 
+@pytest.mark.skipif(not sign_crypto._HAS_CRYPTO,
+                    reason="author signing needs the cryptography (privacy) extra")
 def test_self_signed_plugin_is_jailed_not_run_in_process(tmp_path):
     """Audit 2026-07-14 CRITICAL: a self-signature (the attacker's own key) must
     NOT buy in-process host authority. With trusted_keys=None (the production
@@ -343,6 +348,8 @@ def test_self_signed_plugin_is_jailed_not_run_in_process(tmp_path):
             h.stop()
 
 
+@pytest.mark.skipif(not sign_crypto._HAS_CRYPTO,
+                    reason="author signing needs the cryptography (privacy) extra")
 def test_registered_publisher_runs_in_process(tmp_path):
     """The counterpart: a package signed by a key in trusted_keys IS trusted to
     run in-process, so the registry model still works for vetted publishers."""

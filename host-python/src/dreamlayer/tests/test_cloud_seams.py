@@ -159,6 +159,7 @@ def test_sync_blob_roundtrip_is_ciphertext():
     assert cloud_sync.open_sync_blob(b"garbage", "correct horse battery") is None
 
 
+@pytest.mark.skipif(not cloud_sync.available, reason="cryptography not usable here")
 def test_sync_uses_a_per_user_salt():
     """Audit 2026-07-14: a fixed app-wide scrypt salt let an attacker precompute
     one grinding table against the whole userbase. Each blob now carries its own
@@ -175,6 +176,7 @@ def test_sync_uses_a_per_user_salt():
     assert cloud_sync.open_sync_blob(b, "correct horse battery")["config"]["plan"] == "free"
 
 
+@pytest.mark.skipif(not cloud_sync.available, reason="cryptography not usable here")
 def test_legacy_fixed_salt_blob_still_opens():
     """A blob written before the per-user-salt header (no magic) must still open,
     so nothing already synced is orphaned."""
