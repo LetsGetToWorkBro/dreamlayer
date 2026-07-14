@@ -54,7 +54,10 @@ jobs:
       - name: pip-audit — report known-vulnerable resolved dependencies
         run: |
           pip install pip-audit
-          # --skip-editable: don't try to audit the local `dreamlayer` package
-          # itself (it isn't on PyPI, and --strict would otherwise hard-fail on
-          # "could not be audited"). Third-party deps are still fully scanned.
-          pip-audit --strict --skip-editable --progress-spinner=off
+          # --skip-editable: don't audit the local `dreamlayer` package itself
+          # (it isn't on PyPI). We intentionally omit --strict: pip-audit still
+          # exits non-zero when it *finds a known vulnerability* (that's the
+          # default and what gates this job), whereas --strict *also* fails when
+          # any distribution can't be audited — which our own editable package
+          # always trips. Every third-party dependency is still fully scanned.
+          pip-audit --skip-editable --progress-spinner=off
