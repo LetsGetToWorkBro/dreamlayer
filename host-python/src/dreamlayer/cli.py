@@ -925,6 +925,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    # opt-in structured logging (DL_LOG_JSON=1) at the entrypoint, so a CLI run
+    # is debuggable from logs alone — not only the Brain server was wired
+    # before (audit 2026-07-14). A no-op formatting change by default.
+    from .logging_setup import configure_logging
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
     if getattr(args, "version", False):

@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 
 _HANDLER_TAG = "_dreamlayer_handler"
 
@@ -57,7 +56,10 @@ def configure_logging(json_mode: bool | None = None,
     env (``DL_LOG_JSON``, ``DL_LOG_LEVEL``). Replaces a previously-installed
     DreamLayer handler so repeated calls don't stack."""
     if json_mode is None:
-        json_mode = os.environ.get("DL_LOG_JSON", "") not in ("", "0", "false")
+        # case-insensitive + common falsy spellings, so DL_LOG_JSON=False/off/no
+        # correctly DISABLE json mode rather than enabling it (audit 2026-07-14).
+        json_mode = os.environ.get("DL_LOG_JSON", "").strip().lower() not in (
+            "", "0", "false", "off", "no")
     lvl = (level or os.environ.get("DL_LOG_LEVEL", "INFO")).upper()
 
     root = logging.getLogger()
@@ -75,7 +77,3 @@ def configure_logging(json_mode: bool | None = None,
             "%(asctime)s %(levelname)s %(name)s: %(message)s",
             datefmt="%H:%M:%S"))
     root.addHandler(handler)
-
-
-# convenience so `time` stays imported for future call sites without churn
-_ = time

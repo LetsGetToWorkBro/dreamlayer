@@ -159,6 +159,34 @@ def test_sync_blob_roundtrip_is_ciphertext():
     assert cloud_sync.open_sync_blob(b"garbage", "correct horse battery") is None
 
 
+def test_sync_uses_a_per_user_salt():
+    """Audit 2026-07-14: a fixed app-wide scrypt salt let an attacker precompute
+    one grinding table against the whole userbase. Each blob now carries its own
+    random salt, so two encryptions of the SAME passphrase differ, while both
+    still open with just the passphrase."""
+    class _B:
+        def export_backup(self):
+            return {"version": 1, "config": {"plan": "free"}, "history": []}
+    a = cloud_sync.prepare_sync_blob(_B(), "correct horse battery")
+    b = cloud_sync.prepare_sync_blob(_B(), "correct horse battery")
+    assert a[:4] == b"DLS1" and a[4:20] != b[4:20]     # different random salts
+    assert a != b
+    assert cloud_sync.open_sync_blob(a, "correct horse battery")["config"]["plan"] == "free"
+    assert cloud_sync.open_sync_blob(b, "correct horse battery")["config"]["plan"] == "free"
+
+
+def test_legacy_fixed_salt_blob_still_opens():
+    """A blob written before the per-user-salt header (no magic) must still open,
+    so nothing already synced is orphaned."""
+    from cryptography.fernet import Fernet
+    payload = json.dumps({"v": 1, "snapshot": {"config": {"plan": "pro"}}}).encode()
+    legacy_key = cloud_sync._key_from_passphrase("old pass phrase",
+                                                 cloud_sync._LEGACY_SALT)
+    legacy_blob = Fernet(legacy_key).encrypt(payload)   # no DLS1 header
+    snap = cloud_sync.open_sync_blob(legacy_blob, "old pass phrase")
+    assert snap["config"]["plan"] == "pro"
+
+
 def test_sync_refuses_rather_than_degrading(tmp_path, monkeypatch):
     # with no cryptography, sync must refuse loudly — plaintext is not a fallback
     monkeypatch.setattr(cloud_sync, "_HAS_FERNET", False)

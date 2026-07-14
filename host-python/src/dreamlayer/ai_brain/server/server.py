@@ -123,6 +123,11 @@ class Brain:
     def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None,
                  calendar_reader_fn=None, calendar_list_fn=None):
         self.cfg_dir = Path(cfg_dir)
+        # Serializes the cfg_dir JSON stores (agenda/people/contacts/reminders):
+        # the server is threaded, so concurrent authed POSTs could otherwise
+        # interleave a read-modify-write and lose or corrupt data (audit
+        # 2026-07-14). Re-entrant so a helper can nest inside a held section.
+        self._store_lock = threading.RLock()
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
         self.activity = ActivityLog(self.cfg_dir)
@@ -635,8 +640,8 @@ class Brain:
             self.rc.deployer.push_text(fig.id, time.strftime("%-I:%M %p"))
         try:
             self.rc.vault.revoke(fig.id)   # ephemeral: keep the Repertoire clean
-        except Exception:
-            pass
+        except Exception as exc:
+            self.health.record_failure("rc:vault_revoke", exc)
         self.activity.add("rc", f"Juno started {fig.name!r}")
         return {"ok": record.success, "intent": intent, "say": say,
                 "figment_id": fig.id, "name": fig.name}
@@ -656,8 +661,10 @@ class Brain:
                 docs = self._sources_fn(self.config)
                 self.email_docs = len(docs)
                 self.index.add_documents(docs)
-            except Exception:
-                pass
+            except Exception as exc:
+                # degrade (keyword search still works) but on the record — a
+                # silent pass here hid a broken mail source (audit 2026-07-14).
+                self.health.record_failure("index:email", exc)
         self._sig = self._signature()
         self.last_index_ts = time.time()
         return self.index.stats()
@@ -884,7 +891,7 @@ class Brain:
         if isinstance(data.get("activity"), list):
             self.activity.restore(data["activity"])
         if isinstance(data.get("agenda"), list):
-            (self.cfg_dir / "agenda.json").write_text(json.dumps(data["agenda"]))
+            self._save_json("agenda.json", data["agenda"])
         self._wire_model()
         self.reindex()
 
@@ -911,41 +918,54 @@ class Brain:
         upcoming.sort(key=lambda e: e["ts"])
         return upcoming[:limit]
 
+    # -- cfg_dir JSON stores: locked read-modify-write + atomic write ---------
+    def _load_json(self, name: str, default):
+        """Read a cfg_dir JSON store under the store lock."""
+        with self._store_lock:
+            p = self.cfg_dir / name
+            try:
+                val = json.loads(p.read_text()) if p.exists() else default
+            except Exception:
+                val = default
+            return val if isinstance(val, type(default)) else default
+
+    def _save_json(self, name: str, obj) -> None:
+        """Atomically write a cfg_dir JSON store (temp + os.replace) under the
+        store lock, so a concurrent read can never see a half-written file and
+        two writers can never interleave."""
+        with self._store_lock:
+            p = self.cfg_dir / name
+            tmp = p.with_suffix(p.suffix + ".tmp")
+            tmp.write_text(json.dumps(obj))
+            os.replace(tmp, p)
+
     def add_event(self, title: str, ts: float = 0.0, place: str = "") -> list:
         """Append one event to <cfg>/agenda.json and return the upcoming list."""
         title = (title or "").strip()
-        p = self.cfg_dir / "agenda.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        if not isinstance(cur, list):
-            cur = []
-        if title:
-            cur.append({"title": title, "ts": float(ts or 0), "place": place or ""})
-            p.write_text(json.dumps(cur))
-            self.activity.add("calendar", f"Added event {title}")
+        with self._store_lock:
+            cur = self._load_json("agenda.json", [])
+            if title:
+                cur.append({"title": title, "ts": float(ts or 0), "place": place or ""})
+                self._save_json("agenda.json", cur)
+                self.activity.add("calendar", f"Added event {title}")
         return self.calendar(200)
 
     def remove_event(self, title: str, ts: float | None = None) -> list:
         """Drop the first agenda event matching title (and ts, if given)."""
         title = (title or "").strip()
-        p = self.cfg_dir / "agenda.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        kept, removed = [], False
-        for e in (cur if isinstance(cur, list) else []):
-            same = (e.get("title") == title and
-                    (ts is None or abs(float(e.get("ts", 0) or 0) - float(ts)) < 1))
-            if same and not removed:
-                removed = True
-                continue
-            kept.append(e)
-        if removed:
-            p.write_text(json.dumps(kept))
-            self.activity.add("calendar", f"Removed event {title}")
+        with self._store_lock:
+            cur = self._load_json("agenda.json", [])
+            kept, removed = [], False
+            for e in cur:
+                same = (e.get("title") == title and
+                        (ts is None or abs(float(e.get("ts", 0) or 0) - float(ts)) < 1))
+                if same and not removed:
+                    removed = True
+                    continue
+                kept.append(e)
+            if removed:
+                self._save_json("agenda.json", kept)
+                self.activity.add("calendar", f"Removed event {title}")
         return self.calendar(200)
 
     # -- macOS Calendar.app sync (read-only) -----------------------------
@@ -965,19 +985,14 @@ class Brain:
             events = self._calendar_reader(self.config)
         except Exception:
             events = []
-        p = self.cfg_dir / "agenda.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        if not isinstance(cur, list):
-            cur = []
-        # keep everything you added by hand; drop the last sync's events
-        manual = [e for e in cur if e.get("source") != "calendar"]
         synced = [{"title": e["title"], "ts": float(e.get("ts", 0) or 0),
                    "place": e.get("place", ""), "calendar": e.get("calendar", ""),
                    "source": "calendar"} for e in events if e.get("title")]
-        p.write_text(json.dumps(manual + synced))
+        with self._store_lock:
+            cur = self._load_json("agenda.json", [])
+            # keep everything you added by hand; drop the last sync's events
+            manual = [e for e in cur if e.get("source") != "calendar"]
+            self._save_json("agenda.json", manual + synced)
         self.last_calendar_sync = time.time()
         self.activity.add("calendar", f"Synced {len(synced)} event(s) from Calendar")
         self.saga_record("calendar")
@@ -1040,32 +1055,24 @@ class Brain:
         name = (name or "").strip()
         if not name:
             return self.people()
-        p = self.cfg_dir / "people.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        if not isinstance(cur, list):
-            cur = []
         tags = [t for t in (tags or []) if t]
-        cur = [e for e in cur if e.get("name") != name]     # replace existing
-        cur.append({"name": name, "note": note or "", "tags": tags,
-                    "ts": time.time(), "source": "manual"})
-        p.write_text(json.dumps(cur))
-        self.activity.add("people", f"Introduced {name}")
+        with self._store_lock:
+            cur = self._load_json("people.json", [])
+            cur = [e for e in cur if e.get("name") != name]     # replace existing
+            cur.append({"name": name, "note": note or "", "tags": tags,
+                        "ts": time.time(), "source": "manual"})
+            self._save_json("people.json", cur)
+            self.activity.add("people", f"Introduced {name}")
         return self.people()
 
     def remove_person(self, name: str) -> list:
         name = (name or "").strip()
-        p = self.cfg_dir / "people.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        kept = [e for e in (cur if isinstance(cur, list) else []) if e.get("name") != name]
-        if len(kept) != len(cur if isinstance(cur, list) else []):
-            p.write_text(json.dumps(kept))
-            self.activity.add("people", f"Removed {name}")
+        with self._store_lock:
+            cur = self._load_json("people.json", [])
+            kept = [e for e in cur if e.get("name") != name]
+            if len(kept) != len(cur):
+                self._save_json("people.json", kept)
+                self.activity.add("people", f"Removed {name}")
         return self.people()
 
     def sync_contacts(self) -> dict:
@@ -1076,24 +1083,19 @@ class Brain:
             contacts = self._contacts_reader(self.config)
         except Exception:
             contacts = []
-        p = self.cfg_dir / "people.json"
-        try:
-            cur = json.loads(p.read_text()) if p.exists() else []
-        except Exception:
-            cur = []
-        if not isinstance(cur, list):
-            cur = []
-        manual = [e for e in cur if e.get("source") != "contacts"]
-        manual_names = {e.get("name") for e in manual}
-        synced = []
-        for c in contacts:
-            if not c.get("name") or c["name"] in manual_names:
-                continue                                   # never shadow a manual entry
-            note = "  •  ".join([x for x in (c.get("company"), c.get("role")) if x])
-            synced.append({"name": c["name"], "note": note, "tags": [],
-                           "ts": time.time(), "source": "contacts",
-                           "email": c.get("email", "")})
-        p.write_text(json.dumps(manual + synced))
+        with self._store_lock:
+            cur = self._load_json("people.json", [])
+            manual = [e for e in cur if e.get("source") != "contacts"]
+            manual_names = {e.get("name") for e in manual}
+            synced = []
+            for c in contacts:
+                if not c.get("name") or c["name"] in manual_names:
+                    continue                               # never shadow a manual entry
+                note = "  •  ".join([x for x in (c.get("company"), c.get("role")) if x])
+                synced.append({"name": c["name"], "note": note, "tags": [],
+                               "ts": time.time(), "source": "contacts",
+                               "email": c.get("email", "")})
+            self._save_json("people.json", manual + synced)
         self.last_contacts_sync = time.time()
         self.activity.add("people", f"Synced {len(synced)} contact(s)")
         self.saga_record("contacts")
@@ -1120,7 +1122,7 @@ class Brain:
             items = []
         clean = [{"title": r["title"], "ts": float(r.get("ts", 0) or 0),
                   "list": r.get("list", "")} for r in items if r.get("title")]
-        (self.cfg_dir / "reminders.json").write_text(json.dumps(clean))
+        self._save_json("reminders.json", clean)
         self.last_reminders_sync = time.time()
         self.activity.add("reminders", f"Synced {len(clean)} reminder(s)")
         self.saga_record("reminders")
@@ -1163,8 +1165,7 @@ class Brain:
 
     def _save_people(self) -> None:
         try:
-            (self.cfg_dir / "social_people.json").write_text(
-                json.dumps(self.social_people))
+            self._save_json("social_people.json", self.social_people)
         except Exception:
             pass
 
@@ -1486,7 +1487,7 @@ class Brain:
             "observations": int(d.get("observations", 0) or 0),
         }
         try:
-            (self.cfg_dir / "profile.json").write_text(json.dumps(self.profile))
+            self._save_json("profile.json", self.profile)
         except Exception:
             pass
         return self.profile

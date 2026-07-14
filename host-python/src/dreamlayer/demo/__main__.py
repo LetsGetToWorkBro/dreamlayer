@@ -22,6 +22,8 @@ def _sampler() -> Scene:
 
 
 def main(argv: list[str]) -> int:
+    from ..logging_setup import configure_logging
+    configure_logging()
     args = [a for a in argv if a]
     if "--list" in args:
         try:

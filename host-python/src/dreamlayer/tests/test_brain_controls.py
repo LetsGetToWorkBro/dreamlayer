@@ -151,6 +151,30 @@ class TestControls:
         finally:
             be.cloud_chat = orig
 
+    def test_concurrent_people_writes_do_not_lose_updates(self, tmp_path):
+        """Audit 2026-07-14: the cfg_dir JSON stores are hit by concurrent authed
+        POSTs on the threaded server. A locked read-modify-write + atomic write
+        means N parallel add_person calls all land — no lost or corrupt data."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t").save(cfg)
+        brain = Brain(cfg)
+        errors = []
+
+        def add(i):
+            try:
+                brain.add_person(f"Person{i}", note=f"n{i}")
+            except Exception as e:      # a torn read would raise here
+                errors.append(e)
+
+        ts = [threading.Thread(target=add, args=(i,)) for i in range(40)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        assert not errors
+        names = {p["name"] for p in brain.people()}
+        assert names == {f"Person{i}" for i in range(40)}     # none lost
+
     def test_hub_no_cloud_blocks_brain_cloud_escalation(self, tmp_path):
         """Audit 2026-07-14 CRITICAL: the wearer's Incognito (or hub-cloud-off)
         must reach the paired Brain's OWN cloud escalation. A cloud-ready Brain
