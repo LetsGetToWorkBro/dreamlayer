@@ -159,17 +159,18 @@ function PersonCard({
             person.notes.map((n, i) => (
               <View key={i} style={s.noteRow}>
                 <Text style={[typography.body, { color: colors.textSecondary, flex: 1 }]}>“{n}”</Text>
-                <Tappable onPress={() => removeNote(person.contact_id, n)} hitSlop={8}>
+                <Tappable onPress={() => removeNote(person.contact_id, n)} hitSlop={8}
+                  accessibilityLabel={t("people.removeNote")}>
                   <Text style={s.remove}>✕</Text>
                 </Tappable>
               </View>
             ))
           ) : (
-            <Text style={[typography.caption, { color: colors.statusPaused }]}>No notes yet.</Text>
+            <Text style={[typography.caption, { color: colors.statusPaused }]}>{t("people.noNotes")}</Text>
           )}
           {person.topics.length ? (
             <Text style={[typography.caption, { color: colors.statusPaused, marginTop: space.xs }]}>
-              talked about {person.topics.slice(0, 3).join(", ")}
+              {t("people.talkedAbout", { topics: person.topics.slice(0, 3).join(", ") })}
             </Text>
           ) : null}
           <View style={s.addRow}>
@@ -182,8 +183,9 @@ function PersonCard({
               onSubmitEditing={submit}
               returnKeyType="done"
             />
-            <Tappable style={[s.addBtn, !draft.trim() && { opacity: 0.4 }]} onPress={submit} disabled={!draft.trim()}>
-              <Text style={s.addBtnText}>Add</Text>
+            <Tappable style={[s.addBtn, !draft.trim() && { opacity: 0.4 }]} onPress={submit} disabled={!draft.trim()}
+              accessibilityLabel={t("people.add")}>
+              <Text style={s.addBtnText}>{t("people.add")}</Text>
             </Tappable>
           </View>
         </View>

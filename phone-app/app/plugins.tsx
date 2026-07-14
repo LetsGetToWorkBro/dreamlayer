@@ -273,7 +273,8 @@ function PluginDetail({
                       </Text>
                     ) : null}
                   </View>
-                  <Pressable onPress={onClose} hitSlop={8} style={st.x}>
+                  <Pressable onPress={onClose} hitSlop={8} style={st.x}
+                    accessibilityRole="button" accessibilityLabel="Close">
                     <Text style={{ color: colors.textPrimary, fontSize: 16 }}>✕</Text>
                   </Pressable>
                 </View>
