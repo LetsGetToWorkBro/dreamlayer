@@ -39,6 +39,70 @@ class PrivacyGate:
         recall_conversation, rewind_day)."""
         return not self._paused
 
+class AlwaysOnGate:
+    """The one shared "no veil wired" gate. Capture and recall are always
+    allowed. This is the permissive default a lens falls back to when it is
+    constructed WITHOUT a PrivacyGate — the isolated-unit-test / example /
+    SDK-preview case, where there is no veil to honor.
+
+    It replaces four independent copy-pasted ``_AlwaysOn`` classes that used to
+    live in object_lens / social_lens / truth_lens. Consolidating them means the
+    permissive fallback has ONE definition to audit, and a lens that wants the
+    strict posture can pass ``NullGate()`` instead. In production the
+    Orchestrator always injects the real PrivacyGate, so neither fallback is
+    reached on a live device."""
+    def allow_capture(self) -> bool:
+        return True
+
+    def allow_recall(self) -> bool:
+        return True
+
+
+class NullGate:
+    """The fail-CLOSED gate: capture and recall are always denied. Pass this to
+    a lens when 'no gate wired' must mean 'keep nothing' rather than 'keep
+    everything' — the safe default for any path that handles the wearer's own
+    perception without an explicit veil to consult."""
+    def allow_capture(self) -> bool:
+        return False
+
+    def allow_recall(self) -> bool:
+        return False
+
+
+def requires_capture(method):
+    """Decorator: short-circuit a capture/write method to ``None`` when the
+    instance's veil denies capture. The instance must expose a gate as
+    ``self._privacy`` (or ``self.privacy``); a missing gate is treated as
+    AlwaysOn (library-ergonomic default). One idiom in place of the ~18
+    hand-written ``if not self._privacy.allow_capture(): return`` variants the
+    2026-07-14 audit found scattered across 36 modules."""
+    import functools
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        gate = getattr(self, "_privacy", None) or getattr(self, "privacy", None)
+        if gate is not None and not gate.allow_capture():
+            return None
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
+def requires_recall(method):
+    """Decorator: short-circuit a read-back/recall method to ``None`` when the
+    instance's veil denies recall (a full pause; incognito still recalls). Same
+    gate-resolution rules as ``requires_capture``."""
+    import functools
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        gate = getattr(self, "_privacy", None) or getattr(self, "privacy", None)
+        if gate is not None and not gate.allow_recall():
+            return None
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
 # NB: there is deliberately no purge_* helper here. Forgetting must go through
 # memory.retrieval.Retriever.purge_memory / purge_all, which delete the row AND
 # evict the vector from the ANN index. Two free functions used to live here that

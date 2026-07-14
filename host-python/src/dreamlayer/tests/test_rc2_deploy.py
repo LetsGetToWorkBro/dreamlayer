@@ -107,6 +107,45 @@ class TestDeployGates:
         assert not dep.deploy(fig.id).success     # durably refused
 
 
+class TestHardwareBridgeActuallyReceives:
+    """Audit 2026-07-14 HIGH: on real hardware the bridge is `async send`.
+    _send used to call it without awaiting, dropping every envelope as an
+    un-awaited coroutine. It must now be driven to completion."""
+
+    def test_async_bridge_receives_every_envelope(self, tmp_path):
+        received = []
+
+        class AsyncBridge:
+            async def send(self, raw: bytes):
+                received.append(raw)
+
+        vault = Vault(tmp_path / "vault")
+        dep = StageDeployer(vault, bridge=AsyncBridge())
+        assert dep._mode() == "hardware"
+        fig = make_fig()
+        vault.keep(fig)
+        rec = dep.deploy(fig.id)
+        assert rec.success
+        # put + swap actually crossed the async bridge (not dropped)
+        assert len(received) == 2
+        dep.revoke(fig.id)
+        assert len(received) == 3
+
+    def test_sync_bridge_still_works(self, tmp_path):
+        received = []
+
+        class SyncBridge:
+            def send(self, raw: bytes):
+                received.append(raw)
+
+        vault = Vault(tmp_path / "vault")
+        dep = StageDeployer(vault, bridge=SyncBridge())
+        fig = make_fig()
+        vault.keep(fig)
+        dep.deploy(fig.id)
+        assert len(received) == 2
+
+
 class TestCompilerFacade:
     def test_keep_refuses_unproven(self, tmp_path):
         rc = RealityCompilerV2(vault_dir=tmp_path)

@@ -1,7 +1,58 @@
+from hypothesis import given, strategies as st
+
 from dreamlayer.simulator import scenarios
-from dreamlayer.memory.privacy import PrivacyGate
+from dreamlayer.memory.privacy import (
+    PrivacyGate, AlwaysOnGate, NullGate, requires_capture, requires_recall,
+)
 from dreamlayer.memory.proactive import ProactiveEngine
 from dreamlayer.memory.db import MemoryDB
+
+
+@given(st.lists(st.sampled_from(["pause", "resume", "incognito_on",
+                                 "incognito_off"]), max_size=40))
+def test_privacygate_two_veil_invariant_under_any_transition_sequence(ops):
+    """Audit 2026-07-14 test-infra quick win: fuzz the privacy state machine.
+    After ANY sequence of pause/resume/incognito transitions the two-veil
+    invariant must hold — capture is blocked by EITHER veil, recall ONLY by a
+    full pause. This covers the privacy gate with the property/mutation rigor
+    the interpreter caps already enjoy, rather than hand-picked examples."""
+    g = PrivacyGate()
+    paused = incognito = False
+    for op in ops:
+        if op == "pause":
+            g.pause(); paused = True
+        elif op == "resume":
+            g.resume(); paused = False
+        elif op == "incognito_on":
+            g.set_incognito(True); incognito = True
+        else:
+            g.set_incognito(False); incognito = False
+        assert g.allow_capture() == (not (paused or incognito))
+        assert g.allow_recall() == (not paused)
+
+
+def test_shared_gate_helpers_direction():
+    assert AlwaysOnGate().allow_capture() and AlwaysOnGate().allow_recall()
+    assert not NullGate().allow_capture() and not NullGate().allow_recall()
+
+
+def test_requires_capture_and_recall_decorators_short_circuit():
+    class Lens:
+        def __init__(self, gate):
+            self._privacy = gate
+        @requires_capture
+        def keep(self):
+            return "kept"
+        @requires_recall
+        def read(self):
+            return "read"
+    # veil down (NullGate) → both short-circuit to None
+    assert Lens(NullGate()).keep() is None
+    assert Lens(NullGate()).read() is None
+    # a real gate: incognito blocks capture but not recall
+    g = PrivacyGate(); g.set_incognito(True)
+    assert Lens(g).keep() is None
+    assert Lens(g).read() == "read"
 
 
 def test_pause_blocks_capture():

@@ -384,6 +384,11 @@ class Orchestrator(
         self.quest = QuestLog(self.drift_engine, vault_dir=vault_dir)
         self.rem_bias = (RetrievalBias.load(vault_dir) if vault_dir
                          else RetrievalBias())
+        # forget-that / erase-everything must reach the consolidation bias too,
+        # by construction — wire it into the retrieval purge primitive the same
+        # way the ember sidecar is, so no caller has to remember (audit 2026-07-14).
+        self.retriever.bias_store = self.rem_bias
+        self.retriever.bias_dir = vault_dir
         self.nightwatch = NightWatch(vault_dir) if vault_dir else None
         self.premonition = RecurrenceModel()
         self._premonition_seen_ts = 0.0

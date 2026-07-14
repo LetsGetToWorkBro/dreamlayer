@@ -60,6 +60,21 @@ class RetrievalBias:
         faded = {k: v * DECAY for k, v in self._v.items()}
         self._v = {k: v for k, v in faded.items() if abs(v) > 0.01}
 
+    def remove(self, key: str) -> bool:
+        """Drop one opinion by key. Returns whether anything was removed."""
+        return self._v.pop(key, None) is not None
+
+    def discard(self, kind: str, summary: str) -> bool:
+        """Drop the opinion for a memory by its content identity — the erase
+        hook for "forget that". Without this a forgotten memory left a durable
+        content-hash fingerprint plus a rank-ghost that silently re-attached its
+        old consolidation priority on re-ingest (audit 2026-07-14)."""
+        return self.remove(event_key(kind, summary))
+
+    def clear(self) -> None:
+        """Forget every opinion — the erase-everything hook."""
+        self._v.clear()
+
     # -- persistence -------------------------------------------------------
 
     def save(self, directory: Path | str) -> Path:

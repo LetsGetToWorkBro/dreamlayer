@@ -125,6 +125,46 @@ def test_scan_reports_syntax_errors():
     assert any("syntax error" in i for i in scan_source("def (:", ()))
 
 
+def test_scan_closes_egress_and_dynamic_import_gaps():
+    """Audit 2026-07-14: smtplib/ftplib and importlib.import_module were exfil
+    channels the scanner missed — a plugin could ship data out or dynamically
+    import socket without declaring 'network'."""
+    for mod in ("smtplib", "ftplib", "telnetlib", "httpx", "aiohttp"):
+        src = f"import {mod}"
+        assert scan_source(src, allowed_capabilities=()) != [], mod
+        assert scan_source(src, allowed_capabilities=("network",)) == [], mod
+    # dynamic import is forbidden outright — it launders any import past the table
+    assert any("import_module" in i or "forbidden" in i
+               for i in scan_source(
+                   "import importlib\nimportlib.import_module('socket')",
+                   allowed_capabilities=("network",)))
+
+
+def test_add_knowledge_brain_requires_the_knowledge_capability():
+    """Audit 2026-07-14: a knowledge tier is fed the wearer's recall query in
+    every mode, so registering one must require a declared capability — a plugin
+    with no grant can no longer wire a brain into the router."""
+    from dreamlayer.plugins.base import PluginContext
+
+    class Brain:
+        is_cloud = is_remote = False
+        def ask(self, q): return None
+
+    class FakeRouter:
+        def __init__(self): self.knowledge = []
+        def add_knowledge(self, b): self.knowledge.append(b)
+        def add_vision(self, b): pass
+
+    router = FakeRouter()
+    ungranted = PluginContext(brain=router, capabilities=frozenset())
+    ungranted.add_knowledge_brain(Brain())
+    assert router.knowledge == []                       # refused
+    assert ungranted.added["knowledge_brain"] == []
+    granted = PluginContext(brain=router, capabilities=frozenset({"knowledge"}))
+    granted.add_knowledge_brain(Brain())
+    assert len(router.knowledge) == 1                   # declared → wired
+
+
 # -- the whole gate -----------------------------------------------------------
 
 def test_validate_passes_a_clean_plugin():

@@ -6,10 +6,9 @@ VectorStore (which itself falls back to the exact linear scan). So behaviour is
 always correct — Chroma only adds persistence + speed when installed.
 """
 from __future__ import annotations
-import json
 import logging
 
-from .embeddings import MockEmbeddingProvider
+from .embeddings import MockEmbeddingProvider, unpack_embedding
 from .vector_store import VectorStore
 
 log = logging.getLogger("dreamlayer.chroma_store")
@@ -59,7 +58,7 @@ class ChromaStore:
                 return []
             ids, embs, metas = [], [], []
             for i, m in enumerate(rows):
-                emb = json.loads(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
+                emb = unpack_embedding(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
                 ids.append(str(i)); embs.append(emb); metas.append({"conf": m.get("confidence") or 0.5})
             col.upsert(ids=ids, embeddings=embs, metadatas=metas)
             res = col.query(query_embeddings=[self.embedder.embed(query)], n_results=top_k)

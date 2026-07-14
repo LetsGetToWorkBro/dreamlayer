@@ -57,6 +57,11 @@ _DANGER_CALLS = {
     ("socket", "*"): "network",
     ("ctypes", "*"): "subprocess",
     ("shutil", "rmtree"): "fs",
+    # dynamic import is an import-of-anything laundering channel: it can pull a
+    # dangerous module (socket/subprocess) past the static import table, so the
+    # scanner cannot resolve it and forbids it outright (audit 2026-07-14).
+    ("importlib", "import_module"): None,
+    ("importlib", "__import__"): None,
 }
 # modules any of whose attributes reaching a dynamic name (getattr(mod, x)) we
 # can't resolve statically — treated as a sensitive receiver so a dynamic
@@ -71,6 +76,12 @@ _DANGER_BUILTINS = {
 _DANGER_IMPORTS = {
     "subprocess": "subprocess", "socket": "network", "ctypes": "subprocess",
     "urllib": "network", "http": "network", "requests": "network",
+    # additional network-egress modules the old table missed, so a plugin could
+    # exfiltrate via SMTP/FTP/telnet/websockets without declaring 'network'
+    # (audit 2026-07-14).
+    "smtplib": "network", "ftplib": "network", "telnetlib": "network",
+    "websocket": "network", "websockets": "network",
+    "httpx": "network", "aiohttp": "network",
     "pickle": None, "marshal": None,
 }
 

@@ -62,6 +62,11 @@ ENTRY_RE = re.compile(r"^[A-Za-z_][\w]*:[A-Za-z_][\w]*$")
 # is rejected — no undeclared reach.
 KNOWN_CAPABILITIES = frozenset({
     "object_lens", "glance", "perception", "cards", "ring", "vision",
+    # "knowledge": register a knowledge-answer tier the router consults for the
+    # wearer's recall query text in EVERY mode. A plugin must declare it to
+    # reach add_knowledge_brain (audit 2026-07-14 — the exfil vector was that
+    # any plugin could register a brain fed the query and ship it off-device).
+    "knowledge",
     "mesh", "midi", "network", "fs", "shop",
     # DreamLayer Cloud entitlements (server.PLAN_CAPS["cloud"], docs/CLOUD.md).
     # Declarable by any manifest; GRANTED only on a cloud-plan Brain — a plugin

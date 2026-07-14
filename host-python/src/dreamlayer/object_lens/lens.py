@@ -19,6 +19,7 @@ from typing import Optional
 from .recognizer import ObjectRecognizer
 from .providers import ProviderRegistry, MemoryProvider
 from .schema import ObjectPanel
+from ..memory.privacy import AlwaysOnGate
 
 
 class ObjectLens:
@@ -29,7 +30,7 @@ class ObjectLens:
         self.registry = registry or ProviderRegistry()
         if ring is not None and registry is None:
             self.registry.register(MemoryProvider(ring))
-        self._privacy = privacy or _AlwaysOn()
+        self._privacy = privacy or AlwaysOnGate()
         self._now = now_fn or time.time
 
     def look(self, frame, now: Optional[float] = None,
@@ -52,8 +53,3 @@ class ObjectLens:
         # a bare identification (no rows) is still a valid, useful panel:
         # "that's a mug" — so we return it even when empty.
         return panel
-
-
-class _AlwaysOn:
-    def allow_capture(self) -> bool:
-        return True

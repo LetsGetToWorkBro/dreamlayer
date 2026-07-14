@@ -114,3 +114,45 @@ class TestSocialLensAnalyzer:
         if result.match:
             last_met = fr._enricher.get_last_met("henry")
             assert last_met == datetime.date.today().isoformat()
+
+
+class TestForgetAndVeil:
+    """Audit 2026-07-14 HIGH: forget purges the whole dossier and write paths
+    honor the veil."""
+
+    def test_remove_contact_purges_the_dossier(self):
+        c = make_contact_from_frame("ivy", "Ivy")
+        fr = SocialLens(contacts=[c])
+        fr.add_note_by_id("ivy", "likes climbing")
+        fr.add_debt_by_id("ivy", "they_owe", "$20")
+        fr._enricher.set_relation("ivy", "colleague")
+        assert fr._enricher.get_notes("ivy")
+        fr.remove_contact("ivy")
+        # nothing about Ivy survives — vector AND dossier are gone
+        assert fr._enricher.get_notes("ivy") is None
+        assert fr._enricher.get_relation("ivy") is None
+        assert fr._enricher.get_debts("ivy") == []
+        assert fr._enricher.get_last_met("ivy") is None
+        assert fr.contact_count == 0
+
+    def test_write_paths_are_veil_gated(self):
+        class Paused:
+            def allow_capture(self): return False
+        c = make_contact_from_frame("jack", "Jack")
+        fr = SocialLens(contacts=[c], privacy=Paused())
+        # meeting/annotating a person while veiled writes nothing
+        assert fr.meet("Jack", note="hi") is None
+        assert fr.add_note("a secret", who="Jack") is None
+        assert fr.add_debt("they_owe", "$5", who="Jack") is None
+        assert fr.settle(who="Jack") is None
+        assert fr._enricher.get_notes("jack") is None
+
+
+class TestGrammarNoFalseEnroll:
+    def test_call_me_ambiguous_phrases_do_not_enroll(self):
+        from dreamlayer.social_lens.introduction import parse_introduction
+        assert parse_introduction("call me back later") is None
+        assert parse_introduction("call me crazy") is None
+        assert parse_introduction("call me maybe") is None
+        # a real capitalised name still enrols
+        assert parse_introduction("call me Maya") == "Maya"

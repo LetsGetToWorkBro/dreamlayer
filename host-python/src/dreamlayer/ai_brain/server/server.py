@@ -2067,6 +2067,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
     # the token is read live in _authed (via authorize) so rotation applies;
     # nothing here needs to close over it.
 
+    # Brute-force lockout on the token endpoint: without it a LAN attacker could
+    # grind the Brain token unthrottled (audit 2026-07-14 — the limiter existed
+    # but was never wired). Keyed by client IP, off-box attempts only (loopback
+    # is the local dev/panel path); a burst of wrong tokens locks that IP out.
+    from ...pairing_ratelimit import LockoutLimiter
+    _auth_limiter = LockoutLimiter(max_attempts=10, window_s=60.0,
+                                   lockout_s=300.0)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -2090,10 +2098,22 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _authed(self) -> bool:
             tok = brain.config.token        # read live so token rotation applies
-            ok = authorize(tok, self.headers.get(TOKEN_HEADER),
-                           self._from_localhost())
+            from_local = self._from_localhost()
+            ip = self.client_address[0]
+            # throttle off-box token grinding: while an IP is locked out, refuse
+            # before even checking the token (a correct token during lockout is
+            # still refused — that is the point).
+            gated = bool(tok) and not from_local
+            if gated and not _auth_limiter.allow(ip):
+                return False
+            ok = authorize(tok, self.headers.get(TOKEN_HEADER), from_local)
+            if gated:
+                if ok:
+                    _auth_limiter.record_success(ip)
+                else:
+                    _auth_limiter.record_failure(ip)   # a wrong/absent token
             # a successful token-carrying request from off-box is the phone
-            if ok and tok and not self._from_localhost():
+            if ok and tok and not from_local:
                 brain._last_phone_ts = time.time()
             return ok
 

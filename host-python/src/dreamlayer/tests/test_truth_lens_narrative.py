@@ -111,3 +111,19 @@ class TestNarrativeStore:
         update(ns, "alice")
         update(ns, "bob")
         assert ns.contact_count() >= 2
+
+
+class TestForget:
+    """Audit 2026-07-14 HIGH: 'forget that' must erase the deception baseline
+    AND the anomaly log for a person."""
+
+    def test_forget_erases_baseline_and_log(self):
+        ns = NarrativeStore()
+        for _ in range(3):
+            update(ns, "carol")
+        ns.log_anomaly("carol", 0.8, "voice_stress")
+        assert ns.get_baseline("carol") is not None
+        assert ns.get_anomaly_log("carol")
+        ns.forget("carol")
+        assert ns.get_baseline("carol") is None
+        assert ns.get_anomaly_log("carol") == []

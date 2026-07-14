@@ -159,11 +159,23 @@ class PluginContext:
             self._glance.candidates.append(candidate)
 
     def add_vision_brain(self, brain) -> None:
+        # A vision/knowledge tier is fed the wearer's frame/recall-query text and
+        # is consulted by the router in EVERY privacy mode, so registering one is
+        # a capability, not a free extension point. Enforce the declared grant at
+        # the call site (audit 2026-07-14): an undeclared reach is refused and
+        # recorded, never silently wired into the real router.
+        if not self.has("vision"):
+            self.added.setdefault("rejected", []).append(("vision_brain", "vision"))
+            return
         self.added["vision_brain"].append(brain)
         if self._brain is not None:
             self._brain.add_vision(brain)
 
     def add_knowledge_brain(self, brain) -> None:
+        if not self.has("knowledge"):
+            self.added.setdefault("rejected", []).append(
+                ("knowledge_brain", "knowledge"))
+            return
         self.added["knowledge_brain"].append(brain)
         if self._brain is not None:
             self._brain.add_knowledge(brain)

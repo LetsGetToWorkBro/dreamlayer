@@ -191,3 +191,41 @@ class TestReel:
             img = Image.open(written[0])
             assert img.size == (256, 256)
             assert img.getbbox() is not None   # never a black frame
+
+
+class TestForgetReachesTheBias:
+    """Audit 2026-07-14 HIGH: forget-that / erase-everything must drop the REM
+    consolidation opinion too, or a forgotten memory leaves a content-hash
+    fingerprint + a rank-ghost in rem_bias.json."""
+
+    def _retriever_with_bias(self, tmp_path):
+        from dreamlayer.memory.db import MemoryDB
+        from dreamlayer.memory.retrieval import Retriever
+        from dreamlayer.rem.bias import RetrievalBias, event_key
+        db = MemoryDB(":memory:")
+        bias = RetrievalBias()
+        r = Retriever(db, bias_store=bias, bias_dir=str(tmp_path))
+        return db, bias, r, event_key
+
+    def test_purge_memory_discards_the_bias(self, tmp_path):
+        db, bias, r, event_key = self._retriever_with_bias(tmp_path)
+        mid = db.add_memory("object", "the red bike by the north rack", 0.8)
+        bias.apply({event_key("object", "the red bike by the north rack"): 0.4})
+        assert bias.boost_for("object", "the red bike by the north rack") == 0.4
+        r.purge_memory(mid)
+        assert bias.boost_for("object", "the red bike by the north rack") == 0.0
+        assert len(bias) == 0
+        # persisted, so a restart cannot resurrect the fingerprint
+        from dreamlayer.rem.bias import RetrievalBias
+        assert len(RetrievalBias.load(str(tmp_path))) == 0
+
+    def test_purge_all_clears_the_bias(self, tmp_path):
+        db, bias, r, event_key = self._retriever_with_bias(tmp_path)
+        db.add_memory("object", "keys on the hook", 0.8)
+        bias.apply({event_key("object", "keys on the hook"): 0.3,
+                    event_key("promise", "lease by friday"): -0.2})
+        assert len(bias) == 2
+        r.purge_all()
+        assert len(bias) == 0
+        from dreamlayer.rem.bias import RetrievalBias
+        assert len(RetrievalBias.load(str(tmp_path))) == 0

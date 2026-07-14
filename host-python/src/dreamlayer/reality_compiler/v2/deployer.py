@@ -142,4 +142,28 @@ class StageDeployer:
         for env in envelopes:
             self.sent.append(env)
             if self.bridge is not None:
-                self.bridge.send(transport.frame(env))
+                self._drive(self.bridge.send(transport.frame(env)))
+
+    @staticmethod
+    def _drive(result) -> None:
+        """Deliver a bridge send whether the bridge is sync or async.
+
+        The bridge contract is ``async send`` (BLE transport), but the deploy
+        API is synchronous. Calling an async ``send`` without awaiting used to
+        leave an un-awaited coroutine that was silently garbage-collected, so on
+        real hardware EVERY put/swap/revoke/text/event envelope was dropped
+        (audit 2026-07-14). Now: a sync send returns None and is done; an async
+        send is driven to completion (asyncio.run) when no loop is running, or
+        scheduled on the running loop when there is one — never dropped."""
+        import asyncio
+        import inspect
+        if not inspect.isawaitable(result):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            loop.create_task(result)          # inside an async app: schedule it
+        else:
+            asyncio.run(result)               # sync caller / test / CLI: block

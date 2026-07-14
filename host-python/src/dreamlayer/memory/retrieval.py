@@ -42,7 +42,8 @@ class Retriever:
     # rewritten as an ordinary kind="memory" row, which is findable as normal.
     HIDDEN_KINDS = frozenset({"stasis"})
 
-    def __init__(self, db, embedder=None, ann=None, ember_store=None):
+    def __init__(self, db, embedder=None, ann=None, ember_store=None,
+                 bias_store=None, bias_dir=None):
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
         self.ann = ann                       # PersistentAnnIndex or None
@@ -53,23 +54,46 @@ class Retriever:
         # anything exposing purge_all() (an EmberStore) plugs in. None = no
         # ember file wired (the engram wipe is then a no-op).
         self.ember_store = ember_store
+        # The REM consolidation bias (rem_bias.json) is keyed by memory content
+        # identity, so forgetting a memory must also drop its rank opinion here
+        # — otherwise a content-hash fingerprint of the forgotten memory (and a
+        # rank-ghost that re-attaches on re-ingest) survives forget/erase (audit
+        # 2026-07-14). Duck-typed: a RetrievalBias exposing discard()/clear().
+        # bias_dir is the vault directory so the change is persisted, not just
+        # applied to the in-memory copy that a restart would overwrite.
+        self.bias_store = bias_store
+        self.bias_dir = bias_dir
 
     def index_memory(self, memory_id: int, embedding) -> None:
         """Keep the ANN index in step with an ingest (no-op without one)."""
         if self.ann is not None and embedding:
             self.ann.add(memory_id, embedding)
 
+    def _persist_bias(self) -> None:
+        if self.bias_store is not None and self.bias_dir is not None:
+            try:
+                self.bias_store.save(self.bias_dir)
+            except Exception:
+                pass                          # a save failure must not block forget
+
     def purge_memory(self, memory_id: int) -> None:
-        """Forget one memory *everywhere* — the row and its vector. Without
-        the ANN eviction, a "forget that" left the embedding in the .usearch
-        index forever: recall could still surface it and the index grew with
-        the dead. Keep the two stores in step."""
+        """Forget one memory *everywhere* — the row, its vector, and its REM
+        consolidation opinion. Without the ANN eviction, a "forget that" left
+        the embedding in the .usearch index forever; without the bias discard it
+        left a content-hash fingerprint + rank-ghost in rem_bias.json. Keep all
+        three stores in step."""
+        # read the row BEFORE deleting it — the bias is keyed by kind+summary
+        row = self.db.memory(memory_id) if self.bias_store is not None else None
         self.db.purge_memory(memory_id)
         if self.ann is not None:
             self.ann.remove(memory_id)
+        if row is not None:
+            self.bias_store.discard(row.get("kind", ""), row.get("summary", ""))
+            self._persist_bias()
 
     def purge_all(self) -> None:
-        """Forget everything — rows, the whole index, and the ember practice.
+        """Forget everything — rows, the whole index, the ember practice, and
+        the REM consolidation bias.
 
         Erase-everything must erase everything, by construction: a caller that
         reaches for the retrieval primitive to wipe memory must not have to
@@ -81,6 +105,9 @@ class Retriever:
             self.ann.rebuild(self.db)        # db is now empty → index cleared
         if self.ember_store is not None:
             self.ember_store.purge_all()     # engrams + staged offers, VACUUMed
+        if self.bias_store is not None:
+            self.bias_store.clear()          # no consolidation fingerprints left
+            self._persist_bias()
 
     def search(self, query: str, kind=None, top_k=3):
         qv = self.embedder.embed(query)

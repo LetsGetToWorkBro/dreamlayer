@@ -32,17 +32,13 @@ from .linguistic import LinguisticAnalyzer
 from .fusion import FusionEngine
 from .renderer import TruthLensRenderer
 from .narrative_store import NarrativeStore
+from ..memory.privacy import AlwaysOnGate
 from .schema import (
     AUFrame, ProsodyFrame, LinguisticFrame, TruthLensResult,
 )
 
 EMIT_COOLDOWN_S = 3.0
 FACE_MATCH_THRESHOLD = 0.65
-
-
-class _AlwaysOn:
-    def allow_capture(self) -> bool:
-        return True
 
 
 class TruthLens:
@@ -70,7 +66,7 @@ class TruthLens:
     ):
         self._contacts = contact_registry or {}
         self._cooldown_s = cooldown_s
-        self._privacy = privacy or _AlwaysOn()
+        self._privacy = privacy or AlwaysOnGate()
 
         # Stage instances
         self._embedder = FaceEmbedder()
@@ -88,6 +84,16 @@ class TruthLens:
         self._current_contact_id: Optional[str] = None
         self._current_contact_name: Optional[str] = None
         self._last_emit: float = 0.0
+
+    def forget(self, contact_id: str) -> None:
+        """Erase everything the Truth Lens has learned about a person — their
+        deception baseline and anomaly log — so "forget that" reaches these
+        stored judgments too (audit 2026-07-14). Clears the live rolling state
+        if it is the contact currently in view."""
+        self._store.forget(contact_id)
+        if self._current_contact_id == contact_id:
+            self._current_contact_id = None
+            self._current_contact_name = None
 
     # ------------------------------------------------------------------
     # Feed methods (called each frame by the dream engine)

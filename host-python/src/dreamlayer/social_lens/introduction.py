@@ -39,6 +39,7 @@ from typing import Optional
 
 import numpy as np
 
+from ..memory.privacy import AlwaysOnGate
 from .embedder import FaceEmbedder, embed_frame
 from .schema import ContactRecord
 
@@ -62,8 +63,12 @@ MAX_NAME_WORDS = 3        # "Maya", "Maya Chen", "Maria del Carmen"
 # third-party intro can name a relationship or role ("my brother", "our
 # CTO") before the name; that phrase is captured as the first note on the
 # new contact, so the dossier starts the moment you're introduced.
-_EXPLICIT = ("my name is", "my name's", "the name's", "call me")
-_SOFT = ("i am", "i'm", "im", "this is", "that's", "meet",
+# "call me" is deliberately SOFT, not explicit (audit 2026-07-14): it is highly
+# ambiguous — "call me back later", "call me crazy", "call me maybe" are not
+# introductions. As a soft trigger it demands a CAPITALISED following token, so
+# "call me Maya"/"call me Deshawn" still enrol while the idioms above fall out.
+_EXPLICIT = ("my name is", "my name's", "the name's")
+_SOFT = ("i am", "i'm", "im", "this is", "that's", "meet", "call me",
          "have you met", "introduce you to", "say hi to", "say hello to")
 
 # Lower-case connectors that stay part of a multiword name.
@@ -266,7 +271,7 @@ class IntroductionCapture:
                  auto_keep: bool = True):
         self._index = index
         self._enricher = enricher
-        self._privacy = privacy or _AlwaysOn()
+        self._privacy = privacy or AlwaysOnGate()
         self._embedder = embedder
         self._now = now_fn or time.time
         self.auto_keep = auto_keep
@@ -403,7 +408,3 @@ class IntroductionCapture:
             return None                      # expired between hearing and act
         return offer
 
-
-class _AlwaysOn:
-    def allow_capture(self) -> bool:
-        return True
