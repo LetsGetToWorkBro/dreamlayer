@@ -48,6 +48,8 @@ LENSES: list[Lens] = [
                 "dreamlayer.dream_mode.premonition"),
         Feature("waypath", "Waypath Lens", "point-me-to-my-things: direction + distance from your anchors",
                 "dreamlayer.orchestrator.waypath"),
+        Feature("ember", "Ember", "memories you tend until they live in you — then the tape burns",
+                "dreamlayer.ember"),
     ]),
     Lens("people", "People", "who's around you", [
         Feature("social_lens", "Social Lens", "recognise your own contacts (never strangers)",
