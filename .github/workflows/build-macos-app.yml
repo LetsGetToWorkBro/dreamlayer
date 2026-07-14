@@ -149,7 +149,7 @@ jobs:
 
       - name: Publish .dmg to the public dreamlayer-releases repo
         if: github.ref_type == 'tag' || inputs.publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           repository: LetsGetToWorkBro/dreamlayer-releases
           token: ${{ secrets.RELEASES_TOKEN }}
