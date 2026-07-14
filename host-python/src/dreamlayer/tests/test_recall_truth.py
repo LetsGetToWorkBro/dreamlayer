@@ -94,6 +94,50 @@ def test_kind_filter_falls_through_to_exact_when_starved():
     assert all(db.memory(i)["kind"] == "object" for i in ids)
 
 
+# --- Stasis leak: a live bookmark is not a recall answer --------------------
+
+def test_kindless_search_excludes_live_stasis_bookmarks():
+    """A live Stasis frame rides a kind="stasis" memories row whose summary is
+    the wearer's verbatim unfinished sentence. A kind-less recall ("what did I
+    say about…") must NEVER surface it — it is a bookmark, not an answer. The
+    exclusion is by construction in Retriever.search, not per-call-site."""
+    db = MemoryDB(":memory:")
+    answer = db.add_memory("note", "the hinge torque spec is 4 newton metres",
+                           confidence=0.9)
+    db.add_memory("stasis", "so the hinge torque — wait, where was I",
+                  confidence=0.8)
+    r = Retriever(db)
+    hits = r.search("hinge torque", top_k=5)
+    kinds = {m["kind"] for _s, m in hits}
+    assert "stasis" not in kinds                 # the held thought stays hidden
+    assert any(m["id"] == answer for _s, m in hits)   # the real memory surfaces
+
+
+def test_kindless_search_excludes_stasis_on_the_ann_path_too():
+    db = MemoryDB(":memory:")
+    note = db.add_memory("note", "hinge torque spec four nm", confidence=0.9)
+    stasis = db.add_memory("stasis", "hinge torque so where was i", confidence=0.8)
+    # both sit near the top of the ANN shortlist; the stasis row must still be
+    # dropped after retrieval, on the fast path as well as the exact scan
+    r = Retriever(db, ann=FakeAnn([(stasis, 0.98), (note, 0.97)], size=2))
+    ids = [m["id"] for _s, m in r.search("hinge torque", top_k=5)]
+    assert stasis not in ids and note in ids
+
+
+def test_explicit_stasis_kind_still_returns_them():
+    """The exclusion is a default, not a ban: a caller that explicitly asks
+    for kind="stasis" (or the composted kind="memory" row) still gets rows."""
+    db = MemoryDB(":memory:")
+    sid = db.add_memory("stasis", "where was i on the torque", confidence=0.8)
+    r = Retriever(db)
+    hits = r.search("torque", kind="stasis", top_k=5)
+    assert [m["id"] for _s, m in hits] == [sid]
+    # and a composted frame (rewritten as kind="memory") is findable normally
+    comp = db.add_memory("memory", "the torque thread, folded into memory",
+                         confidence=0.6)
+    assert any(m["id"] == comp for _s, m in r.search("torque thread", top_k=5))
+
+
 def test_zero_confidence_is_not_coerced_to_half():
     assert _confidence({"confidence": 0.0}) == 0.0     # known-unsure stays 0.0
     assert _confidence({"confidence": None}) == 0.5    # absent → default

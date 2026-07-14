@@ -33,6 +33,15 @@ class Retriever:
     # blend is less likely to promote a row from outside the shortlist.
     ANN_CANDIDATES = 8
 
+    # Rows that ride the memories table but are NOT recall answers. A live
+    # Stasis frame is stored as a kind="stasis" row so a held thought survives
+    # a restart — but its summary is the wearer's verbatim unfinished sentence,
+    # a bookmark, not something "what did I say about X" should surface. A
+    # kind-less search excludes these by construction (a caller that explicitly
+    # asks for kind="stasis" still gets them). When such a frame composts it is
+    # rewritten as an ordinary kind="memory" row, which is findable as normal.
+    HIDDEN_KINDS = frozenset({"stasis"})
+
     def __init__(self, db, embedder=None, ann=None, ember_store=None):
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
@@ -85,6 +94,8 @@ class Retriever:
                     m = self.db.memory(mid)
                     if m is None or (kind and m.get("kind") != kind):
                         continue
+                    if kind is None and m.get("kind") in self.HIDDEN_KINDS:
+                        continue                 # bookmarks aren't recall answers
                     score = 0.5 * sim + 0.5 * _confidence(m)
                     scored.append((score, m))
                 scored.sort(key=lambda x: x[0], reverse=True)
@@ -102,6 +113,8 @@ class Retriever:
 
         scored = []
         for m in self.db.memories(kind=kind):
+            if kind is None and m.get("kind") in self.HIDDEN_KINDS:
+                continue                          # bookmarks aren't recall answers
             emb = unpack_embedding(m.get("embedding")) \
                 or self.embedder.embed(m["summary"])
             sim = cosine(qv, emb)
