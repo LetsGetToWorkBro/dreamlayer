@@ -76,23 +76,32 @@ class EmberStore:
              meta: dict | None = None) -> Engram:
         """The tending choice: a moment becomes an engram. Idempotent on
         moment_key — keeping the same moment twice returns the existing
-        engram untouched (a double-tap must not reset a curve)."""
-        existing = self.by_key(moment_key)
-        if existing is not None:
-            return existing
+        engram untouched (a double-tap must not reset a curve).
+
+        The existence check and the INSERT run under ONE lock acquisition
+        (audit 2026-07-14): two concurrent double-taps used to both see no row
+        and both INSERT, and the UNIQUE(moment_key) constraint then raised an
+        uncaught IntegrityError instead of honoring idempotency. Now the loser
+        of the race falls back to the row the winner wrote."""
         state = seed_state(now, first_impression)
         with self._lock:
-            c = self.conn.execute(
-                "INSERT INTO engrams(moment_key,cue,answer,kept_at,"
-                "place_signature,source_memory_id,meta,stability,difficulty,"
-                "due_ts,reps,lapses,last_review_ts,graduated) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (moment_key, cue, answer, now, place_signature,
-                 source_memory_id, json.dumps(meta or {}), state.stability,
-                 state.difficulty, state.due_ts, state.reps, state.lapses,
-                 state.last_review_ts, int(state.graduated)))
-            self.conn.commit()
-            return self.get(c.lastrowid)  # type: ignore[return-value]
+            existing = self.by_key(moment_key)
+            if existing is not None:
+                return existing
+            try:
+                c = self.conn.execute(
+                    "INSERT INTO engrams(moment_key,cue,answer,kept_at,"
+                    "place_signature,source_memory_id,meta,stability,difficulty,"
+                    "due_ts,reps,lapses,last_review_ts,graduated) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (moment_key, cue, answer, now, place_signature,
+                     source_memory_id, json.dumps(meta or {}), state.stability,
+                     state.difficulty, state.due_ts, state.reps, state.lapses,
+                     state.last_review_ts, int(state.graduated)))
+                self.conn.commit()
+                return self.get(c.lastrowid)  # type: ignore[return-value]
+            except sqlite3.IntegrityError:
+                return self.by_key(moment_key)  # type: ignore[return-value]
 
     # -- reading -----------------------------------------------------------
 

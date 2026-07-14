@@ -319,6 +319,18 @@ class RealBridge(BridgeBase):
         }
         if name in command_map:
             kind, p = command_map[name]
+            # Reflect a host-initiated veil LOCALLY and immediately, before the
+            # command even goes out — do not wait for the device to echo the
+            # event back (audit 2026-07-14). In the round-trip window the old
+            # code still delivered content cards through send_card, so the
+            # transport-level veil lagged the wearer's gesture; the emulator
+            # already flipped synchronously, so the two bridges disagreed.
+            if name == "privacy_pause":
+                with self._paused_lock:
+                    self._paused = True
+            elif name == "privacy_resume":
+                with self._paused_lock:
+                    self._paused = False
             self.send_command(kind, p)
         else:
             raise NotImplementedError(

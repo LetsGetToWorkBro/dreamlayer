@@ -174,3 +174,17 @@ class TestObjectLens:
         assert any(f.get("t") == "card" for f in orc.bridge.raw)
         orc.privacy.pause()
         assert orc.look_at_object(frame()) is None
+
+
+def test_open_vocab_person_labels_are_declined():
+    """Audit 2026-07-14: a fixed 6-word person set let an open-vocab VLM slip a
+    human through as a described object. Token-based matching now declines them."""
+    from dreamlayer.object_lens.recognizer import ObjectRecognizer
+    import numpy as np
+    frame = np.full((32, 32), 0.7, dtype=np.float32)
+    for label in ("man in a suit", "young boy", "a woman smiling",
+                  "toddler", "group of people", "selfie"):
+        rec = ObjectRecognizer(classify_fn=lambda f, l=label: (l, 0.95, {}))
+        assert rec.recognize(frame) is None, label
+    rec = ObjectRecognizer(classify_fn=lambda f: ("espresso mug", 0.95, {}))
+    assert rec.recognize(frame) is not None

@@ -13,7 +13,7 @@ and ATMOSPHERE (ambient light/feel). Nothing here changes how anything runs.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,13 @@ class Lens:
     key: str
     name: str
     tagline: str
-    features: list[Feature] = field(default_factory=list)
+    features: tuple[Feature, ...] = ()
+
+    def __post_init__(self) -> None:
+        # freeze the feature list so `lens.features.append(...)` can't silently
+        # mutate the single source of truth despite frozen=True (audit
+        # 2026-07-14). Accepts a list at construction, stores a tuple.
+        object.__setattr__(self, "features", tuple(self.features))
 
 
 LENSES: list[Lens] = [
@@ -118,9 +124,16 @@ ATMOSPHERE: list[Feature] = [
 
 # -- helpers ---------------------------------------------------------------
 
+# Freeze the module-level registries too, so the source of truth is immutable
+# (LENSES.clear() / SPINE.append(...) can no longer mutate it at runtime).
+LENSES = tuple(LENSES)
+SPINE = tuple(SPINE)
+ATMOSPHERE = tuple(ATMOSPHERE)
+
+
 def all_features() -> list[Feature]:
     feats = [f for lens in LENSES for f in lens.features]
-    return feats + SPINE + ATMOSPHERE
+    return feats + list(SPINE) + list(ATMOSPHERE)
 
 
 def find_feature(key: str) -> Feature | None:

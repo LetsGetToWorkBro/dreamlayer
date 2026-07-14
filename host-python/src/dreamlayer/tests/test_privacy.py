@@ -212,3 +212,18 @@ def test_passive_tick_is_silent_during_pause():
     o.ring.append(ev)
     o.pause()
     assert o.tick() is None                         # nothing surfaced under the veil
+
+
+def test_lucid_recall_query_is_recall_gated():
+    """Audit 2026-07-14: the module named for recall must honor allow_recall."""
+    from dreamlayer.lucid_recall.router import LucidRecall
+
+    class Mem:
+        def get(self, q): return "north rack, 4th & Alder"
+    g = PrivacyGate()
+    lr = LucidRecall(memory_index=Mem(), privacy=g)
+    assert lr.query("where is my bike").answer == "north rack, 4th & Alder"
+    g.pause()                                   # full veil → deaf and blind
+    assert lr.query("where is my bike").answer == "No result"
+    g.resume(); g.set_incognito(True)           # incognito still recalls
+    assert lr.query("where is my bike").answer == "north rack, 4th & Alder"

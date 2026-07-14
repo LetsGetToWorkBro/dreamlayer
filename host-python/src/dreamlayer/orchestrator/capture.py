@@ -27,6 +27,7 @@ SAMPLE_RATE = 16000
 WINDOW_MS = 200                      # per push window
 SILENCE_HANG_MS = 600                # trailing silence that ends a segment
 MAX_SEGMENT_MS = 12000               # hard cap so a monologue still endpoints
+MAX_CONSECUTIVE_READ_ERRORS = 20     # give up only after a run of read() faults
 
 
 class CapturePipeline:
@@ -203,12 +204,24 @@ class CapturePipeline:
 
         def loop():
             idle = 0
+            errors = 0
             while not self._stop.is_set():
                 try:
                     window = source.read()
+                    errors = 0
                 except Exception as exc:
+                    # A single transient read() fault used to permanently kill
+                    # the capture thread (a `break`), silently ending all voice
+                    # capture for the session (audit 2026-07-14). Now: record it,
+                    # back off briefly, and retry — only give up after a run of
+                    # consecutive failures signals a genuinely dead source.
                     self._record(exc)
-                    break
+                    errors += 1
+                    if errors >= MAX_CONSECUTIVE_READ_ERRORS:
+                        break
+                    if self._stop.wait(min(0.5, 0.02 * errors)):
+                        break
+                    continue
                 if window is None:
                     idle += 1
                     # a few empty reads in a row = the source went quiet; flush

@@ -34,13 +34,24 @@ class LucidRecall:
         Handles fact/context queries (get(query) -> str).
     """
 
-    def __init__(self, social_lens=None, memory_index=None):
+    def __init__(self, social_lens=None, memory_index=None, privacy=None):
         self._social = social_lens
         self._memory = memory_index
+        # The module NAMED for recall must honor the recall gate: a full pause
+        # veil silences read-back (incognito still recalls). Without this,
+        # query() returned kept facts and contact names with no pause check
+        # (audit 2026-07-14). None = no gate wired (isolated/library use).
+        self._privacy = privacy
 
     def query(self, text: Optional[str] = None,
               camera_frame: Optional[np.ndarray] = None) -> LucidRecallResult:
-        """Route a query and return a LucidRecallResult."""
+        """Route a query and return a LucidRecallResult. Silenced while the full
+        pause veil is up — recall is read-back, and the veil means deaf and
+        blind."""
+        if self._privacy is not None and not self._privacy.allow_recall():
+            return LucidRecallResult(query_type=QueryType.UNKNOWN,
+                                     answer="No result", confidence=0.0,
+                                     source=None)
         qtype = self._classify(text)
 
         # Face query: use SocialLens

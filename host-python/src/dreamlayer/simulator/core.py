@@ -21,6 +21,7 @@ part of the missing hardware:
 from __future__ import annotations
 
 import io
+import logging
 import math
 import threading
 import time
@@ -103,8 +104,12 @@ class HaloSimulator:
                 else:
                     r = self.orc.ask_juno(text) or {}
                     say = r.get("text") or r.get("say") or ""
-            except Exception as e:  # never let a demo line kill the sim
-                r, say = {"intent": "error"}, f"(something broke: {e})"
+            except Exception:  # never let a demo line kill the sim
+                # log the detail for the operator; don't echo internal exception
+                # text into the browser transcript (audit 2026-07-14).
+                logging.getLogger("dreamlayer.simulator").warning(
+                    "voice() failed", exc_info=True)
+                r, say = {"intent": "error"}, "(something went wrong — see logs)"
             self._drain()
             self._say("juno", say)
             return {"ok": True, "say": say, "intent": r.get("intent", "")}

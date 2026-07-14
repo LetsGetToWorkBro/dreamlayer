@@ -72,8 +72,18 @@ export async function boot(mode: ActMode): Promise<void> {
   reveals();
 
   // Build the acts in document order so pin spacing stacks correctly.
+  // Per-act resilience (audit 2026-07-14): one missing/failed manifest must
+  // degrade only its own act to its static hold pose, not reject Promise.all
+  // and silently kill motion for the whole page.
   const sections = Array.from(document.querySelectorAll<HTMLElement>(".act[data-scene]"));
-  const manifests = await Promise.all(sections.map((s) => loadManifest(s.dataset.scene!)));
-  sections.forEach((section, i) => buildAct(section, manifests[i], mode));
+  const settled = await Promise.allSettled(sections.map((s) => loadManifest(s.dataset.scene!)));
+  sections.forEach((section, i) => {
+    const r = settled[i];
+    if (r.status === "fulfilled") {
+      buildAct(section, r.value, mode);
+    } else {
+      console.warn(`[motion] act "${section.dataset.scene}" manifest failed; static hold`, r.reason);
+    }
+  });
   if (mode === "scrub") ScrollTrigger.refresh();
 }

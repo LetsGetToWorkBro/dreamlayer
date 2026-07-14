@@ -27,8 +27,11 @@ class Config:
     llm_confidence_threshold:   float = 0.60
     llm_word_threshold:         int   = 40
     llm_timeout_s:              float = 4.0
+    # repr=False so the key never lands in a repr(CONFIG) / asdict / traceback
+    # dump (audit 2026-07-14 — it was a latent secret-in-logs surface).
     openai_api_key:             str   = field(
-        default_factory=lambda: os.environ.get("OPENAI_API_KEY", "")
+        default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""),
+        repr=False,
     )
 
     # Passive recall primitives
@@ -42,6 +45,19 @@ class Config:
     # cold entities. REM promotion is the only road from hot to lasting.
     retention_hot_hours:        float = 24.0
     retention_warm_days:        float = 90.0
+
+    def __post_init__(self) -> None:
+        # Lightweight bounds so an out-of-range value can't silently disable a
+        # privacy-relevant gate (e.g. a >1.0 confidence floor that never rejects)
+        # — clamp rather than raise, since CONFIG is a mutable runtime singleton
+        # (audit 2026-07-14).
+        for name in ("proactive_min_confidence", "recall_min_confidence",
+                     "passive_min_confidence", "llm_confidence_threshold"):
+            v = getattr(self, name)
+            setattr(self, name, min(1.0, max(0.0, float(v))))
+        for name in ("capture_min_interval_ms", "passive_tick_interval_ms",
+                     "passive_ring_capacity", "llm_word_threshold"):
+            setattr(self, name, max(0, int(getattr(self, name))))
 
 
 CONFIG = Config()

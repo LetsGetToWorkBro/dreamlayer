@@ -441,7 +441,28 @@ class CardRenderer:
         # card's alpha-18 link fill was a solid pill hiding the due text).
         img = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         draw = ImageDraw.Draw(img, "RGBA")
-        dispatch = {
+        dispatch = self._dispatch()
+        if self._extra:
+            dispatch = {**dispatch, **self._extra}   # plugin card renderers
+        fn = dispatch.get(card.get("type", ""))
+        if fn:
+            fn(draw, card)
+        else:
+            # Never black-golden a card the dispatch doesn't know
+            # (CINEMA_V1_JUDGMENT Wrong #1): draw its standard rows instead.
+            self._generic_rows(draw, card)
+        img = img.convert("RGBA")
+        img.putalpha(self._mask)
+        return img
+
+    def _dispatch(self) -> dict:
+        # Built once per renderer and cached — it was rebuilt on every single
+        # card render before (audit 2026-07-14). Bound methods, so it caches on
+        # the instance, not the class.
+        cached = getattr(self, "_dispatch_cache", None)
+        if cached is not None:
+            return cached
+        cached = {
             "ReadyCard":            self._ready,
             "SavedMemoryCard":      self._saved_memory,
             "QueryListeningCard":   self._query_listening,
@@ -493,18 +514,8 @@ class CardRenderer:
             "GlanceChoiceCard":     self._glance_choice,
             "TasteCard":            self._taste,
         }
-        if self._extra:
-            dispatch.update(self._extra)   # plugin card renderers
-        fn = dispatch.get(card.get("type", ""))
-        if fn:
-            fn(draw, card)
-        else:
-            # Never black-golden a card the dispatch doesn't know
-            # (CINEMA_V1_JUDGMENT Wrong #1): draw its standard rows instead.
-            self._generic_rows(draw, card)
-        img = img.convert("RGBA")
-        img.putalpha(self._mask)
-        return img
+        self._dispatch_cache = cached
+        return cached
 
     def save(self, card: dict, path: str | Path) -> None:
         self.render(card).save(str(path))
@@ -858,6 +869,13 @@ class CardRenderer:
             draw.line([(x1, y1), (x2, y2)], fill=T.to_rgba(T.BORDER_SUBTLE, 0.9),
                       width=1)
 
+        # Solid: only the newest revealed stage is bright; older testimony cools
+        # to its dim twin (recency is a visible bit). Computed once here, not
+        # recomputed inside the per-slot loop (audit 2026-07-14).
+        revealed = [idx for idx in range(min(9, len(stages)))
+                    if (stages[idx] or {}).get("direction", "insufficient")
+                    != "insufficient"]
+        newest = max(revealed) if revealed else -1
         for i in range(9):
             stage = stages[i] if i < len(stages) else {}
             direction = stage.get("direction", "insufficient")
@@ -868,13 +886,6 @@ class CardRenderer:
             span = sconf * (self._THREAD_SLOT_DEG - 4)
             if span <= 1:
                 continue
-            # Solid: only the newest revealed stage is bright; older
-            # testimony cools to its dim twin (recency is a visible bit)
-            newest = max(idx for idx in range(9)
-                         if idx < len(stages)
-                         and (stages[idx] or {}).get("direction",
-                                                     "insufficient")
-                         != "insufficient")
             if direction == "truthful":
                 color = T.ACCENT_SUCCESS if i >= newest else T.ACCENT_SUCCESS_DIM
                 self._arc(draw, CX, CY, self._THREAD_R, a0, a0 + span, 2,

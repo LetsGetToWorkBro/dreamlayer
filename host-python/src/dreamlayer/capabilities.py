@@ -284,20 +284,24 @@ def state(cap: Cap, env: Optional[dict] = None) -> str:
       unsupported  wrong platform (macOS-only capability elsewhere)
       external     a service, not a library — probe it at runtime (--probe)
     """
+    # honor DL_DISABLE_* for services too — before the "external" verdict — so a
+    # disabled service isn't silently reported reachable (audit 2026-07-14).
+    if disabled(cap, env):
+        return "off"
     if cap.kind == "service":
         return "external"
     if not supported(cap):
         return "unsupported"
     if not installed(cap):
         return "missing"
-    if disabled(cap, env):
-        return "off"
     return "active"
 
 
 def enabled(key: str, env: Optional[dict] = None) -> bool:
-    """Single-call check for builders: installed AND not flagged off."""
-    return state(_BY_KEY[key], env) == "active"
+    """Single-call check for builders: installed AND not flagged off. Returns
+    False for an unknown key rather than raising a KeyError."""
+    cap = _BY_KEY.get(key)
+    return cap is not None and state(cap, env) == "active"
 
 
 def report(env: Optional[dict] = None) -> list[dict]:
@@ -448,11 +452,6 @@ def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
 
 
 # --- CLI: python -m dreamlayer.capabilities ---------------------------------------
-
-_INSTALL_HINT = {
-    None: "(manual — see note)",
-}
-
 
 def _hint(cap: Cap) -> str:
     if cap.kind == "service":

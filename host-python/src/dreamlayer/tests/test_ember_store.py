@@ -150,3 +150,24 @@ class TestPurgeAll:
         st.purge_all()
         e = st.keep("k2", "cue2", "answer2", NOW)
         assert st.get(e.id) is not None and st.status(NOW)["tended"] == 1
+
+
+def test_keep_is_idempotent_under_concurrent_double_tap():
+    """Audit 2026-07-14: concurrent keeps of the same moment both return the one
+    engram, not raise IntegrityError (check + insert under one lock)."""
+    import threading
+    from dreamlayer.ember.store import EmberStore
+    store = EmberStore(":memory:")
+    results, errors = [], []
+
+    def keep():
+        try:
+            results.append(store.keep("moment-x", "cue", "answer", 1000.0))
+        except Exception as e:
+            errors.append(e)
+
+    ts = [threading.Thread(target=keep) for _ in range(16)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    assert not errors
+    assert len({e.id for e in results}) == 1
