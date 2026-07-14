@@ -68,7 +68,8 @@ export default function Cloud() {
           {guarantees.map((g, i) => (
             <Card key={i} style={{ marginBottom: space.sm }} accent={colors.accentMemory}>
               <View style={st.row}>
-                <Text style={[typography.title, { color: colors.accentMemory }]}>✕</Text>
+                <Text style={[typography.title, { color: colors.accentMemory }]}
+                  accessibilityElementsHidden importantForAccessibility="no">✕</Text>
                 <Text style={[typography.body, { color: colors.textSecondary, flex: 1, marginLeft: space.sm }]}>{g}</Text>
               </View>
             </Card>
