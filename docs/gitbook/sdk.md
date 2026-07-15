@@ -84,7 +84,9 @@ curated-registry trust with a warning; trusted publisher keys live in
 action, so the six official plugins currently ship unsigned).
 
 The gate itself is now five defences: manifest shape, SDK compatibility,
-checksum integrity, authenticity, the AST scan, and a smoke load. One
+checksum integrity, authenticity, and the AST scan (which follows import
+aliases and rebinds) — plus a smoke load that is **opt-in author tooling
+only**: the install path validates without ever executing plugin code. One
 sharpening worth knowing: `subprocess`, `ctypes`, and `os.system` map to
 a capability that **cannot be declared at all** — they are forbidden
 outright, not merely withheld.

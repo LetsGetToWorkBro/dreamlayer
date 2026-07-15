@@ -5,7 +5,10 @@ pairing token header **`X-DreamLayer-Token`** (the panel injects it
 automatically when opened on the machine itself). Endpoints marked
 **local** additionally refuse any off-box client (403) because they expose
 secrets, the filesystem, or outbound action. Any token-bearing off-box
-request also stamps the "phone last seen" heartbeat.
+request also stamps the "phone last seen" heartbeat. Since the audit
+waves the server **binds loopback-only by default** — an empty token is
+trusted only from 127.0.0.1, and a LAN bind (`--host 0.0.0.0`) mints a
+pairing token if none exists, with off-box token guesses rate-limited.
 
 Source: `host-python/src/dreamlayer/ai_brain/server/server.py`. This table
 is the complete surface; `docs/INTEGRATION.md` carries the same tables with
@@ -35,6 +38,7 @@ the seams marked.
 | `/dreamlayer/plugins` | token | installed plugins + the capabilities this Brain can grant |
 | `/dreamlayer/capabilities` | token | the live capability report `{items, summary, profiles, disabled, packs, frozen}` |
 | `/dreamlayer/memories` | token | assembled kept memory: saved places, people met, owed favors, dated reminders |
+| `/dreamlayer/ember` | token | the Ember practice state: engrams, due tendings, graduation status |
 | `/panel-assets/<name>` | none | bundled panel imagery (cinematic stills, explainer cards) |
 | `/dreamlayer/rc/repertoire` | token | kept Reality Compiler figments `{items, active}` |
 | `/dreamlayer/brain/tiers` | token | the live tier ladder: device / mac_mini / cloud, each with measured `latency_ms`, reliability, and the active tier (the BYOB ceremony) |
@@ -78,6 +82,8 @@ the seams marked.
 | `/dreamlayer/capabilities` | token | `{key, disabled}` → one-click capability on/off (persisted as `disabled_caps`) |
 | `/dreamlayer/packs` | token | `{pack}` → background pip-install of a capability pack (refused in the sealed app) |
 | `/dreamlayer/memories/purge` | token | `{}` → drop every saved place (people and reminders deliberately survive) |
+| `/dreamlayer/ember/tend` | token | a tending answer → grade + reschedule (FSRS-shaped) |
+| `/dreamlayer/ember/burn` | token | explicit consent → burn the recording, keep the cue-only tombstone |
 | `/dreamlayer/memory/browse` | **local** | `{}` → launch a read-only Datasette over the memory file `{available, url}` |
 | `/dreamlayer/memory/export` | **local** | `{dest}` → copy the memory SQLite to a path `{ok, dest, bytes}` |
 | `/dreamlayer/rc/compose` | token | `{prompt}` → "Ask Juno": the offline intent parser lifts plain English to a budget-verified figment, returned to the builder, never deployed |

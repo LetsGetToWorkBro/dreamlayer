@@ -74,7 +74,10 @@ at 1.0); cloud knowledge answers carry 0.6, cloud vision 0.65, Ollama vision
 
 ## The index — your files, on your machine
 
-`server/index.py` walks the watched folders and splits text-like files
+`server/index.py` walks the watched folders — which are now
+**default-deny outside your home directory and the OS temp dir**: a
+watched-folder path anywhere else is refused when added, on config load,
+and again at the walk itself — and splits text-like files
 (default extensions: txt, md, markdown, rst, text, log, csv, json, py, org,
 tex; configurable) into passages of at most 600 characters, skipping files
 over the size cap and any exclude-glob match.
@@ -117,11 +120,13 @@ DreamLayer Cloud preset, and Custom for any OpenAI-compatible endpoint
 (LM Studio, llama.cpp) — all hand-rolled request builders, no SDKs
 (`backends.py: PROVIDER_PRESETS`, `_build_cloud_request`). Whatever the
 provider, it is reached **only** when the local tiers come up empty *and*
-`cloud_ready()` holds:
+`cloud_ready()` holds — and since the defaults pass, `cloud_enabled`
+starts **false**: the cloud tier is opt-in, off out of the box:
 
 ```
 cloud_ready = network_mode != "lan_only"  AND  cloud_enabled
-              AND cloud_api_key set       AND  cloud_model set
+              AND cloud_model set
+              AND (cloud_api_key set  OR  provider is ollama-local)
 ```
 
 Incognito sets `network_mode = "lan_only"`; quiet hours produce the same

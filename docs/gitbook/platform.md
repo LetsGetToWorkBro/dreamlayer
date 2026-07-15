@@ -132,7 +132,9 @@ validation gate, now **five defences**:
 4. A static AST scan — `subprocess`, sockets, `ctypes`, file deletion,
    `eval`/`exec`/`pickle` are flagged; each allowed only if the matching
    capability was declared, some forbidden outright.
-5. A smoke load against a mock context granting only declared capabilities.
+5. A smoke load against a mock context granting only declared
+   capabilities — **opt-in author tooling only** since the secure-defaults
+   pass: validating a package on the install path never executes its code.
 
 The honest limit, stated in `docs/MARKETPLACE.md`: in-process Python cannot
 be perfectly sandboxed — the gate is defense-in-depth for a curated,

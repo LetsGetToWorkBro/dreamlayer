@@ -29,10 +29,10 @@ JSON dict over BLE.
 
 The mind of the product, designed to run on the phone. One `Orchestrator`
 class coordinates everything — since the decomposition pass it is a thin
-coordinator composed of ten focused ops mixins (ingest, conversation,
+coordinator composed of twelve focused ops mixins (ingest, conversation,
 commitments, world lenses, brain switches, messages, dream/REM,
-confluence, Juno/attention, plugins), behavior-preserving and
-API-identical. It coordinates: the Juno voice assistant, the conversation
+confluence, Juno/attention, plugins, Ember, Stasis), behavior-preserving
+and API-identical. It coordinates: the Juno voice assistant, the conversation
 ledger and live captions, Veritas fact-checking, Truth Lens delivery reads,
 Discernment fusion, answer-ahead, the anticipation and attention engines,
 commitment capture, time-scrub rewind, the Social Lens, Dream Mode, and the
@@ -48,7 +48,11 @@ for written answers and vision, schedules the morning brief, tracks the Saga,
 and serves a full control panel as a single self-contained HTML page. Every
 request carries the pairing token header `X-DreamLayer-Token`; anything that
 exposes secrets, the filesystem, or outbound sends is additionally
-**local-only** (403 from off-box).
+**local-only** (403 from off-box). The bind itself is now
+**loopback-by-default**: a bare run listens on 127.0.0.1 only, an empty
+token is trusted only from loopback, and exposing to the LAN
+(`--host 0.0.0.0`) mints a random pairing token if none is set — an
+unauthenticated network Brain can no longer exist.
 
 ### 4. The phone app — `phone-app/`
 

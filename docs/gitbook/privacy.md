@@ -67,7 +67,7 @@ phone and the Mac panel:
 | Switch | What it does | Default |
 |---|---|---|
 | **Mac mini** (`connect_mac_mini`) | upgrades the local brain to the Mac's bigger model plus your indexed files | off — the phone is the brain |
-| **Cloud** (`use_cloud`) | frontier reach for the hardest, non-personal asks | on |
+| **Cloud** (`use_cloud`) | frontier reach for the hardest, non-personal asks | off — opt in when you want it |
 | **Incognito** (`set_incognito`) | forces cloud off and pauses capture for the session | off |
 
 The rule of thumb the architecture enforces: **everything that is yours —

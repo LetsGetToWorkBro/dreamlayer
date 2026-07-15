@@ -139,8 +139,10 @@ turned into one of eight human directions given your current heading —
 but the IMU heading and drop-distance that feed it are a **seam** today,
 so place-worded anchors ("at the north rack") are the real product and
 bearing-worded ones light up with hardware. Anchors are yours alone: a
-thing you never stashed has no waypath, and both stashing and locating
-hold while incognito.
+thing you never stashed has no waypath. The privacy rule was sharpened by
+the recall-gate pass: **stashing holds while incognito** (it is a write),
+but *locating still answers* — incognito blocks keeping, not recalling —
+and only the full Veil (capture paused) holds the on-glass answer too.
 
 Scenes are kept through `ingest_scene` (object, place, time; embedded and
 stored in the vault), conversations through `ingest_conversation`; both
@@ -256,6 +258,15 @@ Saving is celebrated once (SavedMemoryCard, the system's only particle
 burst); forgetting is instant and confirmed (**ForgetLastCard**). Deeper
 retention — what consolidates overnight, what fades — belongs to REM and the
 memory vault, covered in [the wider lens set](lenses.md).
+
+Erasure itself grew three tested guarantees in the remediation waves:
+forgetting a memory **evicts its vector** from the ANN index, not just
+the database row; a full purge clears the place and entity tables too, so
+**no location signature survives** as residue; and the hub's
+`erase_all_memories` sweeps all eight stores that can hold a trace —
+memories and vectors, Ember engrams, the REM bias, Truth-Lens baselines,
+Social-Lens faces and dossiers, the conversation ledger, the user model,
+the hot ring, recurrence models, and Waypath anchors.
 
 Everything kept is also inspectable in one place:
 `GET /dreamlayer/memories` assembles the saved places (Waypath anchors),

@@ -127,6 +127,11 @@ pip install -e "./host-python[profile-mac]"   # or plain -e ./host-python
 python -m dreamlayer.ai_brain.server --token <token>   # port 7777, any OS
 ```
 
+A bare run binds **127.0.0.1 only** (the secure default). To pair a phone
+over the LAN, pass `--host 0.0.0.0` — and if no token was set, the server
+mints a random one and prints it for pairing; an unauthenticated
+network-visible Brain is no longer possible.
+
 The dmg packaging lives in `host-python/packaging/` (py2app setup, launch
 shim, entitlements) and `.github/workflows/build-macos-app.yml`; the
 menu-bar app and native window are `ai_brain/menubar.py` and
