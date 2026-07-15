@@ -41,6 +41,14 @@ updates:
       - dependency-name: "jest"
       - dependency-name: "@types/jest"
       - dependency-name: "@testing-library/react-native"
+      # Also `npx expo install`-managed: their release lines track RN versions
+      # (screens 4.26 requires RN 0.84+, vs the SDK-54-pinned 0.81), and jest
+      # mocks native modules so CI cannot catch the mismatch (#346).
+      - dependency-name: "react-native-screens"
+      - dependency-name: "react-native-safe-area-context"
+      - dependency-name: "react-native-svg"
+      - dependency-name: "react-native-web"
+      - dependency-name: "@react-native-async-storage/async-storage"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "npm"
