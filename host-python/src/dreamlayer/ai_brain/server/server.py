@@ -393,6 +393,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 self.index.embedder = (self._backend.embed
                                        if self.config.semantic_search else None)
         else:
+            # keyword AND api: the local index stays a pure keyword retriever.
+            # For "api", the first-pass answer is routed to the external agent
+            # in ask(); the keyword index is the graceful fallback for when that
+            # endpoint is unreachable, or (if remote) silenced by the veil.
             self._backend = None
             self.index.synthesizer = None
             self.index.embedder = None
@@ -406,6 +410,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_provider", "cloud_base_url",
                   "cloud_api_key", "cloud_model", "plan",
+                  "api_provider", "api_base_url", "api_key", "api_model",
                   "semantic_search", "index_extensions", "max_file_kb",
                   "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
                   "calendar_sync", "calendar_names", "calendar_days",
@@ -447,7 +452,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # cloud config: a paired hub that says no_cloud must never egress to the
         # cloud here, even if this Mac is configured cloud_ready(). Direct panel
         # callers pass no_cloud=False and keep the Brain's own config.
-        ans = self.index.ask(query)
+        # Primary tier: when the wearer has plugged in their own agent
+        # (model == "api"), it answers first. A LOCAL agent answers freely; a
+        # REMOTE one is silenced by no_cloud/incognito and falls through to the
+        # on-device keyword index below (never a dead end).
+        ans = None
+        if self.config.model == "api":
+            ans = self._ask_primary_api(query, no_cloud)
+        if ans is None:
+            ans = self.index.ask(query)
         if ans is None and not no_cloud \
                 and self.config.cloud_ready() and not self.incognito_now():
             ans = self._ask_cloud(query)
@@ -455,6 +468,50 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             self.history.add(query, ans.text, ans.tier, ans.sources)
             self.saga_record("recall")
         return ans
+
+    def _ask_primary_api(self, query: str, no_cloud: bool = False) -> Optional[Answer]:
+        """Route the first-pass answer to the wearer's own external API/agent
+        (OpenClaw, Hermes, LM Studio, vLLM, a local Ollama, any OpenAI-compatible
+        / Anthropic / Gemini endpoint), with LOCAL-vs-REMOTE awareness the cloud
+        tier lacks:
+
+          * LOCAL endpoint (localhost / LAN): answers freely, is NOT egress, and
+            stays reachable while incognito — same status as the on-device tier.
+          * REMOTE endpoint: a real boundary, so it is gated by the wearer's veil
+            (no_cloud / incognito) and, when it does fire, counted + logged
+            BEFORE the request exactly like _ask_cloud (a failed or empty call
+            still left the device and must be on the ledger).
+
+        Returns None (→ caller falls back to the keyword index) when nothing is
+        wired, when a remote endpoint is veiled, or when the endpoint errors /
+        returns empty."""
+        from .backends import api_chat, is_local_endpoint
+        base = (self.config.api_base_url or "").strip()
+        if not base:
+            return None
+        local = is_local_endpoint(base)
+        if not local:
+            # remote agent = egress: honor the wearer's posture first…
+            if no_cloud or self.incognito_now():
+                return None
+            # …then account for it before the request (mirrors _ask_cloud's
+            # count-log-save-before-call ordering — reaching here means the
+            # query is leaving the device).
+            self.config.cloud_calls += 1
+            self.activity.add("cloud-egress", f"Asked your API brain: {query[:70]}")
+            self.save()
+        try:
+            text = api_chat(self.config, query)
+            self.health.record_ok("api-brain")
+        except Exception as exc:
+            self.health.record_failure("api-brain", exc)
+            text = ""
+        if not text:
+            return None
+        # a local agent is a "laptop"-class on-device answer; a remote one is
+        # cloud-class (it left the device), so it stamps the cloud tier.
+        return Answer(text=text, tier=("laptop" if local else "cloud"),
+                      sources=["api"], confidence=0.6)
 
     def _ask_cloud(self, query: str) -> Optional[Answer]:
         """The one place data leaves the device — logged every single time.
@@ -1553,6 +1610,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "cloud": bool(brain.config.cloud_enabled) and not brain.config.lan_only,
                 "cloud_ready": brain.config.cloud_ready(),
                 "cloud_calls": brain.config.cloud_calls,
+                # primary API brain, if the wearer plugged one in
+                "api": brain.config.model == "api",
+                "api_configured": brain.config.api_configured(),
+                "api_local": brain.config.api_is_local(),
                 "incognito": brain.incognito_now(),
                 "quiet": brain.incognito_now() and not brain.config.lan_only,
                 "phone_ago": ago,
@@ -2126,6 +2187,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from .backends import cloud_test
             self._json(200, cloud_test(brain.config))
 
+        def _post_api_test(self, path, qs):
+            """Probe the wearer's primary API brain (api_* config) — local-only."""
+            if not self._from_localhost():
+                self._json(403, {"error": "local-only"}); return
+            from .backends import api_test
+            self._json(200, api_test(brain.config))
+
         def _post_restore(self, path, qs):
             """Restore full state from a backup — local-only."""
             if not self._from_localhost():
@@ -2201,6 +2269,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/token/rotate": _post_token_rotate,
             "/dreamlayer/clear": _post_clear,
             "/dreamlayer/cloud/test": _post_cloud_test,
+            "/dreamlayer/api/test": _post_api_test,
             "/dreamlayer/restore": _post_restore,
             "/dreamlayer/message/draft": _post_message_draft,
             "/dreamlayer/message/send": _post_message_send,

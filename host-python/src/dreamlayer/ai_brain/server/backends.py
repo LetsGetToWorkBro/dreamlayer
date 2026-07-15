@@ -54,19 +54,46 @@ PROVIDER_PRESETS: dict[str, dict] = {
 }
 
 
-def _build_cloud_request(config, prompt: str):
-    """Return (wire, url, body_dict, headers) for the configured provider.
+def is_local_endpoint(base_url: str) -> bool:
+    """True when an endpoint lives on THIS machine or the local network — so it
+    is NOT cloud egress and stays reachable while incognito, exactly like the
+    Mac-mini/Ollama tier already is. A remote (public) endpoint returns False
+    and must be treated as egress: counted, logged, and veil-gated.
+
+    Local = loopback, RFC-1918 / carrier-grade-NAT / link-local ranges, `.local`
+    mDNS names, or a bare single-label hostname (a LAN name like ``my-nas``).
+    Anything else — a public domain, or a host we cannot classify — is REMOTE.
+    The unsure case fails SAFE toward egress: over-counting a call as leaving
+    the device is harmless; under-counting one that actually left is a privacy
+    lie."""
+    host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
+    if not host:
+        return False
+    if host == "localhost" or host.endswith(".local"):
+        return True
+    if "." not in host and ":" not in host:
+        return True                        # bare single-label LAN hostname
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False                       # public domain / unparseable → remote
+    return bool(ip.is_loopback or ip.is_private or ip.is_link_local)
+
+
+def _build_request(provider: str, base_url: str, model: str, key: str, prompt: str):
+    """Return (wire, url, body_dict, headers) for a provider/endpoint tuple.
 
     Three wire formats, all hand-rolled (no SDK): OpenAI-compatible chat
     completions (openai/openrouter/ollama/custom), Anthropic messages, and
-    Gemini generateContent. Pure — unit-testable without a network.
-    """
-    provider = getattr(config, "cloud_provider", "openai") or "openai"
+    Gemini generateContent. Pure — unit-testable without a network. Shared by
+    the cloud-escalation tier (cloud_* config) and the primary API-brain tier
+    (api_* config), so both speak the same adapters from one place."""
+    provider = provider or "openai"
     preset = PROVIDER_PRESETS.get(provider, PROVIDER_PRESETS["custom"])
     wire = preset["wire"]
-    base = (config.cloud_base_url or preset["base_url"]).rstrip("/")
-    model = config.cloud_model
-    key = config.cloud_api_key or ""
+    base = (base_url or preset["base_url"]).rstrip("/")
+    key = key or ""
     if wire == "anthropic":
         url = base + "/v1/messages"
         body = {"model": model, "max_tokens": 1024,
@@ -86,6 +113,13 @@ def _build_cloud_request(config, prompt: str):
         if key:  # Ollama-local sends no key
             headers["Authorization"] = "Bearer " + key
     return wire, url, body, headers
+
+
+def _build_cloud_request(config, prompt: str):
+    """Back-compat shim: build a request from the cloud_* config group."""
+    return _build_request(getattr(config, "cloud_provider", "openai") or "openai",
+                          config.cloud_base_url, config.cloud_model,
+                          config.cloud_api_key or "", prompt)
 
 
 def _parse_cloud_response(wire: str, d: dict) -> str:
@@ -200,16 +234,16 @@ class OllamaBackend:
         return (out or {}).get("embedding", []) or []
 
 
-def cloud_chat(config, prompt: str, http_post: Optional[Callable] = None,
-               timeout: float = 30.0) -> str:
-    """Ask the configured cloud model. Supports OpenAI, Anthropic, Gemini,
-    OpenRouter, Ollama-local, and any custom OpenAI-compatible endpoint —
-    dispatched on config.cloud_provider. The call is injectable for tests."""
+def _provider_chat(provider: str, base_url: str, model: str, key: str,
+                   prompt: str, http_post: Optional[Callable] = None,
+                   timeout: float = 30.0) -> str:
+    """Ask any provider/endpoint, dispatched on wire format. Injectable
+    http_post short-circuits to a test double (posts {model, prompt} to the
+    base URL and reads {text})."""
     if http_post is not None:
-        out = http_post(config.cloud_base_url, {"model": config.cloud_model,
-                                                "prompt": prompt})
+        out = http_post(base_url, {"model": model, "prompt": prompt})
         return (out or {}).get("text", "").strip()
-    wire, url, body, headers = _build_cloud_request(config, prompt)
+    wire, url, body, headers = _build_request(provider, base_url, model, key, prompt)
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -218,11 +252,47 @@ def cloud_chat(config, prompt: str, http_post: Optional[Callable] = None,
     return _parse_cloud_response(wire, d)
 
 
+def cloud_chat(config, prompt: str, http_post: Optional[Callable] = None,
+               timeout: float = 30.0) -> str:
+    """Ask the configured CLOUD-escalation model. Supports OpenAI, Anthropic,
+    Gemini, OpenRouter, Ollama-local, and any custom OpenAI-compatible endpoint
+    — dispatched on config.cloud_provider. Injectable for tests."""
+    return _provider_chat(getattr(config, "cloud_provider", "openai") or "openai",
+                          config.cloud_base_url, config.cloud_model,
+                          config.cloud_api_key or "", prompt, http_post, timeout)
+
+
+def api_chat(config, prompt: str, http_post: Optional[Callable] = None,
+             timeout: float = 30.0) -> str:
+    """Ask the wearer's own PRIMARY external API/agent (the api_* config group:
+    OpenClaw, Hermes, LM Studio, vLLM, a local Ollama, any OpenAI-compatible /
+    Anthropic / Gemini endpoint). Same wire adapters as cloud_chat, but a
+    SEPARATE config group so the primary brain and the cloud-escalation tier
+    are independent and can point at different places. The caller
+    (Brain._ask_primary_api) owns the local-vs-remote egress accounting."""
+    return _provider_chat(getattr(config, "api_provider", "custom") or "custom",
+                          config.api_base_url, config.api_model,
+                          config.api_key or "", prompt, http_post, timeout)
+
+
 def cloud_test(config, http_post: Optional[Callable] = None) -> dict:
     """A tiny round-trip so the panel can say 'connected' or show the error."""
     try:
         txt = cloud_chat(config, "Reply with the single word: OK",
                          http_post=http_post, timeout=15.0)
+        return {"ok": bool(txt), "reply": txt[:80]}
+    except Exception as e:  # noqa: BLE001 — surface any provider error verbatim
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def api_test(config, http_post: Optional[Callable] = None) -> dict:
+    """Same round-trip against the PRIMARY API brain (api_* config), so the
+    panel's 'Test connection' can confirm the wearer's own agent replies."""
+    if not (getattr(config, "api_base_url", "") or "").strip():
+        return {"ok": False, "error": "no endpoint set"}
+    try:
+        txt = api_chat(config, "Reply with the single word: OK",
+                       http_post=http_post, timeout=15.0)
         return {"ok": bool(txt), "reply": txt[:80]}
     except Exception as e:  # noqa: BLE001 — surface any provider error verbatim
         return {"ok": False, "error": str(e)[:200]}

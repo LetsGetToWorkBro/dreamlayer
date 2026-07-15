@@ -49,7 +49,7 @@ def _is_allowed_root(path: str) -> bool:
 class BrainConfig:
     """Everything the Brain reads and how it thinks. Editable from the panel."""
     folders: list[str] = field(default_factory=list)   # watched directories
-    model: str = "keyword"          # "keyword" | "ollama"
+    model: str = "keyword"          # "keyword" | "ollama" | "mlx" | "api"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
@@ -73,6 +73,19 @@ class BrainConfig:
     cloud_api_key: str = ""
     cloud_model: str = "gpt-4o-mini"
     cloud_calls: int = 0            # lifetime count of cloud egress
+    # -- primary API brain — plug in your own agent as the MAIN answerer -----
+    # When model == "api", the first-pass answer is routed to this endpoint
+    # (OpenClaw, Hermes, LM Studio, vLLM, a local Ollama, any OpenAI-compatible
+    # / Anthropic / Gemini API) instead of the on-device keyword/Ollama tier.
+    # Distinct from cloud_* (the escalation tier) so the two can point at
+    # different places. Egress is decided by the endpoint's LOCALITY, not by
+    # this being a "cloud" field: a localhost/LAN endpoint answers freely and
+    # is not egress; a remote one is counted, logged, and veil-gated exactly
+    # like the cloud tier (see Brain._ask_primary_api).
+    api_provider: str = "custom"    # a PROVIDER_PRESETS key (wire format)
+    api_base_url: str = ""
+    api_key: str = ""
+    api_model: str = ""
     # -- knowledge depth (batch 3) --------------------------------------
     semantic_search: bool = False   # embed + rank (needs an embed model)
     index_extensions: list[str] = field(default_factory=list)   # [] = defaults
@@ -112,6 +125,20 @@ class BrainConfig:
         if self.cloud_provider == "ollama":
             return True
         return bool(self.cloud_api_key)
+
+    def api_configured(self) -> bool:
+        """Is a primary API brain wired (base URL present)?"""
+        return bool((self.api_base_url or "").strip())
+
+    def api_is_local(self) -> bool:
+        """Does the primary API endpoint live on this machine / LAN? If so it is
+        NOT cloud egress and stays reachable while incognito; if remote, it is
+        gated and logged like the cloud tier. Drives the panel's privacy
+        warning. Unconfigured → False (nothing to reach)."""
+        if not self.api_configured():
+            return False
+        from .backends import is_local_endpoint      # lazy: avoid import cycle
+        return is_local_endpoint(self.api_base_url)
 
     def add_folder(self, path: str) -> bool:
         # SECURITY: default-deny allow-list. A token holder must not be able to
@@ -168,11 +195,14 @@ class BrainConfig:
         (d / CONFIG_FILE).write_text(json.dumps(asdict(self), indent=2))
 
     def public(self) -> dict:
-        """Config for the panel — never leaks the token or the cloud key."""
+        """Config for the panel — never leaks the token or any provider key."""
         d = asdict(self)
         d["token"] = "set" if self.token else ""
         d["cloud_api_key"] = "set" if self.cloud_api_key else ""
+        d["api_key"] = "set" if self.api_key else ""
         d["cloud_ready"] = self.cloud_ready()
+        d["api_configured"] = self.api_configured()
+        d["api_is_local"] = self.api_is_local()
         return d
 
 

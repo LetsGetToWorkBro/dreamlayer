@@ -491,15 +491,36 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
   <section>
     <div class="eyebrow">Intelligence</div><h2>Model</h2>
-    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision.</p>
+    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision — or plug in your own agent (Hermes, OpenClaw, LM Studio, anything OpenAI-compatible) as the brain.</p>
     <div class="seg" id="modelSeg">
       <button data-m="keyword" onclick="pickModel('keyword')">Keyword</button>
-      <button data-m="ollama" onclick="pickModel('ollama')">Ollama</button></div>
+      <button data-m="ollama" onclick="pickModel('ollama')">Ollama</button>
+      <button data-m="api" onclick="pickModel('api')">Your API</button></div>
     <div class="fold" id="ollamaFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s">
       <div class="row" style="margin-top:12px">
         <input type="text" id="ourl" placeholder="http://127.0.0.1:11434" style="max-width:230px">
         <input type="text" id="ochat" placeholder="chat · llama3.2" style="max-width:190px">
         <input type="text" id="ovis" placeholder="vision model" style="max-width:170px"></div>
+    </div>
+    <div class="fold" id="apiFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .4s var(--ease),opacity .3s,margin .3s">
+      <p class="lead" style="margin:12px 0 8px">Point the Brain at any chat API and it becomes your primary answerer. Pick a shape, paste the endpoint, and save.</p>
+      <div class="row">
+        <select id="aprov" onchange="apiPreset(true)" style="max-width:220px">
+          <option value="custom">Custom (OpenAI-compatible)</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="ollama">Ollama · local</option>
+        </select>
+        <input type="text" id="abase" placeholder="http://localhost:1234/v1" oninput="renderApiWarn()" style="max-width:230px">
+        <input type="password" id="akey" placeholder="API key (blank if local)" style="max-width:180px">
+        <input type="text" id="amodel" placeholder="model name" style="max-width:150px"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="sm ghost" onclick="testApi()">Test connection</button>
+        <button class="sm" onclick="saveApi()">Use this brain</button></div>
+      <div id="apiStatus"></div>
+      <div id="apiWarn"></div>
     </div>
     <div id="modelStatus"></div>
     <div class="row" style="margin-top:16px;justify-content:flex-end">
@@ -864,9 +885,15 @@ async function load(){
   folders.forEach(f=>{fl.innerHTML+=`<li class="folder"><span class="path">${esc(f)}</span>`+
     `<button class="ghost sm" onclick="rmFolder('${esc(f)}')">Remove</button></li>`;
     dt.innerHTML+=`<option>${esc(f)}</option>`;});
-  pickModel(c.config.model==="ollama"?"ollama":"keyword",true);
+  const mm=["keyword","ollama","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
   $("ourl").value=c.config.ollama_url||"";$("ochat").value=c.config.ollama_chat_model||"";
   $("ovis").value=c.config.ollama_vision_model||"";$("email").checked=!!c.config.email_enabled;
+  // primary API brain
+  $("aprov").value=c.config.api_provider||"custom";
+  $("abase").value=c.config.api_base_url||"";$("amodel").value=c.config.api_model||"";
+  $("akey").placeholder=c.config.api_key==="set"?"key saved — leave blank to keep":"API key (blank if local)";
+  apiPreset(false);
+  pickModel(mm,true);
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   // cloud provider
@@ -1075,9 +1102,73 @@ function pickModel(m,silent){modelSel=m;
   document.querySelectorAll("#modelSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
   const f=$("ollamaFields"),on=m==="ollama";
   f.style.maxHeight=on?"200px":"0";f.style.opacity=on?"1":"0";f.style.marginTop=on?"12px":"0";
+  const a=$("apiFields"),aon=m==="api";
+  a.style.maxHeight=aon?"460px":"0";a.style.opacity=aon?"1":"0";a.style.marginTop=aon?"12px":"0";
+  if(aon) renderApiWarn();
   if(!silent&&m==="keyword"){saveModel(true);}
   renderModel();
   if(m==="ollama") checkModel();
+}
+// Mirror of backends.is_local_endpoint, for the live warning. localhost, LAN
+// (RFC-1918), *.local, and bare hostnames are on-device; anything else is a
+// remote endpoint your queries LEAVE the device to reach.
+function isLocalUrl(u){
+  let host;try{host=new URL(u).hostname.toLowerCase();}catch(e){return null;}   // null = can't tell yet
+  if(!host)return null;
+  if(host==="localhost"||host.endsWith(".local"))return true;
+  if(host.indexOf(".")<0&&host.indexOf(":")<0)return true;                      // bare LAN name
+  if(host==="::1"||host==="[::1]")return true;
+  const m=host.match(/^(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)$/);
+  if(m){const a=+m[1],b=+m[2];
+    return a===127||a===10||(a===192&&b===168)||(a===172&&b>=16&&b<=31)||(a===169&&b===254);}
+  return false;                                                                 // public domain → remote
+}
+const APROV={custom:{base:"",model:"",key:true},openai:{base:"https://api.openai.com",model:"gpt-4o-mini",key:true},
+  anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},
+  gemini:{base:"https://generativelanguage.googleapis.com",model:"gemini-1.5-flash",key:true},
+  openrouter:{base:"https://openrouter.ai/api",model:"openai/gpt-4o-mini",key:true},
+  ollama:{base:"http://localhost:11434",model:"llama3.2",key:false}};
+function apiPreset(apply){const p=APROV[$("aprov").value]||APROV.custom;
+  if(apply){$("abase").value=p.base;$("amodel").value=p.model;}
+  $("abase").placeholder=p.base||"http://localhost:1234/v1";$("amodel").placeholder=p.model||"model name";
+  $("akey").style.display=p.key?"":"none";
+  renderApiWarn();
+}
+function renderApiWarn(){const el=$("apiWarn");if(!el)return;
+  const loc=isLocalUrl($("abase").value.trim());
+  const lost='<b>What stays with DreamLayer:</b> your agent answers questions, but it does <b>not</b> run '+
+    'DreamLayer\\'s own on-device features. The fact-checker, memory lenses and private capture read '+
+    'DreamLayer\\'s local memory, not your agent\\'s. Vision (naming what you look at) stays on the built-in path, '+
+    'and answers aren\\'t glasses-shaped the way the built-in brain\\'s are.';
+  if(loc===true){
+    el.innerHTML='<div class="mstat" style="margin-top:12px"><div class="head"><span class="sdot ok"></span>'+
+      '<b>On your device</b> &nbsp;<span class="tag privacy">local</span></div>'+
+      '<div class="lead" style="margin:6px 0 0">This endpoint is on your machine or network, so questions '+
+      'never leave your device and it keeps working while incognito — same as the built-in brain. '+lost+'</div></div>';
+  }else if(loc===false){
+    el.innerHTML='<div class="mstat" style="margin-top:12px;border-color:var(--amber)"><div class="head">'+
+      '<span class="sdot warn"></span><b>Remote endpoint — your queries leave this device</b> &nbsp;'+
+      '<span class="tag" style="color:var(--amber)">egress</span></div>'+
+      '<div class="lead" style="margin:6px 0 0"><b>Privacy:</b> every question is sent to this service, '+
+      '<b>counted and logged as cloud egress</b>, and <b>silenced while you\\'re incognito</b> (it falls back to '+
+      'on-device keyword search). DreamLayer can\\'t see or control what that service does with your data. '+lost+'</div></div>';
+  }else{
+    el.innerHTML='<div class="conn-s" style="margin-top:12px">Enter your endpoint URL above. A localhost / LAN '+
+      'address stays on-device; a public URL sends your questions off the device (logged as egress, off in incognito).</div>';
+  }
+}
+async function saveApi(){const body={model:"api",api_provider:$("aprov").value,
+    api_base_url:$("abase").value.trim(),api_model:$("amodel").value.trim()};
+  const k=$("akey").value.trim(); if(k) body.api_key=k;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});$("akey").value="";
+  modelSel="api";toast("Your API is now the brain");load();}
+async function testApi(){const el=$("apiStatus");el.innerHTML='<div class="mstat"><div class="shimmer"></div></div>';
+  await saveApi();
+  let r;try{r=await api("/dreamlayer/api/test",{method:"POST",body:"{}"});}catch(e){r={ok:false,error:"request failed"};}
+  el.innerHTML='<div class="mstat"><div class="head"><span class="sdot '+(r.ok?'ok':'warn')+'"></span>'+
+    '<b>'+(r.ok?'Connected':'Not working')+'</b></div><div class="lead" style="margin:0">'+
+    (r.ok?'Your agent replied: <code>'+esc(r.reply||'ok')+'</code>':esc(r.error||'no reply — check the URL, model'+
+    ' and key'))+'</div></div>';
 }
 function renderModel(){
   const el=$("modelStatus");
