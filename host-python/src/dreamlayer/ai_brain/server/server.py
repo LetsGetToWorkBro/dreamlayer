@@ -20,6 +20,7 @@ panel page is injected with the token only when opened from localhost.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import urllib.parse
@@ -30,6 +31,12 @@ from typing import Optional
 
 import threading
 import time
+
+# Module logger. configure_logging() (wired at the server entrypoint in
+# __main__.py) attaches the handler; call sites just log. Best-effort failures
+# that used to `except Exception: pass` now surface here instead of vanishing
+# (audit 2026-07-14, Error-Handling B-→A-).
+log = logging.getLogger("dreamlayer.ai_brain.server")
 
 from ..schema import Answer
 from .store import BrainConfig, QueryHistory, ActivityLog
@@ -263,6 +270,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                                   "description": m.description, "long": list(m.long),
                                   "forwho": m.forwho, "screenshot": m.screenshot})
             except Exception:
+                # a single unreadable/corrupt package must not blank the whole
+                # list — degrade to a stub row, but record why (was a silent
+                # pass that hid a broken install).
+                log.warning("plugin %r failed to load for state listing",
+                            name, exc_info=True)
                 installed.append({"name": name, "version": "", "author": "", "requires": []})
         return {"installed": installed,
                 "capabilities": sorted(self.plugin_capabilities())}
@@ -322,6 +334,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                         if f.is_file():
                             sig.append((str(f), f.stat().st_mtime_ns))
                 except OSError:
+                    # a folder that vanished or denied access mid-walk just
+                    # contributes nothing to the change signature — genuinely
+                    # ignorable (the next poll re-scans); narrowed to OSError.
                     pass
         return tuple(sorted(sig))
 
@@ -342,7 +357,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 try:
                     self.poll()
                 except Exception:
-                    pass
+                    # the watch thread must survive a bad scan (a vanished
+                    # folder, a racing edit) — but log so a persistently dead
+                    # watcher is visible instead of silently stopped.
+                    log.warning("folder watch poll failed", exc_info=True)
         threading.Thread(target=loop, daemon=True).start()
 
     def stop_watching(self) -> None:
@@ -402,7 +420,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             if updates.get("reminders_sync") or ("reminder_lists" in updates and self.config.reminders_sync):
                 self.sync_reminders()
         except Exception:
-            pass
+            # a failed opportunistic sync must not fail the config write that
+            # triggered it (the sync loop retries on schedule); log so a broken
+            # macOS source doesn't fail silently (was a silent pass).
+            log.warning("post-config macOS sync failed", exc_info=True)
         if updates.get("cloud_enabled"):
             self.saga_record("cloud")
         if updates.get("network_mode") == "lan_only":
@@ -472,7 +493,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 if s and s.strip():
                     return s.strip()
             except Exception:
-                pass
+                # best-effort model summary; on any backend failure we fall
+                # through to the clip below so the feed never blocks. Debug —
+                # an unreachable model here is an expected degrade, not alarming.
+                log.debug("summarize backend call failed; clipping instead",
+                          exc_info=True)
         head = text.split(". ")[0].strip()
         return head if 0 < len(head) <= max_chars else text[:max_chars].rstrip() + "…"
 
@@ -503,7 +528,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 try:
                     self.maybe_run_brief()
                 except Exception:
-                    pass
+                    # keep the scheduler thread alive across a bad brief run;
+                    # log so a recurring failure surfaces (was a silent pass).
+                    log.warning("brief scheduler run failed", exc_info=True)
         threading.Thread(target=loop, daemon=True).start()
 
     def export_backup(self) -> dict:
@@ -548,7 +575,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             p = self.cfg_dir / name
             try:
                 val = json.loads(p.read_text()) if p.exists() else default
-            except Exception:
+            except (OSError, ValueError, UnicodeDecodeError):
+                # a missing/corrupt/half-written store degrades to the default
+                # rather than crashing a request — but on the record, since a
+                # silent default here once masked a truncated file (audit
+                # 2026-07-14). Narrowed so a programming error still surfaces.
+                log.warning("store %s unreadable; using default", name,
+                            exc_info=True)
                 val = default
             return val if isinstance(val, type(default)) else default
 
@@ -576,7 +609,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         if p.exists():
             try:
                 return json.loads(p.read_text())
-            except Exception:
+            except (OSError, ValueError, UnicodeDecodeError):
+                # corrupt/half-written profile mirror → empty (the hub re-pushes
+                # it). Narrowed + logged so a real read bug can't hide here.
+                log.warning("profile.json unreadable; starting empty",
+                            exc_info=True)
                 return {}
         return {}
 
@@ -618,6 +655,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         try:
             msgs = self._messages_fn(self.config, 40) if self.config.email_enabled else []
         except Exception:
+            # the macOS message source is best-effort; a failure means "nothing
+            # to report", not an error to the caller. Log so a broken source is
+            # visible (was silent).
+            log.warning("message source failed in missed()", exc_info=True)
             msgs = []
         incoming = [m for m in msgs if not m.get("from_me") and m.get("ts", 0) > since]
         texts = [m for m in incoming if m.get("channel") != "email"]
@@ -736,8 +777,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         }
         try:
             self._save_json("profile.json", self.profile)
-        except Exception:
-            pass
+        except OSError:
+            # persistence is best-effort here (the in-memory mirror is already
+            # updated and the hub re-pushes on reconnect); a disk error must not
+            # fail the request, but it must not vanish either. Narrowed so a
+            # serialization bug (TypeError) surfaces instead of being swallowed.
+            log.warning("failed to persist profile.json", exc_info=True)
         return self.profile
 
     def pull_model(self, name: str) -> dict:
@@ -775,7 +820,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                     items.append({"ts": ts, "kind": "message",
                                   "text": f"{who}: {body}".strip(": ")})
         except Exception:
-            pass
+            # message source is best-effort in the rewind timeline; a failure
+            # just omits messages from the view. Logged (was silent).
+            log.warning("message source failed in rewind()", exc_info=True)
         for e in self.calendar(50):
             if day_start <= e["ts"] < day_start + 86400:
                 items.append({"ts": e["ts"], "kind": "event", "text": e["title"]})
@@ -803,7 +850,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 if lines:
                     return lines[:n]
             except Exception:
-                pass
+                # best-effort model suggestions; fall through to the canned
+                # replies below on any backend failure. Debug — expected when no
+                # model is wired.
+                log.debug("suggest_replies backend call failed; using canned",
+                          exc_info=True)
         return ["On my way", "Give me a few", "Thanks!"][:n]
 
     def brief(self, agenda=None, since: float = 0.0, depth: str = "short",
@@ -832,6 +883,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         try:
             msgs = self._messages_fn(self.config, 30 if long else 20) if self.config.email_enabled else []
         except Exception:
+            # best-effort message source; the brief still assembles without it.
+            log.warning("message source failed in brief()", exc_info=True)
             msgs = []
         incoming = [m for m in msgs if not m.get("from_me") and m.get("ts", 0) > since]
         texts = [m for m in incoming if m.get("channel") != "email"]
@@ -862,7 +915,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                     if s and s.strip():
                         text = s.strip()
                 except Exception:
-                    pass
+                    # best-effort model prose; keep the structured join above on
+                    # failure so the brief always returns. Debug (no-model case).
+                    log.debug("brief short model call failed; using join",
+                              exc_info=True)
             self.saga_record("brief")
             return {"text": text, "bullets": bullets, "depth": "short",
                     "missed": {"texts": len(texts), "emails": len(emails)}}
@@ -913,7 +969,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 if s and s.strip():
                     text = s.strip()
             except Exception:
-                pass
+                # best-effort model prose; the sectioned text above stands in on
+                # failure. Debug (expected when no model is wired).
+                log.debug("brief long model call failed; using sections",
+                          exc_info=True)
         self.saga_record("brief")
         return {"text": text, "bullets": bullets, "sections": sections,
                 "depth": "long",
@@ -1104,6 +1163,9 @@ def _cloud_view_payload(brain: Brain) -> dict:
     try:
         caps = set(brain.plugin_capabilities())
     except Exception:
+        # defensive: capability enumeration should not fail, but the cloud view
+        # must render regardless. Log loudly if it ever does (that's a bug).
+        log.warning("plugin_capabilities failed in cloud view", exc_info=True)
         caps = set()
     enabled = bool({"cloud_sync", "cloud_relay", "cloud_ai"} & caps)
     return {
@@ -1193,6 +1255,9 @@ def _brain_view_payload(brain: Brain) -> dict:
     try:
         seams = brain.health.snapshot()
     except Exception:
+        # defensive: the health snapshot should always render; if it can't, the
+        # tier ladder still returns. Log — an exception here signals a real bug.
+        log.warning("health snapshot failed in brain view", exc_info=True)
         seams = {}
     cloud_on = bool(brain.config.cloud_enabled) and not brain.config.lan_only
     incognito = brain.incognito_now()
@@ -1616,6 +1681,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             try:
                 items = brain._messages_fn(brain.config, 20)
             except Exception:
+                # best-effort live feed; an unreachable macOS source yields an
+                # empty feed rather than a 500. Logged (was silent).
+                log.warning("message source failed for /messages/recent",
+                            exc_info=True)
                 items = []
             if brain.config.summarize_emails:
                 for it in items:
@@ -2178,7 +2247,9 @@ def _version() -> str:
     try:
         import dreamlayer
         return getattr(dreamlayer, "__version__", "0.0.0")
-    except Exception:
+    except ImportError:
+        # the package should always import from within itself; fall back only
+        # for that narrow case rather than masking any other error.
         return "0.0.0"
 
 
@@ -2219,6 +2290,8 @@ def _browse_dir(raw: str) -> dict:
             if e.is_dir() and not e.name.startswith("."):
                 dirs.append(e.name)
     except OSError:
+        # a permission-denied or vanished directory just lists no children —
+        # genuinely ignorable for a folder picker; narrowed to OSError.
         pass
     parent = str(base.parent) if base.parent != base else ""
     return {"path": str(base), "parent": parent, "dirs": dirs,

@@ -8,7 +8,10 @@ path key corresponds to a require() string used in the codebase,
 failing loudly with a diff if there are unreachable or missing modules.
 """
 from __future__ import annotations
+import logging
 import os
+
+log = logging.getLogger("dreamlayer.lua_loader")
 
 # All require() strings found in halo-lua/main.lua top-level imports.
 # These are the modules the device MUST be able to resolve at boot.
@@ -123,11 +126,14 @@ def collect_lua(
             )
         if extra:
             # Extra files are a warning, not a hard error — they may be
-            # legitimate helpers not yet in MANDATORY_REQUIRE_PATHS.
-            print(
-                "[lua_loader] NOTE: bundle contains files not in "
-                "MANDATORY_REQUIRE_PATHS (may be fine):\n"
-                + "\n".join(f"  + {e}" for e in sorted(extra))
+            # legitimate helpers not yet in MANDATORY_REQUIRE_PATHS. This is a
+            # diagnostic on the normal (non-dry-run) path, so it belongs in the
+            # log, not on stdout (audit 2026-07-14). The dry-run manifest above
+            # is deliberate stdout inspection output and stays a print.
+            log.warning(
+                "lua bundle contains %d file(s) not in MANDATORY_REQUIRE_PATHS "
+                "(may be fine): %s",
+                len(extra), ", ".join(sorted(extra)),
             )
 
         if errors and not dry_run:

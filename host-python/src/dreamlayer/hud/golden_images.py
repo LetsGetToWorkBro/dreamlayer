@@ -238,6 +238,10 @@ def run_regression_suite(
 # CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # opt-in structured logging at the entrypoint (DL_LOG_JSON=1); a no-op
+    # formatting change by default (audit 2026-07-14: configure at every entry).
+    from ..logging_setup import configure_logging
+    configure_logging()
     parser = argparse.ArgumentParser(description="DreamLayer golden-image regression")
     parser.add_argument("--generate", action="store_true", help="Generate/overwrite golden PNGs")
     parser.add_argument("--diff",     metavar="KEY",       help="Diff a single card key")

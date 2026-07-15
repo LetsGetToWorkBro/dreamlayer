@@ -37,12 +37,15 @@ Usage
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Deque, Optional
+
+log = logging.getLogger("dreamlayer.adaptive_confidence")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -126,13 +129,17 @@ class DismissalTracker:
         if self._persist:
             self._save()
 
-        # Notify threshold-change listeners
+        # Notify threshold-change listeners. A listener is arbitrary caller
+        # code, so one that raises must not break the fan-out or the telemetry
+        # ingest — but a silent swallow hid every broken listener (audit
+        # 2026-07-14). Keep isolating them; make the failure observable.
         for cb in self._listeners:
             try:
                 base = 0.45  # sensible default; callers can re-query directly
                 cb(card_type, self.suggested_threshold(card_type, base))
             except Exception:
-                pass
+                log.warning("threshold-change listener %r failed", cb,
+                            exc_info=True)
 
     def on_threshold_change(self, cb: Callable[[str, float], None]) -> None:
         """Register a callback(card_type, new_threshold) for threshold updates."""
@@ -205,13 +212,20 @@ class DismissalTracker:
                 with os.fdopen(fd, "w") as f:
                     f.write(payload)
                 os.replace(tmp, self._log_path)
-            except Exception:
+            except OSError:
+                # clean up the temp file on a failed write; the outer handler
+                # logs the underlying fault.
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
-        except Exception:
-            pass  # persistence is best-effort; never crash main loop
+                raise
+        except OSError as exc:
+            # persistence is best-effort — a disk/permission fault must never
+            # crash the telemetry loop — but log it at debug so it isn't wholly
+            # invisible (audit 2026-07-14). Narrowed to OSError so a programming
+            # error (e.g. a non-serialisable payload) still surfaces loudly.
+            log.debug("dismissal-log persist failed: %s", exc)
 
     def _load(self) -> None:
         try:
@@ -228,8 +242,13 @@ class DismissalTracker:
                 for item in raw:
                     self._window_for(item["c"]).append(
                         _Event(card_type=item["c"], event=item["e"]))
-        except Exception:
-            pass
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            # a corrupt/unreadable log means "start fresh", not a crash — but
+            # say so, don't discard it silently (audit 2026-07-14). Narrowed to
+            # the deserialisation/IO faults a bad file actually produces so a
+            # real bug here isn't mistaken for corrupt data.
+            log.warning("could not load dismissal log %s (%s); starting fresh",
+                        self._log_path, exc)
 
 
 # ---------------------------------------------------------------------------

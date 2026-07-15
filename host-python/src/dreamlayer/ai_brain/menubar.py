@@ -213,6 +213,10 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
 
 def main(argv=None) -> int:
     import argparse
+    # opt-in structured logging at the entrypoint (DL_LOG_JSON=1); a no-op
+    # formatting change by default (audit 2026-07-14: configure at every entry).
+    from ..logging_setup import configure_logging
+    configure_logging()
     ap = argparse.ArgumentParser(description="DreamLayer Brain menu-bar app")
     ap.add_argument("--dir", default=None)
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)

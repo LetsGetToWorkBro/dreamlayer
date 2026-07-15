@@ -3,7 +3,13 @@ extras, plain mode is unchanged, and configure_logging is idempotent."""
 import json
 import logging
 
-from dreamlayer.logging_setup import JsonLineFormatter, configure_logging
+from dreamlayer.logging_setup import (
+    JsonLineFormatter,
+    configure_logging,
+    correlation_id,
+    current_correlation_id,
+    with_correlation_id,
+)
 
 
 def _record(msg="hello", **extra):
@@ -105,3 +111,47 @@ class TestConfigure:
             h = next(h for h in logging.getLogger().handlers
                      if getattr(h, "_dreamlayer_handler", False))
             assert isinstance(h.formatter, ls.JsonLineFormatter), val
+
+
+class TestCorrelationId:
+    """Audit 2026-07-14: a request/correlation id so one flow's log lines can be
+    stitched together. Present in JSON only when a flow is bound; zero-overhead
+    (and invisible) otherwise; nesting-safe so a flow gets ONE id."""
+
+    def test_absent_when_unbound(self):
+        assert current_correlation_id() is None
+        line = JsonLineFormatter().format(_record("idle"))
+        assert "cid" not in json.loads(line)
+
+    def test_present_in_json_when_bound(self):
+        with correlation_id("abc123"):
+            assert current_correlation_id() == "abc123"
+            obj = json.loads(JsonLineFormatter().format(_record("in-flow")))
+            assert obj["cid"] == "abc123"
+        # cleared on exit
+        assert current_correlation_id() is None
+        assert "cid" not in json.loads(JsonLineFormatter().format(_record("out")))
+
+    def test_generated_when_none_passed(self):
+        with correlation_id() as cid:
+            assert cid and current_correlation_id() == cid
+
+    def test_nesting_reuses_outer_id(self):
+        with correlation_id("outer") as outer:
+            with correlation_id() as inner:      # no id passed → reuse outer
+                assert inner == outer == "outer"
+            # still bound to outer after the inner block
+            assert current_correlation_id() == "outer"
+
+    def test_decorator_binds_for_call(self):
+        seen = {}
+
+        @with_correlation_id
+        def handler():
+            seen["cid"] = current_correlation_id()
+            return seen["cid"]
+
+        assert current_correlation_id() is None
+        cid = handler()
+        assert cid is not None and seen["cid"] == cid
+        assert current_correlation_id() is None   # reset after the call

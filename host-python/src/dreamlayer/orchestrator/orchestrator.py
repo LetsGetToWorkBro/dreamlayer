@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+from ..logging_setup import with_correlation_id
 from ..memory.db import MemoryDB
 from ..memory.retrieval import Retriever
 from ..memory.proactive import ProactiveEngine
@@ -732,6 +733,7 @@ class Orchestrator(
         Returns the card dict ready for the bridge."""
         return self.lucid.query(text or None, camera_frame=frame).to_hud_card()
 
+    @with_correlation_id
     def ask_juno(self, text: str) -> dict:
         """The full "Hey Juno" surface: run a device command if it is one
         ("turn on focus", "go incognito", "rewind my day"), otherwise answer
@@ -816,6 +818,7 @@ class Orchestrator(
         return persona.dunno(), False, "unknown"
 
 
+    @with_correlation_id
     def handle_voice(self, text: str, frame=None) -> dict:
         """Route a spoken (already-transcribed) line to an intent. 'Ask/recall'
         run straight through to the brain and return the answer; a 'scholar'

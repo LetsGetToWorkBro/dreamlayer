@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from ..logging_setup import correlation_id
 from .core import HaloSimulator
 from .page import PAGE
 
@@ -45,29 +46,33 @@ def make_simulator_server(sim: HaloSimulator | None = None,
                 return {}
 
         def do_GET(self):
-            path = self.path.split("?", 1)[0]
-            if path == "/":
-                self._send(200, PAGE.encode(), "text/html; charset=utf-8")
-            elif path == "/sim/frame.png":
-                self._send(200, sim.frame_png(), "image/png")
-            elif path == "/sim/state":
-                self._json(200, sim.state())
-            else:
-                self._json(404, {"error": "not found"})
+            # one correlation id per HTTP request, so its log lines stitch back
+            # into one flow (see logging_setup.correlation_id).
+            with correlation_id():
+                path = self.path.split("?", 1)[0]
+                if path == "/":
+                    self._send(200, PAGE.encode(), "text/html; charset=utf-8")
+                elif path == "/sim/frame.png":
+                    self._send(200, sim.frame_png(), "image/png")
+                elif path == "/sim/state":
+                    self._json(200, sim.state())
+                else:
+                    self._json(404, {"error": "not found"})
 
         def do_POST(self):
-            path = self.path.split("?", 1)[0]
-            b = self._body()
-            if path == "/sim/voice":
-                self._json(200, sim.voice(b.get("text", ""), b.get("look") or None))
-            elif path == "/sim/glance":
-                self._json(200, sim.glance(b.get("look") or None))
-            elif path == "/sim/gesture":
-                self._json(200, sim.gesture(str(b.get("name", "single"))))
-            elif path == "/sim/veil":
-                self._json(200, sim.veil(bool(b.get("on"))))
-            else:
-                self._json(404, {"error": "not found"})
+            with correlation_id():
+                path = self.path.split("?", 1)[0]
+                b = self._body()
+                if path == "/sim/voice":
+                    self._json(200, sim.voice(b.get("text", ""), b.get("look") or None))
+                elif path == "/sim/glance":
+                    self._json(200, sim.glance(b.get("look") or None))
+                elif path == "/sim/gesture":
+                    self._json(200, sim.gesture(str(b.get("name", "single"))))
+                elif path == "/sim/veil":
+                    self._json(200, sim.veil(bool(b.get("on"))))
+                else:
+                    self._json(404, {"error": "not found"})
 
     srv = ThreadingHTTPServer((host, port), Handler)
     srv.simulator = sim  # reachable for tests

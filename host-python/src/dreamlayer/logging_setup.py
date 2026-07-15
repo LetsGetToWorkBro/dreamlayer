@@ -12,12 +12,69 @@ Idempotent: safe to call more than once (it replaces its own handler).
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import logging
 import os
+import secrets
+from contextlib import contextmanager
+from functools import wraps
 
 _HANDLER_TAG = "_dreamlayer_handler"
+
+# --- correlation / request IDs ----------------------------------------------
+# A single request flow (a voice turn, an HTTP request) crosses several
+# modules; without a shared id the log lines it produces cannot be stitched
+# back into one story (audit 2026-07-14: "no correlation/request IDs; cannot
+# reconstruct a request flow"). A contextvar carries a short id for the
+# duration of a bound block — per-thread and per-async-task isolated, so the
+# ThreadingHTTPServers here each get their own — and the JSON formatter emits
+# it when set. Zero-overhead when unused: the formatter pays one
+# ``ContextVar.get()`` and only while emitting a record, and nothing binds an
+# id unless a request boundary opts in.
+_CID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "dreamlayer_cid", default=None)
+
+
+def new_correlation_id() -> str:
+    """A short, collision-resistant id for one request/flow (8 hex chars —
+    enough to group a flow in a log, short enough to read)."""
+    return secrets.token_hex(4)
+
+
+def current_correlation_id() -> str | None:
+    """The correlation id bound to the current context, or ``None``."""
+    return _CID.get()
+
+
+@contextmanager
+def correlation_id(cid: str | None = None):
+    """Bind a correlation id for the duration of the block so every log record
+    emitted on this thread/task carries it (JSON mode). Nesting-safe: if an id
+    is already bound and none is passed, the existing one is reused, so a
+    request flow gets ONE id rather than one per layer. Yields the active id."""
+    existing = _CID.get()
+    if cid is None and existing is not None:
+        # already inside a bound flow — reuse it; add no nesting/reset
+        yield existing
+        return
+    token = _CID.set(cid or new_correlation_id())
+    try:
+        yield _CID.get()
+    finally:
+        _CID.reset(token)
+
+
+def with_correlation_id(fn):
+    """Decorator form of :func:`correlation_id` for a request-boundary method:
+    every log line emitted while the call runs shares one id (reused if the
+    caller already bound one)."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        with correlation_id():
+            return fn(*args, **kwargs)
+    return wrapper
 
 # Standard LogRecord attributes we never treat as "extra" payload.
 _RESERVED = {
@@ -108,6 +165,9 @@ class JsonLineFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
         }
+        cid = _CID.get()
+        if cid is not None:                      # only when a flow is bound
+            payload["cid"] = cid
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         for key, val in record.__dict__.items():
