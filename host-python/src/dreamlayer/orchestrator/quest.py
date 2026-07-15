@@ -273,6 +273,7 @@ class QuestLog:
     # -- persistence -----------------------------------------------------
 
     def _path(self) -> Path:
+        assert self._vault is not None   # _path is only read on the vault-backed arc
         return self._vault / TALLY_FILE
 
     def _load(self) -> None:

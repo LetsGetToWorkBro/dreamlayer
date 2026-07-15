@@ -25,7 +25,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from ..orchestrator.budgets import GLANCE_PANEL_MS, run_with_deadline
 from ..object_lens.schema import PanelRow
@@ -146,7 +146,7 @@ class SubprocessPluginHost:
     def register_into(self, orchestrator) -> dict:
         """Materialise proxies for every provider the child registered and put
         them into the orchestrator's real registries. Returns a summary."""
-        registered = {"object_providers": 0, "shop_providers": 0,
+        registered: dict[str, Any] = {"object_providers": 0, "shop_providers": 0,
                       "rejected": self.rejected}
         for idx, meta in enumerate(self.provider_meta):
             prov = _ProxyProvider(self, idx, facet=meta.get("facet", "own"),
@@ -181,7 +181,7 @@ class _ProxyProvider:
         # RPC, not two — but a build() for a different sighting never reuses it.
         sd = self._sighting_dict(sighting)
         resp = self._host._rpc({"op": "build", "idx": self._idx, "sighting": sd})
-        self._last = (sd, resp)
+        self._last: tuple[dict, Any] | None = (sd, resp)
         return bool(resp and resp.get("ok") and resp.get("rows"))
 
     def build(self, sighting, now=None) -> list:

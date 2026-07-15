@@ -254,7 +254,7 @@ class GlancePriors:
 
     def favourite(self, scene: str) -> Optional[str]:
         row = self._c.get(scene)
-        return max(row, key=row.get) if row else None
+        return max(row, key=lambda k: row[k]) if row else None
 
     def to_dict(self) -> dict:
         return {"counts": self._c, "weight": self.weight}

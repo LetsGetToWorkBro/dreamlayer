@@ -70,6 +70,7 @@ class PresenceLedger:
         for name, t in self._tracks.items():
             if t.total < min_seconds:
                 continue
+            assert t.last_seen is not None   # total>0 implies a gaze was recorded
             if within_s is not None and (now - t.last_seen) > within_s:
                 continue
             out.append((name, t.total))

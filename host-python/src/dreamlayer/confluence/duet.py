@@ -71,6 +71,7 @@ class DuetSession:
     def finish(self) -> RehearsalResult:
         result = self._session.finish()
         if result.ok:
+            assert result.figment is not None   # ok=True always carries a figment
             result.figment.meta["duet"] = {
                 "performers": list(self.performers),
                 "credits": list(self.credits),

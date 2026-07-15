@@ -5,11 +5,13 @@ method runs on the shared Brain ``self`` — the orchestrator ops_* pattern.
 """
 from __future__ import annotations
 
+from ._brain_host import BrainHost
+
 import json
 import time
 
 
-class ReminderOps:
+class ReminderOps(BrainHost):
     def reminders(self) -> list:
         """Open reminders, dated first. Backed by <cfg>/reminders.json."""
         p = self.cfg_dir / "reminders.json"

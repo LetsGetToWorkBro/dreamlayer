@@ -68,7 +68,9 @@ def discover_entrypoint_plugins() -> List:
         eps = entry_points()
         # py3.10+: selectable API; older: dict-like
         group = (eps.select(group=ENTRY_POINT_GROUP)
-                 if hasattr(eps, "select") else eps.get(ENTRY_POINT_GROUP, []))
+                 # legacy importlib.metadata dict API (py<3.10); stubs type the
+                 # modern EntryPoints, so the list default trips [arg-type].
+                 if hasattr(eps, "select") else eps.get(ENTRY_POINT_GROUP, []))  # type: ignore[arg-type]
     except Exception as exc:  # pragma: no cover - defensive
         log.warning("[hookspecs] entry-point scan failed: %s", exc)
         return found

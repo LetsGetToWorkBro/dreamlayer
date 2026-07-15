@@ -39,7 +39,7 @@ def test_brain_pull_model_logs_on_success(tmp_path):
     # patch the module-level pull to avoid a real network call
     import dreamlayer.ai_brain.server.backends as be
     orig = be.pull_model
-    be.pull_model = lambda config, name: {"ok": True, "status": "success", "model": name}
+    be.pull_model = lambda config, name: {"ok": True, "status": "success", "model": name}  # type: ignore[assignment,misc]  # test monkeypatch
     try:
         r = brain.pull_model("llama3.2")
     finally:

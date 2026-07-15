@@ -51,8 +51,8 @@ def detect_question(text: str, speaker: str = "") -> Question:
     if not t:
         return miss
     low = t.lower()
-    first = re.findall(r"[a-z']+", low)
-    first = first[0] if first else ""
+    words = re.findall(r"[a-z']+", low)
+    first = words[0] if words else ""
     marked = t.endswith("?")
     interrogative = marked or first in _WH or bool(_AUX_YOU.search(t))
     if not interrogative:

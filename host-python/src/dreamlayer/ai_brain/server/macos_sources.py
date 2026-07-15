@@ -20,7 +20,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
 
 # default locations on macOS
 IMESSAGE_DB = "~/Library/Messages/chat.db"
@@ -76,14 +76,15 @@ def parse_emlx(raw: bytes) -> dict:
     if msg.is_multipart():
         for part in msg.walk():
             if part.get_content_type() == "text/plain":
-                text = part.get_payload(decode=True) or b""
-                text = text.decode(part.get_content_charset() or "utf-8",
-                                   "ignore")
+                # decode=True yields bytes|None for a leaf part; the email
+                # stub's return union is broader, so pin it to bytes.
+                raw = cast(bytes, part.get_payload(decode=True) or b"")
+                text = raw.decode(part.get_content_charset() or "utf-8",
+                                  "ignore")
                 break
     else:
-        payload = msg.get_payload(decode=True)
-        text = (payload or b"").decode(msg.get_content_charset() or "utf-8",
-                                       "ignore")
+        raw = cast(bytes, msg.get_payload(decode=True) or b"")
+        text = raw.decode(msg.get_content_charset() or "utf-8", "ignore")
     return {"from": msg.get("From", ""), "subject": msg.get("Subject", ""),
             "date": msg.get("Date", ""), "body": text.strip()}
 

@@ -121,6 +121,7 @@ class FileIndex:
             self._vecs = []
             return
         vecs = []
+        assert self.embedder is not None   # _semantic_on() is only True with an embedder
         for _, passage in self._passages:
             try:
                 vecs.append(self.embedder(passage))
@@ -159,6 +160,7 @@ class FileIndex:
 
     def _search_semantic(self, query: str, k: int) -> list[tuple[str, str, int]]:
         import math
+        assert self.embedder is not None   # only reached when semantic search is on
         try:
             qv = self.embedder(query)
         except Exception:

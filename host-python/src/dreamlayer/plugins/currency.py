@@ -73,7 +73,7 @@ class CurrencyProvider(PanelProvider):
         return [PanelRow(
             label=format_money(home_amount, self.home),
             detail=f"{format_money(amount, cur)} · 1 {cur} = {rate:.3f} {self.home}",
-            kind="stat", value=home_amount, source="currency")]
+            kind="stat", value=str(home_amount), source="currency")]
 
 
 class CurrencyPlugin:

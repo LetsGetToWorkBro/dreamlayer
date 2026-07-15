@@ -25,6 +25,8 @@ stages nothing.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..ember import RecallOutcome, ceremony
 from ..ember.grading import grade_recall
 from ..ember.scheduler import DAY
@@ -42,7 +44,7 @@ _REVEAL_PHRASES = ("show me", "tell me", "i don't remember", "i dont remember",
 _LATER_PHRASES = ("not now", "later", "skip", "leave it")
 
 
-class EmberOps:
+class EmberOps(OpsHost):
 
     # ------------------------------------------------------------------
     # The glow: place-gated prompting
@@ -117,6 +119,7 @@ class EmberOps:
             return self._ember_reveal(e, now)
 
         updated = self.embers.record_review(engram_id, outcome, now)
+        assert updated is not None      # engram_id was just fetched non-None above
         next_days = max(0.0, (updated.state.due_ts - now) / DAY)
         self.bridge.send_card(
             cards.ember_flare(cue=e.cue, reps=updated.state.reps,

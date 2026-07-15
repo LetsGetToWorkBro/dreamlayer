@@ -209,7 +209,7 @@ class REMCycle:
 
         # open promises dream even if they've scrolled off the buffer
         if self._drift is not None:
-            promise_words = set()
+            promise_words: set[str] = set()
             for rec in self._drift.all_records():
                 ev = getattr(rec, "event", None)
                 summary = getattr(ev, "summary", "") if ev else ""

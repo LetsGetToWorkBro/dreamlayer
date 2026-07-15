@@ -17,7 +17,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from .figment import Figment
 from .signer import SessionSigner, SigningError
@@ -80,7 +80,7 @@ class Vault:
                 entries.append(entry)
         return entries
 
-    def inherited(self) -> list[VaultEntry]:
+    def inherited(self) -> List[VaultEntry]:  # noqa: UP006 (Vault.list shadows builtin list here)
         """The *Inherited* section: kept figments carrying a dedication
         (`meta.dedication`) — an author's rhythm, signed and provably theirs,
         that outlives every device (INNOVATION_SESSION 5.5). Newest first."""
@@ -132,7 +132,7 @@ class Vault:
         with (self.root / "history" / f"{figment_id}.jsonl").open("a") as fh:
             fh.write(line + "\n")
 
-    def performance_history(self, figment_id: str) -> list[dict]:
+    def performance_history(self, figment_id: str) -> List[dict]:  # noqa: UP006 (list is shadowed)
         path = self.root / "history" / f"{figment_id}.jsonl"
         if not path.exists():
             return []

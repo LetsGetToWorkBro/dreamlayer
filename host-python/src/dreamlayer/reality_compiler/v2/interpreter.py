@@ -152,6 +152,7 @@ class Stage:
 
     def _guard(self, t: Transition) -> bool:
         g = t.when
+        assert g is not None   # only called past the `t.when is None` short-circuit
         val = self.counters.get(g.counter, 0)
         if g.cmp == "ge":
             return val >= g.value
@@ -273,7 +274,9 @@ class Stage:
     def swap(self, fig: Figment) -> None:
         """Replace the running figment between ticks — no reboot."""
         rng, batt = self.rng, self.battery_level
-        self.__init__(fig, rng=rng, battery_level=batt)
+        # deliberate in-place re-init: hot-swap the running figment without
+        # rebinding the interpreter object the tick loop holds.
+        self.__init__(fig, rng=rng, battery_level=batt)  # type: ignore[misc]
 
     def revoke(self) -> None:
         """Stop and clear; the stage returns to ambient ready."""

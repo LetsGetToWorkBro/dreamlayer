@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import urllib.parse
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
 
 # Nutri-Score grade → a 0–5 rating TasteLens can rank on (A is best).
 NUTRISCORE_RATING = {"a": 4.8, "b": 4.0, "c": 3.0, "d": 2.0, "e": 1.0}
@@ -58,7 +58,7 @@ def lookup(label: str, fetch_fn: Callable[[str], object]) -> dict:
         return {}
     try:
         raw = fetch_fn(build_query(label))
-        data = json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {})
+        data = cast(dict, json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {}))
         products = data.get("products") or []
         return parse_product(products[0]) if products else {}
     except Exception:

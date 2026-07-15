@@ -7,9 +7,11 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
 
 
-class PluginOps:
+
+class PluginOps(OpsHost):
 
     def _plugin_capabilities(self) -> frozenset:
         """What this host offers plugins right now — checked against each

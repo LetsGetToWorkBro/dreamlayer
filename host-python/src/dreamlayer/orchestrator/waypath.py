@@ -109,6 +109,9 @@ class WaypathLens:
         if anchor is None:
             return WaypathCue(found=False, subject=subject)
         if anchor.has_bearing():
+            # has_bearing() is exactly `bearing_deg is not None and distance_m
+            # is not None`, so both are present on this branch.
+            assert anchor.bearing_deg is not None and anchor.distance_m is not None
             rel = _normalize(anchor.bearing_deg - heading_deg)
             direction = relative_direction(rel)
             dist = round(anchor.distance_m)

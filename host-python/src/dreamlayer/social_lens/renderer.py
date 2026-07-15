@@ -112,7 +112,7 @@ def _hsv_rgb(h: float, s: float, v: float) -> tuple[int, int, int]:
     f = h * 6 - int(h * 6)
     p, q, t = v * (1 - s), v * (1 - f * s), v * (1 - (1 - f) * s)
     rgb = [(v, t, p), (q, v, p), (p, v, t), (p, q, v), (t, p, v), (v, p, q)][i]
-    return tuple(int(c * 255) for c in rgb)
+    return (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
 
 
 # ---------------------------------------------------------------------------

@@ -204,7 +204,7 @@ def test_pack_install_failure_reported(tmp_path):
 
 
 def test_pack_install_rejects_unknown_and_concurrent(tmp_path):
-    _srv._PACK_RUNNER = lambda reqs: (time.sleep(0.3), True) and (True, "ok")
+    _srv._PACK_RUNNER = lambda reqs: (time.sleep(0.3), True) and (True, "ok")  # type: ignore[func-returns-value]  # sleep-to-inject-delay hack
     lb = _Live(tmp_path)
     try:
         status, body = _req(lb.url + "/dreamlayer/packs", {"pack": "nope"}, lb.h)

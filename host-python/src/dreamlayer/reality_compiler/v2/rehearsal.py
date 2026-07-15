@@ -22,7 +22,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .budgets import BudgetReport
+    from .figment import Figment
+    from .teach import TeachCard
 
 # ---------------------------------------------------------------------------
 # Beats
@@ -86,7 +91,7 @@ _NUM = r"(\d+(?:\.\d+)?|" + "|".join(_WORD_NUM) + r")"
 
 
 def _num(tok: str) -> float:
-    return _WORD_NUM.get(tok, None) if tok in _WORD_NUM else float(tok)
+    return _WORD_NUM[tok] if tok in _WORD_NUM else float(tok)
 
 
 def _find_duration(t: str) -> Optional[float]:
@@ -186,18 +191,21 @@ def parse_utterance(text: str) -> tuple:
 @dataclass
 class RehearsalResult:
     ok: bool
-    figment: Optional[object] = None          # Figment
-    report: Optional[object] = None           # BudgetReport
-    teach: Optional[object] = None            # TeachCard
+    figment: Optional[Figment] = None
+    report: Optional[BudgetReport] = None
+    teach: Optional[TeachCard] = None
     playback: list = field(default_factory=list)   # PlaybackFrames
     beats: list[Beat] = field(default_factory=list)
 
     def summary(self) -> str:
         if self.ok:
+            # ok=True is only ever built with figment+report present (finish()).
+            assert self.figment is not None and self.report is not None
             return (f"Kept-ready: {self.figment.name!r} "
                     f"({self.report.scene_count} scenes, "
                     f"display<={self.report.worst_display_hz:g}Hz, "
                     f"emit<={self.report.worst_emit_per_sec:g}/s)")
+        assert self.teach is not None      # not-ok always carries a teach card
         return f"Can't stage that: {self.teach.title}"
 
 

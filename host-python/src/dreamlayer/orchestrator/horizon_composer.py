@@ -143,17 +143,18 @@ class HorizonComposer:
             for rec in self._drift.all_records():
                 state = _DRIFT_STATE_CODE.get(getattr(rec, "state", ""), 2)
                 due_ts = getattr(rec, "due_ts", None)
+                pdeg: float | None
                 if due_ts is None:
-                    deg = None   # vague promise: waits at the future cap
+                    pdeg = None   # vague promise: waits at the future cap
                 else:
-                    deg = self._angle_for_due(float(due_ts), now)
-                if deg is None:
+                    pdeg = self._angle_for_due(float(due_ts), now)
+                if pdeg is None:
                     future_cap_needed = True
                     continue
                 conf = float(getattr(rec.event, "confidence", 0.5) or 0.5)
                 conf += self._rem_boost(
                     "promise", getattr(rec.event, "summary", "") or "")
-                marks.append((deg, KIND_PROMISE * 100 + state * 10 + 2, conf))
+                marks.append((pdeg, KIND_PROMISE * 100 + state * 10 + 2, conf))
 
         # -- cap: drop lowest-confidence memories first, never promises.
         # When the cap forces drops, reserve one slot for the elder tick —

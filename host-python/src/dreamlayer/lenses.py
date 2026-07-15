@@ -14,6 +14,7 @@ and ATMOSPHERE (ambient light/feel). Nothing here changes how anything runs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class Lens:
     key: str
     name: str
     tagline: str
-    features: tuple[Feature, ...] = ()
+    features: Sequence[Feature] = ()
 
     def __post_init__(self) -> None:
         # freeze the feature list so `lens.features.append(...)` can't silently
@@ -38,7 +39,7 @@ class Lens:
         object.__setattr__(self, "features", tuple(self.features))
 
 
-LENSES: list[Lens] = [
+LENSES: Sequence[Lens] = [
     Lens("memory", "Memory", "your life, remembered", [
         Feature("dream_mode", "Dream Mode", "ambient sensing; the resting state",
                 "dreamlayer.dream_mode"),
@@ -106,13 +107,13 @@ LENSES: list[Lens] = [
 ]
 
 # always on — the privacy spine
-SPINE: list[Feature] = [
+SPINE: Sequence[Feature] = [
     Feature("privacy_veil", "Privacy Veil", "one gesture: fully deaf and blind",
             "dreamlayer.memory.privacy"),
 ]
 
 # ambient light and feel — atmosphere, not a task
-ATMOSPHERE: list[Feature] = [
+ATMOSPHERE: Sequence[Feature] = [
     Feature("inner_weather", "Inner Weather", "your body churns the core; the room storms the rim",
             "dreamlayer.dream_mode.inner_weather"),
     Feature("prism", "Prism Lens", "the world as a reactive kaleidoscope",

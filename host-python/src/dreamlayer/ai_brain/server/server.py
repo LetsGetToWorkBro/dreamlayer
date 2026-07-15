@@ -27,7 +27,10 @@ import urllib.parse
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from ..mlx_backend import MLXBackend
 
 import threading
 import time
@@ -163,11 +166,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         self.health = HealthLedger()
         self.last_index_ts = 0.0
         self.email_docs = 0
-        self.last_brief = None
-        self.last_long_brief = None
-        self._brief_ran_day = None
-        self._brief_stop = None
-        self._cal_stop = None
+        self.last_brief: dict | None = None
+        self.last_long_brief: dict | None = None
+        self._brief_ran_day: tuple[int, int] | None = None
+        self._brief_stop: threading.Event | None = None
+        self._cal_stop = None   # (BrainHost declares: threading.Event | None)
         self.last_calendar_sync = 0.0
         self.last_contacts_sync = 0.0
         self.last_reminders_sync = 0.0
@@ -207,7 +210,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         from ...reality_compiler.v2.compiler import RealityCompilerV2
         self.rc = RealityCompilerV2(vault_dir=self.cfg_dir / "vault")
         self._rc_pending: dict = {}          # figment_id → Figment awaiting keep
-        self._rc_active: Optional[str] = None  # the figment on stage right now
+        self._rc_active = None  # the figment on stage (BrainHost declares: str | None)
         # emit→reaction capability handlers. A lens emits a capability tag, the
         # Brain runs the matching handler and streams the result back to the
         # glass — but only for a capability the active lens actually declared
@@ -371,7 +374,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
         if self.config.model == "ollama":
-            self._backend = OllamaBackend(self.config)
+            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(self.config)
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
                                    if self.config.semantic_search else None)

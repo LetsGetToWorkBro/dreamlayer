@@ -148,6 +148,7 @@ class WasmCapabilityHost:
     def call(self, export: str, *args):
         if self._inst is None:
             self.instantiate()
+        assert self._inst is not None   # instantiate() sets it or raises
         fn = self._inst.exports(self.store).get(export)
         if fn is None:
             raise KeyError(f"no export {export!r}")

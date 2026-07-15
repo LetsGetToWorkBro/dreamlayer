@@ -57,7 +57,7 @@ def discover(group: str = ENTRY_GROUP) -> list:
         eps = metadata.entry_points()
         # Python 3.10+ selectable API; 3.9 returns a dict.
         selected = eps.select(group=group) if hasattr(eps, "select") \
-            else eps.get(group, [])
+            else eps.get(group, [])  # type: ignore[arg-type]  # legacy dict API (py<3.10)
     except Exception:
         return out
     for ep in selected:

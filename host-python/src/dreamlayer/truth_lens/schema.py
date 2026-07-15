@@ -253,13 +253,13 @@ class TruthLensResult:
         has_voice = self.prosody_frame is not None
         has_ling  = self.linguistic_frame is not None
 
-        face_conf = self.au_frame.face_confidence if has_face else 0.0
+        face_conf = self.au_frame.face_confidence if self.au_frame is not None else 0.0
         stages = [
             {"name": "face", "confidence": round(face_conf, 3),
              "direction": "truthful" if has_face else "insufficient"},
             z_stage("au", c.micro_expression_z, has_face),
             {"name": "voice",
-             "confidence": round(self.prosody_frame.stress_score(), 3) if has_voice else 0.0,
+             "confidence": round(self.prosody_frame.stress_score(), 3) if self.prosody_frame is not None else 0.0,
              "direction": ("deceptive" if has_voice and c.voice_stress_z > 1.0
                            else "truthful" if has_voice else "insufficient")},
             z_stage("prosody", c.voice_stress_z, has_voice),

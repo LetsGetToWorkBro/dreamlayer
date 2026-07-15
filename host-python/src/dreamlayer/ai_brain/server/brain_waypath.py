@@ -5,11 +5,13 @@ method runs on the shared Brain ``self`` — the orchestrator ops_* pattern.
 """
 from __future__ import annotations
 
+from ._brain_host import BrainHost
+
 import json
 import os
 
 
-class WaypathOps:
+class WaypathOps(BrainHost):
     def _load_waypath(self) -> None:
         p = self.cfg_dir / "waypath.json"
         if not p.exists():

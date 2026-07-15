@@ -34,21 +34,18 @@ jobs:
         # contributor can't quietly land dead code or an undefined name.
         run: ruff check src/dreamlayer
 
-      - name: Typecheck — mypy on the safety core
-        # The formal-methods surface — the caps (contracts), the flood/timeout
-        # prover (budgets), the flash analyzer (flash_safety), and the
-        # integrity signer — is fully typed and held to it. --follow-imports=skip
-        # keeps the gate on these files rather than cascading into the
-        # deliberately-untyped internals (a repo-wide typing pass is tracked
-        # separately). vault_sync is out on purpose: its types come from loro's
-        # LoroValue union, so that's a CRDT-plumbing typing task, not part of
-        # the "data, not code" proof these four carry.
-        run: >
-          mypy --follow-imports=skip --ignore-missing-imports
-          src/dreamlayer/reality_compiler/v2/contracts.py
-          src/dreamlayer/reality_compiler/v2/budgets.py
-          src/dreamlayer/reality_compiler/v2/flash_safety.py
-          src/dreamlayer/reality_compiler/v2/signer.py
+      - name: Typecheck — mypy over the whole dreamlayer package
+        # Was 4 of 323 files behind --follow-imports=skip; the repo-wide typing
+        # pass landed (audit 2026-07-14, Type-Safety C+ -> A-), so the gate now
+        # covers the whole tree via [tool.mypy] in pyproject.toml
+        # (ignore_missing_imports + follow_imports=silent, a pragmatic non-strict
+        # baseline). The formal-methods safety core — contracts, budgets,
+        # flash_safety, signer — stays fully typed and is covered by this run.
+        # Four leaf/subsystem modules (qr bit-matrix, the RC-v2 choreographer,
+        # the NL intent_parser's Literal fields, the hardware-gated BLE bridge)
+        # are a documented ignore_errors backlog in [[tool.mypy.overrides]];
+        # everything else, incl. the mixin<->host contract, is enforced.
+        run: mypy src/dreamlayer
 
       - name: Run pytest
         # hardware/benchmark tests need a device or run only on demand.

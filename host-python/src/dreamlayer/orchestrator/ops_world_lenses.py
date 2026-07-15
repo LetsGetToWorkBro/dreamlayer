@@ -7,12 +7,14 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..hud import cards
 from ._ops_helpers import _parse_scene_reply
 from ._ops_helpers import _parse_taste_reply
 
 
-class WorldLensOps:
+class WorldLensOps(OpsHost):
 
     # ------------------------------------------------------------------
     # Instant Skill Overlay (a procedure compiled to a Figment)
@@ -36,6 +38,7 @@ class WorldLensOps:
             return None
         result = self.consistency.check(claim, now=now)
         if result.fired:
+            assert result.card is not None      # a fired result always has a card
             self.bridge.send_card(result.card, event="consistency")
         return result
 
@@ -47,6 +50,7 @@ class WorldLensOps:
             return None
         result = self.provenance.trace(claim, now=now)
         if result.found:
+            assert result.card is not None      # a found result always has a card
             self.bridge.send_card(result.card, event="provenance")
         return result
 

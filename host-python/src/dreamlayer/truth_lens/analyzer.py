@@ -116,7 +116,7 @@ class TruthLens:
         self._current_au = au
 
         # Contact matching (if embedding available)
-        if au.embedding and self._contacts:
+        if au is not None and au.embedding and self._contacts:
             cid, score = self._match_contact(au.embedding)
             if cid and score >= FACE_MATCH_THRESHOLD:
                 self._current_contact_id = cid

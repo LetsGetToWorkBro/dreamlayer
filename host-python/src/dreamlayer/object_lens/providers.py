@@ -18,7 +18,7 @@ The registry merges the matching providers' rows into one ObjectPanel.
 """
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from .schema import ObjectSighting, PanelRow, ObjectPanel
 from .polled import humanize_age
@@ -214,7 +214,7 @@ class AIProvider(PanelProvider):
     def __init__(self, router, want: str = "quick"):
         self._router = router
         self._want = want
-        self._cache: dict[str, object] = {}
+        self._cache: dict[str, Any] = {}
 
     def matches(self, sighting) -> bool:
         return self._router.has_vision()

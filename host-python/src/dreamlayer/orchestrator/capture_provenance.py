@@ -31,7 +31,7 @@ from __future__ import annotations
 import io
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 log = logging.getLogger("dreamlayer.capture_provenance")
 
@@ -165,6 +165,7 @@ class CaptureProvenance:
         redacted, regions = False, 0
         frame = jpeg
         if self._has_redactor():
+            assert self.redactor is not None   # _has_redactor() checks exactly this
             frame, regions = self.redactor.redact(jpeg)
             redacted = True                # a redactor ran (0 regions = none found)
         elif self.strict:
@@ -183,7 +184,7 @@ class CaptureProvenance:
         return ProvenanceResult(out, manifest, redacted, regions, signed)
 
     def _manifest(self, redacted: bool, regions: int) -> dict:
-        actions = [{"action": "c2pa.created",
+        actions: list[dict[str, Any]] = [{"action": "c2pa.created",
                     "softwareAgent": f"dreamlayer/{self.device_id}"}]
         if redacted:
             actions.append({"action": "c2pa.redacted",

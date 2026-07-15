@@ -7,11 +7,13 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..hud import cards
 from ._ops_helpers import _default_http_get
 
 
-class MessagesOps:
+class MessagesOps(OpsHost):
 
     # -- live message pop-ups (texts/emails flash on the glasses) --------
 

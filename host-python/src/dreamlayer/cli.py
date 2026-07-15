@@ -293,8 +293,8 @@ def cmd_install(args) -> int:
             _p(f"  {WARN} {w}")
         _p(f"{OK} installed {label}")
         return 0
-    for e in (resp.get("errors") or [resp.get("error", "install failed")]):
-        _p(f"  {BAD} {e}")
+    for err in (resp.get("errors") or [resp.get("error", "install failed")]):
+        _p(f"  {BAD} {err}")
     return 1
 
 
@@ -396,8 +396,8 @@ def _dev_pass(path: str, brain_url: str, tok: str) -> None:
     report = validate(pkg, host_capabilities=frozenset(KNOWN_CAPABILITIES),
                       run_smoke=True)
     if not report.ok:
-        for e in report.errors:
-            _p(f"  {BAD} {e}")
+        for err in report.errors:
+            _p(f"  {BAD} {err}")
         return
     _p(f"  {OK} {pkg.manifest.name} v{pkg.manifest.version} — gate green"
        + (f" ({len(report.warnings)} warning(s))" if report.warnings else ""))

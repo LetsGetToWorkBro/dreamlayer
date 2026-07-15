@@ -7,10 +7,12 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..hud import cards
 
 
-class ConversationOps:
+class ConversationOps(OpsHost):
 
     # -- conversation ledger: captions, recall, rewind, dossier ----------
 

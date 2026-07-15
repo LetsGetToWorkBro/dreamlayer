@@ -7,12 +7,14 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..rem import RetrievalBias
 from ..rem.bias import event_key
 from .time_scrub import TimeScrubSession
 
 
-class DreamRemOps:
+class DreamRemOps(OpsHost):
 
     # ------------------------------------------------------------------
     # Dream Mode entry / exit

@@ -7,10 +7,12 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..hud import cards
 
 
-class BrainSwitchOps:
+class BrainSwitchOps(OpsHost):
 
     # ------------------------------------------------------------------
     # AI brain — knowledge queries (folds into Lucid Recall) + cloud gate

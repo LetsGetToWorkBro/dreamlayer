@@ -23,7 +23,7 @@ def _optional_deps() -> dict:
 # --- core logic, exercised through synthetic caps (no optional deps needed) ---
 
 def _cap(**kw) -> C.Cap:
-    base = dict(key="probe_test", title="t", tier="test",
+    base: dict = dict(key="probe_test", title="t", tier="test",
                 modules=("json",), extra="memory", seam="x.py")
     base.update(kw)
     return C.Cap(**base)

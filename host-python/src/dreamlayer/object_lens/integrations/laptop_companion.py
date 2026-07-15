@@ -80,7 +80,9 @@ class Companion:
         self._server = server
         self._thread = thread
         host, port = server.server_address[:2]
-        self.url = f"http://{host}:{port}"
+        # server_address[0] is the bound host string; the stdlib stub widens it
+        # to include bytes, tripping the bytes-in-f-string check.
+        self.url = f"http://{host}:{port}"  # type: ignore[str-bytes-safe]
 
     def stop(self) -> None:
         self._server.shutdown()

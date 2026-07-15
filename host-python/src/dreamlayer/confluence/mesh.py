@@ -187,6 +187,7 @@ class MeshManager:
         self._seq_out += 1
         pkt = MeshPacket(group_id=self.group_id, sender=self.me,
                          seq=self._seq_out, kind=kind, body=dict(body or {}))
+        assert self._key is not None   # a group is joined (key derived) before sending
         pkt.mac = _mac(self._key, pkt.payload())
         return pkt
 
@@ -196,6 +197,7 @@ class MeshManager:
         silently. Returns the updated member, or None if rejected."""
         if not self.live():
             return None
+        assert self._key is not None   # live() is False until a group key is derived
         try:
             pkt = MeshPacket.from_wire(wire)
         except (KeyError, TypeError, ValueError):

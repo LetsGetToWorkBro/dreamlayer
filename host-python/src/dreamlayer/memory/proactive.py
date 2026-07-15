@@ -1,5 +1,9 @@
 from __future__ import annotations
 import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestrator.adaptive_confidence import DismissalTracker
 
 
 class ProactiveEngine:
@@ -14,7 +18,7 @@ class ProactiveEngine:
         self.db = db
         self.min_conf = min_conf
         self._privacy = privacy  # optional PrivacyGate
-        self.dismissals = None   # optional DismissalTracker (set by the orchestrator)
+        self.dismissals: DismissalTracker | None = None   # set by the orchestrator
 
     def _effective_min(self) -> float:
         """The confidence floor, lifted for card types the wearer keeps

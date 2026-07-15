@@ -150,6 +150,9 @@ class ProvenanceLens:
         return result
 
     def _card(self, r: ProvenanceResult, now: float) -> dict:
+        # _card is only built for a found result (trace() returns early with no
+        # card when origin is None), so the origin is always present here.
+        assert r.origin is not None
         status_color = {
             "firsthand": "accent_success", "corroborated": "accent_success",
             "unverified": "accent_attention", "contested": "accent_error",

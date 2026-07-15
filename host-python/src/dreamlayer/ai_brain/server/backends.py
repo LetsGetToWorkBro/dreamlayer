@@ -12,7 +12,10 @@ from __future__ import annotations
 import json
 import urllib.parse
 import urllib.request
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from ..mlx_backend import MLXBackend
 
 from ..schema import Answer
 
@@ -225,7 +228,7 @@ def cloud_test(config, http_post: Optional[Callable] = None) -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def make_synthesizer(backend: OllamaBackend) -> Callable:
+def make_synthesizer(backend: OllamaBackend | MLXBackend) -> Callable:
     """Turn retrieved passages into a written answer via the chat model."""
     def synth(query: str, passages: list[tuple[str, str]]) -> str:
         context = "\n\n".join(f"[{name}] {text}" for name, text in passages)
@@ -236,7 +239,7 @@ def make_synthesizer(backend: OllamaBackend) -> Callable:
     return synth
 
 
-def vision_answer(backend: Optional[OllamaBackend], label: str,
+def vision_answer(backend: OllamaBackend | MLXBackend | None, label: str,
                   image_b64: Optional[str], want: str) -> Optional[Answer]:
     """Explain an object. With no backend, return None (the tier declines)."""
     if backend is None:

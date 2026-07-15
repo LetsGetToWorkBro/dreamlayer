@@ -103,6 +103,7 @@ class SceneDescriber:
             return None            # veiled: the raw frame never reaches the VLM
         if not ctx.has_camera():
             return None
+        assert ctx.camera_frame is not None   # has_camera() implies a frame
 
         description = await self._describe(ctx.camera_frame)
         if not description:

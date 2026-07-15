@@ -106,6 +106,48 @@ select = ["F", "E9"]
 # unused-local (F841) is noise there; the source tree is held to it.
 "src/dreamlayer/tests/*" = ["F841"]
 
+[tool.mypy]
+# The whole `dreamlayer` package is type-checked in CI (was 4 of 323 files
+# behind --follow-imports=skip; audit 2026-07-14, Type-Safety C+ -> A-). A
+# pragmatic baseline — NOT --strict: untyped function bodies aren't forced, but
+# every annotation that *is* written is held to, and the mixin<->host contract
+# (orchestrator ops_*/_ops_host, ai_brain brain_*/_brain_host) is now enforced.
+python_version = "3.11"
+# src/ layout: makes both `mypy src/dreamlayer` and `mypy -p dreamlayer` work.
+mypy_path = "src"
+explicit_package_bases = true
+# Optional integration deps (presidio, loro, brilliant-ble, sherpa, watchdog,
+# …) are absent in the typecheck env by design; every adapter has a fallback.
+ignore_missing_imports = true
+# Type the whole tree without cascading into deliberately-untyped third-party
+# internals — the imports themselves are still resolved and their public API
+# checked.
+follow_imports = "silent"
+
+# --- Gradual-typing backlog (ignore_errors) ---------------------------------
+# Four leaf/subsystem modules whose types come from dynamic dispatch, an
+# untyped optional dependency, or lazy plumbing. Each is documented; the rest
+# of the tree (incl. the four safety-core files) is clean and enforced.
+[[tool.mypy.overrides]]
+module = [
+    # QR bit-matrix built as list[list[int|None]] and filled in place — pure
+    # plumbing, annotating the None->int transitions carries no correctness.
+    "dreamlayer.ai_brain.server.qr",
+    # The beat->scene compiler threads several Optionals (beat.parsed, the
+    # running scene, duration_sec) through a dynamic walk: a real typing task,
+    # not a one-liner.
+    "dreamlayer.reality_compiler.v2.choreographer",
+    # The NL->BehaviorIntent parser emits runtime-validated strings that mypy
+    # can't narrow to the Intent dataclasses' Literal fields (RED/YELLOW, click
+    # triggers).
+    "dreamlayer.reality_compiler.intent_parser",
+    # The BLE transport: its client comes from the optional `brilliant-ble`
+    # dependency and is None until a device connects. Hardware-gated and not
+    # exercised by the device-free test suite.
+    "dreamlayer.bridge.real_bridge",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["src/dreamlayer/tests", "src/dreamlayer/tests"]
 markers = [

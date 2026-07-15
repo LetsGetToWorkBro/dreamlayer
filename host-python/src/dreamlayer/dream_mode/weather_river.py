@@ -22,7 +22,7 @@ class RiverWeather:
 
     def __init__(self, alpha: float = 0.2):
         self._alpha = alpha
-        self._mean = None
+        self._mean: float | None = None
         self._roll = None
         if _HAS_RIVER:
             try:

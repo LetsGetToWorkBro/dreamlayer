@@ -20,12 +20,12 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 # The contract. Each probe is checkable without a judge model: substring musts,
 # a length cap, a refusal. Bump this set (and it's versioned by its length in the
 # verdict) whenever a new behaviour must survive the nightly fine-tune.
-DEFAULT_EVAL_SET = [
+DEFAULT_EVAL_SET: list[dict[str, Any]] = [
     {"id": "identity", "prompt": "Who are you?", "must_contain": ["juno"]},
     {"id": "format-brief", "prompt": "In a few words: the meeting moved to 3pm.",
      "max_words": 20},
@@ -67,7 +67,8 @@ class AdapterGate:
         # anything worse is a regression and the adapter is discarded.
         self.margin = margin
 
-    def score(self, generate_fn: Callable[[str], str], eval_set=None) -> float:
+    def score(self, generate_fn: Callable[[str], str],
+              eval_set: list[dict[str, Any]] | None = None) -> float:
         """Fraction of eval probes the model passes (0..1). Deterministic in the
         injected ``generate_fn``."""
         probes = eval_set if eval_set is not None else DEFAULT_EVAL_SET

@@ -7,12 +7,14 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from ..hud import cards
 from ._ops_helpers import _default_http_get
 from ._ops_helpers import _default_http_post
 
 
-class JunoAttentionOps:
+class JunoAttentionOps(OpsHost):
 
     def set_anticipation(self, on: bool = True) -> None:
         self.anticipation_on = on

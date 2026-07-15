@@ -230,6 +230,7 @@ class HaloSimulator:
     def _paint_figment(self) -> Image.Image:
         """Draw a DisplayFrame the way the device stage lays it out: rows of
         text on the round glass, with the final-window pulse breathing."""
+        assert self.stage is not None   # a figment is on stage when this paints
         f = self.stage.frame()
         img = Image.new("RGB", (SIZE, SIZE), (0, 0, 0))
         d = ImageDraw.Draw(img, "RGBA")
@@ -240,11 +241,11 @@ class HaloSimulator:
         # painted strokes (the "draw on your lens" layer) — beneath the text so
         # the words stay legible on top of the art
         _STROKE_PX = {"sm": 2, "md": 4, "lg": 7}
-        for g in f.glyphs:
-            pts = [(x * SIZE, y * SIZE) for x, y in g.points]
+        for gl in f.glyphs:
+            pts = [(x * SIZE, y * SIZE) for x, y in gl.points]
             if len(pts) >= 2:
-                d.line(pts, fill=_token_rgb(g.color),
-                       width=_STROKE_PX.get(g.width, 4), joint="curve")
+                d.line(pts, fill=_token_rgb(gl.color),
+                       width=_STROKE_PX.get(gl.width, 4), joint="curve")
         for ln in f.lines:
             if not ln.text:
                 continue

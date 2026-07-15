@@ -50,7 +50,8 @@ def _slot_rgb(colors: list, idx: int) -> tuple[int, int, int]:
             r = y + 1.402 * cr
             g = y - 0.344 * cb - 0.714 * cr
             b = y + 1.772 * cb
-            return tuple(max(0, min(255, int(v))) for v in (r, g, b))
+            return (max(0, min(255, int(r))), max(0, min(255, int(g))),
+                    max(0, min(255, int(b))))
     return (60, 70, 75)
 
 
@@ -128,6 +129,7 @@ class EntangledSky:
                 return [{"t": MSG_CONFLUENCE, "mode": "solo"}]
             return []
 
+        assert self._peer_state is not None   # peer_present() above implies a peer state
         raw = 1.0 - min(1.0, abs(float(my_state) - self._peer_state))
         self.togetherness += TOGETHER_ALPHA * (raw - self.togetherness)
         tg = self.togetherness

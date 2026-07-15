@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import urllib.parse
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
 
 from dreamlayer.sdk import PanelProvider, PanelRow
 
@@ -100,7 +100,7 @@ def lookup(artist: str, title: str, fetch_fn: Callable[[str], object],
         return {}
     try:
         raw = fetch_fn(build_query(artist, title, token=token))
-        data = json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {})
+        data = cast(dict, json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {}))
         results = data.get("results") or []
         return parse_release(results[0]) if results else {}
     except Exception:

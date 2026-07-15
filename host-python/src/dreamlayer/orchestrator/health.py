@@ -40,7 +40,7 @@ class HealthLedger:
             ring.append({"ts": self._now(),
                          "error": str(error)[:200]})
 
-    def record_ok(self, seam: str, ms: object = None) -> None:
+    def record_ok(self, seam: str, ms: float | None = None) -> None:
         with self._lock:
             self._ok[seam] = self._ok.get(seam, 0) + 1
             if ms is not None:

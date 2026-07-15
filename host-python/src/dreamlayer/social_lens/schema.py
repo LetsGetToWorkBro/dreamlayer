@@ -122,8 +122,9 @@ class SocialLensResult:
                 },
             }
 
-        # Matched contact
+        # Matched contact (reached only past the no_match guard above)
         m = self.match
+        assert m is not None
         c = m.contact
         conf_pct = round(m.confidence * 100)
         conf_color = 0x07E0 if m.confidence >= 0.85 else (

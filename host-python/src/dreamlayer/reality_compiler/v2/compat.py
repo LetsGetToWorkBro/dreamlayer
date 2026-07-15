@@ -17,6 +17,8 @@ the deprecation path.
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from dreamlayer.reality_compiler.schema import (
     BehaviorIntent, RoundTimerIntent, OvertimeTimerIntent,
     StopwatchIntent, IntervalTimerIntent, SimpleCounterIntent,
@@ -363,7 +365,7 @@ def _speaker_indicator(i: SpeakerIndicatorIntent) -> Figment:
     return fig
 
 
-_LIFTERS = {
+_LIFTERS: dict[str, Callable[..., Figment]] = {
     "round_timer": _round_timer,
     "overtime_timer": _overtime_timer,
     "stopwatch": _stopwatch,

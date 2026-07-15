@@ -142,6 +142,7 @@ def compile_skill(name: str, steps: list[Step],
 
         if timed:
             # a timed step advances itself, hands-free; the tap still skips
+            assert step.hold_sec is not None   # `timed` is exactly this check
             scene.duration_sec = step.hold_sec
             scene.tick = "countdown"
             scene.on_timeout = [Transition(target=nxt, counter_ops=list(adv_ops))]

@@ -15,6 +15,7 @@ def embed_from_frame(value: float) -> list[float]:
     frame = make_frame(value)
     au = embedder.process_frame(frame)
     assert au is not None
+    assert au.embedding is not None
     return au.embedding
 
 

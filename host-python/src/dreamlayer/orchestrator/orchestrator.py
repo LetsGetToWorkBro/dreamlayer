@@ -317,7 +317,7 @@ class Orchestrator(
         # Candor Mirror (2.7): the inward self-coach — your own pace + fillers,
         # a live arc and an after-the-fact debrief. Veil-gated, self-only.
         self.candor = CandorMirror(privacy=self.privacy)
-        self._candor_drift: str | None = None    # drift line captured for the debrief
+        self._candor_drift = None    # drift line captured for the debrief (OpsHost: str | None)
 
     def _init_brain_tier(self) -> None:
         """The AI brain and everything mounted directly around it: the three
@@ -373,9 +373,9 @@ class Orchestrator(
         # dossier. Starts empty; Contacts sync fills it.
         from ..social_lens import SocialLens
         self.social = SocialLens(privacy=self.privacy)
-        self._last_person: dict | None = None    # who you last looked at (for on-the-spot notes)
-        self._active_figment: str | None = None  # native timer/clock on the glasses stage
-        self._rosetta_figment_id: str | None = None  # Rosetta Live figment on stage
+        self._last_person = None    # who you last looked at (OpsHost: dict | None)
+        self._active_figment = None  # native timer/clock on the glasses stage (OpsHost: str | None)
+        self._rosetta_figment_id = None  # Rosetta Live figment on stage (OpsHost: str | None)
         # Figments the wearer killed on-glass (double long-press). The banish
         # gesture works with no host; when the event does arrive we honor it
         # durably. rc_deployer is an optional seam — whoever owns a vault-backed
@@ -692,7 +692,9 @@ class Orchestrator(
             contact = idx.get(contact_id)
         self.social.remove_contact(contact_id)
         self.truth.forget(contact_id)
-        if contact is not None and getattr(contact, "name", ""):
+        # getattr on an Any-typed value trips a typeshed overload false-positive
+        # (it matches the `default: bool` overload); the call is valid at runtime.
+        if contact is not None and getattr(contact, "name", ""):  # type: ignore[arg-type]
             self.conversation.forget(contact.name)
 
     def erase_all_memories(self) -> dict:

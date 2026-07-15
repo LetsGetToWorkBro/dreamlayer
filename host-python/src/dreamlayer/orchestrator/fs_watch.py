@@ -7,6 +7,7 @@ absent, `start()` returns False and callers keep their existing periodic scan
 """
 from __future__ import annotations
 import logging
+from typing import Any
 
 log = logging.getLogger("dreamlayer.fs_watch")
 
@@ -24,7 +25,7 @@ class FolderWatcher:
     def __init__(self, path: str, on_change):
         self.path = path
         self._on_change = on_change
-        self._observer = None
+        self._observer: Any = None       # watchdog Observer (untyped optional dep)
 
     def start(self) -> bool:
         """Begin watching. Returns True if a real watcher started, False when the

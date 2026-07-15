@@ -5,11 +5,13 @@ method runs on the shared Brain ``self`` — the orchestrator ops_* pattern.
 """
 from __future__ import annotations
 
+from ._brain_host import BrainHost
+
 import json
 import time
 
 
-class CalendarOps:
+class CalendarOps(BrainHost):
     def calendar(self, limit: int = 10) -> list:
         """Upcoming events for the glasses + the brief. Reads
         <cfg>/agenda.json (a list of {title, ts, place}); events pulled from

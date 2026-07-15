@@ -99,6 +99,7 @@ class EmberStore:
                      state.difficulty, state.due_ts, state.reps, state.lapses,
                      state.last_review_ts, int(state.graduated)))
                 self.conn.commit()
+                assert c.lastrowid is not None
                 return self.get(c.lastrowid)  # type: ignore[return-value]
             except sqlite3.IntegrityError:
                 return self.by_key(moment_key)  # type: ignore[return-value]

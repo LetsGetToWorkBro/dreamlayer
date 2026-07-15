@@ -163,7 +163,10 @@ class StageDeployer:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
+        # isawaitable() narrows `result` to Awaitable; the bridge's `send` is an
+        # `async def` (a Coroutine), which create_task/run require. The stubs
+        # can't see that through the guard, so pin it on these two calls.
         if loop is not None and loop.is_running():
-            loop.create_task(result)          # inside an async app: schedule it
+            loop.create_task(result)          # type: ignore[arg-type]  # async app: schedule
         else:
-            asyncio.run(result)               # sync caller / test / CLI: block
+            asyncio.run(result)               # type: ignore[arg-type]  # sync caller: block

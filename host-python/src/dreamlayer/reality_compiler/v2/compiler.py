@@ -29,7 +29,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from . import budgets, compat
 from .budgets import BudgetReport
@@ -101,7 +101,7 @@ class RealityCompilerV2:
         and is kept in the vault log so the lesson survives a restart."""
         if outcome not in ("complete", "banish"):
             return
-        ctx = {"action": outcome}
+        ctx: dict[str, Any] = {"action": outcome}
         if scene is not None:
             ctx["scene"] = scene
         if elapsed is not None:

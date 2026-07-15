@@ -60,7 +60,7 @@ class MaturityGate:
         self._now = now_fn or time.time
         self.paired_at = self._now()
         self.events_seen = 0
-        self._cards = deque(maxlen=APPRENTICE_WINDOW)   # True = dismissed
+        self._cards: deque[bool] = deque(maxlen=APPRENTICE_WINDOW)   # True = dismissed
         self.regressed_until = 0.0
         self._resident = False        # RESIDENT is sticky once earned
         self._sent_today = 0

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 log = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ class SherpaWakeWord:
     def __init__(self, cfg: SherpaConfig, _impl=None):
         self.cfg = cfg
         self._impl = _impl               # a KeywordSpotter (or fake)
-        self._stream = None
+        self._stream: Any = None         # sherpa-onnx stream (untyped optional dep)
 
     def detect(self, samples) -> tuple[bool, float]:
         kws = self._impl

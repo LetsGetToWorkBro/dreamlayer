@@ -76,4 +76,7 @@ def make_translate_fn() -> Callable[[str, str], str]:
     """Return a `translate_fn(text, target)->str` for RosettaLens. Always safe:
     identity passthrough when Argos or a language pair is unavailable."""
     tr = ArgosTranslator()
-    return lambda text, target="en": tr.translate(text, target)
+
+    def translate_fn(text: str, target: str = "en") -> str:
+        return tr.translate(text, target)
+    return translate_fn

@@ -86,6 +86,7 @@ class FusionEngine:
 
         if is_stranger:
             return self._stranger_fuse(au, prosody, linguistic)
+        assert baseline is not None   # is_stranger is False only for a real baseline
         return self._known_fuse(au, prosody, linguistic, baseline)
 
     # ------------------------------------------------------------------
@@ -151,14 +152,14 @@ class FusionEngine:
         # Confidence: how many REAL channels contributed + baseline calibration.
         # The AU channel does not count while it is synthetic, so noise can't
         # inflate confidence.
-        real_channels = [prosody, linguistic]
+        real_channels: list = [prosody, linguistic]
         if AU_CHANNEL_REAL:
             real_channels.append(au)
         active = sum(1 for ch in real_channels if ch is not None)
         confidence = (active / len(real_channels)) * min(
             baseline.sample_count / 20.0, 1.0)
 
-        dominant = max(scores, key=scores.get)
+        dominant = max(scores, key=lambda k: scores[k])
 
         return CredibilityVector(
             deception_prob=round(deception_prob, 3),
@@ -203,7 +204,7 @@ class FusionEngine:
         scores = {"micro_expression": au_score,
                   "voice_stress": prosody_score,
                   "linguistic": ling_score}
-        dominant = max(scores, key=scores.get)
+        dominant = max(scores, key=lambda k: scores[k])
 
         return CredibilityVector(
             deception_prob=round(deception_prob, 3),

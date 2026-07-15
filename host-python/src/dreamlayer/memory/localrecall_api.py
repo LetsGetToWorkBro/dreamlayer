@@ -13,7 +13,7 @@ Honors the capture guard: `add` refuses when the Veil is down.
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 log = logging.getLogger("dreamlayer.localrecall_api")
 
@@ -82,7 +82,7 @@ class LocalRecallClient:
                 log.warning("[localrecall] search failed: %s; local fallback", exc)
         # In-memory token-overlap scoring (deterministic, no deps).
         q = _tokens(query)
-        scored = []
+        scored: list[dict[str, Any]] = []
         for text, meta in self._local:
             overlap = len(q & _tokens(text))
             if overlap:

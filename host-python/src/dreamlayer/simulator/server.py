@@ -75,7 +75,7 @@ def make_simulator_server(sim: HaloSimulator | None = None,
                     self._json(404, {"error": "not found"})
 
     srv = ThreadingHTTPServer((host, port), Handler)
-    srv.simulator = sim  # reachable for tests
+    setattr(srv, "simulator", sim)  # dynamic attach, reachable for tests
     return srv
 
 

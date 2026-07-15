@@ -346,7 +346,7 @@ class IntroductionCapture:
         record = ContactRecord(
             contact_id=offer.contact_id,
             name=offer.name,
-            embedding=offer.embedding if offer.has_face()
+            embedding=offer.embedding if offer.embedding is not None
             else [0.0] * 512,
             company=extra.get("company"),
             role=extra.get("role"),

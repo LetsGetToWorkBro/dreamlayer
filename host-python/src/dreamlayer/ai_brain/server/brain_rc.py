@@ -8,6 +8,8 @@ uses, applied to the Brain.
 """
 from __future__ import annotations
 
+from ._brain_host import BrainHost
+
 import time
 
 
@@ -25,7 +27,7 @@ def _spoken_duration(secs: float) -> str:
     return " ".join(parts) or "0 seconds"
 
 
-class RCOps:
+class RCOps(BrainHost):
     def rc_rehearse(self, name: str, beats: list) -> dict:
         """Replay a performance (the phone's beats) into a rehearsal session,
         infer → verify → run-through, and mirror the result back: the live
@@ -68,6 +70,7 @@ class RCOps:
                               "emit_per_sec": result.report.worst_emit_per_sec}
         if result.ok:
             fig = result.figment
+            assert fig is not None      # ok=True always carries a figment
             self._rc_pending[fig.id] = fig
             resp["figment_id"] = fig.id
             resp["brief"] = present.figment_brief(fig)

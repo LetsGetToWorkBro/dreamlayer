@@ -49,7 +49,7 @@ class CapturePipeline:
         # speech events in a segment (doorbell/alarm/…) — the second brain
         # understands sound, not just words. Routed to the hub if it accepts it.
         self.tagger = tagger
-        self.last_acoustic = []          # last [(label, score)] tagged
+        self.last_acoustic: list = []    # last [(label, score)] tagged
         # embedding → diarization label ("them"/"me"/a name); None → unknown "".
         # Speaker embeddings identify; the ledger wants a label, so keep them
         # separate rather than mislabelling a caption with a raw vector.
@@ -64,8 +64,8 @@ class CapturePipeline:
         self._seg_started = 0.0
         self._last_speech = 0.0
         self._source = None
-        self._stop = None
-        self._thread = None
+        self._stop: threading.Event | None = None
+        self._thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
 

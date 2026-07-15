@@ -5,11 +5,13 @@ method runs on the shared Brain ``self`` — the orchestrator ops_* pattern.
 """
 from __future__ import annotations
 
+from ._brain_host import BrainHost
+
 import json
 import time
 
 
-class SocialOps:
+class SocialOps(BrainHost):
     def people(self) -> list:
         """Everyone you've introduced to the Brain, newest first. Backed by
         <cfg>/people.json: a list of {name, note, tags, ts}. [] when empty."""

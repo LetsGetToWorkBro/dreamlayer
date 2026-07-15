@@ -7,13 +7,15 @@ was changed in the move.
 """
 from __future__ import annotations
 
+from ._ops_host import OpsHost
+
 from . import answer_builder
 from . import intents
 from ..hud import cards
 import json
 
 
-class CommitmentRecallOps:
+class CommitmentRecallOps(OpsHost):
 
     # ------------------------------------------------------------------
     # Commitment Drift

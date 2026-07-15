@@ -32,6 +32,10 @@ behind the same capture gate as on_place itself.
 """
 from __future__ import annotations
 
+from typing import Any
+
+from ._ops_host import OpsHost
+
 import json
 
 from ..hud import cards
@@ -83,7 +87,7 @@ def _age_label(created_ts: float, now: float) -> str:
     return f"{int(hours // 24)} days ago"
 
 
-class StasisOps:
+class StasisOps(OpsHost):
 
     # ------------------------------------------------------------------
     # Freeze: the shutter closes; your brain gets permission to let go
@@ -366,7 +370,7 @@ class StasisOps:
                          row_pinned: bool = False) -> None:
         if not frame.id:
             return
-        meta = {"stasis": frame.to_payload()}
+        meta: dict[str, Any] = {"stasis": frame.to_payload()}
         if row_pinned or frame.meta.get("pinned"):
             meta["pinned"] = True
         try:

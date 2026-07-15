@@ -29,7 +29,7 @@ class MemoryDB:
         with self._lock:
             c = self.conn.execute("INSERT INTO memories(kind,summary,embedding,confidence,place_id,created_at,meta) VALUES (?,?,?,?,?,?,?)",
                 (kind, summary, pack_embedding(embedding) if embedding else None, confidence, place_id, self._now(), json.dumps(meta or {})))
-            self.conn.commit(); return c.lastrowid
+            self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
     def memory(self, memory_id: int):
         with self._lock:
             r = self.conn.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
@@ -60,11 +60,11 @@ class MemoryDB:
         with self._lock:
             c = self.conn.execute("INSERT INTO commitments(person,task,due,source_memory_id,confidence,created_at) VALUES (?,?,?,?,?,?)",
                 (person, task, due, source_memory_id, confidence, self._now()))
-            self.conn.commit(); return c.lastrowid
+            self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
     def add_place(self, name, signature=None) -> int:
         with self._lock:
             c = self.conn.execute("INSERT INTO places(name,signature) VALUES (?,?)", (name, signature))
-            self.conn.commit(); return c.lastrowid
+            self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
     def memories(self, kind=None):
         q = "SELECT * FROM memories" + (" WHERE kind=?" if kind else "")
         with self._lock:
