@@ -182,6 +182,31 @@ Each entry lists: when the card appears, what it shows, its materials
   you missed, what you owe.
 - **Dismiss:** 8000.
 
+### The Ember cards — tending a memory
+
+The Ember practice ([the lens set](lenses.md)) speaks through four cards
+of its own, all device-rendered:
+
+| EmberPromptCard | EmberFlareCard |
+|---|---|
+| ![EmberPromptCard](assets/cards/ember_prompt.webp) | ![EmberFlareCard](assets/cards/ember_flare.webp) |
+
+- **EmberPromptCard** — a tending moment: the cue, never the answer
+  ("what did she say about the bridge?"). Dismissing it is a *missed*,
+  never a lapse. Dismiss 12000.
+- **EmberFlareCard** — the brief warm acknowledgment when you answer from
+  memory. Dismiss 2600.
+
+| EmberRevealCard | EmberGraduatedCard |
+|---|---|
+| ![EmberRevealCard](assets/cards/ember_reveal.webp) | ![EmberGraduatedCard](assets/cards/ember_graduated.webp) |
+
+- **EmberRevealCard** — the recorded answer, shown only when you reach
+  for it. Dismiss 9000.
+- **EmberGraduatedCard** — the ceremony: the memory lives in you now, and
+  the recording can be burned with explicit consent, leaving a cue-only
+  tombstone. Dismiss 9000.
+
 ## People
 
 ### PersonContextCard

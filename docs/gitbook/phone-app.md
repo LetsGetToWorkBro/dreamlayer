@@ -5,9 +5,9 @@ remote control and the pocket brain: pairing, the three switches, every
 toggle, message approval, and a phone-sized view of everything the Brain
 knows. Seven tabs — **Brain, Now, Look, Messages, People, Memories,
 Settings** — plus hidden screens reached from Settings and Now (Brief,
-Plugins, Waypath, Capabilities, Device Vitals, Feel, Rewind, Saga, Profile,
-Rehearsal, Confluence, and the Cloud and Brain-tier views) and a six-step
-onboarding.
+Plugins, Waypath, Capabilities, Device Vitals, Feel, Ember, Rewind, Saga,
+Profile, Rehearsal, Confluence, and the Cloud and Brain-tier views) and a
+six-step onboarding.
 
 *Every screenshot in this chapter is the real app: the repository's code
 exported to web (`npx expo export --platform web`) and captured headlessly
@@ -156,15 +156,18 @@ with sources.
   raise), and listening feedback (visual, audio, haptic).
 - **Devices and brain:** glasses status and the link to the Brain tab.
 - **Labs:** Saga, Profile, Rewind, Rehearsal, Confluence — joined by
-  Waypath, Capabilities, Device Vitals, and Feel (below), plus "What the
-  cloud can see" and the live Brain tier ladder.
+  Waypath, Capabilities, Device Vitals, Feel, and **Ember** (the
+  memories-you-tend practice; see [the lens set](lenses.md)), plus "What
+  the cloud can see" and the live Brain tier ladder.
 - **Explore:** the Demo Mode switch ("Explore the whole app with labeled
   sample data — no glasses or Mac needed").
 - **Danger zone:** Erase all memories (confirmed) — it clears the local
   memory store *and* reaches the paired Brain
   (`POST /dreamlayer/memories/purge`), which drops every saved place while
   deliberately leaving people and reminders (they are mirrors of their own
-  surfaces with their own remove controls).
+  surfaces with their own remove controls). Erase now also clears the
+  on-disk cache, so a purge can no longer un-delete itself on the next
+  launch.
 
 The full toggle-to-effect table, with defaults and the endpoints each drives,
 is in [Settings and modes](reference/settings.md).
@@ -322,9 +325,12 @@ the repo rather than living in someone's browser session:
   `fastlane/metadata/` in **nine locales** — en-US, de-DE, es-ES, fr-FR,
   it, ja, ko, pt-BR, zh-Hans — plus a screenshots directory in the layout
   `deliver` expects.
-- **In-app i18n** (`src/i18n/`): the same nine languages for the UI
-  strings, with English as the fallback for any missing key; tab titles
-  and screens read through `t()`.
+- **In-app i18n** (`src/i18n/`): the same nine languages — and no longer
+  just the chrome: every tab screen's *body* is localized (placeholders,
+  section labels, day groups, empty states, interpolated counts), a
+  **catalog-parity gate** in the test suite fails the build if any locale
+  drifts from the English key set or ships an empty string, and icon-only
+  controls carry screen-reader labels.
 - **Privacy:** every locale's `privacy_url.txt` points at the real policy,
   `https://dreamlayer.app/privacy.html`, served from the landing site in
   this repository.

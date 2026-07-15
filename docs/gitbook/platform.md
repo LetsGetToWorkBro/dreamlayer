@@ -145,6 +145,10 @@ path.
   browse, search, Featured / Top rated / Most downloaded tabs, per-plugin
   detail with the author's screenshot, plain-English permissions, star
   rating, and a copy-install action.
+  Search is one ranked, typo-tolerant scorer (fielded weights, a curated
+  concept map, one-edit tolerance) shared verbatim by the store page, the
+  phone, and the Worker's search route — the same query ranks the same
+  everywhere.
 - **The phone** — the Plugins screen (Settings, "Build on the layer"):
   same catalog, install/remove, one-tap rating, and a permissions alert
   before any install ("This plugin will be able to use: ..."). Installs

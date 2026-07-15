@@ -155,7 +155,17 @@ gets the honest miss: "I don't have a spot saved for your bike yet."
 More on the anchors themselves in
 [Perception and memory](perception-memory.md#stashes-and-the-waypath).
 
-### 7. Knowledge intents
+### 7. Hold that thought — Stasis
+
+Interrupted mid-task? Say *"hold that thought"* (or double-nod) and
+Stasis freezes the moment — the last thing you were saying, held
+**verbatim**, with where you were and what you were looking at. Coming
+back, say *"where was I"* / *"what was I saying"* (or tilt), or simply
+return to the same place or object, and it offers you back your own cues
+— never a summary, never a finished sentence, no model in the loop.
+Full detail in [the lens set](lenses.md).
+
+### 8. Knowledge intents
 
 Anything else runs through `parse_intent` (`voice.py`) and `handle_voice` —
 and since the wiring pass, every one of these completes end to end instead

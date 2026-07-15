@@ -1,7 +1,7 @@
 # Hardware and seams
 
 DreamLayer is a **pre-hardware build**: the intelligence stack is complete
-and tested (2,600+ passing tests), and the handful of places where physical
+and tested (3,022 passing tests), and the handful of places where physical
 hardware plugs in are explicit, narrow, and documented. This chapter is the
 honest matrix.
 

@@ -24,6 +24,10 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | SpokenCaptionCard | each raw-transcript caption line (the translate path now rides the Rosetta figment instead) | device | rolling | — |
 | LiveCaptionCard | Puente / Rosetta translation | device | rolling | — |
 | MorningBriefCard | wake with a brief waiting | device | 8000 | — |
+| EmberPromptCard | an Ember tending moment (the cue, never the answer) | device | 12000 | — |
+| EmberFlareCard | you answered from memory — the warm flare | device | 2600 | — |
+| EmberRevealCard | the recorded answer, reached for | device | 9000 | — |
+| EmberGraduatedCard | graduation: burn the recording, keep the cue | device | 9000 | — |
 | FactCheckCard | Veritas verdict | device | 7000 | chime / hark / hark_urgent by verdict; double haptic + flash on flags |
 | AnswerAheadCard | copilot pre-answer | device | 8000 | **silent**; tick haptic |
 | HarkCard | attention policy | device | 6000 (9000 urgent) | `hark` / `hark_urgent`; tick / double; flash urgent |
@@ -68,6 +72,6 @@ payload — pan / gain / ITD / ILD / behind, computed by
 `hud/spatial_audio.py: spatial_payload` and attached by Waypath's
 `attach_spatial` — so any device renders the cue positioned at whatever
 fidelity it has. The sample payloads used for every
-image in this book live in `cards.py: ALL_SAMPLES` (31 keys), and
+image in this book live in `cards.py: ALL_SAMPLES` (35 keys), and
 `hud/golden_images.py` renders any of them with
 `generate_golden(card_key, golden_dir)`.

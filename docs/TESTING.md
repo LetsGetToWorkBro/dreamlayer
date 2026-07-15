@@ -182,5 +182,5 @@ cd host-python && python -m pytest -q
 cd phone-app && npm install && npm test && npx tsc --noEmit
 ```
 
-The host suite (2,600+ tests) covers the Brain server, the router/switches, the
+The host suite (3,022 tests) covers the Brain server, the router/switches, the
 pairing codec, and every lens.

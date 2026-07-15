@@ -125,8 +125,11 @@ figment grammar grew its own, deliberately tiny pair:
   **eight named channels** — `{slot:translation}`, `{slot:langs}` — each
   still one 24-character line, still host-fed (a slot fill is a `text`
   event, so it adds zero autonomous budget). The grammar is identical in
-  all three interpreters — Python stage, device Lua, browser `figment.js`
-  — and parity-tested across them.
+  all **four** interpreters — the Python stage, the device Lua, the
+  browser `figment.js`, and the Rust `reality-core` (the embedded
+  native/WASM core) — and parity-tested across them, down to one
+  canonical text-length unit (UTF-8 bytes, truncated on a codepoint
+  boundary, sized to the core's fixed 24-byte slot buffers).
 - **The emit-capability registry** (`reality_compiler/v2/capabilities.py`).
   Three emit tags are host powers with plain-language summaries: `ask`,
   `translate` (passive — the Brain fills a slot; the lens emits nothing),

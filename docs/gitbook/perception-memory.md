@@ -168,7 +168,9 @@ What "remembering" is made of got real this wave (`memory/`):
   blobs, and every vector is stamped with its embedding-space signature so
   spaces never mix.
 - **A persistent ANN index.** HNSW over `usearch` (one sidecar file beside
-  the database, updated on every ingest) — because a linear scan breaks
+  the database, persisted in batches — every 64 mutations by default, with
+  an explicit flush on shutdown and after the retention sweep, an honest
+  and bounded crash window) — because a linear scan breaks
   inside year one of real use. Without `usearch` every query falls back to
   the exact linear cosine scan with identical scoring.
 - **A retention lifecycle.** Hot (a 24-hour ring, purged after REM), warm

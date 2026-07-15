@@ -82,7 +82,7 @@ cd phone-app && npm install && npx expo start             # Expo Go on your phon
 ## The test suites
 
 ```bash
-cd host-python && python -m pytest -q     # 2,600+ passing at time of writing
+cd host-python && python -m pytest -q     # 3,022 passing at time of writing
 ```
 
 - **Python**: unit + live-HTTP server tests (the suite boots the real Brain
@@ -97,6 +97,10 @@ cd host-python && python -m pytest -q     # 2,600+ passing at time of writing
   (settled frames pixel-identical), Solid richness floors (at least 1.25x
   pre-Solid lit pixels), typography metrics (glyph advances within +-2 px of
   the reference face), and Lua-to-Python motion-constant parity.
+- **CI gates beyond the suites**: a ruff lint and a mypy type gate over
+  the whole Python package, a pip-audit dependency gate, the registry
+  Worker's Node tests, and the cross-interpreter parity proofs — all
+  required, with the old parity bypasses closed.
 - **Phone**: `npm test` — Jest as two projects, "logic" (ts-jest over the
   pure-TS stores, services, and BLE core) and "component" (jest-expo over
   the screens); `npx tsc --noEmit` (strict TypeScript) stands alongside it.

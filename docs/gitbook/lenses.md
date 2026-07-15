@@ -209,6 +209,13 @@ index and the tiered brain) and returns one HUD card. The AI knowledge tier
 folds into it — "ask about your own stuff" *is* Lucid Recall extended from
 memory to your files and mail.
 
+Once an unwired island (its memory index was, in the audit's own words,
+"implemented nowhere"), it is now genuinely part of the orchestrator:
+`orc.lucid_query(text, frame)` routes through a Retriever-backed index,
+is recall-gated like every other read, and its classifier upgrades to a
+dense semantic router when the semantic-recall extras are installed —
+falling back byte-identically to the keyword path otherwise.
+
 ## The newer lenses
 
 The lenses added in recent builds. Each card below is the real renderer's
