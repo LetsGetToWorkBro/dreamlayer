@@ -290,6 +290,25 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .mw.sub .mbody{padding:0}
 /* screens: dark product surfaces inside the paper windows */
 .screen{background:var(--scr);color:var(--h-text)}
+/* Juno as a desk accessory — a little companion window that lives on the
+   desktop, watches you scroll, and comments. Collapsible via WindowShade.
+   (Selectors carry .mw.sub so these rules outrank the base window chrome.) */
+.mw.sub.da{position:fixed;left:14px;bottom:14px;z-index:60;width:176px;display:none;
+  opacity:0;transform:translateY(8px);
+  transition:opacity 500ms var(--ease) 600ms,transform 500ms var(--ease) 600ms}
+.desk-in .mw.sub.da{opacity:1;transform:none}
+@media(min-width:960px){.mw.sub.da{display:block}}
+.da .tbar{cursor:default}
+.mw.sub.da .mbody{background:var(--scr);padding:12px 10px 9px;text-align:center}
+.dasprite{width:112px;height:auto;margin:0 auto;image-rendering:pixelated;
+  filter:drop-shadow(0 0 14px rgba(44,199,154,.28));
+  animation:dabob 4.2s steps(6) infinite}
+@keyframes dabob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.dacap{margin-top:8px;font-family:var(--chi);font-size:11.5px;color:var(--h-text2);
+  line-height:1.45;min-height:2.6em}
+.mw.sub.da.shut .mbody{display:none}
+.about-juno{width:54px;height:auto;margin-left:auto;image-rendering:pixelated;flex:none;
+  filter:drop-shadow(0 0 10px rgba(44,199,154,.3))}
 
 /* ---------- type on paper ---------- */
 .eyebrow{display:inline-block;font-family:var(--chi);font-size:12.5px;letter-spacing:.04em;
@@ -334,30 +353,29 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #field{position:absolute;inset:0;width:100%;height:100%}
 .hero-vignette{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(115% 90% at 50% 44%,transparent 34%,rgba(0,0,0,.72) 82%,#000 100%)}
-.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;perspective:1200px;
-  left:50%;top:42%;width:clamp(380px,46%,620px);
-  transform:translate(-50%,-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0);
-  opacity:.85;filter:drop-shadow(0 10px 42px rgba(47,212,196,.14))}
+.hero .hero-juno{position:absolute;z-index:1;pointer-events:none;
+  left:44%;top:41%;width:clamp(300px,42%,540px);
+  transform:translate(-50%,-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0)}
 .hero .hero-juno::before{content:"";position:absolute;left:50%;top:52%;width:66%;height:82%;
   transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
-  background:radial-gradient(closest-side,rgba(47,212,196,.24),rgba(120,180,255,.09) 55%,transparent 78%);
+  background:radial-gradient(closest-side,rgba(47,212,196,.20),rgba(120,180,255,.08) 55%,transparent 78%);
   filter:blur(18px);animation:junoAura 6.5s ease-in-out infinite}
-.hero .hero-juno .juno-media,.hero .hero-juno .jshimmer{animation:junoFloat 11s ease-in-out infinite;will-change:transform}
+/* the render keeps its black plate; screen-blend over the near-black field
+   composites her wing glow with no matte line. The idle loop is a muted
+   inline video; the still is the reduced-motion / no-autoplay fallback. */
+.hero .hero-juno video,.hero .hero-juno img{width:100%;height:auto;display:block;
+  mix-blend-mode:screen;filter:contrast(1.32) brightness(.98);
+  -webkit-mask-image:radial-gradient(ellipse closest-side,#000 74%,transparent 99%);
+  mask-image:radial-gradient(ellipse closest-side,#000 74%,transparent 99%);
+  animation:junoFloat 11s ease-in-out infinite;will-change:transform}
+.hero .hero-juno img{display:none}
 @keyframes junoFloat{
-  0%{transform:translateY(0) rotate(-.6deg) rotateY(0deg)}
-  30%{transform:translateY(-7px) rotate(.3deg) rotateY(-4deg)}
-  55%{transform:translateY(-12px) rotate(.7deg) rotateY(3deg)}
-  100%{transform:translateY(0) rotate(-.6deg) rotateY(0deg)}}
+  0%{transform:translateY(0) rotate(-.6deg)}
+  30%{transform:translateY(-7px) rotate(.3deg)}
+  55%{transform:translateY(-12px) rotate(.7deg)}
+  100%{transform:translateY(0) rotate(-.6deg)}}
 @keyframes junoAura{0%,100%{opacity:.42;transform:translate(-50%,-50%) scale(.9)}
   50%{opacity:.9;transform:translate(-50%,-50%) scale(1.08)}}
-.hero .hero-juno .jshimmer{position:absolute;inset:0;pointer-events:none;z-index:2;
-  -webkit-mask:url(./assets/juno/juno_idle.webp?v=7) center/contain no-repeat;
-  mask:url(./assets/juno/juno_idle.webp?v=7) center/contain no-repeat;
-  background:linear-gradient(115deg,transparent 40%,rgba(210,245,255,.45) 48%,rgba(255,255,255,.65) 50%,
-    rgba(205,240,255,.45) 52%,transparent 60%);background-size:260% 100%;
-  mix-blend-mode:screen;animation:junoFloat 10s ease-in-out infinite,junoShimmer 10s ease-in-out infinite}
-@keyframes junoShimmer{0%,66%{background-position:190% 0;opacity:0}
-  74%{opacity:1}84%{opacity:1}92%,100%{background-position:-90% 0;opacity:0}}
 @keyframes junoFloatLite{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 .hero-core{position:relative;z-index:2;text-align:center;padding:9svh var(--gutter) 8svh;
   will-change:transform,opacity}
@@ -794,9 +812,8 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   .tier .rail{left:6px;top:24px;bottom:6px;right:auto;width:2px;height:auto}
   .tier .rail i::after{transform:scaleY(0);transform-origin:top}
   .tier.lit .rail i::after{transform:scaleY(1)}
-  .hero .hero-juno{width:min(86%,430px);top:34%}
-  .hero .hero-juno .jshimmer{display:none}
-  .hero .hero-juno .juno-media{animation:junoFloatLite 9s ease-in-out infinite}
+  .hero .hero-juno{width:min(78%,400px);top:35%}
+  .hero .hero-juno video,.hero .hero-juno img{animation:junoFloatLite 9s ease-in-out infinite}
   .can-head{flex-direction:column;align-items:flex-start}
   .hud-float{width:148px;margin:6px auto 0}
 }
@@ -843,9 +860,10 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   .soon .device .lens-dot::after,.scroll-cue .sbx::after,.splash .pbar i{animation:none!important}
   .marquee .track{animation:none}
   .hud-card,.tier .rail i::after{transition:none}
-  .hero .hero-juno .juno-media{animation:none}
+  .hero .hero-juno video{display:none}
+  .hero .hero-juno img{display:block;animation:none}
   .hero .hero-juno::before{animation:none}
-  .hero .hero-juno .jshimmer{display:none}
+  .dasprite{animation:none}
   .deskicons{opacity:1;transform:none;transition:none}
   #boot{display:none}
 }
@@ -943,6 +961,7 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
         <p>A memory layer for the real world. Private by architecture.<br>
            Intelligence lives at the lowest tier that can do the job.</p>
       </div>
+      <img class="about-juno" src="assets/juno/juno_pixel.png" alt="Juno, the DreamLayer assistant" width="603" height="657">
     </div>
     <div class="membar">
       <div class="lbl"><span>Built-in Memory</span><i>your phone — instant, offline</i></div>
@@ -986,6 +1005,19 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
     <span>Trash</span></button>
 </aside>
 
+<!-- Juno, the desk accessory -->
+<aside class="mw sub da" id="junoDA" aria-hidden="true">
+  <div class="tbar"><span class="tstripes"></span>
+    <span class="ttext">Juno</span>
+    <span class="tstripes"></span>
+    <button class="wbox collapse" id="daShade" tabindex="-1"
+      data-balloon="WindowShade — roll Juno up. She won't mind."></button></div>
+  <div class="mbody dabody">
+    <img class="dasprite" src="assets/juno/juno_pixel.png" alt="" width="603" height="657">
+    <div class="dacap" id="daCap">hi. i’m juno.</div>
+  </div>
+</aside>
+
 <!-- ======================= hero: the first window ======================= -->
 <section class="hero" id="top">
   <div class="mw mw-hero" data-wtitle="DreamLayer">
@@ -1001,7 +1033,10 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
       <div class="hero-screen">
         <canvas id="field" aria-hidden="true"></canvas>
         <div class="hero-vignette" aria-hidden="true"></div>
-        <div class="hero-juno" data-juno data-juno-state="idle" aria-hidden="true"></div>
+        <div class="hero-juno" aria-hidden="true">
+          <video muted loop playsinline preload="metadata" poster="assets/juno/juno_poster.webp"
+                 width="960" height="960"><source src="assets/juno/juno_loop.mp4" type="video/mp4"></video>
+          <img src="assets/juno/juno_render.webp" alt="" width="1176" height="1280"></div>
         <div class="hero-core" id="heroCore">
           <div class="hero-glass" aria-hidden="true"><canvas id="heroGlass"></canvas></div>
           <span class="h-eyebrow-line arrive in" style="--d:60ms">A layer for smart AR glasses</span>
@@ -1928,30 +1963,39 @@ python -m <span class="t">dreamlayer.simulator</span></pre>
 <script src="./assets/vendor/ScrollTrigger.min.js" defer></script>
 <script src="./assets/vendor/lenis.min.js" defer></script>
 <script src="./assets/sim/halo-sim.js" defer></script>
-<script src="./assets/juno/juno.js?v=7" defer></script>
 <script>
-/* Juno hero ambience — wing-shimmer + smooth cursor parallax, unchanged
-   from the previous build. Motion-safe: skipped under reduced motion. */
+/* Juno hero ambience — smooth cursor parallax on the render.
+   Motion-safe: skipped under reduced motion and coarse pointers. */
+(function(){
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce || !matchMedia("(pointer:fine)").matches) return;
+  function init(){
+    var el = document.querySelector(".hero-juno");
+    var hero = document.querySelector(".hero-screen");
+    if(!el || !hero) return;
+    var tx=0,ty=0,cx=0,cy=0,raf=null;
+    function loop(){ raf=null; cx+=(tx-cx)*0.08; cy+=(ty-cy)*0.08;
+      el.style.setProperty("--jpx",cx.toFixed(2)+"px"); el.style.setProperty("--jpy",cy.toFixed(2)+"px");
+      if(Math.abs(tx-cx)>0.1||Math.abs(ty-cy)>0.1) raf=requestAnimationFrame(loop); }
+    hero.addEventListener("mousemove",function(e){ var r=hero.getBoundingClientRect();
+      tx=((e.clientX-r.left)/r.width-0.5)*-18; ty=((e.clientY-r.top)/r.height-0.5)*-13;
+      if(!raf) raf=requestAnimationFrame(loop); });
+    hero.addEventListener("mouseleave",function(){ tx=0;ty=0; if(!raf) raf=requestAnimationFrame(loop); });
+  }
+  if(document.readyState!=="loading") init(); else document.addEventListener("DOMContentLoaded",init);
+})();
+/* Juno's idle loop: play only in view; if autoplay is refused (iOS Low
+   Power Mode), the poster still stands in. */
 (function(){
   var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   function init(){
-    var el = document.querySelector(".hero-juno");
-    if(!el) return;
-    if(!el.__juno) return setTimeout(init, 120);      // wait for juno.js to mount
-    if(el.__jfx) return; el.__jfx = true;
-    if(!reduce){
-      var sh=document.createElement("div"); sh.className="jshimmer"; el.appendChild(sh);
-    }
-    if(!reduce && matchMedia("(pointer:fine)").matches){
-      var hero=el.closest(".hero-screen"), tx=0,ty=0,cx=0,cy=0,raf=null;
-      function loop(){ raf=null; cx+=(tx-cx)*0.08; cy+=(ty-cy)*0.08;
-        el.style.setProperty("--jpx",cx.toFixed(2)+"px"); el.style.setProperty("--jpy",cy.toFixed(2)+"px");
-        if(Math.abs(tx-cx)>0.1||Math.abs(ty-cy)>0.1) raf=requestAnimationFrame(loop); }
-      hero.addEventListener("mousemove",function(e){ var r=hero.getBoundingClientRect();
-        tx=((e.clientX-r.left)/r.width-0.5)*-18; ty=((e.clientY-r.top)/r.height-0.5)*-13;
-        if(!raf) raf=requestAnimationFrame(loop); });
-      hero.addEventListener("mouseleave",function(){ tx=0;ty=0; if(!raf) raf=requestAnimationFrame(loop); });
-    }
+    var v=document.querySelector(".hero-juno video");
+    if(!v || reduce) return;
+    var io=new IntersectionObserver(function(en){
+      if(en[0].isIntersecting){ v.muted=true; var p=v.play(); if(p&&p.catch) p.catch(function(){}); }
+      else v.pause();
+    },{threshold:0.1});
+    io.observe(v);
   }
   if(document.readyState!=="loading") init(); else document.addEventListener("DOMContentLoaded",init);
 })();
@@ -2658,6 +2702,41 @@ function closeAbout(){ about.classList.remove("on"); mveil.classList.remove("on"
 if(aboutBtn) aboutBtn.addEventListener("click",openAbout);
 if(aboutX) aboutX.addEventListener("click",closeAbout);
 mveil.addEventListener("click",closeAbout);
+
+/* ---------- Juno, desk accessory: section-aware captions ---------- */
+(function(){
+  var da=document.getElementById("junoDA"); if(!da) return;
+  var cap=document.getElementById("daCap"), shade=document.getElementById("daShade");
+  try{ if(sessionStorage.getItem("dlda")==="shut") da.classList.add("shut"); }catch(e){}
+  shade.addEventListener("click",function(){
+    var s=da.classList.toggle("shut");
+    try{ sessionStorage.setItem("dlda", s?"shut":"open"); }catch(e){}
+  });
+  var LINES={
+    top:"hi. i’m juno.",
+    feel:"nothing pops. everything arrives.",
+    see:"that’s the real renderer.",
+    walk:"level 3, blue pillar. kept.",
+    can:"all of this runs today.",
+    lenses:"six lenses, one layer.",
+    brain:"the lowest tier that can do the job.",
+    software:"two apps, today.",
+    veil:"veil is down. i see nothing.",
+    platform:"build a lens. i’ll run it.",
+    simulator:"that one’s me, simulated.",
+    playground:"speak lua to the glass.",
+    faq:"256 px is plenty.",
+    soon:"be there when i wake."
+  };
+  var daIO=new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(!e.isIntersecting) return;
+      var l=LINES[e.target.id];
+      if(l && cap.textContent!==l) cap.textContent=l;
+    });
+  },{rootMargin:"-45% 0px -45% 0px",threshold:0});
+  [].slice.call(document.querySelectorAll("section[id]")).forEach(function(s){ daIO.observe(s); });
+})();
 
 /* ---------- desktop icons: zoom out, then go ---------- */
 document.querySelectorAll(".dicon[data-zoom]").forEach(function(ic){
