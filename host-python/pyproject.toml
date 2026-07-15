@@ -36,14 +36,14 @@ dream    = ["brilliant-msg>=7,<8", "Pillow>=10"]   # pip install dreamlayer[drea
 memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "mem0ai>=2,<3", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
 voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2"]
 asr-extra = ["whisperx>=3,<4"]
-structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=0.8,<1"]
+structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=0.8,<2"]
 llm      = ["litellm>=1,<2"]
 intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-learn>=0.3,<1", "supervision>=0.29,<1"]
 vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
 causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]
-infra    = ["rich>=14,<15", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
+infra    = ["rich>=14,<16", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
 # Security-critical: keep a floor below which known CVEs live (audit 2026-07-14).
 # cryptography>=48.0.1 clears GHSA-537c-gmf6-5ccf (the unconstrained resolver
 # otherwise settles on the vulnerable 46.0.7); presidio floors match the modern
