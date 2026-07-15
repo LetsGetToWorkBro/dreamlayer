@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="platinum">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,126 +7,180 @@
 <meta name="description" content="How DreamLayer handles your data: on-device by default, opt-in cloud, no accounts, no tracking. The DreamLayer privacy policy.">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://dreamlayer.app/privacy.html">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#DDDDDD">
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/fonts/ChicagoFLF.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-  :root { --memory:#2CC79A; --bg:#000; --surface:#0E1416; --text:#ECF0F1; --muted:#A8B8C0; --border:#243036; }
-  * { box-sizing:border-box; }
-  html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
-    font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; }
-  .wrap { max-width:760px; margin:0 auto; padding:64px 24px 96px; }
-  a { color:var(--memory); text-decoration:none; }
-  a:hover { text-decoration:underline; }
-  .eyebrow { color:var(--memory); font-size:12px; letter-spacing:2px; text-transform:uppercase; font-weight:600; }
-  h1 { font-size:40px; line-height:1.1; margin:8px 0 4px; letter-spacing:-0.5px; }
-  h2 { font-size:22px; margin:44px 0 10px; letter-spacing:-0.2px; }
-  h3 { font-size:16px; margin:24px 0 6px; color:var(--text); }
-  p, li { color:var(--muted); font-size:16px; }
-  strong { color:var(--text); font-weight:600; }
-  .updated { color:var(--muted); font-size:14px; margin-top:4px; }
-  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin:20px 0; }
-  ul { padding-left:20px; }
-  li { margin:6px 0; }
-  hr { border:none; border-top:1px solid var(--border); margin:40px 0; }
-  .back { display:inline-block; margin-bottom:28px; color:var(--muted); font-size:14px; }
-  .foot { color:var(--muted); font-size:13px; margin-top:56px; }
+  /* ============================================================
+     Privacy.txt — the policy as a SimpleText document.
+     One Platinum window, paper ground, dark ink, Chicago headings.
+     Chrome (menu bar, Juno DA, footer) comes from assets/platinum/.
+     ============================================================ */
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;padding:0;line-height:1.6;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  /* skip link (menu bar is injected before it; still first in markup) */
+  .skip{position:fixed;left:8px;top:-52px;z-index:400;font-family:var(--chi);font-size:13px;
+    color:var(--ink);text-decoration:none;background:var(--paper);
+    border:1px solid var(--frame);box-shadow:2px 2px 0 rgba(0,0,0,.4);
+    padding:8px 14px;transition:top 180ms var(--ease)}
+  .skip:focus{top:calc(var(--mbh) + 8px)}
+
+  /* the SimpleText document window */
+  .mw.stx{width:min(860px,calc(100vw - 2*var(--gutter)));
+    margin:clamp(26px,6svh,64px) auto}
+  .mw.stx .mbody{padding:clamp(26px,5vw,54px) clamp(18px,5vw,52px)}
+  .doc{max-width:72ch;margin:0 auto;color:var(--ink2);font-size:16px}
+
+  /* ink + type on paper */
+  .doc h1{font-family:var(--chi);font-weight:400;color:var(--ink);
+    font-size:clamp(26px,5vw,36px);line-height:1.15;margin:10px 0 4px;letter-spacing:.005em}
+  .doc h2{font-family:var(--chi);font-weight:400;color:var(--ink);
+    font-size:clamp(18px,2.4vw,21px);margin:44px 0 10px;letter-spacing:.005em}
+  .doc p,.doc li{color:var(--ink2);font-size:16px}
+  .doc strong{color:var(--ink);font-weight:600}
+  .doc a{color:var(--teal-ink);text-decoration:underline;text-underline-offset:2px;
+    text-decoration-color:rgba(11,107,82,.5)}
+  .doc a:hover{text-decoration-color:var(--teal-ink)}
+  .doc a:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+  .eyebrow{display:inline-block;font-family:var(--chi);font-size:12.5px;letter-spacing:.04em;
+    color:var(--teal-ink);border-bottom:1px solid rgba(11,107,82,.35);padding-bottom:2px}
+  .updated{font-family:var(--mono);font-size:12.5px;color:var(--ink2);margin-top:8px}
+
+  /* the "At a glance" card — a Platinum panel, not a dark web card */
+  .card{background:#fff;border:1px solid var(--frame);
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
+    padding:18px 20px;margin:24px 0}
+  .card>strong{font-family:var(--chi);font-weight:400;font-size:15px;
+    display:block;margin-bottom:6px}
+
+  .doc ul{padding-left:20px;margin:12px 0}
+  .doc li{margin:6px 0}
+  .doc li::marker{color:var(--teal-ink)}
+  .doc hr{border:0;border-top:1px solid #A6A6A6;border-bottom:1px solid #fff;margin:44px 0 0}
+  .foot{font-family:var(--chi);color:var(--ink2);font-size:13px;margin-top:22px}
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .skip{transition:none}
+  }
 </style>
+<link rel="stylesheet" href="assets/platinum/platinum.css">
 </head>
 <body>
-<div class="wrap">
-  <a class="back" href="/">← DreamLayer</a>
-  <div class="eyebrow">Privacy</div>
-  <h1>Privacy Policy</h1>
-  <p class="updated">Last updated 8 July 2026</p>
+<a class="skip" href="#content">Skip to the policy</a>
 
-  <p>DreamLayer is a memory layer for the real world, built to run on your own devices. This policy
-  explains what the DreamLayer apps do with your information. The short version: <strong>by default your
-  data stays on your devices, there are no accounts, and we do not track you or run ads.</strong></p>
+<main id="content">
+  <section class="mw stx" aria-labelledby="docTitle">
+    <div class="tbar">
+      <span class="wbox close" aria-hidden="true"></span>
+      <span class="tstripes" aria-hidden="true"></span>
+      <span class="ttext" id="docTitle">Privacy.txt</span>
+      <span class="tstripes" aria-hidden="true"></span>
+      <span class="wbox collapse" aria-hidden="true"></span>
+      <span class="wbox zoom" aria-hidden="true"></span>
+    </div>
+    <div class="fstatus"><span>read-only&nbsp;&nbsp;·&nbsp;&nbsp;plain text&nbsp;&nbsp;·&nbsp;&nbsp;last updated 8 July 2026</span></div>
+    <div class="mbody">
+      <article class="doc">
+        <div class="eyebrow">Privacy</div>
+        <h1>Privacy Policy</h1>
+        <p class="updated">Last updated 8 July 2026</p>
 
-  <div class="card">
-    <strong>At a glance</strong>
-    <ul>
-      <li>The iOS app collects no personal data and requires no account.</li>
-      <li>The camera is used only to scan a pairing QR code. Nothing is uploaded.</li>
-      <li>Your memories, messages, and mail are processed by your own Mac "Brain" on your own machine.</li>
-      <li>Cloud AI is <strong>off by default</strong> and opt-in. When you turn it on, only the text of that
-        request is sent to the AI provider you choose.</li>
-      <li>You can erase everything at any time from the app.</li>
-    </ul>
-  </div>
+        <p>DreamLayer is a memory layer for the real world, built to run on your own devices. This policy
+        explains what the DreamLayer apps do with your information. The short version: <strong>by default your
+        data stays on your devices, there are no accounts, and we do not track you or run ads.</strong></p>
 
-  <h2>1. The DreamLayer iOS app</h2>
-  <p>The iOS app is a companion and hub for the DreamLayer system (the Brilliant Labs Halo glasses and an
-  optional self-hosted Mac "Brain"). On its own, the app:</p>
-  <ul>
-    <li><strong>Collects no personal information</strong> and has no login or account.</li>
-    <li>Uses the <strong>camera only</strong> to scan a pairing QR code shown by your Mac Brain. Frames are
-      processed on-device to read the code and are never stored or transmitted.</li>
-    <li>Stores its settings and any sample/paired state <strong>locally on your device</strong>.</li>
-    <li>Can show a <strong>Demo Mode</strong> with clearly-labeled sample data so you can explore the app
-      without any hardware. Demo data is fictional and never leaves your device.</li>
-  </ul>
-  <p>The app requests permission to send you <strong>local notifications</strong> (e.g. a morning brief).
-  These are generated on your device; we do not operate a push server.</p>
+        <div class="card">
+          <strong>At a glance</strong>
+          <ul>
+            <li>The iOS app collects no personal data and requires no account.</li>
+            <li>The camera is used only to scan a pairing QR code. Nothing is uploaded.</li>
+            <li>Your memories, messages, and mail are processed by your own Mac "Brain" on your own machine.</li>
+            <li>Cloud AI is <strong>off by default</strong> and opt-in. When you turn it on, only the text of that
+              request is sent to the AI provider you choose.</li>
+            <li>You can erase everything at any time from the app.</li>
+          </ul>
+        </div>
 
-  <h2>2. Your Brain (Mac app) and glasses</h2>
-  <p>The substantive features run on hardware you control:</p>
-  <ul>
-    <li>The <strong>Mac "Brain"</strong> app reads content you point it at — for example your Messages and
-      Mail, and folders you choose — <strong>locally, read-only, on your own machine</strong>. It keeps
-      <strong>structured memory</strong> (short summaries, names, places, reminders, timestamps), not raw
-      audio or video recordings.</li>
-    <li>The phone talks to your Brain over your home network, or over a relay you host, using a pairing token.
-      This traffic goes between your own devices, not to us.</li>
-    <li>The glasses capture is on-device; DreamLayer deliberately does <strong>not</strong> perform stranger
-      facial recognition, keep a face database, clone voices, or record covertly.</li>
-  </ul>
+        <h2>1. The DreamLayer iOS app</h2>
+        <p>The iOS app is a companion and hub for the DreamLayer system (the Brilliant Labs Halo glasses and an
+        optional self-hosted Mac "Brain"). On its own, the app:</p>
+        <ul>
+          <li><strong>Collects no personal information</strong> and has no login or account.</li>
+          <li>Uses the <strong>camera only</strong> to scan a pairing QR code shown by your Mac Brain. Frames are
+            processed on-device to read the code and are never stored or transmitted.</li>
+          <li>Stores its settings and any sample/paired state <strong>locally on your device</strong>.</li>
+          <li>Can show a <strong>Demo Mode</strong> with clearly-labeled sample data so you can explore the app
+            without any hardware. Demo data is fictional and never leaves your device.</li>
+        </ul>
+        <p>The app requests permission to send you <strong>local notifications</strong> (e.g. a morning brief).
+        These are generated on your device; we do not operate a push server.</p>
 
-  <h2>3. Optional cloud AI (opt-in)</h2>
-  <p>For the hardest questions, DreamLayer can use a cloud AI model. This is <strong>off by default</strong>.
-  When you enable the Cloud switch or add your own API key, the <strong>text of that specific request</strong>
-  (and only that request) is sent to the provider you selected so it can answer. Depending on your choice,
-  that provider may be:</p>
-  <ul>
-    <li><a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI</a></li>
-    <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic</a></li>
-    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google (Gemini)</a></li>
-    <li><a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">OpenRouter</a>, or a local /
-      self-hosted model (e.g. Ollama), in which case nothing leaves your machine.</li>
-  </ul>
-  <p>Your provider API keys are stored on your own devices, never on our servers. Every cloud request is
-  counted and logged locally so you can see exactly what left your devices. <strong>Incognito mode</strong>
-  forces cloud off and keeps everything on your local network. Anything marked private never uses the cloud
-  in any configuration.</p>
+        <h2>2. Your Brain (Mac app) and glasses</h2>
+        <p>The substantive features run on hardware you control:</p>
+        <ul>
+          <li>The <strong>Mac "Brain"</strong> app reads content you point it at — for example your Messages and
+            Mail, and folders you choose — <strong>locally, read-only, on your own machine</strong>. It keeps
+            <strong>structured memory</strong> (short summaries, names, places, reminders, timestamps), not raw
+            audio or video recordings.</li>
+          <li>The phone talks to your Brain over your home network, or over a relay you host, using a pairing token.
+            This traffic goes between your own devices, not to us.</li>
+          <li>The glasses capture is on-device; DreamLayer deliberately does <strong>not</strong> perform stranger
+            facial recognition, keep a face database, clone voices, or record covertly.</li>
+        </ul>
 
-  <h2>4. What we do not do</h2>
-  <ul>
-    <li>No user accounts, and no collection of your name, email, or contacts by the app.</li>
-    <li>No advertising, no ad identifiers (IDFA), and no third-party analytics or tracking SDKs.</li>
-    <li>No selling or sharing of personal data. We do not receive your memories, messages, or media.</li>
-  </ul>
+        <h2>3. Optional cloud AI (opt-in)</h2>
+        <p>For the hardest questions, DreamLayer can use a cloud AI model. This is <strong>off by default</strong>.
+        When you enable the Cloud switch or add your own API key, the <strong>text of that specific request</strong>
+        (and only that request) is sent to the provider you selected so it can answer. Depending on your choice,
+        that provider may be:</p>
+        <ul>
+          <li><a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI</a></li>
+          <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic</a></li>
+          <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google (Gemini)</a></li>
+          <li><a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">OpenRouter</a>, or a local /
+            self-hosted model (e.g. Ollama), in which case nothing leaves your machine.</li>
+        </ul>
+        <p>Your provider API keys are stored on your own devices, never on our servers. Every cloud request is
+        counted and logged locally so you can see exactly what left your devices. <strong>Incognito mode</strong>
+        forces cloud off and keeps everything on your local network. Anything marked private never uses the cloud
+        in any configuration.</p>
 
-  <h2>5. Your control and data deletion</h2>
-  <p>Because your data lives on your devices, you control it directly. In the app,
-  <strong>Settings → Danger zone → Erase all memories</strong> purges kept memory on the phone and instructs a
-  paired Brain to drop its stored anchors too. Uninstalling the apps removes their local data. There is no
-  server-side account to delete because none is created.</p>
+        <h2>4. What we do not do</h2>
+        <ul>
+          <li>No user accounts, and no collection of your name, email, or contacts by the app.</li>
+          <li>No advertising, no ad identifiers (IDFA), and no third-party analytics or tracking SDKs.</li>
+          <li>No selling or sharing of personal data. We do not receive your memories, messages, or media.</li>
+        </ul>
 
-  <h2>6. Children</h2>
-  <p>DreamLayer is not directed to children under 13, and we do not knowingly collect information from them.</p>
+        <h2>5. Your control and data deletion</h2>
+        <p>Because your data lives on your devices, you control it directly. In the app,
+        <strong>Settings → Danger zone → Erase all memories</strong> purges kept memory on the phone and instructs a
+        paired Brain to drop its stored anchors too. Uninstalling the apps removes their local data. There is no
+        server-side account to delete because none is created.</p>
 
-  <h2>7. Changes</h2>
-  <p>We may update this policy as the product evolves (for example, when shipping hardware arrives). Material
-  changes will be reflected here with a new "last updated" date.</p>
+        <h2>6. Children</h2>
+        <p>DreamLayer is not directed to children under 13, and we do not knowingly collect information from them.</p>
 
-  <h2>8. Contact</h2>
-  <p>Questions about privacy? Email <a href="mailto:info@labyrinth.vision">info@labyrinth.vision</a>.</p>
+        <h2>7. Changes</h2>
+        <p>We may update this policy as the product evolves (for example, when shipping hardware arrives). Material
+        changes will be reflected here with a new "last updated" date.</p>
 
-  <hr>
-  <p class="foot">DreamLayer — private by architecture. Yours to run, yours to keep.</p>
-</div>
+        <h2>8. Contact</h2>
+        <p>Questions about privacy? Email <a href="mailto:info@labyrinth.vision">info@labyrinth.vision</a>.</p>
+
+        <hr>
+        <p class="foot">DreamLayer — private by architecture. Yours to run, yours to keep.</p>
+      </article>
+    </div>
+  </section>
+</main>
+
+<script>window.PLATINUM={app:"SimpleText",daLine:"i see only what you allow."}</script>
+<script src="assets/platinum/platinum.js" defer></script>
 </body>
 </html>
