@@ -10,11 +10,15 @@ verbatim with its source file.
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Callable, Optional
 
 from ..schema import Answer
+from .store import _is_allowed_root
+
+log = logging.getLogger(__name__)
 
 TEXT_EXTS = {".txt", ".md", ".markdown", ".rst", ".text", ".log", ".csv",
              ".json", ".py", ".org", ".tex"}
@@ -83,6 +87,16 @@ class FileIndex:
         self._vecs = []
         exts, cap = self._exts(), self._max_bytes()
         for folder in self.config.folders:
+            # Re-validate at the walk sink, not just at add_folder: a folder can
+            # reach config.folders through import_backup/restore, a hand-edited
+            # or pre-remediation config file, or a symlink swapped after the
+            # add-time check (TOCTOU). _is_allowed_root re-resolves here, so no
+            # path outside the allow-list is ever read regardless of how it got
+            # into the list (refute-remediation 2026-07: the add_folder gate was
+            # not the only writer). Skip + record rather than index it.
+            if not _is_allowed_root(folder):
+                log.warning("reindex: skipping disallowed folder %r", folder)
+                continue
             base = Path(folder).expanduser()
             if not base.is_dir():
                 continue

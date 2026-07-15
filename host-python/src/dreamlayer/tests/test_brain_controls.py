@@ -125,9 +125,10 @@ class TestControls:
     def test_status_reports_missing_and_egress(self, tmp_path):
         lb = Live(tmp_path)
         try:
-            lb.post("/dreamlayer/folders", {"action": "add", "path": "/no/such/dir"})
+            missing = str(tmp_path / "no_such_dir")   # allowed root, but absent
+            lb.post("/dreamlayer/folders", {"action": "add", "path": missing})
             s = lb.get("/dreamlayer/status")
-            assert "/no/such/dir" in s["missing"]
+            assert missing in s["missing"]
             assert s["cloud_calls"] == 0 and s["cloud_ready"] is False
             h = lb.get("/dreamlayer/health")
             assert h["version"] and "uptime_s" in h

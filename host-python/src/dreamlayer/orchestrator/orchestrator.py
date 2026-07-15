@@ -37,6 +37,36 @@ from ._ops_helpers import (          # noqa: F401  (re-export for compatibility)
     _default_http_get, _default_http_post,
     _parse_scene_reply, _parse_taste_reply,
 )
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    # Types for the shared-state surface below. Imported only for type
+    # checking (and cheap, since `from __future__ import annotations` keeps
+    # every annotation a string) so declaring the mixin<->host contract can
+    # never introduce an import cycle at runtime.
+    from ..bridge.base import BridgeBase
+    from ..config import Config
+    from ..memory.embeddings import EmbeddingProvider
+    from .health import HealthLedger
+    from .capability_log import CapabilityLedger
+    from .maturity import MaturityGate, ResidentGate
+    from .adaptive_confidence import DismissalTracker
+    from .frame_budget import FrameBudget
+    from ..ember import EmberStore
+    from .stasis import StasisStack
+    from .anticipation import AnticipationEngine
+    from .conversation import ConversationLedger
+    from ..social_lens import SocialLens
+    from .attention import AttentionPolicy
+    from .veritas import Veritas
+    from ..ai_brain.world_check import WorldChecker
+    from ..truth_lens.analyzer import TruthLens
+    from .answer_ahead import AnswerAhead
+    from .user_model import UserModel
+    from .scholar import Scholar
+    from .taste import TasteLens
+    from .glance import GlanceArbiter
+    from ..ai_brain import PerceptionRouter
+    from ..plugins.events import PluginEventBus
 from .ops_ingest import IngestOps
 from .ops_dream_rem import DreamRemOps
 from .ops_confluence import ConfluenceOps
@@ -65,8 +95,98 @@ class Orchestrator(
     EmberOps,
     StasisOps,
 ):
+    # ------------------------------------------------------------------
+    # Shared-state surface
+    # ------------------------------------------------------------------
+    # The ops_* mixins are split by concern but every one of them reads and
+    # writes attributes on this single Orchestrator host. Declaring the surface
+    # here makes that coupling explicit and typed: mypy sees the mixin<->host
+    # contract, and a reader sees the whole shape in one place instead of
+    # reverse-engineering it from a ~350-line constructor. `from __future__
+    # import annotations` keeps each entry a string, so nothing is assigned at
+    # class scope — the real values are built by the _init_* builders below.
+    bridge: BridgeBase
+    db: MemoryDB
+    config: Config
+    state: HostState
+    health: HealthLedger
+    embedder: EmbeddingProvider
+    capability_log: CapabilityLedger
+    retriever: Retriever
+    privacy: PrivacyGate
+    proactive: ProactiveEngine
+    maturity: MaturityGate | ResidentGate
+    dismissals: DismissalTracker
+    frame_budget: FrameBudget
+    pipeline: IngestPipeline
+    ring: SemanticRingBuffer
+    silent_capture: SilentCapture
+    passive: PassiveEventInjector
+    embers: EmberStore
+    stasis: StasisStack
+    drift_engine: CommitmentDriftEngine
+    _scrub_session: TimeScrubSession | None
+    tell_engine: TellEngine
+    consistency: ConsistencyEngine
+    provenance: ProvenanceLens
+    candor: CandorMirror
+    brain: BrainRouter
+    anticipation: AnticipationEngine
+    conversation: ConversationLedger
+    social: SocialLens
+    attention: AttentionPolicy
+    veritas: Veritas
+    world_check: WorldChecker
+    truth: TruthLens
+    answer_ahead: AnswerAhead
+    user: UserModel
+    object_lens: ObjectLens
+    dietary: DietaryProfile
+    rosetta: RosettaLens
+    waypath: WaypathLens
+    scholar: Scholar
+    taste_lens: TasteLens
+    glance_arbiter: GlanceArbiter
+    perception: PerceptionRouter
+    quest: QuestLog
+    rem_bias: RetrievalBias
+    nightwatch: NightWatch | None
+    premonition: RecurrenceModel
+    horizon: HorizonComposer
+    dream: DreamEngine
+    tap_collector: TapCollector
+    plugin_events: PluginEventBus
+
     def __init__(self, bridge, db_path=":memory:", config=None):
         cfg = config or CONFIG
+        # Construction is dependency-ordered: each builder below leaves the
+        # attributes the next one reads already on self, so the call sequence
+        # IS the dependency graph. The order is load-bearing — self.brain must
+        # exist before the object lens (AIProvider) and the cloud_ok closure
+        # read it, self.retriever.ember_store is set only after self.embers,
+        # and the bridge.on_event(...) wiring is strictly last — so do not
+        # reorder these calls.
+        self._init_core(bridge, cfg, db_path)
+        self._init_passive_recall(cfg)
+        self._init_ember_stasis(db_path)
+        self._init_reasoning_engines()
+        self._init_brain_tier()
+        self._init_juno_attention(db_path)
+        self._init_object_lenses(db_path)
+        self._init_dream_rem_horizon(cfg, bridge)
+        self._init_confluence_plugins(cfg)
+        bridge.on_event(self._on_event)
+
+    # ------------------------------------------------------------------
+    # Construction — dependency-ordered builders
+    # ------------------------------------------------------------------
+
+    def _init_core(self, bridge, cfg, db_path) -> None:
+        """Core spine every other subsystem hangs off: the bridge, the memory
+        DB, config and host state, the per-seam health ledger, the embedder
+        ladder + capability log, the retriever, the privacy gate + proactive
+        engine, the cold-start maturity arc, the adaptive-confidence dismissal
+        tracker, the camera frame budget and the ingest pipeline."""
         self.bridge = bridge
         self.db = MemoryDB(db_path)
         self.config = cfg
@@ -130,6 +250,11 @@ class Orchestrator(
         else:
             self.pipeline = IngestPipeline(self.db)
 
+    def _init_passive_recall(self, cfg) -> None:
+        """Passive recall primitives: the semantic ring buffer, the silent
+        capture gate and the passive event injector (whose cadence follows the
+        config knob and whose clock is a late-bound closure over self._clock so
+        the DST harness can swap in a SimClock)."""
         # Passive recall primitives
         self.ring = SemanticRingBuffer(cfg.passive_ring_capacity)
         self.silent_capture = SilentCapture(self, self.ring, self.privacy, cfg.capture_min_interval_ms)
@@ -141,6 +266,11 @@ class Orchestrator(
             tick_interval_ms=cfg.passive_tick_interval_ms,
             clock=lambda: self._clock())
 
+    def _init_ember_stasis(self, db_path) -> None:
+        """Ember (memories you tend until they live in you) and Stasis (save
+        states for your mind). The ember store is wired into the retriever so
+        purge_all() reaches engrams by construction; the stasis stack plus its
+        ephemeral session state is restored from the vault via _stasis_load()."""
         # Ember: memories you tend until they live in you (docs/EMBER.md).
         # Its own DB file beside the memory DB — engrams are records of what
         # the WEARER knows, so they survive the retention *lifecycle* (nightly
@@ -170,6 +300,10 @@ class Orchestrator(
         self._stasis_last_replay = None           # (frame_id, ts)
         self._stasis_load()
 
+    def _init_reasoning_engines(self) -> None:
+        """On-device reasoning engines over the ring: commitment drift, the
+        time-scrub session, the Tell engine, fact consistency (Candor) and
+        belief genealogy (Provenance), plus the Candor Mirror self-coach."""
         # Drift / scrub / tell engines
         self.drift_engine = CommitmentDriftEngine(self.ring)
         self._scrub_session: TimeScrubSession | None = None
@@ -181,6 +315,13 @@ class Orchestrator(
         # a live arc and an after-the-fact debrief. Veil-gated, self-only.
         self.candor = CandorMirror(privacy=self.privacy)
         self._candor_drift: str | None = None    # drift line captured for the debrief
+
+    def _init_brain_tier(self) -> None:
+        """The AI brain and everything mounted directly around it: the three
+        independent brain switches (phone/mac-mini, cloud, incognito), live
+        message-notification toggles, the anticipation engine, the conversation
+        ledger + captions, the Social Lens and the on-glass figment seams
+        (banished figments, the optional rc_deployer / capture_provenance)."""
         # AI brain (docs/AI_BRAIN.md): three independent switches, not one dial.
         #   • the phone is the brain by default (on-device, works anywhere);
         #     connect_mac_mini() upgrades it with a bigger local brain + your
@@ -240,6 +381,12 @@ class Orchestrator(
         self._banished_figments: set[str] = set()
         self.rc_deployer = None                  # seam: StageDeployer or None
         self.capture_provenance = None           # seam: CaptureProvenance (N2)
+
+    def _init_juno_attention(self, db_path) -> None:
+        """The Juno assistant surface and its perception/verification stack:
+        wake sources + session, the attention policy, Veritas + WorldChecker,
+        the Discernment fusion state, the Truth Lens, Answer-ahead, the on-device
+        user model (persisted beside the vault) and Focus mode."""
         # Juno — the assistant. "Hey Juno" wakes it; tap / gaze / raise are
         # multimodal alternatives. On wake it shows a Listening ring + (device
         # seams) an earcon and a haptic tick, then stays open a short session so
@@ -305,6 +452,13 @@ class Orchestrator(
         # captions, message pop-ups). Distinct from Incognito — capture keeps
         # running. 0 = off; set_focus(minutes) arms it.
         self.focus_until = 0.0
+
+    def _init_object_lenses(self, db_path) -> None:
+        """The look-at-a-thing lenses and their perception tier: the Object Lens
+        (with its recognizer and AI/Label/Rosetta providers — AIProvider needs
+        self.brain, built already), the DietaryProfile, RosettaLens, Waypath,
+        Scholar, TasteLens, the Glance Arbiter (priors beside the vault) and the
+        Tier-0 PerceptionRouter."""
         # Object Lens: look at a thing -> a contextual panel (objects, not
         # people). Ships with the memory provider + the (inert) AI explainer;
         # register integration seams (laptop/car/plant) at the app layer.
@@ -377,6 +531,11 @@ class Orchestrator(
         from ..ai_brain import PerceptionRouter
         self.perception = PerceptionRouter()
 
+    def _init_dream_rem_horizon(self, cfg, bridge) -> None:
+        """The nightly / future-facing layer: the Life Quest engine, REM
+        retrieval bias (wired into the retriever's purge primitive), NightWatch,
+        the Premonition recurrence model, the Meridian Horizon Frame composer and
+        the Dream Mode engine."""
         # REM: last night's verdicts brighten the morning; Premonition:
         # future ghosts. Both feed the composer; both are inert when empty.
         vault_dir = getattr(cfg, "vault_dir", None)
@@ -405,6 +564,12 @@ class Orchestrator(
             privacy=self.privacy,
         )
 
+    def _init_confluence_plugins(self, cfg) -> None:
+        """The app-layer attachment seams and the plugin surface: Confluence
+        bonds / tincan / tap collector / outbox, the GhostMode mesh + Beacon,
+        the plugin registry and the always-present typed plugin event bus, and
+        the final LLM-gated wiring of the vision pipeline into the dream
+        describer."""
         # Confluence: attached by the app layer when a bond goes live
         self.bonds = None
         self.tincan = None
@@ -428,8 +593,6 @@ class Orchestrator(
         # Wire vision pipeline into SceneDescriber if LLM available
         if getattr(cfg, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY"):
             self.dream.describer.set_vision_fn(self._vision_describe)
-
-        bridge.on_event(self._on_event)
 
 
     # ------------------------------------------------------------------

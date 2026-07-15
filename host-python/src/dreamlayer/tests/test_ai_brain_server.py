@@ -7,6 +7,7 @@ phone-side remote clients + router wiring, and the opt-in cloud tier."""
 from __future__ import annotations
 
 import json
+import tempfile
 import threading
 import urllib.request
 from pathlib import Path
@@ -51,11 +52,67 @@ def _get(url, headers=None):
 class TestStore:
     def test_config_round_trip_and_folders(self, tmp_path):
         c = BrainConfig()
-        assert c.add_folder("/a/b") and not c.add_folder("/a/b")
+        d = tmp_path / "watched"; d.mkdir()
+        assert c.add_folder(str(d)) and not c.add_folder(str(d))
         c.model = "ollama"
         c.save(tmp_path)
         back = BrainConfig.load(tmp_path)
-        assert back.folders == ["/a/b"] and back.model == "ollama"
+        assert back.folders == [str(d)] and back.model == "ollama"
+
+    def test_add_folder_allow_list_rejects_sensitive_paths(self, tmp_path):
+        # SECURITY (revert-failing): add_folder must default-deny anything
+        # outside the user's home / temp trees. Before the allow-list, a token
+        # holder could point the Brain at /etc, /, or another user's home.
+        import os
+        from pathlib import Path
+        c = BrainConfig()
+        # a legit directory under the user's home is accepted
+        home_sub = tempfile.mkdtemp(dir=str(Path.home()))
+        try:
+            assert c.add_folder(home_sub) is True
+            assert home_sub in c.folders
+        finally:
+            os.rmdir(home_sub)
+        # sensitive / out-of-home paths are refused and never stored
+        for bad in ("/etc", "/", "/usr", "/home/someone-else", "/var/root"):
+            assert c.add_folder(bad) is False
+            assert bad not in c.folders
+            assert str(Path(bad).expanduser()) not in c.folders
+
+    def test_load_sanitizes_disallowed_folders(self, tmp_path):
+        # SECURITY (revert-failing, refute-remediation 2026-07): a hand-edited
+        # or pre-remediation config file must not reintroduce a disallowed
+        # watched folder on load — add_folder is not the only writer.
+        from dreamlayer.ai_brain.server.store import CONFIG_FILE
+        good = tmp_path / "ok"; good.mkdir()
+        (tmp_path / CONFIG_FILE).write_text(
+            json.dumps({"folders": ["/etc", str(good)]}))
+        cfg = BrainConfig.load(tmp_path)
+        assert "/etc" not in cfg.folders
+        assert str(good) in cfg.folders
+
+    def test_reindex_skips_disallowed_folder_at_walk_sink(self, tmp_path, monkeypatch):
+        # SECURITY (revert-failing): even if a disallowed path reaches
+        # config.folders by ANY route (backup restore, legacy file, TOCTOU),
+        # the index walk must refuse to read it. A real indexable file in a dir
+        # forced disallowed proves the guard is at the walk sink, not vacuous.
+        import dreamlayer.ai_brain.server.index as idxmod
+        d = tmp_path / "secret"; d.mkdir()
+        (d / "leak.txt").write_text("TOPSECRET passage content")
+        cfg = BrainConfig()
+        cfg.folders = [str(d)]
+        monkeypatch.setattr(idxmod, "_is_allowed_root", lambda p: False)
+        idx = FileIndex(cfg)
+        idx.reindex()
+        assert idx._passages == []      # walk sink refused the disallowed folder
+        assert all("TOPSECRET" not in passage for _, passage in idx._passages)
+
+    def test_import_backup_filters_disallowed_folders(self, tmp_path):
+        # SECURITY (revert-failing): the CONFIRMED bypass — import_backup wrote
+        # config.folders straight from request data with no allow-list.
+        b = Brain(tmp_path)
+        b.import_backup({"config": {"folders": ["/etc"]}})
+        assert "/etc" not in b.config.folders
 
     def test_public_hides_token(self):
         c = BrainConfig(token="secret")

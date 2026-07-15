@@ -7,6 +7,7 @@ inspect, back up, or hand-edit.
 from __future__ import annotations
 
 import json
+import tempfile
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -15,6 +16,33 @@ from typing import Optional
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
+
+
+def _is_allowed_root(path: str) -> bool:
+    """True if `path` may be indexed by the Brain.
+
+    Default-deny allow-list: the path must resolve to somewhere under the
+    user's own home tree, or under the OS temp tree (used by legitimate
+    export/scratch workflows and the test harness). Anything else — a system
+    directory (/etc, /var, /usr, /System), another user's home, or the
+    filesystem root — is refused. The path is fully resolved first so `..`
+    and symlink escapes can't smuggle a disallowed target past the check.
+    Non-existent paths are permitted as long as they resolve under an allowed
+    root, so a temporarily-missing folder can still be watched.
+    """
+    try:
+        p = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    try:
+        allowed_roots = [Path.home().resolve(),
+                         Path(tempfile.gettempdir()).resolve()]
+    except (OSError, RuntimeError, ValueError):
+        return False
+    for root in allowed_roots:
+        if p == root or root in p.parents:
+            return True
+    return False
 
 
 @dataclass
@@ -86,6 +114,18 @@ class BrainConfig:
         return bool(self.cloud_api_key)
 
     def add_folder(self, path: str) -> bool:
+        # SECURITY: default-deny allow-list. A token holder must not be able to
+        # point the Brain at /etc, another user's home, or the filesystem root
+        # (audit 2026-07-14 — "accepts any path with no allow-list"). This is a
+        # fast-fail at the front door; _is_allowed_root is also re-checked at the
+        # walk sink (index.reindex) and on every other writer (sanitize_folders,
+        # called from load + import_backup), so the allow-list holds no matter
+        # how a path reaches config.folders — not just via this handler
+        # (refute-remediation 2026-07). Storage stays expanduser-only
+        # (unresolved) so downstream comparisons — missing_folders,
+        # _write_upload, the index — see the same string they always did.
+        if not _is_allowed_root(path):
+            return False
         p = str(Path(path).expanduser())
         if p not in self.folders:
             self.folders.append(p)
@@ -99,6 +139,13 @@ class BrainConfig:
             return True
         return False
 
+    def sanitize_folders(self) -> None:
+        """Drop any watched folder that isn't allow-listed. Called on load and
+        after a restore, so a hand-edited/pre-remediation config file or a
+        crafted backup cannot reintroduce a path the add-folder gate would have
+        refused (refute-remediation 2026-07)."""
+        self.folders = [f for f in self.folders if _is_allowed_root(f)]
+
     # -- persistence -----------------------------------------------------
 
     @classmethod
@@ -108,7 +155,9 @@ class BrainConfig:
             try:
                 data = json.loads(p.read_text())
                 known = {f.name for f in field_list(cls)}
-                return cls(**{k: v for k, v in data.items() if k in known})
+                inst = cls(**{k: v for k, v in data.items() if k in known})
+                inst.sanitize_folders()   # a tampered/legacy file can't smuggle disallowed roots
+                return inst
             except (ValueError, TypeError, json.JSONDecodeError):
                 pass
         return cls()
