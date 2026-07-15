@@ -61,6 +61,21 @@ profile-phone = ["dreamlayer[memory,voice,structured,llm]"]    # pocket hub: loc
 profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,causal,infra,privacy,platform]"]  # the full Brain
 profile-cloud = ["dreamlayer[structured,llm,intelligence,causal,privacy]"]  # remote runner: reasoning, no device/local-model stack
 
+[tool.uv]
+# The brilliant-msg extras (glasses-bridge host: pillow>=11) and the
+# moondream/vision extras (Mac Brain: pillow<11) pin incompatible pillow
+# ranges. They target different machines — the profiles above say "pick ONE
+# per machine" — so declare every cross-machine pair conflicting instead of
+# letting the incompatibility block the universal lock.
+conflicts = [
+    [{ extra = "dream" },        { extra = "vision" }],
+    [{ extra = "dream" },        { extra = "profile-mac" }],
+    [{ extra = "hardware" },     { extra = "vision" }],
+    [{ extra = "hardware" },     { extra = "profile-mac" }],
+    [{ extra = "profile-halo" }, { extra = "vision" }],
+    [{ extra = "profile-halo" }, { extra = "profile-mac" }],
+]
+
 [tool.setuptools.package-data]
 # ship the control-panel imagery (cinematic stills, HUD explainer thumbnails)
 # so it's installed with the package and lands in the py2app .dmg bundle.
