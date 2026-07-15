@@ -285,6 +285,16 @@ class HaloSimulator:
                 "state": self.bridge.state,
                 "veiled": not self.orc.privacy.allow_capture(),
                 "figment": fig,
-                "people": [p["name"] for p in self.orc.social_people()],
-                "transcript": self.transcript[-14:],
+                # count-only, never the names: /sim/state is unauthenticated
+                # localhost, so a local process must not be able to enumerate
+                # everyone the wearer has met (refute 2026-07: the name list
+                # leaked here even after the transcript was coarsened).
+                "people": len(self.orc.social_people()),
+                # who-only: /sim/state is unauthenticated localhost, so any
+                # local process can read it. Never hand it the raw spoken
+                # content (names / debts / notes) — expose only the speaker
+                # label per utterance so the dev tool can still show THAT
+                # speech happened, not what was said. (audit 2026-07-15: the
+                # raw transcript leaked verbatim over /sim/state.)
+                "transcript": [{"who": t["who"]} for t in self.transcript[-14:]],
             }

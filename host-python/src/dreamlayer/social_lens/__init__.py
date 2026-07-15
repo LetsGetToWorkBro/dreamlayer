@@ -23,21 +23,25 @@ Architecture
 
 Name-you-were-told capture
 ---------------------------
-    # someone says "Hi, I'm Maya" — the name is kept automatically
+    # someone says "Hi, I'm Maya" — you are only *offered* the name
     card = fr.offer_introduction("hi, I'm Maya", frame=camera_frame)
-    if card:                       # Maya is now your own contact
-        send_to_hud(card)          # the KeptCard states the saved fact
+    if card:                       # an IntroOfferCard — nothing saved yet
+        send_to_hud(card)          # it asks; it never states a saved fact
+    # a deliberate double-tap keeps her — only now is Maya your contact
+    fr.confirm_introduction()
 
-    # prefer the older consent flow? construct with
-    # SocialLens(auto_keep_introductions=False) and gate the save
-    # behind confirm_introduction() on a deliberate double-tap.
+    # want the name kept the instant it's heard? opt in with
+    # SocialLens(auto_keep_introductions=True) and offer_introduction()
+    # returns the KeptCard directly.
 
-  Automatic on a self-introduction (the default), spoken (closed
-  offline grammar of self-introductions only — never bystanders),
-  in-place (writes to your local contacts, no lookup, no network), and
-  veiled-silent. A kept introduction is recallable by face on the very
-  next identify(), and the conversation ledger grows its dossier from
-  there.
+  Consent-first on a self-introduction (the default): hearing only
+  offers, and nothing is enrolled until you deliberately confirm — so
+  only people you *chose* to keep are stored, never on hearing alone.
+  Spoken (closed offline grammar of self-introductions only — never
+  bystanders), in-place (writes to your local contacts, no lookup, no
+  network), and veiled-silent. A kept introduction is recallable by face
+  on the very next identify(), and the conversation ledger grows its
+  dossier from there.
 
 Introduced by someone else
 ---------------------------

@@ -1,9 +1,10 @@
-"""Name-you-were-told capture: spoken, in-place, veiled — kept automatically.
+"""Name-you-were-told capture: spoken, in-place, veiled — consent-first.
 
-Covers the offline grammar, the automatic keep (the default), the older
-consent flow behind auto_keep=False, the veil, offer expiry, the name-only
-vs face-bearing split, and the round-trip where a kept introduction is
-recalled by face on the next identify()."""
+Covers the offline grammar, the consent flow (the default: hearing only
+offers, a deliberate confirm enrols), the auto-keep opt-in behind
+auto_keep=True, the veil, offer expiry, the name-only vs face-bearing
+split, and the round-trip where a kept introduction is recalled by face
+on the next identify()."""
 import numpy as np
 import pytest
 
@@ -71,13 +72,55 @@ class TestParseIntroduction:
 
 
 # --------------------------------------------------------------------------
-# The default: a self-introduction is kept automatically.
+# Consent by default: hearing a self-introduction never silently enrols.
+# This is the privacy invariant — "only people you chose to keep". These
+# tests use DEFAULT construction (no auto_keep passed): a revert of the
+# default back to auto_keep=True makes them fail.
+# --------------------------------------------------------------------------
+
+class TestDefaultIsConsentNotAutoKeep:
+    def test_default_heard_offers_and_stores_no_face(self):
+        # REGRESSION (Contract Compliance / Privacy): the default spoken-
+        # capture path must NOT enrol a face on hearing alone. It offers.
+        idx = ContactIndex()
+        enr = ContactEnricher()
+        cap = IntroductionCapture(index=idx, enricher=enr)   # DEFAULT
+        card = cap.heard("I'm Maya", frame=make_frame(0.8))
+        assert card["type"] == "IntroOfferCard"   # offered, not kept
+        assert card["primary"] == "Maya"
+        assert idx.size == 0                       # NO contact vector stored
+        assert cap.pending is not None            # staged, awaiting consent
+
+    def test_default_explicit_confirm_enrols(self):
+        # The deliberate keep still works: confirm() enrols the offered face.
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        cap.heard("I'm Maya", frame=make_frame(0.8))          # DEFAULT
+        assert idx.size == 0                       # nothing yet
+        rec = cap.confirm()                        # explicit keep
+        assert rec is not None and rec.name == "Maya"
+        assert idx.size == 1                        # NOW enrolled
+        assert cap.pending is None
+
+    def test_default_no_confirm_no_face_ever_stored(self):
+        # Hearing then walking away (no confirm) leaves nothing behind.
+        idx = ContactIndex()
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        cap.heard("my name is Sam", frame=make_frame(0.8))    # DEFAULT
+        cap.dismiss()                              # let it go, unremembered
+        assert idx.size == 0
+        assert cap.confirm() is None
+
+
+# --------------------------------------------------------------------------
+# The auto-keep opt-in (auto_keep=True): keep a self-introduction on hearing.
 # --------------------------------------------------------------------------
 
 class TestAutomaticKeep:
     def test_heard_keeps_immediately(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx, enricher=ContactEnricher())
+        cap = IntroductionCapture(index=idx, enricher=ContactEnricher(),
+                                  auto_keep=True)
         card = cap.heard("I'm Maya", frame=make_frame(0.8))
         assert card["type"] == "IntroKeptCard"
         assert card["primary"] == "Maya"
@@ -85,27 +128,27 @@ class TestAutomaticKeep:
         assert cap.pending is None               # nothing staged
 
     def test_kept_card_states_the_fact(self):
-        cap = IntroductionCapture(index=ContactIndex())
+        cap = IntroductionCapture(index=ContactIndex(), auto_keep=True)
         card = cap.heard("my name is Sam", frame=make_frame())
         assert card["eyebrow"] == "KEPT"
         assert "double-tap" not in card["detail"]
 
     def test_ambient_chatter_keeps_nothing(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx)
+        cap = IntroductionCapture(index=idx, auto_keep=True)
         assert cap.heard("what a nice day", frame=make_frame()) is None
         assert idx.size == 0
 
     def test_veil_still_closes_the_ear(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx, privacy=Paused())
+        cap = IntroductionCapture(index=idx, privacy=Paused(), auto_keep=True)
         assert cap.heard("I'm Maya", frame=make_frame()) is None
         assert idx.size == 0
 
     def test_name_only_auto_keep_stays_out_of_the_face_index(self):
         idx = ContactIndex()
         enr = ContactEnricher()
-        cap = IntroductionCapture(index=idx, enricher=enr)
+        cap = IntroductionCapture(index=idx, enricher=enr, auto_keep=True)
         card = cap.heard("I'm Maya")             # no frame -> no face
         assert card["type"] == "IntroKeptCard"
         assert card["has_face"] is False
@@ -114,7 +157,7 @@ class TestAutomaticKeep:
 
     def test_confirm_is_a_noop_after_auto_keep(self):
         idx = ContactIndex()
-        cap = IntroductionCapture(index=idx)
+        cap = IntroductionCapture(index=idx, auto_keep=True)
         cap.heard("I'm Maya", frame=make_frame())
         assert cap.confirm() is None             # already kept in heard()
         assert idx.size == 1
@@ -203,12 +246,32 @@ class TestPrivacyAndLifecycle:
 # --------------------------------------------------------------------------
 
 class TestSocialLensRoundTrip:
-    def test_introduce_then_recall_by_face(self):
-        fr = SocialLens()
+    def test_default_offer_does_not_silently_enrol(self):
+        # REGRESSION (Contract Compliance / Privacy): through the
+        # orchestrator, the DEFAULT hears-then-offers — a spoken
+        # introduction without an explicit confirm enrols no one. Fails
+        # if the default flips back to auto_keep_introductions=True.
+        fr = SocialLens()                        # DEFAULT
         frame = make_frame(0.83)
         card = fr.offer_introduction("hi, my name is Maya", frame=frame)
         assert card and card["primary"] == "Maya"
-        assert card["type"] == "IntroKeptCard"   # kept automatically
+        assert card["type"] == "IntroOfferCard"  # offered, not kept
+        assert fr.contact_count == 0             # NO contact stored
+        # the face is not recallable — nothing was enrolled
+        assert fr.identify(make_frame(0.83)).match is None
+        # an explicit confirm DOES enrol, and then the face recalls
+        assert fr.confirm_introduction() is not None
+        assert fr.contact_count == 1
+        result = fr.identify(make_frame(0.83))
+        assert result.match is not None
+        assert result.match.contact.name == "Maya"
+
+    def test_introduce_then_recall_by_face_auto_keep(self):
+        fr = SocialLens(auto_keep_introductions=True)   # opt in
+        frame = make_frame(0.83)
+        card = fr.offer_introduction("hi, my name is Maya", frame=frame)
+        assert card and card["primary"] == "Maya"
+        assert card["type"] == "IntroKeptCard"   # kept on hearing (opt-in)
         assert fr.contact_count == 1
 
         # the same face now recalls the name you were given

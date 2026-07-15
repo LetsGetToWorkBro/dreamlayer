@@ -5,7 +5,11 @@ from ..bridge.emulator_bridge import EmulatorBridge
 
 FX = os.path.join(os.path.dirname(__file__), "fixtures")
 
-def _load(name): return json.load(open(os.path.join(FX, name)))
+def _load(name):
+    # `with` so the fixture file descriptor is closed, not leaked (the bare
+    # json.load(open(...)) left it dangling until GC).
+    with open(os.path.join(FX, name)) as f:
+        return json.load(f)
 
 def new_orch():
     return Orchestrator(EmulatorBridge(), db_path=":memory:")

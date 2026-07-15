@@ -27,6 +27,28 @@ def test_export_missing_db_guides(tmp_path, capsys):
     assert rc == 2 and "no memory file" in capsys.readouterr().err
 
 
+def test_export_refuses_under_veil_env_and_writes_no_dump(tmp_path, capsys, monkeypatch):
+    """A raw copy is a full read of your memory, so it must be veil-gated exactly
+    like `memories browse`: under an active veil, export refuses and leaves NO
+    dump behind. Without the gate the owner could full-dump the very file that
+    `browse` just refused to open. Fails on revert of the cmd_mem_export gate."""
+    db = _db(tmp_path)
+    dest = tmp_path / "backup" / "mem.db"
+    monkeypatch.setenv("DREAMLAYER_VEIL", "1")
+    rc = cli.main(["memories", "export", str(dest), "--db", str(db)])
+    assert rc == 2 and "veil" in capsys.readouterr().err.lower()
+    assert not dest.exists(), "no dump may be written under an active veil"
+
+
+def test_export_refuses_under_veil_lockfile_and_writes_no_dump(tmp_path, capsys):
+    db = _db(tmp_path)
+    (tmp_path / "veil.lock").write_text("up", encoding="utf-8")   # veil beside the db
+    dest = tmp_path / "backup" / "mem.db"
+    rc = cli.main(["memories", "export", str(dest), "--db", str(db)])
+    assert rc == 2 and "veil" in capsys.readouterr().err.lower()
+    assert not dest.exists(), "no dump may be written under an active veil"
+
+
 def test_import_restores_and_refuses_to_clobber(tmp_path, capsys):
     src = _db(tmp_path, "source.db")
     db = tmp_path / "dest.db"

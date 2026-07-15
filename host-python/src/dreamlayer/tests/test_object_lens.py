@@ -188,3 +188,36 @@ def test_open_vocab_person_labels_are_declined():
         assert rec.recognize(frame) is None, label
     rec = ObjectRecognizer(classify_fn=lambda f: ("espresso mug", 0.95, {}))
     assert rec.recognize(frame) is not None
+
+
+def test_open_vocab_human_description_is_deferred_to_social():
+    """Audit 2026-07-15: the person gate must catch an open-vocab VLM's
+    description of a human — the audit's flagged example "man in a suit" — via a
+    broadened person-indicator token set, and defer it to the Social Lens, while
+    (crucially) still accepting an open-vocabulary OBJECT the small taxonomy
+    never lists ("almond milk"), which flows on to the Label/AI providers.
+
+    FAILS ON REVERT to the audit's original 6-word denylist: "man in a suit"
+    would panel a human because "man" wasn't listed.
+    """
+    from dreamlayer.object_lens.recognizer import (
+        ObjectRecognizer, DEFAULT_TAXONOMY,
+    )
+    import numpy as np
+    frame = np.full((32, 32), 0.7, dtype=np.float32)
+
+    # a human, open-vocab described → declined (caught via the "man" indicator)
+    rec = ObjectRecognizer(classify_fn=lambda f: ("man in a suit", 0.95, {}))
+    assert rec.recognize(frame) is None
+    rec = ObjectRecognizer(classify_fn=lambda f: ("a young boy", 0.95, {}))
+    assert rec.recognize(frame) is None
+
+    # a novel OBJECT the tiny taxonomy never lists still panels (open-vocab path)
+    assert "almond milk" not in DEFAULT_TAXONOMY
+    rec = ObjectRecognizer(classify_fn=lambda f: ("almond milk", 0.95, {}))
+    assert rec.recognize(frame) is not None
+
+    # a taxonomy object still panels
+    rec = ObjectRecognizer(classify_fn=lambda f: ("laptop", 0.95, {}))
+    sighting = rec.recognize(frame)
+    assert sighting is not None and sighting.label == "laptop"

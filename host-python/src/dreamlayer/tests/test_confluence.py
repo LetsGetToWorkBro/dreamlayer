@@ -8,6 +8,7 @@ import pytest
 from dreamlayer.confluence import (
     BondManager, EntangledSky, TinCan, SharedRhythms, DuetSession,
     export_claims, crossings, wrap_gift, unwrap_gift,
+    Beacon, MeshManager,
     MSG_CONFLUENCE, MSG_TINCAN, BOND_TTL_S,
 )
 from dreamlayer.confluence.entangle import (
@@ -15,6 +16,7 @@ from dreamlayer.confluence.entangle import (
 )
 from dreamlayer.dream_mode.premonition import RecurrenceModel
 from dreamlayer.dream_mode.weather_ledger import WeatherSnapshot
+from dreamlayer.memory.privacy import PrivacyGate
 
 NOW = 1_700_000_000.0
 assert time.gmtime(NOW).tm_wday == 1     # Tuesday anchor
@@ -395,3 +397,115 @@ class TestDeviceRenderer:
         assert dr.tincan() is not None
         dr.draw_frame(100)          # headless safe mid-train
         dr.draw_frame(5000)         # long past the train: consumed
+
+
+class TestVeilRecallGate:
+    """Veil/Recall Gate integrity (audit 2026-07-15). Inbound peer content —
+    a gifted sky, an entangled sky, a beacon rim — is a read-back painted onto
+    MY device, so the full pause veil ("deaf and blind") must silence it. These
+    fail on revert: without the gate a paused wearer still sees the peer. And
+    incognito must NOT silence recall — only capture stops while incognito, so
+    you can still see what you already share."""
+
+    def snapshot(self):
+        return WeatherSnapshot(ts=NOW - 6 * 3600.0, place="kitchen",
+                               colors=colors(y=700), amplitude=0.3)
+
+    # -- gift.unwrap_gift -----------------------------------------------------
+
+    def test_paused_veil_silences_gifted_sky(self):
+        a, b, _, _ = bonded_pair()
+        gate = PrivacyGate()
+        gate.pause()
+        assert unwrap_gift(b, wrap_gift(a, self.snapshot()), privacy=gate) == []
+        # unpaused (default gate): the gifted sky plays in full
+        frames = unwrap_gift(b, wrap_gift(a, self.snapshot()))
+        assert len(frames) == 6 and frames[0]["colors"][0]["y"] == 700
+
+    def test_incognito_still_replays_the_gift(self):
+        a, b, _, _ = bonded_pair()
+        gate = PrivacyGate()
+        gate.set_incognito(True)                 # capture stops, recall does not
+        assert not gate.allow_capture() and gate.allow_recall()
+        frames = unwrap_gift(b, wrap_gift(a, self.snapshot()), privacy=gate)
+        assert len(frames) == 6
+
+    # -- entangle.EntangledSky ------------------------------------------------
+
+    def test_paused_veil_blinds_the_entangled_sky(self):
+        clock = Clock()
+        a, b, _, _ = bonded_pair(clock)
+        gate = PrivacyGate()
+        sky = EntangledSky(b, now_fn=clock, privacy=gate)
+        assert sky.receive(a.send_weather(0.30, colors()).to_wire())
+        opened = []
+        for _ in range(30):
+            opened += sky.tick(my_state=0.30, my_colors=colors())
+        assert opened                            # open: renders the shared sky
+        gate.pause()
+        assert sky.peer_present()                # the peer is still fresh...
+        assert sky.tick(my_state=0.30, my_colors=colors()) == []   # ...yet blind
+
+    def test_paused_veil_makes_the_sky_deaf(self):
+        clock = Clock()
+        a, b, _, _ = bonded_pair(clock)
+        gate = PrivacyGate()
+        gate.pause()
+        sky = EntangledSky(b, now_fn=clock, privacy=gate)
+        assert sky.receive(a.send_weather(0.30, colors()).to_wire()) is False
+        assert not sky.peer_present()
+
+    def test_incognito_leaves_the_sky_entangled(self):
+        clock = Clock()
+        a, b, _, _ = bonded_pair(clock)
+        gate = PrivacyGate()
+        gate.set_incognito(True)
+        sky = EntangledSky(b, now_fn=clock, privacy=gate)
+        assert sky.receive(a.send_weather(0.30, colors()).to_wire())
+        frames = []
+        for _ in range(30):
+            frames += sky.tick(my_state=0.30, my_colors=colors())
+        assert frames                            # incognito still renders
+
+    # -- beacon.Beacon --------------------------------------------------------
+
+    def _lit_beacon(self, clock, gate):
+        """A Beacon whose mesh already holds one fresh peer bearing. The fold is
+        done at the mesh level so the render gate is what's under test."""
+        me = MeshManager(now_fn=clock, me="me")
+        peer = MeshManager(now_fn=clock, me="peer")
+        gid, code = me.form()
+        peer.join(gid, code)
+        pkt = peer.emit("bearing", {"bearing_dd": 900, "dist": "near"})
+        assert me.receive(pkt.to_wire()) is not None
+        return Beacon(me, now_fn=clock, privacy=gate)
+
+    def test_paused_veil_blinds_the_beacon(self):
+        clock = Clock()
+        gate = PrivacyGate()
+        beacon = self._lit_beacon(clock, gate)
+        assert beacon.render_frames()            # open: a pulse at the bearing
+        assert beacon.card() is not None
+        gate.pause()
+        assert beacon.render_frames() == []      # blind
+        assert beacon.card() is None
+
+    def test_paused_veil_makes_the_beacon_deaf(self):
+        clock = Clock()
+        me = MeshManager(now_fn=clock, me="me")
+        peer = MeshManager(now_fn=clock, me="peer")
+        gid, code = me.form()
+        peer.join(gid, code)
+        gate = PrivacyGate()
+        gate.pause()
+        beacon = Beacon(me, now_fn=clock, privacy=gate)
+        pkt = peer.emit("bearing", {"bearing_dd": 900, "dist": "near"})
+        assert beacon.receive(pkt.to_wire()) is None   # deaf: not folded in
+
+    def test_incognito_leaves_the_beacon_lit(self):
+        clock = Clock()
+        gate = PrivacyGate()
+        gate.set_incognito(True)
+        beacon = self._lit_beacon(clock, gate)
+        assert beacon.render_frames()            # incognito still pulses
+        assert beacon.card() is not None

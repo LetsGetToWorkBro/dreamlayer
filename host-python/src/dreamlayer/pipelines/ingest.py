@@ -270,6 +270,7 @@ class IngestPipeline:
         llm_confidence_threshold: float = 0.60,
         llm_word_threshold: int = 40,
         cloud_ok=None,
+        privacy=None,
     ):
         self.db = db
         self.use_spacy = use_spacy
@@ -282,10 +283,21 @@ class IngestPipeline:
         # so a mere API key can no longer send transcripts to the cloud with the
         # Cloud switch off (audit 2026-07-14 CRITICAL).
         self.cloud_ok = cloud_ok
+        # privacy: an optional capture veil (allow_capture() -> bool). This is
+        # the defense-in-depth gate on the LOCAL write path (audit 2026-07-15).
+        # The producer (orchestrator ops_ingest.ingest_conversation) already
+        # refuses to call ingest() while the veil is up, but a DIRECT caller of
+        # this primitive would otherwise persist a MemoryEvent past the veil. So
+        # ingest() ALSO consults this gate and no-ops the write when capture is
+        # denied. Default AlwaysOnGate() keeps the isolated/library posture
+        # permissive and every existing call signature working. Can be passed
+        # here or per-call to ingest(privacy=...).
+        from ..memory.privacy import AlwaysOnGate
+        self.privacy = privacy or AlwaysOnGate()
 
     @classmethod
     def with_llm(cls, db, config, use_spacy: bool = True,
-                 cloud_ok=None) -> "IngestPipeline":
+                 cloud_ok=None, privacy=None) -> "IngestPipeline":
         """Convenience constructor that wires LLMClient from config."""
         from .llm_client import LLMClient
         return cls(
@@ -295,6 +307,7 @@ class IngestPipeline:
             llm_confidence_threshold=getattr(config, "llm_confidence_threshold", 0.60),
             llm_word_threshold=getattr(config, "llm_word_threshold", 40),
             cloud_ok=cloud_ok,
+            privacy=privacy,
         )
 
     def _should_use_llm(self, transcript: str, events: list[MemoryEvent]) -> bool:
@@ -315,7 +328,7 @@ class IngestPipeline:
         return False
 
     def ingest(self, transcript: str, context: dict | None = None,
-               write_commitments: bool = True) -> list[MemoryEvent]:
+               write_commitments: bool = True, privacy=None) -> list[MemoryEvent]:
         """Extract memory events from *transcript* and persist to DB.
 
         Parameters
@@ -327,11 +340,23 @@ class IngestPipeline:
             when it has already written the conversation's commitments from a
             more authoritative source (structured turns[].commitment), so one
             promise doesn't land as two commitment rows.
+        privacy : object with allow_capture() -> bool, optional
+            Defense-in-depth capture veil for the LOCAL write path (audit
+            2026-07-15). Overrides the instance-level gate for this call. When
+            capture is denied — either this per-call gate or the instance gate
+            reports allow_capture() False — ingest() no-ops the write entirely:
+            nothing is extracted, no MemoryEvent or commitment row is persisted,
+            and it returns []. Defaults to the instance gate (AlwaysOnGate() when
+            none was wired), so existing callers are unaffected.
 
         Returns
         -------
         list[MemoryEvent]  each event has db_id > 0 after DB write
         """
+        gate = privacy or self.privacy
+        if gate is not None and not gate.allow_capture():
+            return []                     # veiled: persist nothing
+
         if not transcript or not transcript.strip():
             return []
 

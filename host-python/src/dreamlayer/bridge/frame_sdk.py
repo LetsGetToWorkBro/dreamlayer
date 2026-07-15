@@ -17,6 +17,8 @@ from __future__ import annotations
 import logging
 from typing import List
 
+from ..memory.privacy import AlwaysOnGate
+
 log = logging.getLogger("dreamlayer.frame_sdk")
 
 try:
@@ -29,10 +31,15 @@ except ImportError:
 class FrameDisplay:
     available = _HAS_FRAME
 
-    def __init__(self):
+    def __init__(self, privacy=None):
         self._frame = None
         self.sent: List[dict] = []          # record of shown payloads (fallback + real)
         self.connected = False
+        # Privacy chokepoint. A lens/adapter constructed WITHOUT a gate falls
+        # back to the permissive AlwaysOnGate() (isolated-unit-test / SDK-preview
+        # case). In production the caller injects the real PrivacyGate so the
+        # display honors the wearer's veil. Same idiom as object_lens/social_lens.
+        self._privacy = privacy or AlwaysOnGate()
 
     def connect(self) -> dict:
         if not _HAS_FRAME:
@@ -58,7 +65,17 @@ class FrameDisplay:
 
     def show_card(self, card: dict) -> None:
         """Flatten a DreamLayer card to Frame's text display via noa-style
-        patterns (title + first line)."""
+        patterns (title + first line).
+
+        Privacy chokepoint (defense-in-depth, mirrors real_bridge.send_card):
+        while the veil is up (gate denies recall) only a PrivacyVeilCard may
+        light the display — a content card can carry recalled/signal-derived
+        text and must not cross the pause boundary. This is a live display
+        surface, so the gate is enforced here even though it is currently a
+        prototype/test path.
+        """
+        if not self._privacy.allow_recall() and card.get("type") != "PrivacyVeilCard":
+            return
         from .noa_patterns import card_to_frame_lines
         lines = card_to_frame_lines(card)
         self.sent.append({"kind": "card", "lines": lines})

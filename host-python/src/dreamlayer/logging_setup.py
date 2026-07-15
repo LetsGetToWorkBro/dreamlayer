@@ -12,6 +12,7 @@ Idempotent: safe to call more than once (it replaces its own handler).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -26,10 +27,79 @@ _RESERVED = {
     "processName", "process", "taskName",
 }
 
+# Extra keys whose *values* are treated as sensitive PII/secrets and never
+# written verbatim to a log line. Compared case-insensitively (see
+# ``_is_sensitive``). The JSON formatter serialises every non-reserved extra
+# verbatim, so absent this list a caller passing names/embeddings/transcripts
+# in ``extra={…}`` would leak them into logs if logs ever ship. Keep this
+# conservative-but-broad; extend as new sensitive fields appear.
+_SENSITIVE_KEYS = {
+    "name", "names", "summary", "transcript", "transcripts",
+    "embedding", "embeddings", "contact", "contacts", "query", "answer",
+    "token", "api_key", "apikey", "key", "secret", "secrets", "password",
+    "passphrase", "text", "caption", "captions", "email", "phone",
+    "address", "prompt", "content", "message_body", "credential",
+    "credentials", "auth", "authorization", "session", "cookie",
+}
+
+
+# Substring roots: a key whose separator-stripped form CONTAINS one of these is
+# sensitive, so single-word compounds and camelCase (username, userName→username,
+# fullname, authToken→authtoken, homeAddress) are caught, not just ``_``-suffixed
+# forms. Over-redaction is the safe direction for a privacy-first logger.
+_SENSITIVE_ROOTS = (
+    "name", "email", "phone", "address", "token", "secret", "password",
+    "passphrase", "credential", "apikey", "transcript", "embedding",
+    "contact", "summary", "caption", "passcode", "ssn",
+)
+
+
+def _is_sensitive(key: str) -> bool:
+    """A key is sensitive if its normalised form matches a known-sensitive key
+    exactly, ends with ``_<sensitive>``, OR contains a sensitive root as a
+    substring (so ``username``/``userEmail``/``authToken`` are caught, not only
+    ``user_name``). Case- and separator-insensitive."""
+    norm = key.strip().lower().replace("-", "_")
+    if norm in _SENSITIVE_KEYS:
+        return True
+    if any(norm.endswith("_" + s) for s in _SENSITIVE_KEYS):
+        return True
+    flat = norm.replace("_", "")
+    return any(root in flat for root in _SENSITIVE_ROOTS)
+
+
+def _sanitize(val: object, depth: int = 0) -> object:
+    """Recursively redact sensitive keys *inside* a structured extra value, so a
+    transcript/name nested under a benign key (``extra={"result": {"name": …}}``)
+    can't slip through the top-level key check. Bounded depth guards cycles."""
+    if depth > 6:
+        return "<max-depth>"
+    if isinstance(val, dict):
+        return {str(k): (_redact(v) if _is_sensitive(str(k))
+                         else _sanitize(v, depth + 1)) for k, v in val.items()}
+    if isinstance(val, (list, tuple)):
+        return [_sanitize(v, depth + 1) for v in val]
+    return val
+
+
+def _redact(val: object) -> str:
+    """Replace a sensitive value with a stable, non-reversible marker. The
+    short hash lets an operator correlate repeated values across log lines
+    without ever exposing the plaintext."""
+    try:
+        raw = json.dumps(val, separators=(",", ":"), sort_keys=True,
+                         default=repr)
+    except (TypeError, ValueError):
+        raw = repr(val)
+    digest = hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:8]
+    return f"<redacted:{digest}>"
+
 
 class JsonLineFormatter(logging.Formatter):
     """One compact JSON object per record; extras (logger.info(msg, extra={…}))
-    ride alongside the standard fields."""
+    ride alongside the standard fields. Values under known-sensitive keys are
+    redacted (replaced with a ``<redacted:hash>`` marker) before serialisation
+    so PII/secrets never reach the log line."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -42,6 +112,9 @@ class JsonLineFormatter(logging.Formatter):
             payload["exc"] = self.formatException(record.exc_info)
         for key, val in record.__dict__.items():
             if key not in _RESERVED and not key.startswith("_"):
+                if _is_sensitive(key):
+                    payload[key] = _redact(val)
+                    continue
                 try:
                     json.dumps(val)          # only serialisable extras
                     payload[key] = val

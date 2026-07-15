@@ -62,7 +62,7 @@ class SocialLens:
         threshold: float = 0.65,
         memory_backend=None,
         privacy=None,
-        auto_keep_introductions: bool = True,
+        auto_keep_introductions: bool = False,
     ):
         self._embedder = FaceEmbedder(threshold=0.40)
         self._index = ContactIndex(threshold=threshold)
@@ -73,9 +73,12 @@ class SocialLens:
 
         # Name-you-were-told capture shares this instance's index,
         # enricher, embedder, and privacy gate, so a kept introduction
-        # is recallable by the very next identify(). auto_keep (the
-        # default) saves a heard self-introduction immediately;
-        # auto_keep_introductions=False restores the offer/confirm flow.
+        # is recallable by the very next identify(). The default
+        # (auto_keep_introductions=False) runs the offer/confirm consent
+        # flow: hearing a self-introduction only offers, and nothing is
+        # enrolled until a deliberate confirm — so only people you chose
+        # to keep are stored. auto_keep_introductions=True opts into
+        # saving a heard self-introduction immediately.
         self.introductions = IntroductionCapture(
             index=self._index,
             enricher=self._enricher,
@@ -140,11 +143,12 @@ class SocialLens:
                            now=None) -> Optional[dict]:
         """Hear a spoken self-introduction.
 
-        With auto_keep (the default) the name is saved immediately and
-        the KeptCard is returned. With auto_keep_introductions=False this
-        returns an offer card and saves nothing until
-        confirm_introduction(). Returns None when nothing was recognised
-        or the veil is down.
+        With the default (auto_keep_introductions=False) this returns an
+        offer card and saves nothing until a deliberate
+        confirm_introduction() — enrolment is opt-in. With
+        auto_keep_introductions=True the name is saved immediately and the
+        KeptCard is returned. Returns None when nothing was recognised or
+        the veil is down.
         """
         return self.introductions.heard(utterance, frame=frame, now=now)
 
@@ -269,6 +273,13 @@ class SocialLens:
         self._enricher.purge(contact_id)
         if self._last_identified == contact_id:
             self._last_identified = None
+
+    def forget_all(self) -> None:
+        """Forget EVERY contact — face vectors and dossiers — for the
+        erase-everything path. Reuses remove_contact per id so each enricher
+        dossier is purged too, not just the index."""
+        for c in list(self._index.all()):
+            self.remove_contact(c.contact_id)
 
     @property
     def contact_count(self) -> int:

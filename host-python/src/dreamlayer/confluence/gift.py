@@ -14,6 +14,8 @@ verbatim-history machinery Yesterlight already trusts.
 """
 from __future__ import annotations
 
+from ..memory.privacy import AlwaysOnGate
+
 GIFT_PLAY_S = 30.0
 GIFT_FRAME_EVERY_S = 5.0     # re-assert the gifted sky at ledger cadence
 
@@ -29,9 +31,19 @@ def wrap_gift(bonds, snapshot) -> dict | None:
     return wire
 
 
-def unwrap_gift(bonds, wire: dict) -> list[dict]:
+def unwrap_gift(bonds, wire: dict, privacy=None) -> list[dict]:
     """Receiver: an authenticated gift → the palette frames that play it.
-    A forged or unbonded gift plays nothing."""
+    A forged or unbonded gift plays nothing.
+
+    Recall-gated (Veil/Recall Gate integrity, audit 2026-07-15): replaying a
+    peer's gifted sky paints their recorded moment onto YOUR device — a
+    read-back the full pause veil must silence ("deaf and blind"), so a paused
+    wearer plays nothing even from a perfectly authentic gift. Incognito does
+    NOT block it (recall survives incognito; only capture stops). Defaults to
+    AlwaysOnGate() for the gate-less unit/SDK case."""
+    gate = privacy or AlwaysOnGate()
+    if not gate.allow_recall():
+        return []
     pkt = bonds.receive_weather(wire)
     if pkt is None or "gift" not in wire:
         return []

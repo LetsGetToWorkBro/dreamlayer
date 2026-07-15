@@ -12,9 +12,10 @@ deterministic mock maps frame statistics onto a small taxonomy so the rest
 of the lens — providers, panels, HUD — is fully exercisable and testable
 without a model.
 
-Privacy boundary: if the recogniser names a *person*, the Object Lens
-declines and returns nothing. People are Social Lens's consented domain;
-the Object Lens is for things.
+Privacy boundary: the recogniser panels a label only if it names something in
+the object taxonomy (an allowlist). Any other label — an unknown object, a
+person-ish word, an open-vocab description of a human — is declined and left to
+the Social Lens. People are its consented domain; the Object Lens is for things.
 """
 from __future__ import annotations
 
@@ -25,33 +26,69 @@ import numpy as np
 
 from .schema import ObjectSighting
 
-# A person is never an "object" here — defer to Social Lens. A fixed 6-word
-# exact-match set let an open-vocabulary VLM slip a human through as a described
-# object ("man in a suit", "young boy") — so this is now a broad set of
-# person-indicating TOKENS, matched against any word in the label, not the whole
-# label (audit 2026-07-14). Better to decline a rare true object than to
-# describe a person.
+# A person is never an "object" here — defer to Social Lens. The recognizer must
+# still accept open-vocabulary OBJECT labels the small taxonomy never lists
+# ("almond milk", "espresso machine") because those flow on to the Label /
+# Rosetta / AI providers — so the person defence is a denylist of person
+# indicators, NOT an object allowlist (an allowlist would decline every novel
+# object and break the open-vocab object path). The audit's real complaint was
+# that the ORIGINAL set was only 6 words, so "boy"/"man in a suit" slipped
+# through; the set below is widened to ~30 person indicators (audit 2026-07-15),
+# which catches those via their person-indicator token while objects pass.
 PERSON_TOKENS = frozenset({
-    "person", "people", "face", "faces", "man", "men", "woman", "women",
-    "child", "children", "kid", "kids", "boy", "boys", "girl", "girls",
-    "toddler", "baby", "infant", "human", "humans", "lady", "ladies",
-    "gentleman", "guy", "guys", "adult", "teenager", "teen", "pedestrian",
-    "someone", "somebody", "crowd", "portrait", "selfie",
+    "person", "people", "persons", "face", "faces", "man", "men",
+    "woman", "women", "child", "children", "kid", "kids", "boy", "boys",
+    "girl", "girls", "toddler", "toddlers", "baby", "babies", "infant",
+    "infants", "human", "humans", "lady", "ladies", "gentleman", "gentlemen",
+    "guy", "guys", "adult", "adults", "teenager", "teenagers", "teen", "teens",
+    "pedestrian", "pedestrians", "someone", "somebody", "everyone", "crowd",
+    "portrait", "portraits", "selfie", "selfies",
+    # relations / roles that name a present human
+    "bride", "groom", "couple", "mother", "father", "mom", "dad", "mum",
+    "parent", "parents", "son", "daughter", "husband", "wife", "spouse",
+    "brother", "sister", "friend", "colleague", "coworker", "worker",
+    # pronouns pointing at a present human (whole-token matches only)
+    "he", "she", "him", "her", "his", "hers", "they", "them", "folks",
 })
-# kept for back-compat with anything importing the old name
 PERSON_LABELS = PERSON_TOKENS
 
+# gendered/relational SUFFIXES for compound nouns where the person indicator is
+# not a standalone token: "businessman", "policewoman", "schoolboy",
+# "grandchild", "salesperson". Suffix (not substring) so an object like
+# "mandarin"/"manual"/"command" is NOT mis-flagged. len>4 avoids the bare tokens
+# already caught above. ("german" ending in "man" is the accepted rare cost.)
+_PERSON_SUFFIX = ("man", "men", "woman", "women", "boy", "girl",
+                  "person", "people", "child", "children")
+
 _WORD_RE = re.compile(r"[a-z]+")
-
-
-def _names_a_person(label: str) -> bool:
-    """True if any word in the label is a person token."""
-    return any(w in PERSON_TOKENS for w in _WORD_RE.findall((label or "").lower()))
 
 DEFAULT_TAXONOMY = [
     "laptop", "mug", "book", "houseplant", "phone", "keys",
     "bottle", "backpack", "car", "watch",
 ]
+
+
+def _names_a_person(label: str) -> bool:
+    """True if any word in the label is a person-indicator.
+
+    The recognizer must keep accepting open-vocabulary OBJECT labels the small
+    taxonomy never lists ("almond milk", "espresso machine") — those flow to the
+    Label / Rosetta / AI providers. So the person defence is a denylist of
+    person-indicator tokens, not an object allowlist (an allowlist would decline
+    every novel object). The token set was widened from the audit's 6 words to
+    ~30 (man/woman/boy/girl/person/guy/lady/pedestrian/someone/…), so the
+    open-vocab humans the audit flagged — "boy", "man in a suit", "the woman" —
+    are now caught via their person-indicator token and deferred to the Social
+    Lens, while objects pass. (Role-only words like "surgeon" carry no
+    person-indicator and read as scene description, not identification.)
+    """
+    toks = _WORD_RE.findall((label or "").lower())
+    for t in toks:
+        if t in PERSON_TOKENS:
+            return True
+        if len(t) > 4 and t.endswith(_PERSON_SUFFIX):   # businessman, policewoman, schoolboy
+            return True
+    return False
 
 MIN_FRAME_VARIANCE = 1e-4       # a flat/black frame has nothing to recognise
 
@@ -66,7 +103,7 @@ class ObjectRecognizer:
 
     def recognize(self, frame) -> Optional[ObjectSighting]:
         """Name the object in a frame, or None (no frame / low confidence /
-        a person)."""
+        a label that names no object in the taxonomy — e.g. a person)."""
         if frame is None:
             return None
         if self._classify is not None:
@@ -81,7 +118,7 @@ class ObjectRecognizer:
             label, confidence, attrs = got
 
         if _names_a_person(label):
-            return None                       # people belong to Social Lens
+            return None                       # a person → defer to Social Lens
         if confidence < self.min_confidence:
             return None
         return ObjectSighting(label=label, confidence=confidence,

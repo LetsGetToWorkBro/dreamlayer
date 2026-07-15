@@ -83,6 +83,13 @@ class RecurrenceModel:
         self._slots: dict[tuple, _SlotStats] = {}
         self._pending: dict[tuple, Prediction] = {}
 
+    def clear(self) -> None:
+        """Drop every learned recurrence slot + pending prediction — the
+        recurrence model encodes place/time patterns, so erase-everything must
+        forget it too (audit refute 2026-07)."""
+        self._slots.clear()
+        self._pending.clear()
+
     # -- learning ----------------------------------------------------------
 
     def observe(self, kind: str, summary: str, ts: float,

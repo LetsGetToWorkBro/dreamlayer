@@ -7,12 +7,14 @@ This module keeps that name in your *own* memory, and nothing else.
 
 The discipline, end to end:
 
-  automatic   By default (auto_keep=True) a heard self-introduction is
-              kept immediately — the way a person keeps a name they were
-              just given — and the KeptCard states the saved fact. With
-              auto_keep=False the older consent flow runs instead:
-              hearing only *offers*, nothing is saved until a deliberate
-              confirm, and an unconfirmed offer expires (OFFER_TTL_S).
+  consent     By default (auto_keep=False) a heard self-introduction only
+              *offers*: nothing is saved until a deliberate confirm, and an
+              unconfirmed offer expires on its own (OFFER_TTL_S). This is
+              what makes enrolment opt-in — only people you were introduced
+              to and *chose* to keep are ever stored, never on hearing
+              alone. With auto_keep=True (an explicit opt-in) a heard
+              self-introduction is instead kept immediately and the
+              KeptCard states the saved fact.
   spoken      Only a closed, offline grammar of self-introductions
               ("my name is …", "I'm …", "this is …", "call me …") ever
               captures anything. Ambient chatter produces nothing —
@@ -260,15 +262,17 @@ class IntroductionCapture:
     embedder : FaceEmbedder, optional
         Shared embedder for the in-the-moment face.
     auto_keep : bool
-        When True (the default), a heard self-introduction is kept
-        immediately and heard() returns the KeptCard. When False, the
-        consent flow runs: heard() stages an offer that confirm() /
-        dismiss() decide and that expires on its own.
+        When False (the default), the consent flow runs: heard() stages
+        an offer that confirm() / dismiss() decide and that expires on
+        its own — nothing is enrolled until a deliberate confirm, so only
+        people you *chose* to keep are ever stored. When True (an explicit
+        opt-in), a heard self-introduction is kept immediately and heard()
+        returns the KeptCard.
     """
 
     def __init__(self, index=None, enricher=None, privacy=None,
                  embedder: Optional[FaceEmbedder] = None, now_fn=None,
-                 auto_keep: bool = True):
+                 auto_keep: bool = False):
         self._index = index
         self._enricher = enricher
         self._privacy = privacy or AlwaysOnGate()
@@ -284,10 +288,11 @@ class IntroductionCapture:
               now: Optional[float] = None) -> Optional[dict]:
         """React to a name spoken in a self-introduction.
 
-        auto_keep on (default): the name is saved immediately and the
-        KeptCard is returned — the card states the saved fact.
-        auto_keep off: nothing is saved; an offer card is returned that
-        confirm() can act on and that expires on its own.
+        auto_keep off (default): nothing is saved; an offer card is
+        returned that confirm() can act on and that expires on its own —
+        enrolment waits for a deliberate keep.
+        auto_keep on (explicit opt-in): the name is saved immediately and
+        the KeptCard is returned — the card states the saved fact.
         Returns None when no self-introduction was recognised, and always
         when the veil is down.
         """

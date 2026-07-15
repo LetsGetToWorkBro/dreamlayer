@@ -180,7 +180,7 @@ async function pull(){
     $("log").innerHTML=(s.transcript||[]).map(t=>
       `<div class="${t.who}">${esc(t.line)}</div>`).join("");
     $("log").scrollTop=$("log").scrollHeight;
-    $("people").textContent=(s.people&&s.people.length)?s.people.join(" · "):
+    $("people").textContent=(s.people>0)?(s.people+" kept"):
       "no one yet — introduce someone";
   }catch(e){}
 }

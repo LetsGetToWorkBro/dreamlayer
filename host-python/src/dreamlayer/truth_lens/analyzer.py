@@ -91,9 +91,15 @@ class TruthLens:
         stored judgments too (audit 2026-07-14). Clears the live rolling state
         if it is the contact currently in view."""
         self._store.forget(contact_id)
-        if self._current_contact_id == contact_id:
-            self._current_contact_id = None
-            self._current_contact_name = None
+
+    def forget_all(self) -> None:
+        """Erase every per-contact deception baseline + anomaly log (the
+        erase-everything path). reset() only clears rolling session state, so
+        erase must call this to actually scrub the narrative store. Also drops
+        the live rolling state so the person in view isn't still resident."""
+        self._store.forget_all()
+        self._current_contact_id = None
+        self._current_contact_name = None
 
     # ------------------------------------------------------------------
     # Feed methods (called each frame by the dream engine)

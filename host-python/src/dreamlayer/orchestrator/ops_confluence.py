@@ -15,10 +15,18 @@ class ConfluenceOps:
     # ------------------------------------------------------------------
 
     def attach_confluence(self, bonds, sky) -> None:
-        """A bond went live: entangle the sky and arm the tin can."""
+        """A bond went live: entangle the sky and arm the tin can.
+
+        Inject the wearer's real veil into the app-built sky so its own
+        allow_recall() gate (in receive/tick) actually fires — otherwise the
+        sky is constructed with a permissive default and the gate is vacuous
+        on the live path, letting a peer's weather fold in (and re-paint after
+        unpause) while fully veiled (refute-remediation 2026-07)."""
         from ..confluence import TinCan
         self.bonds = bonds
         self.tincan = TinCan(bonds)
+        if sky is not None:
+            sky._privacy = self.privacy
         self.dream.confluence = sky
 
 
@@ -37,9 +45,14 @@ class ConfluenceOps:
             if self.bonds.receive_weather(wire) is not None:
                 self.bridge.send_raw(TinCan.render_frame(wire))
         elif "gift" in wire:
-            for frame in unwrap_gift(self.bonds, wire):
+            # thread the wearer's veil into the inbound render: a full pause
+            # means deaf-and-blind, so a peer's gifted sky must not paint while
+            # veiled (unwrap_gift recall-gates on this). Phase 3 wiring.
+            for frame in unwrap_gift(self.bonds, wire, privacy=self.privacy):
                 self.bridge.send_raw(frame)
-        elif self.dream.confluence is not None:
+        elif self.dream.confluence is not None and self.privacy.allow_recall():
+            # deaf-and-blind while fully veiled: don't fold peer weather into the
+            # entangled sky at all (so nothing is held to re-paint after unpause).
             self.dream.confluence.receive(wire)
 
 

@@ -152,6 +152,97 @@ def test_person_dossier_payload():
 
 
 # ---------------------------------------------------------------------------
+# Capture-veil awareness on the live-capture caption builders (defense-in-depth)
+#
+# These builders embed raw mic/ASR content. The veil should already be honored
+# upstream, but a buggy caller must not be able to render captured speech during
+# Incognito/pause. The gate is OPTIONAL and defaults permissive, so the "no gate"
+# path below asserts every existing caller is unchanged. FAILS ON REVERT: remove
+# the veil check and the veiled captured text reappears in the card payload.
+# ---------------------------------------------------------------------------
+
+from dreamlayer.memory.privacy import PrivacyGate, AlwaysOnGate
+
+
+def test_spoken_caption_veiled_gate_drops_captured_text():
+    secret = "meet me at the safehouse at midnight"
+
+    paused = PrivacyGate()
+    paused.pause()
+    veiled = cards.spoken_caption("Marcus Reyes", secret, privacy=paused)
+    assert veiled["type"] == "SpokenCaptionCard"      # still a valid card
+    blob = repr(veiled)
+    assert secret not in blob                          # captured speech gone
+    assert "Marcus" not in blob                        # speaker name gone too
+    assert veiled["primary"] == ""                     # neutral / blank body
+
+    incognito = PrivacyGate()
+    incognito.set_incognito(True)
+    assert secret not in repr(
+        cards.spoken_caption("Marcus Reyes", secret, privacy=incognito)
+    )
+
+    # No gate (every existing caller) OR a permissive gate → renders as before.
+    assert cards.spoken_caption("Marcus Reyes", secret)["primary"] == secret
+    assert cards.spoken_caption(
+        "Marcus Reyes", secret, privacy=AlwaysOnGate()
+    )["primary"] == secret
+    assert cards.spoken_caption(
+        "Marcus Reyes", secret, privacy=PrivacyGate()  # constructed, not paused
+    )["primary"] == secret
+
+
+def test_live_caption_veiled_gate_drops_captured_text():
+    orig = "no te preocupes yo me encargo"
+    trans = "dont worry ill handle it"
+
+    paused = PrivacyGate()
+    paused.pause()
+    veiled = cards.live_caption_card(
+        original=orig, translation=trans, speaker="Jordan", privacy=paused
+    )
+    assert veiled["type"] == "LiveCaptionCard"
+    blob = repr(veiled)
+    assert orig not in blob and trans not in blob      # both directions gone
+    assert "Jordan" not in blob                        # speaker gone too
+    assert veiled["original"] == "" and veiled["translation"] == ""
+
+    # No gate / permissive → captured text renders exactly as before.
+    openc = cards.live_caption_card(
+        original=orig, translation=trans, speaker="Jordan"
+    )
+    assert openc["translation"] == trans
+    assert openc["primary"] == trans
+    assert cards.live_caption_card(
+        original=orig, translation=trans, speaker="Jordan", privacy=AlwaysOnGate()
+    )["translation"] == trans
+
+
+def test_fact_check_veiled_gate_drops_captured_claim():
+    claim = "the deal closed at three million"
+    basis = "earlier they said two million"
+
+    paused = PrivacyGate()
+    paused.pause()
+    veiled = cards.fact_check(
+        verdict="self_contradiction", speaker="Marcus",
+        claim=claim, basis=basis, corroboration="elevated", privacy=paused,
+    )
+    assert veiled["type"] == "FactCheckCard"
+    blob = repr(veiled)
+    assert claim not in blob and basis not in blob
+    assert "Marcus" not in blob
+    assert veiled["primary"] == "—"                    # neutral verdict shell
+
+    # No gate → the claim renders as before.
+    openc = cards.fact_check(
+        verdict="disputed", speaker="Marcus", claim=claim, basis=basis,
+    )
+    assert openc["primary"] == claim
+    assert claim in repr(openc)
+
+
+# ---------------------------------------------------------------------------
 # ALL_SAMPLES smoke test
 # ---------------------------------------------------------------------------
 

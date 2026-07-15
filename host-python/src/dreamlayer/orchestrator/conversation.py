@@ -68,6 +68,23 @@ class ConversationLedger:
     def __len__(self) -> int:
         return len(self._log)
 
+    def clear(self) -> None:
+        """Drop the whole ledger (erase-everything)."""
+        self._log.clear()
+
+    def forget(self, person: str) -> int:
+        """Drop every utterance attributed to one speaker (forget-a-person), so
+        their day-recall dossier and timeline go with them. Returns the count
+        removed."""
+        who = (person or "").strip().lower()
+        if not who:
+            return 0
+        kept = [u for u in self._log if u.speaker.lower() != who]
+        n = len(self._log) - len(kept)
+        self._log.clear()
+        self._log.extend(kept)
+        return n
+
     # -- live captions ---------------------------------------------------
 
     def captions(self, n: int = 6) -> list[Utterance]:

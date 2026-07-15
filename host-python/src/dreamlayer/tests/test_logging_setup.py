@@ -37,6 +37,36 @@ class TestJsonFormatter:
         obj = json.loads(JsonLineFormatter().format(rec))
         assert "ValueError: boom" in obj["exc"]
 
+    def test_sensitive_extras_are_redacted(self):
+        """Regression (privacy): sensitive extras (names/embeddings/etc.) must
+        NOT be serialised verbatim into the log line — a caller passing PII in
+        extra={} would otherwise leak it if logs ship. Benign keys survive.
+        FAILS ON REVERT of the redaction pass in logging_setup.JsonLineFormatter.
+
+        NB: the bare key ``name`` is a *reserved* LogRecord attribute (the
+        logger name); real ``logger.info(msg, extra={"name": ...})`` raises
+        KeyError and setattr'ing it here would just overwrite the logger field.
+        The genuine leak surface is the *non-reserved* extras below — a
+        name-family key (``user_name``) and a raw ``embedding`` vector."""
+        line = JsonLineFormatter().format(_record(
+            "event",
+            user_name="Alice",      # name-family PII (caught via *_name rule)
+            embedding=[0.1, 0.2],   # raw vector PII
+            seam="cloud",           # benign, must survive unchanged
+        ))
+        # The raw plaintext / raw vector must be absent from the serialised line.
+        assert "Alice" not in line
+        assert "0.1" not in line and "0.2" not in line
+        obj = json.loads(line)
+        # Sensitive keys are still present as keys, but with a redacted marker.
+        assert obj["user_name"] != "Alice"
+        assert obj["user_name"].startswith("<redacted")
+        assert obj["embedding"] != [0.1, 0.2]
+        assert isinstance(obj["embedding"], str)
+        assert obj["embedding"].startswith("<redacted")
+        # Non-sensitive extras ride through untouched.
+        assert obj["seam"] == "cloud"
+
 
 class TestConfigure:
     def teardown_method(self):

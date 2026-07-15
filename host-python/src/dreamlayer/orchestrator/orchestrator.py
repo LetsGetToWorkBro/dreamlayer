@@ -677,6 +677,52 @@ class Orchestrator(
                 "plugins": self.capability_log.report()}
 
 
+    def forget_person(self, contact_id: str) -> None:
+        """Forget one person *everywhere* the hub keys content by them: their
+        contact + dossier (Social Lens, incl. the enricher notes/relation/debts),
+        their deception baseline + anomaly log (Truth Lens), and their day-recall
+        conversation dossier/timeline (keyed by speaker name). TruthLens.forget
+        and the conversation ledger were never reached from the forget path
+        (audit 2026-07-14 + refute 2026-07), so a forgotten person left resident
+        judgments and transcripts behind."""
+        contact = None
+        idx = getattr(self.social, "_index", None)
+        if idx is not None:
+            contact = idx.get(contact_id)
+        self.social.remove_contact(contact_id)
+        self.truth.forget(contact_id)
+        if contact is not None and getattr(contact, "name", ""):
+            self.conversation.forget(contact.name)
+
+    def erase_all_memories(self) -> dict:
+        """Erase everything on the hub — every store that holds recallable
+        content, not just the vector DB. The audit flagged that the wearer's
+        'erase everything' missed the MAIN store (Retriever.purge_all had no
+        caller); a refute pass then showed "everything" was still dishonest —
+        the deception baselines, contacts, conversation ledger, and the on-disk
+        user model all survived. This scrubs them all, by construction:
+
+          - Retriever.purge_all() → MemoryDB rows + ANN index + ember engrams
+            (VACUUMed) + REM consolidation bias
+          - Truth Lens per-contact deception baselines + anomaly log
+            (forget_all, NOT the session-only reset())
+          - Social Lens contacts, face vectors, and enricher dossiers
+          - the conversation ledger (day-recall dossiers + timeline)
+          - the on-disk user model (name, interests, who-you-talk-with)
+          - the hot ring buffer of recent verbatim utterances
+          - the Premonition recurrence model (place/time patterns)
+          - Waypath anchors
+        """
+        self.retriever.purge_all()          # rows + ANN + ember VACUUM + REM bias
+        self.truth.forget_all()             # deception baselines + anomaly log
+        self.social.forget_all()            # contacts + face vectors + dossiers
+        self.conversation.clear()           # day-recall ledger
+        self.user.forget_all()              # learned model, in RAM and on disk
+        self.ring.clear()                   # recent verbatim utterances
+        self.premonition.clear()            # learned recurrence (place/time)
+        n_way = self.waypath.forget_all()   # stashed-thing anchors
+        return {"ok": True, "waypath_cleared": n_way}
+
     def lucid_query(self, text: str = "", frame=None) -> dict:
         """Lucid Recall's public surface: a question (and optionally what you're
         looking at) -> a single HUD answer card. FACE queries resolve against

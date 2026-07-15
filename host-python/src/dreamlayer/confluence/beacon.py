@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from ..memory.privacy import AlwaysOnGate
+
 # render lockstep with tincan: a pulse train at a bearing
 MSG_BEACON = "beacon"
 BANDS = ("close", "near", "far")
@@ -47,9 +49,14 @@ class BeaconContact:
 
 
 class Beacon:
-    def __init__(self, mesh, now_fn=None):
+    def __init__(self, mesh, now_fn=None, privacy=None):
         self._mesh = mesh
         self._now = now_fn or time.time
+        # Recall gate for the inbound circle (Veil/Recall Gate integrity, audit
+        # 2026-07-15). Folding a peer's bearing in and pulsing it onto MY rim is
+        # a read-back onto my device; the full pause veil ("deaf and blind")
+        # must silence it. AlwaysOnGate() is the gate-less unit/SDK fallback.
+        self._privacy = privacy or AlwaysOnGate()
 
     # -- emit my own position (bearing + band, never coordinates) ------------
 
@@ -62,7 +69,13 @@ class Beacon:
         return self._mesh.emit("bearing", body)
 
     def receive(self, wire: dict):
-        """Fold a peer's bearing packet into the mesh; returns the member."""
+        """Fold a peer's bearing packet into the mesh; returns the member.
+
+        Deaf under a full pause veil: while recall is denied we do not fold a
+        peer's bearing in, so nothing of theirs is held to be pulsed later
+        (Veil/Recall Gate integrity)."""
+        if not self._privacy.allow_recall():
+            return None
         return self._mesh.receive(wire)
 
     # -- read the circle ------------------------------------------------------
@@ -87,7 +100,13 @@ class Beacon:
 
     def render_frames(self) -> list:
         """A device frame per fresh contact: a pulse train at their bearing,
-        cadence set by distance band (reuses the TinCan pulse-train shape)."""
+        cadence set by distance band (reuses the TinCan pulse-train shape).
+
+        Blind under a full pause veil: pulsing a peer's bearing reads the circle
+        back onto MY rim, so a paused wearer renders nothing (Veil/Recall Gate
+        integrity). Incognito does not blind the rim."""
+        if not self._privacy.allow_recall():
+            return []
         frames = []
         for c in self.contacts():
             if not c.fresh:
@@ -99,7 +118,10 @@ class Beacon:
 
     def card(self) -> Optional[dict]:
         """A BeaconCard listing who's found and roughly where. None when the
-        circle is empty."""
+        circle is empty — or when the full pause veil silences recall, since the
+        card reads the circle back onto the screen (Veil/Recall Gate integrity)."""
+        if not self._privacy.allow_recall():
+            return None
         found = [c for c in self.contacts() if c.fresh]
         if not found:
             return None

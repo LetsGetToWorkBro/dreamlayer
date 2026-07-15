@@ -76,11 +76,18 @@ def _detect_language(text: str) -> str:
 class PuenteBridge:
     """Converts Puente caption events into LiveCaptionCard payloads."""
 
-    def __init__(self, default_src: str = "es", default_dst: str = "en") -> None:
+    def __init__(self, default_src: str = "es", default_dst: str = "en",
+                 privacy=None) -> None:
         self._default_src = default_src
         self._default_dst = default_dst
         self._last_card: Optional[dict] = None
         self._card_callbacks: list[Callable[[dict], None]] = []
+        # optional capture veil: a Puente caption is captured foreign speech, so
+        # under the veil (pause OR incognito) the card must not carry it. Passed
+        # through to live_caption_card, which blanks the content when blocked.
+        # Defaults permissive (unwired seam); the orchestrator injects the real
+        # gate when it wires Puente (refute-remediation 2026-07, defense-in-depth).
+        self._privacy = privacy
 
     # ------------------------------------------------------------------
     # Callback registration
@@ -129,6 +136,7 @@ class PuenteBridge:
             dst_lang=dst,
             confidence=confidence,
             speaker=speaker,
+            privacy=self._privacy,      # veil blanks the captured speech
         )
         self._last_card = card
 

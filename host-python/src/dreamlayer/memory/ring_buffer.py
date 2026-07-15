@@ -50,6 +50,11 @@ class SemanticRingBuffer:
         for ev in events:
             self.append(ev, ts=stamp, source=source)
 
+    def clear(self) -> None:
+        """Drop every buffered utterance (erase-everything). Lock-guarded."""
+        with self._lock:
+            self._buf.clear()
+
     def latest(self, kind: str | None = None, limit: int = 10) -> list[BufferedEvent]:
         with self._lock:
             out = list(self._buf)                 # snapshot under the lock

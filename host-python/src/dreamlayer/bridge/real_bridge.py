@@ -356,7 +356,12 @@ class RealBridge(BridgeBase):
                     self._paused = False
             self._emit_event(name, payload)
         except Exception as exc:
-            self._emit_event("parse_error", {"error": str(exc), "raw": str(raw)})
+            # Do NOT echo the raw frame back into the event stream. Inbound
+            # frames can be signal-derived (mic/camera telemetry), and a PARSE
+            # FAILURE must not leak the unparsed bytes to every event listener.
+            # Emit an error marker only — the exception type, never the payload
+            # (privacy hardening 2026-07-15).
+            self._emit_event("parse_error", {"error": type(exc).__name__})
 
     # ------------------------------------------------------------------
     # Helpers

@@ -543,6 +543,13 @@ def cmd_mem_export(args) -> int:
     if not Path(db).exists():
         _err(f"{BAD} no memory file at {db} — pass --db PATH or set DREAMLAYER_DB")
         return 2
+    # A raw copy is a full read of your memory — gate it exactly like `browse`
+    # (and `ember log --answers`), or an active veil that refuses the browser
+    # would still let the owner full-dump the file it just refused to open.
+    blocked, reason = _veil_blocked(db)
+    if blocked:
+        _err(f"{BAD} not exporting your memory: {reason}. Lower the veil first.")
+        return 2
     dest = Path(args.dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(db, dest)

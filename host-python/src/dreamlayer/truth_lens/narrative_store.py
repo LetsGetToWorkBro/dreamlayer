@@ -99,6 +99,14 @@ class NarrativeStore:
             else:
                 self._backend.set(key, None)
 
+    def forget_all(self) -> None:
+        """Erase EVERY stored deception baseline and anomaly log — the
+        erase-everything path (audit refute 2026-07: session reset() does not
+        reach the per-contact store; only this and forget(cid) do)."""
+        clearer = getattr(self._backend, "clear", None)
+        if callable(clearer):
+            clearer()
+
     def contact_count(self) -> int:
         return self._backend.count()
 
@@ -119,6 +127,9 @@ class _DictStore:
         if key not in self._data:
             self._data[key] = []
         self._data[key].append(value)
+
+    def clear(self) -> None:
+        self._data.clear()
 
     def delete(self, key: str) -> None:
         self._data.pop(key, None)

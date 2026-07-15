@@ -181,8 +181,13 @@ def test_intro_grammar_captures_relationship():
 
 def test_third_party_intro_creates_contact_with_relationship_note():
     fr = SocialLens()                               # empty — never met anyone
+    # Consent-by-default (audit 2026-07-15): hearing "this is my brother Dan"
+    # OFFERS to remember — it does not silently enrol the face. The contact +
+    # its relationship note are created only on the deliberate confirm.
     card = fr.offer_introduction("this is my brother Dan", frame=_frame(0.8))
-    assert card is not None and fr.contact_count == 1
+    assert card is not None and fr.contact_count == 0     # offered, not kept
+    kept = fr.confirm_introduction()                       # the deliberate keep
+    assert kept is not None and fr.contact_count == 1
     res = fr.identify(_frame(0.8))
     assert res.match.contact.name == "Dan"
     assert res.match.contact.relation == "brother"        # how you know them

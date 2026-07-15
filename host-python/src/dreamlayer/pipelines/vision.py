@@ -10,6 +10,8 @@ import base64
 import os
 from typing import Any
 
+from ..memory.privacy import AlwaysOnGate
+
 
 def extract_object_memory(scene: dict) -> dict:
     """Extract a structured object memory from a scene dict.
@@ -28,7 +30,8 @@ def extract_object_memory(scene: dict) -> dict:
     return {"object": str(scene), "place": "", "detail": "", "last_seen": "", "confidence": 0.5}
 
 
-async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None) -> str:
+async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None,
+                          privacy: Any = None) -> str:
     """Call vision-language model for a short poetic scene description.
 
     Used exclusively by Dream Mode SceneDescriber.  Returns a string of
@@ -37,7 +40,21 @@ async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None) ->
     Requires OPENAI_API_KEY (or config.openai_api_key) and the openai package.
     Model: gpt-4o with vision (cheapest vision model, ~0.01 USD per call).
     Swap the model string for liquid/lfm2-vl-450m once Liquid API is stable.
+
+    Defense-in-depth capture gate (audit 2026-07-15): sending the raw camera
+    JPEG to a cloud VLM is the most sensitive egress this pipeline performs. The
+    producer (orchestrator SceneDescriber._vision_describe) already refuses when
+    the veil is up or the Cloud switch is off, but a DIRECT caller of this
+    primitive would otherwise bypass the veil entirely. So this function ALSO
+    consults an optional ``privacy`` gate and refuses — empty string, no cloud
+    POST — when ``allow_capture()`` is False. Default ``AlwaysOnGate()`` keeps
+    the isolated/library posture permissive and every existing call signature
+    working.
     """
+    gate = privacy or AlwaysOnGate()
+    if not gate.allow_capture():
+        return ""                     # veiled: raw frame never leaves the device
+
     api_key = (
         getattr(config, "openai_api_key", None)
         or os.environ.get("OPENAI_API_KEY", "")

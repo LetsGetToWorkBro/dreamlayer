@@ -27,6 +27,8 @@ from __future__ import annotations
 import time
 from typing import Optional
 
+from ..memory.privacy import AlwaysOnGate
+
 # keep in lockstep with halo-lua/ble/message_types.lua (CONFLUENCE)
 MSG_CONFLUENCE = "confluence"
 
@@ -69,9 +71,15 @@ def _blend_colors(mine: list, theirs: list) -> list:
 
 
 class EntangledSky:
-    def __init__(self, bonds, now_fn=None) -> None:
+    def __init__(self, bonds, now_fn=None, privacy=None) -> None:
         self._bonds = bonds                  # BondManager
         self._now = now_fn or time.time
+        # Recall gate for the inbound peer sky (Veil/Recall Gate integrity,
+        # audit 2026-07-15). Folding in and re-painting the peer's weather is a
+        # read-back onto MY device; the full pause veil ("deaf and blind") must
+        # silence it. AlwaysOnGate() is the permissive fallback for the
+        # gate-less unit/SDK case — production injects the real PrivacyGate.
+        self._privacy = privacy or AlwaysOnGate()
         self.togetherness = 0.5
         self._peer_state: Optional[float] = None
         self._peer_colors: list = []
@@ -83,7 +91,13 @@ class EntangledSky:
 
     def receive(self, wire: dict) -> bool:
         """Feed a peer packet (already-authenticated path lives in the
-        BondManager). Returns True if it was genuine."""
+        BondManager). Returns True if it was genuine.
+
+        Deaf under a full pause veil: while recall is denied we do not fold the
+        peer's weather in at all, so nothing of theirs is held to be re-painted
+        later (Veil/Recall Gate integrity)."""
+        if not self._privacy.allow_recall():
+            return False
         pkt = self._bonds.receive_weather(wire)
         if pkt is None:
             return False
@@ -100,7 +114,13 @@ class EntangledSky:
 
     def tick(self, my_state: float, my_colors: list) -> list[dict]:
         """Frames for MY device this tick (and the outbound packet is a
-        separate concern — see BondManager.send_weather)."""
+        separate concern — see BondManager.send_weather).
+
+        Blind under a full pause veil: rendering the shared/split sky reads the
+        peer's weather back onto MY device, so a paused wearer renders nothing
+        (Veil/Recall Gate integrity). Incognito does not blind the sky."""
+        if not self._privacy.allow_recall():
+            return []
         if not self.peer_present():
             if self._last_mode is not None:
                 self._last_mode = None

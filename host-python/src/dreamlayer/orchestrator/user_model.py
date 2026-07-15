@@ -156,6 +156,18 @@ class UserModel:
         keep = sorted(self._topics.items(), key=lambda kv: -kv[1])[: self.max_topics]
         self._topics = dict(keep)
 
+    def forget_all(self) -> None:
+        """Erase the whole learned model — name, interests, who-you-talk-with,
+        preferences — in memory AND on disk (usermodel.json). The user model
+        persists to disk, so erase-everything must overwrite the file, not just
+        the RAM copy (audit refute 2026-07)."""
+        self.name = ""
+        self._topics = {}
+        self._people = {}
+        self._prefs = []
+        self._count = 0
+        self._save()               # rewrites the file to the empty model
+
     def _save(self) -> None:
         if not self.path:
             return

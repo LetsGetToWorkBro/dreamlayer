@@ -1,6 +1,24 @@
 """cards.py — Python card payload constructors."""
 from __future__ import annotations
 from . import themes as T
+from ..memory.privacy import AlwaysOnGate
+
+
+def _capture_allowed(privacy) -> bool:
+    """Optional capture-veil check for the live-capture caption builders.
+
+    Permissive by default: with no gate (``privacy is None``) capture is always
+    allowed, so EVERY existing caller — none of which pass a gate — keeps its
+    exact current behavior. When a gate IS supplied and its ``allow_capture()``
+    returns False (an explicit pause or Incognito), the caller-facing builder
+    blanks the captured text instead of embedding it.
+
+    This is defense-in-depth: the veil should already be honored upstream, but a
+    buggy caller that forgets to check during Incognito/pause must not be able to
+    render captured speech through the card factory. Mirrors the lens idiom
+    ``privacy or AlwaysOnGate()`` so "no gate wired" means "permissive" here too.
+    """
+    return (privacy or AlwaysOnGate()).allow_capture()
 
 
 def _d(data, key, alt_keys=(), default=""):
@@ -318,7 +336,13 @@ def live_caption_card(
     dst_lang: str = "en",
     confidence: float | None = None,
     speaker: str | None = None,
+    privacy=None,
 ) -> dict:
+    if not _capture_allowed(privacy):
+        # Veil down: never embed captured speech (original/translation) or the
+        # speaker's name. Keep only the non-captured language metadata so the
+        # card renders as a neutral placeholder.
+        original, translation, speaker = "", "", None
     eyebrow_parts = [src_lang.upper(), "\u2192", dst_lang.upper()]
     if speaker:
         eyebrow_parts = [speaker.split()[0]] + eyebrow_parts
@@ -356,9 +380,17 @@ def live_caption_card(
     }
 
 
-def spoken_caption(speaker: str = "", text: str = "") -> dict:
+def spoken_caption(speaker: str = "", text: str = "", privacy=None) -> dict:
     """A live transcript line — who just spoke and what they said. Distinct from
-    live_caption_card, which is for translated speech. Stays until replaced."""
+    live_caption_card, which is for translated speech. Stays until replaced.
+
+    ``privacy`` is an optional capture veil (any object exposing
+    ``allow_capture()``); when it blocks, the captured speaker/text are dropped
+    and a neutral (blank) caption is returned instead of the live content."""
+    if not _capture_allowed(privacy):
+        # Veil down: keep no captured content — neither the speaker nor what
+        # they said may reach the card.
+        speaker, text = "", ""
     who = (speaker or "").strip()
     body = (text or "").strip()
     if len(body) > 96:
@@ -572,13 +604,19 @@ _FACT_STYLE = {
 
 def fact_check(verdict: str = "unverified", speaker: str = "them",
                claim: str = "", basis: str = "", detail: str = "",
-               corroboration: str = "") -> dict:
+               corroboration: str = "", privacy=None) -> dict:
     """Veritas — a quiet fact-check on what's being said, sized to be read at a
     glance while the conversation continues. Green when a claim checks out, amber
     when it doesn't, attention-red when the speaker contradicts their own earlier
     words. `basis` is the one-line why (the correction, or what they said before).
     `corroboration` is the Discernment tag — how the *delivery* and any *pattern*
-    line up (e.g. "elevated · seen before") — folded into the footer."""
+    line up (e.g. "elevated · seen before") — folded into the footer.
+
+    `privacy` is an optional capture veil; when it blocks, every field carrying
+    captured speech (claim, basis, detail, speaker, corroboration) is dropped so
+    the card renders as a neutral verdict shell with no captured content."""
+    if not _capture_allowed(privacy):
+        speaker, claim, basis, corroboration = "", "", "", ""
     eyebrow, color, earcon = _FACT_STYLE.get(verdict, _FACT_STYLE["unverified"])
     body = (claim or "").strip()
     if len(body) > 90:
