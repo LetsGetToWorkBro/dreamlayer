@@ -118,7 +118,12 @@ def _build_request(provider: str, base_url: str, model: str, key: str, prompt: s
         body = {"contents": [{"parts": [{"text": prompt}]}]}
         headers = {"Content-Type": "application/json"}
     else:  # openai-compatible
-        url = base + "/v1/chat/completions"
+        # Don't double the version segment: many local servers (LM Studio,
+        # llama.cpp, vLLM) are addressed with the /v1 already in the base URL,
+        # and one-click discovery hands those back verbatim. base + "/v1/…"
+        # would then POST to /v1/v1/chat/completions and 404.
+        suffix = "/chat/completions" if base.endswith("/v1") else "/v1/chat/completions"
+        url = base + suffix
         body = {"model": model,
                 "messages": [{"role": "user", "content": prompt}]}
         headers = {"Content-Type": "application/json"}
@@ -162,6 +167,73 @@ def _urllib_get(url: str, timeout: float = 4.0) -> dict:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(urllib.request.Request(url), timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+# Well-known local agent servers, by default port. Discovery probes each for a
+# model list; a hit means the agent is running and can be connected in one tap
+# with nothing to type. Every probe is a LOCALHOST address, so a discovered
+# agent is on-device by construction — one-click connect can never wire a
+# remote endpoint. base_url is what gets saved verbatim (the /v1 forms are
+# handled by _build_request's no-double-/v1 rule).
+_LOCAL_AGENT_PROBES = (
+    {"label": "Ollama", "provider": "ollama",
+     "base_url": "http://localhost:11434",
+     "models_url": "http://localhost:11434/api/tags"},
+    {"label": "LM Studio", "provider": "custom",
+     "base_url": "http://localhost:1234/v1",
+     "models_url": "http://localhost:1234/v1/models"},
+    {"label": "Jan", "provider": "custom",
+     "base_url": "http://localhost:1337/v1",
+     "models_url": "http://localhost:1337/v1/models"},
+    {"label": "vLLM", "provider": "custom",
+     "base_url": "http://localhost:8000/v1",
+     "models_url": "http://localhost:8000/v1/models"},
+    {"label": "llama.cpp / LocalAI", "provider": "custom",
+     "base_url": "http://localhost:8080/v1",
+     "models_url": "http://localhost:8080/v1/models"},
+    {"label": "Text-Gen-WebUI", "provider": "custom",
+     "base_url": "http://localhost:5000/v1",
+     "models_url": "http://localhost:5000/v1/models"},
+)
+
+
+def _models_from(data: dict) -> list:
+    """Model names out of either shape: Ollama /api/tags ({models:[{name}]}) or
+    OpenAI-compatible /v1/models ({data:[{id}]})."""
+    out = []
+    for m in ((data.get("models") or data.get("data") or [])
+              if isinstance(data, dict) else []):
+        name = (isinstance(m, dict) and (m.get("name") or m.get("id"))) or ""
+        if name:
+            out.append(name)
+    return out
+
+
+def discover_local_agents(timeout: float = 0.6, getter=None) -> list:
+    """Find agent servers already running on this Mac for a one-click connect.
+
+    Probes the well-known local ports concurrently and returns the reachable
+    ones with their model lists: [{label, provider, base_url, models}]. Every
+    endpoint is localhost, so anything returned is on-device — connecting one
+    can never wire a remote/egress endpoint. `getter(url, timeout)->dict` is
+    injectable for tests."""
+    import concurrent.futures as _f
+    get = getter or _urllib_get
+
+    def probe(a: dict):
+        try:
+            data = get(a["models_url"], timeout)
+        except Exception:
+            return None                       # not running / not reachable
+        return {"label": a["label"], "provider": a["provider"],
+                "base_url": a["base_url"], "models": _models_from(data)}
+
+    found = []
+    with _f.ThreadPoolExecutor(max_workers=len(_LOCAL_AGENT_PROBES)) as ex:
+        for r in ex.map(probe, _LOCAL_AGENT_PROBES):
+            if r is not None:
+                found.append(r)
+    return found
 
 
 def probe_ollama(config, timeout: float = 4.0) -> dict:

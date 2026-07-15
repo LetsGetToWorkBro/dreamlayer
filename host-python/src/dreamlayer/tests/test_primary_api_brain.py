@@ -14,7 +14,8 @@ from __future__ import annotations
 import dreamlayer.ai_brain.server.backends as be
 from dreamlayer.ai_brain.server import Brain
 from dreamlayer.ai_brain.server.backends import (
-    api_chat, api_test, is_local_endpoint,
+    _build_request, _models_from, api_chat, api_test,
+    discover_local_agents, is_local_endpoint,
 )
 from dreamlayer.ai_brain.server.store import BrainConfig
 
@@ -56,6 +57,42 @@ class TestIsLocalEndpoint:
 
 
 # --- the request adapter reads the api_* group, not cloud_* -----------------
+
+class TestOneClickDiscovery:
+    def test_models_parsed_from_both_shapes(self):
+        assert _models_from({"models": [{"name": "llama3.2"}, {"name": "q"}]}) == \
+            ["llama3.2", "q"]                       # Ollama /api/tags shape
+        assert _models_from({"data": [{"id": "gpt-x"}]}) == ["gpt-x"]  # OpenAI shape
+        assert _models_from({}) == [] and _models_from("nope") == []
+
+    def test_discover_returns_only_reachable_with_models(self):
+        def fake(url, timeout):
+            if "1234" in url:
+                return {"data": [{"id": "mistral-7b"}]}      # LM Studio up
+            if "11434" in url:
+                return {"models": [{"name": "llama3.2"}]}     # Ollama up
+            raise ConnectionError("down")                     # everyone else off
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"LM Studio", "Ollama"}
+        assert found["Ollama"]["base_url"] == "http://localhost:11434"
+        assert found["Ollama"]["models"] == ["llama3.2"]
+        assert found["LM Studio"]["provider"] == "custom"
+        # every discovered endpoint is localhost → on-device by construction
+        assert all(is_local_endpoint(a["base_url"]) for a in found.values())
+
+    def test_discover_empty_when_nothing_running(self):
+        def down(url, timeout):
+            raise OSError("refused")
+        assert discover_local_agents(getter=down) == []
+
+    def test_build_request_does_not_double_the_v1_segment(self):
+        # a /v1-suffixed base (LM Studio, and what discovery hands back) must not
+        # become /v1/v1/chat/completions
+        _, u1, _, _ = _build_request("custom", "http://localhost:1234/v1", "m", "", "q")
+        _, u2, _, _ = _build_request("custom", "http://localhost:11434", "m", "", "q")
+        assert u1 == "http://localhost:1234/v1/chat/completions"
+        assert u2 == "http://localhost:11434/v1/chat/completions"
+
 
 class TestApiChatAdapter:
     def test_api_chat_reads_api_fields_via_injected_post(self):

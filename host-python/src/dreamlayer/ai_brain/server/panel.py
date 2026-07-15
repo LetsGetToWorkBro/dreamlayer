@@ -502,8 +502,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <input type="text" id="ochat" placeholder="chat · llama3.2" style="max-width:190px">
         <input type="text" id="ovis" placeholder="vision model" style="max-width:170px"></div>
     </div>
-    <div class="fold" id="apiFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .4s var(--ease),opacity .3s,margin .3s">
-      <p class="lead" style="margin:12px 0 8px">Point the Brain at any chat API and it becomes your primary answerer. Pick a shape, paste the endpoint, and save.</p>
+    <div class="fold" id="apiFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .5s var(--ease),opacity .3s,margin .3s">
+      <div class="conn" style="margin-top:12px"><div style="flex:1">
+        <div class="conn-t">Agents running on this Mac</div>
+        <div class="conn-s">We look for a local agent already running (Ollama, LM Studio, vLLM, llama.cpp, Jan) and connect it in one tap — nothing to type, nothing leaves your device.</div></div>
+        <button class="sm ghost" onclick="scanAgents()">Scan</button></div>
+      <div id="apiFound"></div>
+      <div class="conn-s" style="margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px">
+        …or set one up by hand — a local endpoint, or a cloud provider (paste your key):</div>
       <div class="row">
         <select id="aprov" onchange="apiPreset(true)" style="max-width:220px">
           <option value="custom">Custom (OpenAI-compatible)</option>
@@ -1103,8 +1109,8 @@ function pickModel(m,silent){modelSel=m;
   const f=$("ollamaFields"),on=m==="ollama";
   f.style.maxHeight=on?"200px":"0";f.style.opacity=on?"1":"0";f.style.marginTop=on?"12px":"0";
   const a=$("apiFields"),aon=m==="api";
-  a.style.maxHeight=aon?"460px":"0";a.style.opacity=aon?"1":"0";a.style.marginTop=aon?"12px":"0";
-  if(aon) renderApiWarn();
+  a.style.maxHeight=aon?"900px":"0";a.style.opacity=aon?"1":"0";a.style.marginTop=aon?"12px":"0";
+  if(aon){renderApiWarn(); if(!silent) scanAgents();}   // auto-detect on open
   if(!silent&&m==="keyword"){saveModel(true);}
   renderModel();
   if(m==="ollama") checkModel();
@@ -1171,6 +1177,35 @@ async function testApi(){const el=$("apiStatus");el.innerHTML='<div class="mstat
     '<b>'+(r.ok?'Connected':'Not working')+'</b></div><div class="lead" style="margin:0">'+
     (r.ok?'Your agent replied: <code>'+esc(r.reply||'ok')+'</code>':esc(r.error||'no reply — check the URL, model'+
     ' and key'))+'</div></div>';
+}
+// one-click discovery: find agents already running on this Mac and connect one
+// with a single tap — nothing to type. Everything found is localhost.
+let FOUND=[];
+async function scanAgents(){const el=$("apiFound");
+  el.innerHTML='<div class="mstat" style="margin-top:8px"><div class="shimmer"></div></div>';
+  let r;try{r=await api("/dreamlayer/api/discover");}catch(e){r={agents:[]};}
+  FOUND=r.agents||[];
+  if(!FOUND.length){el.innerHTML='<div class="conn-s" style="margin:8px 0 0">No local agent found on the usual ports. '+
+    'Start one (e.g. <code>ollama serve</code>) and scan again, or set it up by hand below.</div>'+
+    '<div class="row" style="margin-top:8px"><button class="sm ghost" onclick="scanAgents()">Scan again</button></div>';return;}
+  el.innerHTML=FOUND.map((a,i)=>{
+    const ms=(a.models&&a.models.length)?a.models:[""];
+    const pick=ms.length>1?'<select id="am'+i+'" style="max-width:170px">'+
+      ms.map(m=>'<option>'+esc(m)+'</option>').join("")+'</select>'
+      :'<span class="conn-s" style="flex:1">'+esc(ms[0]||"default model")+'</span>';
+    return '<div class="mstat" style="margin-top:8px"><div class="head"><span class="sdot ok"></span>'+
+      '<b>'+esc(a.label)+'</b> &nbsp;<span class="tag privacy">local · on-device</span></div>'+
+      '<div class="conn-s" style="margin:4px 0 8px">'+esc(a.base_url)+'</div>'+
+      '<div class="row" style="align-items:center;gap:8px">'+pick+
+      '<button class="sm" onclick="connectFound('+i+')">Connect</button></div></div>';}).join("");
+}
+function connectFound(i){const a=FOUND[i];if(!a)return;
+  const sel=$("am"+i);
+  const model=(sel&&sel.value)||(a.models&&a.models[0])||"";
+  $("aprov").value=a.provider;apiPreset(false);
+  $("abase").value=a.base_url;$("amodel").value=model;$("akey").value="";
+  renderApiWarn();
+  saveApi();                                   // model=api + fields, zero typing
 }
 function renderModel(){
   const el=$("modelStatus");

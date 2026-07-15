@@ -1761,6 +1761,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Probe the configured Ollama endpoint."""
             self._json(200, probe_ollama(brain.config))
 
+        def _get_api_discover(self, path, qs):
+            """One-click discovery: which local agent servers are running right
+            now (Ollama, LM Studio, vLLM, …). Local-only — it port-probes this
+            Mac, so a paired phone must not be able to trigger it."""
+            if not self._from_localhost():
+                self._json(403, {"error": "discovery is local-only"}); return
+            from .backends import discover_local_agents
+            self._json(200, {"agents": discover_local_agents()})
+
         def _get_browse(self, path, qs):
             """A server-side folder picker (the panel navigates the Mac's own
             filesystem) — local-only, like pairing."""
@@ -1831,6 +1840,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/brief/long/latest": _get_brief_long_latest,
             "/dreamlayer/messages/recent": _get_messages_recent,
             "/dreamlayer/model/status": _get_model_status,
+            "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
         }
