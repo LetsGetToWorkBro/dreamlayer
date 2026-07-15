@@ -57,3 +57,17 @@ We follow the [Code of Conduct](CODE_OF_CONDUCT.md). Open an issue before large 
 is agreed before code. Small fixes: just send the PR. Maintainers make final
 product calls — see [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md) for
 governance.
+
+### Security remediations get an adversarial re-audit
+
+Any change that fixes a security/privacy finding — veil/capture gates, auth,
+plugin isolation, cloud egress, or a concurrency/data-integrity fix — must be
+**re-audited adversarially before it is trusted as closed**, especially when
+the fix was written and reviewed in one sitting (a self-review shares its own
+blind spots). Passing tests and a confident writeup are not proof the finding
+is closed. The pass runs independent reviewers each tasked to *refute* a slice
+of the fix (find where it is vacuous, incomplete at a sibling call-site,
+bypassable via another path, or fails open), verifies every claim in the real
+code, and fixes what survives — each with a test that fails on revert. This
+has repeatedly caught live leaks a green suite declared fixed. The method is
+captured as the `refute-remediation` skill (`.claude/skills/`).

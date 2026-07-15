@@ -1,5 +1,13 @@
 # Audit remediation — the owner-action register
 
+> **Standing practice:** every security/privacy remediation gets an
+> adversarial re-audit before it is trusted as closed — independent reviewers
+> tasked to *refute* the fix, not confirm it, because a self-written
+> remediation shares its author's blind spots and a green suite is not proof.
+> This has repeatedly caught live leaks a passing audit declared fixed (the
+> `no_cloud` phone-egress leak; the ember `purge_all` residue). The method is
+> the `refute-remediation` skill; the policy is in `CONTRIBUTING.md`.
+
 The 2026-07 system audit was remediated in code where code could fix it,
 in three passes:
 
