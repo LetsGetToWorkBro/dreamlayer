@@ -1,9 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="platinum">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DreamLayer · Lens Builder</title>
+<meta name="theme-color" content="#DDDDDD" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
+<link rel="preload" href="assets/fonts/ChicagoFLF.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="assets/fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
 <meta name="description" content="Build a DreamLayer lens in your browser — no code. Pick a recipe or wire a scene graph, watch it run on a live ring, see the safety proof, deploy to your glasses, publish to the store." />
 <style>
   :root{
@@ -15,13 +19,7 @@
   body{margin:0;background:var(--bg);color:var(--text);
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   a{color:var(--teal)}
-  header{padding:20px 26px;border-bottom:1px solid var(--border);display:flex;
-    align-items:baseline;gap:14px;flex-wrap:wrap}
-  header h1{font-size:19px;margin:0;font-weight:650}
-  header .tag{color:var(--text2);font-size:13.5px;max-width:640px}
-  header .home{margin-left:auto;font-size:13.5px}
-  header .home[href] [data-icon]{display:inline-flex;vertical-align:-0.14em}
-  header .home[href] .ic{width:.95em;height:.95em}
+  /* (the page's own header is gone — the Platinum menu bar replaces it) */
   .wrap{display:grid;grid-template-columns:290px 1fr 330px;min-height:calc(100vh - 62px)}
   @media(max-width:1080px){.wrap{grid-template-columns:1fr}}
   .col{padding:20px;overflow-y:auto}
@@ -222,16 +220,54 @@
   .share-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .share-scrim .toast{min-height:16px}
 </style>
+<link rel="stylesheet" href="assets/platinum/platinum.css">
+<style>
+  /* ---- Platinum (Mac OS 8.1) page dressing — chrome only, no editor logic ---- */
+  /* the application window that frames the whole builder */
+  .mw.app{width:min(1360px,calc(100vw - 2*var(--gutter)));margin:4svh auto 0}
+  @media(max-width:700px){.mw.app{width:calc(100vw - 12px)}}
+  h1.ttext{margin:0}
+  .mw.app .fstatus{flex-wrap:wrap;gap:2px 12px}
+  /* keep the builder's exact dark palette inside the screen body */
+  .mw.app .mbody.screen{background:var(--bg)}
+  .wrap{min-height:0}
+  /* Platinum-reskin the builder's buttons (CSS only — ids/classes untouched).
+     Primary = the teal "go" button; ghost = the standard platinum button. */
+  button.btn{font-family:var(--chi);font-weight:400;letter-spacing:.01em;
+    background:linear-gradient(180deg,#49E8BC,#17AE85);color:#00251C;
+    border:1px solid var(--frame);border-radius:8px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.22)}
+  button.btn:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in)}
+  button.btn.ghost{background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#111;border:1px solid var(--frame)}
+  button.btn.ghost:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
+  button.btn:disabled{box-shadow:var(--bev-out)}
+  /* section eyebrows speak Chicago now */
+  .eyebrow{font-family:var(--chi);font-weight:400;letter-spacing:.1em}
+  /* the live-preview sub-window (chrome around the untouched stage).
+     NB: the builder's own ".sub" section-header class also matches ".mw.sub" —
+     neutralise every property it leaks before it wrecks the window layout. */
+  .mw.sub.preview{display:block;max-width:560px;margin:0 auto;
+    font-size:15px;color:inherit;letter-spacing:normal;text-transform:none}
+  .mw.sub.preview>.mbody{padding:18px 12px 14px}
+  /* pixel Juno in the Ask Juno avatar (desk accessory is off on this page) */
+  .juno-avatar img{width:100%;height:100%;object-fit:cover;object-position:50% 12%;image-rendering:pixelated}
+</style>
 </head>
 <body>
-<header>
-  <h1>Lens Builder</h1>
-  <span class="tag">A behavior is <b>data</b>, not code. Build one here — no coding — watch your device re-prove it's safe, deploy it, share it.</span>
-  <button class="home helpbtn" id="showtour" title="See what's possible">✦ What's possible</button>
-  <a class="home" href="./gallery.html" title="Remixable lenses from the community"><span data-icon="globe"></span> Gallery</a>
-  <a class="home" href="./golf.html" title="Express a behavior in the fewest bytes"><span data-icon="flag"></span> Golf</a>
-  <a class="home" href="./index.html">← dreamlayer</a>
-</header>
+
+<!-- The builder lives in one Platinum application window -->
+<div class="mw app" id="builderWin">
+  <div class="tbar">
+    <span class="wbox close" aria-hidden="true"></span>
+    <span class="tstripes" aria-hidden="true"></span>
+    <h1 class="ttext">Lens Builder</h1>
+    <span class="tstripes" aria-hidden="true"></span>
+    <span class="wbox collapse" aria-hidden="true"></span>
+    <span class="wbox zoom" aria-hidden="true"></span>
+  </div>
+  <div class="fstatus"><span>no code</span><span aria-hidden="true">·</span><span>watch it run live</span><span aria-hidden="true">·</span><span>deploy to your glasses</span></div>
+  <div class="mbody screen">
+
 <div class="remix-banner" id="remixBanner" style="display:none">
   <span id="remixMsg"></span>
   <button class="rb-x" id="remixDismiss" title="Dismiss">✕</button>
@@ -260,9 +296,10 @@
 
 <div class="wrap">
   <div class="col left">
+    <button class="btn ghost helpbtn" id="showtour" title="See what's possible" style="width:100%;margin:0 0 14px">✦ What's possible</button>
     <div class="askjuno" id="askjuno">
       <div class="askjuno-head">
-        <div class="juno-avatar" id="junoAvatar" data-juno data-juno-state="idle" aria-hidden="true"></div>
+        <div class="juno-avatar" id="junoAvatar" aria-hidden="true"><img src="assets/juno/juno_da_still.png" alt="" width="96" height="96"></div>
         <p class="eyebrow" style="margin:0">Ask Juno</p>
       </div>
       <p class="muted" style="margin:0 0 8px">Say what you want in plain words — <b>Juno</b> (the assistant) drafts a lens, and your glasses re-prove it's safe. A <i>lens</i> is a little thing your glasses show.</p>
@@ -282,6 +319,9 @@
   </div>
 
   <div class="col mid">
+    <div class="mw sub preview">
+      <div class="tbar"><span class="tstripes" aria-hidden="true"></span><span class="ttext">Halo · live preview</span><span class="tstripes" aria-hidden="true"></span></div>
+      <div class="mbody screen">
     <div class="stage">
       <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
       <div class="bgpick" id="bgpick" role="group" aria-label="Preview background — the world behind the glass">
@@ -309,6 +349,8 @@
       </div>
       <p class="muted" id="scenelabel">—</p>
     </div>
+      </div><!-- /preview .mbody -->
+    </div><!-- /preview .mw.sub -->
     <div style="max-width:540px;margin:20px auto 0">
       <p class="eyebrow">Edit</p>
       <div class="name-row"><label class="f">Lens name</label><input id="fname" maxlength="40" /></div>
@@ -358,6 +400,9 @@
   </div>
 </div>
 
+  </div><!-- /.mbody.screen -->
+</div><!-- /.mw.app -->
+
 <!-- Share modal: the lens as a link + a scannable QR -->
 <div class="share-scrim" id="shareModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
   <div class="share">
@@ -381,7 +426,6 @@
 </div>
 
 <script src="./assets/lens/icons.js"></script>
-<script src="./assets/juno/juno.js?v=7"></script>
 <script src="./assets/lens/qr.js"></script>
 <script src="./assets/lens/figment.js"></script>
 <script>
@@ -1223,5 +1267,10 @@
   try{ if(!localStorage.getItem("dl_tour_seen") && !(location.hash||"").match(/lens=/) && editKind!=="remix") openTour(); }catch(e){}
 })();
 </script>
+<!-- Platinum chrome: menu bar + footer. The desk accessory is disabled here —
+     both bottom corners hold builder controls at 1440x900, so the fixed DA
+     would cover them; pixel Juno lives in the Ask Juno panel instead. -->
+<script>window.PLATINUM={app:"Lens Builder",daLine:false}</script>
+<script src="assets/platinum/platinum.js" defer></script>
 </body>
 </html>
