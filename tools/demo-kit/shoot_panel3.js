@@ -68,7 +68,8 @@ const CURSOR_JS = `
     await snap(3);
     await page.evaluate(([x,y])=>window.__press(x,y,false),[cx,cy]); await snap(2);
   }
-  const scrollDown=async(px,n=1)=>{ for(let i=0;i<n;i++){ await page.evaluate((p)=>{const se=document.scrollingElement||document.documentElement; se.scrollTop+=p;},px); await snap(1);} };
+  // the panel's .content pane is the scroller (height:100vh; overflow-y:auto)
+  const scrollDown=async(px,n=1)=>{ for(let i=0;i<n;i++){ await page.evaluate((p)=>{const c=document.querySelector('.content')||document.scrollingElement; c.scrollTop+=p;},px); await snap(1);} };
 
   // 1) the dashboard
   cap('The Brain dashboard','everything the Mac mini runs, at a glance');
@@ -81,9 +82,9 @@ const CURSOR_JS = `
 
   // 3) scroll to the Model card
   cap('The Model card','keyword · Ollama · or your own API');
-  await (async()=>{ for(let s=0;s<30;s++){
+  await (async()=>{ for(let s=0;s<60;s++){
     const ok=await page.evaluate(()=>{const el=[...document.querySelectorAll('h2')].find(h=>h.textContent.trim()==='Model');const r=el.getBoundingClientRect();return r.top<140&&r.top>-40;});
-    if(ok)break; await scrollDown(56,1);} })();
+    if(ok)break; await scrollDown(64,1);} })();
   await snap(8);
 
   // 4) click "Your API" -> auto-scan kicks off
