@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="platinum">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,8 +11,9 @@
 <link rel="canonical" href="https://dreamlayer.app/gallery.html" />
 <style>
   :root{
-    --bg:#07100f; --surface:#0e1a18; --surface2:#12211f; --border:#1c2e2b;
-    --text:#eaf3f1; --text2:#8aa5a0; --teal:#2fd4c4; --amber:#e0b54a;
+    /* retinted to sit on the Platinum "screen" surface (assets/platinum/platinum.css) */
+    --bg:#0E1416; --surface:#141F23; --surface2:#19262B; --border:#26363C;
+    --text:#ECF0F1; --text2:#A8B8C0; --teal:#2fd4c4; --amber:#e0b54a;
     --red:#e06b52; --green:#56d364;
   }
   *{box-sizing:border-box}
@@ -20,14 +21,12 @@
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   a{color:var(--teal);text-decoration:none}
   a:hover{text-decoration:underline}
-  header{padding:20px 26px;border-bottom:1px solid var(--border);display:flex;
-    align-items:baseline;gap:14px;flex-wrap:wrap}
-  header h1{font-size:19px;margin:0;font-weight:650}
-  header .tag{color:var(--text2);font-size:13.5px;max-width:560px}
-  header .home{margin-left:auto;font-size:13.5px;display:flex;gap:16px}
+  .ghead{padding:20px 26px 6px;display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap}
+  .ghead h1{font-size:20px;margin:0;font-weight:400}
+  .ghead .tag{color:var(--text2);font-size:13.5px;max-width:560px}
   .toolbar{padding:16px 26px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;
-    border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(7,16,15,.92);
-    backdrop-filter:blur(8px);z-index:5}
+    border-bottom:1px solid var(--border);position:sticky;top:var(--mbh,28px);
+    background:rgba(14,20,22,.94);backdrop-filter:blur(8px);z-index:5}
   .search{flex:1;min-width:200px;max-width:420px;position:relative}
   .search input{width:100%;font:inherit;background:var(--surface2);color:var(--text);
     border:1px solid var(--border);border-radius:999px;padding:9px 15px 9px 38px}
@@ -103,41 +102,82 @@
   .jam .pill2.closed{color:var(--text2)}
   .jam .cd{color:var(--teal);font-variant-numeric:tabular-nums}
   .jamback{margin:12px 26px 0;display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--teal)}
-  /* share modal */
+  /* share modal (a Platinum sub-window — skinned in the Platinum block below) */
   .scrim{position:fixed;inset:0;background:rgba(3,8,7,.72);display:none;align-items:center;
     justify-content:center;z-index:40;padding:20px}
-  .modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;
-    max-width:380px;width:100%;padding:22px;text-align:center}
-  .modal h3{margin:0 0 4px;font-size:17px}
-  .modal p{color:var(--text2);font-size:13px;margin:0 0 14px}
-  .modal .qrbox{background:#fff;border-radius:12px;padding:12px;display:inline-block;margin-bottom:14px}
   .modal canvas{display:block}
   .urlrow{display:flex;gap:8px;margin-bottom:10px}
-  .urlrow input{flex:1;font:inherit;background:var(--surface2);color:var(--text);
-    border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px}
+  .urlrow input{flex:1;font:inherit;padding:8px 10px;font-size:12px}
   .modal .row2{display:flex;gap:8px;justify-content:center}
   .toast{font-size:12.5px;min-height:18px;margin-top:8px}
-  .toast.ok-t{color:var(--green)}
-  .modal .x{position:relative;float:right;color:var(--text2);cursor:pointer;font-size:18px;
-    margin:-8px -6px 0 0;background:none;border:0}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
   /* inline-svg icons — inherit colour, scale with text */
   .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
   [data-icon]{display:inline-flex;align-items:center}
-  header h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal)}
-  .home a [data-icon] .ic{width:.95em;height:.95em}
+  .ghead h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal)}
   .banner .bn-ic .ic{width:1.15em;height:1.15em;color:var(--teal)}
   .chip .ic{width:.95em;height:.95em;vertical-align:-0.12em;margin-right:3px}
   .icnbtn .ic{width:15px;height:15px}
   .jam .jt .ic{width:1em;height:1em;color:var(--teal);margin-right:3px}
 </style>
+<link rel="stylesheet" href="assets/platinum/platinum.css">
+<style>
+  /* ============ Platinum dressing (loads after platinum.css so it wins ties) ============ */
+  /* heading strip — Chicago chrome on the dark screen */
+  .ghead h1{font-family:var(--chi);letter-spacing:.01em;color:var(--h-text)}
+  .ghead h1 .ttl-ic .ic{color:var(--h-teal)}
+  .ghead .tag{color:var(--h-text2)}
+  .ghead .bld{margin-left:auto;padding:7px 15px;font-size:13.5px;white-space:nowrap;
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
+  @media (max-width:640px){.ghead .bld{margin-left:0}}
+  .fstatus{flex-wrap:wrap;row-gap:0}
+  /* toolbar controls, squared to the desktop */
+  .search input{border-radius:3px;
+    box-shadow:inset 1px 1px 0 rgba(0,0,0,.55),inset -1px -1px 0 rgba(255,255,255,.06)}
+  .seg{border-radius:3px;background:rgba(0,0,0,.28);
+    box-shadow:inset 1px 1px 0 rgba(0,0,0,.5),inset -1px -1px 0 rgba(255,255,255,.06)}
+  .seg button.on{background:var(--h-teal);color:#00251C}
+  /* cards read as instrument panels set into the screen */
+  .card{border-radius:2px;border-color:#0A1114;
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.05),inset -1px -1px 0 rgba(0,0,0,.5)}
+  .card:hover{border-color:var(--h-teal-dim);
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.05),inset -1px -1px 0 rgba(0,0,0,.5),
+      3px 3px 0 rgba(0,0,0,.35)}
+  .jam{border-radius:2px}
+  /* Remix is a real Platinum button (JS keeps .btn.remix hooks alongside) */
+  .actions .pbtn{padding:6px 12px;font-size:13.5px;gap:6px;
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
+  .actions .pbtn:hover{text-decoration:none}
+  .icnbtn{border-radius:6px;color:#111;border:1px solid var(--frame);
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
+  .icnbtn:hover{border-color:var(--frame);background:linear-gradient(180deg,#FFFFFF,#DDDDDD)}
+  .icnbtn:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
+  /* the share dialog is a real Platinum window on the desktop */
+  .scrim .modal{width:100%;max-width:380px;margin:0;text-align:center}
+  .modal .mbody{padding:20px 20px 14px;color:var(--ink)}
+  .modal p{color:var(--ink2);font-size:13px;margin:0 0 14px}
+  .modal .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-in);
+    padding:12px;display:inline-block;margin-bottom:14px}
+  .urlrow input{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-in);
+    color:var(--ink);font-family:var(--mono)}
+  .modal .pbtn{padding:7px 14px;font-size:13.5px}
+  .modal .wbox:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
+  .toast.ok-t{color:var(--teal-ink)}
+</style>
 </head>
 <body>
-<header>
+
+<div class="mw open active" style="margin-top:4svh">
+<div class="tbar"><span class="wbox close" aria-hidden="true"></span><span class="tstripes" aria-hidden="true"></span><span class="ttext">Lens Gallery</span><span class="tstripes" aria-hidden="true"></span><span class="wbox collapse" aria-hidden="true"></span><span class="wbox zoom" aria-hidden="true"></span></div>
+<div class="fstatus"><span id="fsCount">8 lenses</span><span>all running live</span><span>remix any of them</span></div>
+<div class="mbody screen">
+
+<div class="ghead">
   <h1><span class="ttl-ic" data-icon="globe"></span> Lens Gallery</h1>
   <span class="tag">Every lens here runs live below and is yours to remix — a proven scene machine, not code.</span>
-  <span class="home"><a href="./golf.html"><span data-icon="flag"></span> Golf</a><a href="./lens-builder.html">Build your own →</a><a href="./index.html">Home</a></span>
-</header>
+  <a class="pbtn go bld" href="./lens-builder.html">Build your own →</a>
+</div>
 
 <p class="banner" id="offlineBanner" style="display:none">
   <span class="bn-ic" data-icon="spark"></span><span>Showing <b>featured lenses</b> — community submissions appear here as they're approved. Every one is fully remixable right now.</span>
@@ -163,22 +203,31 @@
 
 <div class="grid" id="grid" aria-live="polite"></div>
 
+</div><!-- /.mbody.screen -->
+</div><!-- /.mw -->
+
 <!-- share modal -->
 <div class="scrim" id="shareScrim" role="dialog" aria-modal="true" aria-label="Share this lens">
-  <div class="modal">
-    <button class="x" id="shareX" aria-label="Close">×</button>
-    <h3 id="shareName">Share</h3>
-    <p>Anyone with this link opens the lens ready to remix.</p>
-    <div class="qrbox" id="shareQrBox"><canvas id="shareQr" width="200" height="200"></canvas></div>
-    <div class="urlrow">
-      <input id="shareUrl" readonly />
-      <button class="btn" id="shareCopy">Copy</button>
+  <div class="mw sub modal">
+    <div class="tbar">
+      <button class="wbox close" id="shareX" aria-label="Close"></button>
+      <span class="tstripes" aria-hidden="true"></span>
+      <span class="ttext" id="shareName">Share</span>
+      <span class="tstripes" aria-hidden="true"></span>
     </div>
-    <div class="row2">
-      <button class="btn ghost" id="shareTweet">Share on X</button>
-      <button class="btn ghost" id="shareDl">Save QR</button>
+    <div class="mbody">
+      <p>Anyone with this link opens the lens ready to remix.</p>
+      <div class="qrbox" id="shareQrBox"><canvas id="shareQr" width="200" height="200"></canvas></div>
+      <div class="urlrow">
+        <input id="shareUrl" readonly />
+        <button class="pbtn go" id="shareCopy">Copy</button>
+      </div>
+      <div class="row2">
+        <button class="pbtn" id="shareTweet">Share on X</button>
+        <button class="pbtn" id="shareDl">Save QR</button>
+      </div>
+      <div class="toast" id="shareToast"></div>
     </div>
-    <div class="toast" id="shareToast"></div>
   </div>
 </div>
 
@@ -194,6 +243,7 @@
   var grid = document.getElementById("grid");
   var qEl = document.getElementById("q");
   var countEl = document.getElementById("count");
+  var fsCountEl = document.getElementById("fsCount"); // Finder status strip
   var players = [];      // live LensPlayer instances
   var items = [];        // normalized lens rows {id,name,author,description,scenes,code,at,fig,_seed}
   var sort = "featured";
@@ -273,6 +323,7 @@
       : function(a,b){ return (a._seed?1:0)-(b._seed?1:0) || (a._featIdx||0)-(b._featIdx||0) || (b.at||0)-(a.at||0); });
 
     countEl.textContent = list.length + (list.length === 1 ? " lens" : " lenses");
+    if(fsCountEl) fsCountEl.textContent = countEl.textContent;
 
     if(!list.length){
       grid.innerHTML = '<div class="empty"><h2>No lens matches that.</h2>' +
@@ -330,7 +381,7 @@
         '<div class="chips">' + chips + '</div>' +
         (it.description ? '<p class="desc"></p>' : '') +
         '<div class="actions">' +
-          '<a class="btn remix" href="' + remixUrlFor(it) + '">✦ Remix</a>' +
+          '<a class="btn remix pbtn go" href="' + remixUrlFor(it) + '">✦ Remix</a>' +
           '<button class="icnbtn share" title="Share link / QR" aria-label="Share">' + DLIcon("link") + '</button>' +
           '<button class="icnbtn deploy" title="Deploy to your glasses" aria-label="Deploy">' + DLIcon("send") + '</button>' +
         '</div>' +
@@ -558,5 +609,7 @@
   else grid.innerHTML = '<div class="empty"><h2>Couldn’t load the lens engine.</h2><p>Refresh to try again.</p></div>';
 })();
 </script>
+<script>window.PLATINUM={app:"Lens Gallery",daLine:"every lens here runs live."}</script>
+<script src="assets/platinum/platinum.js" defer></script>
 </body>
 </html>
