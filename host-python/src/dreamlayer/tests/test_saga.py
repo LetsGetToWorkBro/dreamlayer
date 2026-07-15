@@ -79,3 +79,36 @@ def test_every_feature_has_a_badge():
                     "reminders", "brief", "recall", "focus", "rewind", "hark",
                     "model", "backup", "folder", "juno_wake", "dossier"):
         assert feature in events, f"no badge for {feature}"
+
+
+def test_concurrent_saves_never_publish_a_torn_file(tmp_path):
+    """Re-audit 2026-07-15: the atomic-write fix used a FIXED tmp name with no
+    lock, so two threaded writers could interleave into the one tmp before
+    either os.replace and publish a truncated saga.json that _load resets to
+    zero. A per-writer tmp + a lock closes it: many concurrent records leave a
+    valid file and no stray tmp."""
+    import json as _json
+    import threading
+
+    sp = saga.SagaProfile(tmp_path)
+    errs = []
+
+    def worker():
+        try:
+            for _ in range(40):
+                sp.record("cloud")            # each record() persists via _save
+        except Exception as exc:              # a torn write / race would raise
+            errs.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errs, errs
+    # the published file is always complete, valid JSON — never a torn write
+    data = _json.loads((tmp_path / saga.SAGA_FILE).read_text())
+    assert isinstance(data, dict) and "xp" in data
+    # and no per-writer tmp leaked
+    assert list(tmp_path.glob("*.tmp")) == []

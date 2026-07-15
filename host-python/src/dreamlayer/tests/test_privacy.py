@@ -227,3 +227,48 @@ def test_lucid_recall_query_is_recall_gated():
     assert lr.query("where is my bike").answer == "No result"
     g.resume(); g.set_incognito(True)           # incognito still recalls
     assert lr.query("where is my bike").answer == "north rack, 4th & Alder"
+
+
+# -- re-audit 2026-07-15: the decorators fail CLOSED when no gate is wired ----
+
+class TestRequiresGateFailsClosed:
+    """The old decorators skipped the check when the instance exposed no gate
+    ("missing gate → AlwaysOn"), so a decorated method was safe only by luck —
+    a class that forgot to wire a gate captured while veiled yet read as
+    protected. They now DENY when no gate is present; a path that wants the
+    permissive posture says so with AlwaysOnGate()."""
+
+    def test_capture_with_no_gate_denies(self):
+        class Lens:
+            @requires_capture
+            def write(self):
+                return "wrote"
+        assert Lens().write() is None            # no gate → deny (was: allow)
+
+    def test_recall_with_no_gate_denies(self):
+        class Lens:
+            @requires_recall
+            def read(self):
+                return "value"
+        assert Lens().read() is None
+
+    def test_explicit_alwayson_allows(self):
+        class Lens:
+            def __init__(self):
+                self._privacy = AlwaysOnGate()
+            @requires_capture
+            def write(self):
+                return "wrote"
+        assert Lens().write() == "wrote"
+
+    def test_denying_gate_denies(self):
+        class Deny:
+            def allow_capture(self):
+                return False
+        class Lens:
+            def __init__(self):
+                self._privacy = Deny()
+            @requires_capture
+            def write(self):
+                return "wrote"
+        assert Lens().write() is None

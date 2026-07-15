@@ -102,8 +102,13 @@ class FusionEngine:
         scores = {}
         z_scores = {}
 
-        # AU channel
-        if au is not None:
+        # AU channel — neutral while synthetic. Zeroing its WEIGHT kept AU out of
+        # the verdict, but the score/z were still computed from live detector
+        # noise, so `dominant_channel` could headline "micro_expression" and a
+        # nonzero micro_expression_z could surface on the card — a synthetic
+        # signal shown as real (re-audit 2026-07-15). Skip the compute entirely
+        # until the channel is real; it then contributes nowhere, display too.
+        if au is not None and AU_CHANNEL_REAL:
             z_list = self._au_detector.compute_au_zscores(
                 au, baseline.au_mean, baseline.au_std
             )

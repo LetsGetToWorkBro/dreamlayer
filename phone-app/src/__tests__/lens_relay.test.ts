@@ -87,6 +87,21 @@ describe("emitLens closes the ask loop", () => {
     expect(r).toMatchObject({ text: "Lease due Fri", tier: "device" });
   });
 
+  it("carries the wearer's no_cloud posture to the Brain (re-audit 2026-07-15)", async () => {
+    // the phone talks to the Brain directly for rc/emit; it must state the
+    // wearer's posture so the paired Mac honors Incognito/Cloud-off at its own
+    // cloud sink. effectiveCloud() is false while incognito → no_cloud true.
+    mockBrain({ ok: true, tag: "ask", answer: "x", tier: "device" });
+    useBrainStore.setState({ incognito: false, cloud: true });
+    await brain().emitLens("ask", "q");
+    expect(calls[0]!.body).toMatchObject({ no_cloud: false });
+
+    mockBrain({ ok: true, tag: "ask", answer: "x", tier: "device" });
+    useBrainStore.setState({ incognito: true });   // incognito forces cloud off
+    await brain().emitLens("ask", "q");
+    expect(calls[0]!.body).toMatchObject({ no_cloud: true });
+  });
+
   it("returns null when the Brain is unreachable", async () => {
     (global as any).fetch = jest.fn(() => Promise.reject(new Error("offline")));
     expect(await brain().emitLens("ask", "hi")).toBeNull();

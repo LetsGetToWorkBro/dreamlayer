@@ -172,6 +172,8 @@ class SagaProfile:
         self.xp = 0
         self.unlocked: set[str] = set()
         self.progress: dict[str, int] = {}     # event-id → count so far
+        import threading
+        self._save_lock = threading.Lock()     # serialize concurrent _save()
         if self._vault:
             self._load()
 
@@ -269,12 +271,18 @@ class SagaProfile:
         # atomic write (temp + os.replace) so a crash mid-write — or the hub
         # quest engine and the Brain profile writing at once — can't leave a
         # truncated saga.json that _load silently resets to zero (audit
-        # 2026-07-14).
+        # 2026-07-14). The first pass used a FIXED tmp name with NO lock, so the
+        # very concurrency it names could still interleave two writers into the
+        # one tmp before either os.replace — os.replace makes the rename atomic,
+        # not the tmp contents. A per-writer unique tmp + a lock closes it
+        # (re-audit 2026-07-15).
         import os
-        path = self._path()
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps({
+        payload = json.dumps({
             "xp": self.xp, "level": level_for_xp(self.xp),
             "rank": rank_for_level(level_for_xp(self.xp)),
-            "unlocked": sorted(self.unlocked), "progress": self.progress}))
-        os.replace(tmp, path)
+            "unlocked": sorted(self.unlocked), "progress": self.progress})
+        path = self._path()
+        with self._save_lock:
+            tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
+            tmp.write_text(payload)
+            os.replace(tmp, path)

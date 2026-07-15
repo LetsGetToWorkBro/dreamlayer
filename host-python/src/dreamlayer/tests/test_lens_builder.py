@@ -304,7 +304,9 @@ class TestBrainLensLoop:
         active = self._deploy_slot_lens(brain)
         # stand in for the Brain's recall so the test is deterministic
         seen = {}
-        brain.ask = lambda q: (seen.update(q=q) or Answer("Lease due Fri 14th", tier="device"))
+        brain.ask = lambda q, no_cloud=False: (
+            seen.update(q=q, no_cloud=no_cloud)
+            or Answer("Lease due Fri 14th", tier="device"))
         r = brain.rc_emit("ask", "when is my lease due?")
         assert r["ok"] and r["tag"] == "ask"
         assert seen["q"] == "when is my lease due?"           # the question reached the Brain

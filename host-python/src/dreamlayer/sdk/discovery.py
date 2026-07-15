@@ -6,10 +6,20 @@ advertises a plugin by declaring, in its own ``pyproject.toml``::
     [project.entry-points."dreamlayer.plugins"]
     my-plugin = "my_pkg.plugin:plugin"      # -> a factory returning a plugin object
 
-``discover()`` finds every such entry point in the current environment.
-The **manifest** (``plugin.json`` / the registry) remains the trust +
-capability layer: an entry point says *where* a plugin loads from; the manifest
-says *what it may do*, and the gate still decides whether it runs.
+``discover()`` finds every such entry point in the current environment and is
+metadata-only — it imports nothing.
+
+TRUST BOUNDARY (be precise, re-audit 2026-07-15): ``discover()`` is safe, but
+``DiscoveredPlugin.load()`` / ``load_discovered()`` **import and execute** the
+target module (its top-level code runs at import) and return a live object with
+NO signature check, NO capability scan, and NO gate. They are the *mechanism*,
+not the trust layer. A host that loads discovered plugins MUST route each one
+through ``plugins.validate`` + the ``PluginStore`` publisher/isolation gate
+before trusting it — exactly as ``PluginStore.load_installed`` does for manifest
+packages. The manifest and gate decide *what a plugin may do and whether it runs
+in-process*; entry points only say *where the code is*. (No first-party host
+calls ``load_discovered`` today; it is public API for integrators, who inherit
+this obligation.)
 """
 from __future__ import annotations
 
@@ -61,7 +71,12 @@ def load_discovered(group: str = ENTRY_GROUP,
                     on_error: Optional[Callable[[str, Exception], None]] = None) -> list:
     """Discover *and* load every entry-point plugin into live objects, isolating
     failures (one bad plugin never sinks the rest). ``on_error(name, exc)`` is
-    called per failure when provided."""
+    called per failure when provided.
+
+    UNTRUSTED: this imports and runs third-party module code with no signature,
+    capability, or gate check (see the module docstring's trust boundary). Only
+    call it for plugins you have already validated, or gate each returned object
+    through ``plugins.validate`` + ``PluginStore`` before use."""
     objs = []
     for d in discover(group):
         try:

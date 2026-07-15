@@ -119,3 +119,19 @@ class TestSyntheticAUChannelExcluded:
         b = calibrated_baseline()
         only_au = self.fe.fuse(stressed_au(), None, None, b)
         assert only_au.confidence == 0.0       # a lone synthetic channel earns nothing
+
+
+def test_synthetic_au_never_dominates_or_surfaces():
+    """Re-audit 2026-07-15: zeroing the AU channel's WEIGHT kept it out of the
+    verdict, but its score/z were still computed from live detector noise, so a
+    loud synthetic AU could win dominant_channel and surface a nonzero
+    micro_expression_z on the card — a synthetic signal shown as real. It must
+    be neutral everywhere until the channel is real."""
+    from dreamlayer.truth_lens.fusion import AU_CHANNEL_REAL
+    fe = FusionEngine()
+    b = calibrated_baseline()
+    # loud AU, calm everything else: if AU counted, it would dominate outright
+    cv = fe.fuse(stressed_au(), calm_prosody(), calm_ling(), b)
+    if not AU_CHANNEL_REAL:
+        assert cv.dominant_channel != "micro_expression"
+        assert cv.micro_expression_z == 0.0

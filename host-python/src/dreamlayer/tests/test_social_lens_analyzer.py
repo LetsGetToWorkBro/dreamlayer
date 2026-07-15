@@ -146,6 +146,14 @@ class TestForgetAndVeil:
         assert fr.add_debt("they_owe", "$5", who="Jack") is None
         assert fr.settle(who="Jack") is None
         assert fr._enricher.get_notes("jack") is None
+        # re-audit 2026-07-15: the id-resolved twins — the ones the orchestrator
+        # actually calls (ops_commitments) — must honor the veil too, not just
+        # their name-based siblings.
+        assert fr.add_note_by_id("jack", "a secret") is None
+        assert fr.add_debt_by_id("jack", "they_owe", "$5") is None
+        assert fr.settle_by_id("jack") is None
+        assert fr._enricher.get_notes("jack") is None
+        assert fr._enricher.get_debts("jack") == []
 
 
 class TestGrammarNoFalseEnroll:
