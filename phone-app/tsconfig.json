@@ -3,6 +3,10 @@
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    // SDK 57's expo/tsconfig.base stopped auto-including ambient @types
+    // packages; the test suite uses jest globals (describe/it/expect/jest)
+    // in every file, so include them explicitly.
+    "types": ["jest", "node"],
     "paths": {
       "@/*": [
         "./src/*"

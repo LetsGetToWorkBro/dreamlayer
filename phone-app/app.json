@@ -3,7 +3,6 @@
     "name": "DreamLayer",
     "slug": "dreamlayer",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
     "scheme": "dreamlayer",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -41,7 +40,9 @@
           "backgroundColor": "#071012"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-audio",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true

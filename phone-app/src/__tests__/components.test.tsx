@@ -20,35 +20,35 @@ jest.mock("../services/haptics", () => ({
 
 
 describe("Tappable", () => {
-  it("fires onPress and a haptic tick", () => {
+  it("fires onPress and a haptic tick", async () => {
     const onPress = jest.fn();
-    render(
+    await render(
       <Tappable onPress={onPress}>
         <Text>go</Text>
       </Tappable>
     );
     const node = screen.getByText("go");
-    fireEvent(node, "pressIn");
-    fireEvent.press(node);
+    await fireEvent(node, "pressIn");
+    await fireEvent.press(node);
     expect(onPress).toHaveBeenCalled();
     expect(tapLight).toHaveBeenCalled();
   });
 
-  it("stays silent when haptic is disabled", () => {
+  it("stays silent when haptic is disabled", async () => {
     (tapLight as jest.Mock).mockClear();
-    render(
+    await render(
       <Tappable onPress={() => {}} haptic={false}>
         <Text>quiet</Text>
       </Tappable>
     );
-    fireEvent(screen.getByText("quiet"), "pressIn");
+    await fireEvent(screen.getByText("quiet"), "pressIn");
     expect(tapLight).not.toHaveBeenCalled();
   });
 
   // P2-14: the one touch primitive is what makes (or breaks) screen-reader
   // access app-wide — every Tappable must be a labeled, stateful button.
-  it("announces itself as a button to screen readers", () => {
-    render(
+  it("announces itself as a button to screen readers", async () => {
+    await render(
       <Tappable onPress={() => {}}>
         <Text>go</Text>
       </Tappable>
@@ -56,8 +56,8 @@ describe("Tappable", () => {
     expect(screen.getByRole("button")).toBeTruthy();
   });
 
-  it("carries an explicit label for icon-only surfaces", () => {
-    render(
+  it("carries an explicit label for icon-only surfaces", async () => {
+    await render(
       <Tappable onPress={() => {}} accessibilityLabel="Ask your Brain">
         <Text>{"↳"}</Text>
       </Tappable>
@@ -65,8 +65,8 @@ describe("Tappable", () => {
     expect(screen.getByRole("button", { name: "Ask your Brain" })).toBeTruthy();
   });
 
-  it("reports its disabled state", () => {
-    render(
+  it("reports its disabled state", async () => {
+    await render(
       <Tappable onPress={() => {}} disabled>
         <Text>held</Text>
       </Tappable>
@@ -79,26 +79,27 @@ describe("Tappable", () => {
 
 
 describe("Look screen", () => {
-  it("shows the no-camera fallback when expo-camera is absent", () => {
+  it("shows the no-camera fallback when expo-camera is absent", async () => {
     // setup-rntl mocks expo-camera to {}, so loadCamera() → null → fallback
-    render(<Look />);
+    await render(<Look />);
     expect(screen.getByText("No camera here")).toBeTruthy();
   });
 });
 
 
 describe("DemoBanner", () => {
-  it("renders nothing when demo mode is off", () => {
+  it("renders nothing when demo mode is off", async () => {
     useBrainStore.setState({ demoMode: false });
-    const { toJSON } = render(<DemoBanner />);
+    // RNTL 14: render is async (concurrent React) — await it before reading
+    const { toJSON } = await render(<DemoBanner />);
     expect(toJSON()).toBeNull();
   });
 
-  it("renders the banner pill when demo mode is on", () => {
+  it("renders the banner pill when demo mode is on", async () => {
     useBrainStore.setState({ demoMode: true });
-    render(<DemoBanner />);
-    // the banner carries a stable nativeID; assert it mounted
-    expect(screen.UNSAFE_root).toBeTruthy();
+    await render(<DemoBanner />);
+    // RNTL 14 dropped UNSAFE_root; a non-null tree proves the pill mounted
+    expect(screen.toJSON()).not.toBeNull();
     useBrainStore.setState({ demoMode: false });
   });
 });

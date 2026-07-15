@@ -39,14 +39,14 @@ describe("useCloudViewStore", () => {
 });
 
 describe("Cloud panel", () => {
-  it("shows 'holds nothing' + the guarantees when cloud is off", () => {
+  it("shows 'holds nothing' + the guarantees when cloud is off", async () => {
     seed({ ...OFF, loaded: true, connected: true });
-    render(<Cloud />);
+    await render(<Cloud />);
     expect(screen.getByText("Cloud is off")).toBeTruthy();
     expect(screen.getByText("What it can never see")).toBeTruthy();
   });
 
-  it("renders the opaque shapes when cloud is on", () => {
+  it("renders the opaque shapes when cloud is on", async () => {
     seed({
       enabled: true,
       vault: { bytes: 2_300_000, last_backup_ts: 0 },
@@ -56,7 +56,7 @@ describe("Cloud panel", () => {
       loaded: true,
       connected: true,
     });
-    render(<Cloud />);
+    await render(<Cloud />);
     expect(screen.getByText(/2\.3 MB of ciphertext/)).toBeTruthy();
     expect(screen.getByText(/1 room/)).toBeTruthy();
     expect(screen.getByText("What it can never see")).toBeTruthy();
