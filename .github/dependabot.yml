@@ -26,19 +26,21 @@ updates:
         # Expo-coupled platform set below, which only moves together via a
         # deliberate `npx expo install` SDK migration.
         update-types: ["minor", "patch"]
+    # The Expo SDK pins exact versions of these — even a "minor" RN bump broke
+    # jest-expo (#339: RN's jest preset moved packages mid-0.8x), and jest-expo
+    # itself pins the jest major (#341) while RNTL targets specific RN lines
+    # (#343). None of them can move outside an `npx expo install` SDK
+    # migration, so Dependabot never proposes ANY update for them.
     ignore:
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-native"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "jest-expo"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest"
+      - dependency-name: "@types/jest"
+      - dependency-name: "@testing-library/react-native"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "npm"
