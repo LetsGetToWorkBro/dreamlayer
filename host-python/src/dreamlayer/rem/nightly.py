@@ -17,6 +17,8 @@ re-running an interrupted night reproduces the same dreams.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -24,6 +26,8 @@ from typing import Optional
 from .bias import RetrievalBias
 from .cycle import DreamReel, REMCycle
 from .reel import render_reel
+
+log = logging.getLogger("dreamlayer.rem.nightly")
 
 NIGHT_FROM = 22        # 22:00 …
 NIGHT_UNTIL = 6        # … 06:00
@@ -48,7 +52,9 @@ class NightWatch:
             try:
                 return float(json.loads(
                     self._stamp_path.read_text())["ts"])
-            except (ValueError, KeyError, json.JSONDecodeError):
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                log.warning("NightWatch: unreadable night stamp %s — "
+                            "treating as never-ran", self._stamp_path)
                 return 0.0
         return 0.0
 
@@ -72,13 +78,25 @@ class NightWatch:
                          seed=int(now // 86400), now_fn=lambda: now)
         reel = cycle.run(sweeps=sweeps)
 
+        # Stamp BEFORE touching the durable bias, atomically. Two files can't
+        # share one transaction, so the ORDER picks which crash we accept:
+        # stamp-first means a crash before bias.save loses one night's
+        # promotion (benign — the next eligible night re-dreams, and the
+        # module's law is "when in doubt, keep"); the old bias-first order
+        # meant a crash before the stamp left should_run eligible and the next
+        # run RE-APPLIED the same deltas onto the already-updated bias —
+        # double-consolidation corrupting the ranking (audit 2026-07-14:
+        # non-transactional consolidation).
+        self.vault_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self._stamp_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"ts": now, "dreams": len(reel.scenes)}))
+        os.replace(tmp, self._stamp_path)
+
         bias = RetrievalBias.load(self.vault_dir)
         reel.apply_to(bias)
         bias.save(self.vault_dir)
-
-        self.vault_dir.mkdir(parents=True, exist_ok=True)
-        self._stamp_path.write_text(json.dumps(
-            {"ts": now, "dreams": len(reel.scenes)}))
+        log.info("REM night ran: %d dreams, %d bias deltas applied",
+                 len(reel.scenes), len(reel.deltas))
 
         if reel_dir is not None and reel.scenes:
             render_reel(reel, reel_dir)

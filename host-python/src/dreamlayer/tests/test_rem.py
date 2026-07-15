@@ -229,3 +229,61 @@ class TestForgetReachesTheBias:
         assert len(bias) == 0
         from dreamlayer.rem.bias import RetrievalBias
         assert len(RetrievalBias.load(str(tmp_path))) == 0
+
+
+class TestNightWatchCrashConsistency:
+    """A crashed night must never double-consolidate (audit 2026-07-14: the
+    bias/stamp pair was written bias-first and non-atomically, so a crash
+    between the two writes left should_run eligible and the next run re-applied
+    the same deltas onto the already-updated bias)."""
+
+    def _night_ts(self):
+        import time as _t
+        # 23:00 local on an arbitrary day — inside the NIGHT_FROM..NIGHT_UNTIL
+        # window whatever the timezone-independent hour check sees.
+        return _t.mktime((2023, 11, 14, 23, 0, 0, 0, 0, -1))
+
+    def test_stamp_lands_before_the_bias_write(self, tmp_path, monkeypatch):
+        # SECURITY-ADJACENT (revert-failing): crash bias.save mid-night; the
+        # cooldown stamp must ALREADY be durable, so the interrupted night can
+        # never be re-run inside the gap and re-apply its deltas. Under the
+        # old bias-first order the stamp is missing here and this fails.
+        from dreamlayer.rem.nightly import NightWatch
+
+        night = self._night_ts()
+        watch = NightWatch(tmp_path, now_fn=lambda: night)
+
+        def boom(self, directory):
+            raise OSError("disk died mid-night")
+        monkeypatch.setattr(RetrievalBias, "save", boom)
+
+        with pytest.raises(OSError):
+            watch.run(a_day(), now=night)
+
+        assert watch.last_night() == night          # stamp survived the crash
+        assert not (tmp_path / "rem_bias.json").exists()  # deltas 0×, never 2×
+        # and the cooldown now holds: the interrupted night cannot re-run
+        assert watch.should_run(charging=True, now=night + 60.0) is False
+
+    def test_clean_night_leaves_no_tmp_residue(self, tmp_path):
+        from dreamlayer.rem.nightly import NightWatch
+
+        night = self._night_ts()
+        watch = NightWatch(tmp_path, now_fn=lambda: night)
+        reel = watch.run(a_day(), now=night)
+        assert reel.scenes
+        # both writes are tmp+os.replace atomic: files parse, no .tmp left
+        import json as _json
+        assert _json.loads((tmp_path / "rem_last_night.json").read_text())["ts"] == night
+        assert _json.loads((tmp_path / "rem_bias.json").read_text())
+        assert not list(tmp_path.glob("*.tmp"))
+
+    def test_corrupt_stamp_recovers_and_warns(self, tmp_path, caplog):
+        from dreamlayer.rem.nightly import NightWatch
+
+        (tmp_path / "rem_last_night.json").write_text("{torn")
+        watch = NightWatch(tmp_path)
+        import logging as _logging
+        with caplog.at_level(_logging.WARNING, logger="dreamlayer.rem.nightly"):
+            assert watch.last_night() == 0.0
+        assert any("unreadable night stamp" in r.message for r in caplog.records)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -78,9 +79,15 @@ class RetrievalBias:
     # -- persistence -------------------------------------------------------
 
     def save(self, directory: Path | str) -> Path:
+        # tmp + os.replace: a crash mid-write must never leave a torn
+        # rem_bias.json — load() would raise on it forever after, killing
+        # every future night (audit 2026-07-14: non-transactional
+        # consolidation).
         path = Path(directory) / FILENAME
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self._v, sort_keys=True, indent=1))
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self._v, sort_keys=True, indent=1))
+        os.replace(tmp, path)
         return path
 
     @classmethod
