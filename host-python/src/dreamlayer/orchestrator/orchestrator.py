@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from .anticipation import AnticipationEngine
     from .conversation import ConversationLedger
     from ..social_lens import SocialLens
+    from ..lucid_recall import LucidRecall
     from .attention import AttentionPolicy
     from .veritas import Veritas
     from ..ai_brain.world_check import WorldChecker
@@ -141,6 +142,7 @@ class Orchestrator(
     answer_ahead: AnswerAhead
     user: UserModel
     object_lens: ObjectLens
+    lucid: LucidRecall
     dietary: DietaryProfile
     rosetta: RosettaLens
     waypath: WaypathLens
@@ -531,6 +533,44 @@ class Orchestrator(
         from ..ai_brain import PerceptionRouter
         self.perception = PerceptionRouter()
 
+        # Lucid Recall ("ask and receive"): the on-demand query router that
+        # turns a question into one answer card — FACE queries to the Social
+        # Lens, FACT queries to your own memory. Was an unwired island (audit:
+        # "nothing wires it into the orchestrator; its memory_index.get() is
+        # implemented nowhere"). Now composed from the real pieces and gated:
+        # the memory index reads through the Retriever (consulting the mem0
+        # layer first when installed), and the keyword classifier is upgraded to
+        # the usearch DenseRouter when the semantic-recall extras are present.
+        # Every optional piece has a fallback, so the offline default path is
+        # byte-identical to the keyword+Retriever configuration.
+        from ..lucid_recall import LucidRecall, RetrieverRecallIndex
+        from ..lucid_recall.usearch_router import DenseRouter
+        from ..lucid_recall.schema import QueryType
+        _mem0 = None
+        try:
+            from ..lucid_recall.mem0_layer import Mem0Layer
+            _m = Mem0Layer(privacy=self.privacy)
+            if getattr(_m, "_mem", None) is not None:   # only when mem0 truly loaded
+                _mem0 = _m
+        except Exception:
+            _mem0 = None
+        _classify_fn = None
+        if DenseRouter.available:
+            _dr = DenseRouter(self.embedder)
+            for _ex in ("who is this", "what is their name", "do i know them"):
+                _dr.add("face", _ex)
+            for _ex in ("what did we discuss", "what do i know about", "last time we talked"):
+                _dr.add("fact", _ex)
+
+            def _classify_fn(text, _dr=_dr):     # noqa: E306  (compose DenseRouter in)
+                lbl = _dr.route(text, threshold=0.35)
+                return {"face": QueryType.FACE, "fact": QueryType.FACT}.get(lbl)
+        self.lucid = LucidRecall(
+            social_lens=self.social,
+            memory_index=RetrieverRecallIndex(self.retriever, mem0=_mem0),
+            privacy=self.privacy,
+            classify_fn=_classify_fn)
+
     def _init_dream_rem_horizon(self, cfg, bridge) -> None:
         """The nightly / future-facing layer: the Life Quest engine, REM
         retrieval bias (wired into the retriever's purge primitive), NightWatch,
@@ -636,6 +676,15 @@ class Orchestrator(
                 "frames": self.frame_budget.stats(),
                 "plugins": self.capability_log.report()}
 
+
+    def lucid_query(self, text: str = "", frame=None) -> dict:
+        """Lucid Recall's public surface: a question (and optionally what you're
+        looking at) -> a single HUD answer card. FACE queries resolve against
+        your own contacts through the Social Lens; FACT queries against your own
+        memory. Recall-gated by construction (the router short-circuits on
+        allow_recall()), so a full pause veil returns an empty 'No result' card.
+        Returns the card dict ready for the bridge."""
+        return self.lucid.query(text or None, camera_frame=frame).to_hud_card()
 
     def ask_juno(self, text: str) -> dict:
         """The full "Hey Juno" surface: run a device command if it is one

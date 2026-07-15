@@ -34,21 +34,32 @@ class LucidRecall:
         Handles fact/context queries (get(query) -> str).
     """
 
-    def __init__(self, social_lens=None, memory_index=None, privacy=None):
+    def __init__(self, social_lens=None, memory_index=None, privacy=None,
+                 classify_fn=None):
         self._social = social_lens
         self._memory = memory_index
         # The module NAMED for recall must honor the recall gate: a full pause
         # veil silences read-back (incognito still recalls). Without this,
         # query() returned kept facts and contact names with no pause check
-        # (audit 2026-07-14). None = no gate wired (isolated/library use).
-        self._privacy = privacy
+        # (audit 2026-07-14). Default to the ONE shared permissive gate rather
+        # than an ad-hoc `privacy is None` fail-open idiom: no gate wired
+        # (isolated/library use) resolves to AlwaysOnGate — one primitive to
+        # audit — while production always injects the real PrivacyGate.
+        from ..memory.privacy import AlwaysOnGate
+        self._privacy = privacy or AlwaysOnGate()
+        # Pluggable classifier seam (Arch: the three lucid_recall pieces now
+        # compose behind this one surface). classify_fn(text) -> QueryType | None
+        # lets a semantic router (usearch DenseRouter) replace the keyword
+        # heuristic; None keeps the dependency-free keyword _classify default,
+        # so the offline path is byte-identical.
+        self._classify_fn = classify_fn
 
     def query(self, text: Optional[str] = None,
               camera_frame: Optional[np.ndarray] = None) -> LucidRecallResult:
         """Route a query and return a LucidRecallResult. Silenced while the full
         pause veil is up — recall is read-back, and the veil means deaf and
         blind."""
-        if self._privacy is not None and not self._privacy.allow_recall():
+        if not self._privacy.allow_recall():
             return LucidRecallResult(query_type=QueryType.UNKNOWN,
                                      answer="No result", confidence=0.0,
                                      source=None)
@@ -102,6 +113,12 @@ class LucidRecall:
     def _classify(self, text: Optional[str]) -> QueryType:
         if not text:
             return QueryType.FACE  # default: camera trigger
+        if self._classify_fn is not None:
+            # a wired semantic router (DenseRouter) gets first say; fall back to
+            # the keyword heuristic only when it abstains (returns None).
+            qt = self._classify_fn(text)
+            if isinstance(qt, QueryType):
+                return qt
         lower = text.lower()
         tokens = set(re.findall(r"[a-z']+", lower))
         face = bool(tokens & FACE_WORDS) or any(p in lower for p in FACE_PHRASES)

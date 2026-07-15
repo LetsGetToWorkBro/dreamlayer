@@ -19,5 +19,7 @@ Public API
 """
 from .router import LucidRecall
 from .schema import LucidRecallResult, QueryType
+from .index_adapter import RetrieverRecallIndex
 
-__all__ = ["LucidRecall", "LucidRecallResult", "QueryType"]
+__all__ = ["LucidRecall", "LucidRecallResult", "QueryType",
+           "RetrieverRecallIndex"]
