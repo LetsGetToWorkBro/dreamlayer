@@ -48,6 +48,6 @@
     "jest-expo": "~57.0.1",
     "test-renderer": "^1.2.0",
     "ts-jest": "^29.4.11",
-    "typescript": "~6.0.3"
+    "typescript": "~7.0.2"
   }
 }
