@@ -385,9 +385,17 @@ class WorldLensOps:
         lo = (target - _dt.timedelta(days=window_days)).isoformat()
         hi = (target + _dt.timedelta(days=window_days)).isoformat()
         try:
-            rows = self.db.conn.execute(
-                "SELECT summary, meta FROM memories WHERE created_at BETWEEN ? AND ? "
-                "ORDER BY created_at", (lo, hi)).fetchall()
+            # Shared SQLite connection: capture writes off-thread, so this read
+            # must ride the MemoryDB RLock like every other db.conn access
+            # (memory/db.py serializes all statements; memory/vector_store.py
+            # holds the same lock). An unlocked read here raced the writer's
+            # interleaved commits — the exact hazard the lock exists for
+            # (audit 2026-07-14 §7). fetchall() stays inside the guard so the
+            # cursor is fully drained before the lock is released.
+            with self.db._lock:
+                rows = self.db.conn.execute(
+                    "SELECT summary, meta FROM memories WHERE created_at BETWEEN ? AND ? "
+                    "ORDER BY created_at", (lo, hi)).fetchall()
         except Exception:
             return None
         for summary, meta_s in rows:

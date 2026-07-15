@@ -3,9 +3,13 @@ artifacts — Ed25519 signatures over canonical JSON.
 
 ADD-alongside: new sibling to v2/signer.py (SessionSigner, HMAC-stdlib, is
 untouched). Mirrors its sign/verify/verify_or_raise surface but on a generic
-dict|bytes payload. Lazy-imports cryptography (extras group `privacy`); when
-absent it falls back to the same stdlib HMAC scheme SessionSigner uses, so
-signing/verification always works.
+dict|bytes payload. Lazy-imports cryptography (extras group `privacy`). When it
+is absent, sign() can still emit an HMAC, but verify() REFUSES that fallback
+(returns False): a symmetric MAC is not a provenance signature — the verifier
+holds the same secret the signer used, so a "match" attests nothing about
+authorship and, with any shared/guessable key, is forgeable. Trustworthy
+verification therefore requires the Ed25519 path, matching verify_detached()
+which returns None on the same fallback (audit 2026-07-14).
 """
 from __future__ import annotations
 import hashlib
@@ -36,7 +40,9 @@ def _canonical(payload) -> bytes:
 
 
 class Signer:
-    """Ed25519 when available, else HMAC-SHA256 (stdlib). `key` is 32 bytes."""
+    """Ed25519 signer/verifier. `key` is 32 bytes. Without the `cryptography`
+    extra it can still HMAC-sign, but verify() refuses that fallback — a
+    symmetric MAC proves no authorship — so a "verified" HMAC is never trusted."""
     available = _HAS_CRYPTO
 
     def __init__(self, key: bytes | None = None):
@@ -64,6 +70,14 @@ class Signer:
         return hmac.new(self._key, data, hashlib.sha256).hexdigest()
 
     def verify(self, payload, signature: str) -> bool:
+        """True only on a genuine Ed25519 verification. On the HMAC fallback
+        (no `cryptography` extra, or a key that would not load as Ed25519) there
+        is no asymmetric signature to check: the "signature" is a symmetric MAC
+        this verifier could equally have produced, so a match proves nothing
+        about authorship and, with any shared/guessable key, is forgeable.
+        Refuse (return False = unverifiable) rather than hand back a misleading
+        True — real provenance needs the Ed25519 path. Mirrors verify_detached(),
+        which returns None on the same fallback (audit 2026-07-14)."""
         data = _canonical(payload)
         if self._pub is not None:
             try:
@@ -71,8 +85,9 @@ class Signer:
                 return True
             except (InvalidSignature, ValueError):
                 return False
-        expected = hmac.new(self._key, data, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(expected, signature)
+        log.warning("[sign_crypto] verify refused: HMAC fallback cannot attest "
+                    "provenance (install the 'privacy' extra for Ed25519)")
+        return False
 
     def verify_or_raise(self, payload, signature: str) -> None:
         if not self.verify(payload, signature):

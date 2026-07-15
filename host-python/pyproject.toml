@@ -21,35 +21,35 @@ dreamlayer = "dreamlayer.cli:main"
 
 [project.optional-dependencies]
 # lupa runs the halo-lua test suites (pinned to lupa.lua53 = device Lua)
-dev      = ["pytest>=8", "pytest-asyncio>=0.23", "lupa>=2.0", "pytest-benchmark>=4", "hypothesis>=6", "pytest-cov>=4", "qrcode>=7", "ruff>=0.5", "mypy>=1.8"]
+dev      = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2", "lupa>=2.0,<3", "pytest-benchmark>=4,<6", "hypothesis>=6,<7", "pytest-cov>=4,<8", "qrcode>=7,<9", "ruff>=0.5,<1", "mypy>=1.8,<3"]
 # proofs: CrossHair symbolically verifies the on-glass safety caps in
 # reality_compiler/v2/contracts.py (skipped when crosshair-tool is absent).
-verify   = ["crosshair-tool>=0.0.60"]
+verify   = ["crosshair-tool>=0.0.60,<1"]
 # mutation: mutmut mutation-tests the safety core — proves the tests actually
 # catch bugs, not just pass. Run on demand: see .github/workflows/mutation.yml.
-mutation = ["mutmut>=3.0"]
-hardware = ["brilliant-ble", "brilliant-msg"]
-dream    = ["brilliant-msg", "Pillow>=10"]   # pip install dreamlayer[dream]
+mutation = ["mutmut>=3.0,<4"]
+hardware = ["brilliant-ble>=3,<4", "brilliant-msg>=7,<8"]
+dream    = ["brilliant-msg>=7,<8", "Pillow>=10"]   # pip install dreamlayer[dream]
 
 # --- Optional integration groups (adapters lazy-import these; every one has a
 #     working fallback, so the core system runs with none of them installed) ---
-memory   = ["sqlite-vec", "chromadb", "sentence-transformers", "model2vec", "mem0ai", "lancedb", "usearch", "docarray", "networkx"]
-voice    = ["silero-vad", "faster-whisper", "openwakeword", "sounddevice", "sherpa-onnx"]
-asr-extra = ["whisperx"]
-structured = ["outlines", "instructor", "pydantic>=2", "pydantic-ai"]
-llm      = ["litellm"]
-intelligence = ["speechbrain", "spacy", "river", "human-learn", "supervision"]
-vision   = ["ultralytics", "moondream", "open-clip-torch", "coremltools; sys_platform=='darwin'", "mlx-vlm; sys_platform=='darwin'"]
-causal   = ["dowhy"]
+memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "mem0ai>=2,<3", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
+voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2"]
+asr-extra = ["whisperx>=3,<4"]
+structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=0.8,<1"]
+llm      = ["litellm>=1,<2"]
+intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-learn>=0.3,<1", "supervision>=0.29,<1"]
+vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
+causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
-sync     = ["loro>=1.0"]
-infra    = ["rich", "watchdog", "zeroconf", "datasette", "rerun-sdk"]
+sync     = ["loro>=1.0,<2"]
+infra    = ["rich>=14,<15", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
 # Security-critical: keep a floor below which known CVEs live (audit 2026-07-14).
 # cryptography>=48.0.1 clears GHSA-537c-gmf6-5ccf (the unconstrained resolver
 # otherwise settles on the vulnerable 46.0.7); presidio floors match the modern
 # analyzer API. pip-audit (dep-audit.yml) gates the rest.
-privacy  = ["cryptography>=48.0.1", "presidio-analyzer>=2.2", "presidio-anonymizer>=2.2", "anyio>=4", "c2pa-python"]
-platform = ["pluggy", "pyee", "argostranslate", "skia-python", "fastapi", "uvicorn", "frame-sdk", "pylsl", "wasmtime", "cbor2", "mlx; sys_platform=='darwin'", "mlx-lm; sys_platform=='darwin'"]
+privacy  = ["cryptography>=48.0.1,<50", "presidio-analyzer>=2.2,<3", "presidio-anonymizer>=2.2,<3", "anyio>=4,<5", "c2pa-python>=0.36,<1"]
+platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "skia-python>=144,<145", "fastapi>=0.139,<1", "uvicorn>=0.51,<1", "frame-sdk>=1,<2", "pylsl>=1,<2", "wasmtime>=46,<47", "cbor2>=6,<7", "mlx>=0.32,<1; sys_platform=='darwin'", "mlx-lm>=0.31,<1; sys_platform=='darwin'"]
 
 # --- Deployment profiles: one install per target, composed from the groups
 #     above via self-referential extras. Pick ONE per machine:
@@ -124,6 +124,15 @@ markers = [
 # source read can't see). vault_sync.py stays out: it needs the loro extra,
 # which the mutation runner doesn't install.
 #
+# memory/privacy.py joins the core (audit 2026-07-14 §7): the privacy gate is
+# the product's core safety contract, yet it previously had NO mutation net —
+# only the 4-file reality_compiler core did. Mutating it here proves the gate's
+# killer suite (test_privacy.py + tests/test_privacy_gate_properties.py) would
+# actually catch an OR->AND flip or an incognito-blocks-recall regression, not
+# just pass. The @requires_capture/@requires_recall call-site helpers live in
+# the same file, so they come under the net for free ("the gate call-sites'
+# helper" from the task) — no separate file to configure.
+#
 # Enforcement (.github/workflows/mutation.yml) is per-file survivor CEILINGS,
 # not a blanket zero: contracts.py and signer.py hold at zero survivors, while
 # budgets.py and flash_safety.py carry documented non-behavioral residuals
@@ -137,6 +146,7 @@ only_mutate = [
     "src/dreamlayer/reality_compiler/v2/budgets.py",
     "src/dreamlayer/reality_compiler/v2/flash_safety.py",
     "src/dreamlayer/reality_compiler/v2/signer.py",
+    "src/dreamlayer/memory/privacy.py",
 ]
 pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_contracts_unit.py",
@@ -146,4 +156,6 @@ pytest_add_cli_args_test_selection = [
     "src/dreamlayer/tests/test_flash_safety.py",
     "src/dreamlayer/tests/test_signer_boundaries.py",
     "src/dreamlayer/tests/test_rc2_vault.py",
+    "src/dreamlayer/tests/test_privacy.py",
+    "src/dreamlayer/tests/test_privacy_gate_properties.py",
 ]

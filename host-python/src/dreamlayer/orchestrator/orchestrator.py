@@ -994,7 +994,11 @@ class Orchestrator(
         if name == "long_press":
             self.pause() if not self.privacy.paused else self.resume()
         elif name == "double_tap":
-            if self.state.is_dream():
-                self.exit_dream()
-            else:
+            # Atomic decide-and-flip so two concurrent double-taps can't both
+            # read the same mode and drop one of the toggles (audit 2026-07-14
+            # §7). The side-effecting enter/exit_dream then re-asserts the same
+            # mode idempotently under the same lock.
+            if self.state.toggle_dream():
                 self.enter_dream()
+            else:
+                self.exit_dream()

@@ -31,17 +31,57 @@ def test_memory_event_type_invariant():
         MemoryEvent(kind="Promise", summary="lease", allowed=False)
 
 
-# --- security: signer round-trips + rejects tampering (HMAC fallback) --------
+# --- security: signer round-trips (Ed25519) + rejects tampering --------------
 def test_signer_roundtrip_and_tamper():
     from dreamlayer.reality_compiler.sign_crypto import Signer, SigningError, content_hash
     s = Signer(key=b"x" * 32)
     payload = {"figment": "round-timer", "run_sec": 180}
     sig = s.sign(payload)
-    assert s.verify(payload, sig) is True
-    assert s.verify({"figment": "round-timer", "run_sec": 181}, sig) is False
+    if s.available:                       # real Ed25519 signatures verify…
+        assert s.verify(payload, sig) is True
+        assert s.verify({"figment": "round-timer", "run_sec": 181}, sig) is False
+    else:                                 # …but the HMAC fallback is never trusted
+        assert s.verify(payload, sig) is False
     with pytest.raises(SigningError):
         s.verify_or_raise(payload, "deadbeef")
     assert len(content_hash(payload)) == 16
+
+
+# --- security: the HMAC fallback signature is never trusted (revert-failing) --
+def test_hmac_fallback_verify_is_refused(monkeypatch):
+    """Without `cryptography`, Signer can only emit a symmetric HMAC, which
+    proves no authorship and — under the old public default key — was forgeable
+    by anyone. verify()/verify_or_raise() must REFUSE the fallback, never
+    compare-and-trust it. Reverting the primitive (a baked-in default key and/or
+    hmac.compare_digest in verify) turns this red."""
+    import hashlib
+    import hmac as _hmac
+    from dreamlayer.reality_compiler import sign_crypto
+    from dreamlayer.reality_compiler.sign_crypto import Signer, SigningError, _canonical
+
+    monkeypatch.setattr(sign_crypto, "_HAS_CRYPTO", False)
+    payload = {"figment": "round-timer", "run_sec": 180}
+
+    # 1) A genuine HMAC produced by this very signer is still refused on the
+    #    fallback path — catches a revert of verify() to hmac.compare_digest.
+    s = Signer(key=b"k" * 32)
+    assert s._pub is None                             # fallback path is live
+    good_hmac = s.sign(payload)
+    assert s.verify(payload, good_hmac) is False
+    with pytest.raises(SigningError):
+        s.verify_or_raise(payload, good_hmac)
+
+    # 2) The original footgun: a signature forged with the OLD public default
+    #    key (sha256(b"dreamlayer-session")) must not verify against a keyless
+    #    Signer — pre-fix, Signer() adopted that constant and compared with it.
+    forged_key = hashlib.sha256(b"dreamlayer-session").digest()
+    forged_sig = _hmac.new(forged_key, _canonical(payload),
+                           hashlib.sha256).hexdigest()
+    assert Signer().verify(payload, forged_sig) is False
+
+    # 3) A keyless Signer must not silently adopt that public constant as its
+    #    key — catches a revert of the default back to the baked-in constant.
+    assert Signer()._key != forged_key
 
 
 # --- reliability: anyio veil scope cancels all tasks on stop (asyncio path) ---
@@ -101,7 +141,8 @@ if _HAS_HYP:
         from dreamlayer.reality_compiler.sign_crypto import Signer
         s = Signer(key=b"k" * 32)
         payload = {"t": text}
-        assert s.verify(payload, s.sign(payload)) is True
+        # Ed25519 verifies its own signatures; the HMAC fallback is refused.
+        assert s.verify(payload, s.sign(payload)) is s.available
 
 
 # --- benchmark: signing stays well under budget (deselected in CI) -----------

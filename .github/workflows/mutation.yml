@@ -2,9 +2,11 @@ name: mutation
 
 # Mutation testing for the on-glass safety core. The default `pytest` job proves
 # the tests PASS; this job proves they actually CATCH BUGS — mutmut mutates the
-# four safety-core files (contracts.py, budgets.py, flash_safety.py, signer.py;
-# see [tool.mutmut] in host-python/pyproject.toml) and checks the killer suites
-# actually kill the mutants.
+# safety-core files (contracts.py, budgets.py, flash_safety.py, signer.py) plus
+# the privacy gate (memory/privacy.py, the product's core safety contract; added
+# by the audit 2026-07-14 §7 test-infra raise); see [tool.mutmut] in
+# host-python/pyproject.toml, and checks the killer suites actually kill the
+# mutants.
 #
 # The gate is a per-file survivor CEILING, not a blanket zero. contracts.py and
 # signer.py hold at ZERO survivors. budgets.py and flash_safety.py carry a
@@ -65,12 +67,27 @@ jobs:
               "signer": 0,          # the deploy trust anchor: always zero
               "budgets": 213,       # diagnostic-string + equivalent residue
               "flash_safety": 15,   # degradation branches + boundary-exact forms
+              # privacy.py — the core safety gate, added by the audit 2026-07-14
+              # §7 test-infra raise. PROVISIONAL ceiling: mutmut is not
+              # installable in the authoring env (it is the optional [mutation]
+              # extra), so this was NOT measured — it is a small analytic bound,
+              # not a count. The one analytically-equivalent form is set_incognito's
+              # `bool(on)` truthiness coercion (dropping bool() is behaviorally
+              # identical: the flag's only reader is `_paused or _incognito`, so
+              # truthiness is all that is observed). The margin covers mutmut
+              # `return None`->bare-`return` idioms in the two decorator guards.
+              # The first SCHEDULED run (this job is workflow_dispatch + weekly,
+              # never a merge gate) calibrates this: tighten to the measured
+              # count, or document any additional provably-equivalent residue the
+              # budgets.py/flash_safety.py way. Any REAL new test hole leaves far
+              # more survivors (and "no tests" mutants) than 3 and still fails.
+              "privacy": 3,
           }
 
           per = Counter()
           for line in open("/tmp/results.txt"):
               m = re.match(
-                  r"\s*dreamlayer\.reality_compiler\.v2\.(\w+)\..*: "
+                  r"\s*dreamlayer\.(?:reality_compiler\.v2|memory)\.(\w+)\..*: "
                   r"(survived|no tests)$", line)
               if m:
                   per[m.group(1)] += 1

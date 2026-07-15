@@ -64,6 +64,19 @@ updates:
         patterns: ["*"]
     open-pull-requests-limit: 5
 
+  # registry-api is the Cloudflare Worker (worker.js). It ships no runtime npm
+  # dependencies today (tests use node builtins), so Dependabot has nothing to
+  # bump yet — this entry future-proofs it: any dep added to its package.json is
+  # monitored from day one rather than silently floating.
+  - package-ecosystem: "npm"
+    directory: "/registry-api"
+    schedule:
+      interval: "weekly"
+    groups:
+      registry-api-deps:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
