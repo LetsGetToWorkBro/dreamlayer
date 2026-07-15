@@ -1495,6 +1495,38 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             return self.client_address[0] in ("127.0.0.1", "::1",
                                               "::ffff:127.0.0.1")
 
+        def _same_origin_write(self) -> bool:
+            """CSRF guard for state-changing (POST) requests.
+
+            A tokenless loopback Brain authorizes any local caller (authorize()
+            trusts loopback), and the panel's own JSON adapters mean _body()
+            parses a request body whatever its Content-Type is. That combination
+            is CSRF-able: a page the wearer merely visits can fire a *simple*
+            cross-origin POST (text/plain body, no CORS preflight) at
+            http://127.0.0.1:<port>/dreamlayer/config and — without ever reading
+            the response — repoint the PRIMARY answer tier
+            (model=api + api_base_url) at an attacker endpoint, silently
+            exfiltrating every later non-incognito query and letting the attacker
+            forge the answers the wearer sees.
+
+            Browsers attach an UNFORGEABLE Origin header to every cross-origin
+            POST (even the simple one that skips preflight), so a mutating
+            request whose Origin is present and does not match the Host it
+            arrived on is a cross-site forgery — refuse it. Native callers (the
+            phone's React-Native networking) and CLI tools send no Origin and are
+            unaffected; the same-origin panel's Origin always matches its Host.
+            This closes the write side of the same-origin policy the read side
+            (no CORS headers on _json) already enforces."""
+            origin = self.headers.get("Origin")
+            if not origin:
+                return True             # native app / CLI — no browser origin
+            try:
+                origin_host = urllib.parse.urlsplit(origin).netloc.lower()
+            except ValueError:
+                return False
+            host = (self.headers.get("Host") or "").lower()
+            return bool(origin_host) and origin_host == host
+
         def _body(self) -> dict:
             n = int(self.headers.get("Content-Length", 0) or 0)
             raw = self.rfile.read(n) if n else b""
@@ -2292,6 +2324,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def do_POST(self):
             parsed = urllib.parse.urlparse(self.path)
             path, qs = parsed.path, urllib.parse.parse_qs(parsed.query)
+            # CSRF guard first: a forged cross-origin write must be refused even
+            # when it would otherwise be authorized (tokenless loopback trusts
+            # any local caller). Native/CLI callers carry no Origin and pass.
+            if not self._same_origin_write():
+                self._json(403, {"error": "cross-origin write refused"}); return
             # the auth gate stays first, exactly as before the route table
             if not self._authed():
                 self._json(401, {"error": "unauthorised"}); return
