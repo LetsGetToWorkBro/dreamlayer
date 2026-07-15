@@ -49,6 +49,10 @@ updates:
       - dependency-name: "react-native-svg"
       - dependency-name: "react-native-web"
       - dependency-name: "@react-native-async-storage/async-storage"
+      # typescript is SDK-blessed too: `npx expo install --fix` pins the TS
+      # the SDK validates against (~6.0 for SDK 57); TS 7 broke typecheck
+      # (#334, #348). Moves with SDK migrations, not bot bumps.
+      - dependency-name: "typescript"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "npm"
