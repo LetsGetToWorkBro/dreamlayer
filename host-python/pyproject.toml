@@ -43,7 +43,7 @@ vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "co
 causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]
-infra    = ["rich>=14,<15", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
+infra    = ["rich>=14,<16", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
 # Security-critical: keep a floor below which known CVEs live (audit 2026-07-14).
 # cryptography>=48.0.1 clears GHSA-537c-gmf6-5ccf (the unconstrained resolver
 # otherwise settles on the vulnerable 46.0.7); presidio floors match the modern

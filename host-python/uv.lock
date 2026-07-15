@@ -2222,7 +2222,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
     { name = "qrcode", marker = "extra == 'dev'", specifier = ">=7,<9" },
     { name = "rerun-sdk", marker = "extra == 'infra'", specifier = ">=0.34,<1" },
-    { name = "rich", marker = "extra == 'infra'", specifier = ">=14,<15" },
+    { name = "rich", marker = "extra == 'infra'", specifier = ">=14,<16" },
     { name = "river", marker = "extra == 'intelligence'", specifier = ">=0.23,<1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5,<1" },
     { name = "sentence-transformers", marker = "extra == 'memory'", specifier = ">=5,<6" },
