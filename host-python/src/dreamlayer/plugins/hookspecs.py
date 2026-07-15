@@ -28,10 +28,10 @@ try:
 except ImportError:
     _HAS_PLUGGY = False
 
-    def hookspec(fn=None, **_kw):          # no-op decorator fallback
+    def hookspec(fn=None, **_kw):          # type: ignore[misc]  # no-op fallback for the pluggy marker
         return fn if fn is not None else (lambda f: f)
 
-    def hookimpl(fn=None, **_kw):          # so downstream @hookimpl still parses
+    def hookimpl(fn=None, **_kw):          # type: ignore[misc]  # so downstream @hookimpl still parses
         return fn if fn is not None else (lambda f: f)
 
 

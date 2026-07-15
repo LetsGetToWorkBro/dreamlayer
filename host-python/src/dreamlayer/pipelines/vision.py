@@ -104,6 +104,6 @@ async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None,
                 }
             ],
         )
-        return response.choices[0].message.content.strip()
+        return (response.choices[0].message.content or "").strip()
     except Exception:
         return ""

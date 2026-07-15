@@ -132,7 +132,7 @@ class TestFramingProperty:
     @given(
         text=st.text(
             alphabet=st.characters(codec="utf-8",
-                                   blacklist_categories=("Cs",)),
+                                   blacklist_categories=("Cs",)),  # type: ignore[arg-type]
             max_size=2000),
         chunk_size=st.integers(min_value=1, max_value=400),
     )

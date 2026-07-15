@@ -49,7 +49,7 @@ try:  # numpy is a core dependency, but keep the pure-math half importable
     import numpy as _np
     _HAS_NUMPY = True
 except Exception:  # pragma: no cover
-    _np = None
+    _np = None  # type: ignore[assignment]  # optional-import fallback
     _HAS_NUMPY = False
 
 

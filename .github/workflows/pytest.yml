@@ -45,7 +45,11 @@ jobs:
         # the NL intent_parser's Literal fields, the hardware-gated BLE bridge)
         # are a documented ignore_errors backlog in [[tool.mypy.overrides]];
         # everything else, incl. the mixin<->host contract, is enforced.
-        run: mypy src/dreamlayer
+        # `python -m mypy` (not the bare `mypy` entrypoint) guarantees the type
+        # checker runs under the same interpreter that installed the deps, so it
+        # sees the packages it should — the entrypoint can resolve to a different
+        # Python whose site-packages differ, silently changing what gets checked.
+        run: python -m mypy src/dreamlayer
 
       - name: Run pytest
         # hardware/benchmark tests need a device or run only on demand.
