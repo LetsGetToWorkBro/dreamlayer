@@ -20,7 +20,7 @@ jobs:
       contents: read
       deployments: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Publish the plugin registry with the site: the phone app and web store
       # install by fetching dreamlayer.app/registry/packages/<name>-<ver>.json
       # (raw.githubusercontent 404s while the repo is private).
