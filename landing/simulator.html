@@ -45,15 +45,6 @@
     -webkit-font-smoothing:antialiased;overflow-x:hidden}
   a{color:var(--teal);text-decoration:none}
   .wrap{max-width:1060px;margin:0 auto;padding:0 20px}
-  header{position:sticky;top:0;z-index:20;background:rgba(0,0,0,.82);
-    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-  .bar{display:flex;align-items:center;justify-content:space-between;height:60px}
-  .wordmark{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;color:#fff;font-size:14px}
-  .ring{width:15px;height:15px;border:2px solid var(--teal);border-radius:50%;position:relative}
-  .ring::after{content:"";position:absolute;inset:3px;background:var(--teal);border-radius:50%}
-  .bar .sub{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal)}
-  .bar a.home{color:var(--text-2);font-size:13px}
-  .bar a.home:hover{color:#fff}
 
   main{padding:24px 0 48px}
   .lede{text-align:center;max-width:640px;margin:6px auto 26px}
@@ -116,7 +107,7 @@
   .scenebtn:hover{border-color:var(--teal);color:#fff}
   .scenebtn .ic{font-size:15px;line-height:1}
   .scenebtn.playing{background:var(--teal);color:#00201c;border-color:var(--teal)}
-  .pulse{animation:ctlpulse 1s ease-in-out infinite;border-color:var(--teal)!important;color:#fff!important}
+  #simwin .pulse{animation:ctlpulse 1s ease-in-out infinite;border-color:var(--teal)!important;color:#fff!important}
   @keyframes ctlpulse{0%,100%{box-shadow:0 0 0 0 rgba(44,199,154,.55)}50%{box-shadow:0 0 0 8px rgba(44,199,154,0)}}
   .soundtgl{font:inherit;font-size:12px;color:var(--text-3);background:transparent;border:0;cursor:pointer;
     padding:2px 6px;-webkit-tap-highlight-color:transparent}
@@ -199,21 +190,50 @@
   .try button::before{content:"› ";color:var(--teal)}
   .people{color:var(--text-2);font-size:13.5px;line-height:1.6}
   .people b{color:var(--teal);font-weight:600}
-  footer{color:var(--text-3);font-size:12.5px;text-align:center;padding:26px 20px;border-top:1px solid var(--border);margin-top:20px}
-  footer b{color:var(--text-2)}
-  footer a{color:var(--text-2)}
-  @media(max-width:430px){.bar .sub{display:none}}
+</style>
+<link rel="stylesheet" href="assets/platinum/platinum.css">
+<style>
+  /* ===== Platinum chrome fit — page-specific, layers over platinum.css ===== */
+  /* the whole simulator lives in one application window on the desktop */
+  .simwin{margin:calc(3svh + 8px) auto 0}
+  .simwin .fstatus{flex-wrap:wrap;row-gap:2px;column-gap:10px}
+  .simwin .fstatus .sep{color:#8E8E8E}
+  /* the world-haze backdrop moves INSIDE the window's dark screen, so the
+     Platinum desktop pattern stays visible around the window */
+  .simwin .mbody.screen{overflow:clip}
+  .simwin .world-haze{position:absolute;z-index:0}
+  .simwin main,.simwin .sim-credit{position:relative;z-index:1}
+  /* headline in the system face */
+  .lede h1{font-family:var(--chi);font-weight:400;letter-spacing:0}
+  /* credit strip (was the page footer; the shared Platinum footer replaces it) */
+  .sim-credit{color:var(--text-3);font-size:12.5px;text-align:center;
+    padding:22px 20px 26px;border-top:1px solid var(--scr-border);margin-top:20px}
+  .sim-credit b{color:var(--text-2)}
+  .sim-credit a{color:var(--text-2)}
+  /* engine CTA re-tinted as a Platinum action button — CSS only, id/handlers untouched */
+  .tourbtn{font-family:var(--chi);font-weight:400;color:#00251C;
+    background:linear-gradient(180deg,#49E8BC,#17AE85);border:1px solid var(--frame);
+    border-radius:8px;box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.3)}
+  .tourbtn:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in);transform:none}
+  /* the desk-accessory Juno must not cover the sim's type-to-talk column
+     at laptop widths (1280×800) — park her bottom-right instead */
+  .mw.sub.da{left:auto;right:14px}
 </style>
 </head>
 <body>
-<div class="world-haze" aria-hidden="true"><div class="hz" id="hazeLayer"></div></div>
-<header>
-  <div class="wrap bar">
-    <a class="wordmark" href="./index.html"><span class="ring"></span>DREAMLAYER</a>
-    <span class="sub">Halo Simulator</span>
-    <a class="home" href="./index.html">← Home</a>
+
+<div class="mw simwin" id="simwin">
+  <div class="tbar">
+    <span class="wbox close" data-balloon="This window stays open. It's the whole demo." aria-hidden="true"></span>
+    <span class="tstripes" aria-hidden="true"></span>
+    <span class="ttext">Halo Simulator</span>
+    <span class="tstripes" aria-hidden="true"></span>
+    <span class="wbox collapse" aria-hidden="true"></span>
+    <span class="wbox zoom" aria-hidden="true"></span>
   </div>
-</header>
+  <div class="fstatus"><span>the real stack</span><span class="sep" aria-hidden="true">·</span><span>only the glasses are simulated</span><span class="sep" aria-hidden="true">·</span><span>type to talk to Juno</span></div>
+  <div class="mbody screen">
+  <div class="world-haze" aria-hidden="true"><div class="hz" id="hazeLayer"></div></div>
 
 <main class="wrap">
   <div class="lede">
@@ -313,12 +333,14 @@
   </div>
 </main>
 
-<footer>
+<div class="sim-credit">
   Every pixel on the glass is drawn by a faithful port of the <b>real DreamLayer renderer</b> — the
   same voice grammar, Social Lens, and Figment timer stage the
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/tree/main/host-python/src/dreamlayer/simulator" target="_blank" rel="noopener">Python simulator</a>
   runs. Only the hardware is simulated. · <a href="./index.html">Home</a> · <a href="./plugins.html">Plugin store</a>
-</footer>
+</div>
+  </div><!-- /.mbody.screen -->
+</div><!-- /.mw simwin -->
 
 <script src="./assets/sim/halo-sim.js"></script>
 <script>
@@ -659,5 +681,7 @@
   });
 })();
 </script>
+<script>window.PLATINUM={app:"Halo Simulator",daLine:"that’s me in there."}</script>
+<script src="assets/platinum/platinum.js" defer></script>
 </body>
 </html>
