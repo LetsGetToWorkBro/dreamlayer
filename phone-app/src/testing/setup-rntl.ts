@@ -1,6 +1,6 @@
 /** Component-test setup: native-module shims that don't exist under jest-expo
- * (haptics, camera). RNTL 13 auto-extends expect, so no matcher import needed.
- * Keeps screen tests from touching real native code. */
+ * (haptics, camera). RNTL (13+) auto-extends expect, so no matcher import
+ * needed. Keeps screen tests from touching real native code. */
 
 // expo-haptics: no native actuator in a test runtime — make every call a no-op
 jest.mock("expo-haptics", () => ({

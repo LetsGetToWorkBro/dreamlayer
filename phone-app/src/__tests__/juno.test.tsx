@@ -9,16 +9,17 @@ import { render, screen } from "@testing-library/react-native";
 import { Juno } from "../ui/components/Juno";
 
 describe("Juno", () => {
-  it("renders with an accessibility label", () => {
-    render(<Juno width={240} state="idle" />);
+  it("renders with an accessibility label", async () => {
+    await render(<Juno width={240} state="idle" />);
     expect(screen.getByLabelText("Juno, the DreamLayer assistant")).toBeTruthy();
   });
 
-  it("mounts for every state without throwing", () => {
+  it("mounts for every state without throwing", async () => {
     for (const s of ["idle", "thinking", "success"] as const) {
-      const { unmount } = render(<Juno width={200} state={s} />);
+      // RNTL 14: render/unmount are async (concurrent React)
+      const { unmount } = await render(<Juno width={200} state={s} />);
       expect(screen.getByLabelText("Juno, the DreamLayer assistant")).toBeTruthy();
-      unmount();
+      await unmount();
     }
   });
 });

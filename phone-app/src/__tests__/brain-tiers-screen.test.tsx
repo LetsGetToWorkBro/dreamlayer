@@ -21,8 +21,8 @@ describe("Brain tiers screen", () => {
     useBrainStore.setState({ cloud: true, incognito: false } as never);
   });
 
-  it("shows the loaded cartridge and the tier ladder with latency", () => {
-    render(<BrainTiers />);
+  it("shows the loaded cartridge and the tier ladder with latency", async () => {
+    await render(<BrainTiers />);
     expect(screen.getByText("claude-sonnet-5")).toBeTruthy();
     expect(screen.getByText("On-device")).toBeTruthy();
     expect(screen.getByText("Mac mini")).toBeTruthy();
@@ -31,12 +31,14 @@ describe("Brain tiers screen", () => {
     expect(screen.getByText("not used yet")).toBeTruthy();   // cloud never answered
   });
 
-  it("toggling the cloud switch calls the brain store", () => {
+  it("toggling the cloud switch calls the brain store", async () => {
     const setCloud = jest.fn();
     useBrainStore.setState({ setCloud } as never);
-    render(<BrainTiers />);
-    const sw = screen.UNSAFE_getAllByType(require("react-native").Switch)[0];
-    fireEvent(sw, "valueChange", false);
+    await render(<BrainTiers />);
+    // RNTL 14 dropped the UNSAFE_* type queries; RN's Switch exposes the
+    // "switch" accessibility role, so query by role instead.
+    const sw = screen.getAllByRole("switch")[0]!;   // getAllBy* throws when empty
+    await fireEvent(sw, "valueChange", false);
     expect(setCloud).toHaveBeenCalledWith(false);
   });
 });

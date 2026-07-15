@@ -8,16 +8,16 @@ import { usePackStore } from "../state/usePackStore";
 describe("Packs screen", () => {
   beforeEach(() => usePackStore.setState({ selectedId: "glass" }));
 
-  it("lists the bundled packs with the active one marked", () => {
-    render(<Packs />);
+  it("lists the bundled packs with the active one marked", async () => {
+    await render(<Packs />);
     expect(screen.getByText("Glass")).toBeTruthy();
     expect(screen.getByText("Analog")).toBeTruthy();
     expect(screen.getByText("✓ active")).toBeTruthy(); // Glass is active by default
   });
 
-  it("selecting a pack marks it active", () => {
-    render(<Packs />);
-    fireEvent.press(screen.getByText("Analog"));
+  it("selecting a pack marks it active", async () => {
+    await render(<Packs />);
+    await fireEvent.press(screen.getByText("Analog"));
     expect(usePackStore.getState().selectedId).toBe("analog");
   });
 });

@@ -1,11 +1,14 @@
 import React from "react";
+import type { ColorValue } from "react-native";
 import Svg, { Path, Circle } from "react-native-svg";
 
 /**
  * TabIcon — crisp line icons for the tab bar, drawn in the active/inactive tint
  * expo-router passes. One visual language with the Mac panel's SVG nav icons.
+ * (`color` is ColorValue: SDK 57's expo-router types the tabBarIcon tint as
+ * ColorValue, and react-native-svg accepts it directly.)
  */
-export function TabIcon({ name, color, size = 23 }: { name: string; color: string; size?: number }) {
+export function TabIcon({ name, color, size = 23 }: { name: string; color: ColorValue; size?: number }) {
   const p = { stroke: color, strokeWidth: 1.7, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

@@ -55,17 +55,17 @@ describe("useCapabilityStore", () => {
 });
 
 describe("Capabilities screen", () => {
-  it("renders the upgrade path with the highest-impact capability first", () => {
+  it("renders the upgrade path with the highest-impact capability first", async () => {
     seed({ items: ITEMS, loaded: true, connected: true, loading: false, error: null });
-    render(<Capabilities />);
+    await render(<Capabilities />);
     expect(screen.getByText("Your Brain can also learn to")).toBeTruthy();
     expect(screen.getByText("On-device transcription")).toBeTruthy();
     expect(screen.getByText("1 of 3 active")).toBeTruthy();
   });
 
-  it("shows an empty state when no Brain is paired", () => {
+  it("shows an empty state when no Brain is paired", async () => {
     seed({ items: [], loaded: true, connected: false });
-    render(<Capabilities />);
+    await render(<Capabilities />);
     expect(screen.getByText("No Brain paired")).toBeTruthy();
   });
 });

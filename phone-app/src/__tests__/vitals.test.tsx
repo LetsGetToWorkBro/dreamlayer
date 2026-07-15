@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 describe("useVitalsStore.ingest", () => {
-  it("folds HEAP watermarks into a trend", () => {
+  it("folds HEAP watermarks into a trend", async () => {
     const { ingest } = useVitalsStore.getState();
     ingest(tel("HEAP", { kb: 120 }));
     ingest(tel("HEAP", { kb: 140 }));
@@ -22,7 +22,7 @@ describe("useVitalsStore.ingest", () => {
     expect(s.lastHeapKb).toBe(140);
   });
 
-  it("counts crashes and keeps the last error", () => {
+  it("counts crashes and keeps the last error", async () => {
     const { ingest } = useVitalsStore.getState();
     ingest(tel("TICK_ERROR", { error: "nil index", count: 3 }));
     const s = useVitalsStore.getState();
@@ -30,7 +30,7 @@ describe("useVitalsStore.ingest", () => {
     expect(s.lastError).toContain("nil index");
   });
 
-  it("tracks card attention + dismiss rate", () => {
+  it("tracks card attention + dismiss rate", async () => {
     const { ingest } = useVitalsStore.getState();
     ingest(tel("CARD_SHOWN"));
     ingest(tel("CARD_SHOWN"));
@@ -41,7 +41,7 @@ describe("useVitalsStore.ingest", () => {
     expect(s.dismissRate()).toBeCloseTo(0.5);
   });
 
-  it("counts banishes and follows the veil", () => {
+  it("counts banishes and follows the veil", async () => {
     const { ingest } = useVitalsStore.getState();
     ingest(tel("FIGMENT_BANISHED"));
     ingest(tel("PRIVACY_VEIL"));
@@ -54,18 +54,18 @@ describe("useVitalsStore.ingest", () => {
 });
 
 describe("Device Vitals screen", () => {
-  it("shows an empty state before any telemetry", () => {
-    render(<Vitals />);
+  it("shows an empty state before any telemetry", async () => {
+    await render(<Vitals />);
     expect(screen.getByText("No telemetry yet")).toBeTruthy();
   });
 
-  it("renders the vitals once telemetry has arrived", () => {
+  it("renders the vitals once telemetry has arrived", async () => {
     const { ingest } = useVitalsStore.getState();
     ingest(tel("HEAP", { kb: 150 }));
     ingest(tel("HEAP", { kb: 100 }));      // now=100, peak=150 (distinct)
     ingest(tel("CARD_SHOWN"));
     ingest(tel("CARD_DISMISSED"));
-    render(<Vitals />);
+    await render(<Vitals />);
     expect(screen.getByText("100 KB")).toBeTruthy();   // heap now
     expect(screen.getByText("150 KB")).toBeTruthy();   // peak
     expect(screen.getByText("Dismiss rate")).toBeTruthy();
