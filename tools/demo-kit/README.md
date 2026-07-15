@@ -90,3 +90,29 @@ ffmpeg -framerate 30 -i /tmp/montage_out/veritas/f/f_%04d.png \
   plus `drawtext` title/caption (see the session's `vpad` recipe in git history).
 - Keep favicon'd captions honest: label anything simulated, and prefer sample
   "Demo Mode" data the apps themselves ship.
+
+## System 3 — voiced videos (ElevenLabs narration)
+
+Proven flow from the 0.1.0 install video. The trick: don't cut the audio to the
+video — **re-time the video to the read**.
+
+1. Write the script in blocks whose first words are unique (`vo_blocks.py`'s
+   `OPENERS`, or pass your own openers JSON). Generate ONE continuous take in
+   ElevenLabs (stability ~0.55, similarity ~0.85, style low).
+2. Transcribe with word timestamps (`faster-whisper`, `base.en`, int8 CPU) to
+   `/tmp/words_<tag>.json`, then `vo_blocks.py <tag>` → block boundaries.
+3. Size each video section to its block (see `yt3.py` — the audio-driven
+   variant of `yt2.py`; both use `macui.py` for the desktop chrome and print a
+   `sections.json` of section start times).
+4. `vo_mix.py <take> <video> <out>` places each block at its section start and
+   loudness-normalizes (-16 LUFS).
+
+`vo_head_*.{py,sh}` are the experimental webcam-bubble half (local Wav2Lip:
+clone Rudrabha/Wav2Lip, CPU torch venv, weights from the camenduru HF mirror,
+face-crop constants measured with the included cascade snippet). It works and
+stays fully local, but mouth-region quality at 2026 standards is marginal —
+shipped video went voice-only. Kept for reference.
+
+**Privacy rule (enforced by this directory's `.gitignore`): no media is ever
+committed here.** Voice takes, reference footage, and finished videos with a
+real person's face or voice are deliverables, not repo content.

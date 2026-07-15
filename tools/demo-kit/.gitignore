@@ -1,0 +1,9 @@
+# Never commit media through the demo-kit: finished videos may carry a real
+# person's face or voice. Deliver those directly; only code lives here.
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.gif
+*.webm
+*.webp
