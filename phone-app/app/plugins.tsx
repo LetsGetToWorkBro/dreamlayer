@@ -411,7 +411,9 @@ const st = StyleSheet.create({
   more: { color: colors.accentMemory, fontSize: 12.5, fontWeight: "600", marginTop: space.md },
   // detail sheet
   overlay: { flex: 1, justifyContent: "flex-end" },
-  overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  // Inlined absolute-fill (RN minors ≥0.82 drop StyleSheet.absoluteFillObject
+  // from the typings; the literal works on every RN version).
+  overlayBg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     maxHeight: "88%",
     backgroundColor: colors.surface,
