@@ -18,10 +18,18 @@ pairing token you already chose, and it only ever travels the way you show it
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from dataclasses import dataclass, asdict
 
 SCHEME = "dreamlayer"          # dreamlayer:<base64> for deep-link / QR
+
+# A pairing code is a tiny JSON (a URL, a short token, a BLE id). Anything much
+# larger is not ours — cap the input so a hostile QR/deep-link can't hand us a
+# multi-megabyte blob to base64-decode + json-parse (audit 2026-07-14: decode
+# had no size cap and no error handling).
+_MAX_CODE_LEN = 4096
+_OK_SCHEMES = ("http://", "https://")
 
 
 @dataclass
@@ -39,17 +47,37 @@ def encode_pairing(bundle: PairingBundle) -> str:
     return SCHEME + ":" + base64.urlsafe_b64encode(raw).decode("ascii")
 
 
+def _checked_url(value: str, field_name: str) -> str:
+    """A decoded URL is fed into live HTTP — refuse anything that isn't http(s)
+    so a crafted code can't smuggle a file:// / javascript: scheme into the
+    connect path (audit 2026-07-14). Empty is allowed (the field is optional)."""
+    if value and not value.startswith(_OK_SCHEMES):
+        raise ValueError(f"pairing {field_name} must be http(s): {value!r}")
+    return value
+
+
 def decode_pairing(code: str) -> PairingBundle:
-    s = code.strip()
+    """Decode a pairing code back to a bundle. Raises ``ValueError`` on anything
+    malformed (bad base64, non-JSON, oversized, or a non-http(s) URL) so callers
+    get one predictable exception type instead of a raw binascii/JSON error."""
+    s = (code or "").strip()
+    if len(s) > _MAX_CODE_LEN:
+        raise ValueError(f"pairing code too long ({len(s)} > {_MAX_CODE_LEN})")
     if s.startswith(SCHEME + ":"):
         s = s[len(SCHEME) + 1:]
-    raw = base64.urlsafe_b64decode(s.encode("ascii"))
-    data = json.loads(raw.decode("utf-8"))
+    try:
+        raw = base64.urlsafe_b64decode(s.encode("ascii"))
+        data = json.loads(raw.decode("utf-8"))
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
+        raise ValueError(f"not a valid pairing code: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("pairing payload is not a JSON object")
     return PairingBundle(
-        brain_url=data.get("brain_url", ""), token=data.get("token", ""),
+        brain_url=_checked_url(data.get("brain_url", ""), "brain_url"),
+        token=data.get("token", ""),
         glasses_id=data.get("glasses_id", ""),
         label=data.get("label", "DreamLayer"),
-        relay_url=data.get("relay_url", ""))
+        relay_url=_checked_url(data.get("relay_url", ""), "relay_url"))
 
 
 def connect_all(orchestrator, bundle: PairingBundle,

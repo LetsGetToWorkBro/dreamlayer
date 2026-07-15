@@ -15,7 +15,17 @@ import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decodePairing } from "../services/pairing";
 import { useConnectionStore } from "./useConnectionStore";
+import { useVitalsStore } from "./useVitalsStore";
 import * as demo from "../demo/fixtures";
+
+/** The Veil is closed if the phone/session paused capture (capturePaused, which
+ *  local incognito forces on synchronously) OR the glasses raised the Veil
+ *  (PRIVACY_VEIL telemetry → useVitalsStore.veiled). Defense-in-depth for the
+ *  relay methods below so a direct caller can't leak captured content past the
+ *  Veil either (audit 2026-07-14). */
+function veilClosed(capturePaused: boolean): boolean {
+  return capturePaused || useVitalsStore.getState().veiled;
+}
 
 /** A Brain just paired — complete any plugin installs queued while offline.
  *  Lazy require avoids a load-order dependency between the two stores. */
@@ -468,6 +478,9 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   // -- the lens relay: close the loop on the phone side ----------------------
   feedLens: async (text, source = "") => {
     if (get().demoMode) return true;                 // the builder sim already shows it
+    // host capture (translation / camera label / memory) — never stream it into
+    // the lens while the Veil is closed from either end.
+    if (veilClosed(get().capturePaused)) return false;
     const m = get().macMini;
     if (!m.connected || !m.url || !text) return false;
     try {
@@ -484,6 +497,9 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   emitLens: async (tag, text = "") => {
     if (get().demoMode) return { text: "", tier: "device", sources: [] };
+    // only "ask" carries captured speech; refuse it while the Veil is closed.
+    // Other tags are inert lens control signals with no captured payload.
+    if (tag === "ask" && veilClosed(get().capturePaused)) return null;
     const m = get().macMini;
     if (!m.connected || !m.url || !tag) return null;
     try {

@@ -29,6 +29,19 @@ def _d(data, key, alt_keys=(), default=""):
     return default
 
 
+def _clip(text, max_chars: int):
+    """Truncate a field so it can't overflow the fixed-width round glass.
+
+    The display is 256x256 and every text slot is bounded; an unbounded field
+    (a long place name, a verbose "last seen") otherwise runs off the round
+    display (audit 2026-07-14: object_recall clipped only ``detail`` while
+    ``place``/``last_seen`` were unbounded). Adds a single-character ellipsis.
+    Non-str inputs (callers may pass ``None``) pass through unchanged."""
+    if not isinstance(text, str) or len(text) <= max_chars:
+        return text
+    return text[:max_chars - 1].rstrip() + "…"
+
+
 def ready() -> dict:
     return {"type": "ReadyCard", "dismiss_ms": 0}
 
@@ -66,8 +79,13 @@ def object_recall(
     else:
         object_name = data
 
-    if len(detail) > 18:
-        detail = detail[:17] + "\u2026"
+    # Bound every text slot so no field overflows the round glass \u2014 not just
+    # `detail` (audit 2026-07-14): `place`, `last_seen` and the object name
+    # were unbounded and ran off the display on long values.
+    object_name = _clip(object_name, 20)
+    place       = _clip(place, 22)
+    detail      = _clip(detail, 18)
+    last_seen   = _clip(last_seen, 24)
 
     return {
         "type":       "ObjectRecallCard",

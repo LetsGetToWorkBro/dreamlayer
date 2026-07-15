@@ -42,7 +42,10 @@ class WidgetCandidate(LensCandidate):
 
 def test_context_add_object_provider_registers_it():
     reg = ProviderRegistry()
-    ctx = PluginContext(object_registry=reg)
+    # object_lens is the declared capability for a panel provider; it is now
+    # enforced at the add_* call site (audit 2026-07-14), so grant it here.
+    ctx = PluginContext(object_registry=reg,
+                        capabilities=frozenset({"object_lens"}))
     ctx.add_object_provider(StampProvider())
     panel = reg.build_panel(ObjectSighting("mug", 0.9))
     assert any(r.label == "stamped" for r in panel.rows)
@@ -57,7 +60,7 @@ def test_context_add_glance_candidate_appends_it():
 
 
 def test_context_no_ops_without_a_target():
-    ctx = PluginContext()                     # nothing wired
+    ctx = PluginContext(capabilities=frozenset({"object_lens"}))  # cap, no target
     ctx.add_object_provider(StampProvider())  # must not raise
     assert ctx.added["object_provider"]       # still recorded
 

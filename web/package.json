@@ -12,7 +12,8 @@
     "assets:build": "node scripts/generate-assets.mjs .asset-src public/assets",
     "assets": "npm run assets:render && npm run assets:build",
     "artifact": "vite build --mode artifact && node scripts/build-artifact.mjs",
-    "shoot": "playwright test e2e/screenshots.spec.ts"
+    "shoot": "playwright test e2e/screenshots.spec.ts",
+    "test": "node --test test/*.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

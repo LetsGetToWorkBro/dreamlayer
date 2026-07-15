@@ -19,6 +19,18 @@ id = "5e9450711c634998aa38df97aa230da5"
 pattern = "api.dreamlayer.app"
 custom_domain = true
 
+# Durable Object counter — the ONLY way to get atomic increments on Cloudflare
+# (KV read-modify-write races and loses downloads under concurrency). One DO
+# instance per counter key serialises its read-add-write. The Worker falls back
+# to KV when this binding is absent (local/dev), so it degrades gracefully.
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "Counter"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Counter"]
+
 [vars]
 # The registry repo is private, so the Worker doesn't read it — the client owns
 # the catalogue and the Worker serves stats for names it has seen (KV

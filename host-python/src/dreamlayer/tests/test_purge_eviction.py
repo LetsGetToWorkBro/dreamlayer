@@ -122,6 +122,76 @@ class TestRetentionSweepEviction:
         assert db.memory(mid) is None
 
 
+class SpyVectorStore:
+    """Duck-typed alternate store (VectorStore/Chroma/Lance shape) — records the
+    forget calls the purge paths must make, no optional deps needed."""
+    def __init__(self):
+        self.evicted, self.purged = [], False
+
+    def evict(self, memory_id):
+        self.evicted.append(memory_id)
+
+    def purge_all(self):
+        self.purged = True
+
+
+class TestAlternateVectorStorePurge:
+    """Audit 2026-07-14 HIGH: an ALTERNATE vector store indexes the same
+    MemoryDB in its OWN table/collection — not the ann/usearch index, and NOT
+    among the tables db.purge_* delete (VectorStore's memory_vec lives inside
+    db.conn but the DB purge never touched it). So "forget that" left a fully
+    recallable embedding the moment such a store was enabled. These pin the
+    Retriever→vector_store.evict/purge_all wiring."""
+
+    def test_purge_memory_evicts_from_alternate_store(self):
+        db, vs = MemoryDB(":memory:"), SpyVectorStore()
+        r = Retriever(db, vector_store=vs)
+        mid = db.add_memory("scene", "keys on the counter", embedding=VEC)
+        r.purge_memory(mid)
+        assert mid in vs.evicted            # REVERT-FAILING: evict was wired
+        assert db.memory(mid) is None
+
+    def test_purge_all_wipes_alternate_store(self):
+        db, vs = MemoryDB(":memory:"), SpyVectorStore()
+        r = Retriever(db, vector_store=vs)
+        db.add_memory("scene", "a", embedding=VEC)
+        r.purge_all()
+        assert vs.purged is True            # REVERT-FAILING: purge_all was wired
+        assert db.memories() == []
+
+    def test_no_alternate_store_is_a_noop(self):
+        # a Retriever with no alternate store wired must not raise
+        db = MemoryDB(":memory:")
+        db.add_memory("scene", "a", embedding=VEC)
+        Retriever(db).purge_all()
+        assert db.memories() == []
+
+    def test_real_vector_store_embedding_gone_after_forget(self):
+        # When sqlite-vec IS installed, prove the embedding truly leaves the
+        # persistent memory_vec table on forget (not just that a spy was called).
+        pytest.importorskip("sqlite_vec")
+        from dreamlayer.memory.vector_store import VectorStore
+        from dreamlayer.memory.embeddings import MockEmbeddingProvider
+
+        db = MemoryDB(":memory:")
+        emb = MockEmbeddingProvider()
+        vs = VectorStore(db, embedder=emb)
+        r = Retriever(db, vector_store=vs)
+        mid = db.add_memory("scene", "the red bike",
+                            embedding=emb.embed("the red bike"))
+        vs.search("the red bike")           # builds + populates memory_vec
+
+        def _count():
+            with db._lock:
+                return db.conn.execute(
+                    "SELECT COUNT(*) c FROM memory_vec WHERE memory_id=?",
+                    (mid,)).fetchone()[0]
+
+        assert _count() == 1                # precondition: indexed
+        r.purge_memory(mid)
+        assert _count() == 0                # the embedding is gone from the store
+
+
 class TestRealIndexEviction:
     def test_purged_vector_is_gone_from_recall(self):
         pytest.importorskip("usearch")

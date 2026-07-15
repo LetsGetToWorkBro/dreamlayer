@@ -61,11 +61,17 @@ class DreamEngine:
         self._last_scene_t: float = 0.0
         self._ctx: RecallContext = RecallContext()
 
-        self.mic       = MicReactor()
+        # The camera→VLM and mic→palette reactors are the two capture paths a
+        # veil must silence. They carry the REAL PrivacyGate the Orchestrator
+        # injects (orchestrator.py: privacy=self.privacy) so the refusal lives
+        # at the primitive too — a direct caller of describer.tick()/mic.tick()
+        # (e.g. scene_lostfound builds its own SceneDescriber) is refused even
+        # though _tick already drops staged frames while veiled.
+        self.mic       = MicReactor(privacy=privacy)
         self.imu       = ImuReactor()
         self.ghost     = GhostLayer(db=db, privacy=privacy)
         self.place     = PlaceReactor()
-        self.describer = SceneDescriber()
+        self.describer = SceneDescriber(privacy=privacy)
         self.sprites   = SpriteBridge(bridge)
         self.weather   = WeatherLedger(privacy=privacy)
         self.yesterlight = YesterlightController(self.weather)
@@ -120,7 +126,14 @@ class DreamEngine:
 
     def _ensure_task(self) -> None:
         """Schedule _loop() if we're now inside a running event loop but
-        start() was called outside one (sync → async transition)."""
+        start() was called outside one (sync → async transition).
+
+        Called from every sensor feed (feed_mic/imu/camera/place), which is the
+        real async re-entry point: start() may run in a sync BLE callback with no
+        loop (leaving _task None), and the first feed that arrives inside the
+        loop starts it. Idempotent — the ``_task is None`` guard means it never
+        spawns a second loop once one is running (audit 2026-07-14: this was
+        dead code, so the documented sync-start path silently never ran)."""
         if self._running and self._task is None:
             try:
                 loop = asyncio.get_running_loop()
@@ -142,21 +155,25 @@ class DreamEngine:
         return self.privacy is not None and not self.privacy.allow_capture()
 
     def feed_mic(self, fft: list[float], amplitude: float) -> None:
+        self._ensure_task()                 # sync-start → async loop bridge
         if self._veiled():
             return                          # the ear is closed; process no audio
         self._ctx.mic_fft = fft
         self._ctx.mic_amplitude = amplitude
 
     def feed_imu(self, pose: dict, delta: dict) -> None:
+        self._ensure_task()
         self._ctx.imu_pose = pose
         self._ctx.imu_delta = delta
 
     def feed_camera(self, jpeg_bytes: bytes) -> None:
+        self._ensure_task()
         if self._veiled():
             return                          # veiled: no frame enters, none is sent
         self._ctx.camera_frame = jpeg_bytes
 
     def feed_place(self, signature: str, anchors: list[dict]) -> None:
+        self._ensure_task()
         self._ctx.place_signature = signature
         self._ctx.world_anchors = anchors
 

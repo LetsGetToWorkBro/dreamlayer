@@ -138,3 +138,36 @@ def test_list_entry_points_runs(capsys):
 def test_version_flag(capsys):
     assert cli.main(["--version"]) == 0
     assert "dreamlayer sdk" in capsys.readouterr().out
+
+
+# --- entrypoint: structured logging + top-level error handling ---------------
+
+def test_main_configures_logging_at_the_entrypoint(monkeypatch):
+    # a CLI run must be debuggable from logs alone — the entrypoint wires
+    # configure_logging (audit 2026-07-14: only the Brain server did before).
+    import dreamlayer.logging_setup as ls
+    called = []
+    monkeypatch.setattr(ls, "configure_logging", lambda *a, **k: called.append(True))
+    cli.main(["--version"])
+    assert called == [True]
+
+
+def test_main_reports_a_handler_error_cleanly(tmp_path, capsys, monkeypatch):
+    # an unexpected handler exception exits 1 with a one-line reason, not a
+    # raw traceback.
+    def boom(_args):
+        raise RuntimeError("kaboom")
+    monkeypatch.setattr(cli, "cmd_new", boom)
+    rc = cli.main(["plugins", "new", "x-plugin", "--dir", str(tmp_path)])
+    assert rc == 1
+    assert "kaboom" in capsys.readouterr().err
+
+
+def test_main_reraises_the_traceback_under_dl_debug(tmp_path, monkeypatch):
+    import pytest
+    def boom(_args):
+        raise RuntimeError("kaboom")
+    monkeypatch.setattr(cli, "cmd_new", boom)
+    monkeypatch.setenv("DL_DEBUG", "1")
+    with pytest.raises(RuntimeError):
+        cli.main(["plugins", "new", "x-plugin", "--dir", str(tmp_path)])

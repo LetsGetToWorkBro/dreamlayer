@@ -60,16 +60,24 @@ _C_MIN, _C_MAX = 300, 800
 class MicReactor:
     """Converts mic FFT data into palette-weather BLE commands."""
 
-    def __init__(self, smoothing: float = 0.25) -> None:
+    def __init__(self, smoothing: float = 0.25, privacy=None) -> None:
         # EWM coefficient applied to band energies (1=instant, 0=frozen)
         self._alpha = smoothing
         self._pressure = 0.0
         self._energy   = 0.0
         self._prev_sky:    Optional[dict] = None
         self._prev_energy: Optional[dict] = None
+        # Capture veil (allow_capture() -> bool). None = no gate wired (legacy /
+        # isolated-unit-test posture). Live audio driving a palette frame IS
+        # capture, so the primitive refuses when the veil is up — the same
+        # refusal DreamEngine.feed_mic makes upstream, now unbypassable by a
+        # direct tick() caller (audit 2026-07-15 CRITICAL #2).
+        self._privacy = privacy
 
     def tick(self, ctx: RecallContext) -> Optional[dict]:
         """Compute a palette-weather frame. Returns BLE cmd or None."""
+        if self._privacy is not None and not self._privacy.allow_capture():
+            return None                       # veiled: the ear is closed
         if not ctx.has_mic():
             return None
 

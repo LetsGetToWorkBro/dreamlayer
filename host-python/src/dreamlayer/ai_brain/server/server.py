@@ -2025,7 +2025,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if not self._from_localhost():
                 self._json(403, {"error": "local-only"}); return
             import secrets
-            brain.config.token = secrets.token_hex(8)
+            # 128-bit, matching the launcher (__main__.py) — a rotated token must
+            # not be weaker than the one it replaces (audit 2026-07-14: rotate
+            # minted token_hex(8) = 64-bit vs the launcher's token_hex(16)).
+            brain.config.token = secrets.token_hex(16)
             brain.save()
             brain.activity.add("privacy", "Rotated the pairing token — devices must re-pair")
             self._json(200, {"token": brain.config.token})

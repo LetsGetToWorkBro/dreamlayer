@@ -74,9 +74,17 @@ class GesturalSprite:
 class SceneDescriber:
     """Async VLM scene description → SynesthesiaCard v2 + gestural sprite."""
 
-    def __init__(self, vision_fn=None) -> None:
-        """vision_fn: async callable(jpeg_bytes, prompt) -> str, or None."""
+    def __init__(self, vision_fn=None, privacy=None) -> None:
+        """vision_fn: async callable(jpeg_bytes, prompt) -> str, or None.
+
+        privacy: an optional capture veil (allow_capture() -> bool). Sending the
+        camera JPEG to the VLM is the most sensitive egress Dream Mode performs,
+        so this primitive refuses at the top of tick() when the veil is up — even
+        though DreamEngine._tick already drops a staged frame while veiled. This
+        closes the direct-caller bypass (scene_lostfound builds its own
+        SceneDescriber). None = no gate wired (isolated-test posture)."""
         self._vision_fn = vision_fn
+        self._privacy = privacy
         self._fallback_idx = 0
         self._last_description: str = ""
         self._last_sprite: Optional[GesturalSprite] = None
@@ -91,6 +99,8 @@ class SceneDescriber:
         The gestural sprite spec is exposed as .last_sprite; DreamEngine
         renders and streams it via SpriteBridge after sending the card.
         """
+        if self._privacy is not None and not self._privacy.allow_capture():
+            return None            # veiled: the raw frame never reaches the VLM
         if not ctx.has_camera():
             return None
 

@@ -14,8 +14,11 @@ only state.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+log = logging.getLogger("dreamlayer.saga")
 
 MAX_LEVEL = 30
 SAGA_FILE = "saga.json"
@@ -198,6 +201,44 @@ class SagaProfile:
         self._save()
         return fresh
 
+    # -- forgetting — the erase path for the usage trail -----------------
+
+    def forget(self, event: str) -> bool:
+        """Erase the persisted usage trail for one event: its frequency counter
+        and any explore/quest badge earned from it (with the XP it awarded), so
+        no residue of a privacy-sensitive activity (incognito / recall / dossier
+        / cloud) lingers in ``saga.json`` — a file a `backup` achievement implies
+        can leave the device. Level milestones are a coarse aggregate (they name
+        no feature) and are deliberately left. Returns True if anything was
+        erased; persists the result (audit 2026-07-14: a saga store with no erase
+        path is a privacy gap)."""
+        changed = event in self.progress
+        self.progress.pop(event, None)
+        for a in _BY_EVENT.get(event, []):
+            if a.id in self.unlocked:
+                self.unlocked.discard(a.id)
+                self.xp = max(0, self.xp - a.xp)
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
+    def forget_all(self) -> None:
+        """The nuclear erase: drop all XP, badges, and counters and remove the
+        durable file, mirroring the engine's erase-everything path for saga
+        state. Serialised against ``_save`` so it can't race a concurrent write."""
+        with self._save_lock:
+            self.xp = 0
+            self.unlocked = set()
+            self.progress = {}
+            if self._vault:
+                p = self._path()
+                try:
+                    if p.exists():
+                        p.unlink()
+                except OSError as exc:
+                    log.warning("saga: could not remove %s: %s", p, exc)
+
     def note_level(self, level: int) -> list[str]:
         """Unlock level-milestone badges up to `level`."""
         fresh: list[str] = []
@@ -261,8 +302,13 @@ class SagaProfile:
                 self.xp = int(d.get("xp", 0))
                 self.unlocked = set(d.get("unlocked", []))
                 self.progress = {k: int(v) for k, v in (d.get("progress") or {}).items()}
-            except (ValueError, TypeError, json.JSONDecodeError):
-                pass
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                # a corrupt/truncated saga.json must not silently reset progress
+                # to zero with no trace — recover to defaults, but on the record
+                # (audit 2026-07-14: _load swallowed all errors → invisible total
+                # loss of progression).
+                log.warning("saga: ignoring unreadable %s (%s); starting fresh",
+                            p, exc)
 
     def _save(self) -> None:
         if not self._vault:

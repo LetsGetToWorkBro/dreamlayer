@@ -251,3 +251,27 @@ def test_all_samples_have_type():
     assert len(cards.ALL_SAMPLES) >= 14
     for name, payload in cards.ALL_SAMPLES.items():
         assert "type" in payload, f"ALL_SAMPLES['{name}'] missing 'type' key"
+
+
+# ---------------------------------------------------------------------------
+# Truncation — no field may overflow the round glass (audit 2026-07-14)
+# ---------------------------------------------------------------------------
+
+def test_object_recall_truncates_every_overlong_field():
+    long = "x" * 200
+    c = cards.object_recall(
+        {"object": long, "place": long, "detail": long, "last_seen": long})
+    caps = {"object": 20, "place": 22, "detail": 18, "last_seen": 24}
+    for key, cap in caps.items():
+        assert len(c[key]) <= cap, f"{key} not bounded: {len(c[key])}"
+        assert c[key].endswith("…"), f"{key} not ellipsized"
+    # derived mirrors stay clipped, and no 'lines' entry overflows
+    assert c["primary"] == c["object"] and c["footer"] == c["last_seen"]
+    assert all(len(s) <= 24 for s in c["lines"])
+
+
+def test_object_recall_leaves_short_fields_untouched():
+    c = cards.object_recall(
+        {"object": "Keys", "place": "kitchen", "last_seen": "an hour ago"})
+    assert c["object"] == "Keys" and "…" not in c["place"]
+    assert c["footer"] == "an hour ago"

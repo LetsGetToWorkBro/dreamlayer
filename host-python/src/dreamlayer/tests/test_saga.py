@@ -81,6 +81,55 @@ def test_every_feature_has_a_badge():
         assert feature in events, f"no badge for {feature}"
 
 
+def test_forget_erases_one_events_usage_trail(tmp_path):
+    """Privacy erase path (audit 2026-07-14): forgetting a privacy-sensitive
+    event scrubs its counter + badge from the persisted file, leaving unrelated
+    progress intact."""
+    p = saga.SagaProfile(vault_dir=tmp_path)
+    p.record("incognito")                        # unlocks "Veiled", writes a trail
+    p.record("calendar")                         # unrelated, must survive
+    assert "incognito" in p.progress
+    unlocked = {a["id"] for a in p.snapshot()["achievements"] if a["unlocked"]}
+    assert "veiled" in unlocked
+
+    assert p.forget("incognito") is True
+    assert "incognito" not in p.progress         # counter gone
+    still = {a["id"] for a in p.snapshot()["achievements"] if a["unlocked"]}
+    assert "veiled" not in still                  # badge relocked
+    assert "timekeeper" in still                  # unrelated survives
+
+    # and it's persisted — a reborn profile no longer knows about incognito
+    reborn = saga.SagaProfile(vault_dir=tmp_path)
+    assert "incognito" not in reborn.progress
+    assert "veiled" not in reborn.unlocked
+    # forgetting something never recorded is a no-op
+    assert reborn.forget("never-happened") is False
+
+
+def test_forget_all_wipes_everything_and_removes_the_file(tmp_path):
+    p = saga.SagaProfile(vault_dir=tmp_path)
+    p.record("cloud"); p.record("pair"); p.record("recall")
+    assert (tmp_path / saga.SAGA_FILE).exists()
+
+    p.forget_all()
+    assert p.xp == 0 and p.unlocked == set() and p.progress == {}
+    assert not (tmp_path / saga.SAGA_FILE).exists()   # durable file removed
+    # a reborn profile starts clean
+    reborn = saga.SagaProfile(vault_dir=tmp_path)
+    assert reborn.xp == 0 and reborn.unlocked == set()
+
+
+def test_corrupt_save_file_recovers_to_defaults_with_a_warning(tmp_path, caplog):
+    """A truncated/corrupt saga.json must recover to defaults but on the record —
+    not a silent total-progress loss (audit 2026-07-14)."""
+    import logging
+    (tmp_path / saga.SAGA_FILE).write_text("{not: valid json,,,")
+    with caplog.at_level(logging.WARNING, logger="dreamlayer.saga"):
+        p = saga.SagaProfile(vault_dir=tmp_path)
+    assert p.xp == 0 and p.unlocked == set() and p.progress == {}
+    assert any("unreadable" in r.message for r in caplog.records)
+
+
 def test_concurrent_saves_never_publish_a_torn_file(tmp_path):
     """Re-audit 2026-07-15: the atomic-write fix used a FIXED tmp name with no
     lock, so two threaded writers could interleave into the one tmp before

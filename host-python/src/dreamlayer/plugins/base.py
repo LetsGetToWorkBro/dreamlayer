@@ -73,6 +73,70 @@ def make_plugin(name: str, register: Callable[["PluginContext"], None],
                         version=version)
 
 
+# --- the capability-scoped, veil-gated memory surface -----------------------
+
+class MemoryFacade:
+    """The ONLY supported way a plugin reads the wearer's memory.
+
+    The audit (2026-07-14 CRITICAL #4) found that an in-process plugin was
+    handed the raw ``MemoryDB`` (all embeddings/contacts) via ``ctx._db`` — a
+    clean memory-exfil surface, since underscore-prefixing is not access
+    control in Python. This facade replaces that: it exposes only a handful of
+    read-only queries and enforces two gates on **every** call:
+
+      * **capability** — the plugin must hold the declared ``memory``
+        capability; without it a read raises :class:`PermissionError`. The
+        default orchestrator never grants ``memory``
+        (``PluginOps._plugin_capabilities``), so by default this facade refuses
+        everything — the fail-closed posture the audit asks for.
+      * **veil** — while recall is paused/incognito (``allow_recall()`` is
+        false, or the gate raises) every read returns ``[]``, so a plugin can't
+        read memory during the Veil even when it holds the capability.
+
+    There is deliberately no write/purge/raw-connection surface here.
+    """
+
+    def __init__(self, db, *, caps, veil):
+        self._db = db
+        self._caps = frozenset(caps or ())
+        self._veil = veil
+
+    def _require_cap(self) -> None:
+        if "memory" not in self._caps:
+            raise PermissionError(
+                "plugin memory access requires the declared 'memory' capability")
+
+    def _recall_ok(self) -> bool:
+        v = self._veil
+        if v is None or not hasattr(v, "allow_recall"):
+            return True
+        try:
+            return bool(v.allow_recall())
+        except Exception:
+            return False                      # gate raised → fail closed (veiled)
+
+    def memories(self, kind: str | None = None) -> list:
+        """Kept memories (optionally filtered by kind). ``[]`` while veiled."""
+        self._require_cap()
+        if self._db is None or not self._recall_ok():
+            return []
+        return list(self._db.memories(kind))
+
+    def commitments(self, person: str | None = None) -> list:
+        """Kept commitments/promises. ``[]`` while veiled."""
+        self._require_cap()
+        if self._db is None or not self._recall_ok():
+            return []
+        return list(self._db.commitments(person))
+
+    def places(self) -> list:
+        """Known places. ``[]`` while veiled."""
+        self._require_cap()
+        if self._db is None or not self._recall_ok():
+            return []
+        return list(self._db.places())
+
+
 # --- the narrow surface a plugin is handed ----------------------------------
 
 class PluginContext:
@@ -105,6 +169,11 @@ class PluginContext:
         # v2: the event bus, a db for persisted settings, and the name of the
         # plugin currently being registered/ticked (set by the registry so a
         # shared context still gives each plugin its own settings/subscriptions).
+        # `_db` is a PRIVATE backing store used only for (a) per-plugin settings
+        # k/v and (b) constructing the capability-scoped `memory` facade — it is
+        # NOT a plugin-facing surface. A plugin reads memory ONLY through
+        # `ctx.memory` (gated); the raw db is never exposed as an extension
+        # point (audit 2026-07-14 CRITICAL #4).
         self._events = events
         self._db = db
         self._current_plugin = ""
@@ -144,10 +213,25 @@ class PluginContext:
         return bool(v is not None and hasattr(v, "allow_capture")
                     and not v.allow_capture())
 
+    @property
+    def memory(self) -> "MemoryFacade":
+        """The capability-scoped, veil-gated memory surface — the ONLY supported
+        way a plugin reads the wearer's kept memories/commitments/places.
+        Requires the declared ``memory`` capability and honours the Veil (see
+        :class:`MemoryFacade`). The raw ``MemoryDB`` is never handed out."""
+        return MemoryFacade(self._db, caps=self._caps, veil=self._veil)
+
     # -- extension points ----------------------------------------------------
 
     def add_object_provider(self, provider) -> None:
-        """Register a look-at-a-thing panel provider (object_lens facet)."""
+        """Register a look-at-a-thing panel provider (object_lens facet).
+        Requires the declared ``object_lens`` capability — enforced here at the
+        call site (audit 2026-07-14): an undeclared reach is refused and
+        recorded, never silently wired into the real registry."""
+        if not self.has("object_lens"):
+            self.added.setdefault("rejected", []).append(
+                ("object_provider", "object_lens"))
+            return
         self.added["object_provider"].append(provider)
         if self._object_registry is not None:
             self._object_registry.register(provider)
@@ -181,6 +265,14 @@ class PluginContext:
             self._brain.add_knowledge(brain)
 
     def add_perceptor(self, perceptor, prefer: bool = True) -> None:
+        """Register an on-glass perceptor (fed live frames/audio). Requires the
+        declared ``perception`` capability — enforced at the call site (audit
+        2026-07-14): an undeclared reach is refused and recorded, never wired
+        into the real perception router."""
+        if not self.has("perception"):
+            self.added.setdefault("rejected", []).append(
+                ("perceptor", "perception"))
+            return
         self.added["perceptor"].append(perceptor)
         if self._perception is not None:
             self._perception.add_perceptor(perceptor, prefer=prefer)
@@ -193,7 +285,16 @@ class PluginContext:
 
     def add_shop_provider(self, fn) -> None:
         """Register a TasteLens price/review connector: fn(label, attrs) ->
-        {rating?, price?, …}. Consulted when a shelf/menu is ranked."""
+        {rating?, price?, …}. Consulted when a shelf/menu is ranked.
+
+        A shop connector reaches an external price/review source, so it must
+        have declared either the ``shop`` entitlement or ``network`` (its egress
+        channel) — enforced at the call site (audit 2026-07-14). An undeclared
+        reach is refused and recorded, never wired into the taste registry."""
+        if not (self.has("shop") or self.has("network")):
+            self.added.setdefault("rejected", []).append(
+                ("shop_provider", "shop"))
+            return
         self.added["shop_provider"].append(fn)
         if self._shop_registry is not None:
             self._shop_registry.append(fn)

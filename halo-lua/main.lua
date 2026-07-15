@@ -13,6 +13,8 @@ local Prism      = require("display.prism")
 local PAL        = require("display.palette")
 local Figment    = require("app.figment_stage") -- Reality Compiler v2 stage
 local ImuGesture = require("app.imu_gesture")    -- Nod to Remember (boot-flag)
+local StateMachine = require("app.state_machine") -- on-device input FSM (Veil toggle)
+local E          = require("app.events")          -- FSM event constants
 local MT         = require("ble.message_types")
 local Horizon    = require("display.horizon")   -- Meridian day-ring
 local Renderer   = require("display.renderer")
@@ -121,6 +123,42 @@ local CARD_PRIORITY = {
 }
 
 -- ---------------------------------------------------------------------------
+-- On-device input FSM (app/state_machine.lua).
+--
+-- Audit 2026-07-14: the FSM was DEAD — required by no boot path, driven by no
+-- test — so the documented local `long_press → privacy_veil` affordance never
+-- existed and there was NO on-glass Veil toggle. We wire it here: when no
+-- figment holds the stage, physical buttons drive the FSM, and a long-press
+-- toggles the Veil with no host/phone in the loop. Entering/leaving the veil
+-- emits PRIVACY_VEIL / PRIVACY_RESUMED telemetry, which the phone honors to
+-- silence its lens relay (phone-app src/services/lensRelay.ts). The FSM's cards
+-- ride the SAME one card queue; its idle "ready" card is just the empty-queue
+-- Horizon the renderer already draws, so we clear to that rather than stack a
+-- duplicate card (the audit's "card registry in 3-4 places" is not re-created).
+-- ---------------------------------------------------------------------------
+local function _on_fsm_transition(old_state, new_state)
+  if new_state == "privacy_veil" then
+    Telemetry.emit(Telemetry.PRIVACY_VEIL, {})
+  elseif old_state == "privacy_veil" then
+    Telemetry.emit(Telemetry.PRIVACY_RESUMED, {})
+  end
+end
+
+local function _on_fsm_card(card)
+  if not card then return end
+  if card.type == "ReadyCard" then
+    -- idle / resume: main.lua's empty-queue renderer IS the "ready" Horizon,
+    -- so drop the (veil) card back to it instead of stacking a ReadyCard.
+    Cards:dismiss(_tick_ms)
+    return
+  end
+  Cards:push(card, CARD_PRIORITY[card.type] or CardQueue.CONTEXT)
+end
+
+StateMachine.init(Renderer, nil, _on_fsm_transition, _on_fsm_card)
+StateMachine.dispatch(E.EVENTS.startup)   -- boot → ready so long-press is live
+
+-- ---------------------------------------------------------------------------
 -- Tick clock (_tick_ms) is declared near the top so the BLE registrations can
 -- close over it; the banish gesture below closes over it too.
 -- ---------------------------------------------------------------------------
@@ -160,26 +198,40 @@ local function process_inbound(msg)
 
   elseif t == "connect" then
     Horizon.wake()
+    StateMachine.dispatch(E.EVENTS.host_connected)  -- ready → connected
 
-  elseif t == "button" and Figment.is_running() then
-    -- while a figment holds the stage, physical buttons drive it —
-    -- EXCEPT the escape hatch: two long-presses within BANISH_WINDOW_MS
-    -- banish the figment locally, no host required. A figment may consume
-    -- single long-presses, but it can never swallow its own kill switch.
+  elseif t == "button" then
     local ev = msg.ev or ""
-    if ev == "long" then
-      if _tick_ms - _last_long_ms <= BANISH_WINDOW_MS then
-        local id = Figment.banish()
-        if id then
-          Telemetry.emit(Telemetry.FIGMENT_BANISHED, { id = id })
+    if Figment.is_running() then
+      -- while a figment holds the stage, physical buttons drive it —
+      -- EXCEPT the escape hatch: two long-presses within BANISH_WINDOW_MS
+      -- banish the figment locally, no host required. A figment may consume
+      -- single long-presses, but it can never swallow its own kill switch.
+      if ev == "long" then
+        if _tick_ms - _last_long_ms <= BANISH_WINDOW_MS then
+          local id = Figment.banish()
+          if id then
+            Telemetry.emit(Telemetry.FIGMENT_BANISHED, { id = id })
+          end
+          _last_long_ms = -BANISH_WINDOW_MS
+        else
+          _last_long_ms = _tick_ms
+          Figment.on_event(ev)
         end
-        _last_long_ms = -BANISH_WINDOW_MS
-      else
-        _last_long_ms = _tick_ms
+      elseif ev == "single" or ev == "double" then
         Figment.on_event(ev)
       end
-    elseif ev == "single" or ev == "double" then
-      Figment.on_event(ev)
+    else
+      -- no figment on stage: physical buttons drive the on-device FSM, giving
+      -- the wearer a LOCAL Veil toggle (long-press → privacy_veil → resume)
+      -- with no host or phone in the loop. See the FSM-wiring note above.
+      if ev == "long" then
+        StateMachine.dispatch(E.EVENTS.long_press)
+      elseif ev == "single" then
+        StateMachine.dispatch(E.EVENTS.single_click)
+      elseif ev == "double" then
+        StateMachine.dispatch(E.EVENTS.double_click)
+      end
     end
 
   elseif t == "event" then

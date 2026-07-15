@@ -92,11 +92,19 @@ all from a polished web control panel.
 One-command Mac mini setup (Ollama + models + launch-at-login):
 
 ```bash
+# loopback only (default): reachable from this Mac at http://127.0.0.1:7777/
 ./install-macos.sh --token rune-birch
+
+# to pair the phone, opt into a LAN bind explicitly (mints a token if omitted):
+./install-macos.sh --lan --token rune-birch
 # then open the control panel at http://<mac-mini>:7777/
 ```
 
-Or run it directly: `python -m dreamlayer.ai_brain.server --token rune-birch`.
+The installer binds **loopback by default** — exposing the Brain (and your
+indexed files/mail) to the network is an explicit `--lan` opt-in, and a LAN bind
+always carries a token (minted and shown if you don't pass one). The token is
+written to `~/.dreamlayer/brain_config.json` (chmod 600), never on the command
+line. Or run it directly: `python -m dreamlayer.ai_brain.server --host 0.0.0.0 --token rune-birch`.
 
 Once it's up, connecting it is **one code**: the panel's *Connections → Pair a
 phone* hands out a `dreamlayer:…` code the phone scans or pastes (Brain tab →

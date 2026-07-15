@@ -67,6 +67,13 @@ KNOWN_CAPABILITIES = frozenset({
     # reach add_knowledge_brain (audit 2026-07-14 — the exfil vector was that
     # any plugin could register a brain fed the query and ship it off-device).
     "knowledge",
+    # "memory": read the wearer's kept memories/commitments/places through the
+    # capability-scoped, veil-gated PluginContext.memory facade. A plugin must
+    # declare it to read anything back; the host grants it only deliberately
+    # (the default orchestrator never does), so by default the facade refuses —
+    # the fail-closed posture the audit 2026-07-14 CRITICAL asks for (the raw
+    # MemoryDB must never be a plugin-facing surface).
+    "memory",
     "mesh", "midi", "network", "fs", "shop",
     # DreamLayer Cloud entitlements (server.PLAN_CAPS["cloud"], docs/CLOUD.md).
     # Declarable by any manifest; GRANTED only on a cloud-plan Brain — a plugin

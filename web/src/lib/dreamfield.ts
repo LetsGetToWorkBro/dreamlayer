@@ -5,7 +5,9 @@
 
 const TAU = Math.PI * 2;
 
-function vnoise(x: number): number {
+// Exported for unit coverage: this smooth value-noise is the field's math core;
+// initDreamField below is DOM/canvas-bound, but the noise is pure and testable.
+export function vnoise(x: number): number {
   const h = (n: number) => {
     n = ((Math.floor(n) % 289) + 289) % 289;
     return (((n * 34 + 1) * n) % 289) / 144.5 - 1.0;

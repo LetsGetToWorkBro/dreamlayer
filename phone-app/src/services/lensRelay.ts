@@ -17,6 +17,7 @@
  * Brain, exactly like the BLE core.
  */
 import { useBrainStore, type AskResult } from "../state/useBrainStore";
+import { useVitalsStore } from "../state/useVitalsStore";
 
 // The spoken question for an "ask" emit is captured elsewhere (the phone's
 // voice/ASR layer). It registers a provider here; the default is empty so the
@@ -28,18 +29,32 @@ export function setQuestionProvider(fn: () => string): void {
   questionProvider = typeof fn === "function" ? fn : () => "";
 }
 
+/** Is capture suppressed right now? The relay must refuse captured content when
+ *  the wearer has closed the Veil from EITHER end:
+ *   • the phone/session (`capturePaused` — also forced on by local incognito,
+ *     set synchronously by setIncognito so it is authoritative the instant the
+ *     switch flips, not after the Brain acks the deferred config push), and
+ *   • the glasses hardware (a PRIVACY_VEIL telemetry frame flips
+ *     useVitalsStore.veiled; PRIVACY_RESUMED clears it). Trusting only the phone
+ *     switch left a window where a Veil raised on the glass still relayed the
+ *     spoken question — this closes it (audit 2026-07-14). */
+function captureSuppressed(): boolean {
+  return useBrainStore.getState().capturePaused || useVitalsStore.getState().veiled;
+}
+
 /** Forward a lens emit to the Brain. Returns the Brain's reply (for "ask") or
  *  null when nothing was reachable/actionable. Never throws.
  *
  *  Veil-enforcing chokepoint (audit 2026-07-14): the `emit "ask"` payload is the
- *  wearer's spoken question — captured speech — so while capture is paused (the
- *  Veil, or incognito, which forces capturePaused) the phone refuses to forward
- *  it rather than trusting the upstream ASR layer to have stopped. Other tags
- *  carry no captured payload and are inert lens control signals. */
+ *  wearer's spoken question — captured speech — so while capture is suppressed
+ *  from either end (the phone Veil / incognito's capturePaused, or a Veil raised
+ *  on the glasses → vitals.veiled) the phone refuses to forward it rather than
+ *  trusting the upstream ASR layer to have stopped. Other tags carry no captured
+ *  payload and are inert lens control signals. */
 export async function relayEmit(emit: { tag: string; id?: string }): Promise<AskResult> {
   const tag = (emit && emit.tag) || "";
   if (!tag) return null;
-  if (tag === "ask" && useBrainStore.getState().capturePaused) return null;
+  if (tag === "ask" && captureSuppressed()) return null;
   const text = tag === "ask" ? questionProvider() : "";
   return useBrainStore.getState().emitLens(tag, text);
 }
@@ -48,9 +63,10 @@ export async function relayEmit(emit: { tag: string; id?: string }): Promise<Ask
  *  running lens's `{slot}`. Returns whether the Brain accepted it.
  *
  *  Veil-gated: this text is host capture (translated speech, a camera label, a
- *  resurfaced memory), so the Veil / incognito silences it here on the phone. */
+ *  resurfaced memory), so the Veil / incognito — from the phone OR the glasses —
+ *  silences it here on the phone. */
 export async function feed(text: string, source = ""): Promise<boolean> {
   if (!text) return false;
-  if (useBrainStore.getState().capturePaused) return false;
+  if (captureSuppressed()) return false;
   return useBrainStore.getState().feedLens(text, source);
 }

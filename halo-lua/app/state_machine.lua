@@ -1,6 +1,18 @@
 -- app/state_machine.lua
 -- Real finite-state machine for DreamLayer Halo.
 --
+-- WIRING (audit 2026-07-14): this FSM was previously required by no boot path
+-- and driven by no test — dead code that left the documented on-glass
+-- `long_press → privacy_veil` affordance unreachable. It is now driven by
+-- main.lua: at boot (startup), on host connect (host_connected), and by
+-- physical buttons whenever NO figment holds the stage (single/double/long
+-- press). That gives the wearer a LOCAL Veil toggle with no host/phone in the
+-- loop; the veil transitions emit PRIVACY_VEIL / PRIVACY_RESUMED telemetry that
+-- the phone honors to silence its lens relay. Card DISPLAY is owned by main.lua
+-- (process_inbound → renderer.show_card via the CardQueue); the set_card/
+-- set_command host-card API below is the FSM's own construction seam, kept for
+-- host-driven use but NOT the live BLE card path (see test_*_cards_device.py).
+--
 -- States:
 --   boot         -> startup event -> ready
 --   ready        -> host_connected -> connected

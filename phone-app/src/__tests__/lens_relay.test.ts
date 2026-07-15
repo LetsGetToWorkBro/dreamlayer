@@ -7,6 +7,7 @@
 import { HaloBridge, type BleTransport } from "../ble/bridge";
 import { framePayload } from "../ble/framing";
 import { useBrainStore } from "../state/useBrainStore";
+import { useVitalsStore } from "../state/useVitalsStore";
 import { relayEmit, feed, setQuestionProvider } from "../services/lensRelay";
 
 class FakeTransport implements BleTransport {
@@ -37,7 +38,10 @@ beforeEach(() => {
   useBrainStore.setState({
     macMini: { connected: true, url: "http://10.0.0.9:7777", token: "t", relayUrl: "" },
     demoMode: false,
+    capturePaused: false,
+    incognito: false,
   });
+  useVitalsStore.getState().reset();
   setQuestionProvider(() => "");
 });
 
@@ -149,6 +153,32 @@ describe("relay service forwards to the Brain", () => {
     mockBrain({ ok: true, tag: "look", text: "Monstera" });
     useBrainStore.setState({ capturePaused: true });
     await relayEmit({ tag: "look" });
+    expect(calls.length).toBe(1);
+  });
+
+  it("a Veil raised on the GLASSES silences the relay too (audit 2026-07-14)", async () => {
+    // The wearer can close the Veil from the glass hardware; the phone learns via
+    // a PRIVACY_VEIL telemetry frame (useVitalsStore.veiled) — capturePaused stays
+    // false. The relay must still refuse captured content, not trust the phone
+    // switch alone.
+    (global as any).fetch = jest.fn();
+    useBrainStore.setState({ capturePaused: false });
+    useVitalsStore.getState().ingest({ event: "PRIVACY_VEIL" });
+    expect(useVitalsStore.getState().veiled).toBe(true);
+    setQuestionProvider(() => "a private question");
+    expect(await relayEmit({ tag: "ask", id: "z" })).toBeNull();
+    expect(await feed("translated overheard speech", "whisper")).toBe(false);
+    // the store methods refuse it directly too (defense-in-depth)
+    expect(await useBrainStore.getState().emitLens("ask", "q")).toBeNull();
+    expect(await useBrainStore.getState().feedLens("Hola", "translate")).toBe(false);
+    expect((global as any).fetch).not.toHaveBeenCalled();
+
+    // PRIVACY_RESUMED lifts it — the relay flows again
+    mockBrain({ ok: true, tag: "ask", answer: "ok", tier: "device" });
+    useVitalsStore.getState().ingest({ event: "PRIVACY_RESUMED" });
+    expect(useVitalsStore.getState().veiled).toBe(false);
+    const r = await relayEmit({ tag: "ask", id: "z" });
+    expect(r?.text).toBe("ok");
     expect(calls.length).toBe(1);
   });
 });

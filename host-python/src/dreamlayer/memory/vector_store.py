@@ -127,13 +127,30 @@ class VectorStore:
         """Drop a purged memory's vector so it can never be recalled again and
         never occupies a top-k slot. Without this the vec table only ever grew:
         a forgotten memory's row survived, and a search that fetched it (its DB
-        row gone) silently returned fewer than top_k live matches."""
+        row gone) silently returned fewer than top_k live matches.
+
+        Wired into Retriever.purge_memory (audit 2026-07-14): "forget that" must
+        reach this table too — it lives inside db.conn, which the DB-level purge
+        never touched, so a forgotten memory left a fully recallable embedding
+        the moment this store was enabled."""
         if not self._ensure_loaded():
             return
         with self.db._lock:
             self.db.conn.execute(
                 "DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
         self._indexed_ids.discard(memory_id)
+
+    def purge_all(self) -> None:
+        """Empty the whole vec table — the erase-everything hook, wired into
+        Retriever.purge_all. memory_vec lives in db.conn but is NOT one of the
+        tables db.purge_all() deletes, so without this an erase left every
+        embedding behind (a privacy residue) the moment this store was enabled.
+        No-op when the extension never loaded (table was never created)."""
+        if not self._ensure_loaded():
+            return
+        with self.db._lock:
+            self.db.conn.execute("DELETE FROM memory_vec")
+        self._indexed_ids.clear()
 
     def _search_indexed(self, query, kind, top_k):
         if not self._ensure_loaded():

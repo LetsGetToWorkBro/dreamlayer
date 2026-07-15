@@ -8,9 +8,12 @@ of the installed brilliant-msg package so we never assume a constant name.
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import threading
 from .base import BridgeBase
 from .lua_loader import collect_lua
+
+log = logging.getLogger("dreamlayer.bridge.real")
 
 try:
     from brilliant_ble import BrilliantBLE           # type: ignore
@@ -170,9 +173,35 @@ class RealBridge(BridgeBase):
         }
 
     def disconnect(self) -> None:
-        if self._client:
-            self._run(self._client.disconnect())
-            self._client = None
+        """Drop the BLE link and reclaim the event-loop thread.
+
+        Resilient by design: if the link is already gone the SDK's
+        ``disconnect()`` may raise — we log and continue rather than propagate,
+        so a dropped BLE/socket link can never crash the caller. The daemon
+        event-loop thread is always stopped and joined afterwards (it used to
+        leak, keeping a background thread alive for the process lifetime)."""
+        client, self._client = self._client, None
+        if client is not None:
+            try:
+                self._run(client.disconnect())
+            except Exception:
+                log.warning("BLE disconnect raised (link may already be down); "
+                            "continuing teardown", exc_info=True)
+        self._shutdown_loop()
+
+    def _shutdown_loop(self) -> None:
+        """Stop the run_forever loop and join its daemon thread (no leak)."""
+        loop, thread = self._loop, self._thread
+        self._loop, self._thread = None, None
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(loop.stop)
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+        if loop is not None and not loop.is_closed():
+            try:
+                loop.close()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Lua upload with post-upload verification
@@ -217,9 +246,9 @@ class RealBridge(BridgeBase):
                 self._client.receive(), timeout=3.0
             )
             if response is None:
-                print(
-                    "[real_bridge] WARNING: list_files returned no response — "
-                    "cannot verify main.lua presence. Proceeding with reset."
+                log.warning(
+                    "list_files returned no response — cannot verify main.lua "
+                    "presence; proceeding with reset."
                 )
                 return
             # Response may be bytes, str, or dict depending on SDK version
@@ -253,9 +282,9 @@ class RealBridge(BridgeBase):
                 )
         except (NotImplementedError, AttributeError, asyncio.TimeoutError) as exc:
             # Device does not support list_files — degrade gracefully
-            print(
-                f"[real_bridge] WARNING: upload verification skipped ({type(exc).__name__}: {exc}). "
-                "Cannot confirm main.lua is on device before reset."
+            log.warning(
+                "upload verification skipped (%s: %s); cannot confirm main.lua "
+                "is on device before reset.", type(exc).__name__, exc
             )
 
     # ------------------------------------------------------------------

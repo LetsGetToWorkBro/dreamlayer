@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import sys
 from pathlib import Path
+
+log = logging.getLogger("dreamlayer.cli")
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,48}[a-z0-9]$")
 
@@ -946,7 +949,23 @@ def main(argv=None) -> int:
     if not getattr(args, "func", None):
         parser.print_help()
         return 0
-    return args.func(args) or 0
+    try:
+        return args.func(args) or 0
+    except KeyboardInterrupt:
+        _err("\ninterrupted.")
+        return 130
+    except Exception as exc:
+        # A handler bug should exit non-zero with a one-line reason, not dump a
+        # raw traceback at a plugin author (audit 2026-07-14 — the entrypoint had
+        # no top-level error handling). The failure is logged (visible, never
+        # swallowed); set DL_DEBUG=1 to re-raise the full traceback while
+        # debugging.
+        if os.environ.get("DL_DEBUG", "").strip().lower() in (
+                "1", "true", "on", "yes"):
+            raise
+        log.exception("dreamlayer: command failed")
+        _err(f"{BAD} {exc}")
+        return 1
 
 
 if __name__ == "__main__":

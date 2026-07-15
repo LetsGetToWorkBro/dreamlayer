@@ -1,6 +1,9 @@
 from __future__ import annotations
+import logging
 import os
 from dataclasses import dataclass, field
+
+log = logging.getLogger("dreamlayer.config")
 
 
 @dataclass
@@ -8,6 +11,20 @@ class Paths:
     db:      str = "dreamlayer.db"
     lua_root: str = "../halo-lua"
     hud_out: str = "../assets/hud/samples"
+
+
+def _env_float(env, name: str):
+    """Parse an env var as a float, or None if unset/blank/unparseable. A bad
+    value is ignored (logged, default kept) rather than crashing config load —
+    a mistyped OPENAI_CONFIDENCE must not take the whole engine down."""
+    raw = env.get(name)
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        log.warning("config: ignoring %s=%r (not a number)", name, raw)
+        return None
 
 
 @dataclass
@@ -58,6 +75,38 @@ class Config:
         for name in ("capture_min_interval_ms", "passive_tick_interval_ms",
                      "passive_ring_capacity", "llm_word_threshold"):
             setattr(self, name, max(0, int(getattr(self, name))))
+        # A zero/negative network timeout is a silent footgun (urllib blocks or
+        # fails instantly), and negative retention windows would make the
+        # lifecycle nonsensical — floor them too (audit 2026-07-14 flagged only
+        # the confidences; these fields could still fail silently).
+        self.llm_timeout_s = max(0.1, float(self.llm_timeout_s))
+        self.retention_hot_hours = max(0.0, float(self.retention_hot_hours))
+        self.retention_warm_days = max(0.0, float(self.retention_warm_days))
+
+    @classmethod
+    def from_env(cls, env=None) -> "Config":
+        """Build a Config honoring environment overrides.
+
+        Precedence is explicit and one-way: an environment variable, when set to
+        a parseable value, wins over the dataclass default; anything unset or
+        unparseable falls back to the default (never raises, never half-applies).
+        This is the *single* place the environment is read for tuning knobs, so
+        `.env.example` can document exactly these names — the file had drifted to
+        knobs no code read (audit 2026-07-14). Env-overridable fields:
+
+            OPENAI_API_KEY      -> openai_api_key
+            OPENAI_MODEL        -> llm_model
+            OPENAI_CONFIDENCE   -> llm_confidence_threshold
+        """
+        env = os.environ if env is None else env
+        over: dict = {"openai_api_key": env.get("OPENAI_API_KEY", "")}
+        model = env.get("OPENAI_MODEL")
+        if model:
+            over["llm_model"] = model
+        conf = _env_float(env, "OPENAI_CONFIDENCE")
+        if conf is not None:
+            over["llm_confidence_threshold"] = conf
+        return cls(**over)
 
 
-CONFIG = Config()
+CONFIG = Config.from_env()

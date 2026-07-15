@@ -31,7 +31,7 @@ def extract_object_memory(scene: dict) -> dict:
 
 
 async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None,
-                          privacy: Any = None) -> str:
+                          privacy: Any = None, cloud_ok: Any = None) -> str:
     """Call vision-language model for a short poetic scene description.
 
     Used exclusively by Dream Mode SceneDescriber.  Returns a string of
@@ -50,10 +50,28 @@ async def describe_poetic(jpeg_bytes: bytes, prompt: str, config: Any = None,
     POST — when ``allow_capture()`` is False. Default ``AlwaysOnGate()`` keeps
     the isolated/library posture permissive and every existing call signature
     working.
+
+    Cloud-switch gate (audit 2026-07-14 CRITICAL #3): egress here was gated only
+    on the API KEY being present — so a key with the wearer's Cloud switch OFF
+    (or incognito) still shipped the raw frame to the cloud. A mere key is not
+    consent. This primitive now ALSO refuses when the Cloud switch reads off,
+    via EITHER an explicit ``cloud_ok()`` predicate (the shape the orchestrator
+    wires to ``brain.cloud_opt_in``, which incognito forces off) OR a ``config``
+    exposing ``cloud_ready()`` (BrainConfig: lan_only / cloud_enabled / key). A
+    key without the switch no longer egresses. Both default absent, so the
+    library/offline call signature is unchanged.
     """
     gate = privacy or AlwaysOnGate()
     if not gate.allow_capture():
         return ""                     # veiled: raw frame never leaves the device
+
+    # Cloud switch: an explicit predicate wins; else a config that knows its own
+    # cloud posture (cloud_ready) is honored. Absent both, unchanged behaviour.
+    if cloud_ok is not None and not cloud_ok():
+        return ""                     # Cloud switch off → no raw frame egress
+    cloud_ready = getattr(config, "cloud_ready", None)
+    if callable(cloud_ready) and not cloud_ready():
+        return ""                     # config's own Cloud switch off → no egress
 
     api_key = (
         getattr(config, "openai_api_key", None)

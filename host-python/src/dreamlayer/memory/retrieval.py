@@ -43,10 +43,18 @@ class Retriever:
     HIDDEN_KINDS = frozenset({"stasis"})
 
     def __init__(self, db, embedder=None, ann=None, ember_store=None,
-                 bias_store=None, bias_dir=None):
+                 bias_store=None, bias_dir=None, vector_store=None):
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
         self.ann = ann                       # PersistentAnnIndex or None
+        # An optional ALTERNATE vector store (VectorStore/Chroma/Lance) that
+        # indexes the same MemoryDB in its own table/collection. When one is
+        # wired, forget must reach it too or it becomes purge-blind — its index
+        # is NOT the ann/usearch one and NOT among the tables db.purge_* delete,
+        # so a "forget that" would leave a fully recallable embedding behind
+        # (audit 2026-07-14 HIGH). Duck-typed: anything exposing evict(id) and
+        # purge_all(). None = no alternate store enabled (the default posture).
+        self.vector_store = vector_store
         # The ember practice is a separate SQLite file that holds consolidated
         # cue+answer engrams. It is retention-immune by design, but the
         # wearer's erase-everything must reach it too — so purge_all() wipes it
@@ -87,6 +95,8 @@ class Retriever:
         self.db.purge_memory(memory_id)
         if self.ann is not None:
             self.ann.remove(memory_id)
+        if self.vector_store is not None:
+            self.vector_store.evict(memory_id)   # alternate store, else purge-blind
         if row is not None:
             self.bias_store.discard(row.get("kind", ""), row.get("summary", ""))
             self._persist_bias()
@@ -103,6 +113,8 @@ class Retriever:
         self.db.purge_all()
         if self.ann is not None:
             self.ann.rebuild(self.db)        # db is now empty → index cleared
+        if self.vector_store is not None:
+            self.vector_store.purge_all()    # alternate store's index emptied too
         if self.ember_store is not None:
             self.ember_store.purge_all()     # engrams + staged offers, VACUUMed
         if self.bias_store is not None:

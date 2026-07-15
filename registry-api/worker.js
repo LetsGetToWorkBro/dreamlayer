@@ -221,9 +221,60 @@ async function stats(env, name) {
   const rating = votes.length
     ? Math.round((votes.reduce((a, b) => a + b, 0) / votes.length) * 100) / 100
     : 0;
-  const downloads = Number(await env.SOCIAL.get(`downloads:${name}`)) || 0;
+  const downloads = await readCounter(env, `downloads:${name}`);
   const comments = await readJSON(env.SOCIAL, `comments:${name}`, []);
   return { name, downloads, rating, ratings_count: votes.length, comments_count: comments.length };
+}
+
+// -- atomic counters ---------------------------------------------------------
+// A plain KV read-modify-write (`get` then `put`) is NOT atomic: two Workers
+// isolates handling concurrent downloads can both read N and both write N+1,
+// silently losing a count (audit 2026-07-14). KV has no atomic increment, so
+// when a Durable Object counter is bound we route increments through it — a DO
+// is single-threaded per key, so its read-add-write is serialised and no
+// increment is lost. Without the binding (local/dev/tests on KV only) we fall
+// back to the best-effort KV RMW so the endpoint still works.
+async function bumpCounter(env, key) {
+  if (env.COUNTER) {
+    const stub = env.COUNTER.get(env.COUNTER.idFromName(key));
+    const res = await stub.fetch("https://counter/incr");
+    return Number(await res.text()) || 0;
+  }
+  const n = (Number(await env.SOCIAL.get(key)) || 0) + 1;
+  await env.SOCIAL.put(key, String(n));
+  return n;
+}
+
+async function readCounter(env, key) {
+  if (env.COUNTER) {
+    const stub = env.COUNTER.get(env.COUNTER.idFromName(key));
+    const res = await stub.fetch("https://counter/value");
+    return Number(await res.text()) || 0;
+  }
+  return Number(await env.SOCIAL.get(key)) || 0;
+}
+
+// The Durable Object: one instance per counter key, so storage.get/put run
+// serialised (strongly consistent) and concurrent increments can't interleave.
+export class Counter {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/incr") {
+      // blockConcurrencyWhile serialises the read-add-write against any other
+      // in-flight request to THIS object, closing the lost-update window.
+      const n = await this.state.blockConcurrencyWhile(async () => {
+        const cur = (await this.state.storage.get("n")) || 0;
+        const next = cur + 1;
+        await this.state.storage.put("n", next);
+        return next;
+      });
+      return new Response(String(n));
+    }
+    return new Response(String((await this.state.storage.get("n")) || 0));
+  }
 }
 
 export default {
@@ -509,8 +560,7 @@ export default {
         return json(await stats(env, name));
       }
       if (action === "download") {
-        const n = (Number(await env.SOCIAL.get(`downloads:${name}`)) || 0) + 1;
-        await env.SOCIAL.put(`downloads:${name}`, String(n));
+        const n = await bumpCounter(env, `downloads:${name}`);   // atomic (DO)
         await trackName(env, name);
         return json({ name, downloads: n });
       }

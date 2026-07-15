@@ -71,3 +71,28 @@ class ChromaStore:
         except Exception as exc:
             log.error("[chroma_store] query failed: %s; linear fallback", exc)
             return self._fallback.search(query, kind=kind, top_k=top_k)
+
+    # -- forget hooks: wired into Retriever.purge_* so this store is not
+    # purge-blind (audit 2026-07-14). Chroma keyed vectors by transient row
+    # index, not memory_id, so a single vector can't be precisely targeted;
+    # both hooks therefore drop the whole persisted collection and let the next
+    # search re-derive it from the (now-purged) live DB rows — no residue, no
+    # orphaned vectors. Best-effort + fallback delegation; never raises into a
+    # forget path.
+    def evict(self, memory_id: int) -> None:
+        self._drop_collection()
+        self._fallback.evict(memory_id)
+
+    def purge_all(self) -> None:
+        self._drop_collection()
+        self._fallback.purge_all()
+
+    def _drop_collection(self) -> None:
+        if self._client is None and self._col is None:
+            return
+        try:
+            if self._client is not None:
+                self._client.delete_collection(self._collection)
+        except Exception as exc:
+            log.warning("[chroma_store] collection drop failed: %s", exc)
+        self._col = None

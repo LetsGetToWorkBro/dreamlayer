@@ -51,3 +51,26 @@ class LanceStore:
         except Exception as exc:
             log.error("[lance_store] query failed: %s; linear fallback", exc)
             return self._fallback.search(query, kind=kind, top_k=top_k)
+
+    # -- forget hooks: wired into Retriever.purge_* so this store is not
+    # purge-blind (audit 2026-07-14). Lance keyed rows by transient row index
+    # (mode="overwrite" rebuilds the table from live DB rows on every search),
+    # so a forget just needs to drop the persisted table; the next search
+    # rebuilds it without the purged row. Best-effort + fallback delegation.
+    def evict(self, memory_id: int) -> None:
+        self._drop_table()
+        self._fallback.evict(memory_id)
+
+    def purge_all(self) -> None:
+        self._drop_table()
+        self._fallback.purge_all()
+
+    def _drop_table(self) -> None:
+        if not _HAS_LANCE:
+            return
+        try:
+            conn = lancedb.connect(self._uri)
+            if self._table in conn.table_names():
+                conn.drop_table(self._table)
+        except Exception as exc:
+            log.warning("[lance_store] table drop failed: %s", exc)

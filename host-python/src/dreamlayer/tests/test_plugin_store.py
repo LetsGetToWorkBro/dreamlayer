@@ -423,3 +423,100 @@ def test_require_sandbox_honors_env(tmp_path, monkeypatch):
     orc = Orchestrator(FakeBridge())
     store.load_installed(orc)                        # env drives fail-closed
     assert store.isolated == []
+
+
+# -- capability enforcement at the ctx.add_* call sites (audit 2026-07-14) ----
+# The extension-point capabilities used to be advisory (declared in docs, never
+# checked where the plugin actually reaches). These pin that the grant is now
+# enforced at the call site, so an undeclared reach is refused — reverting the
+# guard makes these fail.
+
+def test_add_object_provider_requires_the_object_lens_capability():
+    from dreamlayer.plugins.base import PluginContext
+    from dreamlayer.object_lens.providers import ProviderRegistry
+
+    class Prov:
+        facet, name = "own", "p"
+        def matches(self, s): return True
+        def build(self, s, now=None): return []
+
+    reg = ProviderRegistry()
+    ungranted = PluginContext(object_registry=reg, capabilities=frozenset())
+    ungranted.add_object_provider(Prov())
+    assert ungranted.added["object_provider"] == []          # refused
+    assert ("object_provider", "object_lens") in ungranted.added.get("rejected", [])
+    assert reg.providers == [] if hasattr(reg, "providers") else True
+
+    granted = PluginContext(object_registry=reg,
+                            capabilities=frozenset({"object_lens"}))
+    granted.add_object_provider(Prov())
+    assert len(granted.added["object_provider"]) == 1        # declared → wired
+
+
+def test_add_shop_provider_requires_shop_or_network():
+    from dreamlayer.plugins.base import PluginContext
+    reg: list = []
+    ungranted = PluginContext(shop_registry=reg, capabilities=frozenset())
+    ungranted.add_shop_provider(lambda label, attrs: {"rating": 5.0})
+    assert reg == [] and ungranted.added["shop_provider"] == []   # refused
+    # either the commerce entitlement OR its egress channel satisfies it
+    for cap in ("shop", "network"):
+        r2: list = []
+        ok = PluginContext(shop_registry=r2, capabilities=frozenset({cap}))
+        ok.add_shop_provider(lambda label, attrs: {"rating": 5.0})
+        assert len(r2) == 1, cap
+
+
+def test_scan_flags_smtplib_ftplib_telnetlib_without_network():
+    # audit 2026-07-14: the old _DANGER_IMPORTS omitted these egress modules, so
+    # a plugin could exfiltrate over SMTP/FTP/telnet without declaring 'network'.
+    for mod in ("smtplib", "ftplib", "telnetlib"):
+        assert scan_source(f"import {mod}\n", ()), f"{mod} not flagged"
+        # declaring network mediates it (a real capability gate, not a ban)
+        assert scan_source(f"import {mod}\n", {"network"}) == [], mod
+    # importlib.import_module is a forbidden dynamic-import laundering channel
+    assert scan_source("import importlib\nimportlib.import_module('socket')\n",
+                       {"network"}), "importlib.import_module not flagged"
+
+
+# -- the memory facade: capability + veil gated (audit 2026-07-14 CRITICAL) ---
+# The raw MemoryDB used to be reachable in-process; now the ONLY supported
+# memory surface is ctx.memory, which refuses a plugin lacking the 'memory'
+# capability and returns nothing while the Veil is up. Reverting either gate
+# makes these fail.
+
+def test_plugin_memory_facade_denies_without_the_memory_capability():
+    from dreamlayer.plugins.base import PluginContext
+    from dreamlayer.memory.db import MemoryDB
+
+    db = MemoryDB()
+    db.add_memory("fact", "the wearer's private secret")
+
+    no_cap = PluginContext(db=db, capabilities=frozenset())
+    with pytest.raises(PermissionError):
+        no_cap.memory.memories()                 # undeclared reach → refused
+    with pytest.raises(PermissionError):
+        no_cap.memory.commitments()
+    with pytest.raises(PermissionError):
+        no_cap.memory.places()
+
+    granted = PluginContext(db=db, capabilities=frozenset({"memory"}))
+    got = granted.memory.memories()
+    assert any("private secret" in m.get("summary", "") for m in got)
+
+
+def test_plugin_memory_facade_is_veil_gated():
+    from dreamlayer.plugins.base import PluginContext
+    from dreamlayer.memory.db import MemoryDB
+    from dreamlayer.memory.privacy import PrivacyGate
+
+    db = MemoryDB()
+    db.add_memory("fact", "recallable while unveiled")
+    gate = PrivacyGate()
+    ctx = PluginContext(db=db, capabilities=frozenset({"memory"}), veil=gate)
+
+    assert ctx.memory.memories()                 # unveiled → readable
+    gate.pause()                                 # Veil up → recall blocked
+    assert ctx.memory.memories() == []           # nothing crosses the Veil
+    gate.resume()
+    assert ctx.memory.memories()                 # readable again

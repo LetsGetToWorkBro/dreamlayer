@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Cloudflare Worker for the DreamLayer plugin/figment registry.",
   "scripts": {
-    "test": "node worker.plugins.test.mjs && node worker.figments.test.mjs && node worker.golf.test.mjs && node worker.search.test.mjs"
+    "test": "node worker.plugins.test.mjs && node worker.figments.test.mjs && node worker.golf.test.mjs && node worker.search.test.mjs && node worker.counter.test.mjs"
   }
 }

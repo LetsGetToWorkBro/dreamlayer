@@ -105,6 +105,74 @@ class TestDescribePoeticCaptureGate:
 
 
 # ---------------------------------------------------------------------------
+# describe_poetic — the CLOUD SWITCH, not the API key, authorizes egress
+# (audit 2026-07-14 CRITICAL #3). A key with the wearer's Cloud switch OFF (or
+# incognito) is NOT consent: the raw JPEG must not leave the device.
+# ---------------------------------------------------------------------------
+
+class TestDescribePoeticCloudSwitch:
+    def test_key_present_cloud_off_predicate_no_post(self, monkeypatch):
+        """FAIL-ON-REVERT: valid key + veil OPEN + Cloud switch OFF (cloud_ok()
+        -> False, the shape the orchestrator wires to brain.cloud_opt_in) ⇒
+        describe_poetic returns '' and never constructs the cloud client. Before
+        the cloud-switch gate, key-presence alone let the frame egress."""
+        fake = _fake_openai_async(_vlm_response("a private room"))
+        monkeypatch.setitem(sys.modules, "openai", fake)
+
+        class Cfg:
+            openai_api_key = "sk-test-fake-key"
+
+        result = asyncio.run(
+            vision.describe_poetic(
+                b"\xff\xd8\xff\xe0rawjpeg", "describe", config=Cfg(),
+                privacy=_Veil(True), cloud_ok=lambda: False,
+            )
+        )
+        assert result == ""
+        fake.AsyncOpenAI.assert_not_called()      # raw frame never left device
+
+    def test_key_present_cloud_off_config_no_post(self, monkeypatch):
+        """A config that knows its own posture (cloud_ready() -> False for
+        lan_only / cloud_enabled-off / incognito) also refuses egress."""
+        fake = _fake_openai_async(_vlm_response("a private room"))
+        monkeypatch.setitem(sys.modules, "openai", fake)
+
+        class Cfg:
+            openai_api_key = "sk-test-fake-key"
+            def cloud_ready(self):
+                return False
+
+        result = asyncio.run(
+            vision.describe_poetic(
+                b"\xff\xd8\xff\xe0rawjpeg", "describe", config=Cfg(),
+                privacy=_Veil(True),
+            )
+        )
+        assert result == ""
+        fake.AsyncOpenAI.assert_not_called()
+
+    def test_cloud_on_reaches_cloud(self, monkeypatch):
+        """Positive control: Cloud switch ON (cloud_ok()->True AND
+        cloud_ready()->True) still performs the call — the deny is not vacuous."""
+        fake = _fake_openai_async(_vlm_response("morning light on the sill"))
+        monkeypatch.setitem(sys.modules, "openai", fake)
+
+        class Cfg:
+            openai_api_key = "sk-test-fake-key"
+            def cloud_ready(self):
+                return True
+
+        result = asyncio.run(
+            vision.describe_poetic(
+                b"\xff\xd8jpeg", "describe", config=Cfg(),
+                privacy=_Veil(True), cloud_ok=lambda: True,
+            )
+        )
+        assert result == "morning light on the sill"
+        fake.AsyncOpenAI.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # IngestPipeline.ingest — transcript must NOT persist while veiled
 # ---------------------------------------------------------------------------
 
