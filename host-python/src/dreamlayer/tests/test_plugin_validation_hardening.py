@@ -54,6 +54,41 @@ class TestAliasBypassIsClosed:
         # aliasing a harmless module must not raise a false positive
         assert scan_source("import json as j\nj.dumps({})\n", ()) == []
 
+    # -- builtins laundering + egress-module gaps (re-audit 2026-07-15) --------
+
+    def test_builtins_dynamic_import_is_flagged(self):
+        # bare __import__ was forbidden, but `builtins.__import__("socket")`
+        # slipped past because "builtins" wasn't a sensitive receiver — a
+        # declared-no-network plugin could bind a live socket.
+        issues = scan_source(
+            'import builtins\nbuiltins.__import__("socket")\n', ())
+        assert any("builtins.__import__" in i or "forbidden" in i
+                   for i in issues), issues
+
+    def test_builtins_eval_exec_flagged(self):
+        assert scan_source('import builtins\nbuiltins.eval("1")\n', ())
+        assert scan_source('import builtins\nbuiltins.exec("x=1")\n', ())
+
+    def test_plain_builtins_import_without_danger_is_clean(self):
+        # importing builtins itself is harmless — only builtins.<danger> flags
+        assert scan_source("import builtins\nbuiltins.len([])\n", ()) == []
+
+    def test_missing_egress_modules_now_need_network(self):
+        # mail/news protocols, the second urllib fork, the XML-RPC HTTP client,
+        # and webbrowser.open("http://…") GET-exfil all reach the network.
+        for mod in ("xmlrpc", "poplib", "imaplib", "nntplib",
+                    "urllib3", "webbrowser"):
+            issues = scan_source(f"import {mod}\n", ())
+            assert issues, f"{mod} import was not flagged: {issues}"
+            # and declaring network makes it clean (real mediation, not a ban)
+            assert scan_source(f"import {mod}\n", {"network"}) == [], mod
+
+    def test_asyncio_socket_opener_flagged_but_plain_asyncio_clean(self):
+        # asyncio itself is legitimate; only its raw-socket openers imply network
+        assert scan_source(
+            "import asyncio\nasyncio.open_connection('h', 80)\n", ())
+        assert scan_source("import asyncio\nasyncio.sleep(0)\n", ()) == []
+
     # -- rebind forms the import-alias map alone would miss (re-audit 2026-07) --
 
     def test_value_rebind_of_module(self):

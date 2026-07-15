@@ -214,7 +214,13 @@ class SocialLens:
         self._enricher.add_debt(contact.contact_id, direction, what)
         return self._enricher.enrich(contact)
 
+    @requires_capture
     def add_debt_by_id(self, contact_id: str, direction: str, what: str):
+        # writing about a person is capture — the id-resolved twin must honor the
+        # veil exactly as add_debt() does. It was left ungated while its
+        # name-based sibling was decorated, and it is the one the orchestrator
+        # actually calls (ops_commitments), so the veil-for-capture claim only
+        # held by the caller remembering to gate (re-audit 2026-07-15).
         self._enricher.add_debt(contact_id, direction, what)
         contact = self._index.get(contact_id)
         return self._enricher.enrich(contact) if contact is not None else None
@@ -230,9 +236,11 @@ class SocialLens:
         self._enricher.clear_debts(contact.contact_id)
         return self._enricher.enrich(contact)
 
+    @requires_capture
     def settle_by_id(self, contact_id: str) -> None:
         self._enricher.clear_debts(contact_id)
 
+    @requires_capture
     def add_note_by_id(self, contact_id: str, note: str):
         """Append a note to a specific contact_id (the caller already resolved
         who you were looking at). The enricher stores notes by id whether or not

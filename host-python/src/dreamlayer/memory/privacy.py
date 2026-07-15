@@ -73,16 +73,25 @@ class NullGate:
 def requires_capture(method):
     """Decorator: short-circuit a capture/write method to ``None`` when the
     instance's veil denies capture. The instance must expose a gate as
-    ``self._privacy`` (or ``self.privacy``); a missing gate is treated as
-    AlwaysOn (library-ergonomic default). One idiom in place of the ~18
-    hand-written ``if not self._privacy.allow_capture(): return`` variants the
-    2026-07-14 audit found scattered across 36 modules."""
+    ``self._privacy`` (or ``self.privacy``).
+
+    A MISSING gate now fails CLOSED (deny), not open. The old "no gate → allow"
+    default made a decorated method safe only by luck — every caller had to
+    remember to wire a gate, and one that forgot would capture while veiled yet
+    read as protected in review (re-audit 2026-07-15). A path that wants the
+    permissive posture must say so explicitly with ``AlwaysOnGate()`` — which is
+    exactly what every lens already does (``self._privacy = privacy or
+    AlwaysOnGate()``), so this is a no-op for them and a footgun-closer for any
+    future class. Mirrors this module's ``NullGate`` safe-default philosophy.
+    One idiom in place of the ~18 hand-written ``if not
+    self._privacy.allow_capture(): return`` variants the 2026-07-14 audit found
+    scattered across 36 modules."""
     import functools
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         gate = getattr(self, "_privacy", None) or getattr(self, "privacy", None)
-        if gate is not None and not gate.allow_capture():
+        if gate is None or not gate.allow_capture():
             return None
         return method(self, *args, **kwargs)
     return wrapper
@@ -91,13 +100,14 @@ def requires_capture(method):
 def requires_recall(method):
     """Decorator: short-circuit a read-back/recall method to ``None`` when the
     instance's veil denies recall (a full pause; incognito still recalls). Same
-    gate-resolution rules as ``requires_capture``."""
+    gate-resolution rules as ``requires_capture`` — a missing gate fails CLOSED
+    (deny), so a decorated recall on a gate-less instance surfaces nothing."""
     import functools
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         gate = getattr(self, "_privacy", None) or getattr(self, "privacy", None)
-        if gate is not None and not gate.allow_recall():
+        if gate is None or not gate.allow_recall():
             return None
         return method(self, *args, **kwargs)
     return wrapper

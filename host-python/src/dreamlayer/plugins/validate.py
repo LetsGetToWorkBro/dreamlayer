@@ -62,6 +62,17 @@ _DANGER_CALLS = {
     # scanner cannot resolve it and forbids it outright (audit 2026-07-14).
     ("importlib", "import_module"): None,
     ("importlib", "__import__"): None,
+    # builtins.<x> is the same laundering channel by another name: the scanner
+    # forbids bare __import__/eval/exec (below), but `builtins.__import__("socket")`
+    # slipped past because "builtins" wasn't a sensitive receiver — a declared-
+    # no-network plugin could bind a live socket (re-audit 2026-07-15).
+    ("builtins", "__import__"): None,
+    ("builtins", "eval"): None,
+    ("builtins", "exec"): None,
+    ("builtins", "compile"): None,
+    # asyncio itself is legitimate; only its raw-socket openers imply network.
+    ("asyncio", "open_connection"): "network",
+    ("asyncio", "open_unix_connection"): "network",
 }
 # modules any of whose attributes reaching a dynamic name (getattr(mod, x)) we
 # can't resolve statically — treated as a sensitive receiver so a dynamic
@@ -82,6 +93,12 @@ _DANGER_IMPORTS = {
     "smtplib": "network", "ftplib": "network", "telnetlib": "network",
     "websocket": "network", "websockets": "network",
     "httpx": "network", "aiohttp": "network",
+    # more egress channels the table still missed: mail/news protocols, the
+    # XML-RPC HTTP client, a second urllib fork, and webbrowser.open("http://…")
+    # as a GET-exfil vector — all reach the network without declaring it
+    # (re-audit 2026-07-15).
+    "xmlrpc": "network", "poplib": "network", "imaplib": "network",
+    "nntplib": "network", "urllib3": "network", "webbrowser": "network",
     "pickle": None, "marshal": None,
 }
 

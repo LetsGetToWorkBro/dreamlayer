@@ -534,15 +534,17 @@ class Brain:
         except Exception:
             return None
 
-    def _cap_ask(self, text: str) -> tuple[str, dict]:
+    def _cap_ask(self, text: str, no_cloud: bool = False) -> tuple[str, dict]:
         """The `ask` capability: run the Brain over the spoken question and hand
-        back the answer (+ which tier answered it) to stream onto the glass."""
-        ans = self.ask(text or "")
+        back the answer (+ which tier answered it) to stream onto the glass.
+        no_cloud carries the wearer's session posture (incognito / cloud-off) so
+        a lens-driven ask honors the Veil at the same sink /brain/ask does."""
+        ans = self.ask(text or "", no_cloud=no_cloud)
         reply = (ans.text if ans and not ans.is_empty() else "") or "no answer yet"
         self.activity.add("rc", "Lens asked → Brain answered")
         return reply, {"answer": reply, "tier": ans.tier if ans else ""}
 
-    def rc_emit(self, tag: str, text: str = "") -> dict:
+    def rc_emit(self, tag: str, text: str = "", no_cloud: bool = False) -> dict:
         """Close the loop glass → Brain → glass. A running lens emits a tag and
         the Brain acts on it, streaming the result back into the lens's slot.
 
@@ -578,7 +580,7 @@ class Brain:
                         "error": f"lens did not declare capability {cap!r}"}
             handler = self._capability_handlers.get(cap)
             if handler:
-                reply, extra = handler(text or "")
+                reply, extra = handler(text or "", no_cloud=no_cloud)
                 return {**self.rc_feed(reply, source=cap), "tag": tag, **extra}
             # a declared capability the phone/hub fulfills (translate/look):
             # its payload is the result — route it straight to the slot
@@ -1301,10 +1303,15 @@ class Brain:
                         "distance_m": a.distance_m, "place": a.place, "ts": a.ts}
                        for a in self.waypath.anchors()]
             # atomic: the server is threaded, and a torn write would silently
-            # lose every anchor on the next load
-            tmp = self.cfg_dir / "waypath.json.tmp"
-            tmp.write_text(json.dumps(anchors))
-            os.replace(tmp, self.cfg_dir / "waypath.json")
+            # lose every anchor on the next load. A FIXED tmp name is not enough
+            # on its own — two request threads share it and can interleave their
+            # write_text before either os.replace. Serialize under _store_lock
+            # (as _save_json does) and use a per-writer tmp (re-audit 2026-07-15).
+            payload = json.dumps(anchors)
+            with self._store_lock:
+                tmp = self.cfg_dir / f"waypath.json.{os.getpid()}.tmp"
+                tmp.write_text(payload)
+                os.replace(tmp, self.cfg_dir / "waypath.json")
         except Exception:
             pass
 
@@ -2477,8 +2484,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif path == "/dreamlayer/rc/emit":
                 # the lens emitted a tag; act on it and stream the result back
                 # (emit "ask" → Brain answers into the slot). Closes the loop.
+                # no_cloud carries the wearer's session posture: an "ask" emit
+                # from a lens must honor Incognito/Cloud-off just like /brain/ask.
                 b = self._body()
-                self._json(200, brain.rc_emit(b.get("tag", ""), b.get("text", "")))
+                self._json(200, brain.rc_emit(b.get("tag", ""), b.get("text", ""),
+                                              no_cloud=bool(b.get("no_cloud"))))
             elif path == "/dreamlayer/rc/import":
                 # the no-code browser builder's "Deploy to my Brain"
                 self._json(200, brain.rc_import(self._body().get("figment") or self._body()))
@@ -2528,9 +2538,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # route a spoken/typed line: ask/recall answered here, the rest
                 # returned as a structured intent for the app to act on
                 from ...orchestrator.voice import parse_intent
-                it = parse_intent(self._body().get("text", ""))
+                vb = self._body()
+                it = parse_intent(vb.get("text", ""))
                 if it.kind in ("ask", "recall"):
-                    ans = brain.ask(it.args.get("query", ""))
+                    # honor the wearer's posture: a voice "ask" reaches the same
+                    # cloud sink as /brain/ask, so it must carry no_cloud too
+                    # (a paired hub that is incognito must not egress here).
+                    ans = brain.ask(it.args.get("query", ""),
+                                    no_cloud=bool(vb.get("no_cloud")))
                     self._json(200, {"intent": it.kind, "query": it.args.get("query", ""),
                                      "answer": ans.text if ans is not None else ""})
                 elif it.kind == "brief":

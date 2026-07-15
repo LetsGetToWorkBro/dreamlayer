@@ -426,7 +426,10 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     try {
       const r = await brainFetch(m, "/dreamlayer/brain/ask", {
         method: "POST",
-        body: JSON.stringify({ query }),
+        // carry the wearer's session posture: incognito (or Cloud off) means the
+        // paired Brain must NOT escalate this ask to its own cloud. effectiveCloud
+        // is false while incognito, so no_cloud follows both switches.
+        body: JSON.stringify({ query, no_cloud: !get().effectiveCloud() }),
       });
       const j = await r.json();
       return { text: j.text ?? "", tier: j.tier ?? "", sources: j.sources ?? [] };
@@ -486,7 +489,8 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     try {
       const r = await brainFetch(m, "/dreamlayer/rc/emit", {
         method: "POST",
-        body: JSON.stringify({ tag, text }),
+        // a lens "ask" emit reaches the same cloud sink — carry the posture too
+        body: JSON.stringify({ tag, text, no_cloud: !get().effectiveCloud() }),
       });
       const j = await r.json();
       // "ask" comes back with the Brain's answer (already pushed to the glass)
@@ -542,7 +546,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     const m = get().macMini;
     if (!m.connected || !m.url) return { intent: "ask", answer: "" };
     try {
-      const r = await brainFetch(m, "/dreamlayer/voice", { method: "POST", body: JSON.stringify({ text }) });
+      const r = await brainFetch(m, "/dreamlayer/voice", { method: "POST", body: JSON.stringify({ text, no_cloud: !get().effectiveCloud() }) });
       return await r.json();
     } catch {
       return { intent: "ask", answer: "Couldn't reach your Brain." };

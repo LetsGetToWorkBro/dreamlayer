@@ -219,6 +219,57 @@ class TestControls:
         router.ask("again")
         assert seen[-1]["no_cloud"] is False             # hub cloud on → allowed
 
+    def test_lens_ask_capability_honors_no_cloud(self, tmp_path):
+        """Re-audit 2026-07-15: the audit gated /brain/ask but the lens `ask`
+        capability (_cap_ask, reached by /rc/emit) called self.ask() with no
+        posture — a lens running while the hub is incognito still escalated to
+        the Mac's own cloud. Now threaded through."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="t", cloud_api_key="k", cloud_model="m",
+                    cloud_enabled=True).save(cfg)
+        brain = Brain(cfg)
+        import dreamlayer.ai_brain.server.backends as be
+        orig = be.cloud_chat
+        be.cloud_chat = lambda config, prompt, **k: "the cloud answer"
+        try:
+            brain._cap_ask("something not in any file", no_cloud=True)
+            assert brain.config.cloud_calls == 0          # incognito → no egress
+            brain._cap_ask("something not in any file")   # default hub-cloud-on
+            assert brain.config.cloud_calls == 1
+        finally:
+            be.cloud_chat = orig
+
+    def test_voice_endpoint_honors_no_cloud_over_http(self, tmp_path):
+        """The /dreamlayer/voice endpoint is a network-reachable, authed path to
+        the same cloud sink as /brain/ask. It was left unpatched, so a paired
+        phone issuing a voice 'ask' while incognito still egressed. End-to-end:
+        no_cloud in the POST body must block the escalation (re-audit 2026-07-15)."""
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="tok", cloud_api_key="k", cloud_model="m",
+                    cloud_enabled=True).save(cfg)
+        brain = Brain(cfg)
+        srv = make_brain_server(brain, "127.0.0.1", 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        h = {"X-DreamLayer-Token": "tok", "Content-Type": "application/json"}
+        import dreamlayer.ai_brain.server.backends as be
+        orig = be.cloud_chat
+        be.cloud_chat = lambda config, prompt, **k: "the cloud answer"
+
+        def voice(body):
+            req = urllib.request.Request(
+                url + "/dreamlayer/voice", data=json.dumps(body).encode(),
+                headers=h)
+            return json.loads(_op().open(req, timeout=5).read())
+        try:
+            voice({"text": "what does marcus owe me", "no_cloud": True})
+            assert brain.config.cloud_calls == 0          # incognito → no egress
+            voice({"text": "what does marcus owe me", "no_cloud": False})
+            assert brain.config.cloud_calls == 1          # cloud-on → escalates
+        finally:
+            be.cloud_chat = orig
+            srv.shutdown(); srv.server_close()
+
     def test_cloud_egress_counted_even_when_call_fails(self, tmp_path):
         """Re-audit 2026-07: the query LEAVES the device before the provider
         answers. A call that errors or returns empty still egressed, so it must
