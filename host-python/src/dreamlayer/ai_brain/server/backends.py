@@ -54,31 +54,43 @@ PROVIDER_PRESETS: dict[str, dict] = {
 }
 
 
+# The one definition of "on my device / my LAN", used verbatim by BOTH the
+# server (egress accounting + veil gating) and the panel's JS warning, so the
+# two never disagree. Deliberately EXPLICIT and narrow — loopback, the three
+# RFC-1918 private v4 blocks, IPv4/IPv6 link-local, and IPv6 loopback — rather
+# than ipaddress.is_private, which also claims TEST-NET / benchmarking / CGNAT
+# ranges that are not "your device" and whose looseness the JS mirror can't
+# match. Anything outside this set — a public IP, a bare hostname (which a DNS
+# search domain could resolve to a public host), an exotic reserved range, or
+# an unparseable URL — is REMOTE and treated as egress. Fail-safe by design:
+# over-counting a call as leaving the device is harmless; under-counting one
+# that actually left is a privacy lie.
+_LOCAL_NETS = tuple(__import__("ipaddress").ip_network(n) for n in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    "169.254.0.0/16", "::1/128"))
+
+
 def is_local_endpoint(base_url: str) -> bool:
     """True when an endpoint lives on THIS machine or the local network — so it
     is NOT cloud egress and stays reachable while incognito, exactly like the
-    Mac-mini/Ollama tier already is. A remote (public) endpoint returns False
-    and must be treated as egress: counted, logged, and veil-gated.
-
-    Local = loopback, RFC-1918 / carrier-grade-NAT / link-local ranges, `.local`
-    mDNS names, or a bare single-label hostname (a LAN name like ``my-nas``).
-    Anything else — a public domain, or a host we cannot classify — is REMOTE.
-    The unsure case fails SAFE toward egress: over-counting a call as leaving
-    the device is harmless; under-counting one that actually left is a privacy
-    lie."""
-    host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
+    Mac-mini/Ollama tier. A remote (public) endpoint, a bare hostname, or an
+    unparseable URL returns False and is treated as egress: counted, logged,
+    and veil-gated. See _LOCAL_NETS for the exact rule (mirrored in panel.py's
+    isLocalUrl)."""
+    import ipaddress
+    try:
+        host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
+    except ValueError:
+        return False                       # malformed URL (e.g. bad IPv6) → remote
     if not host:
         return False
     if host == "localhost" or host.endswith(".local"):
         return True
-    if "." not in host and ":" not in host:
-        return True                        # bare single-label LAN hostname
-    import ipaddress
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
-        return False                       # public domain / unparseable → remote
-    return bool(ip.is_loopback or ip.is_private or ip.is_link_local)
+        return False                       # hostname (bare or public) → remote
+    return any(ip in net for net in _LOCAL_NETS)
 
 
 def _build_request(provider: str, base_url: str, model: str, key: str, prompt: str):

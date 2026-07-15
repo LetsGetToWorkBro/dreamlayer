@@ -1109,19 +1109,21 @@ function pickModel(m,silent){modelSel=m;
   renderModel();
   if(m==="ollama") checkModel();
 }
-// Mirror of backends.is_local_endpoint, for the live warning. localhost, LAN
-// (RFC-1918), *.local, and bare hostnames are on-device; anything else is a
-// remote endpoint your queries LEAVE the device to reach.
+// EXACT mirror of backends.is_local_endpoint / _LOCAL_NETS. Kept in lockstep so
+// this warning never disagrees with the server's egress accounting. Local =
+// localhost, *.local, IPv4 loopback/RFC-1918/link-local, or ::1. Everything
+// else — a public IP, a bare hostname (a DNS search domain could resolve it to
+// a public host), or anything unparseable — is a REMOTE endpoint your queries
+// leave the device to reach.
 function isLocalUrl(u){
   let host;try{host=new URL(u).hostname.toLowerCase();}catch(e){return null;}   // null = can't tell yet
   if(!host)return null;
-  if(host==="localhost"||host.endsWith(".local"))return true;
-  if(host.indexOf(".")<0&&host.indexOf(":")<0)return true;                      // bare LAN name
-  if(host==="::1"||host==="[::1]")return true;
+  if(host[0]==="["&&host[host.length-1]==="]")host=host.slice(1,-1);            // strip IPv6 brackets
+  if(host==="localhost"||host.endsWith(".local")||host==="::1")return true;
   const m=host.match(/^(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)$/);
   if(m){const a=+m[1],b=+m[2];
     return a===127||a===10||(a===192&&b===168)||(a===172&&b>=16&&b<=31)||(a===169&&b===254);}
-  return false;                                                                 // public domain → remote
+  return false;                                                                 // public / bare host → remote
 }
 const APROV={custom:{base:"",model:"",key:true},openai:{base:"https://api.openai.com",model:"gpt-4o-mini",key:true},
   anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},

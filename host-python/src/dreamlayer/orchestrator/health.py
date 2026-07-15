@@ -19,7 +19,7 @@ from collections import deque
 
 # canonical seam names — keep in sync with the wiring sites
 SEAMS = ("cloud", "mac", "ollama", "ble", "asr", "vision", "brain",
-         "ann", "plugin", "deadline")
+         "ann", "plugin", "deadline", "api-brain")
 
 _RING = 8
 

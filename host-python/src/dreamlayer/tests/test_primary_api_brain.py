@@ -26,8 +26,7 @@ class TestIsLocalEndpoint:
         for u in ("http://localhost:11434", "http://127.0.0.1:1234/v1",
                   "http://[::1]:8080", "http://192.168.1.9:11434",
                   "http://10.0.0.5", "http://172.16.4.4:9000",
-                  "http://169.254.1.1", "http://my-nas:1234",
-                  "http://hermes.local:8000"):
+                  "http://169.254.1.1", "http://hermes.local:8000"):
             assert is_local_endpoint(u) is True, u
 
     def test_public_hosts_are_remote(self):
@@ -35,10 +34,25 @@ class TestIsLocalEndpoint:
                   "http://8.8.8.8", "https://myagent.fly.dev"):
             assert is_local_endpoint(u) is False, u
 
-    def test_unset_or_unparseable_is_remote_failsafe(self):
-        # unsure → remote: over-counting egress is safe, under-counting lies
-        assert is_local_endpoint("") is False
-        assert is_local_endpoint("not a url") is False
+    def test_bare_hostname_is_remote_failsafe(self):
+        # a DNS search domain could resolve a bare name to a public host, so we
+        # cannot claim it is local — fail safe toward egress (refute-remediation).
+        for u in ("http://ai", "http://intranet:8000", "http://ollama:11434"):
+            assert is_local_endpoint(u) is False, u
+
+    def test_reserved_ranges_agree_with_the_js_mirror_remote(self):
+        # ipaddress.is_private also claims TEST-NET / 0.0.0.0/8 / benchmarking,
+        # which the panel's JS classifier does not — so the old code disagreed
+        # with its own warning. The explicit rule treats them all as remote.
+        for u in ("http://0.1.2.3", "http://192.0.2.5", "http://198.18.0.1",
+                  "http://[fc00::1]", "http://[fe80::1]"):
+            assert is_local_endpoint(u) is False, u
+
+    def test_malformed_url_never_raises(self):
+        # a bad IPv6 literal used to raise ValueError out of urlsplit, 500-ing
+        # public()/status on every poll and surviving restart. Now → remote.
+        for u in ("", "not a url", "http://[::1", "http://[fc00::/v1", "://x"):
+            assert is_local_endpoint(u) is False, u
 
 
 # --- the request adapter reads the api_* group, not cloud_* -----------------
@@ -147,6 +161,16 @@ class TestPrimaryApiRouting:
         assert pub["api_key"] == "set"
         assert "sk-secret" not in str(pub)
         assert pub["api_configured"] is True and pub["api_is_local"] is False
+
+    def test_malformed_api_url_does_not_brick_public_or_status(self, tmp_path):
+        # Finding A (refute-remediation): a bad IPv6 literal used to raise
+        # ValueError out of urlsplit inside public()/api_is_local, 500-ing every
+        # status poll and surviving restart. It must degrade to remote instead.
+        brain = _brain(tmp_path, "http://[::1")       # malformed, persisted
+        pub = brain.config.public()                    # must not raise
+        assert pub["api_is_local"] is False            # unparseable → remote
+        assert pub["api_configured"] is True
+        assert brain.ask("q") is None                  # ask() must not raise either
 
     def test_apply_config_persists_and_wires_the_api_tier(self, tmp_path):
         d = tmp_path / "cfg"
