@@ -12,22 +12,37 @@
       "bundleIdentifier": "com.letsgettoworkbro.dreamlayer",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
+      "package": "com.letsgettoworkbro.dreamlayer",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
         "backgroundColor": "#241F38"
       },
-      "package": "com.letsgettoworkbro.dreamlayer"
+      "allowBackup": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "plugins": [
       "expo-router",
       [
         "expo-camera",
         {
-          "cameraPermission": "DreamLayer uses the camera to scan the pairing QR from your Mac mini."
+          "cameraPermission": "DreamLayer uses the camera to scan the pairing QR from your Mac mini.",
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -40,9 +55,23 @@
         }
       ],
       "expo-localization",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
       "expo-image",
-      "expo-asset"
+      "expo-asset",
+      [
+        "./plugins/withAndroidNotificationBrand",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#0B6B52"
+        }
+      ],
+      "./plugins/withAndroidLanCleartext"
     ],
     "experiments": {
       "typedRoutes": true
