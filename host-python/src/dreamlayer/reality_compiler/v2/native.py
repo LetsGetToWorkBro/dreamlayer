@@ -27,6 +27,15 @@ _PULSE_HZ = 2.0
 _STOP = "long"                       # a hold clears a running native behavior
 
 
+def clock12(ts: Optional[float] = None) -> str:
+    """'2:05 PM' — the wall clock, portable. strftime's %-I is a glibc
+    extension (ValueError on Windows), so the 12-hour form is built by hand."""
+    import time
+    lt = time.localtime(ts) if ts is not None else time.localtime()
+    return f"{lt.tm_hour % 12 or 12}:{lt.tm_min:02d} " \
+           f"{'AM' if lt.tm_hour < 12 else 'PM'}"
+
+
 def spoken_duration(secs: float) -> str:
     """'5 minutes', '1 minute 30 seconds' — how Juno says a length back."""
     secs = int(round(secs))

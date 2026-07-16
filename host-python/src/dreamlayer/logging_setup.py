@@ -183,11 +183,32 @@ class JsonLineFormatter(logging.Formatter):
         return json.dumps(payload, separators=(",", ":"))
 
 
+def _default_log_file() -> str | None:
+    """Where records go when there is no console to receive them.
+
+    An explicit ``DL_LOG_FILE`` always wins. Otherwise: a windowed app
+    (pythonw / a PyInstaller --windowed exe) runs with ``sys.stderr`` = None —
+    a StreamHandler built there writes into nothing and every ``emit`` trips
+    logging's error path — so the appliance logs to ``<state dir>/brain.log``
+    instead and stays debuggable. With a real console, None (stream logging,
+    unchanged default behaviour)."""
+    import sys
+    explicit = os.environ.get("DL_LOG_FILE", "").strip()
+    if explicit:
+        return explicit
+    if sys.stderr is None:
+        from pathlib import Path
+        base = os.environ.get("DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
+        return str(Path(base) / "brain.log")
+    return None
+
+
 def configure_logging(json_mode: bool | None = None,
                       level: str | None = None) -> None:
     """Install DreamLayer's root handler. ``json_mode``/``level`` default to the
     env (``DL_LOG_JSON``, ``DL_LOG_LEVEL``). Replaces a previously-installed
-    DreamLayer handler so repeated calls don't stack."""
+    DreamLayer handler so repeated calls don't stack. Console-less processes
+    (see _default_log_file) log to a rotating file under the state dir."""
     if json_mode is None:
         # case-insensitive + common falsy spellings, so DL_LOG_JSON=False/off/no
         # correctly DISABLE json mode rather than enabling it (audit 2026-07-14).
@@ -201,7 +222,20 @@ def configure_logging(json_mode: bool | None = None,
     root.handlers = [h for h in root.handlers
                      if not getattr(h, _HANDLER_TAG, False)]
 
-    handler = logging.StreamHandler()
+    handler: logging.Handler | None = None
+    log_file = _default_log_file()
+    if log_file:
+        try:
+            from logging.handlers import RotatingFileHandler
+            from pathlib import Path
+            Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+            # bounded: an always-on appliance must never fill the disk
+            handler = RotatingFileHandler(log_file, maxBytes=1_000_000,
+                                          backupCount=1, encoding="utf-8")
+        except OSError:
+            handler = None          # unwritable target → fall back to stream
+    if handler is None:
+        handler = logging.StreamHandler()
     setattr(handler, _HANDLER_TAG, True)
     if json_mode:
         handler.setFormatter(JsonLineFormatter())

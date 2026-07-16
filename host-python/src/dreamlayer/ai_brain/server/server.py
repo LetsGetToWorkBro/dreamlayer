@@ -785,7 +785,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             # calendar days, not 24h buckets — so tomorrow's reminder reads
             # "Tomorrow", not "Yesterday", and a same-day dawn stash stays today
             days = (date.fromtimestamp(ts) - today).days
-            clock = _t.strftime("%-I:%M %p", _t.localtime(ts))
+            # clock12/tm_mday, not the glibc-only no-pad strftime flags,
+            # which raise ValueError on Windows
+            from ...reality_compiler.v2.native import clock12
+            lt = _t.localtime(ts)
+            clock = clock12(ts)
             if days == 0:
                 return clock
             if days == -1:
@@ -793,8 +797,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             if days == 1:
                 return "Tomorrow, " + clock
             if -7 < days < 7:
-                return _t.strftime("%a, ", _t.localtime(ts)) + clock
-            return _t.strftime("%b %-d, ", _t.localtime(ts)) + clock
+                return _t.strftime("%a, ", lt) + clock
+            return f"{_t.strftime('%b', lt)} {lt.tm_mday}, " + clock
 
         rows = []
         # places you saved (Waypath) — real timestamps
@@ -2355,7 +2359,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(404, {"error": "not found"}); return
             handler(self, path, qs)
 
-    return ThreadingHTTPServer((host, port), Handler)
+    class _BrainServer(ThreadingHTTPServer):
+        # The stdlib default (allow_reuse_address = 1) is a POSIX convenience:
+        # it lets a restart rebind through TIME_WAIT. On Windows SO_REUSEADDR
+        # means something else entirely — "bind even if another socket is
+        # actively LISTENING" — so two Brains could silently share :7777 with
+        # undefined delivery. There a busy port must fail loudly
+        # (WSAEADDRINUSE) instead; Windows needs no flag to rebind after a
+        # clean close, so nothing is lost.
+        allow_reuse_address = os.name != "nt"
+
+    return _BrainServer((host, port), Handler)
 
 
 def _write_upload(brain: Brain, folder: str, name: str, data: bytes) -> bool:

@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from ._brain_host import BrainHost
 
-import time
-
 
 def _spoken_duration(secs: float) -> str:
     """'5 minutes', '1 minute 30 seconds' — how Juno says a length back."""
@@ -359,9 +357,8 @@ class RCOps(BrainHost):
                    f"{_spoken_duration(rest)} off{r}.")
         elif intent == "clock":
             if a.get("mode") == "time":
-                now = time.localtime()
                 return {"ok": True, "intent": "clock",
-                        "say": time.strftime("It's %-I:%M %p.", now)}
+                        "say": f"It's {native.clock12()}."}
             fig = native.clock_figment()
             say = "Clock's up. Hold to dismiss it."
         else:
@@ -374,7 +371,7 @@ class RCOps(BrainHost):
         if intent == "clock" and record.success:
             # seed the slot so the clock isn't blank; the stage refreshes it
             # each minute (device tick / host push) once it's on real glasses
-            self.rc.deployer.push_text(fig.id, time.strftime("%-I:%M %p"))
+            self.rc.deployer.push_text(fig.id, native.clock12())
         try:
             self.rc.vault.revoke(fig.id)   # ephemeral: keep the Repertoire clean
         except Exception as exc:
