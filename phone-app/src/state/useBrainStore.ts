@@ -13,7 +13,7 @@
  */
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { decodePairing } from "../services/pairing";
+import { decodePairing, cleartextAllowed } from "../services/pairing";
 import { useConnectionStore } from "./useConnectionStore";
 import { useVitalsStore } from "./useVitalsStore";
 import * as demo from "../demo/fixtures";
@@ -230,11 +230,16 @@ async function brainFetch(m: MacMini, path: string, opts: RequestInit = {}): Pro
   const conn = useConnectionStore.getState();
   const o: RequestInit = { ...opts, headers: { ...headers(m), ...(opts.headers as object) } };
   try {
+    // cleartext leaves this app only toward the owner's own network — the
+    // range check Android's network security config can't express (see
+    // plugins/withAndroidLanCleartext.js). URLs are vetted at pairing time;
+    // this re-check keeps a stale/tampered persisted URL from slipping out.
+    if (!cleartextAllowed(m.url)) throw new Error("cleartext to a non-LAN host refused: " + m.url);
     const r = await fetch(m.url + path, o);
     conn.noteLan();
     return r;
   } catch (e) {
-    if (m.relayUrl) {
+    if (m.relayUrl && cleartextAllowed(m.relayUrl)) {
       try {
         const r = await fetch(m.relayUrl + path, o);
         conn.noteRelay();
@@ -408,6 +413,11 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   pairFromCode: (code) => {
     const b = decodePairing(code);
+    // policy gate: plain-HTTP URLs must point at the owner's own network
+    // (HTTPS may go anywhere). A public cleartext Brain URL refuses to pair;
+    // a bad relay is dropped without costing the LAN pairing.
+    if (b.brainUrl && !cleartextAllowed(b.brainUrl)) b.brainUrl = "";
+    if (b.relayUrl && !cleartextAllowed(b.relayUrl)) b.relayUrl = "";
     if (b.brainUrl) {
       set({ macMini: { connected: true, url: b.brainUrl, token: b.token, relayUrl: b.relayUrl } });
     }
@@ -799,6 +809,14 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       if (raw) {
         const snap = JSON.parse(raw);
         set({ ...snap, hydrated: true });
+        // re-vet persisted URLs against the cleartext policy (they were vetted
+        // at pairing time; storage predating the gate or edited by hand isn't)
+        const stored = get().macMini;
+        if (stored.url && !cleartextAllowed(stored.url)) {
+          set({ macMini: { connected: false, url: "", token: "", relayUrl: "" } });
+        } else if (stored.relayUrl && !cleartextAllowed(stored.relayUrl)) {
+          set({ macMini: { ...stored, relayUrl: "" } });
+        }
         // settle the connection pill (and drain any outbox) right away
         const m = get().macMini;
         if (m.connected && m.url) {

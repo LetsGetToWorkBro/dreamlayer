@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { colors, platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { space, radius } from "../theme/spacing";
+import { hardShadow } from "../theme/shadow";
 import { useEntrance } from "../anim";
 import { Pinstripe } from "./Pinstripe";
 import { Tappable } from "./Tappable";
@@ -78,11 +79,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: platinum.frame,
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 2, height: 3 },
-    shadowOpacity: 0.34,
-    shadowRadius: 0,
-    elevation: 4,
+    ...hardShadow(2, 3, 0.34),
   },
   close: box,
   zoom: box,

@@ -19,6 +19,7 @@ import {
   type ViewStyle, type StyleProp,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
+import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
 import { colors } from "../theme/colors";
 
 export type JunoState = "idle" | "thinking" | "success";
@@ -91,6 +92,24 @@ export function Juno({
       {/* Juno herself — the animated clip, gently floating. Still poster under
           reduce-motion. */}
       <Animated.View style={{ transform: [{ translateY }], ...(glow || {}) }}>
+        {/* Android can't render the iOS layer glow (shadow* is a no-op and a
+            boxShadow would hug her rectangle, not her). A radial bloom behind
+            the clip carries the same steady, state-tinted light, and floats
+            with her because it lives inside the same translated view. */}
+        {Platform.OS === "android" ? (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <Svg width={width} height={h}>
+              <Defs>
+                <RadialGradient id="junoBloom" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0%" stopColor={aura} stopOpacity={state === "idle" ? 0.28 : 0.5} />
+                  <Stop offset="65%" stopColor={aura} stopOpacity={(state === "idle" ? 0.28 : 0.5) * 0.35} />
+                  <Stop offset="100%" stopColor={aura} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Ellipse cx={width / 2} cy={h / 2} rx={width / 2} ry={h / 2} fill="url(#junoBloom)" />
+            </Svg>
+          </View>
+        ) : null}
         {reduce
           ? <RNImage source={STILL} accessibilityLabel="Juno, the DreamLayer assistant" resizeMode="contain" style={{ width, height: h }} />
           : <ExpoImage source={ANIM} accessibilityLabel="Juno, the DreamLayer assistant" contentFit="contain" autoplay style={{ width, height: h }} />}

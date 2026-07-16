@@ -5,6 +5,7 @@ import { useBrainStore } from "../../state/useBrainStore";
 import { colors, platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { space, radius } from "../theme/spacing";
+import { hardShadow } from "../theme/shadow";
 import { Tappable } from "./Tappable";
 import { t } from "../../i18n";
 
@@ -45,11 +46,7 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: space.md,
     marginBottom: space.md,
-    shadowColor: "#000000",
-    shadowOffset: { width: 1, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 0,
-    elevation: 3,
+    ...hardShadow(1, 2, 0.3),
   },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accentAttention },
   text: { ...typography.caption, color: "#222222", opacity: 1 },

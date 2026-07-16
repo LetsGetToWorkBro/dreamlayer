@@ -28,3 +28,14 @@ jobs:
         run: npm run typecheck
       - name: Unit tests (stores, pairing codec, haptic vocabulary)
         run: npm test -- --ci
+      # The privacy contract, enforced: prebuild the Android project and fail
+      # if the merged manifest gains a permission off the allowlist, loses the
+      # LAN-scoped network security config, or grows a blanket cleartext flag.
+      - name: Android manifest permission audit
+        run: |
+          npx expo prebuild --platform android --no-install
+          node scripts/audit-android-permissions.mjs
+      # The Play listing sources must keep generating a valid supply tree
+      # (length limits are hard failures, same as a type error).
+      - name: Play listing limits
+        run: node scripts/build-play-metadata.mjs

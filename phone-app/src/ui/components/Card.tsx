@@ -6,6 +6,7 @@ import {
 import { colors, platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
+import { hardShadow } from "../theme/shadow";
 import { useEntrance } from "../anim";
 import { motion } from "../theme/motion";
 import { Tappable } from "./Tappable";
@@ -140,11 +141,7 @@ const s = StyleSheet.create({
     borderColor: platinum.frame,
     marginBottom: space.md,
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 2, height: 3 },
-    shadowOpacity: 0.34,
-    shadowRadius: 0,
-    elevation: 4,
+    ...hardShadow(2, 3, 0.34),
   },
   tbar: {
     height: 26,

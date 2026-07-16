@@ -72,7 +72,7 @@ export default function Now() {
       setBrief(b.text);
       if (!first) {
         playListen(); // Juno: "Listen!" — a fresh brief just landed
-        pushLocal(t("now.morningBrief"), b.text);
+        pushLocal(t("now.morningBrief"), b.text, "brief");
       }
     };
     pull();

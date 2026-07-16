@@ -20,6 +20,9 @@ module.exports = {
       moduleNameMapper: {
         "^@react-native-async-storage/async-storage$":
           "<rootDir>/src/testing/mocks/async-storage.ts",
+        // sound.ts statically require()s its earcon clips (Metro needs that);
+        // node just needs the requires not to explode
+        "\\.(mp3|wav|ttf|png|webp)$": "<rootDir>/src/testing/mocks/asset.ts",
       },
       transform: {
         "^.+\\.tsx?$": ["ts-jest", { tsconfig: { jsx: "react", esModuleInterop: true } }],

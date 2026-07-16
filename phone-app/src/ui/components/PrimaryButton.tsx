@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
+import { hardShadow } from "../theme/shadow";
 import { Tappable } from "./Tappable";
 
 type Props = { label: string; onPress: () => void; accent?: string; style?: ViewStyle };
@@ -46,11 +47,7 @@ const s = StyleSheet.create({
     borderWidth: 2,
     borderColor: platinum.frame,
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 1, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 0,
-    elevation: 4,
+    ...hardShadow(1, 2, 0.3),
   },
   fill: {
     paddingVertical: space.md,

@@ -57,7 +57,7 @@ export default function Messages() {
     if (!firstLoad.current) {
       for (const m of incoming.filter((m) => (m.ts || 0) > lastSeen.current)) {
         const on = m.channel === "email" ? notifyEmails : notifyTexts;
-        if (on) pushLocal(m.who, m.subject ? `${m.subject} — ${m.text}` : m.text);
+        if (on) pushLocal(m.who, m.subject ? `${m.subject} — ${m.text}` : m.text, "messages");
       }
     }
     lastSeen.current = Math.max(lastSeen.current, newest);

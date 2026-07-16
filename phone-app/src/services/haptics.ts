@@ -30,6 +30,20 @@ function mod(): any {
   return Haptics;
 }
 
+// Lazy platform probe, same contract as mod(): this module must load in any
+// runtime (node tests, web) where react-native itself may not.
+let _os: string | null = null;
+function platformOS(): string {
+  if (_os == null) {
+    try {
+      _os = require("react-native").Platform?.OS ?? "unknown";
+    } catch {
+      _os = "unknown";
+    }
+  }
+  return _os as string;
+}
+
 /** One beat of a pattern: an impact weight or a notification type. */
 export type Beat =
   | { impact: "light" | "medium" | "heavy"; at: number }
@@ -84,6 +98,20 @@ export const PATTERNS: Record<HapticSignal, Beat[]> = {
   answer_ahead: [],
 };
 
+/**
+ * Android has no Taptic notification glyphs: expo-haptics renders
+ * notificationAsync there as long waveform buzzes — a pocket pager, exactly
+ * what the vocabulary rules forbid. So on Android each notify type is spoken
+ * with the clean predefined click effects instead, shaped to echo the iOS
+ * curves (success rises, warning firms up, error is a heavy double). All
+ * composites respect the ≤400 ms pocket rule.
+ */
+export const ANDROID_NOTIFY: Record<"success" | "warning" | "error", Beat[]> = {
+  success: [{ impact: "light", at: 0 }, { impact: "medium", at: 90 }],
+  warning: [{ impact: "medium", at: 0 }, { impact: "heavy", at: 120 }],
+  error:   [{ impact: "heavy", at: 0 }, { impact: "heavy", at: 140 }],
+};
+
 function fire(beat: Beat): void {
   const h = mod();
   if (!h) return;
@@ -93,6 +121,11 @@ function fire(beat: Beat): void {
                       medium: h.ImpactFeedbackStyle?.Medium,
                       heavy: h.ImpactFeedbackStyle?.Heavy }[beat.impact];
       h.impactAsync?.(style);
+    } else if (platformOS() === "android") {
+      for (const b of ANDROID_NOTIFY[beat.notify] ?? []) {
+        if (b.at === 0) fire(b);
+        else setTimeout(() => fire(b), b.at);
+      }
     } else {
       const type = { success: h.NotificationFeedbackType?.Success,
                      warning: h.NotificationFeedbackType?.Warning,
