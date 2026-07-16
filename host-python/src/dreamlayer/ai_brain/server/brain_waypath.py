@@ -10,6 +10,8 @@ from ._brain_host import BrainHost
 import json
 import os
 
+from .store import replace_atomic
+
 
 class WaypathOps(BrainHost):
     def _load_waypath(self) -> None:
@@ -43,7 +45,8 @@ class WaypathOps(BrainHost):
             with self._store_lock:
                 tmp = self.cfg_dir / f"waypath.json.{os.getpid()}.tmp"
                 tmp.write_text(payload)
-                os.replace(tmp, self.cfg_dir / "waypath.json")
+                # retries on Windows while a reader holds the store open
+                replace_atomic(tmp, self.cfg_dir / "waypath.json")
         except Exception:
             pass
 

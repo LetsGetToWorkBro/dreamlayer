@@ -8,6 +8,7 @@ semantics, and utf-8 indexing regardless of the locale codepage.
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from dreamlayer.logging_setup import configure_logging
@@ -127,6 +128,40 @@ def test_brain_server_reuse_address_is_posix_only(tmp_path):
         assert srv.allow_reuse_address == (os.name != "nt")
     finally:
         srv.server_close()
+
+
+# -- atomic store writes survive Windows share-mode contention -------------------
+
+def test_replace_atomic_retries_through_reader_contention(tmp_path, monkeypatch):
+    # On Windows, os.replace raises PermissionError while a reader holds the
+    # destination open (no FILE_SHARE_DELETE). Caught live by the Windows CI
+    # leg: the first such error killed a writer thread and lost every later
+    # write. The store must ride out the transient and land the write.
+    from dreamlayer.ai_brain.server import store as st
+    src = tmp_path / "a.tmp"; src.write_text("new")
+    dst = tmp_path / "a.json"; dst.write_text("old")
+    real_replace, tries = os.replace, []
+
+    def flaky(a, b):
+        tries.append(1)
+        if len(tries) < 3:                    # reader still has it open…
+            raise PermissionError(5, "Access is denied")
+        real_replace(a, b)                    # …then it lets go
+    monkeypatch.setattr(st.os, "replace", flaky)
+    st.replace_atomic(src, dst, delay=0.001)
+    assert dst.read_text() == "new" and len(tries) == 3
+
+
+def test_replace_atomic_fails_loudly_when_never_released(tmp_path, monkeypatch):
+    from dreamlayer.ai_brain.server import store as st
+    import pytest
+    src = tmp_path / "a.tmp"; src.write_text("new")
+
+    def always_denied(a, b):
+        raise PermissionError(5, "Access is denied")
+    monkeypatch.setattr(st.os, "replace", always_denied)
+    with pytest.raises(PermissionError):      # a real ACL problem still surfaces
+        st.replace_atomic(src, tmp_path / "a.json", attempts=3, delay=0.001)
 
 
 # -- indexing is utf-8 regardless of the locale codepage -------------------------

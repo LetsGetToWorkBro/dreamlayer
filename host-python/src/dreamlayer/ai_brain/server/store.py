@@ -7,6 +7,7 @@ inspect, back up, or hand-edit.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -16,6 +17,27 @@ from typing import Optional
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
+
+
+def replace_atomic(src, dst, attempts: int = 40, delay: float = 0.025) -> None:
+    """os.replace with a bounded retry for Windows.
+
+    POSIX rename is atomic and never takes the retry path. On Windows,
+    replacing a file that a reader momentarily holds open raises
+    PermissionError (Python's open() doesn't request FILE_SHARE_DELETE) — a
+    transient condition here, because every store reader opens, reads, and
+    closes. Caught by the Windows CI leg: under a reader/writer storm the
+    first PermissionError killed the writing thread and lost every later
+    write. Re-raises after ~1s of retries so a real permission problem still
+    fails loudly instead of spinning."""
+    for i in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(delay)
 
 
 def _is_allowed_root(path: str) -> bool:

@@ -43,7 +43,7 @@ import time
 log = logging.getLogger("dreamlayer.ai_brain.server")
 
 from ..schema import Answer
-from .store import BrainConfig, QueryHistory, ActivityLog
+from .store import BrainConfig, QueryHistory, ActivityLog, replace_atomic
 from .index import FileIndex
 from .backends import OllamaBackend, make_synthesizer, vision_answer, probe_ollama
 from .panel import render_panel
@@ -661,12 +661,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
     def _save_json(self, name: str, obj) -> None:
         """Atomically write a cfg_dir JSON store (temp + os.replace) under the
         store lock, so a concurrent read can never see a half-written file and
-        two writers can never interleave."""
+        two writers can never interleave. The replace retries briefly on
+        Windows, where a concurrent reader holding the store open makes
+        os.replace raise PermissionError (see store.replace_atomic)."""
         with self._store_lock:
             p = self.cfg_dir / name
             tmp = p.with_suffix(p.suffix + ".tmp")
             tmp.write_text(json.dumps(obj))
-            os.replace(tmp, p)
+            replace_atomic(tmp, p)
 
     def saga_record(self, event: str, count: int | None = None) -> list:
         """Advance the Saga profile for an ecosystem event and unlock any badges
