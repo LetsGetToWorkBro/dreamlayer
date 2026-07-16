@@ -1,0 +1,20 @@
+DreamLayer è uno strato di memoria per il mondo reale. Ricorda in silenzio ciò che dimenticheresti — la promessa fatta, la persona appena conosciuta, dove hai lasciato la bici — e te lo restituisce nell'istante in cui ti serve. Privato per architettura, e tuo da eseguire.
+
+COSA RICORDA PER TE
+• Promesse e impegni: "mandare il contratto a Marcus entro venerdì", prima che ti sfugga.
+• Persone: nomi, come li conosci, di cosa avete parlato e chi deve cosa.
+• Luoghi e oggetti: dove hai parcheggiato, cosa hai lasciato, il bar che accetta solo contanti.
+• Il tuo riepilogo del mattino: le poche cose della giornata che contano davvero, in un colpo d'occhio.
+• Messaggi, a mani libere: leggi SMS ed email sugli occhiali e rispondi con un tocco. Nulla parte senza il tuo consenso.
+
+PRIVATO PER ARCHITETTURA
+La tua memoria vive sui tuoi dispositivi, non sui nostri server. Nessun account, nessun tracciamento. L'IA nel cloud è disattivata per impostazione predefinita e del tutto opzionale: solo allora il testo di una richiesta raggiunge il provider che scegli. Attiva la modalità Incognito e nulla lascia la tua rete locale. Puoi cancellare tutto quando vuoi.
+
+COME FUNZIONA
+Il telefono è il tuo hub. Abbina gli occhiali Brilliant Labs Halo per catturare il mondo a mani libere e, se vuoi, collega un Mac sempre acceso come "Cervello" per un modello locale più potente e risposte dai tuoi file e dalla tua posta.
+
+PROVALO SENZA HARDWARE
+Ancora senza occhiali? Attiva la modalità Demo (dal benvenuto o nelle Impostazioni) per esplorare tutta l'app con dati di esempio.
+
+UNA NOTA DI ONESTÀ
+DreamLayer debutta sui Brilliant Labs Halo, ancora in arrivo. Il software è già costruito e funzionante, e diciamo chiaramente dove si inserisce l'hardware. Tutto ciò che vedi nell'app è il prodotto reale.
