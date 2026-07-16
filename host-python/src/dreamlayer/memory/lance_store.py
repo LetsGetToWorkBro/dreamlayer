@@ -25,7 +25,10 @@ class LanceStore:
         self.db = db
         self.embedder = embedder or MockEmbeddingProvider()
         self._fallback = VectorStore(db, embedder=self.embedder)
-        self._uri = uri or "/tmp/dreamlayer-lance"
+        import os
+        import tempfile
+        # tempfile, not a literal /tmp — Windows has no /tmp
+        self._uri = uri or os.path.join(tempfile.gettempdir(), "dreamlayer-lance")
         self._table = table
 
     def search(self, query: str, kind=None, top_k: int = 3):

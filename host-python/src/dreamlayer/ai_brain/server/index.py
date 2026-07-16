@@ -108,7 +108,10 @@ class FileIndex:
                 try:
                     if path.stat().st_size > cap:
                         continue
-                    text = path.read_text(errors="ignore")
+                    # explicit utf-8: the locale default is utf-8 on
+                    # macOS/Linux but cp1252 on Windows, which would silently
+                    # mangle every non-ASCII note there
+                    text = path.read_text(encoding="utf-8", errors="ignore")
                 except OSError:
                     continue
                 for p in _passages(text):

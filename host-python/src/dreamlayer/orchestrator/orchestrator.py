@@ -899,11 +899,10 @@ class Orchestrator(
         """Build a timer / interval / clock and deploy it straight to the glasses
         stage over the bridge — no Brain, no vault. This is why "set a timer"
         works with just the hub and glasses. A clock time-query just answers."""
-        import time as _t
         from ..reality_compiler.v2 import native, transport
         a = args or {}
         if intent == "clock" and a.get("mode") == "time":
-            return {"intent": "clock", "ok": True, "say": _t.strftime("It's %-I:%M %p.")}
+            return {"intent": "clock", "ok": True, "say": f"It's {native.clock12()}."}
         if not self.privacy.allow_capture():
             return {"intent": intent, "ok": False, "say": "Not while you're incognito."}
         fig = None
@@ -932,7 +931,7 @@ class Orchestrator(
         self.bridge.send_raw(transport.put_envelope(fig))
         self.bridge.send_raw(transport.swap_envelope(fig.id))
         if intent == "clock":
-            self.bridge.send_raw(transport.text_envelope(fig.id, _t.strftime("%-I:%M %p")))
+            self.bridge.send_raw(transport.text_envelope(fig.id, native.clock12()))
         self._active_figment = fig.id
         return {"intent": intent, "ok": True, "say": say, "figment_id": fig.id}
 

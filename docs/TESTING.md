@@ -1,12 +1,12 @@
-# Testing DreamLayer — the Mac Brain + the phone app
+# Testing DreamLayer — the Brain + the phone app
 
 This is the hands-on guide for trying DreamLayer end to end: the **Brain**
-(the software that runs on your Mac / Mac mini) and the **phone app** that
-pairs to it. Neither needs the glasses to test — both run and demo on their
-own.
+(the software that runs on your Mac, Mac mini, or Windows PC) and the **phone
+app** that pairs to it. Neither needs the glasses to test — both run and demo
+on their own.
 
 > **TL;DR**
-> - **Brain:** `cd host-python && pip install -e . && python -m dreamlayer.ai_brain.server --token rune-birch` → open the printed URL.
+> - **Brain:** `cd host-python && pip install -e . && python -m dreamlayer.ai_brain.server --token rune-birch` → open the printed URL. (Any OS — macOS, Windows, Linux.)
 > - **Phone:** `cd phone-app && npm install && npx expo start` → scan the QR with Expo Go.
 > - **Pair them:** Brain panel → *Pair a phone* → copy code → phone *Brain* tab → *Pair a device* → paste.
 
@@ -99,6 +99,57 @@ python scripts/run_demo_brain_app.py
 
 ---
 
+## Part 1½ — The Windows Brain
+
+The same engine ships as a first-class **Windows system-tray app** — same
+panel, same pairing, same answers. Two ways to run it:
+
+### Install the app (the double-click path)
+
+1. Download `DreamLayer-Setup.exe` (a GitHub Release, or the
+   `DreamLayer-windows` artifact from **Actions → Build Windows app**).
+2. Double-click it. An unsigned build trips **Defender SmartScreen** — click
+   *More info → Run anyway*. The installer is per-user (no admin prompt) and
+   offers "Start DreamLayer when you sign in."
+3. Launch DreamLayer. **Allow it on private networks** when the Windows
+   Firewall asks — that's what lets the phone reach the panel on `:7777`.
+4. A DreamLayer dot appears in the system tray (green = healthy). The menu is
+   the same as the Mac menu bar: **Open panel** (a native window, or your
+   browser as fallback), **Sync now**, **Incognito**, status, **Quit**.
+5. On first run the Brain mints a pairing token into `~\.dreamlayer` —
+   nothing else to configure.
+
+### Or run from source (any terminal)
+
+```powershell
+cd dreamlayer
+py -3.11 -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -e .\host-python
+python -m dreamlayer.ai_brain.server --token rune-birch
+```
+
+Open the printed URL — the identical Platinum panel. The tray app alone:
+`pip install pystray pywebview`, then
+`python -m dreamlayer.ai_brain.tray_windows` (server already running), and
+`--install-login` / `--uninstall-login` manage the start-at-login registry
+entry.
+
+### What to test on Windows
+
+1. **Add a folder + ask** — exactly as on the Mac (keyword mode needs zero
+   setup; install [Ollama](OLLAMA_SETUP.md) for written answers).
+2. **Pair the phone** — panel → *Pair a phone* → same code flow as Part 2c.
+   Phone and PC must share a Wi-Fi network.
+3. **Incognito from the tray** — flips `network_mode` just like the Mac menu
+   bar: cloud forced off, URL calendar feeds stop fetching, dot goes dark.
+4. **Honest capabilities** — the panel says exactly what a Windows Brain can
+   read: your folders, **Thunderbird** mail (if present, opt-in), and
+   **.ics calendar files** dropped in `~\.dreamlayer\calendars` (or feed URLs
+   in the config). iMessage / macOS Contacts / macOS Reminders don't exist on
+   Windows, and the panel reports that instead of pretending.
+
+---
+
 ## Part 2 — The phone app
 
 Expo/React Native. You run it with Expo Go on your own phone — no Xcode or
@@ -183,4 +234,7 @@ cd phone-app && npm install && npm test && npx tsc --noEmit
 ```
 
 The host suite (3,022 tests) covers the Brain server, the router/switches, the
-pairing codec, and every lens.
+pairing codec, and every lens. CI runs it all on Linux plus a
+**windows-latest leg** (the appliance cores, Brain server, indexer, and
+Windows sources — see `.github/workflows/pytest.yml`), so a Windows
+regression fails CI, not users.
