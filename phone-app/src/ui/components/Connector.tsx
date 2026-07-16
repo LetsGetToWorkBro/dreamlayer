@@ -80,7 +80,8 @@ export function Bullet({ children, muted }: { children: React.ReactNode; muted?:
 }
 
 /** A beveled push button for "Connect" / "Pair" affordances. Solid teal for a
- * primary action; `ghost` for a plain platinum push button. */
+ * primary action; `ghost` for a plain platinum push button. Presses IN like a
+ * real Platinum button — dark face, white label, highlight bevel gone. */
 export function PillButton({
   label,
   onPress,
@@ -93,21 +94,32 @@ export function PillButton({
   ghost?: boolean;
 }) {
   return (
-    <Tappable
-      onPress={onPress}
-      scaleTo={0.97}
-      style={[s.pill, ghost ? { backgroundColor: platinum.face } : { backgroundColor: accent }]}
-    >
-      <View style={s.pillBevel} pointerEvents="none" />
-      <Text
-        style={[
-          typography.title,
-          s.pillLabel,
-          { color: ghost ? platinum.ink : platinum.well },
-        ]}
-      >
-        {label}
-      </Text>
+    <Tappable onPress={onPress} scaleTo={0.985} style={s.pill}>
+      {(pressed) => (
+        <>
+          <View
+            pointerEvents="none"
+            style={[
+              s.pillFill,
+              {
+                backgroundColor: pressed
+                  ? ghost ? "#6E6E6E" : "#06392C"
+                  : ghost ? platinum.face : accent,
+              },
+            ]}
+          />
+          {!pressed && <View style={s.pillBevel} pointerEvents="none" />}
+          <Text
+            style={[
+              typography.title,
+              s.pillLabel,
+              { color: pressed ? "#FFFFFF" : ghost ? platinum.ink : platinum.well },
+            ]}
+          >
+            {label}
+          </Text>
+        </>
+      )}
     </Tappable>
   );
 }
@@ -137,6 +149,14 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
     overflow: "hidden",
+  },
+  // the face color lives on its own layer so the press can swap it
+  pillFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   pillBevel: {
     position: "absolute",

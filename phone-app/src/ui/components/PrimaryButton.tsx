@@ -11,21 +11,30 @@ type Props = { label: string; onPress: () => void; accent?: string; style?: View
  * PrimaryButton — the Mac OS 8.1 default push button. A beveled rectangle with a
  * bold black ring (the "this is the default action" cue), a top-lit gradient
  * face, and a Chicago label. The default action wears the brand teal;
- * `accent="attention"` swaps it for coral. Tappable still gives the press its
- * scale + haptic tick.
+ * `accent="attention"` swaps it for coral. While held it presses IN the way a
+ * real Platinum button does — the face goes solid dark, the label flips white,
+ * and the highlight bevel disappears (the site's `.pbtn:active`).
  */
 export function PrimaryButton({ label, onPress, accent, style }: Props) {
   const attention = accent === "attention";
   const stops: [string, string] = attention
     ? ["#E8846F", "#B3402E"]
     : ["#49E8BC", "#12A588"];
+  const down = attention ? "#8E2F1F" : "#0B6B52";
   const labelColor = attention ? "#2A0B06" : "#00251C";
   return (
-    <Tappable onPress={onPress} scaleTo={0.97} style={[s.ring, style]}>
-      <LinearGradient colors={stops} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={s.fill}>
-        <View style={s.bevel} pointerEvents="none" />
-        <Text style={[typography.title, s.label, { color: labelColor }]}>{label}</Text>
-      </LinearGradient>
+    <Tappable onPress={onPress} scaleTo={0.985} style={[s.ring, style]}>
+      {(pressed) => (
+        <LinearGradient
+          colors={pressed ? [down, down] : stops}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={s.fill}
+        >
+          {!pressed && <View style={s.bevel} pointerEvents="none" />}
+          <Text style={[typography.title, s.label, { color: pressed ? "#FFFFFF" : labelColor }]}>{label}</Text>
+        </LinearGradient>
+      )}
     </Tappable>
   );
 }

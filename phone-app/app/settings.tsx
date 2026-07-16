@@ -8,6 +8,7 @@ import { colors, platinum } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { CineBackdrop } from "../src/ui/components/CineBackdrop";
+import { MenuBar } from "../src/ui/components/MenuBar";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { t } from "../src/i18n";
 
@@ -65,6 +66,7 @@ export default function Settings() {
     <View style={s.root}>
       <CineBackdrop />
       <SafeAreaView style={s.safe}>
+      <MenuBar />
       <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
       <View style={s.headWrap}>
         <ScreenHeader title="Preferences" eyebrow="Brain" />

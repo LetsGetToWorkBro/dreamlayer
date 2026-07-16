@@ -8,6 +8,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { HaloMirror } from "../src/ui/components/HaloMirror";
 import { StatusPill } from "../src/ui/components/StatusPill";
+import { Card } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
 import { useEntrance } from "../src/ui/anim";
 import { colors, platinum } from "../src/ui/theme/colors";
@@ -166,98 +167,85 @@ export default function Now() {
       </View>
 
       {brief ? (
-        <View style={s.briefCard}>
-          <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: space.xs }]}>{t("now.morningBrief")}</Text>
+        <Card title={t("now.morningBrief")}>
           <Text style={[typography.body, { color: colors.textPrimary }]}>{brief}</Text>
           <Tappable onPress={() => router.push("/brief")} style={{ marginTop: space.md }}>
             <Text style={[typography.caption, { color: colors.accentMemory }]}>{t("now.readFull")}</Text>
           </Tappable>
-        </View>
+        </Card>
       ) : null}
 
-      {/* the day's agenda — surfaced from the calendar engine when connected */}
+      {/* the day's agenda — a real Platinum window (tap the bar to WindowShade) */}
       {macConnected ? (
-        <>
-          <View style={s.evHead}>
-            <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.upcoming")}</Text>
-            <Tappable onPress={syncCalendar}>
-              <Text style={[typography.caption, { color: colors.accentMemory }]}>
-                {syncing ? t("brain.syncing") : t("brain.syncCalendar")}
+        <Card
+          title={t("brain.upcoming")}
+          titleRight={
+            <Tappable onPress={syncCalendar} haptic={false} style={s.barChip}>
+              <Text style={[typography.caption, { color: colors.accentMemory, opacity: 1 }]}>
+                {syncing ? "…" : "Sync"}
               </Text>
             </Tappable>
-          </View>
-          <View style={s.panel}>
-            {events.length === 0 ? (
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.noEvents")}</Text>
-            ) : (
-              events.map((e, i) => (
-                <View key={i} style={s.evRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[typography.body, { color: colors.textPrimary }]}>
-                      {e.title}
-                      {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || t("brain.calendar"))}</Text> : null}
-                    </Text>
-                  </View>
-                  <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                    {new Date(e.ts * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+          }
+        >
+          {events.length === 0 ? (
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.noEvents")}</Text>
+          ) : (
+            events.map((e, i) => (
+              <View key={i} style={s.evRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.body, { color: colors.textPrimary }]}>
+                    {e.title}
+                    {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || t("brain.calendar"))}</Text> : null}
                   </Text>
                 </View>
-              ))
-            )}
-            <View style={s.evAdd}>
-              <TextInput
-                value={evTitle}
-                onChangeText={setEvTitle}
-                placeholder={t("brain.addEventPlaceholder")}
-                placeholderTextColor={colors.textSecondary}
-                style={s.voiceInput}
-                onSubmitEditing={addEvent}
-              />
-              <Tappable onPress={addEvent} style={s.voiceBtn} accessibilityLabel={t("brain.add")}>
-                <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>＋</Text>
-              </Tappable>
-            </View>
-          </View>
-        </>
-      ) : null}
-
-      {/* recent memories — a peek into the Memories tab */}
-      {recent.length ? (
-        <>
-          <View style={s.evHead}>
-            <Text style={[typography.eyebrow, s.eyebrow]}>Recent memories</Text>
-            <Tappable onPress={() => router.push("/memories")}>
-              <Text style={[typography.caption, { color: colors.accentMemory }]}>See all</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  {new Date(e.ts * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                </Text>
+              </View>
+            ))
+          )}
+          <View style={s.evAdd}>
+            <TextInput
+              value={evTitle}
+              onChangeText={setEvTitle}
+              placeholder={t("brain.addEventPlaceholder")}
+              placeholderTextColor={colors.textSecondary}
+              style={s.voiceInput}
+              onSubmitEditing={addEvent}
+            />
+            <Tappable onPress={addEvent} style={s.voiceBtn} accessibilityLabel={t("brain.add")}>
+              <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>＋</Text>
             </Tappable>
           </View>
-          <View style={s.panel}>
-            {recent.map((m, i) => (
-              <View key={m.id} style={[s.memRow, i === recent.length - 1 ? s.memRowLast : null]}>
-                <View style={s.memTag} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[typography.body, { color: colors.textPrimary }]} numberOfLines={2}>{m.summary}</Text>
-                  <Text style={[typography.caption, { color: colors.textSecondary }]}>{m.kind}{m.createdAt ? "  ·  " + m.createdAt : ""}</Text>
-                </View>
+        </Card>
+      ) : null}
+
+      {/* recent memories — a peek into the Memories tab, in its own window */}
+      {recent.length ? (
+        <Card
+          title="Recent memories"
+          titleRight={
+            <Tappable onPress={() => router.push("/memories")} haptic={false} style={s.barChip}>
+              <Text style={[typography.caption, { color: colors.accentMemory, opacity: 1 }]}>See all</Text>
+            </Tappable>
+          }
+        >
+          {recent.map((m, i) => (
+            <View key={m.id} style={[s.memRow, i === recent.length - 1 ? s.memRowLast : null]}>
+              <View style={s.memTag} />
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.body, { color: colors.textPrimary }]} numberOfLines={2}>{m.summary}</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{m.kind}{m.createdAt ? "  ·  " + m.createdAt : ""}</Text>
               </View>
-            ))}
-          </View>
-        </>
+            </View>
+          ))}
+        </Card>
       ) : null}
 
       <View style={{ height: space.xl }} />
     </Screen>
   );
 }
-
-const panel = {
-  backgroundColor: platinum.face,
-  borderRadius: radius.sm,
-  borderTopColor: platinum.hi,
-  borderLeftColor: platinum.hi,
-  borderBottomColor: platinum.sh,
-  borderRightColor: platinum.sh,
-  borderWidth: 1.5,
-} as const;
 
 const s = StyleSheet.create({
   stage: { minHeight: 260, alignItems: "center", justifyContent: "center", marginBottom: space.lg },
@@ -270,7 +258,6 @@ const s = StyleSheet.create({
     paddingVertical: space.sm,
     paddingHorizontal: space.lg,
   },
-  eyebrow: { color: colors.accentMemory },
   // quick-action tile row
   quick: { flexDirection: "row", gap: space.sm, marginBottom: space.lg },
   quickBtn: {
@@ -285,7 +272,15 @@ const s = StyleSheet.create({
     borderBottomColor: platinum.sh,
     borderRightColor: platinum.sh,
   },
-  briefCard: { ...panel, padding: space.lg, marginBottom: space.md },
+  // a small platinum chip so a title-bar action stays legible over pinstripes
+  barChip: {
+    backgroundColor: platinum.face,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: platinum.sh,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
   voiceRow: { flexDirection: "row", gap: space.sm, marginBottom: space.sm },
   voiceInput: {
     flex: 1,
@@ -307,8 +302,6 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  panel: { ...panel, padding: space.lg, marginBottom: space.md },
-  evHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: space.sm, marginBottom: space.sm },
   evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, gap: 8 },
   evAdd: { flexDirection: "row", gap: space.sm, alignItems: "center", marginTop: space.sm },
   memRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
