@@ -60,7 +60,9 @@ class VectorStore:
         scored = []
         for m in self.db.memories(kind=kind):
             sim = cosine(qv, self._emb_of(m))
-            score = 0.5 * sim + 0.5 * (m.get("confidence") or 0.5)
+            conf = m.get("confidence")
+            conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
+            score = 0.5 * sim + 0.5 * conf
             scored.append((score, m))
         scored.sort(key=lambda x: x[0], reverse=True)
         return scored[:top_k]
