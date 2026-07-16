@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, SafeAreaView, TextInput, StyleSheet } from "react-native";
+import { View, Text, ScrollView, TextInput, StyleSheet } from "react-native";
+// safe-area-context: RN's SafeAreaView is deprecated and a no-op on Android
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/components/Connector";

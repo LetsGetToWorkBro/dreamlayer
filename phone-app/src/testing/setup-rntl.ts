@@ -13,6 +13,12 @@ jest.mock("expo-haptics", () => ({
 // expo-camera: the Look screen degrades to a "no camera here" state under tests
 jest.mock("expo-camera", () => ({}));
 
+// safe-area-context: the official mock (a default export) — provider-less
+// rendering with zero insets
+jest.mock("react-native-safe-area-context", () =>
+  require("react-native-safe-area-context/jest/mock").default
+);
+
 // expo-router pulls a native routing/linking stack we don't need for rendering;
 // stub the surface the screens use. (require() inside the factory — jest.mock
 // factories can't close over module-scope variables.)
@@ -30,6 +36,3 @@ jest.mock("expo-router", () => {
     Stack: Object.assign(({ children }: any) => children, { Screen: () => null }),
   };
 });
-
-// expo-blur: a plain passthrough is fine for a render test
-jest.mock("expo-blur", () => ({ BlurView: ({ children }: any) => children ?? null }));

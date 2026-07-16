@@ -1,23 +1,29 @@
 # DreamLayer — one-command-ish submission (what's automated vs. what only you can do)
 
-Everything that *can* be prepared is prepared. The steps below that need **your Apple account**
-are marked 🔑 — they authenticate as you and/or build a signed binary, which cannot be done from a
-shared/CI Linux box on your behalf. Run them from your Mac.
+Everything that *can* be prepared is prepared, for **both stores**. The steps below that need
+**your Apple or Google account** are marked 🔑 — they authenticate as you and/or build a signed
+binary, which cannot be done from a shared/CI Linux box on your behalf.
 
 ## What's already done (in the repo)
-- Build config: icon, splash, `app.json` (1.0.0 / build 1 / export-compliance), `eas.json`.
+- Build config: icon, splash, `app.json` (1.0.0 / build 1 / versionCode 1, export-compliance,
+  Android manifest diet + LAN-scoped cleartext), `eas.json` (iOS + Android profiles).
 - Demo Mode + privacy policy (`landing/privacy.html`).
-- Listing copy — English (`store/listing.md`) + 8 localized (`store/listing-localized.md`).
-- Screenshots — 6.9" English (`store/screenshots/`) + localized 6.5" (`store/screenshots-6.5/`).
-- App Preview poster (`store/app-preview-poster.png`).
-- Review notes (`store/review-notes.txt`).
-- **fastlane** metadata + screenshots tree (`fastlane/metadata/`, `fastlane/screenshots/`) so the
-  whole listing uploads in one command.
+- Listing copy — English (`store/listing.md`) + 8 localized (`store/listing-localized.md`) +
+  the Play-specific fields (`store/play-listing.md`: short descriptions, Data safety draft,
+  content-rating draft).
+- Screenshots — 6.9" English (`store/screenshots/`) + localized 6.5" (`store/screenshots-6.5/`);
+  Play-legal 2:1 conversions generated into `fastlane/metadata/android/*/images/`.
+- App Preview poster (`store/app-preview-poster.png`) + Play feature graphic
+  (`fastlane/metadata/android/en-US/images/featureGraphic.png`).
+- Review notes (`store/review-notes.txt`, plus the Android note in `store/play-listing.md`).
+- **fastlane** trees for both stores: deliver (`fastlane/metadata/`, `fastlane/screenshots/`)
+  and supply (`fastlane/metadata/android/`), each uploading in one command.
 
-## The submission, start to finish
+## The App Store submission, start to finish
 
 ### 0. 🔑 Deploy the privacy page
-Publish the landing site so `https://dreamlayer.app/privacy.html` resolves (Apple checks it).
+Publish the landing site so `https://dreamlayer.app/privacy.html` resolves (Apple and Google
+both check it).
 
 ### 1. 🔑 Get an App Store Connect API key (once)
 App Store Connect → Users and Access → Integrations → App Store Connect API → **+** →
@@ -67,6 +73,59 @@ Flip `submit_for_review(true)` in `fastlane/Deliverfile` and re-run `fastlane me
 
 ---
 
+## The Google Play submission, start to finish
+
+The same shape as iOS: EAS builds and signs, fastlane pushes the listing, and the handful of
+console questionnaires are pre-drafted so they're copy-paste. Step 0 (privacy page) is shared.
+
+### P1. 🔑 Create the Play Console app record
+- [Play Console](https://play.google.com/console) → **Create app** → name "DreamLayer",
+  default language English (US), App (not game), Free.
+- App content → **Privacy policy** → `https://dreamlayer.app/privacy.html`.
+
+### P2. 🔑 Service account key (once) — the Android `asc_key.json`
+Play Console → Setup → API access → create/link a Google Cloud project → create a
+**service account** with the *Release manager* role, download its JSON key, and save it as
+`phone-app/fastlane/play_key.json` (**gitignored — never commit**). `eas.json`
+(`submit.production.android`) and the fastlane `play_metadata` lane both read that path.
+
+### P3. 🔑 Build the AAB + first upload
+```bash
+cd phone-app
+npm i -g eas-cli && eas login          # your Expo account
+npm run build:android                  # EAS cloud build — EAS creates & stores the
+                                       # upload keystore on first run (say yes)
+```
+Google requires the **first** AAB to be uploaded by hand: Play Console → Testing →
+**Internal testing** → Create release → upload the `.aab` from the EAS build page → save.
+(Opt into **Play App Signing** when asked — EAS's keystore is the upload key.)
+Every build after that is one command: `npm run submit:android` (goes to the internal
+track as a draft release; promote in the console when ready).
+
+### P4. Push the whole Play listing (text + graphics, all 9 locales) — automated
+```bash
+cd phone-app
+fastlane android play_metadata         # regenerates fastlane/metadata/android/ from
+                                       # store/listing*.md + store/play-listing.md, then
+                                       # uploads titles, descriptions, changelogs, the
+                                       # feature graphic and 2:1 screenshots. No binary.
+```
+
+### P5. 🔑 The console questionnaires (copy-paste from the drafts)
+All pre-drafted in `store/play-listing.md`:
+- **Data safety** → "no data collected / no data shared", with the opt-in-cloud nuance
+  pasted into the notes — sourced from `landing/privacy.html`, say so.
+- **Content rating** → Utility, no to everything → Everyone / PEGI 3.
+- **Target audience** → 13+, not "Designed for Families".
+- Ads declaration → **No ads**.
+
+### P6. 🔑 Roll out
+Internal testing → promote the release to **Production** (or straight to a closed track for
+friends first). Respond to any reviewer message with `store/review-notes.txt` + the Android
+note from `store/play-listing.md`.
+
+---
+
 ### Ship listing updates on push (GitHub Actions)
 `.github/workflows/appstore-metadata.yml` runs `fastlane deliver` (metadata + screenshots only —
 never a binary, never submit-for-review) on manual dispatch, and on pushes to `main` that touch
@@ -77,8 +136,8 @@ copy is enough. Add three repo secrets and it's hands-off:
 no-ops. Edit `store/listing.md` → push → the listing updates itself.
 
 ### Why not fully headless here?
-`eas build`/`eas submit` and `fastlane` all authenticate as **you** (Apple ID 2FA or your ASC API
-key) and produce a binary signed with **your** Developer certificate. Those secrets and the paid
-membership are yours; this environment has neither, and publishing is an outward action you should
-drive. The automation above is the closest to "one command" that's safe — your hands-on part is the
-🔑 steps.
+`eas build`/`eas submit` and `fastlane` all authenticate as **you** (Apple ID 2FA, your ASC API
+key, or your Play service account) and produce binaries signed with **your** certificates and
+keystores. Those secrets and the paid memberships are yours; this environment has neither, and
+publishing is an outward action you should drive. The automation above is the closest to "one
+command" that's safe — your hands-on part is the 🔑 steps.

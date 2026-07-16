@@ -60,10 +60,14 @@ class TestJsonFormatter:
             embedding=[0.1, 0.2],   # raw vector PII
             seam="cloud",           # benign, must survive unchanged
         ))
-        # The raw plaintext / raw vector must be absent from the serialised line.
-        assert "Alice" not in line
-        assert "0.1" not in line and "0.2" not in line
+        # The raw plaintext / raw vector must be absent from the serialised
+        # payload. Check it with the ts field stripped: the epoch timestamp's
+        # own digits can legitimately contain "0.1"/"0.2" (e.g. ...60.181),
+        # which is clock noise, not a leak — and made this assertion flaky.
         obj = json.loads(line)
+        scrubbed = json.dumps({k: v for k, v in obj.items() if k != "ts"})
+        assert "Alice" not in scrubbed
+        assert "0.1" not in scrubbed and "0.2" not in scrubbed
         # Sensitive keys are still present as keys, but with a redacted marker.
         assert obj["user_name"] != "Alice"
         assert obj["user_name"].startswith("<redacted")

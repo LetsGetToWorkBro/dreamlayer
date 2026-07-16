@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import {
-  View, Text, SafeAreaView, Animated, Easing,
+  View, Text, Animated, Easing,
   StyleSheet, Dimensions, TouchableOpacity,
 } from "react-native";
+// safe-area-context: RN's SafeAreaView is deprecated and a no-op on Android
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useOnboardingStore } from "../src/state/useOnboardingStore";
 import { useHaloStore }        from "../src/state/useHaloStore";

@@ -199,3 +199,52 @@ export default function Example() {
    reach; "off" states read unmistakably muted.
 5. **The phone breathes with the glasses.** Timings and the HUD palette are
    mirrored, not re-invented — the two screens are one product.
+
+---
+
+## 8. Android notes
+
+One codebase, one design. Android renders the same Platinum, and the handful
+of deliberate per-platform seams are all here — if you add one, add it to this
+list and give it a test in `platform_parity.test.ts` / `android_feel.test.ts`.
+
+- **Hard shadows** ([`src/ui/theme/shadow.ts`](src/ui/theme/shadow.ts)):
+  `shadow*` is iOS-only and `elevation` draws a soft Material blob — wrong for
+  a crisp Mac OS 8.1 offset. `hardShadow()`/`softShadow()` keep the shipped
+  `shadow*` on iOS and draw the identical geometry on Android with `boxShadow`
+  (new-architecture native, RN ≥ 0.76). Never reach for `elevation` for looks.
+- **Juno's glow** ([`Juno.tsx`](src/ui/components/Juno.tsx)): iOS uses a layer
+  shadow that hugs her alpha; Android gets a state-tinted SVG radial bloom in
+  the same floating view. Same light, different brush.
+- **Safe areas**: always `react-native-safe-area-context` — RN's `SafeAreaView`
+  is deprecated and a no-op on Android, where the app is edge-to-edge (SDK 57).
+  The tab strip sizes itself from the reported bottom inset via
+  [`tabBarMetrics`](src/ui/theme/tabBar.ts) (gesture pill vs 3-button nav);
+  iOS keeps the fixed 90/30.
+- **Type metrics**: the whole scale sets `includeFontPadding: false` (a no-op
+  on iOS) so Android measures lines the way iOS does and Chicago sits correctly
+  in its line box.
+- **Haptics** ([`haptics.ts`](src/services/haptics.ts)): Android speaks the
+  notify beats as composed predefined clicks (its `notificationAsync` is a long
+  waveform buzz — the pocket pager the vocabulary forbids). The grammar,
+  patterns, and pack overrides are shared.
+- **Earcons** ([`sound.ts`](src/services/sound.ts)): Android takes *ducking*
+  audio focus once at load — music dips under a cue instead of pausing.
+- **No blur, anywhere**: Platinum chrome is opaque bevels + pinstripes by
+  design, so Android's approximate `expo-blur` never comes up (the dependency
+  is gone).
+- **Back**: hardware/gesture back pops the router history (drill-ins return to
+  the tab you came from; tab roots exit); both modals close via
+  `onRequestClose`. Predictive back stays **off** deliberately: the JS tab
+  navigator can't drive the preview, so the system would show a misleading
+  app-exit zoom on every in-app back.
+- **Networking**: Android blocks cleartext HTTP; the phone↔Brain LAN link is
+  re-enabled by a *scoped* policy — `plugins/withAndroidLanCleartext.js` (the
+  platform half) + `cleartextAllowed()` in
+  [`pairing.ts`](src/services/pairing.ts) (the range check Android XML can't
+  express). CI fails if the manifest ever gains the blanket flag, an
+  un-allowlisted permission, or backups (`scripts/audit-android-permissions.mjs`).
+- **Notification channels** ([`notify.ts`](src/services/notify.ts)): two, named
+  from existing catalog keys (`now.morningBrief`, `tabs.messages`) so system
+  settings read like DreamLayer in all 9 locales; the brief is default
+  importance, messages high. Small icon + teal accent come from `app.json`.

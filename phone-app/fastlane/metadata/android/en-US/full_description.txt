@@ -1,0 +1,20 @@
+DreamLayer is a memory layer for the real world. It quietly remembers what you'd otherwise forget — the promise you made, the person you just met, where you left the bike — and hands it back the instant you need it. Private by architecture, and yours to run.
+
+WHAT IT REMEMBERS FOR YOU
+• Promises & commitments — "send Marcus the lease by Friday," surfaced before it slips.
+• People — names, how you know them, what you talked about, and who owes what.
+• Places & things — where you parked, what you left behind, the café that's cash-only.
+• Your morning brief — the day's few things that actually matter, in one glance.
+• Messages, hands-free — read your texts and mail on your glasses and reply with a tap. Nothing sends without your approval.
+
+PRIVATE BY ARCHITECTURE
+Your memory lives on your own devices, not our servers. There's no account and no tracking. Cloud AI is off by default and strictly opt-in — only then does a request's text reach the provider you choose. Turn on Incognito and nothing leaves your local network at all. You can erase everything at any time.
+
+HOW IT WORKS
+The phone is your hub. Pair the Brilliant Labs Halo glasses to capture the world hands-free, and — optionally — connect an always-on Mac as your "Brain" for a bigger local model and answers drawn from your own files and mail. It's smart, and it stays on your side.
+
+TRY IT WITH NO HARDWARE
+No glasses yet? Turn on Demo Mode (right from the welcome tour, or in Settings) to explore the whole app with sample data — your memories, people, messages, and morning brief — so you can see exactly how it feels.
+
+A NOTE ON HONESTY
+DreamLayer ships first on the Brilliant Labs Halo, which is still ahead of us — the software is built and working today, and we say plainly where the hardware plugs in. Everything you see in the app is the real product.

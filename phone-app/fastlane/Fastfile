@@ -1,7 +1,9 @@
-# DreamLayer — fastlane lanes for App Store Connect.
-# Authenticate with an App Store Connect API key (see SUBMIT.md):
+# DreamLayer — fastlane lanes for App Store Connect and Google Play.
+# iOS authenticates with an App Store Connect API key (see SUBMIT.md):
 #   fastlane metadata api_key_path:./fastlane/asc_key.json
-# The asc_key.json is created once from your ASC API key (.p8 + Key ID + Issuer ID).
+# Android authenticates with a Play service-account key (see SUBMIT.md):
+#   fastlane android play_metadata
+# Both key files are gitignored; neither lane ever touches a binary.
 
 default_platform(:ios)
 
@@ -26,5 +28,27 @@ platform :ios do
   lane :shots do |opts|
     deliver(api_key_path: opts[:api_key_path], skip_binary_upload: true,
             skip_metadata: true, overwrite_screenshots: true, force: true)
+  end
+end
+
+platform :android do
+  desc "Upload Play listing text + graphics for every locale (no binary)"
+  lane :play_metadata do |opts|
+    # regenerate the supply tree from the listing sources first, so editing
+    # store/listing*.md or store/play-listing.md is all it takes
+    sh("node", "../scripts/build-play-metadata.mjs")
+    supply(
+      package_name: "com.letsgettoworkbro.dreamlayer",
+      json_key: opts[:json_key] || "./fastlane/play_key.json",
+      metadata_path: "./fastlane/metadata/android",
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false,
+      # listing-only sync must never flip a release state
+      track: "internal",
+      release_status: "draft"
+    )
   end
 end
