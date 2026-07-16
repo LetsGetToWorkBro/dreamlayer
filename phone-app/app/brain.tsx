@@ -1,25 +1,34 @@
 import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  SafeAreaView,
-  TextInput,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, ScrollView, SafeAreaView, TextInput, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/components/Connector";
 import { QrScanner } from "../src/ui/components/QrScanner";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { CineBackdrop } from "../src/ui/components/CineBackdrop";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
+import { Tappable } from "../src/ui/components/Tappable";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
 import { t } from "../src/i18n";
 import { colors, platinum } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 
+/** A drill-in row: a label + subtitle and a chevron, the iOS way into a
+ * sub-screen (Preferences, Labs). */
+function NavRow({ label, sub, onPress, last }: { label: string; sub?: string; onPress: () => void; last?: boolean }) {
+  return (
+    <Tappable onPress={onPress} style={[s.navRow, last ? s.navRowLast : null]} accessibilityHint="Opens a sub-screen">
+      <View style={{ flex: 1 }}>
+        <Text style={[typography.body, { color: colors.textPrimary }]}>{label}</Text>
+        {sub ? <Text style={[typography.caption, { color: colors.textSecondary }]}>{sub}</Text> : null}
+      </View>
+      <Text style={s.chev}>›</Text>
+    </Tappable>
+  );
+}
+
 export default function Brain() {
+  const router = useRouter();
   const b = useBrainStore();
   useEffect(() => {
     if (!b.hydrated) b.hydrate();
@@ -29,35 +38,6 @@ export default function Brain() {
   const [scanOpen, setScanOpen] = useState(false);
   const [code, setCode] = useState("");
   const [pairMsg, setPairMsg] = useState("");
-  const [q, setQ] = useState("");
-  const [asking, setAsking] = useState(false);
-  const [answer, setAnswer] = useState<{ text: string; tier: string } | null>(null);
-
-  const [events, setEvents] = useState<{ title: string; ts: number; place?: string; source?: string; calendar?: string }[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [activity, setActivity] = useState<{ ts: number; kind: string; text?: string; query?: string }[]>([]);
-  const [evTitle, setEvTitle] = useState("");
-  useEffect(() => {
-    if (b.macMini.connected || b.demoMode) {
-      b.getCalendar().then(setEvents);
-      b.getActivity().then(setActivity);
-    }
-  }, [b.macMini.connected, b.demoMode]);
-
-  const addEvent = async () => {
-    if (!evTitle.trim()) return;
-    // default: one hour from now (a fuller time picker is a later polish)
-    const items = await b.addEvent({ title: evTitle.trim(), ts: Date.now() / 1000 + 3600 });
-    setEvents(items);
-    setEvTitle("");
-  };
-
-  const syncCalendar = async () => {
-    setSyncing(true);
-    const items = await b.syncCalendar();
-    setEvents(items);
-    setSyncing(false);
-  };
 
   const brainKind = b.brainKind();
   const cloudOn = b.effectiveCloud();
@@ -87,22 +67,12 @@ export default function Brain() {
     applyCode(scanned);
   };
 
-  const doAsk = async () => {
-    if (!q.trim()) return;
-    setAsking(true);
-    setAnswer(null);
-    const res = await b.ask(q.trim());
-    setAnswer(res ? { text: res.text, tier: res.tier } : null);
-    setAsking(false);
-  };
-
   return (
     <View style={s.root}>
       <CineBackdrop />
       <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <DemoBanner />
-        {/* header */}
         <ScreenHeader
           eyebrow="DreamLayer"
           title={t("brain.title")}
@@ -197,11 +167,7 @@ export default function Brain() {
         <ConnectorCard title={t("brain.cloud")} accent={colors.accentMemory} on={cloudOn} status={cloudOn ? t("brain.on") : t("brain.off")}>
           <SwitchRow
             label={t("brain.cloudLabel")}
-            sub={
-              b.incognito
-                ? t("brain.cloudHeld")
-                : t("brain.cloudSub")
-            }
+            sub={b.incognito ? t("brain.cloudHeld") : t("brain.cloudSub")}
             value={cloudOn}
             disabled={b.incognito}
             onValueChange={b.setCloud}
@@ -216,7 +182,7 @@ export default function Brain() {
           <Bullet muted>{t("brain.cloudBullet5")}</Bullet>
         </ConnectorCard>
 
-        {/* incognito */}
+        {/* incognito + capture */}
         <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.privacy")}</Text>
         <ConnectorCard title={t("brain.incognito")} accent={colors.accentAttention} on={b.incognito} status={b.incognito ? t("brain.on") : t("brain.off")}>
           <SwitchRow
@@ -237,116 +203,28 @@ export default function Brain() {
           />
         </ConnectorCard>
 
-        {/* recall from the phone */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.askEyebrow")}</Text>
-        <View style={s.askCard}>
-          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 8 }]}>
-            {t("brain.askDesc")}
-          </Text>
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={t("brain.askPlaceholder")}
-            placeholderTextColor={colors.textSecondary}
-            style={s.input}
-            onSubmitEditing={doAsk}
-            returnKeyType="search"
+        {/* the rest of the control center, one tap in */}
+        <Text style={[typography.eyebrow, s.eyebrow]}>More</Text>
+        <View style={s.navPanel}>
+          <NavRow
+            label="Preferences"
+            sub="Assistant, Juno, privacy & data"
+            onPress={() => router.push("/settings")}
           />
-          <PillButton label={t("brain.ask")} onPress={doAsk} />
-          {asking ? <ActivityIndicator color={colors.accentMemory} style={{ marginTop: 14 }} /> : null}
-          {answer ? (
-            <View style={s.answer}>
-              <Text style={[typography.body, { color: colors.textPrimary }]}>{answer.text}</Text>
-              {answer.tier ? (
-                <Text style={[typography.mono, { color: colors.textSecondary, marginTop: 6 }]}>{answer.tier}</Text>
-              ) : null}
-            </View>
-          ) : null}
+          <NavRow
+            label="Labs"
+            sub="Experiments and deeper tools"
+            onPress={() => router.push("/labs")}
+            last
+          />
         </View>
 
-        {/* agenda + activity — surfaced from the engines */}
-        {b.macMini.connected ? (
-          <>
-            <View style={s.evHead}>
-              <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.upcoming")}</Text>
-              <PillButton label={syncing ? t("brain.syncing") : t("brain.syncCalendar")} ghost onPress={syncCalendar} />
-            </View>
-            <View style={s.card}>
-              {events.length === 0 ? (
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.noEvents")}</Text>
-              ) : (
-                events.map((e, i) => (
-                  <View key={i} style={s.evRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[typography.body, { color: colors.textPrimary }]}>
-                        {e.title}
-                        {e.source === "calendar" ? <Text style={{ color: colors.textSecondary }}>{"  · " + (e.calendar || t("brain.calendar"))}</Text> : null}
-                      </Text>
-                    </View>
-                    <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                      {new Date(e.ts * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
-                    </Text>
-                  </View>
-                ))
-              )}
-              <View style={s.evAdd}>
-                <TextInput
-                  value={evTitle}
-                  onChangeText={setEvTitle}
-                  placeholder={t("brain.addEventPlaceholder")}
-                  placeholderTextColor={colors.textSecondary}
-                  style={s.input}
-                  onSubmitEditing={addEvent}
-                />
-                <PillButton label={t("brain.add")} onPress={addEvent} />
-              </View>
-            </View>
-
-            <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.recentActivity")}</Text>
-            <View style={s.card}>
-              {activity.length === 0 ? (
-                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t("brain.nothingYet")}</Text>
-              ) : (
-                activity.slice(0, 8).map((a, i) => (
-                  <View key={i} style={s.actRow}>
-                    <Text style={[typography.caption, { color: colors.accentMemory, width: 78 }]} numberOfLines={1}>
-                      {a.kind}
-                    </Text>
-                    <Text style={[typography.caption, { color: colors.textSecondary, flex: 1 }]} numberOfLines={1}>
-                      {a.query || a.text}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </View>
-          </>
-        ) : null}
-
-        {/* what your brain can do */}
-        <Text style={[typography.eyebrow, s.eyebrow]}>{t("brain.canDo")}</Text>
-        <View style={s.lensGrid}>
-          {LENSES.map((l) => (
-            <View key={l.name} style={s.lens}>
-              <Text style={[typography.body, { color: colors.textPrimary }]}>{l.name}</Text>
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>{t(l.blurbKey)}</Text>
-            </View>
-          ))}
-        </View>
         <View style={{ height: 40 }} />
       </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
-
-const LENSES = [
-  { name: "Lucid Recall", blurbKey: "brain.lucidRecallBlurb" },
-  { name: "Juno", blurbKey: "brain.junoBlurb" },
-  { name: "People", blurbKey: "brain.peopleBlurb" },
-  { name: "Waypath", blurbKey: "brain.waypathBlurb" },
-  { name: "Rosetta & Puente", blurbKey: "brain.rosettaBlurb" },
-  { name: "Prism", blurbKey: "brain.prismBlurb" },
-];
 
 const panel = {
   backgroundColor: platinum.face,
@@ -377,18 +255,14 @@ const s = StyleSheet.create({
     marginTop: 12,
     fontSize: 15,
   },
-  askCard: { ...panel, padding: 18 },
-  answer: {
-    marginTop: 14,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accentMemory,
-    paddingLeft: 12,
+  navPanel: { ...panel, paddingHorizontal: 16 },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#C4C4C4",
   },
-  card: { ...panel, padding: 16 },
-  evHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, gap: 8 },
-  evAdd: { flexDirection: "row", gap: 8, alignItems: "center", marginTop: 8 },
-  actRow: { flexDirection: "row", gap: 10, paddingVertical: 6 },
-  lensGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  lens: { ...panel, width: "47%", padding: 14 },
+  navRowLast: { borderBottomWidth: 0 },
+  chev: { ...typography.title, fontSize: 18, color: platinum.sh, marginLeft: 8 },
 });
