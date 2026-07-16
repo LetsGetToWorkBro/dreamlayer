@@ -41,6 +41,7 @@ panels.innerHTML = '\
   <button class="deskpick" data-pic="pattern"><span class="chk"></span>Platinum Pattern</button>\
   <hr>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer.dmg">Download for Mac <span class="mdim">.dmg</span></a>\
+  <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer-Setup.exe">Download for Windows <span class="mdim">.exe</span></a>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer" target="_blank" rel="noopener">GitHub <span class="mdim">↗</span></a>\
   <a href="https://letsgettoworkbro.github.io/dreamlayer-docs/" target="_blank" rel="noopener">Knowledge Base <span class="mdim">↗</span></a>\
   <hr>\
