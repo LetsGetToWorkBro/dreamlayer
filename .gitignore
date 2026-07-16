@@ -31,3 +31,9 @@ host-python/packaging/windows/dreamlayer.ico
 host-python/packaging/windows/wizard*.bmp
 host-python/packaging/windows/Output/
 host-python/packaging/windows/build/
+
+# generated macOS build art (CI + local builds; see packaging/)
+host-python/packaging/dmg-background*.png
+host-python/packaging/dmg-background.tiff
+host-python/packaging/dreamlayer.icns
+host-python/packaging/DreamLayer.iconset/
