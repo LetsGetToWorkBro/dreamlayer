@@ -33,7 +33,12 @@ var panels = h('<div></div>');
 panels.innerHTML = '\
 <nav class="mpanel" id="pm-dl" aria-label="DreamLayer">\
   <a href="./">The Desktop <span class="mdim">home</span></a>\
-  <button id="pdeskpic">Use Platinum Pattern</button>\
+  <hr>\
+  <div class="mdl-head">Desktop Picture</div>\
+  <button class="deskpick" data-pic="dusk"><span class="chk"></span>Dusk · Juno’s World</button>\
+  <button class="deskpick" data-pic="dawn"><span class="chk"></span>Dawn</button>\
+  <button class="deskpick" data-pic="juno"><span class="chk"></span>The Scene</button>\
+  <button class="deskpick" data-pic="pattern"><span class="chk"></span>Platinum Pattern</button>\
   <hr>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer.dmg">Download for Mac <span class="mdim">.dmg</span></a>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer" target="_blank" rel="noopener">GitHub <span class="mdim">↗</span></a>\
@@ -87,16 +92,23 @@ document.querySelectorAll(".mpanel a").forEach(function(a){
   a.addEventListener("click",function(){ setTimeout(closeMenus,10); });
 });
 
-/* ---------- Desktop Picture toggle ---------- */
+/* ---------- Desktop Picture picker (shared with the landing) ---------- */
 (function(){
-  var btn=document.getElementById("pdeskpic");
-  function apply(on){ document.body.classList.toggle("deskpic",on);
-    if(btn) btn.textContent = on ? "Use Platinum Pattern" : "Use Dreamscape Picture"; }
-  var on=true;
-  try{ on = localStorage.getItem("dldesk")!=="pattern"; }catch(e){}
-  apply(on);
-  if(btn) btn.addEventListener("click",function(){ on=!on;
-    try{ localStorage.setItem("dldesk",on?"pic":"pattern"); }catch(e){} apply(on); });
+  var picks=[].slice.call(document.querySelectorAll(".deskpick"));
+  var VALID={dusk:1,dawn:1,juno:1,pattern:1};
+  function apply(pic){
+    var b=document.body;
+    b.classList.remove("desk-dusk","desk-dawn","desk-juno");
+    b.classList.toggle("deskpic", pic!=="pattern");
+    if(pic!=="pattern") b.classList.add("desk-"+pic);
+    picks.forEach(function(p){ p.querySelector(".chk").textContent = p.dataset.pic===pic ? "✓" : ""; });
+  }
+  var pic="dusk";
+  try{ var s=localStorage.getItem("dldeskpic"); if(s&&VALID[s]) pic=s; }catch(e){}
+  apply(pic);
+  picks.forEach(function(p){ p.addEventListener("click",function(){
+    pic=p.dataset.pic; try{ localStorage.setItem("dldeskpic",pic); }catch(e){} apply(pic);
+  }); });
 })();
 
 /* ---------- clock ---------- */
