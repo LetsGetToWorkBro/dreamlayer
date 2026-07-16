@@ -59,10 +59,20 @@ jobs:
         run: |
           cd host-python/packaging
           rm -rf DreamLayer.iconset && mkdir DreamLayer.iconset
-          for s in 16 32 128 256 512; do
-            sips -z $s $s        icon.png --out DreamLayer.iconset/icon_${s}x${s}.png
-            sips -z $((s*2)) $((s*2)) icon.png --out DreamLayer.iconset/icon_${s}x${s}@2x.png
-          done
+          # The detailed "little Mac" icon can't read below ~64px, so the small
+          # slots (<=32px) use a dedicated simplified mark (icon_small.png — the
+          # teal ring on the dusk squircle); larger slots downscale icon.png.
+          gen() { sips -z "$2" "$2" "$1" --out "DreamLayer.iconset/icon_$3.png"; }
+          gen icon_small.png 16  16x16
+          gen icon_small.png 32  16x16@2x
+          gen icon_small.png 32  32x32
+          gen icon.png       64  32x32@2x
+          gen icon.png       128 128x128
+          gen icon.png       256 128x128@2x
+          gen icon.png       256 256x256
+          gen icon.png       512 256x256@2x
+          gen icon.png       512 512x512
+          gen icon.png       1024 512x512@2x
           iconutil -c icns DreamLayer.iconset -o dreamlayer.icns
 
       - name: Build the .app (py2app)
