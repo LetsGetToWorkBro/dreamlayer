@@ -99,6 +99,10 @@ class BrainConfig:
     calendar_sync: bool = False     # pull events from Calendar.app on a poll
     calendar_names: list[str] = field(default_factory=list)  # [] = all calendars
     calendar_days: int = 14         # how far ahead to pull
+    # portable calendar feeds (the Windows reader; harmless elsewhere):
+    # .ics file paths or http(s) URLs, on top of <cfg>/calendars/*.ics.
+    # URL feeds are never fetched while incognito (see windows_sources).
+    calendar_ics: list[str] = field(default_factory=list)
     # -- contacts + reminders sync (macOS) ------------------------------
     contacts_sync: bool = False     # pull Contacts.app into the People registry
     reminders_sync: bool = False    # pull open Reminders.app to-dos

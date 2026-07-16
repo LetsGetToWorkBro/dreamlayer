@@ -22,12 +22,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import socket
 import urllib.parse
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from ..mlx_backend import MLXBackend
@@ -45,7 +46,6 @@ from ..schema import Answer
 from .store import BrainConfig, QueryHistory, ActivityLog
 from .index import FileIndex
 from .backends import OllamaBackend, make_synthesizer, vision_answer, probe_ollama
-from .macos_sources import collect_documents
 from .panel import render_panel
 # Brain method clusters extracted into sibling mixin modules (the orchestrator's
 # ops_* pattern). Behaviour-preserving: every method still runs on the shared
@@ -144,17 +144,29 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         self.history = QueryHistory(self.cfg_dir)
         self.activity = ActivityLog(self.cfg_dir)
         self.index = FileIndex(self.config)
-        # macOS message/mail documents (folded in when email is enabled)
-        self._sources_fn = sources_fn or collect_documents
-        # the live feed the glasses read hands-free (the Mac is the bridge)
-        from .macos_sources import (recent_messages, read_calendar_events,
-                                     list_calendars, read_contacts, read_reminders,
-                                     list_reminder_lists)
-        self._messages_fn = messages_fn or recent_messages
-        # macOS Calendar.app → agenda sync (both are injectable seams for tests)
-        self._calendar_reader = calendar_reader_fn or read_calendar_events
-        self._calendar_lister = calendar_list_fn or list_calendars
-        # macOS Contacts + Reminders readers (injectable seams for tests)
+        # Platform sources: macOS reads Messages/Mail/Calendar.app; Windows
+        # reads Thunderbird mbox + .ics feeds (windows_sources). Each module
+        # returns [] off its platform, so this dispatch only picks the honest
+        # default — injected seams always win, and macOS wiring is unchanged.
+        default_cal_list: Callable[..., Any]
+        if platform.system() == "Windows":
+            from . import windows_sources as _srcmod
+            default_cal_list = lambda: _srcmod.list_calendars(config=self.config)  # noqa: E731
+        else:
+            from . import macos_sources as _srcmod  # type: ignore[no-redef]
+            default_cal_list = _srcmod.list_calendars
+        # message/mail documents (folded in when email is enabled)
+        self._sources_fn = sources_fn or _srcmod.collect_documents
+        # the live feed the glasses read hands-free (this box is the bridge)
+        self._messages_fn = messages_fn or _srcmod.recent_messages
+        # calendar → agenda sync (both are injectable seams for tests)
+        self._calendar_reader = calendar_reader_fn or _srcmod.read_calendar_events
+        self._calendar_lister = calendar_list_fn or default_cal_list
+        # Contacts + Reminders readers (injectable seams for tests; the macOS
+        # readers return [] anywhere else — there is no Windows equivalent to
+        # read, and that absence is reported honestly, never stubbed)
+        from .macos_sources import (read_contacts, read_reminders,
+                                    list_reminder_lists)
         self._contacts_reader = read_contacts
         self._reminders_reader = read_reminders
         self._reminder_lister = list_reminder_lists
@@ -414,6 +426,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                   "semantic_search", "index_extensions", "max_file_kb",
                   "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
                   "calendar_sync", "calendar_names", "calendar_days",
+                  "calendar_ics",
                   "contacts_sync", "reminders_sync", "reminder_lists"):
             if k in updates:
                 setattr(self.config, k, updates[k])
@@ -1544,7 +1557,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         # + the panel). Everything below the auth gate is token/localhost gated.
         def _get_root(self, path, qs):
             """The local control panel (token injected only for localhost)."""
-            html = render_panel(brain.config.token if self._from_localhost() else "")
+            html = render_panel(brain.config.token if self._from_localhost() else "",
+                                os_name=platform.system())
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
