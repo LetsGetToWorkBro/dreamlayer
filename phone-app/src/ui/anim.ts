@@ -13,24 +13,29 @@ import { motion } from "./theme/motion";
 
 const EASE = Easing.bezier(0.16, 1, 0.3, 1); // motion.easeOut
 
-/** A fade + rise that plays once when the view mounts. `delay` staggers lists. */
-export function useEntrance(delay = 0, rise = 14) {
+/** The Mac OS 8 "zoom open": a window doesn't fade in, it GROWS in — a fade +
+ * scale-up from 94% with a slight rise, the phone-sized read of the classic
+ * zoom-rect. Plays once when the view mounts; `delay` staggers lists. */
+export function useEntrance(delay = 0, rise = 10) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(rise)).current;
+  const scale = useRef(new Animated.Value(0.94)).current;
 
   useEffect(() => {
     if (motion.reduceMotion) {
       opacity.setValue(1);
       translateY.setValue(0);
+      scale.setValue(1);
       return;
     }
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: motion.base, delay, easing: EASE, useNativeDriver: true }),
       Animated.timing(translateY, { toValue: 0, duration: motion.slow, delay, easing: EASE, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: motion.slow, delay, easing: EASE, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  return { opacity, transform: [{ translateY }] };
+  return { opacity, transform: [{ translateY }, { scale }] };
 }
 
 /** Returns a scale value + press handlers for a springy, tactile press. */

@@ -8,6 +8,10 @@ import { tapLight } from "../../services/haptics";
  * tick on press gives every interactive surface the same tactile feel. Drop-in
  * for TouchableOpacity. Pass haptic={false} for surfaces that shouldn't buzz.
  *
+ * Children may be a render function `(pressed) => node` — that's how the
+ * Platinum push buttons invert their bevel and go dark while held, the way a
+ * real Mac OS 8 button presses IN instead of merely shrinking.
+ *
  * Accessibility: every Tappable announces itself as a button (override with
  * accessibilityRole) and reports its disabled state, so screen readers see an
  * actionable control, not a silent view. Text children are read automatically;
@@ -26,7 +30,7 @@ export function Tappable({
   accessibilityHint,
   accessibilityRole = "button",
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode | ((pressed: boolean) => React.ReactNode);
   onPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -38,14 +42,19 @@ export function Tappable({
   accessibilityRole?: AccessibilityRole;
 }) {
   const { scale, onPressIn, onPressOut } = usePressScale(scaleTo);
+  const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
       onPress={onPress}
       onPressIn={() => {
         if (haptic && !disabled) tapLight();
+        if (!disabled) setPressed(true);
         onPressIn();
       }}
-      onPressOut={onPressOut}
+      onPressOut={() => {
+        setPressed(false);
+        onPressOut();
+      }}
       disabled={disabled}
       hitSlop={hitSlop}
       accessible
@@ -55,7 +64,7 @@ export function Tappable({
       accessibilityState={{ disabled: !!disabled }}
     >
       <Animated.View style={[{ opacity: disabled ? 0.45 : 1, transform: [{ scale }] }, style]}>
-        {children}
+        {typeof children === "function" ? children(pressed) : children}
       </Animated.View>
     </Pressable>
   );
