@@ -1,11 +1,18 @@
-# DreamLayer Brain — macOS app (.dmg)
+# DreamLayer Brain — the double-click apps
 
-Packages the Brain as a double-click **menu-bar app** so you don't need the
-terminal. Launch it, get a DreamLayer dot in the menu bar, click it to open the
-control panel or quit. State still lives in `~/.dreamlayer`, same as the CLI.
+Packages the Brain as a double-click **always-on appliance** so you don't need
+the terminal: a **menu-bar app** on macOS (.dmg) and a **system-tray app** on
+Windows (installer). Launch it, get a DreamLayer dot, click it to open the
+control panel or quit. State lives in `~/.dreamlayer` on both, same as the CLI.
 
-- `app_main.py` — the bundled entry: starts the Brain server on a background
-  thread, then runs the rumps menu bar on the main thread.
+- `app_main.py` — the shared bundled entry: starts the Brain server on a
+  background thread, then runs the platform appliance on the main thread
+  (rumps menu bar on macOS, pystray tray on Windows).
+- `windows/` — the Windows build: `make_ico.py`, `DreamLayer.spec`
+  (PyInstaller), `installer.iss` (Inno Setup). See the Windows section below.
+
+## macOS (.dmg)
+
 - `setup_app.py` — py2app build config (produces `dist/DreamLayer.app`,
   `LSUIElement` = no Dock icon).
 - `entitlements.plist` — hardened-runtime + AppleEvents entitlements for signing.
@@ -75,3 +82,73 @@ to **DreamLayer** (not to Terminal):
   reach the panel on `:7777`.
 - **Ollama** (optional) — for the local LLM; install separately from ollama.com.
   Without it the Brain runs in keyword-only mode.
+
+---
+
+# Windows (installer)
+
+The same Brain as a **system-tray app**: `DreamLayer.exe` runs the server on a
+background thread and a tray dot (green / yellow / incognito / grey) with the
+same menu as the Mac menu bar — Open panel (a native WebView2 window, browser
+fallback), Sync now, Incognito, Quit. The panel, pairing, and phone flows are
+identical; what differs is stated honestly in the panel (no iMessage on
+Windows; mail reads from a local Thunderbird profile; calendars come from
+`.ics` files/URLs).
+
+## Get the installer (recommended: CI)
+
+The workflow runs on a GitHub `windows-latest` runner
+(`.github/workflows/build-windows-app.yml`):
+
+1. **Actions → Build Windows app (installer) → Run workflow** (or push a `v*`
+   tag, which also attaches `DreamLayer-Setup.exe` to the GitHub Release).
+2. Download the `DreamLayer-windows` artifact.
+
+**Authenticode signing (optional).** Unsigned builds work but trip Defender
+SmartScreen (below). To sign, add these repo secrets and CI signs both the exe
+and the installer with `signtool`:
+
+| Secret | What it is |
+| --- | --- |
+| `WINDOWS_CERT_PFX_BASE64` | Your code-signing cert + private key as a `.pfx`, base64-encoded |
+| `WINDOWS_CERT_PASSWORD` | Password for that `.pfx` |
+
+## Build locally on Windows
+
+```powershell
+cd host-python
+pip install .                        # dreamlayer + deps
+pip install pystray pywebview zeroconf cryptography pyinstaller
+cd packaging\windows
+python make_ico.py                   # icon.png/icon_small.png -> dreamlayer.ico
+pyinstaller DreamLayer.spec          # -> dist\DreamLayer\DreamLayer.exe
+iscc /DAppVersion=0.5.0 installer.iss   # -> Output\DreamLayer-Setup.exe
+```
+
+The installer is **per-user** (no admin prompt): it copies the app under
+`%LOCALAPPDATA%\Programs\DreamLayer`, adds a Start-menu entry, and offers
+"Start DreamLayer when you sign in" (an HKCU Run entry — the same one
+`python -m dreamlayer.ai_brain.tray_windows --install-login` /
+`--uninstall-login` manages). Uninstalling removes the app and that Run entry
+but **leaves `~/.dreamlayer`** (settings, index, history) in place — the
+uninstaller says so.
+
+## First-run on Windows (the honest version)
+
+- **Defender SmartScreen** — an unsigned build shows "Windows protected your
+  PC" on first launch: click **More info → Run anyway**. This is Windows'
+  Gatekeeper moment; a signed CI build (secrets above) builds reputation and
+  eventually opens without it.
+- **Windows Firewall** — on first launch Windows asks to allow incoming
+  connections for DreamLayer. **Allow on private networks** — the phone can't
+  reach the panel on `:7777` without it. The Brain still binds the LAN behind
+  a pairing token minted on first run.
+- **WebView2** — "Open panel" uses the Edge WebView2 runtime (preinstalled on
+  Windows 11 and most 10 machines). Without it the panel simply opens in your
+  browser instead.
+- **Ollama** (optional) — install from ollama.com for written answers;
+  without it the Brain runs in keyword mode, exactly like the Mac.
+- **What the Brain can read here** — your chosen folders, Thunderbird mail
+  (if present, and only when you flip the switch), and `.ics` calendar
+  files/URLs. iMessage, macOS Contacts and Reminders don't exist on Windows;
+  the panel reports each honestly instead of pretending.
