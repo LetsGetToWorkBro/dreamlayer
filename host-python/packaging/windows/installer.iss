@@ -22,7 +22,7 @@
 #endif
 
 [Setup]
-AppId={{7E4B1A52-9C51-4E86-A32C-DL0000000001}
+AppId={{7E4B1A52-9C51-4E86-A32C-04D8B15C7F21}
 AppName=DreamLayer
 AppVersion={#AppVersion}
 AppPublisher=DreamLayer
