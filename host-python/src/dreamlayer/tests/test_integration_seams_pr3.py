@@ -63,6 +63,51 @@ def test_discovery_fallback_noop():
     d.stop()
 
 
+def test_discovery_real_advertise_and_discover():
+    import time
+    import uuid
+    import pytest
+    pytest.importorskip("zeroconf")   # real-path test: needs the actual dep
+    from dreamlayer.orchestrator.discovery_zeroconf import Discovery
+
+    # Uncommon port + a per-run-unique instance name. A real DreamLayer Brain
+    # live on the same LAN advertises the DEFAULT name on ITS own port, so
+    # requiring BOTH this exact port AND this distinctive name on the SAME
+    # entry makes a stray-Brain false positive impossible — only our own
+    # registration can satisfy both. The uuid also rules out a stale entry
+    # lingering from a prior run of this test.
+    port = 51873
+    name = f"dltest-loopback-{uuid.uuid4().hex[:12]}"
+
+    d = Discovery()
+    try:
+        if not d.advertise(port, name=name, token="rune-birch"):
+            # No multicast-capable interface (sandbox/container): a skip is
+            # honest. This is the ONLY honest skip — see the assert below.
+            pytest.skip("no multicast-capable network")
+
+        # Registration + browser propagation are async, so poll with a deadline
+        # rather than trusting a single bare sleep. discover() itself blocks for
+        # its timeout, making each pass a real 1 s browse window; we retry until
+        # our own entry appears or the deadline expires.
+        mine = None
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and mine is None:
+            for entry in d.discover(timeout=1.0):
+                if entry["port"] == port and name in entry["name"]:
+                    mine = entry
+                    break
+
+        # advertise() succeeded, so an empty result here is a REAL failure worth
+        # surfacing — NOT a skip. A vacuous pass would hide a broken loopback.
+        assert mine is not None, (
+            f"advertised {name!r} on port {port} but never discovered it back")
+        assert mine["port"] == port          # the advertised port round-trips
+        assert name in mine["name"]          # ...on our distinctive instance
+    finally:
+        d.stop()                             # unregister even on assertion failure
+
+
 def test_datasette_command_and_serve():
     from dreamlayer.memory.datasette_app import MemoryExplorer
     m = MemoryExplorer("/home/user/.dreamlayer/memory.db")
