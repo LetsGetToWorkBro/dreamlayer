@@ -18,6 +18,11 @@ control panel or quit. State lives in `~/.dreamlayer` on both, same as the CLI.
   `LSUIElement` = no Dock icon).
 - `entitlements.plist` — hardened-runtime + AppleEvents entitlements for signing.
 - `icon.png` — 1024² source; CI turns it into `dreamlayer.icns`.
+- `make_dmg_art.py` — the Platinum `.dmg` window background (the dusk gradient
+  off the icon, Chicago wordmark, a drag arrow to Applications) at 1x and @2x;
+  CI staples them into a HiDPI tiff and hands it to `create-dmg` along with the
+  volume icon. Generated at build time like the Windows wizard art — never
+  committed.
 - The build/sign/notarize/dmg pipeline lives in
   `.github/workflows/build-macos-app.yml`.
 

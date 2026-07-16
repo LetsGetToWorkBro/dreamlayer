@@ -114,10 +114,23 @@ jobs:
 
       - name: Create .dmg
         run: |
+          # the Platinum window dressing: dusk background (1x+2x stapled into a
+          # HiDPI tiff) + the volume icon. Coordinates here are the contract
+          # make_dmg_art.py draws against — change them together.
+          ( cd host-python/packaging && python make_dmg_art.py )
+          tiffutil -cathidpicheck \
+            host-python/packaging/dmg-background.png \
+            host-python/packaging/dmg-background@2x.png \
+            -out host-python/packaging/dmg-background.tiff || \
+          cp host-python/packaging/dmg-background.png host-python/packaging/dmg-background.tiff
           mkdir -p stage && cp -R host-python/packaging/dist/DreamLayer.app stage/
           create-dmg \
             --volname "DreamLayer" \
+            --volicon "host-python/packaging/dreamlayer.icns" \
+            --background "host-python/packaging/dmg-background.tiff" \
             --window-size 600 380 \
+            --icon-size 128 \
+            --text-size 12 \
             --icon "DreamLayer.app" 150 180 \
             --app-drop-link 450 180 \
             --hdiutil-quiet \
