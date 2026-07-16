@@ -69,6 +69,28 @@ reach the cloud for hard cases"* (`connect_mac_mini(False)` + `use_cloud(True)`)
 is a first-class setup. `local_only` skips only the Mac-mini remote tier; the
 cloud gate is independent. Incognito is the old "home/private" mode, renamed.
 
+### 2b. The Windows Brain (same engine, honest capabilities)
+
+Tier 2 doesn't require a Mac: the Brain also ships as a first-class
+**Windows system-tray app** (`ai_brain/tray_windows.py`, packaged by
+`packaging/windows/`) — same server, same panel, same pairing, one codebase
+with guarded per-platform imports. What differs is only the OS sources, and
+the capability system reports each difference instead of papering over it:
+
+| Capability | macOS | Windows |
+|---|---|---|
+| Files/folders index, panel, pairing, briefs | ✓ | ✓ identical |
+| Answers | keyword / Ollama / cloud presets / MLX (Apple Silicon) | keyword / Ollama / cloud presets (MLX is Apple-Silicon-only by design — `mlx_backend.available` is already False there) |
+| Mail | Apple Mail (.emlx), opt-in | **Thunderbird** mbox, opt-in, read-only (`windows_sources.py`); Outlook is deliberately not scraped |
+| Messages | iMessage (chat.db), opt-in | **honestly unavailable** — no store exists; nothing is faked |
+| Calendar → agenda | Calendar.app via the injectable sync seam | **.ics files/URLs** through the same seam (`~/.dreamlayer/calendars`, `config.calendar_ics`); URL feeds never fetch while Incognito |
+| Contacts / Reminders sync | Contacts.app / Reminders.app | honestly unavailable — the panel says so |
+| Send (draft → approve) | Messages/Mail via AppleScript | not available — no local send path, stated in the panel |
+
+The privacy contract is unchanged on Windows: localhost bind by default, the
+LAN bind is the deliberate appliance act with a minted token, Incognito
+behaves identically, and nothing marked private leaves.
+
 **What cloud ON buys you (vs. off):**
 
 | Capability | Cloud OFF (on-device / LAN) | Cloud ON |

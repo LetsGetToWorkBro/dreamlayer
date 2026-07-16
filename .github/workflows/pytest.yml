@@ -58,3 +58,51 @@ jobs:
         run: >
           pytest --tb=short -m "not hardware and not benchmark and not real_model"
           --cov=dreamlayer --cov-report=term-missing --cov-fail-under=85
+
+  test-windows:
+    # The Windows Brain is a shipping target (the tray app), so Windows
+    # regressions must fail CI, not users. A targeted slice — the appliance
+    # cores, the Brain server + indexer, and the Windows sources — runs on
+    # windows-latest; the full suite, lint, and typecheck stay on the Linux
+    # job above. The registry Run-entry round-trip test only executes here
+    # (it's skipped everywhere else).
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: host-python
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: host-python/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[dev]"
+
+      - name: Run pytest (appliance + ai_brain + indexer suites)
+        run: >
+          pytest --tb=short -m "not hardware and not benchmark and not real_model"
+          src/dreamlayer/tests/test_windows_appliance.py
+          src/dreamlayer/tests/test_windows_panel_window.py
+          src/dreamlayer/tests/test_windows_sources.py
+          src/dreamlayer/tests/test_windows_hygiene.py
+          src/dreamlayer/tests/test_mac_appliance.py
+          src/dreamlayer/tests/test_ai_brain.py
+          src/dreamlayer/tests/test_ai_brain_server.py
+          src/dreamlayer/tests/test_ai_brain_macos.py
+          src/dreamlayer/tests/test_brain_controls.py
+          src/dreamlayer/tests/test_brain_capabilities.py
+          src/dreamlayer/tests/test_brain_auth_posture.py
+          src/dreamlayer/tests/test_brain_csrf_write_guard.py
+          src/dreamlayer/tests/test_brain_tiers.py
+          src/dreamlayer/tests/test_brain_rc.py
+          src/dreamlayer/tests/test_server_atomic_stores.py

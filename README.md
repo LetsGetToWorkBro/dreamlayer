@@ -189,14 +189,16 @@ Mode** fills every screen with labeled sample data, one tap to exit.
 cd phone-app && npm install && npx expo start      # scan the QR with Expo Go
 ```
 
-### The Mac Brain — the knowledge node
+### The Brain — the knowledge node
 
-A menu-bar Mac app (a notarized .dmg on the releases page) or one command
-from source, on any OS. It indexes the folders you choose, reads your
-Messages and Mail if you allow it, serves a nine-view control panel, and
-answers questions from *your own stuff*. Keyword search works with zero
-setup; add [Ollama](docs/OLLAMA_SETUP.md) — or any of seven cloud presets,
-strictly opt-in — for written answers and vision.
+A menu-bar Mac app (a notarized .dmg on the releases page), a Windows
+system-tray app (an installer from the same releases), or one command from
+source, on any OS. It indexes the folders you choose, reads your Messages
+and Mail if you allow it (on Windows: Thunderbird mail and .ics calendars —
+the panel states honestly what each platform can read), serves a nine-view
+control panel, and answers questions from *your own stuff*. Keyword search
+works with zero setup; add [Ollama](docs/OLLAMA_SETUP.md) — or any of seven
+cloud presets, strictly opt-in — for written answers and vision.
 
 ```bash
 pip install -e ./host-python
@@ -285,7 +287,8 @@ dreamlayer/                one product, four runtimes and their world
 ├── host-python/           the phone hub + the Mac Brain (Python)
 │   ├── src/dreamlayer/    the engine: orchestrator, ai_brain, lenses, memory,
 │   │                      reality_compiler, plugins, sdk, simulator, hud, bridge
-│   └── packaging/         the macOS .dmg app (py2app)
+│   └── packaging/         the double-click apps: macOS .dmg (py2app) +
+│                          Windows installer (PyInstaller + Inno Setup)
 ├── reality-core/          the Rust figment interpreter core (native + WASM)
 ├── phone-app/             the mobile app (Expo / React Native, 7 tabs, Jest suite)
 ├── laptop-companion/      the minimal laptop context agent

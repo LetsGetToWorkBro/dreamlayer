@@ -7,6 +7,7 @@ inspect, back up, or hand-edit.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -16,6 +17,39 @@ from typing import Optional
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
+
+
+def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
+    """os.replace that rides out Windows share-mode contention.
+
+    POSIX rename is atomic and never takes the retry path. On Windows,
+    replacing a file that a reader holds open raises PermissionError
+    (Python's open() doesn't request FILE_SHARE_DELETE), and the reader may
+    keep it open for whole GIL slices at a time. Caught by the Windows CI
+    leg: under a reader/writer storm the first PermissionError killed the
+    writing thread and lost every later write — and a first fix that
+    *sampled* a few dozen instants at a fixed interval still starved,
+    because the samples landed while some reader held the file. So this
+    scans instead: tight bursts of attempts (an open-read-close reader
+    always leaves gaps between its opens), separated by short jittered
+    breathers that break lockstep with reader cadence. After `timeout`
+    seconds a final attempt re-raises, so a file held open *permanently*
+    by another program still fails loudly instead of spinning forever."""
+    import random
+    deadline = time.monotonic() + timeout
+    delay = 0.0005
+    while True:
+        for _ in range(burst):
+            try:
+                os.replace(src, dst)
+                return
+            except PermissionError:
+                continue
+        if time.monotonic() >= deadline:
+            os.replace(src, dst)        # the loud final attempt
+            return
+        time.sleep(random.uniform(0.0, delay))
+        delay = min(delay * 2, 0.05)
 
 
 def _is_allowed_root(path: str) -> bool:
@@ -99,6 +133,10 @@ class BrainConfig:
     calendar_sync: bool = False     # pull events from Calendar.app on a poll
     calendar_names: list[str] = field(default_factory=list)  # [] = all calendars
     calendar_days: int = 14         # how far ahead to pull
+    # portable calendar feeds (the Windows reader; harmless elsewhere):
+    # .ics file paths or http(s) URLs, on top of <cfg>/calendars/*.ics.
+    # URL feeds are never fetched while incognito (see windows_sources).
+    calendar_ics: list[str] = field(default_factory=list)
     # -- contacts + reminders sync (macOS) ------------------------------
     contacts_sync: bool = False     # pull Contacts.app into the People registry
     reminders_sync: bool = False    # pull open Reminders.app to-dos

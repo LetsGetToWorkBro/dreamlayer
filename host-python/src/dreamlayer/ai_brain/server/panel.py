@@ -11,8 +11,82 @@ requests. The token is injected only when opened from the Mac mini itself.
 from __future__ import annotations
 
 
-def render_panel(token: str = "") -> str:
-    return _PAGE.replace("__TOKEN__", token or "")
+def render_panel(token: str = "", os_name: str = "") -> str:
+    """The panel HTML. One shared page for every platform; on Windows the
+    handful of copy strings that name Apple sources are swapped for honest
+    Windows equivalents (see _WINDOWS_COPY). Anything else — including the
+    default — renders the macOS copy byte-for-byte unchanged."""
+    page = _PAGE
+    if os_name == "Windows":
+        for mac_copy, win_copy in _WINDOWS_COPY:
+            page = page.replace(mac_copy, win_copy)
+    return page.replace("__TOKEN__", token or "")
+
+
+# What a Windows user's Brain can and cannot read, in the panel's own voice.
+# Each entry is (exact macOS copy in _PAGE, its Windows replacement); the
+# design/JS contract is untouched — only user-facing words change, and only
+# where the macOS words would be a lie on Windows (test_windows_sources.py
+# asserts every left-hand string still exists in _PAGE, so drift fails CI).
+_WINDOWS_COPY: tuple[tuple[str, str], ...] = (
+    # Agenda: the portable calendar source is .ics feeds, not Calendar.app
+    ("Sync your macOS Calendar, or add one-off events by hand.",
+     "Drop .ics calendar files (exports or subscriptions) into the Brain's "
+     "calendars folder, or add one-off events by hand."),
+    ("Sync macOS Calendar",
+     "Sync calendar feeds (.ics)"),
+    ("Pull upcoming events from Calendar.app automatically. Synced events "
+     "refresh on their own; your hand-added ones stay put. Reads locally — "
+     "nothing leaves this Mac.",
+     "Pull upcoming events from .ics files in ~/.dreamlayer/calendars "
+     "automatically. Synced events refresh on their own; your hand-added "
+     "ones stay put. Reads locally — a URL feed you add is fetched "
+     "read-only, and never while Incognito."),
+    # People: no local address book to read on Windows — say so
+    ("Sync macOS Contacts",
+     "Contacts sync — not available on Windows"),
+    ("Pull your address book in so dossiers populate themselves. Your "
+     "hand-added notes always win. Reads locally — nothing leaves this Mac.",
+     "Windows has no local address book the Brain can read, so this switch "
+     "has nothing to pull here. People you add by hand below work exactly "
+     "the same."),
+    # Reminders: same honest absence
+    ("Open reminders from macOS Reminders.app — due ones lead the morning "
+     "brief. Read-only.",
+     "Reminders sync isn't available on Windows — there's no local to-do "
+     "store the Brain can read. Events you add to the agenda still lead "
+     "the morning brief."),
+    ("Sync macOS Reminders",
+     "Reminders sync — not available on Windows"),
+    ("Pull open to-dos in. Pick specific lists once you have more than one.",
+     "macOS Reminders doesn't exist on Windows, so this switch has nothing "
+     "to pull."),
+    # Mail: Thunderbird is the local, read-only source; iMessage doesn't exist
+    ("Read email &amp; iMessage</div>",
+     "Read email (Thunderbird)</div>"),
+    ("Let the Brain read Mail and Messages so a glance can catch a reply "
+     "you owe.",
+     "Let the Brain read your local Thunderbird mail so a glance can catch "
+     "a reply you owe. iMessage doesn't exist on Windows — texts stay on "
+     "your phone, never faked here."),
+    ("Nothing is sent; it stays on this Mac. Saves the moment you flip it.",
+     "Nothing is sent; it stays on this PC. Saves the moment you flip it."),
+    # The glasses feed: mail only on Windows, and no voice-reply send path
+    ("This Mac is the <b>bridge</b> to your Messages &amp; Mail — it lives "
+     "here, so",
+     "This PC is the <b>bridge</b> to your mail — Thunderbird lives here, so"),
+    ("the Brain relays it out. You read hands-free on the <b>glasses</b> "
+     "and reply by voice with a\n      tap to approve; you never touch the "
+     "Mac. Texts and emails pop up separately (set on the phone).",
+     "the Brain relays it out. You read hands-free on the <b>glasses</b>. "
+     "Replying by voice isn't\n      available on Windows yet — there's no "
+     "local send path the Brain can drive honestly."),
+    # toasts + empty-state hint name the toggle — keep the names honest
+    ('"Reading email & iMessage":"Email & iMessage off"',
+     '"Reading Thunderbird mail":"Email off"'),
+    ("Turn on “Read email &amp; iMessage” to relay them to your glasses.",
+     "Turn on “Read email (Thunderbird)” to relay them to your glasses."),
+)
 
 
 _PAGE = r"""<!doctype html><html lang="en"><head>
