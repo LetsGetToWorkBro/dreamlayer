@@ -143,6 +143,17 @@ html.platinum ::selection{background:rgba(47,212,196,.35);color:#00201C}
 @media(min-width:960px){.mw.sub.da{display:block}}
 .da .tbar{cursor:default}
 .mw.sub.da .mbody{background:var(--scr);padding:12px 10px 9px;text-align:center}
+/* Juno answers a click: a little hop, a couple of sparks, a new line */
+.da .mbody{cursor:pointer}
+.da .dasprite.hop{animation:dahop .45s var(--ease)}
+@keyframes dahop{0%{transform:translateY(0)}35%{transform:translateY(-10px) rotate(-3deg)}
+  70%{transform:translateY(2px) rotate(1deg)}100%{transform:translateY(0)}}
+.da .daspark{position:absolute;left:50%;top:34%;z-index:3;font:14px var(--chi);color:#9FE8D4;
+  text-shadow:0 0 8px rgba(44,199,154,.6);pointer-events:none;
+  animation:dasp .9s ease-out forwards}
+@keyframes dasp{from{opacity:1;transform:translate(-50%,0) scale(.7)}
+  to{opacity:0;transform:translate(calc(-50% + var(--dx,0px)),-36px) scale(1.2)}}
+.da .dacap a{color:#9FE8D4;text-decoration:underline}
 .dasprite{width:112px;height:auto;margin:0 auto;image-rendering:pixelated;
   filter:drop-shadow(0 0 14px rgba(44,199,154,.28))}
 .dacap{margin-top:8px;font-family:var(--chi);font-size:11.5px;color:var(--h-text2);
@@ -175,6 +186,8 @@ html.platinum ::selection{background:rgba(47,212,196,.35);color:#00201C}
 @media (prefers-reduced-motion:reduce){
   .mright .pulse .dot{animation:none}
   .mw.sub.da{transition:none;opacity:1;transform:none}
+  .da .dasprite.hop{animation:none}
+  .da .daspark{display:none}
 }
 /* keep the footer's wordmark clear of the Juno desk accessory */
 @media(min-width:960px){.pfoot .in{padding-left:196px}}

@@ -142,6 +142,48 @@ if(CFG.daLine !== false){
     var s=da.classList.toggle("shut");
     try{ sessionStorage.setItem("dlda", s?"shut":"open"); }catch(e){}
   });
+
+  /* ---- she answers a click ---- */
+  (function(){
+    var body=da.querySelector(".mbody"), sprite=da.querySelector(".dasprite"),
+        cap=da.querySelector(".dacap");
+    var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var LINES=[
+      "hi. that tickles.",
+      "i’m keeping your place. it’s safe with me.",
+      "the cloud is off. i like it quiet.",
+      "i’ll remember you were here. that’s the job.",
+      "careful — i’m ticklish on the wings."
+    ];
+    var TERM='come find me — <a href="./terminal.html">type dream in the Terminal</a>.';
+    var RARE="✦ a rare line. keep it — keeping is the whole idea.";
+    var clicks=0;
+    body.setAttribute("role","button");
+    body.setAttribute("aria-label","Say hi to Juno");
+    body.setAttribute("tabindex","0");
+    function poke(){
+      clicks++;
+      if(!reduce){
+        sprite.classList.remove("hop"); void sprite.offsetWidth; sprite.classList.add("hop");
+        for(var i=0;i<3;i++){
+          var sp=document.createElement("span");
+          sp.className="daspark"; sp.textContent="✦";
+          sp.style.setProperty("--dx",(i-1)*22+"px");
+          sp.style.animationDelay=(i*70)+"ms";
+          body.appendChild(sp);
+          (function(el){ setTimeout(function(){ el.remove(); },1200); })(sp);
+        }
+      }
+      var line;
+      if(clicks%4===0) line=TERM;
+      else if(Math.random()<1/12) line=RARE;
+      else if(clicks>12) line="okay. back to work. (flattered, though.)";
+      else line=LINES[(clicks-1)%LINES.length];
+      cap.innerHTML=line;
+    }
+    body.addEventListener("click",function(e){ if(!e.target.closest("a")) poke(); });
+    body.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); poke(); } });
+  })();
 }
 
 /* ---------- footer ---------- */

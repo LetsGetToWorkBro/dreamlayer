@@ -329,6 +329,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 @media(min-width:960px){.mw.sub.da{display:block}}
 .da .tbar{cursor:default}
 .mw.sub.da .mbody{background:var(--scr);padding:12px 10px 9px;text-align:center}
+/* Juno answers a click: a little hop, a couple of sparks, a new line */
+.dabody{cursor:pointer}
+.dasprite.hop{animation:dahop .45s var(--ease)}
+@keyframes dahop{0%{transform:translateY(0)}35%{transform:translateY(-10px) rotate(-3deg)}
+  70%{transform:translateY(2px) rotate(1deg)}100%{transform:translateY(0)}}
+.daspark{position:absolute;left:50%;top:34%;z-index:3;font:14px var(--chi);color:#9FE8D4;
+  text-shadow:0 0 8px rgba(44,199,154,.6);pointer-events:none;
+  animation:dasp .9s ease-out forwards}
+@keyframes dasp{from{opacity:1;transform:translate(-50%,0) scale(.7)}
+  to{opacity:0;transform:translate(calc(-50% + var(--dx,0px)),-36px) scale(1.2)}}
+@media (prefers-reduced-motion:reduce){.dasprite.hop{animation:none}.daspark{display:none}}
+.dacap a{color:#9FE8D4;text-decoration:underline}
 .dasprite{width:112px;height:auto;margin:0 auto;image-rendering:pixelated;
   filter:drop-shadow(0 0 14px rgba(44,199,154,.28))}
 .dacap{margin-top:8px;font-family:var(--chi);font-size:11.5px;color:var(--h-text2);
@@ -1105,7 +1117,6 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
                  width="960" height="960"><source src="assets/juno/juno_loop.mp4" type="video/mp4"></video>
           <img src="assets/juno/juno_still.webp" alt="" width="800" height="800"></div>
         <div class="hero-core" id="heroCore">
-          <div class="hero-glass" aria-hidden="true"><canvas id="heroGlass"></canvas></div>
           <span class="h-eyebrow-line arrive in" style="--d:60ms">A layer for smart AR glasses</span>
           <h1 class="display arrive in" style="--d:140ms">DreamLayer</h1>
           <p class="tag arrive in" style="--d:220ms">A memory layer for the real world.</p>
@@ -2618,7 +2629,8 @@ window.__applyVeil=applyVeil;
   }
   function boot(){
     if(!window.Halo){ return setTimeout(boot, 60); }
-    startGlass(document.getElementById("heroGlass"), { glassBg:0.5 });
+    /* (the hero used to run a third glass here — it sat on Juno's face on
+       phones; the live demo already runs in "What it can do" below) */
     var capEl=document.getElementById("simEmbedCap");
     startGlass(document.getElementById("simEmbed"), { glassBg:0.5, onSay:function(sayLine){
       if(capEl) capEl.innerHTML="<b>Juno</b> " + (sayLine||"").replace(/[<>&]/g,"");
@@ -2865,14 +2877,55 @@ mveil.addEventListener("click",closeAbout);
     faq:"256 px is plenty.",
     soon:"be there when i wake."
   };
+  var holdUntil=0;   // a clicked line holds the caption before sections resume
   var daIO=new IntersectionObserver(function(es){
     es.forEach(function(e){
-      if(!e.isIntersecting) return;
+      if(!e.isIntersecting || Date.now()<holdUntil) return;
       var l=LINES[e.target.id];
       if(l && cap.textContent!==l) cap.textContent=l;
     });
   },{rootMargin:"-45% 0px -45% 0px",threshold:0});
   [].slice.call(document.querySelectorAll("section[id]")).forEach(function(s){ daIO.observe(s); });
+
+  /* ---- she answers a click ---- */
+  var body=da.querySelector(".dabody"), sprite=da.querySelector(".dasprite");
+  var CLICK_LINES=[
+    "hi. that tickles.",
+    "i’m keeping your place. it’s safe with me.",
+    "the cloud is off. i like it quiet.",
+    "go on — the good part is further down.",
+    "i’ll remember you were here. that’s the job.",
+    "careful — i’m ticklish on the wings."
+  ];
+  var TERM_LINE='come find me — <a href="./terminal.html">type dream in the Terminal</a>.';
+  var RARE="✦ a rare line. keep it — keeping is the whole idea.";
+  var clicks=0;
+  body.setAttribute("role","button");
+  body.setAttribute("aria-label","Say hi to Juno");
+  body.setAttribute("tabindex","0");
+  function junoPoke(){
+    clicks++;
+    if(!reduced){
+      sprite.classList.remove("hop"); void sprite.offsetWidth; sprite.classList.add("hop");
+      for(var i=0;i<3;i++){
+        var sp=document.createElement("span");
+        sp.className="daspark"; sp.textContent="✦";
+        sp.style.setProperty("--dx",(i-1)*22+"px");
+        sp.style.animationDelay=(i*70)+"ms";
+        body.appendChild(sp);
+        (function(el){ setTimeout(function(){ el.remove(); },1200); })(sp);
+      }
+    }
+    var line;
+    if(clicks%4===0) line=TERM_LINE;
+    else if(Math.random()<1/12) line=RARE;
+    else if(clicks>12) line="okay. back to work. (flattered, though.)";
+    else line=CLICK_LINES[(clicks-1)%CLICK_LINES.length];
+    cap.innerHTML=line;
+    holdUntil=Date.now()+6000;
+  }
+  body.addEventListener("click",function(e){ if(!e.target.closest("a")) junoPoke(); });
+  body.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); junoPoke(); } });
 })();
 
 /* ---------- desktop icons: zoom out, then go ---------- */
