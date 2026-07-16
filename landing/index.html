@@ -125,18 +125,21 @@ body{
   padding-top:var(--mbh)}
 ::selection{background:rgba(47,212,196,.35);color:#00201C}
 /* Desktop Picture — Mac OS 8's Appearance panel let you swap the pattern
-   for a picture; ours is Juno's dreamscape, dimmed for legibility.
-   Desktop-only: fixed-attachment cover is janky on mobile. */
+   for a picture; ours is Juno's dreamscape, dimmed for legibility. Phones
+   get it too (the environment wallpapers are ~50-75KB and far calmer than
+   the fallback pattern); only fixed attachment stays desktop-only, since
+   iOS Safari repaints it badly. */
+body.deskpic{background-image:
+  linear-gradient(rgba(8,14,16,.42),rgba(8,14,16,.62)),
+  var(--deskpic,url(assets/juno/desk-dusk.webp));
+  background-size:cover;background-position:center}
+/* the Appearance panel's picture set — Juno's world, dusk / dawn / the scene */
+body.deskpic.desk-dusk{--deskpic:url(assets/juno/desk-dusk.webp)}
+body.deskpic.desk-dawn{--deskpic:url(assets/juno/desk-dawn.webp);
+  background-image:linear-gradient(rgba(20,14,8,.30),rgba(20,14,10,.50)),var(--deskpic)}
+body.deskpic.desk-juno{--deskpic:url(assets/juno/dreamscape.webp)}
 @media(min-width:960px){
-  body.deskpic{background-image:
-    linear-gradient(rgba(8,14,16,.42),rgba(8,14,16,.62)),
-    var(--deskpic,url(assets/juno/desk-dusk.webp));
-    background-size:cover;background-position:center;background-attachment:fixed}
-  /* the Appearance panel's picture set — Juno's world, dusk / dawn / the scene */
-  body.deskpic.desk-dusk{--deskpic:url(assets/juno/desk-dusk.webp)}
-  body.deskpic.desk-dawn{--deskpic:url(assets/juno/desk-dawn.webp);
-    background-image:linear-gradient(rgba(20,14,8,.30),rgba(20,14,10,.50)),var(--deskpic)}
-  body.deskpic.desk-juno{--deskpic:url(assets/juno/dreamscape.webp)}
+  body.deskpic{background-attachment:fixed}
 }
 img,video{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
