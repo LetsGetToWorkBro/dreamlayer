@@ -144,12 +144,12 @@ def test_replace_atomic_retries_through_reader_contention(tmp_path, monkeypatch)
 
     def flaky(a, b):
         tries.append(1)
-        if len(tries) < 3:                    # reader still has it open…
+        if len(tries) < 40:                   # readers still have it open…
             raise PermissionError(5, "Access is denied")
-        real_replace(a, b)                    # …then it lets go
+        real_replace(a, b)                    # …then a gap opens
     monkeypatch.setattr(st.os, "replace", flaky)
-    st.replace_atomic(src, dst, delay=0.001)
-    assert dst.read_text() == "new" and len(tries) == 3
+    st.replace_atomic(src, dst, timeout=5.0)
+    assert dst.read_text() == "new" and len(tries) == 40
 
 
 def test_replace_atomic_fails_loudly_when_never_released(tmp_path, monkeypatch):
@@ -161,7 +161,7 @@ def test_replace_atomic_fails_loudly_when_never_released(tmp_path, monkeypatch):
         raise PermissionError(5, "Access is denied")
     monkeypatch.setattr(st.os, "replace", always_denied)
     with pytest.raises(PermissionError):      # a real ACL problem still surfaces
-        st.replace_atomic(src, tmp_path / "a.json", attempts=3, delay=0.001)
+        st.replace_atomic(src, tmp_path / "a.json", timeout=0.05, burst=5)
 
 
 # -- indexing is utf-8 regardless of the locale codepage -------------------------
