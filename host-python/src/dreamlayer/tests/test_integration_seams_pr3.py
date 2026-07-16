@@ -16,6 +16,44 @@ def test_fs_watch_fallback_returns_false():
     w.stop()                     # safe no-op
 
 
+def test_fs_watch_real_fires_on_change(tmp_path):
+    import time
+    import pytest
+    pytest.importorskip("watchdog")   # real-path test: needs the actual dep
+    from dreamlayer.orchestrator.fs_watch import FolderWatcher
+    seen = []
+    w = FolderWatcher(str(tmp_path), on_change=seen.append)
+    assert w.start() is True
+    try:
+        target = tmp_path / "note.txt"
+        # Poll with a deadline, re-writing each step: fs events are async AND
+        # the observer's own watch registration races the first write, so a
+        # single write-then-assert would flake. Never a bare fixed sleep.
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not seen:
+            target.write_text("tick")
+            time.sleep(0.05)
+        assert seen, "watchdog callback never fired within 2 s"
+        assert str(target) in seen          # callback gets the changed file's path
+
+        n = len(seen)
+        (tmp_path / "subdir").mkdir()       # directory-only event → filtered out
+        deadline = time.monotonic() + 0.5   # bounded quiet window (negative assert)
+        while time.monotonic() < deadline and len(seen) == n:
+            time.sleep(0.05)
+        assert len(seen) == n               # is_directory events never reach cb
+    finally:
+        w.stop()
+    w.stop()                                 # idempotent: second stop is a no-op
+
+    n = len(seen)
+    target.write_text("after stop")          # teardown: no callbacks after stop
+    deadline = time.monotonic() + 0.5
+    while time.monotonic() < deadline and len(seen) == n:
+        time.sleep(0.05)
+    assert len(seen) == n
+
+
 def test_discovery_fallback_noop():
     from dreamlayer.orchestrator.discovery_zeroconf import Discovery, SERVICE
     d = Discovery()
