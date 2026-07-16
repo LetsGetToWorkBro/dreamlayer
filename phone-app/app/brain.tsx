@@ -6,6 +6,7 @@ import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/componen
 import { QrScanner } from "../src/ui/components/QrScanner";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { CineBackdrop } from "../src/ui/components/CineBackdrop";
+import { MenuBar } from "../src/ui/components/MenuBar";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Tappable } from "../src/ui/components/Tappable";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
@@ -71,6 +72,7 @@ export default function Brain() {
     <View style={s.root}>
       <CineBackdrop />
       <SafeAreaView style={s.safe}>
+      <MenuBar />
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <DemoBanner />
         <ScreenHeader

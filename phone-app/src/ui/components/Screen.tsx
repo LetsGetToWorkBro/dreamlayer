@@ -4,22 +4,27 @@ import { colors } from "../theme/colors";
 import { gutter, space } from "../theme/spacing";
 import { CineBackdrop } from "./CineBackdrop";
 import { DemoBanner } from "./DemoBanner";
+import { MenuBar } from "./MenuBar";
 
 /**
- * Screen — the frame every screen shares: a cinematic backdrop (teal glow +
- * vignette), full-bleed black, safe area, one horizontal gutter, and either a
- * scroll body or a fixed one. Keeps every page on the same luminous surface.
+ * Screen — the frame every screen shares: the pinstripe Platinum desktop, the
+ * menu bar across the top (ring mark + clock, like the website and Mac panel),
+ * safe area, one horizontal gutter, and either a scroll body or a fixed one.
+ * Keeps every page on the same desktop. Pass menuBar={false} for full-bleed
+ * moments (the tour) that shouldn't wear the chrome.
  */
 export function Screen({
   children,
   scroll = true,
   contentStyle,
   gutters = true,
+  menuBar = true,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   gutters?: boolean;
+  menuBar?: boolean;
 }) {
   const pad = gutters ? { paddingHorizontal: gutter } : null;
   return (
@@ -27,6 +32,7 @@ export function Screen({
       <CineBackdrop />
       {scroll ? (
         <SafeAreaView style={s.safe}>
+          {menuBar ? <MenuBar /> : null}
           <ScrollView
             contentContainerStyle={[s.scroll, pad, contentStyle]}
             keyboardShouldPersistTaps="handled"
@@ -38,6 +44,7 @@ export function Screen({
         </SafeAreaView>
       ) : (
         <SafeAreaView style={s.safe}>
+          {menuBar ? <MenuBar /> : null}
           <View style={[s.fixed, pad, contentStyle]}>
             <DemoBanner />
             {children}
