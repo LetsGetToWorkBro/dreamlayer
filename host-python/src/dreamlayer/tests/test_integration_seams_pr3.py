@@ -54,8 +54,15 @@ def test_fs_watch_real_fires_on_change(tmp_path):
     assert len(seen) == n
 
 
-def test_discovery_fallback_noop():
+def test_discovery_fallback_noop(monkeypatch):
+    from dreamlayer.orchestrator import discovery_zeroconf
     from dreamlayer.orchestrator.discovery_zeroconf import Discovery, SERVICE
+    # Force the no-dep fallback deterministically regardless of whether zeroconf
+    # is installed (a dev following #281 will have it). Flipping _HAS_ZC to False
+    # exercises advertise()/discover()'s early-return no-op path either way, so
+    # fallback coverage survives in dep-present envs instead of the assertion
+    # only holding by accident when the dep happens to be absent.
+    monkeypatch.setattr(discovery_zeroconf, "_HAS_ZC", False)
     d = Discovery()
     assert SERVICE == "_dreamlayer._tcp.local."
     assert d.advertise(7777, token="rune-birch") is False
