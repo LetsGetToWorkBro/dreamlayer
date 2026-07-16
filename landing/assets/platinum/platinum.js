@@ -62,6 +62,7 @@ panels.innerHTML = '\
   <a href="./golf.html">Figment Golf <span class="mdim">fewest bytes</span></a>\
   <a href="./plugins.html">Plugin Store <span class="mdim">community</span></a>\
   <a href="./playground.html">Web BLE Playground <span class="mdim">talk Lua</span></a>\
+  <a href="./terminal.html">Terminal <span class="mdim">type dream</span></a>\
 </nav>';
 while(panels.firstChild) document.body.appendChild(panels.firstChild);
 
