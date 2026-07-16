@@ -46,23 +46,44 @@ export function makeBlePlxTransport(): BleTransport | null {
   let disconnectCb: (() => void) | null = null;
   let device: any = null;
 
+  // Hermes ships global.atob/btoa; the inline codec below covers any engine
+  // without them. (No require("buffer") here — Metro resolves require literals
+  // statically, so a Node-polyfill fallback breaks the iOS/Android bundle even
+  // when the branch never runs.)
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const b64ToBytes = (b64: string): Uint8Array => {
-    // RN provides global.atob on modern engines; fall back to Buffer if present.
-    if (typeof atob === "function") {
-      const bin = atob(b64);
-      const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-      return out;
+    const bin = typeof atob === "function" ? atob(b64) : decodeB64(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  const decodeB64 = (b64: string): string => {
+    let bin = "";
+    const clean = b64.replace(/=+$/, "");
+    for (let i = 0; i < clean.length; i += 4) {
+      const n =
+        (B64.indexOf(clean.charAt(i)) << 18) |
+        (B64.indexOf(clean.charAt(i + 1)) << 12) |
+        ((B64.indexOf(clean.charAt(i + 2)) & 63) << 6) |
+        (B64.indexOf(clean.charAt(i + 3)) & 63);
+      bin += String.fromCharCode((n >> 16) & 255);
+      if (i + 2 < clean.length) bin += String.fromCharCode((n >> 8) & 255);
+      if (i + 3 < clean.length) bin += String.fromCharCode(n & 255);
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return Uint8Array.from(require("buffer").Buffer.from(b64, "base64"));
+    return bin;
   };
   const bytesToB64 = (bytes: Uint8Array): string => {
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
     if (typeof btoa === "function") return btoa(bin);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("buffer").Buffer.from(bytes).toString("base64");
+    let out = "";
+    for (let i = 0; i < bin.length; i += 3) {
+      const n = (bin.charCodeAt(i) << 16) | ((bin.charCodeAt(i + 1) || 0) << 8) | (bin.charCodeAt(i + 2) || 0);
+      out += B64.charAt((n >> 18) & 63) + B64.charAt((n >> 12) & 63)
+        + (i + 1 < bin.length ? B64.charAt((n >> 6) & 63) : "=")
+        + (i + 2 < bin.length ? B64.charAt(n & 63) : "=");
+    }
+    return out;
   };
 
   return {
