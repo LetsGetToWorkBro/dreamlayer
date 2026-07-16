@@ -18,15 +18,17 @@ import { pushLocal } from "../src/services/notify";
 import { playListen } from "../src/services/sound";
 import { t } from "../src/i18n";
 
-/** A beveled platinum quick-action tile for the dashboard. */
+/** A beveled platinum quick-action tile. The three tiles split the row into
+ * equal thirds (flex on the Pressable via containerStyle) so the labels sit
+ * centered with room to breathe instead of hugging their text. */
 function QuickAction({ label, onPress, tint }: { label: string; onPress: () => void; tint?: string }) {
   return (
-    <Tappable onPress={onPress} style={s.quickBtn}>
+    <Tappable onPress={onPress} containerStyle={{ flex: 1 }} style={s.quickBtn}>
       <Text
-        style={[typography.body, { fontSize: 12.5, color: tint ?? colors.textPrimary, fontWeight: "600" }]}
+        style={[typography.body, { fontSize: 13, color: tint ?? colors.textPrimary, fontWeight: "600" }]}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.8}
+        minimumFontScale={0.75}
       >
         {label}
       </Text>
@@ -260,11 +262,13 @@ const s = StyleSheet.create({
   },
   // quick-action tile row
   quick: { flexDirection: "row", gap: space.sm, marginBottom: space.lg },
+  // the visual box fills its third of the row; the label breathes inside it
   quickBtn: {
-    flex: 1,
     borderRadius: 8,
     paddingVertical: space.md,
+    paddingHorizontal: space.sm,
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: platinum.face,
     borderWidth: 1.5,
     borderTopColor: platinum.hi,

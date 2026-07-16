@@ -23,6 +23,7 @@ export function Tappable({
   onPress,
   disabled,
   style,
+  containerStyle,
   scaleTo = 0.96,
   hitSlop = 6,
   haptic = true,
@@ -34,6 +35,10 @@ export function Tappable({
   onPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** style for the OUTER Pressable — the node that actually sits in the parent
+   * layout. Flex weights (`flex: 1` in a row of equal tiles) must go here;
+   * on `style` they land on the inner view and the Pressable just hugs. */
+  containerStyle?: StyleProp<ViewStyle>;
   scaleTo?: number;
   hitSlop?: number;
   haptic?: boolean;
@@ -45,6 +50,7 @@ export function Tappable({
   const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
+      style={containerStyle}
       onPress={onPress}
       onPressIn={() => {
         if (haptic && !disabled) tapLight();
