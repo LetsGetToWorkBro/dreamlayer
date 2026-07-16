@@ -23,6 +23,21 @@ function mod(): any {
     tried = true;
     try {
       Audio = require("expo-audio");
+      // Android audio focus, set once: earcons are one-second UI cues — DUCK
+      // whatever's playing (music dips, then recovers) instead of the default
+      // pause-everything focus, stay foreground-only, never the earpiece.
+      // iOS is untouched: its platform defaults already behave this way.
+      try {
+        if (require("react-native").Platform?.OS === "android") {
+          Audio.setAudioModeAsync?.({
+            interruptionModeAndroid: "duckOthers",
+            shouldPlayInBackground: false,
+            shouldRouteThroughEarpiece: false,
+          })?.catch?.(() => {});
+        }
+      } catch {
+        /* platform probe unavailable (node/web) — leave defaults */
+      }
     } catch {
       Audio = null;
     }
