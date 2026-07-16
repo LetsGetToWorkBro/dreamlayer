@@ -157,6 +157,19 @@ if(CFG.daLine !== false){
     ];
     var TERM='come find me — <a href="./terminal.html">type dream in the Terminal</a>.';
     var RARE="✦ a rare line. keep it — keeping is the whole idea.";
+    /* she can actually talk — real clips, played only on a click */
+    var VOICED=[["based.","assets/juno/juno_based.mp3"],
+                ["uh… ok, then.","assets/juno/juno_uhokthen.mp3"]];
+    var voiceEl=null;
+    function say(i){
+      var v=VOICED[((i%2)+2)%2];
+      cap.textContent=v[0];
+      try{
+        if(!voiceEl) voiceEl=new Audio();
+        voiceEl.pause(); voiceEl.src=v[1]; voiceEl.volume=.85; voiceEl.currentTime=0;
+        voiceEl.play().catch(function(){});
+      }catch(e){}
+    }
     var clicks=0;
     body.setAttribute("role","button");
     body.setAttribute("aria-label","Say hi to Juno");
@@ -174,12 +187,15 @@ if(CFG.daLine !== false){
           (function(el){ setTimeout(function(){ el.remove(); },1200); })(sp);
         }
       }
-      var line;
+      var line=null, voice=-1;
       if(clicks%4===0) line=TERM;
+      else if(clicks===2) voice=0;
+      else if(clicks===6) voice=1;
+      else if(clicks>6 && Math.random()<0.2) voice=clicks;
       else if(Math.random()<1/12) line=RARE;
       else if(clicks>12) line="okay. back to work. (flattered, though.)";
       else line=LINES[(clicks-1)%LINES.length];
-      cap.innerHTML=line;
+      if(voice>=0) say(voice); else cap.innerHTML=line;
     }
     body.addEventListener("click",function(e){ if(!e.target.closest("a")) poke(); });
     body.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); poke(); } });

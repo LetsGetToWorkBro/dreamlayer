@@ -186,6 +186,19 @@ var JUNO_LINES = [
   "type <b>lens draft</b> with an idea. i like the weird ones."
 ];
 var junoN = 0;
+/* sometimes she answers out loud — real clips, only ever on your keystroke */
+var JUNO_CLIPS = [["based.","assets/juno/juno_based.mp3"],
+                  ["uh… ok, then.","assets/juno/juno_uhokthen.mp3"]];
+var junoVoice = null, clipN = 0;
+function junoSpeak(){
+  var v = JUNO_CLIPS[clipN++ % JUNO_CLIPS.length];
+  try{
+    if (!junoVoice) junoVoice = new Audio();
+    junoVoice.pause(); junoVoice.src = v[1]; junoVoice.volume = .85; junoVoice.currentTime = 0;
+    junoVoice.play().catch(function(){});
+  }catch(e){}
+  return v[0];
+}
 
 function lensDraft(idea){
   if (!idea){ print('usage: <b>lens draft</b> <i>&lt;what you want&gt;</i>  — say it in plain words'); return; }
@@ -244,7 +257,11 @@ function shellExec(raw){
   else if (c === "figment" || (c === "safety")) figmentSafety();
   else if (c === "brain") brainStatus();
   else if (c === "deskpic") deskpic((parts[1]||"").toLowerCase());
-  else if (c === "juno"){ print('<b>juno</b>: ' + (rest ? JUNO_LINES[junoN++ % JUNO_LINES.length] : "yes? i\'m listening. <span class=\"dim\">(juno &lt;words&gt;)</span>")); }
+  else if (c === "juno"){
+    if (!rest) print('<b>juno</b>: yes? i\'m listening. <span class="dim">(juno &lt;words&gt;)</span>');
+    else if (Math.random() < 1/3) print('<b>juno</b>: ' + esc(junoSpeak()) + ' <span class="dim">♪</span>');
+    else print('<b>juno</b>: ' + JUNO_LINES[junoN++ % JUNO_LINES.length]);
+  }
   else if (c === "veil"){ var v = screen.classList.toggle("veiled"); print(v ? '<span class="coral">the veil is up.</span> capture held. nothing leaves this screen.' : "the veil lifts. carry on."); }
   else if (c === "open" && PAGES[(parts[1]||"").toLowerCase()]) { print("opening " + parts[1] + "…"); setTimeout(function(){ location.href = PAGES[parts[1].toLowerCase()]; }, 450); }
   else if (PAGES[c]) { print("opening " + c + "…"); setTimeout(function(){ location.href = PAGES[c]; }, 450); }
