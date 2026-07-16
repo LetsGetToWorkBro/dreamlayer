@@ -1,5 +1,10 @@
 import React from "react";
-import { View, ScrollView, SafeAreaView, StyleSheet, StyleProp, ViewStyle } from "react-native";
+import { View, ScrollView, StyleSheet, StyleProp, ViewStyle } from "react-native";
+// react-native-safe-area-context, not the RN one: RN's SafeAreaView is
+// deprecated and — crucially — a no-op on Android, where SDK 57 draws the app
+// edge-to-edge. This one insets identically on iOS and actually insets the
+// status/navigation bars on Android.
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 import { gutter, space } from "../theme/spacing";
 import { CineBackdrop } from "./CineBackdrop";

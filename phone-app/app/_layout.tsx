@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform, View, Text, Image, Animated, Easing, AccessibilityInfo, StyleSheet } from "react-native";
+import { View, Text, Image, Animated, Easing, AccessibilityInfo, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   useFonts,
@@ -8,8 +8,11 @@ import {
   SpaceGrotesk_500Medium,
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, platinum } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
+import { hardShadow } from "../src/ui/theme/shadow";
+import { tabBarMetrics } from "../src/ui/theme/tabBar";
 import { TabIcon } from "../src/ui/components/TabIcon";
 import { CineBackdrop } from "../src/ui/components/CineBackdrop";
 import { useBrainStore } from "../src/state/useBrainStore";
@@ -78,6 +81,10 @@ function BootScreen({ onDone }: { onDone: () => void }) {
 }
 
 export default function Layout() {
+  // Android is edge-to-edge: the strip must clear whatever nav the device
+  // uses (gesture pill or 3-button bar). iOS ignores this — see tabBarMetrics.
+  const insets = useSafeAreaInsets();
+  const bar = tabBarMetrics(insets.bottom);
   const [loaded] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_500Medium,
@@ -140,9 +147,9 @@ export default function Layout() {
           backgroundColor: "transparent",
           borderTopWidth: 0,
           elevation: 0,
-          height: Platform.OS === "ios" ? 90 : 78,
+          height: bar.height,
           paddingTop: 10,
-          paddingBottom: Platform.OS === "ios" ? 30 : 16,
+          paddingBottom: bar.paddingBottom,
         },
         // Chicago is too wide for a 7-up label row (and truncates the longer
         // localized strings) — the control strip uses the narrower reading face,
@@ -222,11 +229,7 @@ const s = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 32,
     // the hard Platinum drop shadow
-    shadowColor: "#000000",
-    shadowOffset: { width: 3, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 0,
-    elevation: 6,
+    ...hardShadow(3, 4, 0.3),
   },
   bootMac: { width: 96, height: 96, marginBottom: 14 },
   bootTitle: { fontFamily: fonts.chicago, fontSize: 19, color: platinum.ink, marginBottom: 20 },

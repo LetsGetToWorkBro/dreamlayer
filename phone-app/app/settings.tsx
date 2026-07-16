@@ -1,5 +1,7 @@
 import React from "react";
-import { View, Text, Switch, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
+import { View, Text, Switch, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
+// safe-area-context: RN's SafeAreaView is deprecated and a no-op on Android
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";

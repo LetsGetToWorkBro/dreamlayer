@@ -1,9 +1,10 @@
 import React from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { HaloCard } from "../../state/useMemoryStore";
 import { colors } from "../theme/colors";
 import { typography } from "../theme/typography";
+import { softShadow } from "../theme/shadow";
 
 /**
  * HaloMirror — a phone-side mirror of the card currently on the glasses.
@@ -71,11 +72,10 @@ const s = StyleSheet.create({
     borderColor: "rgba(140, 190, 190, 0.14)",
     padding: 22,
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    ...(Platform.OS === "android" ? { elevation: 6 } : null),
+    // the one soft shadow in the app — the floating glass card. softShadow
+    // renders the same blur on Android (boxShadow) instead of the old
+    // elevation blob, so the two platforms finally match.
+    ...softShadow(10, 22, 0.35),
   },
   sheen: { position: "absolute", top: 0, left: 0, right: 0, height: "60%" },
 });
