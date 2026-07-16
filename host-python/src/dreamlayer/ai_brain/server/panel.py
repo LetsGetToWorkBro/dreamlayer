@@ -18,83 +18,118 @@ def render_panel(token: str = "") -> str:
 _PAGE = r"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
 <style>
+  /* ============================================================
+     DreamLayer Brain — Mac OS 8.1 "Platinum" control panel.
+     Matches dreamlayer.app: Chicago chrome, hard bevels, paper
+     surfaces, pinstriped card headers, selection-blue navigation.
+     Fonts self-hosted via /panel-assets/ — still zero external
+     requests. Every selector below predates the reskin; the JS
+     contract (ids, classes, var() tokens) is unchanged.
+     ============================================================ */
+  @font-face{font-family:"ChicagoFLF";src:url("/panel-assets/ChicagoFLF.woff2") format("woff2");font-display:swap}
+  @font-face{font-family:"Space Grotesk";src:url("/panel-assets/SpaceGrotesk-latin.woff2") format("woff2");font-weight:300 700;font-display:swap}
   :root{
-    --bg:#000000; --surf:#0E1416; --surf2:#141F23; --line:#1F2A2E;
-    --memory:#2FD4C4; --attention:#FF6B5E; --success:#56D364; --error:#FF5C5C;
-    --amber:#FFB454; --text:#FFFFFF; --muted:#8A9BA3; --ghost:#55666C;
-    --r-sm:10px; --r-lg:18px; --r-pill:999px; --ease:cubic-bezier(.16,1,.3,1);
+    /* same token NAMES the JS references; Platinum values (AA on paper) */
+    --bg:#0F1A1D; --surf:#FFFFFF; --surf2:#E9ECEB; --line:#C2C8C6;
+    --memory:#0B6B52; --attention:#B3402E; --success:#1F8A3D; --error:#C0392B;
+    --amber:#8A5A00; --text:#141414; --muted:#4A5054; --ghost:#8A9296;
+    --r-sm:2px; --r-lg:2px; --r-pill:4px; --ease:cubic-bezier(.16,1,.3,1);
+    --paper:#EFEFEF; --plat:#DDDDDD; --plat2:#CCCCCC; --frame:#000000; --hi:#333399;
+    --chi:"ChicagoFLF","Charcoal","Geneva",system-ui,sans-serif;
+    --sg:"Space Grotesk",ui-sans-serif,system-ui,-apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+    --bev-out:inset 1px 1px 0 #FFFFFF, inset -1px -1px 0 #8E8E8E;
+    --bev-in:inset 1px 1px 0 #8E8E8E, inset -1px -1px 0 #FFFFFF;
+    --stripes:repeating-linear-gradient(180deg,#FFFFFF 0 1px,#DDDDDD 1px 2px,#ACACAC 2px 3px);
   }
   *{box-sizing:border-box}
   html,body{margin:0}
   body{
-    background:radial-gradient(1100px 620px at 50% -8%, rgba(47,212,196,.10), transparent 60%),var(--bg);
+    /* the desktop, glimpsed at the edges of the app shell */
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(44,199,154,.10) 1px, transparent 1.2px),
+      conic-gradient(from 90deg at 1px 1px, rgba(255,255,255,.05) 90deg, transparent 0);
+    background-size:96px 96px, 4px 4px;
     color:var(--text); -webkit-font-smoothing:antialiased;
-    font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+    font:15px/1.55 var(--sg);
     min-height:100vh;
   }
   .wrap{max-width:760px;margin:0 auto;padding:0 20px 96px}
-  .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
-       padding:20px 0 16px;margin-bottom:6px;background:linear-gradient(var(--bg) 72%,transparent);backdrop-filter:blur(6px)}
+  .bar{display:flex;align-items:center;gap:12px;padding:14px 0 10px;margin-bottom:6px}
   .brand{font-weight:600;letter-spacing:-.01em;font-size:1.05rem}
   .brand b{color:var(--memory)}
-  .live{display:flex;align-items:center;gap:7px;margin-left:auto;color:var(--muted);
-        font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+  .live{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--muted);
+        font:12.5px var(--chi);background:var(--surf);border:1px solid var(--frame);
+        box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);padding:4px 11px}
   .live .dot{width:8px;height:8px;border-radius:50%;background:var(--success);
         animation:pulse 2.4s var(--ease) infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(86,211,100,.5)}70%{box-shadow:0 0 0 7px rgba(86,211,100,0)}100%{box-shadow:0 0 0 0 rgba(86,211,100,0)}}
-  h1{font-weight:700;letter-spacing:-.025em;font-size:2.4rem;margin:6px 0 2px}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,138,61,.5)}70%{box-shadow:0 0 0 7px rgba(31,138,61,0)}100%{box-shadow:0 0 0 0 rgba(31,138,61,0)}}
+  h1{font-weight:700;letter-spacing:-.025em;font-size:2.1rem;margin:6px 0 2px;font-family:var(--sg)}
   .sub{color:var(--muted);margin:0 0 20px}
-  main>section{background:var(--surf);border:1px solid var(--line);border-radius:var(--r-lg);
-        padding:20px;margin-bottom:14px;opacity:0;transform:translateY(14px);
-        animation:rise .5s var(--ease) forwards}
+  /* every card is a little Platinum window: white body, black frame,
+     hard offset shadow, and a pinstriped strip across the top */
+  main>section{background:var(--surf);border:1px solid var(--frame);border-radius:0;
+        box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.22);
+        padding:30px 20px 20px;margin-bottom:18px;position:relative;
+        opacity:0;transform:translateY(14px);animation:rise .5s var(--ease) forwards}
+  main>section::before{content:"";position:absolute;top:6px;left:6px;right:6px;height:11px;
+        background:var(--stripes);pointer-events:none}
   main>section:nth-child(1){animation-delay:.02s} main>section:nth-child(2){animation-delay:.06s}
   main>section:nth-child(3){animation-delay:.10s} main>section:nth-child(4){animation-delay:.14s}
   main>section:nth-child(5){animation-delay:.18s} main>section:nth-child(6){animation-delay:.22s}
   @keyframes rise{to{opacity:1;transform:none}}
-  h2{font-weight:600;font-size:1.12rem;margin:0 0 4px;letter-spacing:-.01em}
-  .eyebrow{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2em;
-           text-transform:uppercase;color:var(--memory);margin-bottom:8px}
+  h2{font-weight:700;font-size:1.12rem;margin:0 0 4px;letter-spacing:-.01em;font-family:var(--sg)}
+  .eyebrow{font:11.5px var(--chi);letter-spacing:.06em;
+           text-transform:uppercase;color:var(--memory);margin-bottom:8px;
+           border-bottom:1px solid rgba(11,107,82,.35);display:inline-block;padding-bottom:2px}
   .lead{color:var(--muted);font-size:.92rem;margin:0 0 16px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   input[type=text]{flex:1;min-width:180px}
-  input,select{background:#0A1113;border:1px solid var(--line);color:var(--text);
-        border-radius:var(--r-sm);padding:11px 13px;font:inherit;transition:border-color .15s}
-  input:focus,select:focus{outline:none;border-color:var(--memory)}
-  input::placeholder{color:var(--ghost)}
-  button{background:var(--memory);color:#04120d;border:0;border-radius:var(--r-sm);
-         padding:11px 16px;font:inherit;font-weight:600;cursor:pointer;
-         transition:transform .12s var(--ease),filter .15s}
-  button:hover{filter:brightness(1.06)} button:active{transform:scale(.96)}
-  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:500}
-  button.ghost:hover{color:var(--text);border-color:var(--muted);filter:none}
-  button.sm{padding:8px 12px;font-size:.85rem}
-  button.danger{color:var(--error);border-color:rgba(255,92,92,.4)}
+  input,select,textarea{background:#FFFFFF;border:1px solid var(--frame);color:var(--text);
+        border-radius:0;box-shadow:var(--bev-in);padding:10px 12px;font:inherit;font-family:var(--sg)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--memory);outline-offset:-1px}
+  input::placeholder,textarea::placeholder{color:var(--ghost)}
+  button{background:linear-gradient(180deg,#49E8BC,#17AE85);color:#00251C;border:1px solid var(--frame);
+         border-radius:7px;box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.2);
+         padding:9px 16px;font:14px var(--chi);cursor:pointer}
+  button:hover{filter:brightness(1.04)}
+  button:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in);transform:none;filter:none}
+  button.ghost{background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#141414}
+  button.ghost:hover{color:#000;filter:brightness(1.02)}
+  button.ghost:active{background:#6E6E6E;color:#fff}
+  button.sm{padding:6px 12px;font-size:12.5px}
+  button.danger{color:var(--error);background:linear-gradient(180deg,#F6F6F6,#D2D2D2)}
   pre{overflow-x:auto}
 
   /* system status */
   .sys{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
   .sys:first-child{border-top:0}
-  .sdot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ghost)}
-  .sdot.ok{background:var(--success);box-shadow:0 0 8px rgba(86,211,100,.5)}
-  .sdot.warn{background:var(--amber);box-shadow:0 0 8px rgba(255,180,84,.4)}
+  .sdot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ghost);
+        box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+  .sdot.ok{background:var(--success)}
+  .sdot.warn{background:#D89614}
   .sdot.off{background:var(--ghost)}
   .sname{font-size:.98rem;min-width:96px}
   .sstate{color:var(--muted);font-size:.88rem;margin-left:auto;text-align:right}
   .sstate b{color:var(--text);font-weight:600}
 
-  /* connections + switches */
+  /* connections + switches — the toggle is a Platinum slide switch */
   .conn{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:16px 0;border-top:1px solid var(--line)}
   .conn:first-of-type{border-top:0;padding-top:4px}
-  .conn-t{font-size:1rem} .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:46ch}
-  .sw{position:relative;display:inline-block;width:48px;height:28px;flex:none;cursor:pointer}
+  .conn-t{font-size:1rem;font-weight:600} .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:46ch}
+  .sw{position:relative;display:inline-block;width:46px;height:24px;flex:none;cursor:pointer}
   .sw input{opacity:0;width:0;height:0;position:absolute}
-  .sw .track{position:absolute;inset:0;background:#0A1113;border:1px solid var(--line);border-radius:var(--r-pill);transition:background .2s var(--ease),border-color .2s}
-  .sw .track:before{content:"";position:absolute;left:3px;top:2px;width:21px;height:21px;border-radius:50%;background:var(--ghost);transition:transform .2s var(--ease),background .2s}
-  .sw input:checked + .track{background:rgba(47,212,196,.22);border-color:var(--memory)}
-  .sw input:checked + .track:before{transform:translateX(20px);background:var(--memory)}
-  .sw input:checked + .track.red{background:rgba(255,107,94,.22);border-color:var(--attention)}
-  .sw input:checked + .track.red:before{background:var(--attention)}
+  .sw .track{position:absolute;inset:0;background:#FFFFFF;border:1px solid var(--frame);border-radius:3px;
+        box-shadow:var(--bev-in);transition:background .15s}
+  .sw .track:before{content:"";position:absolute;left:2px;top:2px;width:19px;height:18px;border-radius:2px;
+        background:linear-gradient(135deg,#F2F2F6,#B9B9D6);border:1px solid var(--frame);
+        box-shadow:inset 1px 1px 0 rgba(255,255,255,.8);transition:transform .15s var(--ease)}
+  .sw input:checked + .track{background:rgba(11,107,82,.18)}
+  .sw input:checked + .track:before{transform:translateX(20px);background:linear-gradient(135deg,#49E8BC,#17AE85)}
+  .sw input:checked + .track.red{background:rgba(179,64,46,.16)}
+  .sw input:checked + .track.red:before{background:linear-gradient(135deg,#E8907E,#B3402E)}
   .sw input:disabled + .track{opacity:.4;cursor:not-allowed}
 
   /* folders */
@@ -102,17 +137,21 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   li.folder{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
   li.folder:first-child{border-top:0}
   .path{font:13px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all}
-  .path:before{content:"";display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--memory);margin-right:9px;vertical-align:middle;opacity:.8}
-  .drop{margin-top:14px;border:1.5px dashed var(--line);border-radius:14px;padding:24px;text-align:center;color:var(--ghost);transition:.15s}
-  .drop.hot{border-color:var(--memory);color:var(--memory);background:rgba(47,212,196,.06)}
+  .path:before{content:"";display:inline-block;width:7px;height:7px;background:var(--memory);margin-right:9px;vertical-align:middle}
+  .drop{margin-top:14px;border:1.5px dashed #9AA19E;padding:24px;text-align:center;color:var(--ghost);transition:.15s}
+  .drop.hot{border-color:var(--memory);color:var(--memory);background:rgba(11,107,82,.05)}
   .empty{color:var(--ghost);font-size:.9rem;padding:14px 0;text-align:center}
 
-  /* segmented + model status */
-  .seg{display:inline-flex;background:#0A1113;border:1px solid var(--line);border-radius:var(--r-pill);padding:3px;gap:2px}
-  .seg button{background:transparent;color:var(--muted);border-radius:var(--r-pill);padding:8px 16px;font-weight:500}
-  .seg button.on{background:var(--memory);color:#04120d;font-weight:600}
-  .mstat{margin-top:16px;background:#0A1113;border:1px solid var(--line);border-radius:var(--r-sm);padding:16px}
-  .mstat .head{display:flex;align-items:center;gap:10px;font-size:1rem;margin-bottom:4px}
+  /* segmented (Platinum tabs) + model status */
+  .seg{display:inline-flex;background:var(--plat);border:1px solid var(--frame);border-radius:0;
+       box-shadow:var(--bev-out);padding:2px;gap:2px}
+  .seg button{background:transparent;color:var(--muted);border:1px solid transparent;border-radius:0;
+       box-shadow:none;padding:7px 15px;font:13px var(--chi)}
+  .seg button:active{background:#8E8E8E;color:#fff}
+  .seg button.on{background:#FFFFFF;color:var(--text);border-color:var(--frame);box-shadow:var(--bev-out)}
+  .mstat{margin-top:16px;background:#F7F8F7;border:1px solid var(--frame);box-shadow:var(--bev-out);
+       border-radius:0;padding:16px}
+  .mstat .head{display:flex;align-items:center;gap:10px;font-size:1rem;margin-bottom:4px;font-weight:600}
   .mrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:.9rem}
   .mrow:first-of-type{border-top:0}
   .mrow .lbl{min-width:64px;color:var(--muted)} .mrow .nm{font:12px ui-monospace,Menlo,monospace;color:var(--text)}
@@ -120,180 +159,177 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .ok-t{color:var(--success)} .warn-t{color:var(--amber)} .off-t{color:var(--ghost)}
   .steps{margin:10px 0 0;padding:0;counter-reset:s}
   .steps li{list-style:none;display:flex;gap:10px;padding:6px 0;color:var(--muted);font-size:.9rem;border:0}
-  .steps li:before{counter-increment:s;content:counter(s);flex:none;width:20px;height:20px;border-radius:50%;
-        background:rgba(47,212,196,.14);color:var(--memory);font:11px/20px ui-monospace,Menlo,monospace;text-align:center}
-  code{font:12px ui-monospace,Menlo,monospace;background:#050809;border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--memory);user-select:all}
+  .steps li:before{counter-increment:s;content:counter(s);flex:none;width:20px;height:20px;
+        background:var(--plat);border:1px solid var(--frame);box-shadow:var(--bev-out);
+        color:var(--text);font:11px/18px var(--chi);text-align:center}
+  code{font:12px ui-monospace,Menlo,monospace;background:#FFFFFF;border:1px solid var(--frame);
+       box-shadow:var(--bev-in);border-radius:0;padding:2px 7px;color:var(--memory);user-select:all}
 
   /* answer + pair */
-  .ans{margin-top:14px;padding:14px 16px;background:#0A1113;border-radius:var(--r-sm);border-left:2px solid var(--memory);animation:rise .35s var(--ease) both}
+  .ans{margin-top:14px;padding:14px 16px;background:#FFFFFF;border:1px solid var(--frame);
+       border-left:3px solid var(--memory);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.15);
+       border-radius:0;animation:rise .35s var(--ease) both}
   .ans .src{display:inline-flex;gap:8px;align-items:center;font:11px ui-monospace,Menlo,monospace;color:var(--ghost);margin-top:8px}
-  .tier{background:rgba(47,212,196,.14);color:var(--memory);border-radius:var(--r-pill);padding:2px 8px;text-transform:uppercase;letter-spacing:.08em}
-  .shimmer{height:14px;border-radius:6px;margin:6px 0;background:linear-gradient(90deg,#0A1113,#182228,#0A1113);background-size:200% 100%;animation:sh 1.1s linear infinite}
+  .tier{background:rgba(11,107,82,.12);color:var(--memory);border:1px solid rgba(11,107,82,.4);
+       border-radius:0;padding:2px 8px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--chi)}
+  .shimmer{height:14px;margin:6px 0;background:linear-gradient(90deg,#E7EAE9,#F6F8F7,#E7EAE9);
+       background-size:200% 100%;animation:sh 1.1s linear infinite}
   .shimmer.s2{width:70%}
   @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-  .paircode{margin-top:14px;background:#0A1113;border:1px solid var(--line);border-radius:var(--r-sm);padding:14px;animation:rise .35s var(--ease) both}
+  .paircode{margin-top:14px;background:#FFFFFF;border:1px solid var(--frame);box-shadow:var(--bev-out);
+       border-radius:0;padding:14px;animation:rise .35s var(--ease) both}
   .paircode .code{font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--memory);word-break:break-all;user-select:all}
   .paircode .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
-  .qrbox{background:#fff;border-radius:8px;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
+  .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
+       border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
   .qrbox svg{display:block;width:200px;height:200px;max-width:100%}
 
   /* activity feed */
   .feed li{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
   .feed li:first-child{border-top:0}
   .feed .q{color:var(--text)} .feed .a{color:var(--muted);font-size:.9rem;margin-top:2px}
-  .tag{font:10px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em;flex:none;padding-top:3px;color:var(--memory)}
+  .tag{font:10px var(--chi);text-transform:uppercase;letter-spacing:.08em;flex:none;padding-top:3px;color:var(--memory)}
   .tag.folder{color:var(--amber)} .tag.upload{color:var(--success)} .tag.cloud{color:var(--memory)}
-  .tag.privacy{color:var(--attention)} .tag.pair{color:#8FB8FF} .tag.ask{color:var(--memory)} .tag.model,.tag.config{color:var(--muted)}
+  .tag.privacy{color:var(--attention)} .tag.pair{color:#33418F} .tag.model,.tag.config{color:var(--muted)}
 
-  /* modal (folder browser) */
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:60;
+  /* modal (folder browser) — a real Platinum dialog */
+  .overlay{position:fixed;inset:0;background:rgba(8,12,14,.35);z-index:60;
         display:none;align-items:center;justify-content:center;padding:20px}
   .overlay.show{display:flex}
-  .modal{width:100%;max-width:560px;background:var(--surf);border:1px solid var(--line);border-radius:var(--r-lg);
+  .modal{width:100%;max-width:560px;background:var(--plat);border:2px solid var(--frame);border-radius:0;
+        box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35);
         padding:20px;max-height:80vh;display:flex;flex-direction:column;animation:rise .3s var(--ease) both}
-  .modal h3{margin:0 0 4px;font-weight:600} .modal .cur{font:12px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all;margin-bottom:12px}
-  .dirlist{overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:14px}
-  .diritem{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line);color:var(--text)}
-  .diritem:last-child{border-bottom:0} .diritem:hover{background:rgba(47,212,196,.06)}
-  .diritem:before{content:"";width:8px;height:8px;border-radius:2px;background:var(--memory);opacity:.7}
+  .modal h3{margin:0 0 4px;font:16px var(--chi);font-weight:400}
+  .modal .cur{font:12px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all;margin-bottom:12px}
+  .dirlist{overflow-y:auto;background:#FFFFFF;border:1px solid var(--frame);box-shadow:var(--bev-in);
+        border-radius:0;margin-bottom:14px}
+  .diritem{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+        border-bottom:1px solid #E2E5E4;color:var(--text);font-family:var(--chi);font-size:14px}
+  .diritem:last-child{border-bottom:0}
+  .diritem:hover{background:var(--hi);color:#fff}
+  .diritem:before{content:"";width:8px;height:8px;background:var(--memory)}
+  .diritem:hover:before{background:#fff}
   .diritem.up:before{background:var(--ghost);border-radius:50%}
   .modal .mfoot{display:flex;gap:10px;justify-content:flex-end}
   /* plugin detail */
   .modal.pd{max-width:600px;padding:0;overflow:hidden}
-  .pd .shot{width:100%;display:block;border-bottom:1px solid var(--line);background:var(--bg)}
-  .pd .pdbody{padding:22px;overflow-y:auto}
+  .pd .shot{width:100%;display:block;border-bottom:1px solid var(--frame);background:#0E1416}
+  .pd .pdbody{padding:22px;overflow-y:auto;background:var(--surf)}
   .pd h3{font-size:1.3rem} .pd .pdby{font:12px ui-monospace,Menlo,monospace;color:var(--muted);margin-bottom:14px}
-  .pd .pdlong p{color:var(--muted2,#b9c8c5);margin:0 0 11px;line-height:1.6}
-  .pd .pdsec{font:10px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.12em;color:var(--memory);margin:18px 0 7px}
+  .pd .pdlong p{color:var(--muted);margin:0 0 11px;line-height:1.6}
+  .pd .pdsec{font:11px var(--chi);text-transform:uppercase;letter-spacing:.08em;color:var(--memory);margin:18px 0 7px}
   .pd .permr{display:flex;gap:12px;align-items:baseline;margin:6px 0;font-size:.92rem;color:var(--text)}
-  .pd .permr b{color:var(--attention);font:11px ui-monospace,Menlo,monospace;letter-spacing:.04em;min-width:66px;text-transform:uppercase;flex:none}
+  .pd .permr b{color:var(--attention);font:11px var(--chi);letter-spacing:.04em;min-width:66px;text-transform:uppercase;flex:none}
   .pd .pill{cursor:pointer}
 
-  #toast{position:fixed;left:50%;bottom:30px;transform:translate(-50%,20px);background:var(--surf2);
-        border:1px solid var(--line);border-radius:var(--r-pill);padding:11px 20px;color:var(--text);
+  /* toast — Balloon Help */
+  #toast{position:fixed;left:50%;bottom:30px;transform:translate(-50%,20px);background:#FFFFE8;
+        border:1px solid var(--frame);border-radius:10px 10px 10px 2px;padding:10px 18px;color:#222;
         font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);
-        z-index:80;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+        z-index:80;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
   #toast.show{opacity:1;transform:translate(-50%,0)}
   #toast .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:9px;vertical-align:middle}
   a{color:var(--memory)}
-  /* --- cinematic restyle: a dim dusk still + film grain + vignette so the
-     Brain feels like the product, not a form. All overlays are inert. --- */
-  .cine-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
-    background:#05090b url("/panel-assets/still-dusk.webp") center/cover no-repeat;
-    opacity:.16;filter:blur(2px) saturate(1.06)}
-  .cine-bg::after{content:"";position:absolute;inset:0;
-    background:linear-gradient(180deg,rgba(3,6,8,.4),rgba(3,6,8,.9) 64%)}
-  .grain{position:fixed;inset:0;z-index:1;opacity:.05;mix-blend-mode:overlay;pointer-events:none;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
-    background:radial-gradient(120% 85% at 50% -5%,transparent 55%,rgba(0,0,0,.55))}
+  /* the cinematic dusk layer is retired — the Platinum desktop is the scene.
+     The divs remain in the markup (inert), so they are simply hidden. */
+  .cine-bg,.grain,.vignette,.head-cine{display:none}
   .wrap{position:relative;z-index:2}
-  /* cinematic header band — a visible dusk still behind the title, faded out */
-  .head-cine{position:absolute;top:0;left:50%;transform:translateX(-50%);
-    width:100vw;height:360px;z-index:-1;pointer-events:none;
-    background:#05090b url("/panel-assets/still-dusk.webp") center 28%/cover no-repeat;
-    opacity:.62;-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 34%,transparent 96%);
-    mask-image:linear-gradient(180deg,#000 0%,#000 34%,transparent 96%)}
-  .head-cine::after{content:"";position:absolute;inset:0;
-    background:linear-gradient(180deg,rgba(3,6,8,.15),rgba(3,6,8,.6) 68%,var(--bg))}
-  .bar,h1,.sub{position:relative}
-  h1{text-shadow:0 2px 30px rgba(0,0,0,.6)}
-  /* stronger glass on cards so the backdrop reads clearly through them */
-  main>section{background:linear-gradient(180deg,rgba(18,29,33,.68),rgba(12,18,20,.8));
-    border-color:rgba(120,180,180,.16);
-    -webkit-backdrop-filter:blur(16px) saturate(1.18);backdrop-filter:blur(16px) saturate(1.18)}
-  @media (prefers-reduced-motion:reduce){.grain{display:none}}
-  /* feature explainers — a chip grid that opens an illustrated drawer */
+  /* feature explainers — Platinum chips that open an illustrated dialog */
   .xgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
   .xchip{display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer;
-    background:var(--surf2);border:1px solid var(--line);border-radius:var(--r-sm);
-    padding:11px 13px;color:var(--text);font:inherit;font-size:.92rem;transition:border-color .15s,transform .15s var(--ease)}
-  .xchip:hover{border-color:var(--memory);transform:translateY(-1px)}
-  .xchip .xdot{width:7px;height:7px;border-radius:50%;background:var(--memory);flex:none}
+    background:linear-gradient(180deg,#F6F6F6,#DEDEDE);border:1px solid var(--frame);border-radius:0;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);
+    padding:10px 13px;color:var(--text);font:13px var(--chi);transition:transform .12s var(--ease)}
+  .xchip:hover{filter:brightness(1.03)}
+  .xchip:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in)}
+  .xchip .xdot{width:7px;height:7px;background:var(--memory);flex:none}
   .xmodal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
-    padding:24px;background:rgba(3,6,8,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    padding:24px;background:rgba(8,12,14,.35)}
   .xmodal.on{display:flex}
-  .xcard{max-width:440px;width:100%;background:linear-gradient(180deg,var(--surf2),var(--surf));
-    border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
-    box-shadow:0 30px 80px rgba(0,0,0,.6)}
-  .xcard img{display:block;width:100%;background:#05090b;border-bottom:1px solid var(--line)}
-  .xcard .xbody{padding:18px 20px}
+  .xcard{max-width:440px;width:100%;background:var(--plat);
+    border:2px solid var(--frame);border-radius:0;overflow:hidden;
+    box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35)}
+  .xcard img{display:block;width:100%;background:#0E1416;border-bottom:1px solid var(--frame)}
+  .xcard .xbody{padding:18px 20px;background:var(--surf)}
   .xcard .xbody h3{margin:2px 0 8px;font-size:1.3rem;letter-spacing:-.02em}
   .xcard .xbody p{margin:0;color:var(--muted);line-height:1.6}
-  .xcard .xclose{margin:0 20px 20px;padding:9px 16px}
+  .xcard .xclose{margin:14px 20px 20px}
   /* ================= native app chrome ==================================
-     The single biggest "browser vs app" tell is the page scrolling as one with
-     a fat scrollbar. So: the window never scrolls; a fixed sidebar + an
-     independently-scrolling content pane, thin overlay scrollbars, and no
-     text-selection or focus rings on the chrome. Feels like a real Mac app. */
+     The window never scrolls as a page: a fixed Platinum sidebar + an
+     independently-scrolling paper content pane, with lavender Platinum
+     scrollbar thumbs. Feels like a real (classic) Mac app. */
   html,body{height:100%}
   body{overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;
     cursor:default}
-  .cine-bg,.grain,.vignette{position:fixed}     /* stay put; only content scrolls */
   .wrap{max-width:none;width:100%;height:100vh;display:flex;gap:0;padding:0;align-items:stretch;z-index:2}
-  .side{width:232px;flex:none;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
-    padding:18px 12px 16px;border-right:1px solid var(--line);border-radius:0;
-    background:linear-gradient(180deg,rgba(16,26,29,.62),rgba(10,15,17,.72));
-    -webkit-backdrop-filter:blur(22px) saturate(1.1);backdrop-filter:blur(22px) saturate(1.1)}
-  .side .brand2{display:flex;align-items:center;gap:10px;padding:4px 10px 16px;font-weight:700;
-    letter-spacing:-.01em;font-size:1.05rem}
-  .side .brand2 .rd{position:relative;width:18px;height:18px;flex:none;border-radius:50%;
-    border:2px solid var(--memory)}
-  .side .brand2 .rd::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--memory)}
-  .side .navlabel{font:10px var(--mono,ui-monospace);letter-spacing:.16em;text-transform:uppercase;
-    color:var(--ghost);padding:12px 11px 5px}
+  .side{width:224px;flex:none;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
+    padding:14px 10px 16px;border-right:1px solid var(--frame);border-radius:0;
+    background:linear-gradient(180deg,#E4E4E4,#D2D2D2);
+    box-shadow:inset -1px 0 0 #9A9A9A, inset 1px 1px 0 #F4F4F4}
+  .side .brand2{display:flex;align-items:center;gap:10px;padding:6px 10px 14px;
+    font:16px var(--chi);font-weight:400;letter-spacing:.01em;color:#111}
+  .side .brand2 .rd{position:relative;width:16px;height:16px;flex:none;border-radius:50%;
+    border:2.5px solid var(--memory)}
+  .side .brand2 .rd::after{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--memory)}
+  .side .navlabel{font:10.5px var(--chi);letter-spacing:.1em;text-transform:uppercase;
+    color:#6E7671;padding:10px 11px 5px}
   .side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:0;
-    color:var(--muted);font:inherit;font-size:.93rem;font-weight:500;padding:8px 11px;border-radius:8px;
-    cursor:default;outline:none;transition:background .13s,color .13s}
-  .side button svg{width:17px;height:17px;flex:none;opacity:.85}
-  .side button:hover{background:rgba(255,255,255,.05);color:var(--text)}
-  .side button.on{background:linear-gradient(180deg,rgba(47,212,196,.2),rgba(47,212,196,.12));color:#fff;
-    box-shadow:inset 0 0 0 1px rgba(47,212,196,.22)}
-  .side button.on svg{opacity:1;color:var(--memory)}
-  .content{flex:1;min-width:0;height:100vh;overflow-y:auto;position:relative;padding:30px 40px 64px}
-  .content .bar{justify-content:flex-end;margin:0;padding:0;position:static;
-    background:none;-webkit-backdrop-filter:none;backdrop-filter:none}
-  .content .bar .brand{display:none}     /* brand lives in the sidebar now */
-  h1#pageTitle{font-size:2rem;margin:2px 0 2px;letter-spacing:-.03em}
-  .content>main{max-width:760px}          /* comfortable native reading column */
-  /* thin, native-style overlay scrollbars */
-  .content::-webkit-scrollbar,.side::-webkit-scrollbar{width:11px;height:11px}
-  .content::-webkit-scrollbar-thumb{background:rgba(200,220,220,.16);border-radius:8px;
-    border:3px solid transparent;background-clip:padding-box}
-  .content::-webkit-scrollbar-thumb:hover{background:rgba(200,220,220,.28);background-clip:padding-box}
+    color:#26292B;font:14px var(--chi);padding:7px 11px;border-radius:0;box-shadow:none;
+    cursor:default;outline:none}
+  .side button svg{width:16px;height:16px;flex:none;opacity:.9}
+  .side button:hover{background:rgba(0,0,0,.07);color:#000;filter:none}
+  .side button:active{background:var(--hi);color:#fff;box-shadow:none}
+  .side button.on{background:var(--hi);color:#fff}
+  .side button.on svg{opacity:1;color:#fff}
+  .content{flex:1;min-width:0;height:100vh;overflow-y:auto;position:relative;padding:24px 40px 64px;
+    background:var(--paper);box-shadow:inset 1px 1px 0 #9A9A9A}
+  .content .bar{justify-content:flex-end;margin:0;padding:0;position:static;background:none}
+  .content .bar .brand{display:none}     /* brand lives in the sidebar */
+  h1#pageTitle{font-size:1.9rem;margin:2px 0 2px;letter-spacing:-.03em}
+  .content>main{max-width:760px}
+  /* Platinum scrollbars: dithered track, lavender thumb */
+  .content::-webkit-scrollbar,.side::-webkit-scrollbar{width:15px;height:15px}
+  .content::-webkit-scrollbar-track{background:#C6C6C6;border-left:1px solid var(--frame)}
+  .content::-webkit-scrollbar-thumb{background:linear-gradient(135deg,#B8B8E8,#8989CE);
+    border:1px solid var(--frame);box-shadow:inset 1px 1px 0 rgba(255,255,255,.75)}
   .side::-webkit-scrollbar-thumb{background:transparent}
-  .content::-webkit-scrollbar-track,.side::-webkit-scrollbar-track{background:transparent}
+  .side::-webkit-scrollbar-track{background:transparent}
   /* selection + normal cursor only where it belongs */
   input,textarea,pre,.line,.conn-s,.lead,p,#briefout,#recallout{-webkit-user-select:text;user-select:text}
   input,textarea{cursor:text}
   main>section{display:none}                       /* only the active view shows */
   main>section.pon{display:block;opacity:1;transform:none;
-    animation:pagein .3s var(--ease) both}         /* override the scroll-reveal's opacity:0 */
+    animation:pagein .3s var(--ease) both}
   @keyframes pagein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  .head-cine{display:none}                          /* clean app header, not a web hero */
-  /* Juno — a living companion in the corner. juno.js composites her packed
-     colour+matte clip to a <canvas> for true transparency and breathes the
-     media; here we float the whole figure and drift a hue-shifting aura behind
-     her, so the panel feels tended rather than static. */
-  .juno-hero{position:fixed;right:18px;bottom:16px;width:200px;z-index:15;pointer-events:none;
+  /* Juno — the desk accessory, exactly as she appears on dreamlayer.app:
+     a tiny Platinum window in the corner, pixel sprite inside, watching. */
+  .juno-hero{position:fixed;right:16px;bottom:16px;width:150px;z-index:15;pointer-events:none;
+    background:var(--plat);border:1px solid var(--frame);
+    box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.3);
+    padding:17px 8px 8px;text-align:center}
+  .juno-hero::after{content:"Juno";position:absolute;top:2px;left:50%;transform:translateX(-50%);
+    font:11px var(--chi);color:#1A1A1A;background:var(--plat);padding:0 7px}
+  .juno-hero::before{content:"";position:absolute;top:6px;left:6px;right:6px;height:8px;
+    background:var(--stripes)}
+  .juno-hero .jscreen{background:#0E1416;padding:9px 6px 7px}
+  .juno-hero img{width:92px;height:auto;image-rendering:pixelated;
+    filter:drop-shadow(0 0 12px rgba(44,199,154,.28));
     animation:jhFloat 10s ease-in-out infinite;will-change:transform}
-  .juno-hero::before{content:"";position:absolute;left:50%;top:48%;width:150%;height:150%;
-    transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
-    background:radial-gradient(closest-side,rgba(47,212,196,.30),rgba(47,212,196,0) 72%);
-    animation:jhAura 6.5s ease-in-out infinite,jhHue 26s linear infinite}
-  .juno-hero[data-state="thinking"]::before{background:radial-gradient(closest-side,rgba(47,212,196,.42),rgba(47,212,196,0) 72%)}
-  .juno-hero[data-state="success"]::before{background:radial-gradient(closest-side,rgba(86,211,100,.40),rgba(86,211,100,0) 72%)}
-  @keyframes jhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-  @keyframes jhAura{0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}
-    50%{opacity:.82;transform:translate(-50%,-50%) scale(1.08)}}
-  @keyframes jhHue{0%,100%{filter:blur(7px) hue-rotate(-16deg)}50%{filter:blur(7px) hue-rotate(16deg)}}
+  .juno-hero .jcap{display:block;margin-top:5px;font:10.5px var(--chi);color:#A8B8C0;line-height:1.4}
+  .juno-hero[data-state="thinking"] img{filter:drop-shadow(0 0 16px rgba(44,199,154,.5))}
+  .juno-hero[data-state="success"] img{filter:drop-shadow(0 0 16px rgba(86,211,100,.5))}
+  @keyframes jhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
   @media(max-width:760px){.juno-hero{display:none}}
-  @media(prefers-reduced-motion:reduce){.juno-hero,.juno-hero::before{animation:none}}
+  @media(prefers-reduced-motion:reduce){
+    .juno-hero img{animation:none}
+    main>section{animation-duration:.01s}
+    .live .dot{animation:none}
+  }
   @media(max-width:760px){body{overflow:auto}
     .wrap{flex-direction:column;height:auto}
     .side{width:auto;height:auto;flex-direction:row;flex-wrap:wrap;gap:4px;border-right:0;
-      border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+      border-bottom:1px solid var(--frame);position:sticky;top:0;z-index:5}
     .side .brand2,.side .navlabel{width:100%}
     .side button{width:auto}
     .content{height:auto;padding:22px 20px 60px}}
@@ -644,8 +680,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <div class="modal pd"><div id="pdinner"></div></div>
 </div>
 <div id="toast"></div>
-<div class="juno-hero" data-juno data-juno-state="idle" aria-hidden="true"></div>
-<script src="/dreamlayer/build/juno/juno.js" defer></script>
+<div class="juno-hero" data-juno data-juno-state="idle" aria-hidden="true">
+  <div class="jscreen"><img src="/panel-assets/juno_da.webp" alt="" width="96" height="96">
+  <span class="jcap">the brain is listening.</span></div>
+</div>
 <script>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
@@ -1145,9 +1183,9 @@ function apiPreset(apply){const p=APROV[$("aprov").value]||APROV.custom;
 function renderApiWarn(){const el=$("apiWarn");if(!el)return;
   const loc=isLocalUrl($("abase").value.trim());
   const lost='<b>What stays with DreamLayer:</b> your agent answers questions, but it does <b>not</b> run '+
-    'DreamLayer\\'s own on-device features. The fact-checker, memory lenses and private capture read '+
-    'DreamLayer\\'s local memory, not your agent\\'s. Vision (naming what you look at) stays on the built-in path, '+
-    'and answers aren\\'t glasses-shaped the way the built-in brain\\'s are.';
+    'DreamLayer\'s own on-device features. The fact-checker, memory lenses and private capture read '+
+    'DreamLayer\'s local memory, not your agent\'s. Vision (naming what you look at) stays on the built-in path, '+
+    'and answers aren\'t glasses-shaped the way the built-in brain\'s are.';
   if(loc===true){
     el.innerHTML='<div class="mstat" style="margin-top:12px"><div class="head"><span class="sdot ok"></span>'+
       '<b>On your device</b> &nbsp;<span class="tag privacy">local</span></div>'+
@@ -1158,8 +1196,8 @@ function renderApiWarn(){const el=$("apiWarn");if(!el)return;
       '<span class="sdot warn"></span><b>Remote endpoint — your queries leave this device</b> &nbsp;'+
       '<span class="tag" style="color:var(--amber)">egress</span></div>'+
       '<div class="lead" style="margin:6px 0 0"><b>Privacy:</b> every question is sent to this service, '+
-      '<b>counted and logged as cloud egress</b>, and <b>silenced while you\\'re incognito</b> (it falls back to '+
-      'on-device keyword search). DreamLayer can\\'t see or control what that service does with your data. '+lost+'</div></div>';
+      '<b>counted and logged as cloud egress</b>, and <b>silenced while you\'re incognito</b> (it falls back to '+
+      'on-device keyword search). DreamLayer can\'t see or control what that service does with your data. '+lost+'</div></div>';
   }else{
     el.innerHTML='<div class="conn-s" style="margin-top:12px">Enter your endpoint URL above. A localhost / LAN '+
       'address stays on-device; a public URL sends your questions off the device (logged as egress, off in incognito).</div>';

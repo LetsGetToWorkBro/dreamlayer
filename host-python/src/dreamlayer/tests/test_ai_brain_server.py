@@ -205,9 +205,12 @@ class TestServer:
             # the People section now merges the glasses' social memory
             # (relation/notes/debts) with the dossier registry
             assert "/dreamlayer/social/people" in body and "met on Halo" in body
-            # Juno lives on the panel: her mount + sprite script are present
+            # Juno lives on the panel: since the Platinum redesign she is the
+            # pixel desk-accessory sprite served from the panel's own assets
+            # (the photoreal juno.js mount is retired here; the script itself
+            # is still served for the lens builder — see the test below)
             assert 'class="juno-hero"' in body and "data-juno" in body
-            assert "/dreamlayer/build/juno/juno.js" in body
+            assert "/panel-assets/juno_da.webp" in body
         finally:
             lb.stop()
 
