@@ -104,11 +104,22 @@ Source of truth: [`src/ui/anim.ts`](src/ui/anim.ts) (timings from
 Two verbs, both **native-driven** (`useNativeDriver: true`) and **reduce-motion
 aware** (they snap to the end state when `motion.reduceMotion`).
 
-- **`useEntrance(delay?, rise?)`** — a fade + gentle rise (14px) as a view
-  mounts. `ScreenHeader`, `Card`, and `EmptyState` use it. Stagger a column by
-  passing an increasing `delay` (≈45–60ms per item) — see `memories.tsx`.
-- **`usePressScale(to?)`** — a spring scale-down (default `0.96`) while pressed.
-  Baked into `Tappable`, so every touch target answers back the same way.
+- **`useEntrance(delay?, rise?)`** — the Mac OS 8 **zoom open**: a fade +
+  scale-up from 94% with a slight rise, so windows GROW in the way a zoom-rect
+  opens them. `ScreenHeader`, `Card`, and `EmptyState` use it. Stagger a column
+  by passing an increasing `delay` (≈45–60ms per item) — see `memories.tsx`.
+- **`usePressScale(to?)`** — a spring scale-down while pressed, baked into
+  `Tappable`. Platinum push buttons go further: via `Tappable`'s function
+  children they press **IN** — the face goes solid dark, the label flips white,
+  and the highlight bevel disappears (the site's `.pbtn:active`).
+- **WindowShade** — a titled `Card` rolls up to just its title bar when the bar
+  (or its collapse box) is tapped, with a `LayoutAnimation` collapse; a shaded
+  window loses its pinstripes, the Platinum cue for "inactive."
+- **Boot** — one brief boot moment per cold launch (`app/_layout.tsx`): desktop,
+  "Welcome to DreamLayer." panel, an extensions-style progress fill, then a
+  zoom-away. Reduce-motion skips it.
+- **MenuBar** — the top strip (ring mark → home, Chicago name, live clock) that
+  matches the website and Mac panel; rendered by `Screen` on every page.
 
 **The easing curve is `cubic-bezier(0.16, 1, 0.3, 1)`** everywhere — a soft,
 decelerating "arrive." Don't hand-roll other curves.

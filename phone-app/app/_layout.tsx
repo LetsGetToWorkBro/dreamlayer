@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform, View, StyleSheet } from "react-native";
+import { Platform, View, Text, Image, Animated, Easing, AccessibilityInfo, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   useFonts,
@@ -11,6 +11,7 @@ import {
 import { colors, platinum } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
 import { TabIcon } from "../src/ui/components/TabIcon";
+import { CineBackdrop } from "../src/ui/components/CineBackdrop";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { usePackStore } from "../src/state/usePackStore";
 import { t } from "../src/i18n";
@@ -29,6 +30,50 @@ function TabBarBackground() {
       <View style={s.topFrame} />
       <View style={s.topHi} />
     </View>
+  );
+}
+
+/* ------------------------------------------------------------------ boot --
+ * The Mac OS 8.1 boot moment, sized for a phone: the desktop, a beveled
+ * "Welcome to DreamLayer." panel with the little-Mac mark, and an extensions-
+ * style progress bar that fills — then the whole thing zooms away into the
+ * app. Plays once per cold launch; reduce-motion skips it entirely. */
+const EASE = Easing.bezier(0.16, 1, 0.3, 1);
+const BOOT_BAR_W = 176;
+let bootPlayed = false;
+
+function BootScreen({ onDone }: { onDone: () => void }) {
+  const fade = React.useRef(new Animated.Value(1)).current;
+  const zoom = React.useRef(new Animated.Value(1)).current;
+  const fill = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((r) => { if (r && alive) onDone(); })
+      .catch(() => {});
+    Animated.timing(fill, { toValue: 1, duration: 950, delay: 120, easing: EASE, useNativeDriver: true }).start();
+    const tmr = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fade, { toValue: 0, duration: 300, easing: EASE, useNativeDriver: true }),
+        Animated.timing(zoom, { toValue: 1.08, duration: 300, easing: EASE, useNativeDriver: true }),
+      ]).start(() => onDone());
+    }, 1250);
+    return () => { alive = false; clearTimeout(tmr); };
+  }, []);
+
+  const barX = fill.interpolate({ inputRange: [0, 1], outputRange: [-BOOT_BAR_W, 0] });
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, s.boot, { opacity: fade, transform: [{ scale: zoom }] }]}>
+      <CineBackdrop />
+      <View style={s.bootPanel}>
+        <Image source={require("../assets/splash.png")} style={s.bootMac} resizeMode="contain" />
+        <Text style={s.bootTitle}>Welcome to DreamLayer.</Text>
+        <View style={s.bootTrack}>
+          <Animated.View style={[s.bootFill, { transform: [{ translateX: barX }] }]} />
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -72,12 +117,14 @@ export default function Layout() {
       require("../src/state/usePeopleStore").usePeopleStore.getState().hydrateCache();
     }
   }, [hydrated, hydrate]);
+  const [booted, setBooted] = React.useState(bootPlayed);
   if (!loaded) return <View style={{ flex: 1, backgroundColor: platinum.desk }} />;
 
   // hide the tab bar on the first-run tour and the boot redirect
   const noBar = { tabBarStyle: { display: "none" as const } };
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       // drill-ins (Brain -> Preferences/Labs, Now -> Look) live off the bar as
       // hidden tabs; "history" back-behavior makes the back control return to
@@ -151,6 +198,8 @@ export default function Layout() {
       <Tabs.Screen name="onboarding" options={{ href: null, ...noBar }} />
       <Tabs.Screen name="index" options={{ href: null, ...noBar }} />
     </Tabs>
+    {!booted ? <BootScreen onDone={() => { bootPlayed = true; setBooted(true); }} /> : null}
+    </View>
   );
 }
 
@@ -159,4 +208,37 @@ const s = StyleSheet.create({
   topFrame: { position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: platinum.frame },
   // the white highlight just under it — the raised bevel
   topHi: { position: "absolute", top: 1, left: 0, right: 0, height: 1, backgroundColor: platinum.hi },
+  // ------- boot moment -------
+  boot: { alignItems: "center", justifyContent: "center", backgroundColor: platinum.desk, zIndex: 10 },
+  bootPanel: {
+    alignItems: "center",
+    backgroundColor: platinum.face,
+    borderRadius: 12,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    // the hard Platinum drop shadow
+    shadowColor: "#000000",
+    shadowOffset: { width: 3, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  bootMac: { width: 96, height: 96, marginBottom: 14 },
+  bootTitle: { fontFamily: fonts.chicago, fontSize: 19, color: platinum.ink, marginBottom: 20 },
+  // the extensions-march progress bar: a white inset well, teal fill sliding in
+  bootTrack: {
+    width: BOOT_BAR_W,
+    height: 11,
+    backgroundColor: platinum.well,
+    borderWidth: 1,
+    borderColor: platinum.frame,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  bootFill: { width: BOOT_BAR_W, height: "100%", backgroundColor: colors.accentMemory },
 });
