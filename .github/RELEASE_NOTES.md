@@ -1,25 +1,27 @@
-The first release from the open source repo. DreamLayer went Apache-2.0 (the whole stack), so releases now live here, right next to the code they're built from. The old `dreamlayer-releases` repo is retired, and the version numbering restarts at 0.1.0 with this move. If you have a `v0.6.x` build from the old repo, this release is newer, not older.
+The Brain got a face. The entire control panel is now Mac OS 8.1 Platinum: pinstripe title bars, Chicago type, real window chrome, the works. It matches the new dreamlayer.app desktop, because your local brain and its website should look like they came from the same machine. Same engine underneath. Zero features touched, zero features lost.
+
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_home.png" alt="The Brain panel, Home, Platinum" />
 
 ## Install (macOS 12+)
 
-Download `DreamLayer.dmg` below, double-click it, drag DreamLayer to Applications. It runs from the menu bar. The app is signed and notarized, so there is no Gatekeeper warning.
+Download `DreamLayer.dmg` below, double-click, drag DreamLayer to Applications. Runs from the menu bar. Signed and notarized, so Gatekeeper stays quiet. Upgrading from 0.1.0: drag over the old one, your data doesn't live in the app bundle.
 
-## What's in the app
+## What's new since 0.1.0
 
-The Mac Brain: the private half of your setup. It indexes the folders and mail you point it at, serves the control panel, and pairs with the phone app and glasses with one code.
+- The whole panel is a Platinum desktop now. Every card is a proper window with a pinstriped title bar. If you know why the corners look like that, welcome home. If you don't, it still just works.
+- Juno lives on the panel as a desk accessory. A little animated window in the corner, "the brain is listening." It is not a mascot, it is a status light with wings.
+- Real fonts ship inside the app, ChicagoFLF and Space Grotesk. Nothing is fetched from a CDN, because nothing in this app fetches anything unless you turn cloud on.
 
-New since the last public build:
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_intelligence.png" alt="Intelligence, Platinum" />
 
-- A Capabilities tab in the panel. Every optional upgrade the Brain can run (bigger local models, extra memory backends, vision) is listed with what it does and how big a step up it is, with one-click install. The best ones come grouped as packs.
-- Juno, the look-at-a-thing lens, with its voice and greetings.
-- The plugin store wired end to end: browse, validate, install from the panel, and sideload through the same gate.
-- A no-code Lens Builder and a browser simulator, both linked from the panel.
-- Faster local search (sqlite-vec index), a unified speech backend (sherpa-onnx), and Apple-Silicon-native model support (MLX).
-- Cloud is now opt-in and off by default. The panel says exactly what leaves the machine, and Incognito still forces everything off.
-- A pile of hardening from the security audit, including CSRF protection on every panel write.
+- Same brain controls as 0.1.0 under the new paint: keyword search with zero models, Ollama, or plug in whatever agent you already run. One tap, local stays local, remote gets flagged and counted.
+
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_capabilities.png" alt="Capabilities, Platinum" />
+
+- The rest of the family got the same treatment: dreamlayer.app is a Platinum desktop, and the phone app shipped its own Platinum reskin with a new 5-tab layout. Those live in this repo too, they just don't ship in this dmg.
 
 ## Good to know
 
-- This is a pre-hardware build. The Brain, panel, phone pairing, plugins, and simulator are all real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does.
-- The full source for everything in this dmg is this repository. Build it yourself with `.github/workflows/build-macos-app.yml` as the recipe.
-- Found something broken? Open an issue. Want to build a lens? Start at `examples/hello-lens`.
+- Still a pre-hardware build. The Brain, panel, phone pairing, plugins, and simulator are real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does.
+- The full source for everything in this dmg is this repository. Don't trust me, build it yourself: `.github/workflows/build-macos-app.yml` is the recipe.
+- Found something broken? Open an issue with logs and I'll actually read it. Want a lens? `examples/hello-lens`.
