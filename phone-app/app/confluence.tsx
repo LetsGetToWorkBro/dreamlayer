@@ -63,7 +63,7 @@ export default function Confluence() {
             A bond is explicit, mutual, and expires by morning. Only weather crosses it — never words, places, or names.
           </Text>
           <Tappable style={s.primary} onPress={() => setBond("proposed")}>
-            <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>Propose a bond</Text>
+            <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>Propose a bond</Text>
           </Tappable>
           <View style={s.acceptRow}>
             <TextInput

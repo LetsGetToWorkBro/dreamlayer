@@ -1,6 +1,6 @@
 import React from "react";
 import { Animated, View, Text, StyleSheet } from "react-native";
-import { colors } from "../theme/colors";
+import { colors, platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { space } from "../theme/spacing";
 import { useEntrance } from "../anim";
@@ -28,14 +28,22 @@ export function EmptyState({ glyph = "◌", title, hint }: { glyph?: string; tit
 
 const s = StyleSheet.create({
   wrap: { alignItems: "center", justifyContent: "center", paddingVertical: space.huge },
+  // an inset platinum well — the calm, empty desktop object
   ring: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    borderWidth: 1.5,
-    borderColor: colors.borderSubtle,
+    backgroundColor: platinum.paper,
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderTopColor: platinum.sh,
+    borderLeftColor: platinum.sh,
+    borderBottomColor: platinum.hi,
+    borderRightColor: platinum.hi,
     alignItems: "center",
     justifyContent: "center",
   },
-  glyph: { fontSize: 34, color: colors.statusPaused },
+  glyph: { fontSize: 34, color: colors.textSecondary },
 });

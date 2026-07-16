@@ -371,7 +371,7 @@ const st = StyleSheet.create({
   },
   tabOn: { backgroundColor: colors.accentMemory, borderColor: colors.accentMemory },
   tabText: { color: colors.textSecondary, fontSize: 12, letterSpacing: 0.6 },
-  tabTextOn: { color: "#00201C", fontWeight: "700" },
+  tabTextOn: { color: "#FFFFFF", fontWeight: "700" },
   top: { flexDirection: "row", alignItems: "center", gap: space.md },
   icon: {
     width: 42,
@@ -405,7 +405,7 @@ const st = StyleSheet.create({
   actions: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
   btn: { borderRadius: 999, paddingHorizontal: space.lg, paddingVertical: space.sm },
   btnPrimary: { backgroundColor: colors.accentMemory },
-  btnPrimaryText: { color: "#00201C", fontWeight: "700" },
+  btnPrimaryText: { color: "#FFFFFF", fontWeight: "700" },
   btnGhost: { borderWidth: 1, borderColor: colors.borderSubtle },
   btnGhostText: { color: colors.textPrimary, fontWeight: "600" },
   more: { color: colors.accentMemory, fontSize: 12.5, fontWeight: "600", marginTop: space.md },

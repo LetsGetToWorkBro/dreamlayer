@@ -4,9 +4,11 @@ import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";
 import { useBrainStore } from "../src/state/useBrainStore";
-import { colors } from "../src/ui/theme/colors";
+import { colors, platinum } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
+import { CineBackdrop } from "../src/ui/components/CineBackdrop";
+import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { t } from "../src/i18n";
 
 function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
@@ -60,10 +62,12 @@ export default function Settings() {
     ]);
 
   return (
-    <SafeAreaView style={s.safe}>
+    <View style={s.root}>
+      <CineBackdrop />
+      <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
-      <Text style={[typography.title, s.heading]}>{t("settings.title")}</Text>
-      <View style={{ paddingHorizontal: 24 }}>
+      <View style={s.headWrap}>
+        <ScreenHeader title={t("settings.title")} />
         <DemoBanner />
       </View>
 
@@ -77,7 +81,7 @@ export default function Settings() {
               value={proactiveCards}
               onValueChange={setProactiveCards}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -98,7 +102,7 @@ export default function Settings() {
                     value={cues[kind]}
                     onValueChange={(v) => setCue(kind, v)}
                     trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-                    thumbColor={colors.textPrimary}
+                    thumbColor={platinum.well}
                   />
                 }
               />
@@ -112,8 +116,8 @@ export default function Settings() {
             <Switch
               value={focus}
               onValueChange={setFocus}
-              trackColor={{ true: "#8FB8FF", false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              trackColor={{ true: "#3D63C7", false: colors.borderSubtle }}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -125,7 +129,7 @@ export default function Settings() {
               value={incognito}
               onValueChange={setIncognito}
               trackColor={{ true: colors.accentAttention, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -137,7 +141,7 @@ export default function Settings() {
               value={notifyTexts}
               onValueChange={setNotifyTexts}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -149,7 +153,7 @@ export default function Settings() {
               value={notifyEmails}
               onValueChange={setNotifyEmails}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -161,7 +165,7 @@ export default function Settings() {
               value={summarizeEmails}
               onValueChange={setSummarizeEmails}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -173,7 +177,7 @@ export default function Settings() {
               value={paused}
               onValueChange={togglePause}
               trackColor={{ true: colors.statusPaused, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -194,7 +198,7 @@ export default function Settings() {
               value={proactiveAlerts}
               onValueChange={setProactiveAlerts}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -206,7 +210,7 @@ export default function Settings() {
               value={factCheck}
               onValueChange={setFactCheck}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -218,7 +222,7 @@ export default function Settings() {
               value={answerAhead}
               onValueChange={setAnswerAhead}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -241,7 +245,7 @@ export default function Settings() {
                 value={wakeSources[src]}
                 onValueChange={(v) => setWakeSource(src, v)}
                 trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-                thumbColor={colors.textPrimary}
+                thumbColor={platinum.well}
               />
             }
           />
@@ -264,7 +268,7 @@ export default function Settings() {
                 value={wakeFeedback[kind]}
                 onValueChange={(v) => setWakeFeedback(kind, v)}
                 trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-                thumbColor={colors.textPrimary}
+                thumbColor={platinum.well}
               />
             }
           />
@@ -300,7 +304,7 @@ export default function Settings() {
               value={demoMode}
               onValueChange={(v) => (v ? enableDemo() : disableDemo())}
               trackColor={{ true: colors.accentMemory, false: colors.borderSubtle }}
-              thumbColor={colors.textPrimary}
+              thumbColor={platinum.well}
             />
           }
         />
@@ -360,18 +364,34 @@ export default function Settings() {
         </TouchableOpacity>
       </View>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: "transparent" },
   // room so the last row clears the floating tab bar
-  scrollBody: { paddingBottom: 120 },
-  heading: { color: colors.textPrimary, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8 },
-  section: { marginHorizontal: 24, marginTop: 32 },
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  linkRow: { paddingVertical: 14 },
-  subGroup: { paddingLeft: 16, borderLeftWidth: 2, borderLeftColor: colors.borderSubtle, marginLeft: 2 },
-  danger: { paddingVertical: 16, alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.accentError },
+  scrollBody: { paddingBottom: 120, paddingTop: 20 },
+  headWrap: { paddingHorizontal: 24 },
+  // each group is a raised platinum panel on the desktop
+  section: {
+    marginHorizontal: 24,
+    marginTop: 22,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 6,
+    backgroundColor: platinum.face,
+    borderRadius: 10,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
+  },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
+  linkRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
+  subGroup: { paddingLeft: 16, borderLeftWidth: 2, borderLeftColor: platinum.sh, marginLeft: 2 },
+  danger: { paddingVertical: 16, alignItems: "center", borderRadius: 8, borderWidth: 1.5, borderColor: colors.accentError, marginTop: 8, marginBottom: 6, backgroundColor: platinum.well },
 });

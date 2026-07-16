@@ -12,9 +12,11 @@ import { useBrainStore } from "../src/state/useBrainStore";
 import { ConnectorCard, SwitchRow, Bullet, PillButton } from "../src/ui/components/Connector";
 import { QrScanner } from "../src/ui/components/QrScanner";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
+import { CineBackdrop } from "../src/ui/components/CineBackdrop";
+import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
 import { t } from "../src/i18n";
-import { colors } from "../src/ui/theme/colors";
+import { colors, platinum } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 
 export default function Brain() {
@@ -95,16 +97,20 @@ export default function Brain() {
   };
 
   return (
-    <SafeAreaView style={s.safe}>
+    <View style={s.root}>
+      <CineBackdrop />
+      <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <DemoBanner />
         {/* header */}
-        <Text style={[typography.eyebrow, { color: colors.accentMemory }]}>DreamLayer</Text>
-        <Text style={[typography.display, { color: colors.textPrimary }]}>{t("brain.title")}</Text>
-        <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
-          {brainKind === "mac_mini" ? t("brain.descMac") : t("brain.descPhone")}
-          {cloudOn ? t("brain.cloudOnSuffix") : t("brain.cloudOffSuffix")}
-        </Text>
+        <ScreenHeader
+          eyebrow="DreamLayer"
+          title={t("brain.title")}
+          subtitle={
+            (brainKind === "mac_mini" ? t("brain.descMac") : t("brain.descPhone")) +
+            (cloudOn ? t("brain.cloudOnSuffix") : t("brain.cloudOffSuffix"))
+          }
+        />
 
         {/* pair a device */}
         <View style={s.pairBar}>
@@ -328,7 +334,8 @@ export default function Brain() {
         </View>
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -341,62 +348,47 @@ const LENSES = [
   { name: "Prism", blurbKey: "brain.prismBlurb" },
 ];
 
+const panel = {
+  backgroundColor: platinum.face,
+  borderRadius: 10,
+  borderTopColor: platinum.hi,
+  borderLeftColor: platinum.hi,
+  borderBottomColor: platinum.sh,
+  borderRightColor: platinum.sh,
+  borderWidth: 1.5,
+} as const;
+
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
   eyebrow: { color: colors.accentMemory, marginTop: 22, marginBottom: 10 },
   pairBar: { marginTop: 18, marginBottom: 4 },
-  pairBox: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 16,
-    marginTop: 10,
-    marginBottom: 6,
-  },
+  pairBox: { ...panel, padding: 16, marginTop: 10, marginBottom: 6 },
+  // a white inset field — the Platinum text well
   input: {
-    backgroundColor: colors.background,
+    backgroundColor: platinum.well,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 12,
+    borderColor: platinum.frame,
+    borderRadius: 6,
     color: colors.textPrimary,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginTop: 12,
     fontSize: 15,
   },
-  askCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 18,
-  },
+  askCard: { ...panel, padding: 18 },
   answer: {
     marginTop: 14,
-    borderLeftWidth: 2,
+    borderLeftWidth: 3,
     borderLeftColor: colors.accentMemory,
     paddingLeft: 12,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 16,
-  },
+  card: { ...panel, padding: 16 },
   evHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, gap: 8 },
   evAdd: { flexDirection: "row", gap: 8, alignItems: "center", marginTop: 8 },
   actRow: { flexDirection: "row", gap: 10, paddingVertical: 6 },
   lensGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  lens: {
-    width: "47%",
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 14,
-  },
+  lens: { ...panel, width: "47%", padding: 14 },
 });

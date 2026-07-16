@@ -1,30 +1,33 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Platform, View, StyleSheet } from "react-native";
-import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   useFonts,
   SpaceGrotesk_400Regular,
   SpaceGrotesk_500Medium,
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
-import { colors } from "../src/ui/theme/colors";
+import { colors, platinum } from "../src/ui/theme/colors";
 import { fonts } from "../src/ui/theme/fonts";
 import { TabIcon } from "../src/ui/components/TabIcon";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { usePackStore } from "../src/state/usePackStore";
 import { t } from "../src/i18n";
 
-/** Frosted glass under the tab bar — a blur on native, a translucent wash on web. */
+/** The Platinum control strip under the tabs — a light beveled bar: a hard black
+ * top rule, a white highlight under it, and the top-lit platinum gradient face. */
 function TabBarBackground() {
   return (
     <View style={StyleSheet.absoluteFill}>
-      {Platform.OS === "web" ? (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(8,13,15,0.86)" }]} />
-      ) : (
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-      )}
-      <View style={s.hairline} />
+      <LinearGradient
+        colors={[platinum.faceHi, platinum.face, platinum.face2]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={s.topFrame} />
+      <View style={s.topHi} />
     </View>
   );
 }
@@ -34,6 +37,8 @@ export default function Layout() {
     SpaceGrotesk_400Regular,
     SpaceGrotesk_500Medium,
     SpaceGrotesk_700Bold,
+    // the Mac OS 8.1 system face — titles, chrome, tab labels
+    ChicagoFLF: require("../assets/fonts/ChicagoFLF.ttf"),
   });
   const hydrate = useBrainStore((s) => s.hydrate);
   const hydrated = useBrainStore((s) => s.hydrated);
@@ -67,7 +72,7 @@ export default function Layout() {
       require("../src/state/usePeopleStore").usePeopleStore.getState().hydrateCache();
     }
   }, [hydrated, hydrate]);
-  if (!loaded) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  if (!loaded) return <View style={{ flex: 1, backgroundColor: platinum.desk }} />;
 
   // hide the tab bar on the first-run tour and the boot redirect
   const noBar = { tabBarStyle: { display: "none" as const } };
@@ -85,12 +90,16 @@ export default function Layout() {
           borderTopWidth: 0,
           elevation: 0,
           height: Platform.OS === "ios" ? 90 : 78,
-          paddingTop: 9,
+          paddingTop: 10,
           paddingBottom: Platform.OS === "ios" ? 30 : 16,
         },
-        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 10.5, letterSpacing: 0.2 },
-        tabBarItemStyle: { paddingVertical: 2 },
-        sceneStyle: { backgroundColor: colors.background },
+        // Chicago is too wide for a 7-up label row (and truncates the longer
+        // localized strings) — the control strip uses the narrower reading face,
+        // the way the Mac used Geneva for small labels and Chicago for titles.
+        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 9, letterSpacing: 0 },
+        tabBarItemStyle: { paddingTop: 3, paddingBottom: 2, paddingHorizontal: 0 },
+        tabBarAllowFontScaling: false,
+        sceneStyle: { backgroundColor: platinum.desk },
       }}
     >
       <Tabs.Screen
@@ -143,12 +152,8 @@ export default function Layout() {
 }
 
 const s = StyleSheet.create({
-  hairline: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "rgba(140,190,190,0.12)",
-  },
+  // the hard black top rule of the control strip
+  topFrame: { position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: platinum.frame },
+  // the white highlight just under it — the raised bevel
+  topHi: { position: "absolute", top: 1, left: 0, right: 0, height: 1, backgroundColor: platinum.hi },
 });

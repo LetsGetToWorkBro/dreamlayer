@@ -234,6 +234,6 @@ const s = StyleSheet.create({
     borderRadius: radius.pill, color: colors.textPrimary, paddingHorizontal: space.lg, paddingVertical: space.sm,
   },
   addBtn: { backgroundColor: colors.accentMemory, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm },
-  addBtnText: { color: "#00201C", fontWeight: "700" },
+  addBtnText: { color: "#FFFFFF", fontWeight: "700" },
   hint: { color: colors.statusPaused, marginTop: space.md, textAlign: "center" },
 });

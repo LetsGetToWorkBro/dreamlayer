@@ -122,7 +122,7 @@ export default function Rehearsal() {
                 editable={!!macConnected}
               />
               <Tappable style={[s.sayBtn, (!utterance.trim() || busy) && { opacity: 0.4 }]} onPress={say} disabled={!utterance.trim() || busy}>
-                <Text style={[typography.body, { color: "#00201C", fontWeight: "700" }]}>Say</Text>
+                <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>Say</Text>
               </Tappable>
             </View>
             <Text style={[typography.caption, s.micHint]}>🎙 tap the mic on your keyboard to speak the beat</Text>
@@ -167,7 +167,7 @@ export default function Rehearsal() {
                   disabled={!figmentId || busy}
                   style={[s.keepPill, !figmentId && { backgroundColor: "transparent", borderColor: colors.borderSubtle }]}
                 >
-                  <Text style={[typography.body, { color: figmentId ? "#00201C" : colors.statusPaused, fontWeight: "700" }]}>Keep</Text>
+                  <Text style={[typography.body, { color: figmentId ? "#FFFFFF" : colors.statusPaused, fontWeight: "700" }]}>Keep</Text>
                 </Tappable>
               </View>
             </Card>

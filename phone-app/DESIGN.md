@@ -1,13 +1,14 @@
 # DreamLayer — Design System
 
 One surface, one rhythm, one motion. This is the contract every screen in the
-phone app (and the Mac Brain panel) follows so the product reads as a single,
-calm, tactile thing. When you add a screen, compose it from the primitives
-here — don't reinvent spacing, color, or motion locally.
+phone app (and the Mac Brain panel and landing page) follows so the product
+reads as a single, calm, tactile thing. When you add a screen, compose it from
+the primitives here — don't reinvent spacing, color, or motion locally.
 
-> **North star:** the interface should feel like the glasses' HUD in your hand —
-> dark, luminous, unhurried. Nothing jumps; everything *arrives*. Every touch
-> answers back.
+> **North star:** the interface is **Mac OS 8.1 "Platinum," in your hand** — a
+> grey pinstripe desktop, light beveled windows, Chicago titles, the brand teal
+> for meaning. It matches the landing page and the Mac Brain panel exactly.
+> Nothing jumps; everything *arrives*. Every touch answers back.
 
 ---
 
@@ -15,30 +16,37 @@ here — don't reinvent spacing, color, or motion locally.
 
 Source of truth: [`src/ui/theme/colors.ts`](src/ui/theme/colors.ts).
 
-The app palette (`colors`) is the phone's own surface; `haloPalette` is the
-exact mirror of the glasses (`halo-lua/display/palette.lua`) used only where the
-phone previews the HUD — keep them separate on purpose.
+Two exports. `colors` is the semantic palette every screen reads by token name;
+`platinum` carries the raw Mac OS 8.1 materials the chrome is built from (bevel
+highlight/shadow, the desktop and title-bar pinstripes, the hard 1px frame).
+`haloPalette` is the exact mirror of the glasses
+(`halo-lua/display/palette.lua`), kept separate on purpose and used only where
+the phone previews the HUD — that preview stays a dark little screen.
 
 | Token | Value | Use |
 |---|---|---|
-| `background` | `#000000` | the void behind everything |
-| `surface` | `#0E1416` | cards, the tab bar |
-| `surfaceElevated` | `#141F23` | raised surfaces, inputs |
-| `textPrimary` | `#FFFFFF` | titles, answers |
-| `textSecondary` | `#8A9BA3` | captions, supporting copy |
-| `accentMemory` | `#2FD4C4` | the brand teal — primary actions, "on" |
-| `accentAttention` | `#FF6B5E` | promises, incognito, "look here" |
-| `accentSuccess` | `#56D364` | confirmations, live |
-| `accentError` | `#FF5C5C` | destructive, unsigned |
-| `borderSubtle` | `#1F2A2E` | 1px hairlines on every card |
+| `background` | `#B8B8B8` | the Platinum desktop behind every window |
+| `surface` | `#DDDDDD` | window / control face (the 3D grey) |
+| `surfaceElevated` | `#FFFFFF` | white content wells, inputs, list rows |
+| `textPrimary` | `#141414` | ink — titles, answers |
+| `textSecondary` | `#4A5054` | secondary ink — captions, supporting copy |
+| `accentMemory` | `#0B6B52` | deep brand teal — primary actions, "on" |
+| `accentAttention` | `#B3402E` | coral ink — promises, incognito, "look here" |
+| `accentSuccess` | `#1E7A3C` | confirmations, live |
+| `accentError` | `#B3302A` | destructive, unsigned |
+| `borderSubtle` | `#8E8E8E` | bevel-shadow line / hairline frame |
 | `statusPaused` | `#6B7A82` | muted / disabled |
 
 **Rules**
 - One accent per surface. `accentMemory` is the default; reach for another only
   when it *means* something (attention = a promise; error = destroys data).
+- Every accent value is chosen to stay legible as text on light — deep, not
+  neon. The neon teal survives only as a chip/LED inside the dark HUD preview.
 - Text is only ever `textPrimary` or `textSecondary`. Don't invent greys.
+- Raised surfaces wear the bevel (light top-left, shadow bottom-right); pressed
+  wells invert it. Windows carry the hard 1px black frame; group boxes don't.
 - "On" states take the accent as a border edge (`Card active`), never a fill —
-  fills are reserved for primary buttons.
+  fills are reserved for the teal default push button.
 
 ---
 
@@ -65,18 +73,26 @@ xs 4 · sm 8 · md 12 · lg 16 · xl 20 · xxl 24 · xxxl 32 · huge 48
 
 Source of truth: [`src/ui/theme/typography.ts`](src/ui/theme/typography.ts).
 
-| Style | Size / weight | Use |
+Two faces, paired exactly as the landing page and Mac panel pair them: **Chicago
+(`ChicagoFLF`)** is the Mac OS 8.1 system voice — titles, window/menu chrome;
+**Space Grotesk** is the reading face — body, captions, the tracked eyebrow, and
+the small tab-strip labels (the way the Mac used Geneva for small labels and
+Chicago for titles).
+
+| Style | Face · size | Use |
 |---|---|---|
-| `display` | 36 / 700 | screen titles (`ScreenHeader`) |
-| `headline` | 26 / 700 | hero answers, big moments |
-| `title` | 20 / 600 | card headings, glyphs |
-| `body` | 16 / 400 | the reading line |
-| `caption` | 13 / 400 | meta, hints, timestamps |
-| `eyebrow` | 11 / 600, tracked, UPPER | section labels above a title/card |
-| `mono` | 13, monospace | codes, tiers, technical strings |
+| `display` | Chicago 32 | screen titles (`ScreenHeader`'s title bar) |
+| `headline` | Chicago 23 | hero answers, big moments |
+| `title` | Chicago 17 | card headings, window titles |
+| `body` | Space Grotesk 16 | the reading line |
+| `caption` | Space Grotesk 13 | meta, hints, timestamps |
+| `eyebrow` | Space Grotesk 11, tracked, UPPER | section labels above a title/card |
+| `mono` | Menlo 13 | codes, tiers, technical strings |
 
 One title per screen (`display`). Sections are announced by an `eyebrow`, never
-a second big title.
+a second big title. Chicago is a tall, fixed-weight face — never lean on
+`fontWeight` for it. It loads from `assets/fonts/ChicagoFLF.ttf` in
+`app/_layout.tsx`.
 
 ---
 
@@ -113,9 +129,10 @@ All in [`src/ui/components/`](src/ui/components/). Compose screens from these.
 
 | Component | What it is |
 |---|---|
-| **`Screen`** | The frame: full-bleed background, safe area, one gutter, scroll or fixed body. Start every screen with it. |
-| **`ScreenHeader`** | The `display` title block — optional `eyebrow`, `subtitle`, and a right slot (a status pill / action). Rises in on mount. |
-| **`Card` / `Section`** | `Card` = the standard surface (one radius, border, pad; `active` accent edge; optional `onPress`; `delay` to stagger). `Section` = the eyebrow label above a group. |
+| **`Screen`** | The frame: the pinstripe desktop (`CineBackdrop`), safe area, one gutter, scroll or fixed body. Start every screen with it. |
+| **`ScreenHeader`** | The title as a Mac OS 8.1 window **title bar** — pinstriped, close/zoom boxes, Chicago title. Optional `eyebrow`, `subtitle`, and a right slot. Rises in on mount. |
+| **`Card` / `Section`** | `Card` = a beveled platinum panel (group box); pass `title` to grow a pinstriped window title bar. `active` = accent frame; optional `onPress`; `delay` staggers a column. `Section` = the eyebrow label above a group. |
+| **`Pinstripe`** | The crisp SVG title-bar hairline fill, shared by `Card` and `ScreenHeader`. |
 | **`Tappable`** | The one touch primitive — spring scale-on-press. Drop-in for `TouchableOpacity`. |
 | **`EmptyState`** | A calm halo ring + line + hint. No screen ever renders a blank void. |
 | **`StatusPill`** | Live / paused indicator for a header's right slot. |

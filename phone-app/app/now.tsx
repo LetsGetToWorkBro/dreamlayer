@@ -10,7 +10,7 @@ import { StatusPill } from "../src/ui/components/StatusPill";
 import { Tappable } from "../src/ui/components/Tappable";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { useEntrance } from "../src/ui/anim";
-import { colors } from "../src/ui/theme/colors";
+import { colors, platinum } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { pushLocal } from "../src/services/notify";
@@ -112,7 +112,7 @@ export default function Now() {
           returnKeyType="send"
         />
         <Tappable onPress={doVoice} style={s.voiceBtn} accessibilityLabel={t("now.ask")}>
-          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>↳</Text>
+          <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>↳</Text>
         </Tappable>
       </View>
       {voiceOut ? (
@@ -147,31 +147,45 @@ const s = StyleSheet.create({
   stage: { minHeight: 300, alignItems: "center", justifyContent: "center", marginBottom: space.lg },
   pairChip: {
     marginTop: space.xl,
+    backgroundColor: platinum.face,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: radius.pill,
+    borderColor: platinum.frame,
+    borderRadius: 6,
     paddingVertical: space.sm,
     paddingHorizontal: space.lg,
   },
   actions: { gap: space.md, paddingBottom: space.xl },
   actionRow: { flexDirection: "row", gap: space.md },
-  action: { flex: 1, borderRadius: radius.pill, paddingVertical: space.lg, alignItems: "center" },
-  actionGhost: { backgroundColor: "rgba(20, 31, 35, 0.5)", borderWidth: 1 },
+  action: { flex: 1, borderRadius: 8, paddingVertical: space.lg, alignItems: "center" },
+  // a platinum secondary push button
+  actionGhost: {
+    backgroundColor: platinum.face,
+    borderWidth: 1.5,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+  },
+  // a raised platinum panel — the brief window
   briefCard: {
-    backgroundColor: "rgba(20, 31, 35, 0.64)",
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: "rgba(140, 190, 190, 0.14)",
+    backgroundColor: platinum.face,
+    borderRadius: radius.sm,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
     padding: space.lg,
     marginBottom: space.md,
   },
   voiceRow: { flexDirection: "row", gap: space.sm, marginBottom: space.sm },
+  // a white inset text well
   voiceInput: {
     flex: 1,
-    backgroundColor: "rgba(20, 31, 35, 0.5)",
+    backgroundColor: platinum.well,
     borderWidth: 1,
-    borderColor: "rgba(140, 190, 190, 0.14)",
-    borderRadius: radius.pill,
+    borderColor: platinum.frame,
+    borderRadius: 6,
     color: colors.textPrimary,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
@@ -179,7 +193,9 @@ const s = StyleSheet.create({
   },
   voiceBtn: {
     backgroundColor: colors.accentMemory,
-    borderRadius: radius.pill,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: platinum.frame,
     width: 48,
     alignItems: "center",
     justifyContent: "center",

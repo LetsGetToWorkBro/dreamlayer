@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useBrainStore } from "../../state/useBrainStore";
-import { colors } from "../theme/colors";
+import { colors, platinum } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { space, radius } from "../theme/spacing";
 import { Tappable } from "./Tappable";
@@ -32,20 +32,26 @@ export function DemoBanner() {
 
 const s = StyleSheet.create({
   hold: { alignSelf: "flex-start" },
+  // the pale-yellow Balloon Help note, hard-framed with a dropped shadow
   wrap: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
     gap: space.sm,
-    backgroundColor: "rgba(47, 212, 196, 0.12)",
-    borderColor: "rgba(47, 212, 196, 0.35)",
+    backgroundColor: "#FFFFE8",
+    borderColor: platinum.frame,
     borderWidth: 1,
-    borderRadius: radius.pill,
+    borderRadius: 4,
     paddingVertical: 6,
     paddingHorizontal: space.md,
     marginBottom: space.md,
+    shadowColor: "#000000",
+    shadowOffset: { width: 1, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 0,
+    elevation: 3,
   },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accentMemory },
-  text: { ...typography.caption, color: colors.textPrimary, opacity: 1 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accentAttention },
+  text: { ...typography.caption, color: "#222222", opacity: 1 },
   link: { color: colors.accentMemory, fontFamily: typography.eyebrow.fontFamily },
 });

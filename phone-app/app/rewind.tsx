@@ -11,7 +11,7 @@ import { radius, space } from "../src/ui/theme/spacing";
 
 const KIND_COLOR: Record<string, string> = {
   message: colors.accentMemory,
-  event: "#8FB8FF",
+  event: "#3D63C7",
   people: colors.accentSuccess,
   ask: colors.accentAttention,
   "cloud-egress": colors.accentAttention,

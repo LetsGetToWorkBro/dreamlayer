@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "scheme": "dreamlayer",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "ios": {
@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#241F38"
       },
       "package": "com.letsgettoworkbro.dreamlayer"
     },
@@ -35,9 +35,9 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
-          "imageWidth": 200,
+          "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#071012"
+          "backgroundColor": "#161D23"
         }
       ],
       "expo-localization",

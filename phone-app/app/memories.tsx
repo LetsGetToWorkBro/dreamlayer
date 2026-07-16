@@ -16,7 +16,7 @@ const KIND_COLOR: Record<string, string> = {
   Promise: colors.accentAttention,
   Person: colors.accentMemory,
   Object: colors.accentSuccess,
-  Place: "#8FB8FF",
+  Place: "#3D63C7",
   Note: colors.textSecondary,
 };
 
@@ -103,7 +103,7 @@ export default function Memories() {
             accessibilityLabel={t("memories.ask")}
             accessibilityHint={t("memories.askHint")}
           >
-            <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>
+            <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>
               {asking ? "…" : "↳"}
             </Text>
           </Tappable>

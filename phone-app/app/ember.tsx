@@ -22,7 +22,7 @@ import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
 // hearth gold — mirrors themes.py EMBER_GLOW / palette.lua ember_glow
-const EMBER = "#E8A13D";
+const EMBER = "#B4701F";     // deep ember amber, legible on the light desktop
 const EMBER_DIM = "#8A5E20";
 const GRADUATE_AT_DAYS = 90; // scheduler.CONSOLIDATION_THRESHOLD_DAYS
 

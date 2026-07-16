@@ -115,7 +115,7 @@ export default function Messages() {
             Read on your glasses; tap here to reply. Nothing sends without your approval.
           </Text>
           {items.map((m, i) => {
-            const tint = m.channel === "email" ? "#8FB8FF" : colors.accentMemory;
+            const tint = m.channel === "email" ? "#3D63C7" : colors.accentMemory;
             const open = replyTo === m;
             return (
               <Card key={i} delay={i * 40} accent={tint} active={open} onPress={() => openReply(m)}>
@@ -157,7 +157,7 @@ export default function Messages() {
                         <ActivityIndicator color={colors.accentMemory} />
                       ) : (
                         <Tappable onPress={send} style={[s.sendBtn, !text.trim() && { opacity: 0.4 }]} disabled={!text.trim()}>
-                          <Text style={[typography.body, { color: colors.background, fontWeight: "700" }]}>{t("messages.approveSend")}</Text>
+                          <Text style={[typography.body, { color: "#FFFFFF", fontWeight: "700" }]}>{t("messages.approveSend")}</Text>
                         </Tappable>
                       )}
                     </View>

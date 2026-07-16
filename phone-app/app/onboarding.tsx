@@ -11,6 +11,7 @@ import { ONBOARDING_STEPS }    from "../src/services/OnboardingService";
 import { tapMedium, tapSuccess, tapWarn } from "../src/services/haptics";
 import { colors }      from "../src/ui/theme/colors";
 import { typography }  from "../src/ui/theme/typography";
+import { CineBackdrop }     from "../src/ui/components/CineBackdrop";
 import { OnboardingDots }   from "../src/ui/components/OnboardingDots";
 import { PrimaryButton }    from "../src/ui/components/PrimaryButton";
 import { EyebrowLabel }     from "../src/ui/components/EyebrowLabel";
@@ -70,7 +71,9 @@ export default function Onboarding() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.root}>
+      <CineBackdrop />
+      <SafeAreaView style={styles.safe}>
       {!isPairStep && (
         <TouchableOpacity style={styles.skip} onPress={() => { complete(); setOnboardingSeen(true); router.replace("/now"); }}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Skip</Text>
@@ -107,7 +110,8 @@ export default function Onboarding() {
         )}
       </View>
       <QrScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={onScanned} />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -121,7 +125,8 @@ function StepGlyph({ stepId, accent }: { stepId: string; accent: string }) {
 }
 
 const styles = StyleSheet.create({
-  safe:    { flex: 1, backgroundColor: colors.background },
+  root:    { flex: 1, backgroundColor: colors.background },
+  safe:    { flex: 1, backgroundColor: "transparent" },
   skip:    { position: "absolute", top: 56, right: 24, zIndex: 10 },
   content: { flex: 1, alignItems: "center", justifyContent: "center", gap: 40, paddingHorizontal: 32 },
   hero:    { alignItems: "center", justifyContent: "center", height: 200 },
