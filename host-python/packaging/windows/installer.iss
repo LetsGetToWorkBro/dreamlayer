@@ -36,6 +36,22 @@ UninstallDisplayIcon={app}\DreamLayer.exe
 ArchitecturesInstallIn64BitMode=x64compatible
 SolidCompression=yes
 Compression=lzma2
+; The installer is Windows' first-run boot screen, so it wears the same
+; Platinum identity as the panel, the site, and the apps. Both bitmaps are
+; generated at build time by make_installer_art.py (next to dreamlayer.ico)
+; from the shared packaging art — never committed, never hand-edited.
+WizardStyle=modern
+WizardImageFile=wizard.bmp
+WizardSmallImageFile=wizard-small.bmp
+
+[Messages]
+; the product voice — the same "Welcome to DreamLayer." the phone app boots
+; with, and the same honesty about what the Brain is and where data lives
+WelcomeLabel1=Welcome to DreamLayer.
+WelcomeLabel2=This sets up the Brain on this PC — the always-on memory your glasses and phone pair with.%n%nEverything lives on your machine: your files, your index, your history. Cloud stays off until you turn it on.
+FinishedHeadingLabel=The Brain is ready.
+FinishedLabel=DreamLayer lives in your system tray now — the little ring is its heartbeat. Green means healthy; sunglasses mean Incognito.
+BeveledLabel=DreamLayer · Private by architecture
 
 [Tasks]
 Name: "startup"; Description: "Start DreamLayer when you sign in (the always-on Brain your phone pairs with)"
