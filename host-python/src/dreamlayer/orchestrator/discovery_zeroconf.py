@@ -12,7 +12,7 @@ import socket
 log = logging.getLogger("dreamlayer.discovery")
 
 try:
-    from zeroconf import Zeroconf, ServiceInfo, ServiceBrowser  # type: ignore
+    from zeroconf import Zeroconf, ServiceInfo, ServiceBrowser, ServiceListener  # type: ignore
     _HAS_ZC = True
 except ImportError:
     _HAS_ZC = False
@@ -58,7 +58,11 @@ class Discovery:
             return []
         found: list[dict] = []
 
-        class _L:
+        # _L is only defined/instantiated on the _HAS_ZC path (guarded above),
+        # so subclassing ServiceListener never runs when the dep is absent —
+        # the module still imports cleanly there. With the dep present it makes
+        # _L satisfy zeroconf's ServiceListener protocol for ServiceBrowser.
+        class _L(ServiceListener):
             def add_service(self, zc, type_, name):
                 try:
                     info = zc.get_service_info(type_, name)
