@@ -6,7 +6,6 @@
     "scheme": "dreamlayer",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": false,
@@ -42,7 +41,8 @@
       ],
       "expo-localization",
       "expo-audio",
-      "expo-image"
+      "expo-image",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
