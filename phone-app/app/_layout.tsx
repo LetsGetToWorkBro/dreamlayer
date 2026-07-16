@@ -79,6 +79,10 @@ export default function Layout() {
 
   return (
     <Tabs
+      // drill-ins (Brain -> Preferences/Labs, Now -> Look) live off the bar as
+      // hidden tabs; "history" back-behavior makes the back control return to
+      // the tab you came from, not jump to the first tab.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.accentMemory,
@@ -102,35 +106,34 @@ export default function Layout() {
         sceneStyle: { backgroundColor: platinum.desk },
       }}
     >
-      <Tabs.Screen
-        name="brain"
-        options={{ title: t("tabs.brain"), tabBarIcon: ({ color }) => <TabIcon name="brain" color={color} /> }}
-      />
+      {/* The five destinations. iOS convention is <=5 in the tab bar; the rest
+          live inside the Brain hub and the Now home, one tap away. Order:
+          the home first, the control hub last. */}
       <Tabs.Screen
         name="now"
         options={{ title: t("tabs.now"), tabBarIcon: ({ color }) => <TabIcon name="now" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="look"
-        options={{ title: t("tabs.look"), tabBarIcon: ({ color }) => <TabIcon name="look" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{ title: t("tabs.messages"), tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="people"
-        options={{ title: t("tabs.people"), tabBarIcon: ({ color }) => <TabIcon name="people" color={color} /> }}
       />
       <Tabs.Screen
         name="memories"
         options={{ title: t("tabs.memories"), tabBarIcon: ({ color }) => <TabIcon name="memories" color={color} /> }}
       />
       <Tabs.Screen
-        name="settings"
-        options={{ title: t("tabs.settings"), tabBarIcon: ({ color }) => <TabIcon name="settings" color={color} /> }}
+        name="people"
+        options={{ title: t("tabs.people"), tabBarIcon: ({ color }) => <TabIcon name="people" color={color} /> }}
       />
-      {/* reachable from Settings → Labs, kept out of the bar */}
+      <Tabs.Screen
+        name="messages"
+        options={{ title: t("tabs.messages"), tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} /> }}
+      />
+      <Tabs.Screen
+        name="brain"
+        options={{ title: t("tabs.brain"), tabBarIcon: ({ color }) => <TabIcon name="brain" color={color} /> }}
+      />
+      {/* off the bar — Look is a quick action on Now; Settings folded into the
+          Brain hub; the rest are reachable from the hub's Labs list */}
+      <Tabs.Screen name="look" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="labs" options={{ href: null }} />
       <Tabs.Screen name="brief" options={{ href: null }} />
       <Tabs.Screen name="plugins" options={{ href: null }} />
       <Tabs.Screen name="capabilities" options={{ href: null }} />

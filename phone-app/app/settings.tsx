@@ -25,7 +25,7 @@ function Row({ label, sub, right }: { label: string; sub?: string; right: React.
 
 export default function Settings() {
   const router = useRouter();
-  const { paused, togglePause, connected } = useHaloStore();
+  const { paused, togglePause } = useHaloStore();
   const { service } = useMemoryStore();
   const incognito = useBrainStore((s) => s.incognito);
   const setIncognito = useBrainStore((s) => s.setIncognito);
@@ -67,7 +67,7 @@ export default function Settings() {
       <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scrollBody} showsVerticalScrollIndicator={false}>
       <View style={s.headWrap}>
-        <ScreenHeader title={t("settings.title")} />
+        <ScreenHeader title="Preferences" eyebrow="Brain" />
         <DemoBanner />
       </View>
 
@@ -276,25 +276,6 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.devicesBrain")}</Text>
-        <Row
-          label={t("settings.glasses")}
-          sub={connected ? t("settings.connected") : t("settings.notConnected")}
-          right={
-            <Text style={[typography.caption, { color: connected ? colors.accentSuccess : colors.textSecondary }]}>
-              {connected ? "●" : "○"}
-            </Text>
-          }
-        />
-        <TouchableOpacity onPress={() => router.push("/brain")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.pairLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/brain-tiers")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.brainTierLink")}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.tryIt")}</Text>
         <Row
           label={t("settings.demoMode")}
@@ -310,40 +291,6 @@ export default function Settings() {
         />
         <TouchableOpacity onPress={() => router.push("/onboarding")} style={s.linkRow}>
           <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.tourAgain")}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={s.section}>
-        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.labs")}</Text>
-        <TouchableOpacity onPress={() => router.push("/saga")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.sagaLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/profile")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.profileLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/rewind")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.rewindLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/ember")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.emberLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/plugins")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.pluginsLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/capabilities")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.capabilitiesLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/vitals")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.vitalsLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/cloud")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.cloudLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/waypath")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.waypathLink")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/packs")} style={s.linkRow}>
-          <Text style={[typography.body, { color: colors.accentMemory }]}>{t("settings.feelLink")}</Text>
         </TouchableOpacity>
       </View>
 
