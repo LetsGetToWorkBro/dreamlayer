@@ -8,8 +8,9 @@ control panel or quit. State lives in `~/.dreamlayer` on both, same as the CLI.
 - `app_main.py` — the shared bundled entry: starts the Brain server on a
   background thread, then runs the platform appliance on the main thread
   (rumps menu bar on macOS, pystray tray on Windows).
-- `windows/` — the Windows build: `make_ico.py`, `DreamLayer.spec`
-  (PyInstaller), `installer.iss` (Inno Setup). See the Windows section below.
+- `windows/` — the Windows build: `make_ico.py`, `make_installer_art.py`
+  (the Platinum wizard bitmaps), `DreamLayer.spec` (PyInstaller),
+  `installer.iss` (Inno Setup). See the Windows section below.
 
 ## macOS (.dmg)
 
@@ -121,6 +122,7 @@ pip install .                        # dreamlayer + deps
 pip install pystray pywebview zeroconf cryptography pyinstaller
 cd packaging\windows
 python make_ico.py                   # icon.png/icon_small.png -> dreamlayer.ico
+python make_installer_art.py         # -> wizard.bmp / wizard-small.bmp (Platinum installer art)
 pyinstaller DreamLayer.spec          # -> dist\DreamLayer\DreamLayer.exe
 iscc /DAppVersion=0.5.0 installer.iss   # -> Output\DreamLayer-Setup.exe
 ```

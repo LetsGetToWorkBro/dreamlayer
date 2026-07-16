@@ -178,16 +178,20 @@ html.platinum ::selection{background:rgba(47,212,196,.35);color:#00201C}
 }
 /* keep the footer's wordmark clear of the Juno desk accessory */
 @media(min-width:960px){.pfoot .in{padding-left:196px}}
-/* Desktop Picture — Juno's world behind the windows (desktop only).
-   The chosen picture (dusk / dawn / the scene) carries across pages
-   via the dldeskpic key; platinum.js stamps the desk-* class. */
+/* Desktop Picture — Juno's world behind the windows, phones included:
+   the generated environment wallpapers (no Juno in dusk/dawn) are far
+   calmer than the dark fallback pattern, and only ~50-75KB. The chosen
+   picture (dusk / dawn / the scene) carries across pages via the
+   dldeskpic key; platinum.js stamps the desk-* class. */
+html.platinum body.deskpic{background-image:
+  linear-gradient(rgba(8,14,16,.42),rgba(8,14,16,.62)),
+  var(--deskpic,url(../juno/desk-dusk.webp));
+  background-size:cover;background-position:center}
+html.platinum body.deskpic.desk-dusk{--deskpic:url(../juno/desk-dusk.webp)}
+html.platinum body.deskpic.desk-dawn{--deskpic:url(../juno/desk-dawn.webp);
+  background-image:linear-gradient(rgba(20,14,8,.30),rgba(20,14,10,.50)),var(--deskpic)}
+html.platinum body.deskpic.desk-juno{--deskpic:url(../juno/dreamscape.webp)}
+/* fixed attachment only where it behaves — iOS Safari repaints badly */
 @media(min-width:960px){
-  html.platinum body.deskpic{background-image:
-    linear-gradient(rgba(8,14,16,.42),rgba(8,14,16,.62)),
-    var(--deskpic,url(../juno/desk-dusk.webp));
-    background-size:cover;background-position:center;background-attachment:fixed}
-  html.platinum body.deskpic.desk-dusk{--deskpic:url(../juno/desk-dusk.webp)}
-  html.platinum body.deskpic.desk-dawn{--deskpic:url(../juno/desk-dawn.webp);
-    background-image:linear-gradient(rgba(20,14,8,.30),rgba(20,14,10,.50)),var(--deskpic)}
-  html.platinum body.deskpic.desk-juno{--deskpic:url(../juno/dreamscape.webp)}
+  html.platinum body.deskpic{background-attachment:fixed}
 }

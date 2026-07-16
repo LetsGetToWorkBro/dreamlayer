@@ -59,10 +59,11 @@ jobs:
           pip install pywebview              # WebView2 for the native panel window
           pip install pyinstaller
 
-      - name: Build dreamlayer.ico from the shared art
+      - name: Build dreamlayer.ico + installer wizard art from the shared art
         run: |
           cd host-python/packaging/windows
           python make_ico.py
+          python make_installer_art.py
 
       - name: Build the app (PyInstaller, windowed one-dir)
         run: |

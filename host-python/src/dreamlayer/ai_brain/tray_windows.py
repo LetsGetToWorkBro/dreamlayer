@@ -158,12 +158,23 @@ def read_login_entry(value_name: str = RUN_VALUE) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _dot_image(color: str, size: int = 64):
-    """A filled status dot as a PIL image (transparent square, centered disc)."""
+    """The DreamLayer ring mark in the status color — the same ring-and-core
+    the site's favicon and the phone's menu bar draw, so the tray wears the
+    brand shape while the color keeps carrying the traffic-light meaning
+    (the tested dot_color contract is untouched; this is only rendering).
+    Windows scales the 64px image down to tray size; the ring stroke and
+    core are sized to stay legible at 16px, like icon_small.png."""
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     pad = size // 8
-    d.ellipse((pad, pad, size - pad, size - pad), fill=color)
+    stroke = max(2, size // 6)
+    # a whisper of dark halo behind the ring so it reads on light taskbars
+    d.ellipse((pad - 2, pad - 2, size - pad + 2, size - pad + 2),
+              outline=(10, 16, 18, 90), width=stroke + 4)
+    d.ellipse((pad, pad, size - pad, size - pad), outline=color, width=stroke)
+    core = size // 2 - size // 7
+    d.ellipse((core, core, size - core, size - core), fill=color)
     return img
 
 

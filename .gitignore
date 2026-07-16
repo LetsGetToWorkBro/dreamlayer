@@ -25,3 +25,9 @@ mutants/
 
 # local Claude Code overrides (personal, not shared)
 .claude/settings.local.json
+
+# generated Windows build art (CI + local builds; see packaging/windows/)
+host-python/packaging/windows/dreamlayer.ico
+host-python/packaging/windows/wizard*.bmp
+host-python/packaging/windows/Output/
+host-python/packaging/windows/build/

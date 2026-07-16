@@ -19,39 +19,70 @@
 <link rel="canonical" href="https://dreamlayer.app/gallery.html" />
 <style>
   :root{
-    /* retinted to sit on the Platinum "screen" surface (assets/platinum/platinum.css) */
-    --bg:#0E1416; --surface:#141F23; --surface2:#19262B; --border:#26363C;
-    --text:#ECF0F1; --text2:#A8B8C0; --teal:#2fd4c4; --amber:#e0b54a;
-    --red:#e06b52; --green:#56d364;
+    /* the old dark palette, remapped onto Platinum light (assets/platinum/platinum.css).
+       The dark screen lives on only inside each card's lens preview — the glasses'
+       real display, now a screen set into a platinum bezel. */
+    --bg:#EFEFEF;        /* paper */
+    --surface:#DDDDDD;   /* platinum face */
+    --surface2:#FFFFFF;  /* white inset wells */
+    --border:#000000;    /* the hard frame */
+    --text:#141414; --text2:#4A5054;
+    --amber:#8A6116;     /* text-safe amber, for jam pills on paper */
+    --red:#B3402E;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  a{color:var(--teal);text-decoration:none}
+    font:15px/1.5 "Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--teal-ink,#0B6B52);text-decoration:none}
   a:hover{text-decoration:underline}
-  .ghead{padding:20px 26px 6px;display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap}
-  .ghead h1{font-size:20px;margin:0;font-weight:400}
+  .pbtn:hover{text-decoration:none}
+  /* ---- heading strip: Chicago ink on paper ---- */
+  .ghead{padding:22px 26px 8px;display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap}
+  .ghead h1{font-family:var(--chi);font-weight:400;letter-spacing:.01em;
+    font-size:21px;margin:0;color:var(--text)}
   .ghead .tag{color:var(--text2);font-size:13.5px;max-width:560px}
-  .toolbar{padding:16px 26px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;
-    border-bottom:1px solid var(--border);position:sticky;top:var(--mbh,28px);
-    background:rgba(14,20,22,.94);backdrop-filter:blur(8px);z-index:5}
+  /* ---- toolbar: platinum face with a hard bottom frame (no glass, no blur) ---- */
+  .toolbar{padding:12px 26px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+    border-bottom:1px solid var(--frame);position:sticky;top:var(--mbh,28px);
+    background:var(--surface);box-shadow:var(--bev-out);z-index:5}
   .search{flex:1;min-width:200px;max-width:420px;position:relative}
-  .search input{width:100%;font:inherit;background:var(--surface2);color:var(--text);
-    border:1px solid var(--border);border-radius:999px;padding:9px 15px 9px 38px}
-  .search input:focus{outline:0;border-color:var(--teal)}
-  .search .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text2)}
-  .seg{display:flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
-  .seg button{font:inherit;background:transparent;color:var(--text2);border:0;padding:8px 15px;
-    cursor:pointer;font-size:13.5px}
-  .seg button.on{background:var(--teal);color:#00201c;font-weight:650}
-  .count{color:var(--text2);font-size:13px;margin-left:auto}
-  .grid{padding:22px 26px 60px;display:grid;gap:18px;
-    grid-template-columns:repeat(auto-fill,minmax(258px,1fr));max-width:1280px;margin:0 auto}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;
-    display:flex;flex-direction:column;transition:.16s}
-  .card:hover{border-color:var(--teal);box-shadow:0 8px 30px rgba(0,0,0,.35)}
-  .card .ringwrap{position:relative;padding:20px;display:flex;justify-content:center;
-    background:radial-gradient(120px 120px at 50% 42%,rgba(47,212,196,.07),transparent)}
+  .search input{width:100%;font:inherit;-webkit-appearance:none;appearance:none;
+    background:var(--surface2);color:var(--text);border:1px solid var(--frame);
+    border-radius:3px;box-shadow:var(--bev-in);padding:8px 13px 8px 36px}
+  .search input::placeholder{color:var(--text2)}
+  .search input:focus{outline:2px solid var(--teal-ink);outline-offset:-1px}
+  .search .mag{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text2)}
+  /* beveled segmented control — the active segment is pressed IN */
+  .seg{display:flex;border:1px solid var(--frame);border-radius:6px;overflow:hidden;
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.22)}
+  .seg button{font-family:var(--chi);font-size:13px;background:transparent;color:var(--text);
+    border:0;padding:8px 15px;cursor:pointer}
+  .seg button + button{border-left:1px solid var(--frame)}
+  .seg button:hover{background:linear-gradient(180deg,#FFFFFF,#DDDDDD)}
+  .seg button:active{background:#8E8E8E;color:#fff}
+  .seg button.on{background:#BEBEBE;box-shadow:var(--bev-in);color:var(--text)}
+  .seg button:focus-visible{outline:2px solid var(--teal-ink);outline-offset:-2px}
+  .count{color:var(--text2);font-family:var(--chi);font-size:11.5px;margin-left:auto}
+  .grid{padding:22px 26px 56px;display:grid;gap:18px;
+    grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));max-width:1280px;margin:0 auto}
+  /* ---- each card is a little platinum monitor: face, hard frame, hard shadow ---- */
+  .card{background:var(--surface);border:1px solid var(--frame);border-radius:6px;overflow:hidden;
+    display:flex;flex-direction:column;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.32);
+    transition:background var(--fast,180ms) var(--ease,ease)}
+  /* mini title bar — plain while idle; gains pinstripes when the window wakes */
+  .card::before{content:"";flex:none;height:15px;border-bottom:1px solid var(--frame);
+    background:linear-gradient(180deg,#F2F2F2,#D6D6D6);
+    box-shadow:inset 1px 1px 0 var(--pl-hi),inset -1px -1px 0 var(--pl-sh)}
+  .card:hover{background:#E6E6E6}
+  .card:hover::before,.card:focus-within::before{
+    background:repeating-linear-gradient(180deg,#FFFFFF 0 1px,#DDDDDD 1px 2px,#ACACAC 2px 3px)}
+  /* the dark screen well, set into the platinum bezel — the glasses' real display */
+  .card .ringwrap{position:relative;margin:8px 8px 0;padding:20px;display:flex;justify-content:center;
+    border:1px solid var(--frame);background-color:var(--scr,#0E1416);
+    background-image:radial-gradient(120px 120px at 50% 42%,rgba(47,212,196,.07),transparent);
+    box-shadow:var(--bev-in)}
   /* the world behind the glass — a dim, blurred environment (illustrative;
      the interface on the canvas is the real renderer) */
   .card .ringwrap::before{content:"";position:absolute;top:20px;left:50%;
@@ -69,49 +100,58 @@
   .card canvas{position:relative;z-index:1;width:200px;height:200px;border-radius:50%;
     background:transparent;mix-blend-mode:screen;
     box-shadow:0 0 40px rgba(47,212,196,.08)}
-  .card .body{padding:2px 16px 16px;display:flex;flex-direction:column;flex:1}
-  .card h3{margin:0 0 2px;font-size:16px;font-weight:650}
+  .card .body{padding:11px 16px 15px;display:flex;flex-direction:column;flex:1}
+  .card h3{margin:0 0 2px;font-family:var(--chi);font-weight:400;font-size:16px;color:var(--text)}
   .card .by{color:var(--text2);font-size:12.5px;margin-bottom:9px}
   .card .by b{color:var(--text);font-weight:600}
+  /* platinum chips: paper, one hard frame, ink / teal-ink text — no dark pills */
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
   .chip{font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--text2);
-    border:1px solid var(--border);border-radius:999px;padding:2px 8px;white-space:nowrap}
-  .chip.safe{color:var(--green);border-color:rgba(86,211,100,.35)}
-  .chip.brain{color:var(--amber);border-color:rgba(224,181,74,.35)}
-  .chip.golf{color:var(--teal);border-color:rgba(47,212,196,.35)}
+    background:var(--bg);border:1px solid var(--frame);border-radius:4px;padding:2px 8px;white-space:nowrap}
+  .chip.safe{color:var(--teal-ink);background:#E4F0EA}
+  .chip.brain{color:var(--text);background:#F2EBDB}
+  .chip.golf{color:var(--teal-ink)}
   .desc{color:var(--text2);font-size:12.5px;margin:0 0 12px;min-height:1px}
   .actions{display:flex;gap:8px;margin-top:auto}
-  button.btn{font:inherit;background:var(--teal);color:#00201c;border:0;border-radius:999px;
-    padding:8px 14px;font-weight:650;cursor:pointer;font-size:13px}
-  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:600}
-  button.btn.ghost:hover{border-color:var(--teal)}
+  /* Remix keeps its .btn/.remix hooks for the JS — the look is all .pbtn.go */
+  .actions .pbtn{padding:6px 12px;font-size:13.5px;gap:6px;
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
   .actions .btn.remix{flex:1}
-  .icnbtn{font:inherit;background:transparent;color:var(--text);border:1px solid var(--border);
-    border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:14px;flex:none;line-height:1}
-  .icnbtn:hover{border-color:var(--teal)}
+  .icnbtn{font:inherit;color:#111;background:linear-gradient(180deg,#F6F6F6,#D2D2D2);
+    border:1px solid var(--frame);border-radius:6px;width:34px;height:34px;cursor:pointer;
+    font-size:14px;flex:none;line-height:1;box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
+  .icnbtn:hover{background:linear-gradient(180deg,#FFFFFF,#DDDDDD)}
+  .icnbtn:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
+  .icnbtn:focus-visible{outline:2px solid var(--teal-ink);outline-offset:-2px}
   .empty{grid-column:1/-1;text-align:center;color:var(--text2);padding:60px 20px}
-  .empty h2{color:var(--text);font-weight:600}
-  .banner{margin:0;padding:12px 26px;background:var(--surface2);border-bottom:1px solid var(--border);
-    color:var(--text2);font-size:13px;display:flex;gap:10px;align-items:center}
+  .empty h2{font-family:var(--chi);font-weight:400;color:var(--text)}
+  .banner{margin:0;padding:11px 26px;background:var(--surface);border-bottom:1px solid var(--frame);
+    color:var(--text2);font-size:13px;display:flex;gap:10px;align-items:center;
+    box-shadow:var(--bev-out)}
   .banner b{color:var(--text)}
-  /* lens jams */
+  /* lens jams — platinum tiles; the chosen one is pressed IN */
   .jams{padding:16px 26px 4px;display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
-  .jam{background:linear-gradient(135deg,rgba(47,212,196,.09),rgba(224,181,74,.06));
-    border:1px solid var(--border);border-radius:14px;padding:14px 16px;min-width:240px;max-width:340px;
-    display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:.15s}
-  .jam:hover{border-color:var(--teal)}
-  .jam.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
-  .jam .jt{font-weight:650;font-size:15px;display:flex;align-items:center;gap:8px}
+  .jam{background:var(--surface);border:1px solid var(--frame);border-radius:6px;
+    padding:12px 16px;min-width:240px;max-width:340px;
+    display:flex;flex-direction:column;gap:6px;cursor:pointer;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.26);
+    transition:background var(--fast,180ms) var(--ease,ease)}
+  .jam:hover{background:#E6E6E6}
+  .jam.on{background:#C6C6C6;box-shadow:var(--bev-in),1px 1px 0 rgba(0,0,0,.2)}
+  .jam .jt{font-family:var(--chi);font-weight:400;font-size:15px;color:var(--text);
+    display:flex;align-items:center;gap:8px}
   .jam .jtheme{color:var(--text2);font-size:12.5px}
   .jam .jmeta{display:flex;gap:10px;align-items:center;font-size:11.5px;margin-top:2px}
-  .jam .pill2{text-transform:uppercase;letter-spacing:.04em;border-radius:999px;padding:1px 8px;border:1px solid var(--border)}
-  .jam .pill2.open{color:var(--green);border-color:rgba(86,211,100,.4)}
-  .jam .pill2.upcoming{color:var(--amber);border-color:rgba(224,181,74,.4)}
+  .jam .pill2{text-transform:uppercase;letter-spacing:.04em;color:var(--text2);
+    background:var(--bg);border:1px solid var(--frame);border-radius:4px;padding:1px 8px}
+  .jam .pill2.open{color:var(--teal-ink)}
+  .jam .pill2.upcoming{color:var(--amber)}
   .jam .pill2.closed{color:var(--text2)}
-  .jam .cd{color:var(--teal);font-variant-numeric:tabular-nums}
-  .jamback{margin:12px 26px 0;display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--teal)}
+  .jam .cd{color:var(--teal-ink);font-variant-numeric:tabular-nums}
+  .jamback{margin:12px 26px 0;display:inline-flex;align-items:center;gap:6px;font-size:13px;
+    cursor:pointer;color:var(--teal-ink);font-family:var(--chi)}
   /* share modal (a Platinum sub-window — skinned in the Platinum block below) */
-  .scrim{position:fixed;inset:0;background:rgba(3,8,7,.72);display:none;align-items:center;
+  .scrim{position:fixed;inset:0;background:rgba(10,14,14,.55);display:none;align-items:center;
     justify-content:center;z-index:40;padding:20px}
   .modal canvas{display:block}
   .urlrow{display:flex;gap:8px;margin-bottom:10px}
@@ -122,45 +162,20 @@
   /* inline-svg icons — inherit colour, scale with text */
   .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
   [data-icon]{display:inline-flex;align-items:center}
-  .ghead h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal)}
-  .banner .bn-ic .ic{width:1.15em;height:1.15em;color:var(--teal)}
+  .ghead h1 .ttl-ic .ic{width:1.05em;height:1.05em;vertical-align:-0.16em;color:var(--teal-ink)}
+  .banner .bn-ic .ic{width:1.15em;height:1.15em;color:var(--teal-ink)}
   .chip .ic{width:.95em;height:.95em;vertical-align:-0.12em;margin-right:3px}
   .icnbtn .ic{width:15px;height:15px}
-  .jam .jt .ic{width:1em;height:1em;color:var(--teal);margin-right:3px}
+  .jam .jt .ic{width:1em;height:1em;color:var(--teal-ink);margin-right:3px}
+  @media (prefers-reduced-motion:reduce){.card,.jam{transition:none}}
 </style>
 <link rel="stylesheet" href="assets/platinum/platinum.css">
 <style>
   /* ============ Platinum dressing (loads after platinum.css so it wins ties) ============ */
-  /* heading strip — Chicago chrome on the dark screen */
-  .ghead h1{font-family:var(--chi);letter-spacing:.01em;color:var(--h-text)}
-  .ghead h1 .ttl-ic .ic{color:var(--h-teal)}
-  .ghead .tag{color:var(--h-text2)}
   .ghead .bld{margin-left:auto;padding:7px 15px;font-size:13.5px;white-space:nowrap;
     box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
   @media (max-width:640px){.ghead .bld{margin-left:0}}
   .fstatus{flex-wrap:wrap;row-gap:0}
-  /* toolbar controls, squared to the desktop */
-  .search input{border-radius:3px;
-    box-shadow:inset 1px 1px 0 rgba(0,0,0,.55),inset -1px -1px 0 rgba(255,255,255,.06)}
-  .seg{border-radius:3px;background:rgba(0,0,0,.28);
-    box-shadow:inset 1px 1px 0 rgba(0,0,0,.5),inset -1px -1px 0 rgba(255,255,255,.06)}
-  .seg button.on{background:var(--h-teal);color:#00251C}
-  /* cards read as instrument panels set into the screen */
-  .card{border-radius:2px;border-color:#0A1114;
-    box-shadow:inset 1px 1px 0 rgba(255,255,255,.05),inset -1px -1px 0 rgba(0,0,0,.5)}
-  .card:hover{border-color:var(--h-teal-dim);
-    box-shadow:inset 1px 1px 0 rgba(255,255,255,.05),inset -1px -1px 0 rgba(0,0,0,.5),
-      3px 3px 0 rgba(0,0,0,.35)}
-  .jam{border-radius:2px}
-  /* Remix is a real Platinum button (JS keeps .btn.remix hooks alongside) */
-  .actions .pbtn{padding:6px 12px;font-size:13.5px;gap:6px;
-    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
-  .actions .pbtn:hover{text-decoration:none}
-  .icnbtn{border-radius:6px;color:#111;border:1px solid var(--frame);
-    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);
-    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.3)}
-  .icnbtn:hover{border-color:var(--frame);background:linear-gradient(180deg,#FFFFFF,#DDDDDD)}
-  .icnbtn:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
   /* the share dialog is a real Platinum window on the desktop */
   .scrim .modal{width:100%;max-width:380px;margin:0;text-align:center}
   .modal .mbody{padding:20px 20px 14px;color:var(--ink)}
@@ -179,7 +194,7 @@
 <div class="mw open active" style="margin-top:4svh">
 <div class="tbar"><span class="wbox close" aria-hidden="true"></span><span class="tstripes" aria-hidden="true"></span><span class="ttext">Lens Gallery</span><span class="tstripes" aria-hidden="true"></span><span class="wbox collapse" aria-hidden="true"></span><span class="wbox zoom" aria-hidden="true"></span></div>
 <div class="fstatus"><span id="fsCount">8 lenses</span><span>all running live</span><span>remix any of them</span></div>
-<div class="mbody screen">
+<div class="mbody">
 
 <div class="ghead">
   <h1><span class="ttl-ic" data-icon="globe"></span> Lens Gallery</h1>
@@ -211,7 +226,7 @@
 
 <div class="grid" id="grid" aria-live="polite"></div>
 
-</div><!-- /.mbody.screen -->
+</div><!-- /.mbody -->
 </div><!-- /.mw -->
 
 <!-- share modal -->

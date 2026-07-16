@@ -16,44 +16,159 @@
 <link rel="preload" href="assets/fonts/ChicagoFLF.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="preload" href="assets/fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
 <meta name="description" content="Build a DreamLayer lens in your browser — no code. Pick a recipe or wire a scene graph, watch it run on a live ring, see the safety proof, deploy to your glasses, publish to the store." />
+<link rel="stylesheet" href="assets/platinum/platinum.css">
 <style>
-  :root{
-    --bg:#07100f; --surface:#0e1a18; --surface2:#12211f; --border:#1c2e2b;
-    --text:#eaf3f1; --text2:#8aa5a0; --teal:#2fd4c4; --amber:#e0b54a;
-    --red:#e06b52; --green:#56d364;
-  }
+  /* ============================================================
+     Lens Builder — Mac OS 8.1 Platinum interior on the shared kit
+     (assets/platinum/platinum.css supplies the vars + chrome).
+     The editor lives on paper and platinum; the ONE dark surface
+     left is the Halo live preview — the glasses' real display —
+     framed as a screen well inside a platinum monitor bezel.
+     Every id/class the builder script touches is unchanged: this
+     conversion is CSS plus window-chrome wrappers only.
+     ============================================================ */
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  a{color:var(--teal)}
-  /* (the page's own header is gone — the Platinum menu bar replaces it) */
-  .wrap{display:grid;grid-template-columns:290px 1fr 330px;min-height:calc(100vh - 62px)}
-  @media(max-width:1080px){.wrap{grid-template-columns:1fr}}
-  .col{padding:20px;overflow-y:auto}
-  .col.left{border-right:1px solid var(--border)}
-  .col.right{border-left:1px solid var(--border);background:var(--surface)}
-  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 12px}
-  .recipe{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
-    border-radius:14px;padding:13px 15px;margin-bottom:9px;cursor:pointer;color:inherit;transition:.15s}
-  .recipe:hover{border-color:var(--teal)}
-  .recipe.on{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal)}
-  .recipe{display:flex;gap:11px;align-items:flex-start}
-  .recipe .rx-ico{font-size:20px;line-height:1.2;flex:none;width:24px;text-align:center}
+  body{margin:0;font-size:15px;line-height:1.5;color:var(--ink)}
+  a{color:var(--teal-ink)}
+  p.ttext{margin:0}
   .ic{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;flex:none}
-  .recipe .rx-ico .ic{width:22px;height:22px;color:var(--teal);vertical-align:-3px}
-  .recipe .rx-txt{display:block}
   .controls .btn .ic{width:1em;height:1em;vertical-align:-0.14em;margin-right:1px}
   .controls .btn [data-icon]{display:inline-flex;vertical-align:-0.14em}
-  .recipe b{display:block;font-size:15px;margin-bottom:2px}
-  .recipe span{color:var(--text2);font-size:12.5px}
-  .recipe .rx-tag{display:inline-block;font-style:normal;font-size:10px;letter-spacing:.03em;
-    text-transform:uppercase;color:var(--teal);border:1px solid var(--border);border-radius:999px;
-    padding:1px 7px;margin:0 0 3px}
-  .modeswitch{display:flex;gap:0;margin:18px 0 6px;border:1px solid var(--border);border-radius:999px;overflow:hidden}
-  .modeswitch button{flex:1;font:inherit;background:transparent;color:var(--text2);border:0;padding:8px;cursor:pointer;font-size:13.5px}
-  .modeswitch button.on{background:var(--teal);color:#00201c;font-weight:650}
-  .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
-  .ringwrap{position:relative;width:300px;height:300px;margin-top:4px}
+
+  /* ---------- the application window ---------- */
+  .mw.app{width:min(1360px,calc(100vw - 2*var(--gutter)));margin:4svh auto 0}
+  @media(max-width:700px){.mw.app{width:calc(100vw - 12px)}}
+  h1.ttext{margin:0}
+  .mw.app .fstatus{flex-wrap:wrap;gap:2px 12px}
+  .mw.app>.mbody{padding:0}
+
+  /* ---------- the three columns (Platinum panel splits) ---------- */
+  .wrap{display:grid;grid-template-columns:290px minmax(0,1fr) 330px}
+  .col{padding:20px;min-width:0}
+  .col.left{border-right:1px solid var(--frame);background:#E6E6E6;
+    box-shadow:inset -1px 0 0 var(--pl-hi)}
+  .col.right{border-left:1px solid var(--frame);background:#E6E6E6;
+    box-shadow:inset 1px 0 0 var(--pl-hi)}
+  @media(max-width:1080px){
+    .wrap{grid-template-columns:1fr}
+    .col.left{border-right:0;border-bottom:1px solid var(--frame);
+      box-shadow:inset 0 -1px 0 var(--pl-hi)}
+    .col.right{border-left:0;border-top:1px solid var(--frame);
+      box-shadow:inset 0 1px 0 var(--pl-hi)}
+  }
+
+  /* ---------- type on paper ---------- */
+  .eyebrow{font-family:var(--chi);font-weight:400;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--teal-ink);margin:0 0 12px}
+  .muted{color:var(--ink2);font-size:12.5px}
+  code{background:#fff;border:1px solid #A6A6A6;border-radius:3px;padding:0 4px;
+    font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+
+  /* ---------- Platinum push buttons (.btn keeps its JS-facing name) ---------- */
+  button.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-family:var(--chi);font-weight:400;font-size:14px;letter-spacing:.01em;
+    color:#00251C;background:linear-gradient(180deg,#49E8BC,#17AE85);
+    border:1px solid var(--frame);border-radius:8px;padding:9px 18px;cursor:pointer;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.22);
+    -webkit-tap-highlight-color:transparent;transition:filter var(--fast) var(--ease)}
+  button.btn:hover{filter:brightness(1.045)}
+  button.btn:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in);filter:none}
+  button.btn.ghost{background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#111}
+  button.btn.ghost:active{background:#6E6E6E;color:#fff}
+  /* a toggled-on button (e.g. Paint while painting) sits pressed IN */
+  button.btn.on{box-shadow:var(--bev-in)}
+  button.btn.ghost.on{background:linear-gradient(180deg,#BFC4C2,#D3D8D6);color:var(--ink)}
+  button.btn.sm{padding:6px 12px;font-size:12.5px;border-radius:6px;gap:6px}
+  button.btn:disabled{opacity:.45;cursor:default;filter:none}
+  .helpbtn{color:var(--teal-ink)}
+  .btn:focus-visible,.recipe:focus-visible,.modeswitch button:focus-visible,
+  .askex button:focus-visible,.bgpick button:focus-visible,.ib:focus-visible{
+    outline:2px solid var(--hi);outline-offset:2px}
+
+  /* ---------- fields: white inset wells ---------- */
+  input,select,textarea{font:inherit;background:#fff;color:var(--ink);
+    border:1px solid var(--frame);border-radius:2px;padding:7px 9px;width:100%;
+    box-shadow:var(--bev-in)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal-ink);outline-offset:-1px}
+  input::placeholder,textarea::placeholder{color:#8A9296}
+  /* checkboxes/radios must keep their intrinsic size — the width:100% above
+     otherwise stretches them (they're flex items inside .flags labels), which
+     blows the Countdown row apart on narrow/mobile widths */
+  input[type=checkbox],input[type=radio]{width:auto;flex:none;padding:0;box-shadow:none;
+    accent-color:var(--teal-ink)}
+  textarea{resize:vertical;min-height:52px}
+  label.f{display:block;font-family:var(--chi);font-size:11.5px;color:#3A3F42;margin:11px 0 4px}
+  .name-row input{font-size:17px;font-weight:600}
+
+  /* ---------- named sections ride real sub-windows (The proof / Ship it / …) ---------- */
+  .mw.sub.pw{margin:0 0 16px}
+  .mw.sub.pw .mbody{padding:13px 14px}
+  .col .mw.sub.pw:last-child{margin-bottom:0}
+  .panel{margin:0 0 16px}   /* legacy hook — window chrome replaced its dark rule */
+
+  /* ---------- Ask Juno ---------- */
+  .askjuno-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:9px}
+  .juno-avatar{width:40px;height:40px;flex:none;overflow:hidden;background:#05100E;
+    border:1px solid var(--frame);border-radius:4px;box-shadow:var(--bev-in);
+    transition:box-shadow var(--base) var(--ease)}
+  .juno-avatar .juno-media{width:100%;height:100%;object-fit:cover;object-position:50% 30%}
+  .juno-avatar img{width:100%;height:100%;object-fit:cover;object-position:50% 12%;image-rendering:pixelated}
+  .juno-avatar[data-state="thinking"]{box-shadow:var(--bev-in),0 0 0 2px var(--teal-ink)}
+  .juno-avatar[data-state="success"]{box-shadow:var(--bev-in),0 0 0 2px #1F7A33}
+  .askjuno textarea{min-height:44px}
+  .askex{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+  .askex button{font-family:var(--chi);font-size:11px;color:var(--ink);
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);border:1px solid var(--frame);
+    border-radius:5px;padding:4px 9px;cursor:pointer;
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);
+    transition:filter var(--fast) var(--ease)}
+  .askex button:hover{filter:brightness(1.045)}
+  .askex button:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in);filter:none}
+
+  /* ---------- recipes: a Platinum list (selection wears classic blue) ---------- */
+  .recipe{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;
+    font:inherit;color:var(--ink);background:#fff;border:1px solid var(--frame);
+    border-radius:6px;box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
+    padding:12px 13px;margin-bottom:10px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:background var(--fast) var(--ease)}
+  .recipe:hover{background:#F7F7F7}
+  .recipe.on{background:var(--hi);color:#fff;
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.25),inset -1px -1px 0 rgba(0,0,0,.35),
+    2px 2px 0 rgba(0,0,0,.28)}
+  .recipe .rx-ico{font-size:20px;line-height:1.2;flex:none;width:24px;text-align:center}
+  .recipe .rx-ico .ic{width:22px;height:22px;color:var(--teal-ink);vertical-align:-3px}
+  .recipe.on .rx-ico .ic{color:#9FE8D4}
+  .recipe .rx-txt{display:block}
+  .recipe b{display:block;font-family:var(--chi);font-weight:400;font-size:14.5px;margin-bottom:2px}
+  .recipe span{color:var(--ink2);font-size:12.5px}
+  .recipe.on b{color:#fff}
+  .recipe.on span{color:#C9CDF2}
+  /* the "needs your Brain" tag: a coral-ink chip on paper */
+  .recipe .rx-tag{display:inline-block;font-style:normal;font-family:var(--chi);font-size:10px;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--coral-ink);background:var(--paper);
+    border:1px solid var(--frame);border-radius:4px;padding:1px 6px;margin:0 0 3px;
+    box-shadow:1px 1px 0 rgba(0,0,0,.15)}
+  .recipe.on .rx-tag{color:#FFD9CF;background:transparent;border-color:rgba(255,255,255,.55);
+    box-shadow:none}
+
+  /* ---------- mode toggle: a beveled segmented control (active = pressed IN) ---------- */
+  .modeswitch{display:flex;gap:0;margin:18px 0 6px;border:1px solid var(--frame);
+    border-radius:6px;overflow:hidden;box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18)}
+  .modeswitch button{flex:1;font-family:var(--chi);font-size:12.5px;color:var(--ink2);
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);border:0;padding:8px;cursor:pointer}
+  .modeswitch button+button{border-left:1px solid var(--frame)}
+  .modeswitch button.on{background:linear-gradient(180deg,#BFC4C2,#D3D8D6);color:var(--ink);
+    box-shadow:var(--bev-in),inset 0 1px 3px rgba(0,0,0,.16)}
+
+  /* ---------- the Halo live preview: a dark screen in a platinum bezel.
+       THE HONESTY EXCEPTION — this well is the glasses' real display, so it
+       stays dark; the canvas, its palette and its drawing code are untouched. */
+  .mw.sub.preview{display:block;max-width:560px;margin:0 auto}
+  .mw.sub.preview>.mbody{background:var(--plat);padding:clamp(8px,2vw,14px)}
+  .stage{display:flex;justify-content:center;align-items:center;
+    padding:clamp(8px,3vw,22px);background:var(--scr);border:1px solid var(--frame);
+    border-radius:6px;box-shadow:inset 0 0 34px rgba(0,0,0,.55)}
+  .ringwrap{position:relative;width:min(300px,72vw);aspect-ratio:1/1}
   /* a dim, blurred world behind the glass (illustrative), toggled by the picker */
   .ringwrap.world-on::before{content:"";position:absolute;inset:0;border-radius:50%;z-index:0;
     background:var(--lw,none) center/cover;
@@ -64,200 +179,229 @@
     background:radial-gradient(70px 56px at 34% 29%,rgba(255,255,255,.16),transparent 60%),
       radial-gradient(190px 190px at 50% 84%,rgba(0,0,0,.5),transparent 60%);
     box-shadow:inset 0 0 0 1px rgba(150,220,220,.14),inset 0 -20px 46px rgba(0,0,0,.5)}
-  canvas#ring{position:relative;z-index:1;width:300px;height:300px;border-radius:50%;background:#000;
+  canvas#ring{position:relative;z-index:1;width:100%;height:100%;border-radius:50%;background:#000;
     box-shadow:0 0 60px rgba(47,212,196,.10)}
   /* screen-blend the HUD over the world so its black reads through */
   .ringwrap.world-on canvas#ring{background:transparent;mix-blend-mode:screen}
-  .controls{display:flex;gap:10px}
-  canvas#ring.painting{cursor:crosshair;box-shadow:0 0 60px rgba(224,107,82,.28)}
+  canvas#ring.painting{cursor:crosshair;box-shadow:0 0 0 2px var(--coral)}
+  /* the control strip under the screen */
+  .cstrip{display:flex;flex-direction:column;align-items:center;gap:10px;
+    padding:12px 12px 10px;background:var(--plat);border-top:1px solid var(--frame);
+    box-shadow:inset 0 1px 0 var(--pl-hi)}
+  .cstrip .muted{margin:0}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   .bgpick{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:320px}
-  .bgpick button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface);
-    border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
-  .bgpick button.on{color:#00201c;background:var(--teal);border-color:var(--teal);font-weight:650}
+  .bgpick button{font-family:var(--chi);font-size:11px;color:var(--ink);
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);border:1px solid var(--frame);
+    border-radius:5px;padding:3px 9px;cursor:pointer;
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18)}
+  .bgpick button:hover{filter:brightness(1.045)}
+  .bgpick button.on{background:linear-gradient(180deg,#BFC4C2,#D3D8D6);color:var(--teal-ink);
+    box-shadow:var(--bev-in)}
+  /* paint strip: colour wells + width wells, inset like real pickers */
   .paintbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;justify-content:center;
-    max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
-  .paintbar .pb-title{font-size:12px;color:var(--text2);width:100%;text-align:center}
-  .paintbar .pb-title b{color:var(--text)}
+    max-width:320px;background:var(--paper);border:1px solid var(--frame);border-radius:6px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);padding:10px 12px}
+  .paintbar .pb-title{font-family:var(--chi);font-size:11.5px;color:var(--ink2);width:100%;text-align:center}
+  .paintbar .pb-title b{color:var(--ink)}
+  .paintbar select{width:auto;font-family:var(--font);font-size:12px;padding:3px 5px}
   .pb-swatches{display:flex;gap:6px}
-  .pb-swatches .sw{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer}
-  .pb-swatches .sw.on{border-color:var(--text)}
+  .pb-swatches .sw{width:22px;height:22px;border-radius:3px;border:1px solid var(--frame);
+    box-shadow:var(--bev-in);cursor:pointer;padding:0}
+  .pb-swatches .sw.on{outline:2px solid var(--hi);outline-offset:1px}
   .pb-widths{display:flex;gap:6px}
   .pb-widths .wd{display:flex;align-items:center;justify-content:center;width:30px;height:24px;
-    border:1px solid var(--border);border-radius:7px;background:var(--surface2);cursor:pointer}
-  .pb-widths .wd.on{border-color:var(--teal)}
-  .pb-widths .wd i{display:block;background:var(--text);border-radius:3px}
-  .pb-count{font-size:11px;color:var(--text2);width:100%;text-align:center}
-  button.btn{font:inherit;background:var(--teal);color:#00201c;border:0;border-radius:999px;
-    padding:9px 18px;font-weight:650;cursor:pointer}
-  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
-  button.btn.sm{padding:6px 12px;font-size:13px}
-  button.btn:disabled{opacity:.45;cursor:default}
-  input,select,textarea{font:inherit;background:var(--surface2);color:var(--text);
-    border:1px solid var(--border);border-radius:9px;padding:7px 9px;width:100%}
-  /* checkboxes/radios must keep their intrinsic size — the width:100% above
-     otherwise stretches them (they're flex items inside .flags labels), which
-     blows the Countdown row apart on narrow/mobile widths */
-  input[type=checkbox],input[type=radio]{width:auto;flex:none;padding:0}
-  textarea{resize:vertical;min-height:52px}
-  label.f{display:block;font-size:12px;color:var(--text2);margin:11px 0 4px}
-  .name-row input{font-size:17px;font-weight:600}
-  .scene{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:10px}
-  .scene.active{border-color:var(--teal)}
+    border:1px solid var(--frame);border-radius:3px;background:#fff;box-shadow:var(--bev-in);
+    cursor:pointer;padding:0}
+  .pb-widths .wd.on{outline:2px solid var(--hi);outline-offset:1px}
+  .pb-widths .wd i{display:block;background:var(--ink);border-radius:2px}
+  .pb-count{font-size:11px;color:var(--ink2);width:100%;text-align:center}
+
+  /* ---------- the editors ---------- */
+  .lens-does{background:#fff;border:1px solid var(--frame);border-radius:6px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);
+    padding:10px 13px;margin-bottom:12px;font-size:13px;color:var(--ink)}
+  .lens-does b{color:var(--teal-ink)}
+  .scene{background:var(--plat);border:1px solid var(--frame);border-radius:6px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);padding:12px 13px;margin-bottom:12px}
+  .scene.active{outline:2px solid var(--teal-ink);outline-offset:1px}
   .scene .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-  .scene .hd .sid{font-size:12px;color:var(--teal);font-weight:650}
+  .scene .hd .sid{font-family:var(--chi);font-size:12px;color:var(--teal-ink)}
   .scene .hd input.rename{width:96px;font-size:12px;padding:4px 6px}
-  .scene .hd .start{margin-left:auto;font-size:11.5px;color:var(--text2);display:flex;gap:5px;align-items:center;cursor:pointer}
-  .scene .hd .del{color:var(--text2);cursor:pointer;background:none;border:0;font-size:15px}
-  .lines .ln{display:grid;grid-template-columns:1fr 68px 84px 96px 26px;gap:6px;margin-bottom:7px;align-items:center}
+  .scene .hd .start{margin-left:auto;font-size:11.5px;color:var(--ink2);display:flex;gap:5px;
+    align-items:center;cursor:pointer}
+  .scene .hd .del{color:var(--ink2);cursor:pointer;background:none;border:0;font-size:15px;padding:0}
+  .scene .hd .del:hover{color:var(--coral-ink)}
+  .scene .x{color:var(--ink2);cursor:pointer;text-align:center;font-size:15px}
+  .scene .x:hover{color:var(--coral-ink)}
+  .lines .ln{display:grid;grid-template-columns:1fr 68px 84px 96px 26px;gap:6px;margin-bottom:7px;
+    align-items:center}
   .lines .ln select{padding:6px 4px;font-size:12px}
-  .lines .ln .x{color:var(--text2);cursor:pointer;text-align:center;font-size:15px;line-height:26px}
-  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 1fr;grid-auto-rows:auto} .lines .ln .lc{grid-column:1/3} }
-  .sub{font-size:11.5px;color:var(--text2);margin:8px 0 4px;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
-  /* inline help: a ⓘ button that opens a plain-language popover */
-  .ib{flex:none;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);background:transparent;
-    color:var(--text2);font-size:12px;line-height:1;cursor:pointer;padding:0;font-style:italic;font-weight:700}
-  .ib:hover{border-color:var(--teal);color:var(--teal)}
-  .pop{position:fixed;z-index:60;max-width:290px;background:#0c1618;border:1px solid var(--teal);
-    border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.5;color:var(--text);
-    box-shadow:0 14px 44px rgba(0,0,0,.55)}
-  .pop b{color:#fff} .pop code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:11.5px}
+  .lines .ln .x{line-height:26px}
+  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+    .lines .ln .lc{grid-column:1/3} }
+  /* section headers inside a scene ride an etched rule */
+  .scene .sub{font-family:var(--chi);font-size:10.5px;color:var(--teal-ink);margin:10px 0 5px;
+    letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+  .scene .sub::after{content:"";flex:1;height:2px;margin-left:4px;
+    background:linear-gradient(180deg,#A6A6A6 0,#A6A6A6 1px,#fff 1px,#fff 2px)}
+  /* inline help: a small beveled ⓘ button + a balloon-help popover */
+  .ib{flex:none;width:18px;height:18px;border-radius:4px;border:1px solid var(--frame);
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);box-shadow:var(--bev-out);
+    color:var(--ink);font-family:var(--chi);font-size:11px;line-height:1;cursor:pointer;
+    padding:0;font-style:italic}
+  .ib:hover{color:var(--teal-ink)}
+  .ib:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
+  .pop{position:fixed;z-index:60;max-width:290px;background:#FFFFE8;border:1px solid var(--frame);
+    border-radius:10px 10px 10px 2px;padding:11px 13px;font-size:12.5px;line-height:1.5;
+    color:#222;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
+  .pop b{color:var(--ink)}
+  .pop code{font-size:11.5px}
   .pop ul{margin:6px 0 0;padding-left:16px} .pop li{margin:2px 0}
-  .lens-does{background:var(--surface);border:1px solid var(--border);border-radius:11px;
-    padding:10px 13px;margin-bottom:12px;font-size:13px;color:var(--text)}
-  .lens-does b{color:var(--teal)}
-  .chip{display:inline-block;font-size:10.5px;color:var(--teal);background:rgba(47,212,196,.09);
-    border:1px solid rgba(47,212,196,.28);border-radius:999px;padding:1px 8px;margin:0 4px 3px 0;white-space:nowrap}
-  .schips{margin-left:6px} .schips .chip{color:var(--text2);background:transparent;border-color:var(--border)}
+  /* chips */
+  .chip{display:inline-block;font-family:var(--chi);font-size:10px;color:var(--teal-ink);
+    background:var(--paper);border:1px solid #A6A6A6;border-radius:4px;padding:1px 6px;
+    margin:0 4px 3px 0;white-space:nowrap}
+  .schips{margin-left:6px} .schips .chip{color:var(--ink2)}
   .tchips{margin:2px 0 8px 2px}
-  .dl-flash{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);z-index:70;
-    background:#0c1618;border:1px solid var(--teal);border-radius:10px;padding:9px 15px;font-size:13px;color:var(--text);
-    box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.18s}
-  .dl-flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .trans .t{display:grid;grid-template-columns:1fr 14px 1fr 22px;gap:6px;align-items:center;margin-bottom:6px}
-  .trans .t .arr{color:var(--text2);text-align:center}
-  .flags{display:flex;gap:14px;align-items:center;margin-top:8px;color:var(--text2);font-size:13px;flex-wrap:wrap}
+  .trans .t{display:grid;grid-template-columns:1fr 14px 1fr 22px;gap:6px;align-items:center;
+    margin-bottom:6px}
+  .trans .t .arr{color:var(--ink2);text-align:center}
+  .flags{display:flex;gap:14px;align-items:center;margin-top:8px;color:var(--ink2);font-size:13px;
+    flex-wrap:wrap}
   .flags label{display:flex;gap:6px;align-items:center;cursor:pointer}
   .flags .nums{display:inline-flex;gap:6px;flex:none}   /* keep in·hold·out together */
-  .muted{color:var(--text2);font-size:12.5px}
-  .graph{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px;margin-top:14px}
+  /* a brief floating note — so the editor never silently reverts an edit */
+  .dl-flash{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);
+    z-index:70;background:var(--paper);border:1px solid var(--frame);border-radius:6px;
+    padding:9px 15px;font-family:var(--chi);font-size:12.5px;color:var(--ink);
+    box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.35);opacity:0;pointer-events:none;
+    transition:opacity var(--fast) var(--ease),transform var(--fast) var(--ease)}
+  .dl-flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ---------- the flow diagram: ink on paper. The SVG is drawn by the script
+       with its old colours as presentation ATTRIBUTES — CSS outranks those,
+       so the recolor below needs zero script changes. ---------- */
+  .graph{background:#fff;border:1px solid var(--frame);border-radius:6px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);padding:8px;margin-top:14px}
   .graph svg{width:100%;height:auto;display:block}
-  .proof{border-radius:14px;padding:15px;border:1px solid var(--border);background:var(--surface2)}
-  .proof.ok{border-color:rgba(86,211,100,.4)} .proof.bad{border-color:rgba(224,107,82,.5)}
-  .proof h3{margin:0 0 8px;font-size:14px}
+  .graph svg text{font-family:var(--font)}
+  .graph svg rect[fill="#0e1a18"]{fill:#fff}
+  .graph svg rect[fill="#12312c"]{fill:#DCEBE4}
+  .graph svg rect[stroke="#1c2e2b"]{stroke:var(--pl-sh)}
+  .graph svg rect[stroke="#2fd4c4"]{stroke:var(--teal-ink)}
+  .graph svg rect[stroke="#e0b54a"]{stroke:#8A6516}
+  .graph svg text[fill="#eaf3f1"]{fill:var(--ink)}
+  .graph svg text[fill="#8aa5a0"]{fill:var(--ink2)}
+  .graph svg text[fill="#e06b52"]{fill:var(--coral-ink)}
+  .graph svg line[stroke="#2a3c44"]{stroke:#8A9296}
+  .graph svg line[stroke="#e06b52"]{stroke:var(--coral-ink)}
+  .graph svg marker path[fill="#8aa5a0"]{fill:#5C666B}
+
+  /* ---------- the proof ---------- */
+  .proof{background:#fff;border:1px solid var(--frame);border-radius:6px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.16);padding:15px}
+  .proof.ok{background:#F3FAF6}
+  .proof.bad{background:#FBF2EF}
+  .proof h3{margin:0 0 8px;font-family:var(--chi);font-weight:400;font-size:14.5px;color:var(--ink)}
+  .proof.ok h3{color:var(--teal-ink)}
+  .proof.bad h3{color:var(--coral-ink)}
   .proof ul{margin:6px 0 0;padding-left:18px}
-  .proof li{margin:3px 0;font-size:12.5px;color:var(--text2)} .proof .cannot li{color:var(--text)}
-  .proof .will li{color:var(--text)} .proof .will li::marker{color:var(--green)}
-  .viol{color:var(--red);font-size:12.5px;margin:4px 0}
-  .toast{margin-top:9px;font-size:13px;min-height:18px} .ok-t{color:var(--green)} .bad-t{color:var(--red)}
-  .panel{border-top:1px solid var(--border);margin-top:18px;padding-top:16px}
-  details summary{cursor:pointer;color:var(--teal);font-size:13.5px;margin-bottom:8px}
-  .askjuno{background:linear-gradient(180deg,rgba(47,212,196,.07),transparent);
-    border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:16px}
-  .askjuno textarea{min-height:44px}
-  .askjuno-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .juno-avatar{width:40px;height:40px;flex:none;border-radius:50%;overflow:hidden;background:#05100e;
-    box-shadow:0 0 0 1px var(--border),0 0 18px rgba(47,212,196,.16);transition:box-shadow .4s ease}
-  .juno-avatar .juno-media{width:100%;height:100%;object-fit:cover;object-position:50% 30%}
-  .juno-avatar[data-state="thinking"]{box-shadow:0 0 0 1px var(--teal),0 0 22px rgba(47,212,196,.42)}
-  .juno-avatar[data-state="success"]{box-shadow:0 0 0 1px var(--green),0 0 24px rgba(86,211,100,.42)}
-  .askex{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
-  .askex button{font:inherit;font-size:11.5px;color:var(--text2);background:var(--surface2);
-    border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer}
-  .askex button:hover{color:var(--text);border-color:var(--teal)}
-  .helpbtn{cursor:pointer;background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:650}
-  .helpbtn:hover{background:rgba(47,212,196,.10)}
-  /* tutorial */
-  .tour-scrim{position:fixed;inset:0;z-index:50;background:rgba(4,10,10,.72);backdrop-filter:blur(6px);
+  .proof li{margin:3px 0;font-size:12.5px;color:var(--ink2)}
+  .proof .cannot li{color:var(--ink)}
+  .proof .will li{color:var(--ink)} .proof .will li::marker{color:#1F7A33}
+  .viol{color:var(--coral-ink);font-size:12.5px;margin:4px 0}
+  .toast{margin-top:9px;font-family:var(--chi);font-size:12px;min-height:18px}
+  .ok-t{color:var(--teal-ink)} .bad-t{color:var(--coral-ink)}
+  details summary{cursor:pointer;font-family:var(--chi);color:var(--teal-ink);
+    font-size:13px;margin-bottom:8px}
+
+  /* ---------- tutorial: a Platinum dialog ---------- */
+  .tour-scrim{position:fixed;inset:0;z-index:50;background:rgba(14,20,22,.55);
     display:flex;align-items:center;justify-content:center;padding:20px}
   .tour{position:relative;display:flex;width:min(860px,96vw);max-height:92vh;overflow:hidden;
-    background:linear-gradient(160deg,#0c1618,#0a1012);border:1px solid var(--border);border-radius:18px;
-    box-shadow:0 30px 120px rgba(0,0,0,.6),0 0 80px rgba(47,212,196,.06)}
-  .tour-x{position:absolute;top:12px;right:14px;z-index:2;background:transparent;border:0;color:var(--text2);
-    font-size:18px;cursor:pointer;line-height:1}
-  .tour-x:hover{color:var(--text)}
-  .tour-rail{width:210px;flex:none;background:rgba(0,0,0,.28);border-right:1px solid var(--border);
-    padding:20px 12px;overflow-y:auto}
-  .tour-rail .step{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border-radius:9px;cursor:pointer;
-    color:var(--text2);font-size:12.5px;line-height:1.25}
-  .tour-rail .step:hover{background:rgba(255,255,255,.03)}
-  .tour-rail .step.on{background:rgba(47,212,196,.10);color:var(--text)}
-  .tour-rail .step .n{flex:none;width:19px;height:19px;border-radius:50%;border:1px solid var(--border);
-    display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2)}
-  .tour-rail .step.on .n{border-color:var(--teal);color:var(--teal)}
-  .tour-rail .step.done .n{background:var(--teal);color:#00201c;border-color:var(--teal)}
-  .tour-body{flex:1;padding:28px 30px;overflow-y:auto;display:flex;flex-direction:column}
-  .tour-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 6px}
-  .tour-body h2{margin:0 0 12px;font-size:23px;line-height:1.15;letter-spacing:-.01em}
-  .tour-copy{color:var(--text);font-size:14.5px;line-height:1.55}
-  .tour-copy p{margin:0 0 11px} .tour-copy b{color:#fff}
-  .tour-copy .whoa{color:var(--teal);font-style:italic}
-  .tour-copy code{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:12.5px}
+    background:var(--plat);border:2px solid var(--frame);
+    box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.4)}
+  .tour-x{position:absolute;top:8px;right:9px;z-index:2;width:19px;height:19px;
+    display:grid;place-items:center;padding:0;border:1px solid var(--frame);
+    background:linear-gradient(135deg,#FDFDFD,#C9C9C9);box-shadow:var(--bev-out);
+    color:#333;font-size:11px;line-height:1;cursor:pointer}
+  .tour-x:hover{color:#000}
+  .tour-x:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in)}
+  .tour-rail{width:210px;flex:none;background:var(--paper);border-right:1px solid #A6A6A6;
+    box-shadow:inset -1px 0 0 #fff;padding:20px 12px;overflow-y:auto}
+  .tour-rail .step{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border-radius:4px;
+    cursor:pointer;color:var(--ink2);font-size:12.5px;line-height:1.25}
+  .tour-rail .step:hover{background:#E2E2E2}
+  .tour-rail .step.on{background:var(--hi);color:#fff}
+  .tour-rail .step .n{flex:none;width:19px;height:19px;border-radius:3px;
+    border:1px solid var(--frame);background:#fff;box-shadow:var(--bev-out);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--chi);font-size:10.5px;color:var(--ink2)}
+  .tour-rail .step.on .n{color:var(--hi)}
+  .tour-rail .step.done .n{background:var(--teal-ink);color:#fff}
+  .tour-body{flex:1;padding:26px 30px;overflow-y:auto;display:flex;flex-direction:column}
+  .tour-kicker{font-family:var(--chi);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--teal-ink);margin:0 0 6px}
+  .tour-body h2{margin:0 0 12px;font-family:var(--chi);font-weight:400;font-size:22px;
+    line-height:1.2;color:var(--ink)}
+  .tour-copy{color:var(--ink);font-size:14.5px;line-height:1.55}
+  .tour-copy p{margin:0 0 11px} .tour-copy b{color:var(--ink)}
+  .tour-copy .whoa{color:var(--teal-ink);font-style:italic}
+  .tour-copy code{font-size:12.5px}
   .tour-demo{margin:14px 0 6px;min-height:0}
-  .tour-demo button{font:inherit;font-weight:650;background:var(--teal);color:#00201c;border:0;border-radius:999px;
-    padding:9px 16px;cursor:pointer}
-  .tour-demo button:hover{filter:brightness(1.06)}
-  .tour-demo .cap{display:block;margin-top:7px;font-size:12px;color:var(--text2)}
+  .tour-demo button{display:inline-flex;align-items:center;gap:8px;font-family:var(--chi);
+    font-size:14px;color:#00251C;background:linear-gradient(180deg,#49E8BC,#17AE85);
+    border:1px solid var(--frame);border-radius:8px;padding:9px 16px;cursor:pointer;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.22)}
+  .tour-demo button:hover{filter:brightness(1.045)}
+  .tour-demo button:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in)}
+  .tour-demo .cap{display:block;margin-top:7px;font-size:12px;color:var(--ink2)}
   .tour-nav{display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:18px}
-  .tour-skip{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer}
+  .tour-skip{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer}
   .tour-skip input{width:auto}
-  @media(max-width:640px){ .tour{flex-direction:column} .tour-rail{width:auto;display:flex;gap:6px;overflow-x:auto;
-    border-right:0;border-bottom:1px solid var(--border);padding:12px} .tour-rail .step .lbl{display:none}
+  @media(max-width:640px){ .tour{flex-direction:column}
+    .tour-rail{width:auto;display:flex;gap:6px;overflow-x:auto;border-right:0;box-shadow:none;
+      border-bottom:1px solid #A6A6A6;padding:12px}
+    .tour-rail .step .lbl{display:none}
     .tour-rail .step{padding:6px} }
-  /* remix banner */
-  .remix-banner{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,rgba(47,212,196,.14),transparent);
-    border-bottom:1px solid var(--border);padding:9px 20px;font-size:13.5px;color:var(--text)}
-  .remix-banner b{color:var(--teal)}
-  .remix-banner .rb-x{margin-left:auto;background:transparent;border:0;color:var(--text2);cursor:pointer;font-size:15px}
-  /* share modal */
-  .share-scrim{position:fixed;inset:0;z-index:55;background:rgba(4,10,10,.72);backdrop-filter:blur(6px);
+
+  /* ---------- remix banner: a sticky-note strip ---------- */
+  .remix-banner{display:flex;align-items:center;gap:10px;background:#FFFFE8;
+    border-bottom:1px solid var(--frame);padding:9px 20px;font-size:13.5px;color:var(--ink)}
+  .remix-banner b{color:var(--teal-ink)}
+  .remix-banner .rb-x{margin-left:auto;background:none;border:0;color:var(--ink2);
+    cursor:pointer;font-size:15px;padding:0}
+  .remix-banner .rb-x:hover{color:var(--ink)}
+
+  /* ---------- share modal: a Platinum dialog ---------- */
+  .share-scrim{position:fixed;inset:0;z-index:55;background:rgba(14,20,22,.55);
     display:flex;align-items:center;justify-content:center;padding:20px}
-  .share{position:relative;width:min(620px,96vw);background:linear-gradient(160deg,#0c1618,#0a1012);
-    border:1px solid var(--border);border-radius:18px;padding:26px 28px;box-shadow:0 30px 120px rgba(0,0,0,.6)}
-  .share-x{position:absolute;top:12px;right:14px;background:transparent;border:0;color:var(--text2);font-size:18px;cursor:pointer}
-  .share-x:hover{color:var(--text)}
-  .share h2{margin:0 0 8px;font-size:20px}
+  .share{position:relative;width:min(620px,96vw);background:var(--plat);
+    border:2px solid var(--frame);padding:26px 28px;
+    box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.4)}
+  .share-x{position:absolute;top:8px;right:9px;width:19px;height:19px;
+    display:grid;place-items:center;padding:0;border:1px solid var(--frame);
+    background:linear-gradient(135deg,#FDFDFD,#C9C9C9);box-shadow:var(--bev-out);
+    color:#333;font-size:11px;line-height:1;cursor:pointer}
+  .share-x:hover{color:#000}
+  .share-x:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in)}
+  .share h2{margin:0 0 8px;font-family:var(--chi);font-weight:400;font-size:19px;color:var(--ink)}
   .share-body{display:flex;gap:22px;margin-top:16px;flex-wrap:wrap}
-  .share-qr{flex:none;background:#fff;border-radius:12px;padding:10px;line-height:0}
+  .share-qr{flex:none;background:#fff;border:1px solid var(--frame);border-radius:4px;
+    box-shadow:var(--bev-in);padding:10px;line-height:0}
   .share-qr canvas{display:block;width:200px;height:200px;image-rendering:pixelated}
   .share-link{flex:1;min-width:220px;display:flex;flex-direction:column}
   .share-row{display:flex;gap:8px}
-  .share-row input{font-size:12px;font-family:ui-monospace,Menlo,monospace}
-  .btn.sm{padding:8px 14px;font-size:13px}
+  .share-row input{font-size:12px;font-family:var(--mono)}
   .share-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .share-scrim .toast{min-height:16px}
-</style>
-<link rel="stylesheet" href="assets/platinum/platinum.css">
-<style>
-  /* ---- Platinum (Mac OS 8.1) page dressing — chrome only, no editor logic ---- */
-  /* the application window that frames the whole builder */
-  .mw.app{width:min(1360px,calc(100vw - 2*var(--gutter)));margin:4svh auto 0}
-  @media(max-width:700px){.mw.app{width:calc(100vw - 12px)}}
-  h1.ttext{margin:0}
-  .mw.app .fstatus{flex-wrap:wrap;gap:2px 12px}
-  /* keep the builder's exact dark palette inside the screen body */
-  .mw.app .mbody.screen{background:var(--bg)}
-  .wrap{min-height:0}
-  /* Platinum-reskin the builder's buttons (CSS only — ids/classes untouched).
-     Primary = the teal "go" button; ghost = the standard platinum button. */
-  button.btn{font-family:var(--chi);font-weight:400;letter-spacing:.01em;
-    background:linear-gradient(180deg,#49E8BC,#17AE85);color:#00251C;
-    border:1px solid var(--frame);border-radius:8px;
-    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.22)}
-  button.btn:active{background:#0B6B52;color:#fff;box-shadow:var(--bev-in)}
-  button.btn.ghost{background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#111;border:1px solid var(--frame)}
-  button.btn.ghost:active{background:#6E6E6E;color:#fff;box-shadow:var(--bev-in)}
-  button.btn:disabled{box-shadow:var(--bev-out)}
-  /* section eyebrows speak Chicago now */
-  .eyebrow{font-family:var(--chi);font-weight:400;letter-spacing:.1em}
-  /* the live-preview sub-window (chrome around the untouched stage).
-     NB: the builder's own ".sub" section-header class also matches ".mw.sub" —
-     neutralise every property it leaks before it wrecks the window layout. */
-  .mw.sub.preview{display:block;max-width:560px;margin:0 auto;
-    font-size:15px;color:inherit;letter-spacing:normal;text-transform:none}
-  .mw.sub.preview>.mbody{padding:18px 12px 14px}
-  /* pixel Juno in the Ask Juno avatar (desk accessory is off on this page) */
-  .juno-avatar img{width:100%;height:100%;object-fit:cover;object-position:50% 12%;image-rendering:pixelated}
+
+  /* ---------- motion: Platinum-subtle, and off when asked ---------- */
+  @media (prefers-reduced-motion:reduce){
+    .dl-flash,.recipe,button.btn,.askex button,.bgpick button,.juno-avatar{transition:none}
+  }
 </style>
 </head>
 <body>
@@ -273,7 +417,7 @@
     <span class="wbox zoom" aria-hidden="true"></span>
   </div>
   <div class="fstatus"><span>no code</span><span aria-hidden="true">·</span><span>watch it run live</span><span aria-hidden="true">·</span><span>deploy to your glasses</span></div>
-  <div class="mbody screen">
+  <div class="mbody">
 
 <div class="remix-banner" id="remixBanner" style="display:none">
   <span id="remixMsg"></span>
@@ -304,16 +448,18 @@
 <div class="wrap">
   <div class="col left">
     <button class="btn ghost helpbtn" id="showtour" title="See what's possible" style="width:100%;margin:0 0 14px">✦ What's possible</button>
-    <div class="askjuno" id="askjuno">
-      <div class="askjuno-head">
-        <div class="juno-avatar" id="junoAvatar" aria-hidden="true"><img src="assets/juno/juno_da_still.png" alt="" width="96" height="96"></div>
-        <p class="eyebrow" style="margin:0">Ask Juno</p>
+    <div class="mw sub pw askjuno" id="askjuno">
+      <div class="tbar"><span class="tstripes" aria-hidden="true"></span><p class="ttext">Ask Juno</p><span class="tstripes" aria-hidden="true"></span></div>
+      <div class="mbody">
+        <div class="askjuno-head">
+          <div class="juno-avatar" id="junoAvatar" aria-hidden="true"><img src="assets/juno/juno_da_still.png" alt="" width="96" height="96"></div>
+          <p class="muted" style="margin:0">Say what you want in plain words — <b>Juno</b> (the assistant) drafts a lens, and your glasses re-prove it's safe. A <i>lens</i> is a little thing your glasses show.</p>
+        </div>
+        <textarea id="askprompt" rows="2" maxlength="240" placeholder="count my push-ups with a nod"></textarea>
+        <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
+        <div class="toast" id="asktoast"></div>
+        <div class="askex" id="askex"></div>
       </div>
-      <p class="muted" style="margin:0 0 8px">Say what you want in plain words — <b>Juno</b> (the assistant) drafts a lens, and your glasses re-prove it's safe. A <i>lens</i> is a little thing your glasses show.</p>
-      <textarea id="askprompt" rows="2" maxlength="240" placeholder="count my push-ups with a nod"></textarea>
-      <button class="btn" id="askgo" style="width:100%;margin-top:8px">✦ Draft my lens</button>
-      <div class="toast" id="asktoast"></div>
-      <div class="askex" id="askex"></div>
     </div>
     <p class="eyebrow">Start from an idea</p>
     <div id="recipes"></div>
@@ -328,35 +474,37 @@
   <div class="col mid">
     <div class="mw sub preview">
       <div class="tbar"><span class="tstripes" aria-hidden="true"></span><span class="ttext">Halo · live preview</span><span class="tstripes" aria-hidden="true"></span></div>
-      <div class="mbody screen">
-    <div class="stage">
-      <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
-      <div class="bgpick" id="bgpick" role="group" aria-label="Preview background — the world behind the glass">
-        <button type="button" data-bg="">Black</button>
-        <button type="button" data-bg="world">Street</button>
-        <button type="button" data-bg="park">Park</button>
-        <button type="button" data-bg="answer">Desk</button>
-        <button type="button" data-bg="face">Room</button>
-        <button type="button" data-bg="fact">Table</button>
-        <button type="button" data-bg="brief">Dawn</button>
-        <button type="button" data-bg="alt">Dim</button>
-      </div>
-      <div class="controls">
-        <button class="btn" id="play"></button>
-        <button class="btn ghost" id="restart"><span data-icon="restart"></span> Restart</button>
-        <button class="btn ghost" id="paint"><span data-icon="brush"></span> Paint</button>
-      </div>
-      <div class="paintbar" id="paintbar" style="display:none">
-        <span class="pb-title">Painting <select id="paintscene" aria-label="Which screen to paint"></select></span>
-        <div class="pb-swatches" id="paintcolors"></div>
-        <div class="pb-widths" id="paintwidths"></div>
-        <button class="btn ghost sm" id="paintundo">↶ Undo stroke</button>
-        <button class="btn ghost sm" id="paintclear">✕ Clear</button>
-        <span class="pb-count" id="paintcount"></span>
-      </div>
-      <p class="muted" id="scenelabel">—</p>
-    </div>
+      <div class="mbody"><!-- platinum monitor bezel; the .stage well below is the glasses' real (dark) display -->
+        <div class="stage">
+          <div class="ringwrap"><canvas id="ring" width="600" height="600" role="img" aria-label="Live preview of your lens on the round glasses display"></canvas></div>
+        </div>
       </div><!-- /preview .mbody -->
+      <div class="cstrip"><!-- the control strip, under the screen -->
+        <div class="bgpick" id="bgpick" role="group" aria-label="Preview background — the world behind the glass">
+          <button type="button" data-bg="">Black</button>
+          <button type="button" data-bg="world">Street</button>
+          <button type="button" data-bg="park">Park</button>
+          <button type="button" data-bg="answer">Desk</button>
+          <button type="button" data-bg="face">Room</button>
+          <button type="button" data-bg="fact">Table</button>
+          <button type="button" data-bg="brief">Dawn</button>
+          <button type="button" data-bg="alt">Dim</button>
+        </div>
+        <div class="controls">
+          <button class="btn" id="play"></button>
+          <button class="btn ghost" id="restart"><span data-icon="restart"></span> Restart</button>
+          <button class="btn ghost" id="paint"><span data-icon="brush"></span> Paint</button>
+        </div>
+        <div class="paintbar" id="paintbar" style="display:none">
+          <span class="pb-title">Painting <select id="paintscene" aria-label="Which screen to paint"></select></span>
+          <div class="pb-swatches" id="paintcolors"></div>
+          <div class="pb-widths" id="paintwidths"></div>
+          <button class="btn ghost sm" id="paintundo">↶ Undo stroke</button>
+          <button class="btn ghost sm" id="paintclear">✕ Clear</button>
+          <span class="pb-count" id="paintcount"></span>
+        </div>
+        <p class="muted" id="scenelabel">—</p>
+      </div><!-- /control strip -->
     </div><!-- /preview .mw.sub -->
     <div style="max-width:540px;margin:20px auto 0">
       <p class="eyebrow">Edit</p>
@@ -370,44 +518,52 @@
   </div>
 
   <div class="col right">
-    <p class="eyebrow">The proof</p>
-    <div class="proof" id="proof"><h3>—</h3></div>
-
-    <div class="panel">
-      <p class="eyebrow">Ship it</p>
-      <button class="btn" id="download" style="width:100%;margin-bottom:10px">↓ Download lens (.json)</button>
-      <div id="deployBox">
-        <label class="f" id="deployLabel">Deploy to this Brain</label>
-        <input id="braintoken" placeholder="Brain token (Settings → pairing)" style="display:none" />
-        <button class="btn ghost" id="deploy" style="width:100%;margin-top:8px"><span data-icon="bolt"></span> Deploy to this Brain</button>
-        <div class="toast" id="toast"></div>
-      </div>
-      <div id="deployGuide" style="display:none">
-        <p class="muted">To put this on your glasses, open the builder <b>from your Brain</b> — the Mac panel → Plugins → “Build a lens” — and hit Deploy for one-click install. No Brain yet? <b>Download</b> the lens above; you can double-check it any time with <code>dreamlayer figment safety my-lens.json</code>.</p>
+    <div class="mw sub pw">
+      <div class="tbar"><span class="tstripes" aria-hidden="true"></span><p class="ttext">The proof</p><span class="tstripes" aria-hidden="true"></span></div>
+      <div class="mbody">
+        <div class="proof" id="proof"><h3>—</h3></div>
       </div>
     </div>
 
-    <div class="panel">
-      <p class="eyebrow">Share it</p>
-      <button class="btn" id="shareBtn" style="width:100%"><span data-icon="link"></span> Share this lens</button>
-      <p class="muted" style="margin:8px 0 12px">A whole lens fits in a link (and a QR). Anyone can open it, remix it, and their glasses re-prove it's safe — so sharing carries zero risk.</p>
-      <details id="publishDetails">
-        <summary>Publish to the store →</summary>
-        <label class="f">Your name / handle</label>
-        <input id="pubauthor" maxlength="40" placeholder="ada_lovelace" />
-        <label class="f">One line — what is it?</label>
-        <input id="pubdesc" maxlength="120" placeholder="A 25/5 focus timer that breathes." />
-        <label class="f">Who's it for? (optional)</label>
-        <input id="pubforwho" maxlength="120" placeholder="Deep-work sessions." />
-        <button class="btn" id="publish" style="width:100%;margin-top:12px">Submit for review</button>
-        <div class="toast" id="pubtoast"></div>
-        <p class="muted" style="margin-top:8px">Free to publish. The registry re-checks the proof and a maintainer signs it in — your listing's claims are recomputed, never trusted. A submission is a request, not a publish.</p>
-      </details>
+    <div class="mw sub pw panel">
+      <div class="tbar"><span class="tstripes" aria-hidden="true"></span><p class="ttext">Ship it</p><span class="tstripes" aria-hidden="true"></span></div>
+      <div class="mbody">
+        <button class="btn" id="download" style="width:100%;margin-bottom:10px">↓ Download lens (.json)</button>
+        <div id="deployBox">
+          <label class="f" id="deployLabel">Deploy to this Brain</label>
+          <input id="braintoken" placeholder="Brain token (Settings → pairing)" style="display:none" />
+          <button class="btn ghost" id="deploy" style="width:100%;margin-top:8px"><span data-icon="bolt"></span> Deploy to this Brain</button>
+          <div class="toast" id="toast"></div>
+        </div>
+        <div id="deployGuide" style="display:none">
+          <p class="muted">To put this on your glasses, open the builder <b>from your Brain</b> — the Mac panel → Plugins → “Build a lens” — and hit Deploy for one-click install. No Brain yet? <b>Download</b> the lens above; you can double-check it any time with <code>dreamlayer figment safety my-lens.json</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mw sub pw panel">
+      <div class="tbar"><span class="tstripes" aria-hidden="true"></span><p class="ttext">Share it</p><span class="tstripes" aria-hidden="true"></span></div>
+      <div class="mbody">
+        <button class="btn" id="shareBtn" style="width:100%"><span data-icon="link"></span> Share this lens</button>
+        <p class="muted" style="margin:8px 0 12px">A whole lens fits in a link (and a QR). Anyone can open it, remix it, and their glasses re-prove it's safe — so sharing carries zero risk.</p>
+        <details id="publishDetails">
+          <summary>Publish to the store →</summary>
+          <label class="f">Your name / handle</label>
+          <input id="pubauthor" maxlength="40" placeholder="ada_lovelace" />
+          <label class="f">One line — what is it?</label>
+          <input id="pubdesc" maxlength="120" placeholder="A 25/5 focus timer that breathes." />
+          <label class="f">Who's it for? (optional)</label>
+          <input id="pubforwho" maxlength="120" placeholder="Deep-work sessions." />
+          <button class="btn" id="publish" style="width:100%;margin-top:12px">Submit for review</button>
+          <div class="toast" id="pubtoast"></div>
+          <p class="muted" style="margin-top:8px">Free to publish. The registry re-checks the proof and a maintainer signs it in — your listing's claims are recomputed, never trusted. A submission is a request, not a publish.</p>
+        </details>
+      </div>
     </div>
   </div>
 </div>
 
-  </div><!-- /.mbody.screen -->
+  </div><!-- /.mbody -->
 </div><!-- /.mw.app -->
 
 <!-- Share modal: the lens as a link + a scannable QR -->
