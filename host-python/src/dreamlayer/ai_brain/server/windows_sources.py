@@ -278,10 +278,21 @@ ICS_MAX_BYTES = 4_000_000
 
 
 def _fetch_ics_url(url: str, timeout: float = 10.0) -> str:
+    # Route through the shared, tested egress primitives rather than the DEFAULT
+    # urllib opener. The default opener FOLLOWS 3xx, so a public https feed that
+    # 302s to http://169.254.169.254/… (cloud metadata) or the loopback API is
+    # transparently followed — the pre-fetch is_local_endpoint check only sees
+    # the original public URL and does no DNS resolution, so the redirect target
+    # is never re-checked (SSRF-via-redirect). no_redirect_opener refuses every
+    # 3xx (surfaces as HTTPError → load_ics_sources' except-continue skips the
+    # feed), and read_capped keeps the ICS_MAX_BYTES cap without silently
+    # truncating. Defense-in-depth on top of the is_local_endpoint refusal and
+    # the Incognito gate, both preserved in load_ics_sources (refute 2026-07-17).
     import urllib.request
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=timeout) as r:
-        return r.read(ICS_MAX_BYTES).decode("utf-8", "ignore")
+    from dreamlayer.plugins._egress import no_redirect_opener, read_capped
+    req = urllib.request.Request(url)
+    with no_redirect_opener().open(req, timeout=timeout) as r:
+        return read_capped(r, ICS_MAX_BYTES).decode("utf-8", "ignore")
 
 
 def _read_ics_file(path: Path, cap: int = ICS_MAX_BYTES) -> str:

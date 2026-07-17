@@ -1,0 +1,194 @@
+"""test_config_perms.py — secret-at-rest hardening for brain_config.json.
+
+brain_config.json persists the pairing token AND both provider API keys
+(cloud_api_key / api_key) in cleartext (store.BrainConfig). These tests pin the
+three-part hardening of BrainConfig.save():
+
+  * FIX 3 — the 0o600 fix shipped with NO regression test. On POSIX the saved
+    config must be mode 0o600 (owner-only), never group/world readable, and it
+    must actually hold the secrets. Reverting the O_CREAT-0o600 / re-assert
+    chmod widens the mode to the 0o644 umask default and fails
+    test_saved_config_is_mode_0600_and_holds_secrets.
+
+  * FIX 2 — the temp is now a per-writer UNIQUE tempfile.mkstemp (O_EXCL, mode
+    0o600) instead of a fixed shared "<config>.tmp" reopened without O_EXCL. A
+    stale world-readable tmp left by a crash/old build can no longer be
+    reopen-truncated into leaking the fresh secrets through a 0o644 handle.
+
+  * FIX 1 — on Windows chmod(0o600) only toggles the read-only bit and sets NO
+    ACL, so save() adds an owner-only ACL step (strip inheritance, grant Full
+    control to ONLY the current user). Guarded to run on the Windows CI leg and
+    skip on POSIX; a wiring test confirms save() invokes it on every platform.
+"""
+from __future__ import annotations
+
+import json
+import os
+import stat
+import subprocess
+import threading
+
+import pytest
+
+from dreamlayer.ai_brain.server import store
+from dreamlayer.ai_brain.server import BrainConfig
+
+
+posix_only = pytest.mark.skipif(os.name == "nt",
+                                reason="POSIX file-mode semantics")
+
+
+# -- FIX 3: the saved config is owner-only and actually holds the secrets ------
+
+@posix_only
+def test_saved_config_is_mode_0600_and_holds_secrets(tmp_path):
+    cfg = tmp_path / "cfg"
+    BrainConfig(token="pair-secret",
+                cloud_api_key="sk-cloud-xyz",
+                api_key="sk-primary-abc").save(cfg)
+    target = cfg / store.CONFIG_FILE
+    assert target.exists()
+
+    # exactly owner rw, nothing else — reverting the 0o600 fix fails HERE
+    mode = target.stat().st_mode & 0o777
+    assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+    # and, said the other way: NOT one bit of group/world access
+    assert not (target.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO))
+
+    # the file really is the cleartext secret store we just hardened
+    data = json.loads(target.read_text())
+    assert data["token"] == "pair-secret"
+    assert data["cloud_api_key"] == "sk-cloud-xyz"
+    assert data["api_key"] == "sk-primary-abc"
+
+
+@posix_only
+def test_resave_over_existing_config_stays_0600(tmp_path):
+    # a second save (overwriting the target) must not widen the mode back out
+    cfg = tmp_path / "cfg"
+    BrainConfig(token="a").save(cfg)
+    BrainConfig(token="b", api_key="k").save(cfg)
+    target = cfg / store.CONFIG_FILE
+    assert target.stat().st_mode & 0o777 == 0o600
+    assert json.loads(target.read_text())["token"] == "b"
+
+
+# -- FIX 2: the temp is unique + private from birth, never a shared 0644 name --
+
+@posix_only
+def test_temp_is_private_from_birth_and_not_the_stale_shared_name(tmp_path,
+                                                                  monkeypatch):
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    # a crash / old build could leave a WORLD-READABLE file at the OLD fixed
+    # temp name. The pre-fix code reopened+truncated exactly this path, writing
+    # the fresh secrets through a 0o644 handle mid-save.
+    stale = cfg / (store.CONFIG_FILE + ".tmp")
+    stale.write_text("{}")
+    os.chmod(stale, 0o644)
+
+    seen: dict = {}
+    real_replace = store.replace_atomic
+
+    def spy_replace(src, dst, *a, **k):
+        seen["src"] = str(src)
+        seen["mode"] = os.stat(src).st_mode & 0o777
+        return real_replace(src, dst, *a, **k)
+
+    monkeypatch.setattr(store, "replace_atomic", spy_replace)
+
+    BrainConfig(token="tok", api_key="k").save(cfg)
+
+    # the file actually swapped in was private (0o600) BEFORE it held secrets…
+    assert seen["mode"] == 0o600
+    # …and it was a fresh unique temp, NOT the stale world-readable shared name
+    assert seen["src"] != str(stale)
+
+    target = cfg / store.CONFIG_FILE
+    assert target.stat().st_mode & 0o777 == 0o600
+    assert json.loads(target.read_text())["api_key"] == "k"
+
+
+def test_no_leftover_temp_after_save(tmp_path):
+    # the unique temp is renamed onto the target; our writer leaves nothing
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    BrainConfig(token="tok").save(cfg)
+    assert list(cfg.glob(store.CONFIG_FILE + ".*")) == []
+
+
+@posix_only
+def test_concurrent_saves_never_collide_or_widen_mode(tmp_path):
+    # unique per-writer temps mean 8 threads can't clobber one shared tmp; the
+    # final file is always complete JSON at 0o600, with no orphaned temps.
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    errors: list[str] = []
+
+    def worker(i):
+        try:
+            for _ in range(20):
+                BrainConfig(token=f"t{i}", api_key=f"k{i}").save(cfg)
+        except Exception as exc:                       # noqa: BLE001
+            errors.append(repr(exc))
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    target = cfg / store.CONFIG_FILE
+    assert target.stat().st_mode & 0o777 == 0o600
+    json.loads(target.read_text())                     # never torn
+    assert list(cfg.glob(store.CONFIG_FILE + ".*")) == []
+
+
+# -- FIX 1: the Windows owner-only ACL step ------------------------------------
+
+def test_save_invokes_the_windows_acl_hardener(tmp_path, monkeypatch):
+    # cross-platform wiring: save() must call the ACL hardener with the FINAL
+    # target path. On POSIX the hardener is a no-op, but the same code path is
+    # what runs (and matters) on the Windows leg.
+    cfg = tmp_path / "cfg"
+    calls: list[str] = []
+    monkeypatch.setattr(store, "_harden_windows_acl", lambda p: calls.append(p))
+    BrainConfig(token="tok").save(cfg)
+    assert calls == [str(cfg / store.CONFIG_FILE)]
+
+
+@posix_only
+def test_harden_windows_acl_is_a_noop_on_posix(tmp_path):
+    # explicit contract: on POSIX the hardener returns without touching the file
+    # or raising — it must never shell out to icacls (absent here).
+    f = tmp_path / "secret.json"
+    f.write_text("x")
+    os.chmod(f, 0o600)
+    store._harden_windows_acl(str(f))                  # must not raise
+    assert f.stat().st_mode & 0o777 == 0o600           # unchanged
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL semantics")
+def test_windows_config_acl_is_owner_only(tmp_path):
+    # runs only on test-windows: prove the ACL step actually ran — inheritance
+    # stripped and no broad principals left in the DACL, only the current user.
+    cfg = tmp_path / "cfg"
+    BrainConfig(token="tok", cloud_api_key="ck", api_key="ak").save(cfg)
+    target = cfg / store.CONFIG_FILE
+
+    out = subprocess.run(["icacls", str(target)],
+                         capture_output=True, text=True).stdout
+
+    # /inheritance:r removed inherited ACEs — none of the "(I)" inherited flags
+    # should remain in the listing.
+    assert "(I)" not in out
+    # no broadly-scoped principal may appear in the hardened DACL
+    for broad in ("Everyone", "Authenticated Users",
+                  "BUILTIN\\Users", "\\Users:"):
+        assert broad not in out
+    # the current user IS granted (by SID or by account name)
+    import getpass
+    sid = store._current_user_sid() or ""
+    user = getpass.getuser()
+    assert (sid and sid in out) or (user and user in out)

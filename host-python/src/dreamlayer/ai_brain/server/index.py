@@ -105,6 +105,17 @@ class FileIndex:
                     continue
                 if self._excluded(path):
                     continue
+                # Per-FILE allow-list re-check at the walk sink. The folder ROOT
+                # was allow-listed above, but rglob yields the folder's contents,
+                # and a symlink inside an allowed folder can RESOLVE to a target
+                # outside the allow-list (~/watched/notes.txt -> /etc/passwd, and
+                # .txt matches TEXT_EXTS). The root gate never sees that per-file
+                # swap (TOCTOU). _is_allowed_root resolve()s, so the escaping
+                # symlink is skipped rather than read, ingested, and surfaced via
+                # /brain/ask (refute-remediation 2026-07-17).
+                if not _is_allowed_root(str(path)):
+                    log.warning("reindex: skipping disallowed file %r", str(path))
+                    continue
                 try:
                     if path.stat().st_size > cap:
                         continue

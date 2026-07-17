@@ -7,6 +7,7 @@ inspect, back up, or hand-edit.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import time
@@ -17,6 +18,8 @@ from typing import Optional
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
+
+log = logging.getLogger("dreamlayer.ai_brain.server.store")
 
 
 def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
@@ -50,6 +53,98 @@ def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
             return
         time.sleep(random.uniform(0.0, delay))
         delay = min(delay * 2, 0.05)
+
+
+def _current_user_sid() -> Optional[str]:
+    """The calling process's user SID as a string ("S-1-5-...") on Windows.
+
+    Read straight off the process token (OpenProcessToken + GetTokenInformation
+    for TokenUser), so it's locale- and domain-independent — unlike a username,
+    which icacls would have to resolve through whatever the box's naming context
+    is. Returns None on any failure; the caller falls back to the account name.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    TOKEN_QUERY = 0x0008
+    TokenUser = 1
+    # WinDLL exists only on Windows; this fn is only reached on nt (guarded by
+    # _harden_windows_acl), but mypy checks it on every platform.
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+
+    token = wintypes.HANDLE()
+    if not advapi32.OpenProcessToken(
+            kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token)):
+        return None
+    try:
+        size = wintypes.DWORD(0)
+        advapi32.GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(size))
+        if not size.value:
+            return None
+        buf = ctypes.create_string_buffer(size.value)
+        if not advapi32.GetTokenInformation(
+                token, TokenUser, buf, size, ctypes.byref(size)):
+            return None
+        # TOKEN_USER begins with SID_AND_ATTRIBUTES { PSID Sid; ... }; the SID
+        # pointer is the first machine-word of the buffer.
+        psid = ctypes.cast(buf, ctypes.POINTER(ctypes.c_void_p))[0]
+        str_sid = ctypes.c_wchar_p()
+        if not advapi32.ConvertSidToStringSidW(
+                ctypes.c_void_p(psid), ctypes.byref(str_sid)):
+            return None
+        try:
+            return str_sid.value
+        finally:
+            kernel32.LocalFree(str_sid)
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def _harden_windows_acl(path: str) -> None:
+    """Windows only: make `path` readable/writable by ONLY the current user.
+
+    POSIX chmod(0o600) is a no-op for ACLs on Windows — it toggles just the
+    read-only attribute and sets NO ACL, so a secret config's confidentiality
+    would rest entirely on whatever ACLs it inherited from the user profile.
+    This strips inheritance and grants Full control to only the current user's
+    SID, so the pairing token + provider API keys aren't exposed to other
+    principals on a shared or misconfigured box.
+
+    Best-effort by contract: any failure is logged and swallowed — the
+    POSIX-correct 0o600 already ran, and persisting the privacy posture must
+    never crash on ACL plumbing. A hard no-op on non-Windows, so the POSIX save
+    path is not touched (returns before importing anything).
+    """
+    if os.name != "nt":
+        return
+    import subprocess
+
+    grantee = None
+    try:
+        sid = _current_user_sid()
+        if sid:
+            grantee = "*" + sid          # icacls accepts *<SID> for a grantee
+    except Exception as exc:             # ctypes/token lookup is fragile; degrade
+        log.debug("owner-only ACL: SID lookup failed for %s: %s", path, exc)
+    if grantee is None:
+        try:
+            import getpass
+            grantee = getpass.getuser()
+        except Exception as exc:
+            log.warning(
+                "owner-only ACL: could not resolve current user for %s: %s",
+                path, exc)
+            return
+    try:
+        subprocess.run(
+            ["icacls", path, "/inheritance:r", "/grant:r", grantee + ":F"],
+            check=True,
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception as exc:
+        log.warning("owner-only ACL hardening failed for %s: %s", path, exc)
 
 
 def _is_allowed_root(path: str) -> bool:
@@ -238,31 +333,39 @@ class BrainConfig:
         d = Path(cfg_dir)
         d.mkdir(parents=True, exist_ok=True)
         target = d / CONFIG_FILE
-        tmp = target.with_suffix(target.suffix + ".tmp")
         # This file holds the pairing token AND the provider API keys
         # (cloud_api_key/api_key) in clear, so it must never be group/world
         # readable. write_text lands at the umask default (0o644 on POSIX),
         # which the login-entry fix (token moved off the HKCU Run value / the
         # LaunchAgent plist into this file) turned into a fresh world-readable
-        # secret leak. Create the tmp private from its first byte (O_CREAT with
-        # 0o600 — not chmod-after, which leaves a readable window) and re-assert
-        # 0o600 on the swapped-in target, so neither the tmp nor the final file
-        # ever exposes the secrets (refute 2026-07-17). On Windows the mode arg
-        # is largely inert but harmless; ACL inheritance from the user profile
-        # already scopes it there.
+        # secret leak.
+        #
+        # The temp is a per-writer UNIQUE file from tempfile.mkstemp: it opens
+        # O_EXCL at mode 0o600, so it is private from its first byte AND no two
+        # savers can collide on it. The old fixed "<config>.tmp" opened without
+        # O_EXCL was reopen-and-truncate: a stale 0o644 tmp left by a crash or an
+        # older build would be reused KEEPING its world-readable mode, leaking
+        # the secrets through the temp (refute 2026-07-17). 0o600 is re-asserted
+        # on the swapped-in target, and _harden_windows_acl adds the owner-only
+        # ACL that chmod cannot express on Windows (no-op elsewhere).
         payload = json.dumps(asdict(self), indent=2)
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd, tmp = tempfile.mkstemp(dir=str(d), prefix=CONFIG_FILE + ".",
+                                   suffix=".tmp")
         try:
             with os.fdopen(fd, "w") as fh:
                 fh.write(payload)
-            replace_atomic(str(tmp), str(target))
+            replace_atomic(tmp, str(target))
         except Exception:
-            tmp.unlink(missing_ok=True)     # no torn residue if the swap fails
+            try:
+                os.unlink(tmp)             # no torn/readable residue if it fails
+            except OSError:
+                pass
             raise
         try:
             os.chmod(target, 0o600)         # re-assert after the atomic swap
         except OSError:
             pass
+        _harden_windows_acl(str(target))    # Windows ACL; no-op on POSIX
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

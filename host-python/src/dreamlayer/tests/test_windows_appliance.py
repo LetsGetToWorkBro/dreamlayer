@@ -8,11 +8,24 @@ construction is what's tested — same split as the LaunchAgent plist writer.
 """
 from __future__ import annotations
 
+import importlib.util
 import sys
+from pathlib import Path
 
 import pytest
 
 from dreamlayer.ai_brain import menubar, tray_windows
+
+
+def _load_app_main():
+    """Load packaging/app_main.py by path — it lives outside the importable
+    `dreamlayer` package (mirrors test_appliance_token_entropy)."""
+    path = Path(__file__).resolve().parents[3] / "packaging" / "app_main.py"
+    spec = importlib.util.spec_from_file_location("dl_app_main_lifecycle", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # -- the status dot reuses the menu bar's pure summary --------------------------
@@ -157,3 +170,104 @@ def test_main_install_login_declines_off_windows(monkeypatch, capsys):
     assert tray_windows.main(["--install-login"]) == 1
     out = capsys.readouterr().out
     assert "Windows-only" in out and "menubar" in out
+
+
+# -- the "Sync now" toast is honest about what Windows syncs --------------------
+
+def test_windows_sync_toast_names_only_calendar():
+    # Contacts and Reminders are macOS-only; the Windows tray must not claim to
+    # have synced them (the old toast said "calendar, contacts, reminders").
+    assert "calendar" in tray_windows.SYNC_TOAST.lower()
+    assert "contact" not in tray_windows.SYNC_TOAST.lower()
+    assert "reminder" not in tray_windows.SYNC_TOAST.lower()
+    assert tray_windows.SYNC_ENDPOINTS == ("/dreamlayer/calendar/sync",)
+
+
+# -- opt-in "Check for updates" is the shared, offline-safe seam ---------------
+
+def test_tray_reuses_the_update_check_seam():
+    assert tray_windows.check_for_update is menubar.check_for_update
+
+    def fake(url, timeout):
+        import json as _json
+        return _json.dumps({"tag_name": "v9.9.9"}).encode()
+    res = tray_windows.check_for_update(current="0.2.0", fetch_fn=fake)
+    assert res["status"] == "update" and "9.9.9" in res["message"]
+
+
+# -- single-instance guard + server-death surfacing (packaging/app_main.py) ----
+
+def test_single_instance_guard_blocks_a_second_start(tmp_path):
+    app_main = _load_app_main()
+    h1 = app_main.acquire_single_instance_lock(str(tmp_path))
+    assert h1 is not None
+    try:
+        # a 2nd launch can't take the lock → it must back off and exit
+        h2 = app_main.acquire_single_instance_lock(str(tmp_path))
+        assert h2 is None
+    finally:
+        h1.close()
+    # once the first releases, a fresh instance can acquire again
+    h3 = app_main.acquire_single_instance_lock(str(tmp_path))
+    assert h3 is not None
+    h3.close()
+
+
+def test_main_second_instance_exits_0_without_a_second_server(tmp_path, monkeypatch):
+    app_main = _load_app_main()
+    held = app_main.acquire_single_instance_lock(str(tmp_path))    # 1st instance
+    assert held is not None
+    try:
+        started = {"thread": False}
+
+        class _NoThread:
+            def __init__(self, *a, **k):
+                started["thread"] = True
+
+            def start(self):
+                started["thread"] = True
+
+        monkeypatch.setenv("DREAMLAYER_DIR", str(tmp_path))
+        monkeypatch.setattr(app_main.threading, "Thread", _NoThread)
+        monkeypatch.setattr(app_main.webbrowser, "open", lambda *a, **k: True)
+        monkeypatch.setattr(app_main.sys, "argv",
+                            ["dreamlayer", "--dir", str(tmp_path)])
+        rc = app_main.main()
+        assert rc == 0                        # clean exit, not a crash
+        assert started["thread"] is False     # no 2nd _serve thread was created
+    finally:
+        held.close()
+
+
+def test_serve_surfaces_a_bind_failure_instead_of_dying_silently(tmp_path, monkeypatch):
+    app_main = _load_app_main()
+    import dreamlayer.ai_brain.server.server as srv
+
+    class _Cfg:
+        token = "t"
+
+    class _FakeBrain:
+        def __init__(self, d):
+            self.config = _Cfg()
+
+        def save(self): ...
+        def start_watching(self): ...
+        def start_brief_scheduler(self): ...
+        def start_calendar_sync(self): ...
+
+    def _boom(brain, host, port):
+        raise OSError("address already in use")
+
+    monkeypatch.setattr(srv, "Brain", _FakeBrain)
+    monkeypatch.setattr(srv, "make_brain_server", _boom)
+    status: dict = {}
+    app_main._serve(str(tmp_path), 7777, status)      # must NOT raise
+    assert status.get("error") is not None
+    assert status.get("bound") is None
+
+
+def test_wait_ready_short_circuits_on_server_error():
+    app_main = _load_app_main()
+    status = {"error": OSError("bind failed")}
+    # returns immediately (no network) once the serve thread reports an error
+    assert app_main._wait_ready(7777, status, timeout=1.0) is False

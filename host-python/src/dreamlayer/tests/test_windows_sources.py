@@ -5,8 +5,12 @@ Incognito gate on URL feeds, and the platform-honest panel copy.
 """
 from __future__ import annotations
 
+import http.server
+import threading
 import time
 from email.message import EmailMessage
+
+import pytest
 
 from dreamlayer.ai_brain.server import windows_sources as ws
 from dreamlayer.ai_brain.server.store import BrainConfig
@@ -246,6 +250,99 @@ class TestIncognitoNeverFetches:
         names = [name for name, _ in ws.load_ics_sources(BrainConfig())]
         assert "home" in names            # the allow-listed file is still read
         assert "escape" not in names      # the escaping junction is refused
+
+
+# ---------------------------------------------------------------------------
+# SSRF-via-redirect: the ICS URL fetch must refuse a 3xx bounce to another host
+# (mirrors test_egress_hardening_2026_07_17 — a real in-process HTTP server so
+# the test is honestly red on revert to the redirect-following default opener).
+# ---------------------------------------------------------------------------
+
+class _Quiet(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):            # keep the test run quiet
+        pass
+
+
+def _serve(handler_cls):
+    """Start ``handler_cls`` on a daemon thread; return ``(base_url, shutdown)``."""
+    srv = http.server.HTTPServer(("127.0.0.1", 0), handler_cls)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    host, port = srv.server_address
+    return f"http://{host}:{port}", srv.shutdown
+
+
+class TestIcsUrlFetchRefusesRedirect:
+    @pytest.fixture(autouse=True)
+    def _no_proxy(self, monkeypatch):
+        # urllib must talk straight to 127.0.0.1, never via an ambient proxy.
+        monkeypatch.setenv("no_proxy", "*")
+        monkeypatch.setenv("NO_PROXY", "*")
+
+    def test_fetch_ics_url_does_not_follow_a_302(self):
+        # Revert-failing: the DEFAULT opener follows the 302 to /target (a
+        # different host in the wild — cloud metadata / loopback) and returns its
+        # body; the hardened no_redirect_opener raises HTTPError(302) BEFORE
+        # /target is ever requested. is_local_endpoint (pre-fetch) can't catch
+        # this — it only saw the original public URL.
+        followed = {"hit": False}
+
+        class Redir(_Quiet):
+            def do_GET(self):
+                if self.path == "/target":         # only reached if a bounce is followed
+                    followed["hit"] = True
+                    body = b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_response(302)
+                    self.send_header("Location", "/target")
+                    self.end_headers()
+
+        base, shutdown = _serve(Redir)
+        try:
+            with pytest.raises(Exception):
+                ws._fetch_ics_url(base + "/start", timeout=4)
+            assert followed["hit"] is False        # egress never bounced onward
+        finally:
+            shutdown()
+
+    def test_load_ics_sources_skips_a_redirecting_feed(self, tmp_path, monkeypatch):
+        # End to end through the caller: a public-looking https feed clears the
+        # pre-fetch https + is_local_endpoint gate (a bare hostname is remote —
+        # no DNS), then the server 302s. The real _fetch_ics_url raises
+        # HTTPError(302), which load_ics_sources' except-continue skips, so the
+        # feed contributes nothing and the redirect target is never fetched.
+        monkeypatch.setenv("DREAMLAYER_DIR", str(tmp_path))
+        followed = {"hit": False}
+
+        class Redir(_Quiet):
+            def do_GET(self):
+                if self.path == "/target":
+                    followed["hit"] = True
+                    self.send_response(200)
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"{}")
+                else:
+                    self.send_response(302)
+                    self.send_header("Location", "/target")
+                    self.end_headers()
+
+        base, shutdown = _serve(Redir)
+        try:
+            # The config URL LOOKS public (clears the gate); the fetcher routes
+            # through the REAL hardened _fetch_ics_url against the local 302 server
+            # (in production these are the same host — a public feed that bounces).
+            cfg = BrainConfig(network_mode="connected",
+                              calendar_ics=["https://public.example/cal.ics"])
+            out = ws.load_ics_sources(
+                cfg, fetcher=lambda u: ws._fetch_ics_url(base + "/start", timeout=4))
+            assert out == []                       # the redirecting feed is skipped
+            assert followed["hit"] is False        # target never hit
+        finally:
+            shutdown()
 
 
 # ---------------------------------------------------------------------------
