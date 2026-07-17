@@ -291,17 +291,23 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
 
     def check_updates(icon, item):
         # Click-only: the network fetch runs ONLY here, never on the refresh
-        # loop. Offline/error degrades to a "couldn't check" toast.
-        res = check_for_update()
-        try:
-            icon.notify(res["message"], "DreamLayer")
-        except Exception:
-            pass
-        if res["status"] == "update":
+        # loop. Offline/error degrades to a "couldn't check" toast. Run it OFF
+        # the message-loop thread — pystray invokes menu callbacks on the thread
+        # pumping the loop, so a slow/timing-out fetch would freeze the tray for
+        # up to the fetch timeout per click (same fix as the macOS menu bar;
+        # audit 2026-07-17).
+        def _work():
+            res = check_for_update()
             try:
-                webbrowser.open(res["url"])
+                icon.notify(res["message"], "DreamLayer")
             except Exception:
                 pass
+            if res["status"] == "update":
+                try:
+                    webbrowser.open(res["url"])
+                except Exception:
+                    pass
+        threading.Thread(target=_work, daemon=True).start()
 
     def toggle_incognito(icon, item):
         want = not state["incognito"]

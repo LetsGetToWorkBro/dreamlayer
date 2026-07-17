@@ -117,15 +117,73 @@ def test_launch_agent_args_frozen_is_the_app_bundle():
     assert "--dir" in args and "--port" in args
 
 
-def test_launch_agent_args_source_runs_the_menubar_not_the_server():
+def test_launch_agent_args_source_brings_up_a_server_with_the_menubar(monkeypatch):
+    # The source LaunchAgent runs the MENU-BAR module entry (never the headless
+    # `-m dreamlayer.ai_brain.server`)…
     args = menubar.launch_agent_args(
         directory="/Users/me/.dreamlayer", port=7777,
         executable="/usr/bin/python3", frozen=False)
-    # runs the MENU-BAR app entry, never `-m dreamlayer.ai_brain.server`
     assert args[:4] == ["/usr/bin/python3", "-m",
                         "dreamlayer.ai_brain.menubar", "--dir"]
     assert "dreamlayer.ai_brain.server" not in args
     assert "--port" not in args              # default port omitted
+    # …but that entry (menubar.main → run_menubar) must now bring up the Brain
+    # server TOO, not just a menu bar pointed at a server that never starts (a
+    # permanently grey/offline dot with no pairing target). Finding A: assert the
+    # login-autostart entry requests a server (serve=True).
+    captured = {}
+
+    def fake_run_menubar(directory=None, port=menubar.DEFAULT_PORT, serve=False):
+        captured["serve"] = serve
+        captured["dir"] = directory
+        return 0
+    monkeypatch.setattr(menubar, "run_menubar", fake_run_menubar)
+    assert menubar.main(["--dir", "/Users/me/.dreamlayer"]) == 0
+    assert captured["serve"] is True         # the autostart serves, not just UI
+
+
+def test_source_autostart_serves_on_0_0_0_0_with_a_pairing_token(monkeypatch):
+    # The other half of Finding A: the server the source autostart starts binds
+    # 0.0.0.0 (LAN-reachable pairing target) and mints a pairing token on first
+    # run — exactly like the frozen .app's app_main._serve. Without this the dot
+    # stays grey and the paired phone has no target.
+    import dreamlayer.ai_brain.server.server as srv
+    captured: dict = {}
+
+    class _Cfg:
+        token = ""
+
+    class _FakeBrain:
+        def __init__(self, d):
+            self.config = _Cfg()
+
+        def save(self):
+            captured["saved"] = True
+
+        def start_watching(self): ...
+        def start_brief_scheduler(self): ...
+        def start_calendar_sync(self): ...
+
+    class _FakeServer:
+        def serve_forever(self):
+            captured["served"] = True        # returns at once so _serve_brain ends
+
+    def _capture(brain, host, port):
+        # mint happened before bind → token present when we authenticate
+        captured["host"] = host
+        captured["port"] = port
+        captured["token"] = brain.config.token
+        return _FakeServer()
+
+    monkeypatch.setattr(srv, "Brain", _FakeBrain)
+    monkeypatch.setattr(srv, "make_brain_server", _capture)
+    status: dict = {}
+    menubar._serve_brain("/tmp/x", 7777, status)     # thread target, run inline
+    assert status.get("bound") is True and status.get("error") is None
+    assert captured["host"] == "0.0.0.0"             # LAN-reachable, not loopback
+    assert captured["port"] == 7777
+    assert captured["token"]                          # a pairing token was minted
+    assert captured.get("served") is True
 
 
 def test_install_launch_agent_has_log_paths_and_throttle(tmp_path, monkeypatch):
@@ -190,6 +248,40 @@ def test_check_for_update_reports_available_current_and_error():
     err = menubar.check_for_update(current="0.2.0", fetch_fn=boom)
     assert err["status"] == "error" and "check" in err["message"].lower()
     assert err["url"] == menubar.RELEASES_PAGE          # falls back to the page
+
+
+def test_check_for_update_prerelease_and_nonsemver_dont_false_current():
+    # Finding C: the version compare must NEVER claim "up to date" it can't
+    # justify. The old truncating parser read 1.2.3-rc1 == 1.2.3 (an rc user
+    # never saw the stable release) and mapped a non-semver latest → (0,) (which
+    # masked a real newer release).
+    #
+    # A pre-release running version is offered the stable release (rc sorts
+    # BELOW its release):
+    rc = menubar.check_for_update(current="1.2.3-rc1",
+                                  fetch_fn=_fake_release("v1.2.3"))
+    assert rc["status"] == "update"
+    assert rc["latest"] == "v1.2.3"
+    # A stable running version is NOT told to "downgrade" to a pre-release:
+    stable = menubar.check_for_update(current="1.2.3",
+                                      fetch_fn=_fake_release("v1.2.3-rc1"))
+    assert stable["status"] == "current"
+    # A non-semver latest tag ("nightly"/"stable") must NOT read as "current" —
+    # surface the release so the user can open it, never a false "up to date":
+    ns = menubar.check_for_update(current="1.2.3",
+                                  fetch_fn=_fake_release("nightly"))
+    assert ns["status"] != "current"
+    assert ns["latest"] == "nightly"
+    assert "up to date" not in ns["message"].lower()
+    # …and the clean cases still work: v-prefix equals bare, equal → current.
+    eq = menubar.check_for_update(current="1.2.3", fetch_fn=_fake_release("v1.2.3"))
+    assert eq["status"] == "current"
+    newer = menubar.check_for_update(current="1.2.3",
+                                     fetch_fn=_fake_release("v1.2.4"))
+    assert newer["status"] == "update"
+    older = menubar.check_for_update(current="1.3.0",
+                                     fetch_fn=_fake_release("v1.2.9"))
+    assert older["status"] == "current"
 
 
 def test_check_for_update_targets_the_releases_repo():

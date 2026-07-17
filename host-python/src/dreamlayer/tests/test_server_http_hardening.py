@@ -20,6 +20,17 @@ ai_brain/server/server.py and the assertion breaks. The five closed gaps:
   5. Unsynchronized egress counter — config.cloud_calls += 1 was a non-atomic
      load-add-store with no lock, so two concurrent cloud asks lost a count.
      Fix: bump_cloud_calls() guards the increment with a dedicated Lock.
+
+A later refute pass (audit 2026-07-17) confirmed two gaps the first pass left:
+
+  6. The socket timeout is PER-RECV, not a total-request deadline — a slow-POST
+     that dribbles a byte just under it resets the clock forever, pinning a
+     worker + a semaphore slot. Fix: MAX_REQUEST_BODY_SECONDS, a wall-clock cap
+     on reading the whole body (read in bounded read1 slices against a deadline);
+     exceeding it aborts the read → 408 and frees the worker/slot.
+  7. A body the server can't length-delimit (Transfer-Encoding present, no
+     usable Content-Length) was returned as b"" — silently accepted as empty, so
+     /upload wrote a 0-byte file and answered ok. Fix: reject → 411, no artifact.
 """
 from __future__ import annotations
 
@@ -97,7 +108,8 @@ def test_hardening_constants_present_and_sane():
     assert srv.MAX_JSON_BODY == 16 * 1024 * 1024        # 16 MiB JSON-body cap
     assert srv.MAX_UPLOAD_BODY == 64 * 1024 * 1024      # 64 MiB upload cap
     assert srv.MAX_UPLOAD_BODY > srv.MAX_JSON_BODY      # uploads get the larger cap
-    assert srv.SOCKET_TIMEOUT_S == 30.0                 # per-connection read timeout
+    assert srv.SOCKET_TIMEOUT_S == 30.0                 # per-recv read timeout
+    assert srv.MAX_REQUEST_BODY_SECONDS == 30.0         # wall-clock total-body deadline
     assert srv.MAX_CONCURRENT_REQUESTS == 64            # worker-thread ceiling
 
 
@@ -402,3 +414,120 @@ def test_bump_cloud_calls_is_the_locked_primitive(tmp_path):
         t.join()
 
     assert brain.config.cloud_calls == n_threads * per
+
+
+# ---------------------------------------------------------------------------
+# 6. wall-clock body deadline → a byte-dribbling slow-POST can't pin a worker
+# ---------------------------------------------------------------------------
+
+def test_slow_post_body_cut_off_by_wall_clock_cap(tmp_path, monkeypatch):
+    # A slow-POST that dribbles bytes FASTER than the per-recv socket timeout
+    # (so that inactivity timeout never fires) but SLOWER than the total-body
+    # deadline must be aborted by the wall-clock cap — reclaiming the worker and
+    # its semaphore slot. The per-recv timeout is left at its generous 30 s to
+    # make the point: it never trips here, yet the request is still cut off.
+    # Reverted (no wall-clock cap): _read_capped's read(n) blocks reading the
+    # whole body, each dribbled byte resetting the per-recv clock, so the request
+    # runs the full ~12 s the dribble takes and the worker stays pinned.
+    monkeypatch.setattr(srv, "MAX_REQUEST_BODY_SECONDS", 1.0)
+    monkeypatch.setattr(srv, "MAX_CONCURRENT_REQUESTS", 4)
+    brain = Brain(tmp_path)
+    brain.reindex = lambda *a, **k: None
+    server, host, port = _serve(brain)
+    slots = server._slots
+    try:
+        body_len = 400                                   # dribbled 1/0.03 s ≈ 12 s total
+        s = socket.create_connection((host, port), timeout=30)
+        s.sendall(b"POST /dreamlayer/brain/ask HTTP/1.1\r\n"
+                  b"Host: 127.0.0.1\r\n"
+                  b"Content-Type: application/json\r\n"
+                  b"Content-Length: " + str(body_len).encode() + b"\r\n\r\n")
+
+        stop = threading.Event()
+
+        def dribble():
+            try:
+                for _ in range(body_len):
+                    if stop.is_set():
+                        return
+                    s.sendall(b"a")
+                    time.sleep(0.03)
+            except OSError:
+                pass                                     # server closed on us — expected
+
+        d = threading.Thread(target=dribble, daemon=True)
+        start = time.time()
+        d.start()
+        s.settimeout(8)
+        try:
+            resp = s.recv(4096)                          # the 408, or a close/reset on abort
+        except socket.timeout:
+            resp = b"__timeout__"
+        except OSError:
+            resp = b"__reset__"
+        elapsed = time.time() - start
+        stop.set()
+        s.close()
+        d.join(timeout=2)
+
+        # fixed: the 1 s wall-clock cap aborts the read well before the ~12 s the
+        # full dribble would take — we never hang until our own 8 s recv deadline.
+        assert resp != b"__timeout__"
+        assert elapsed < 6.0
+        if resp.startswith(b"HTTP"):
+            assert _status_of(resp) == 408               # aborted → 408 Request Timeout
+        # the worker released its semaphore slot when it aborted (no leak)
+        deadline = time.time() + 3.0
+        while slots._value != 4 and time.time() < deadline:
+            time.sleep(0.01)
+        assert slots._value == 4
+    finally:
+        server.shutdown(); server.server_close()
+
+
+# ---------------------------------------------------------------------------
+# 7. undelimitable body (chunked, no Content-Length) → 411, no 0-byte artifact
+# ---------------------------------------------------------------------------
+
+def test_chunked_upload_without_length_is_411_no_zero_byte_file(tmp_path):
+    # A POST with Transfer-Encoding: chunked and no Content-Length. Python's
+    # http.server does not decode chunked bodies, so on revert _read_capped
+    # returns b"" and /upload writes a 0-byte file into the watched folder and
+    # answers 200 ok. Fixed: rejected with 411 (Length Required) and no artifact.
+    watched = tmp_path / "drop"
+    watched.mkdir()
+    brain = Brain(tmp_path)
+    brain.config.folders = [str(watched)]                # a folder the Brain watches
+    brain.reindex = lambda *a, **k: None
+    server, host, port = _serve(brain)
+    try:
+        q = urllib.parse.quote(str(watched))
+        raw = (b"POST /dreamlayer/upload?folder=" + q.encode() +
+               b"&name=evil.txt HTTP/1.1\r\n"
+               b"Host: 127.0.0.1\r\n"
+               b"Content-Type: application/octet-stream\r\n"
+               b"Transfer-Encoding: chunked\r\n"
+               b"\r\n"
+               b"5\r\nhello\r\n0\r\n\r\n")               # a real, undecoded chunked body
+        resp = _raw_http(host, port, raw, read_timeout=5)
+        assert _status_of(resp) in (411, 400)            # rejected, not silently empty
+        assert not (watched / "evil.txt").exists()       # no 0-byte artifact written
+    finally:
+        server.shutdown(); server.server_close()
+
+
+def test_empty_body_post_without_transfer_encoding_still_ok(tmp_path):
+    # The finding-7 guard must reject ONLY a body it can't length-delimit — a
+    # genuinely empty POST (no Transfer-Encoding, absent Content-Length) is still
+    # a valid empty body for a route that allows it. Proves no over-rejection.
+    brain = Brain(tmp_path)
+    brain.reindex = lambda *a, **k: None                 # isolate from real indexing
+    server, host, port = _serve(brain)
+    try:
+        raw = (b"POST /dreamlayer/reindex HTTP/1.1\r\n"
+               b"Host: 127.0.0.1\r\n"
+               b"\r\n")                                   # no Content-Length, no body
+        resp = _raw_http(host, port, raw, read_timeout=5)
+        assert _status_of(resp) == 200
+    finally:
+        server.shutdown(); server.server_close()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import threading
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -245,3 +246,60 @@ class TestMailScanIsBounded:
             os.utime(f, (i, i))
         docs = mail_documents(str(d), limit=2)
         assert [name for name, _ in docs] == ["Mail · T4", "Mail · T3"]
+
+
+# ---------------------------------------------------------------------------
+# FINDING 4: source_status(None) must snapshot the status map before iterating,
+# or a worker thread recording a NEW source key mid-iteration raises
+# "RuntimeError: dictionary changed size during iteration".
+# ---------------------------------------------------------------------------
+
+class TestSourceStatusSnapshot:
+    def test_none_returns_independent_deep_copy(self):
+        from dreamlayer.ai_brain.server import macos_sources as ms
+        reset_source_status()
+        ms._SOURCE_STATUS["imessage"] = {"status": "ok", "detail": "", "ts": 1.0}
+
+        snap = source_status(None)
+        assert snap == {"imessage": {"status": "ok", "detail": "", "ts": 1.0}}
+        # mutating the snapshot must not reach back into the live store
+        snap["imessage"]["status"] = "denied"
+        snap["mail"] = {"status": "denied"}
+        assert ms._SOURCE_STATUS["imessage"]["status"] == "ok"
+        assert "mail" not in ms._SOURCE_STATUS
+        reset_source_status()
+
+    def test_none_is_safe_while_a_new_source_key_appears(self):
+        """The snapshot (list(...) of items) makes source_status(None) survive a
+        concurrent writer adding keys. On revert (iterating the live dict) this
+        races into RuntimeError: dictionary changed size during iteration.
+        Bounded: the writer inserts a fixed set of keys (dict stays small, so
+        each snapshot copy is cheap), and the reader copies only while the writer
+        is still inserting."""
+        from dreamlayer.ai_brain.server import macos_sources as ms
+        reset_source_status()
+        errors: list[str] = []
+
+        def writer():
+            for i in range(5000):
+                ms._SOURCE_STATUS[f"s{i}"] = {"status": "ok", "detail": "",
+                                              "ts": 0.0}
+
+        wt = threading.Thread(target=writer)
+
+        def reader():
+            try:
+                # keep snapshotting while the writer is still growing the map;
+                # bounded so a missed overlap can never spin forever
+                for _ in range(20000):
+                    source_status(None)
+                    if not wt.is_alive():
+                        break
+            except Exception as exc:               # noqa: BLE001
+                errors.append(repr(exc))
+
+        rt = threading.Thread(target=reader)
+        wt.start(); rt.start()
+        wt.join(); rt.join()
+        reset_source_status()
+        assert errors == []

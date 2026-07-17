@@ -47,16 +47,21 @@ def acquire_single_instance_lock(lock_dir: str):
     """Acquire an exclusive OS lock on ``<lock_dir>/dreamlayer.lock``.
 
     Returns an opaque handle (the lock is held only while the handle stays
-    open) when this is the sole running instance, or ``None`` if another
-    instance already holds it. POSIX uses ``fcntl.flock``, Windows uses
-    ``msvcrt.locking`` — both non-blocking, so a second launch fails fast
-    instead of waiting. Guarded so this module still imports everywhere, and
-    the lock dir is injected so the guard is unit-testable off a real launch."""
-    try:
-        Path(lock_dir).mkdir(parents=True, exist_ok=True)
-        fh = open(Path(lock_dir) / LOCK_FILE, "a+")
-    except OSError:
-        return None
+    open) when this is the sole running instance, or ``None`` ONLY when another
+    instance already HOLDS the lock (the contended/would-block case). POSIX uses
+    ``fcntl.flock``, Windows uses ``msvcrt.locking`` — both non-blocking, so a
+    second launch fails fast instead of waiting.
+
+    A failure to create/open the lock file itself (permission denied, read-only
+    mount) is a DISTINCT failure and propagates as ``OSError`` — it must NOT be
+    mistaken for "already running". Conflating the two made an unwritable state
+    dir look like a second instance, so the app printed "already running", opened
+    a URL to a server that never came up, and exited 0 — masking the real failure
+    (audit 2026-07-17). The lock dir is injected so the guard is unit-testable."""
+    # mkdir/open failures propagate as OSError (create/open failure), which the
+    # caller handles distinctly from a held lock — do NOT swallow them to None.
+    Path(lock_dir).mkdir(parents=True, exist_ok=True)
+    fh = open(Path(lock_dir) / LOCK_FILE, "a+")
     try:
         if os.name == "nt":
             import msvcrt
@@ -67,7 +72,7 @@ def acquire_single_instance_lock(lock_dir: str):
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         fh.close()
-        return None
+        return None                 # the lock is genuinely HELD → back off
     return fh
 
 
@@ -127,6 +132,7 @@ def _smoke(port: int) -> int:
             with opener.open(f"http://127.0.0.1:{port}/", timeout=2) as r:
                 if r.status == 200:
                     return 0
+                time.sleep(0.5)      # 2xx-non-200 (e.g. 204): don't spin tight
         except Exception:
             time.sleep(0.5)
     return 1
@@ -150,6 +156,7 @@ def _wait_ready(port: int, status: dict | None = None,
             with opener.open(f"http://127.0.0.1:{port}/", timeout=1) as r:
                 if r.status == 200:
                     return True
+                time.sleep(0.1)      # 2xx-non-200 (e.g. 204): don't spin tight
         except Exception:
             time.sleep(0.1)
     return False
@@ -193,11 +200,23 @@ def main() -> int:
     # still comes up as a 2nd icon talking to the 1st instance. If the lock is
     # already held the appliance is running: surface it, focus the existing
     # window, and exit cleanly (audit 2026-07-17).
-    lock = acquire_single_instance_lock(cfg_dir)
-    if lock is None:
-        _already_running(port)
-        return 0
-    _INSTANCE_LOCK.append(lock)                    # hold the lock for process life
+    try:
+        lock = acquire_single_instance_lock(cfg_dir)
+    except OSError as exc:
+        # DISTINCT failure: the lock file couldn't be created/opened (permission
+        # denied, read-only mount) — this is NOT "already running". A false
+        # "already running" here would focus a nonexistent instance and exit 0,
+        # masking an unwritable state dir. Log it and fail OPEN — start the server
+        # anyway (without the guard) so the app still runs (audit 2026-07-17).
+        logging.getLogger("dreamlayer.appliance").error(
+            "Single-instance lock unavailable in %s (%s); starting without it.",
+            cfg_dir, exc)
+        lock = None
+    else:
+        if lock is None:                           # the lock is genuinely HELD
+            _already_running(port)
+            return 0
+        _INSTANCE_LOCK.append(lock)                # hold the lock for process life
 
     status: dict = {}
     threading.Thread(target=_serve, args=(cfg_dir, port, status),

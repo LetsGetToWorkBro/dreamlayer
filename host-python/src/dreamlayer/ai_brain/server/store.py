@@ -19,6 +19,13 @@ CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
 
+# A crashed save between mkstemp and the atomic replace can leave a
+# uniquely-named "<config>.<rand>.tmp" orphan (the per-writer temp no longer
+# self-limits to one fixed name the way "<config>.tmp" did). save() sweeps such
+# orphans, but only ones older than this grace window, so a CONCURRENT saver's
+# in-flight temp is never yanked out from under its own replace.
+_TMP_REAP_GRACE = 60.0
+
 log = logging.getLogger("dreamlayer.ai_brain.server.store")
 
 
@@ -53,6 +60,30 @@ def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
             return
         time.sleep(random.uniform(0.0, delay))
         delay = min(delay * 2, 0.05)
+
+
+def _reap_stale_tmps(d: Path) -> None:
+    """Best-effort sweep of orphaned '<config>.*.tmp' temps in `d`.
+
+    save() writes to a per-writer unique tempfile.mkstemp temp, then atomically
+    replaces the target with it. A hard crash BETWEEN mkstemp and replace leaves
+    that uniquely-named temp behind and — unlike the old fixed '<config>.tmp'
+    name, which the next save reused/overwrote — a unique name is never touched
+    again, so orphans would accumulate forever (refute 2026-07-17). Only temps
+    older than _TMP_REAP_GRACE are removed, so a concurrent saver's just-created
+    temp is left alone (its own replace still needs it). All errors are
+    swallowed: reaping is hygiene, never a reason to fail a save."""
+    cutoff = time.time() - _TMP_REAP_GRACE
+    try:
+        candidates = list(d.glob(CONFIG_FILE + ".*.tmp"))
+    except OSError:
+        return
+    for f in candidates:
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
 
 
 def _current_user_sid() -> Optional[str]:
@@ -169,6 +200,59 @@ def _is_allowed_root(path: str) -> bool:
     except (OSError, RuntimeError, ValueError):
         return False
     for root in allowed_roots:
+        if p == root or root in p.parents:
+            return True
+    return False
+
+
+# Dot-directories whose contents are secrets-at-rest by convention. ~/.config is
+# deliberately excluded — too broad, it holds ordinary app state — so this stays
+# to the clearly-secret ones (private keys, cloud creds, GPG keyrings).
+_SECRET_DOTDIRS = (".ssh", ".aws", ".gnupg")
+
+
+def _state_dir() -> Optional[Path]:
+    """The Brain's OWN state directory, resolved exactly the way every entry
+    point resolves it ($DREAMLAYER_DIR, else ~/.dreamlayer). It holds
+    brain_config.json — the pairing token + cloud_api_key + api_key in CLEAR —
+    plus the query/activity logs. None if it can't be resolved."""
+    base = os.environ.get("DREAMLAYER_DIR") or str(Path.home() / ".dreamlayer")
+    try:
+        return Path(base).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _is_index_denied(path: str) -> bool:
+    """True if `path` must be kept OUT of the Brain's index even when it passes
+    the _is_allowed_root allow-list (i.e. resolves under the user's home tree).
+
+    The allow-list permits anything under home, but the Brain's OWN state dir
+    lives there too — and its brain_config.json holds the pairing token and both
+    provider API keys in clear, while brain_history/activity hold past queries. A
+    '.json' target matches index.TEXT_EXTS, so without this denylist a symlink
+    inside a watched folder pointing at <statedir>/brain_config.json — or simply
+    adding <statedir> as a watched folder — would ingest those secrets and make
+    them RECALLABLE via /brain/ask, undercutting the 0o600/ACL secret-at-rest
+    work (refute-remediation 2026-07-17). Common secret-at-rest dotdirs (~/.ssh,
+    ~/.aws, ~/.gnupg) are refused for the same reason. The path is fully resolved
+    first so `..`/symlink escapes can't smuggle a denied target past the check;
+    an unresolvable path is refused (default-deny). This is index-only, distinct
+    from _is_allowed_root, so the Windows calendar reader can still load its
+    <statedir>/calendars/*.ics feeds (which never reach the index)."""
+    try:
+        p = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return True
+    sd = _state_dir()
+    if sd is not None and (p == sd or sd in p.parents):
+        return True
+    try:
+        home = Path.home().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    for name in _SECRET_DOTDIRS:
+        root = home / name
         if p == root or root in p.parents:
             return True
     return False
@@ -311,16 +395,29 @@ class BrainConfig:
     @classmethod
     def load(cls, cfg_dir: Path | str) -> "BrainConfig":
         p = Path(cfg_dir) / CONFIG_FILE
-        if p.exists():
-            try:
-                data = json.loads(p.read_text())
-                known = {f.name for f in field_list(cls)}
-                inst = cls(**{k: v for k, v in data.items() if k in known})
-                inst.sanitize_folders()   # a tampered/legacy file can't smuggle disallowed roots
-                return inst
-            except (ValueError, TypeError, json.JSONDecodeError):
-                pass
-        return cls()
+        try:
+            raw = p.read_text()
+        except FileNotFoundError:
+            return cls()                  # no config yet — first run
+        except OSError as exc:
+            # PermissionError etc.: a config the new owner-only ACL (Windows) or
+            # a bad mode made unreadable to THIS process would otherwise crash
+            # load — dropping the wearer out of Incognito and losing their
+            # watched folders. A missing-OR-unreadable config falls back to
+            # defaults, never raises (refute-remediation 2026-07-17). ``exists()``
+            # was dropped here: it re-raises PermissionError on an unreadable path
+            # exactly like read_text, so guarding read_text alone still crashed.
+            log.warning("brain_config load: %s unreadable (%s); using defaults",
+                        p, exc)
+            return cls()
+        try:
+            data = json.loads(raw)
+            known = {f.name for f in field_list(cls)}
+            inst = cls(**{k: v for k, v in data.items() if k in known})
+            inst.sanitize_folders()   # a tampered/legacy file can't smuggle disallowed roots
+            return inst
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return cls()
 
     def save(self, cfg_dir: Path | str) -> None:
         # tmp + atomic replace: a plain write_text can be caught torn by a crash
@@ -332,6 +429,7 @@ class BrainConfig:
         # contention, matching the JSON stores.
         d = Path(cfg_dir)
         d.mkdir(parents=True, exist_ok=True)
+        _reap_stale_tmps(d)   # sweep crash-orphaned unique temps (age-gated)
         target = d / CONFIG_FILE
         # This file holds the pairing token AND the provider API keys
         # (cloud_api_key/api_key) in clear, so it must never be group/world

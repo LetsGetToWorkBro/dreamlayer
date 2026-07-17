@@ -239,6 +239,63 @@ def test_main_second_instance_exits_0_without_a_second_server(tmp_path, monkeypa
         held.close()
 
 
+def test_lock_acquire_raises_on_unwritable_dir_not_returns_none(tmp_path):
+    # Finding B: a create/open failure must be DISTINGUISHABLE from "already
+    # held". The contended case returns None, but an unwritable/inaccessible lock
+    # dir RAISES OSError — so main() can tell them apart instead of mistaking an
+    # unwritable state dir for a second instance.
+    app_main = _load_app_main()
+    afile = tmp_path / "not-a-dir"
+    afile.write_text("x")
+    bad_dir = str(afile / "sub")     # parent is a file → mkdir(parents=True) fails
+    with pytest.raises(OSError):
+        app_main.acquire_single_instance_lock(bad_dir)
+
+
+def test_unwritable_lock_dir_is_not_a_false_already_running(tmp_path, monkeypatch,
+                                                            caplog):
+    # Finding B: an unwritable lock dir must NOT be reported as "already running"
+    # + exit 0 (which would focus a nonexistent instance and mask the failure).
+    # It fails OPEN: log a distinct error and start the server anyway.
+    import logging as _logging
+    app_main = _load_app_main()
+
+    def _boom(lock_dir):
+        raise OSError(13, "Permission denied")
+    monkeypatch.setattr(app_main, "acquire_single_instance_lock", _boom)
+
+    started = {"thread": False}
+
+    class _NoThread:
+        def __init__(self, *a, **k): ...
+        def start(self):
+            started["thread"] = True
+    monkeypatch.setattr(app_main.threading, "Thread", _NoThread)
+    monkeypatch.setattr(app_main, "_wait_ready", lambda *a, **k: True)
+
+    focused = {"called": False}
+    monkeypatch.setattr(app_main, "_focus_existing",
+                        lambda *a, **k: focused.__setitem__("called", True))
+    # stub the UI entrypoints so main() returns without a real menu bar/tray
+    import dreamlayer.ai_brain.menubar as mb
+    import dreamlayer.ai_brain.tray_windows as tw
+    monkeypatch.setattr(mb, "run_menubar", lambda *a, **k: 0)
+    monkeypatch.setattr(tw, "run_tray", lambda *a, **k: 0)
+
+    monkeypatch.setenv("DREAMLAYER_DIR", str(tmp_path))
+    monkeypatch.setattr(app_main.sys, "argv",
+                        ["dreamlayer", "--dir", str(tmp_path)])
+    with caplog.at_level(_logging.ERROR, logger="dreamlayer.appliance"):
+        rc = app_main.main()
+    # Fail-open to running: a server thread WAS started and the "already running"
+    # focus path was NOT taken (that path starts no thread and focuses instead).
+    assert started["thread"] is True
+    assert focused["called"] is False
+    assert rc == 0                          # the UI ran; not a false-already-running
+    # …and a DISTINCT error was logged rather than a silent misclassification.
+    assert any("lock" in r.getMessage().lower() for r in caplog.records)
+
+
 def test_serve_surfaces_a_bind_failure_instead_of_dying_silently(tmp_path, monkeypatch):
     app_main = _load_app_main()
     import dreamlayer.ai_brain.server.server as srv

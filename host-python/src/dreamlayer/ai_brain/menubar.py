@@ -12,8 +12,11 @@ the LaunchAgent plist — are unit-tested; `python -m dreamlayer.ai_brain.menuba
 from __future__ import annotations
 
 import json
+import logging
 import os
+import secrets
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -69,20 +72,33 @@ def current_version() -> str:
         return "0.0.0"
 
 
-def _version_tuple(tag: str) -> tuple[int, ...]:
-    """Parse a ``vX.Y.Z`` tag into a comparable tuple; trailing non-numeric
-    junk (``-beta`` etc.) truncates that segment to its leading digits."""
+def _parse_version(tag: str):
+    """Parse a ``vX.Y.Z[-pre]`` tag into a comparable key, or ``None`` if it
+    isn't clean semver.
+
+    The key is ``(major, minor, patch, is_release, pre_key)`` so a pre-release
+    (``1.2.3-rc1``) orders strictly BELOW its release (``1.2.3``) — an rc user is
+    then offered the stable release instead of being told "up to date". Non-semver
+    tags (``stable``, ``nightly``) and versions with non-numeric cores return
+    ``None`` so the caller never claims "up to date" against a tag it cannot
+    actually compare (the old ``_version_tuple`` truncated ``3-rc1``→``3`` and
+    mapped ``stable``→``(0,)``, both of which masked a real newer release; audit
+    2026-07-17)."""
     s = (tag or "").strip().lstrip("vV")
-    out: list[int] = []
-    for part in s.split("."):
-        digits = ""
-        for ch in part:
-            if ch.isdigit():
-                digits += ch
-            else:
-                break
-        out.append(int(digits) if digits else 0)
-    return tuple(out) or (0,)
+    if not s:
+        return None
+    s = s.split("+", 1)[0]                 # drop build metadata (ignored)
+    core, _, pre = s.partition("-")
+    parts = core.split(".")
+    if not (1 <= len(parts) <= 3) or not all(p.isdigit() for p in parts):
+        return None
+    nums = tuple(int(p) for p in parts) + (0,) * (3 - len(parts))
+    if not pre:
+        return (nums, 1, ())               # a release sorts ABOVE any pre-release
+    # numeric identifiers sort below alphanumeric ones (semver precedence)
+    pre_key = tuple((0, int(idn)) if idn.isdigit() else (1, idn)
+                    for idn in pre.split("."))
+    return (nums, 0, pre_key)
 
 
 def _default_update_fetch(url: str, timeout: float) -> bytes:
@@ -94,7 +110,10 @@ def _default_update_fetch(url: str, timeout: float) -> bytes:
         url, headers={"Accept": "application/vnd.github+json",
                       "User-Agent": "DreamLayer"})
     with no_redirect_opener().open(req, timeout=timeout) as r:
-        return read_capped(r)
+        # The releases/latest JSON (assets list + release body) routinely exceeds
+        # the shared 512 KiB egress default, which would surface as a false
+        # "couldn't check for updates". Cap generously at 4 MiB (audit 2026-07-17).
+        return read_capped(r, 4 * 1024 * 1024)
 
 
 def check_for_update(current: str | None = None, fetch_fn=None,
@@ -120,10 +139,23 @@ def check_for_update(current: str | None = None, fetch_fn=None,
     if not latest:
         return {"status": "error", "message": "Couldn't check for updates",
                 "current": cur, "latest": None, "url": RELEASES_PAGE}
-    if _version_tuple(latest) > _version_tuple(cur):
-        return {"status": "update", "message": f"Update available: {latest}",
+    lv, cv = _parse_version(latest), _parse_version(cur)
+    if lv is not None and cv is not None:
+        if lv > cv:
+            return {"status": "update", "message": f"Update available: {latest}",
+                    "current": cur, "latest": latest, "url": url}
+        return {"status": "current", "message": "You're up to date",
                 "current": cur, "latest": latest, "url": url}
-    return {"status": "current", "message": "You're up to date",
+    # The tags aren't cleanly comparable semver (a pre-release/non-semver latest
+    # like "stable"/"nightly", or a running version we can't parse). NEVER claim
+    # "up to date" against a tag we can't compare — that hid a real newer release.
+    # If the strings are identical it's genuinely the same build; otherwise
+    # surface the release and let the user decide (audit 2026-07-17).
+    if latest.strip().lstrip("vV") == (cur or "").strip().lstrip("vV"):
+        return {"status": "current", "message": "You're up to date",
+                "current": cur, "latest": latest, "url": url}
+    return {"status": "update",
+            "message": f"A release is available: {latest} — open to check",
             "current": cur, "latest": latest, "url": url}
 
 
@@ -299,10 +331,61 @@ def fetch_status(port: int = DEFAULT_PORT, token: str = "") -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Brain server (for the SOURCE login autostart — see run_menubar(serve=...))
+# ---------------------------------------------------------------------------
+
+def _serve_brain(directory: str | None, port: int,
+                 status: dict | None = None) -> None:
+    """Start the Brain HTTP server and serve forever — the daemon-thread target
+    for the SOURCE login autostart (``python -m dreamlayer.ai_brain.menubar``).
+
+    Mirrors ``packaging/app_main._serve`` (the frozen .app's server start): bind
+    0.0.0.0 so the paired phone can reach it, mint a 128-bit pairing token on
+    first run, and record a bind failure in ``status`` instead of dying silently
+    on the daemon thread. WITHOUT this the source LaunchAgent brought up a menu
+    bar against a server that never started — a permanently grey/offline dot,
+    nothing bound on 0.0.0.0, and no pairing target (regression, audit
+    2026-07-17). The frozen path is unaffected: app_main starts the server and
+    calls ``run_menubar(serve=False)``."""
+    from .server.server import Brain, make_brain_server
+    cfg_dir = directory or os.environ.get(
+        "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
+    brain = Brain(cfg_dir)
+    if not brain.config.token:                     # first run — mint a pairing token
+        brain.config.token = secrets.token_hex(16)
+        brain.save()
+    brain.start_watching()
+    brain.start_brief_scheduler()
+    brain.start_calendar_sync()
+    try:
+        server = make_brain_server(brain, host="0.0.0.0", port=port)
+    except Exception as exc:                        # bind failed (port in use, …)
+        logging.getLogger("dreamlayer.appliance").error(
+            "Brain server failed to start on port %s: %s", port, exc)
+        if status is not None:
+            status["error"] = exc
+        return
+    if status is not None:
+        status["bound"] = True
+    server.serve_forever()
+
+
+def serve_brain_in_background(directory: str | None, port: int) -> dict:
+    """Spawn :func:`_serve_brain` on a background daemon thread and return the
+    status dict the caller can poll for ``bound``/``error``. Used by the source
+    login autostart so the menu bar has a live 0.0.0.0 Brain server to talk to."""
+    status: dict = {}
+    threading.Thread(target=_serve_brain, args=(directory, port, status),
+                     daemon=True).start()
+    return status
+
+
+# ---------------------------------------------------------------------------
 # The menu-bar app (rumps; macOS only)
 # ---------------------------------------------------------------------------
 
-def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
+def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
+                serve: bool = False) -> int:
     try:
         import rumps
     except Exception:
@@ -311,6 +394,13 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
     from .server.store import BrainConfig
     cfg_dir = directory or os.environ.get(
         "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
+    if serve:
+        # SOURCE login autostart (python -m dreamlayer.ai_brain.menubar): bring up
+        # the Brain server in THIS process too, so the menu bar has a live
+        # 0.0.0.0 server + pairing token to talk to. The frozen .app already
+        # starts its server in app_main and calls run_menubar(serve=False), so
+        # this never double-serves there (audit 2026-07-17).
+        serve_brain_in_background(cfg_dir, port)
     auth = {"token": BrainConfig.load(cfg_dir).token}
 
     def _token() -> str:
@@ -369,10 +459,16 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         @rumps.clicked("Check for Updates")
         def check_updates(self, _):
             # Click-only: the network fetch runs ONLY here, never on the timer.
-            res = check_for_update()
-            rumps.notification(
-                "DreamLayer", res["message"],
-                res.get("url") if res["status"] == "update" else "")
+            # Run it OFF the rumps main/UI thread — a slow or timing-out fetch on
+            # the UI thread froze the whole menu bar for up to the fetch timeout
+            # per click. A worker does the fetch and posts the result when it
+            # returns (audit 2026-07-17).
+            def _work():
+                res = check_for_update()
+                rumps.notification(
+                    "DreamLayer", res["message"],
+                    res.get("url") if res["status"] == "update" else "")
+            threading.Thread(target=_work, daemon=True).start()
 
         @rumps.clicked("Sync now")
         def sync_now(self, _):
@@ -428,7 +524,10 @@ def main(argv=None) -> int:
         p = install_launch_agent(args.dir, args.token, args.port)
         print(f"Wrote {p}\nLoad it now with:  launchctl load {p}")
         return 0
-    return run_menubar(args.dir, args.port)
+    # No flags → this IS the login-autostart entry the LaunchAgent runs, so it
+    # must bring up the Brain server (serve=True), not just a menu bar pointed at
+    # a server that never starts (audit 2026-07-17).
+    return run_menubar(args.dir, args.port, serve=True)
 
 
 if __name__ == "__main__":

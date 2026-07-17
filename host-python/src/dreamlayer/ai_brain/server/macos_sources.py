@@ -98,7 +98,10 @@ def source_status(source: Optional[str] = None):
     """Last access status per source, so a health check can tell a permission
     denial apart from an empty read. `source=None` returns the whole map."""
     if source is None:
-        return {k: dict(v) for k, v in _SOURCE_STATUS.items()}
+        # snapshot the items first: a worker thread recording a NEW source key
+        # mid-iteration would otherwise raise "dictionary changed size during
+        # iteration" (refute-remediation 2026-07-17).
+        return {k: dict(v) for k, v in list(_SOURCE_STATUS.items())}
     v = _SOURCE_STATUS.get(source)
     return dict(v) if v else None
 

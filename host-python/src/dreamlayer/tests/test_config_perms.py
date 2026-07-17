@@ -23,10 +23,13 @@ three-part hardening of BrainConfig.save():
 from __future__ import annotations
 
 import json
+import logging
 import os
+import pathlib
 import stat
 import subprocess
 import threading
+import time
 
 import pytest
 
@@ -115,6 +118,80 @@ def test_no_leftover_temp_after_save(tmp_path):
     cfg.mkdir()
     BrainConfig(token="tok").save(cfg)
     assert list(cfg.glob(store.CONFIG_FILE + ".*")) == []
+
+
+# -- FINDING 3: a crash-orphaned UNIQUE temp is reaped by the next save --------
+
+def test_stale_tmp_orphan_is_reaped_on_save(tmp_path):
+    # FIX 2 made the temp a per-writer UNIQUE name, which no longer self-limits
+    # the way the old fixed "<config>.tmp" did: a hard crash between mkstemp and
+    # replace leaves "<config>.<rand>.tmp" that nothing ever reuses, so orphans
+    # would accumulate forever. The next save must sweep such stale temps.
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    orphan = cfg / (store.CONFIG_FILE + ".deadbeef.tmp")
+    orphan.write_text("{}")
+    old = time.time() - 3600                       # a crash from a while ago
+    os.utime(orphan, (old, old))
+    assert orphan.exists()
+
+    BrainConfig(token="tok").save(cfg)
+
+    assert not orphan.exists()                     # reaped
+    assert list(cfg.glob(store.CONFIG_FILE + ".*")) == []
+
+
+def test_reap_spares_a_concurrent_writers_fresh_temp(tmp_path):
+    # age-gated: a just-created temp (a concurrent saver's in-flight file) must
+    # NOT be yanked out from under its own replace — only aged orphans go.
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    fresh = cfg / (store.CONFIG_FILE + ".inflight.tmp")
+    fresh.write_text("{}")                         # mtime = now → too young
+
+    BrainConfig(token="tok").save(cfg)
+
+    assert fresh.exists()                          # spared
+
+
+# -- FINDING 2: an unreadable config falls back to defaults, never crashes -----
+
+def test_load_of_unreadable_config_falls_back_to_defaults(tmp_path, monkeypatch,
+                                                          caplog):
+    # a config the new owner-only ACL / a bad mode made unreadable to THIS
+    # process raises PermissionError on read. load() must degrade to defaults
+    # (not crash, and not silently keep the wearer out of Incognito).
+    cfg = tmp_path / "cfg"
+    BrainConfig(token="pair-secret", network_mode="lan_only",
+                folders=[str(tmp_path)]).save(cfg)
+
+    real_read_text = pathlib.Path.read_text
+
+    def boom(self, *a, **k):
+        if self.name == store.CONFIG_FILE:
+            raise PermissionError("owner-only ACL denies this process")
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", boom)
+
+    with caplog.at_level(logging.WARNING):
+        loaded = BrainConfig.load(cfg)             # must not raise
+
+    # DEFAULTS, not the persisted secret config
+    assert loaded.token == ""
+    assert loaded.network_mode == "connected"
+    assert loaded.folders == []
+    assert any(r.levelname == "WARNING" for r in caplog.records)
+
+
+def test_load_of_missing_config_is_defaults_and_silent(tmp_path, caplog):
+    # the common first-run path (no file yet) still returns defaults with no
+    # WARNING — a missing config is not an error.
+    cfg = tmp_path / "cfg"
+    with caplog.at_level(logging.WARNING):
+        loaded = BrainConfig.load(cfg)
+    assert loaded.token == "" and loaded.network_mode == "connected"
+    assert not any(r.levelname == "WARNING" for r in caplog.records)
 
 
 @posix_only

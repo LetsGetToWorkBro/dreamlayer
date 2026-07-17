@@ -88,3 +88,58 @@ class TestReindexSymlinkAllowlist:
 
         blob = "\n".join(p for _, p in idx._passages)
         assert "INSIDENOTE" in blob         # an in-tree symlink target is read
+
+
+class TestStateDirIsNeverIndexed:
+    """FINDING 1 (privacy): the Brain's OWN state dir resolves UNDER home, so it
+    passes _is_allowed_root — but brain_config.json holds the pairing token +
+    provider API keys in clear and '.json' is a TEXT_EXTS. The index denylist
+    (store._is_index_denied) must keep those secrets out of the index whether
+    they're reached by a symlink or by adding the state dir as a watched folder,
+    so they can never be recalled via /brain/ask. Revert-failing: drop the
+    _is_index_denied guard at the walk sink and the token lands in a passage."""
+
+    def test_symlink_into_state_dir_config_is_not_indexed(self, tmp_path,
+                                                          monkeypatch):
+        allowed, _ = _narrow_allowlist(tmp_path, monkeypatch)
+        # the state dir lives under the (narrowed) HOME, so it is allow-listed;
+        # only the denylist keeps its secret config out of the index.
+        statedir = allowed / ".dreamlayer"
+        statedir.mkdir()
+        monkeypatch.setenv("DREAMLAYER_DIR", str(statedir))
+        (statedir / "brain_config.json").write_text(
+            '{"token": "PAIRSECRET-tok", "cloud_api_key": "sk-CLOUDKEY",'
+            ' "api_key": "sk-PRIMARYKEY"}')
+
+        watched = allowed / "watched"
+        watched.mkdir()
+        (watched / "notes.txt").write_text("LEGITNOTE the rent is 2400.")
+        try:
+            os.symlink(statedir / "brain_config.json", watched / "cfg.json")
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks unavailable (Windows without privilege)")
+
+        cfg = BrainConfig(folders=[str(watched)])
+        idx = FileIndex(cfg)
+        idx.reindex()
+
+        blob = "\n".join(p for _, p in idx._passages)
+        assert "LEGITNOTE" in blob          # the ordinary sibling IS indexed
+        assert "PAIRSECRET" not in blob     # ...but the token is NOT
+        assert "sk-CLOUDKEY" not in blob
+        assert "sk-PRIMARYKEY" not in blob
+
+    def test_adding_state_dir_as_watched_folder_indexes_no_secret(self, tmp_path,
+                                                                  monkeypatch):
+        allowed, _ = _narrow_allowlist(tmp_path, monkeypatch)
+        statedir = allowed / ".dreamlayer"
+        statedir.mkdir()
+        monkeypatch.setenv("DREAMLAYER_DIR", str(statedir))
+        (statedir / "brain_config.json").write_text('{"token": "PAIRSECRET-tok"}')
+
+        cfg = BrainConfig(folders=[str(statedir)])
+        idx = FileIndex(cfg)
+        idx.reindex()
+
+        blob = "\n".join(p for _, p in idx._passages)
+        assert "PAIRSECRET" not in blob     # the whole state dir is denied

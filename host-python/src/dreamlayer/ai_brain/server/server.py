@@ -59,14 +59,15 @@ from .brain_waypath import WaypathOps
 TOKEN_HEADER = "X-DreamLayer-Token"
 
 # --- HTTP request-surface hardening (audit 2026-07-17, "HTTP surface" B-→A) ---
-# Bounded reads, a per-connection socket timeout, and a worker-thread ceiling
-# keep an authed/loopback caller from driving unbounded memory, filling the
-# disk, pinning a worker with slowloris, or exhausting the process's threads.
-# All four are module constants so they are tunable in one place and assertable
-# from tests.
+# Bounded reads, a per-connection socket timeout, a wall-clock body deadline,
+# and a worker-thread ceiling keep an authed/loopback caller from driving
+# unbounded memory, filling the disk, pinning a worker with slowloris (or a
+# byte-dribbling slow-POST), or exhausting the process's threads. All are module
+# constants so they are tunable in one place and assertable from tests.
 MAX_JSON_BODY = 16 * 1024 * 1024        # 16 MiB — cap for JSON bodies (_body/_raw)
 MAX_UPLOAD_BODY = 64 * 1024 * 1024      # 64 MiB — larger cap for file uploads
-SOCKET_TIMEOUT_S = 30.0                 # per-connection read timeout (anti-slowloris)
+SOCKET_TIMEOUT_S = 30.0                 # per-connection PER-RECV read timeout (anti-slowloris)
+MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 
 
@@ -82,6 +83,24 @@ class _RequestTooLarge(Exception):
 class _BadContentLength(Exception):
     """A malformed (non-numeric) Content-Length header → mapped to HTTP 400
     instead of an unhandled int() ValueError surfacing as a 500 traceback."""
+
+
+class _LengthRequired(Exception):
+    """A body the server cannot length-delimit — a request carrying a
+    ``Transfer-Encoding`` (e.g. chunked) header but no usable Content-Length.
+    Python's http.server does not decode chunked bodies, so treating it as an
+    empty body silently accepted a real payload (a 0-byte /upload artifact
+    reported ok). Mapped to HTTP 411 Length Required (audit 2026-07-17,
+    refute-remediation finding 2)."""
+
+
+class _RequestTimeout(Exception):
+    """The request body did not fully arrive within MAX_REQUEST_BODY_SECONDS of
+    wall-clock time. The per-recv socket timeout only bounds a single stalled
+    recv; a slow-POST that dribbles a byte just under it resets that clock
+    indefinitely, pinning a worker thread and a semaphore slot. This
+    total-duration bound is what actually reclaims them. Mapped to HTTP 408
+    (audit 2026-07-17, refute-remediation finding 1)."""
 
 
 def authorize(token: str, provided, from_localhost: bool) -> bool:
@@ -1598,7 +1617,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             return bool(origin_host) and origin_host == host
 
         def _read_capped(self, max_bytes: int) -> bytes:
-            """Read the request body, bounded by ``max_bytes``.
+            """Read the request body, bounded by ``max_bytes`` AND a wall-clock
+            deadline.
 
             An authed/loopback caller must not be able to drive unbounded memory
             or fill the disk, so the whole body is never allocated first: a
@@ -1607,9 +1627,35 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             up to the cap (which the declared length is already ≤). A malformed
             (non-numeric) Content-Length is rejected as 400 rather than raising
             an unhandled ``int()`` ValueError deep in a handler as a 500
-            (audit 2026-07-17)."""
+            (audit 2026-07-17).
+
+            Two subtler defects a refute pass confirmed (audit 2026-07-17):
+
+            * Slow-POST (finding 1): the per-recv socket timeout is an
+              *inactivity* timeout — a client that dribbles one byte just under
+              it resets that clock forever, pinning a worker + a semaphore slot.
+              So the body is read in bounded slices (``read1`` → one recv each)
+              against a MAX_REQUEST_BODY_SECONDS wall-clock deadline; exceeding
+              it aborts the read (→ 408) regardless of per-recv activity. The
+              per-recv timeout still bounds a single stalled recv; this ADDS a
+              total-duration bound and leaves a steady upload that finishes
+              within the cap untouched.
+
+            * Undelimitable body (finding 2): Python's http.server does not decode
+              chunked bodies, so a POST carrying a ``Transfer-Encoding`` header
+              but no usable Content-Length would otherwise return b"" — silently
+              accepted as empty (a 0-byte /upload artifact reported ok). A body we
+              cannot length-delimit is rejected (→ 411) instead of forged into an
+              empty one. A genuinely empty body (no Transfer-Encoding, absent or
+              zero Content-Length) stays a valid empty body."""
             raw = self.headers.get("Content-Length")
             if not raw:
+                # A body was indicated but can't be length-delimited (chunked /
+                # any Transfer-Encoding with no Content-Length): reject rather
+                # than forge an empty body. A plain bodyless POST (no
+                # Transfer-Encoding) is still a valid empty body.
+                if self.headers.get("Transfer-Encoding"):
+                    raise _LengthRequired()
                 return b""
             try:
                 n = int(raw)
@@ -1619,11 +1665,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 return b""
             if n > max_bytes:
                 raise _RequestTooLarge(max_bytes)   # oversize — nothing read
-            # n is already ≤ the cap here, so this read allocates at most the
-            # cap. Read exactly the declared length (never cap+1) so a
-            # well-behaved client that keeps the socket open after its body
-            # isn't left blocking on a byte that never comes.
-            return self.rfile.read(n)
+            # n is already ≤ the cap here, so this allocates at most the cap.
+            # Read in bounded slices against a wall-clock deadline: ``read1``
+            # does at most one recv and returns whatever arrived, so the deadline
+            # is re-checked after every recv instead of blocking inside a single
+            # read(n) that a byte-dribbling slow-POST could stretch indefinitely
+            # (each dribbled byte otherwise resets the per-recv socket timeout).
+            deadline = time.monotonic() + MAX_REQUEST_BODY_SECONDS
+            chunks = []
+            remaining = n
+            while remaining > 0:
+                if time.monotonic() > deadline:
+                    raise _RequestTimeout()
+                chunk = self.rfile.read1(min(remaining, 65536))
+                if not chunk:
+                    break                            # client closed early — take what came
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            return b"".join(chunks)
 
         def _body(self) -> dict:
             raw = self._read_capped(MAX_JSON_BODY)
@@ -2486,6 +2545,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             except _BadContentLength:
                 self.close_connection = True
                 self._json(400, {"error": "invalid Content-Length"})
+            except _LengthRequired:
+                # a body we can't length-delimit (chunked, no Content-Length):
+                # demand a length instead of writing a phantom empty body.
+                self.close_connection = True
+                self._json(411, {"error": "Content-Length required"})
+            except _RequestTimeout:
+                # the body didn't fully arrive within the wall-clock deadline —
+                # a byte-dribbling slow-POST; abort so the worker + slot free up.
+                self.close_connection = True
+                self._json(408, {"error": "request body read timed out"})
 
     class _BrainServer(ThreadingHTTPServer):
         # The stdlib default (allow_reuse_address = 1) is a POSIX convenience:
