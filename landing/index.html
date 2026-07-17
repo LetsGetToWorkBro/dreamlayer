@@ -408,7 +408,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .hero-vignette{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(115% 90% at 50% 44%,transparent 34%,rgba(0,0,0,.72) 82%,#000 100%)}
 .hero .hero-juno{position:absolute;z-index:1;pointer-events:none;
-  left:44%;top:41%;width:clamp(300px,42%,540px);
+  left:44%;top:37%;width:clamp(300px,42%,540px);
   transform:translate(-50%,-50%) translate3d(var(--jpx,0px),var(--jpy,0px),0)}
 .hero .hero-juno::before{content:"";position:absolute;left:50%;top:52%;width:66%;height:82%;
   transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
@@ -433,7 +433,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   50%{opacity:.9;transform:translate(-50%,-50%) scale(1.08)}}
 @keyframes junoFloatLite{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 .hero-core{position:relative;z-index:2;text-align:center;padding:9svh var(--gutter) 8svh;
-  will-change:transform,opacity}
+  will-change:transform,opacity;
+  /* a dark halo so the copy stays legible where it crosses Juno's glow */
+  text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 18px rgba(0,0,0,.55)}
+.hero-core .pbtn{text-shadow:none}
 .hero-glass{position:relative;width:clamp(130px,17svh,170px);height:clamp(130px,17svh,170px);
   margin:0 auto 30px;border-radius:50%}
 .hero-glass canvas{position:relative;z-index:1;width:100%;height:100%;display:block;border-radius:50%;
@@ -875,7 +878,12 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   .tier .rail{left:6px;top:24px;bottom:6px;right:auto;width:2px;height:auto}
   .tier .rail i::after{transform:scaleY(0);transform-origin:top}
   .tier.lit .rail i::after{transform:scaleY(1)}
-  .hero .hero-juno{width:min(78%,400px);top:35%}
+  /* the window is its own height — no forced 100svh, so the first scroll
+     goes straight to the next window instead of through empty desktop */
+  .hero{min-height:auto;padding:2svh 0 4svh}
+  /* Juno steps aside on small screens — off to the window's right edge,
+     a little smaller and dimmer, so the copy never sits on her dress */
+  .hero .hero-juno{width:min(56%,290px);left:72%;top:32%;opacity:.94}
   .hero .hero-juno video,.hero .hero-juno img{animation:junoFloatLite 9s ease-in-out infinite}
   .can-head{flex-direction:column;align-items:flex-start}
   .hud-float{width:148px;margin:6px auto 0}
@@ -2996,9 +3004,15 @@ function initScroll(){
         });
       });
     }
-    ST.create({ trigger:"#top", start:"top top", end:"bottom top", scrub:true,
-      onUpdate:function(self){ applyHero(self.progress); } });
     var mm=G.matchMedia();
+    /* the hero parallax is a desktop pleasure — scrubbed transforms fight
+       native touch momentum on phones and read as chop, so below 761px the
+       first scroll stays a plain scroll */
+    mm.add("(min-width:761px)", function(){
+      var t=ST.create({ trigger:"#top", start:"top top", end:"bottom top", scrub:true,
+        onUpdate:function(self){ applyHero(self.progress); } });
+      return function(){ t.kill(); applyHero(0); };
+    });
     mm.add("(min-width:761px)", function(){
       var t=ST.create({ trigger:"#veil", start:"top top", end:"bottom bottom", scrub:true,
         onUpdate:function(self){ applyVeilSafe(self.progress); } });
@@ -3024,7 +3038,7 @@ function initScroll(){
       requestAnimationFrame(function(){
         ticking=false;
         var y=scrollY, vh=innerHeight;
-        if(!reduced) applyHero(Math.min(1,y/(vh*0.9)));
+        if(!reduced && innerWidth>760) applyHero(Math.min(1,y/(vh*0.9)));
         applyVeilSafe();
       });
     }
