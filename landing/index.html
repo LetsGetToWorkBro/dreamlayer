@@ -2680,11 +2680,20 @@ var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* ---------- zoom-rects: the Finder's opening animation ---------- */
 var zfx=document.getElementById("zoomfx"), zctx=zfx.getContext("2d");
+var _zw=0,_zh=0,_zd=0;
 function zsize(){ var d=Math.min(devicePixelRatio||1,2);
-  zfx.width=innerWidth*d; zfx.height=innerHeight*d; zctx.setTransform(d,0,0,d,0,0); }
-zsize(); addEventListener("resize",zsize,{passive:true});
+  if(innerWidth===_zw && innerHeight===_zh && d===_zd) return;
+  _zw=innerWidth; _zh=innerHeight; _zd=d;
+  zfx.width=_zw*d; zfx.height=_zh*d; zctx.setTransform(d,0,0,d,0,0); }
+zsize();
+/* width/DPR changes re-size eagerly. A height-only resize — the mobile URL
+   bar collapsing on the first scroll — must NOT: reallocating a full-screen
+   canvas right then is a guaranteed dropped frame. zoomRects trues the
+   height up lazily the next time it actually draws. */
+addEventListener("resize",function(){ if(innerWidth!==_zw||Math.min(devicePixelRatio||1,2)!==_zd) zsize(); },{passive:true});
 function zoomRects(from,to,done,ms){
   if(reduced){ if(done) done(); return; }
+  zsize();
   ms=ms||320;
   var t0=performance.now(), STEPS=12;
   function draw(now){
