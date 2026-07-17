@@ -866,7 +866,7 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
 @media (max-width:900px){
   :root{--tbh:24px}
   .deskicons{display:none}
-  .mw{width:calc(100vw - 16px);margin:7svh auto}
+  .mw{width:calc(100vw - 16px);margin:5svh auto}
   .mw.tilt-l,.mw.tilt-r{translate:none}
   .lens-grid{grid-template-columns:repeat(2,1fr)}
   .vid-grid{grid-template-columns:1fr;max-width:420px;margin:0 auto}
@@ -2756,8 +2756,12 @@ function finishBoot(fast){
   setTimeout(function(){ finishBoot(false); }, 2150);
 })();
 
-/* the rest of the windows open as they scroll in */
-var openIO=("IntersectionObserver" in window) ? new IntersectionObserver(function(es){
+/* the rest of the windows open as they scroll in — a desktop pleasure.
+   On phones the zoom-rect + stepped pop lands mid-scroll and reads as
+   chop (and as blank desktop until it fires), so there the windows are
+   simply already open and the first scroll stays calm. */
+var zoomOpens = matchMedia("(min-width:901px)").matches;
+var openIO=(zoomOpens && "IntersectionObserver" in window) ? new IntersectionObserver(function(es){
   es.forEach(function(e){ if(e.isIntersecting){ openWindow(e.target); openIO.unobserve(e.target); } });
 },{rootMargin:"0px 0px -6% 0px",threshold:0.03}) : null;
 topWins.forEach(function(w){ if(w!==heroWin){ if(openIO) openIO.observe(w); else w.classList.add("open"); } });
