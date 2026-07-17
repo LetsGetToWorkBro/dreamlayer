@@ -1,6 +1,14 @@
 from __future__ import annotations
 from .embeddings import MockEmbeddingProvider, cosine, unpack_embedding
 
+# Kinds excluded from a kind-less recall (see Retriever.HIDDEN_KINDS below).
+# Promoted to a module constant so the alternate vector stores
+# (VectorStore/Chroma/Lance) import the SAME source of truth and cannot drift
+# from the linear reference — the alt stores were NOT filtering these and would
+# surface a `stasis` bookmark (the wearer's verbatim unfinished sentence) on a
+# kind=None recall the reference deliberately hides (refute 2026-07-17).
+HIDDEN_KINDS = frozenset({"stasis"})
+
 
 def _confidence(m) -> float:
     """A memory's confidence, defaulting to 0.5 ONLY when absent. `or 0.5`
@@ -40,7 +48,7 @@ class Retriever:
     # kind-less search excludes these by construction (a caller that explicitly
     # asks for kind="stasis" still gets them). When such a frame composts it is
     # rewritten as an ordinary kind="memory" row, which is findable as normal.
-    HIDDEN_KINDS = frozenset({"stasis"})
+    HIDDEN_KINDS = HIDDEN_KINDS          # the module constant (shared with alt stores)
 
     def __init__(self, db, embedder=None, ann=None, ember_store=None,
                  bias_store=None, bias_dir=None, vector_store=None):

@@ -54,6 +54,11 @@ _ISLOCAL_INPUTS = [
     "http://[10.0.0.1]", "http://[192.168.1.1]", "http://[::1]extra",
     "http://[::1].local", "http://[::1]]", "http://[::ffff:127.0.0.1]",
     "http://[fe80::1]",
+    # bracket in the USERINFO: urlsplit raises ValueError -> is_local_endpoint
+    # REMOTE, but the naive "host is after the last @" strip greened the address
+    # after the @ (refute 2026-07-17):
+    "http://[::1]@127.0.0.1", "http://[foo]@192.168.1.1", "//[::1]@10.0.0.1",
+    "http://[x]@127.0.0.1", "http://[::1]@10.0.0.5",
 ]
 _ISLOCAL_LOCAL_FORMS = [
     "http://localhost", "http://localhost:1234/v1", "http://127.0.0.1",
@@ -66,6 +71,9 @@ _ISLOCAL_DIVERGENCES = [
     "http://ｅｖｉｌ．ｌｏｃａｌ",
     "http://evil．local",
     "http:\\localhost\\evil.com", "http:/localhost", "http:localhost",
+    # bracket-in-userinfo false-greens (refute 2026-07-17):
+    "http://[::1]@127.0.0.1", "http://[foo]@192.168.1.1", "//[::1]@10.0.0.1",
+    "http://[x]@127.0.0.1", "http://[::1]@10.0.0.5",
 ]
 
 

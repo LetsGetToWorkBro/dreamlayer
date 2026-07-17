@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 
 from .embeddings import MockEmbeddingProvider, unpack_embedding
+from .retrieval import HIDDEN_KINDS   # shared: kinds a kind=None recall hides
 from .vector_store import VectorStore
 
 log = logging.getLogger("dreamlayer.lance_store")
@@ -36,6 +37,9 @@ class LanceStore:
             return self._fallback.search(query, kind=kind, top_k=top_k)
         try:
             rows = list(self.db.memories(kind=kind))
+            if kind is None:                      # mirror the linear reference:
+                rows = [m for m in rows            # a kind-less recall hides
+                        if m.get("kind") not in HIDDEN_KINDS]  # stasis bookmarks
             if not rows:
                 return []
             data = []

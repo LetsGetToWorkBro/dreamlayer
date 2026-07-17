@@ -39,7 +39,13 @@ export function setQuestionProvider(fn: () => string): void {
  *     switch left a window where a Veil raised on the glass still relayed the
  *     spoken question — this closes it (audit 2026-07-14). */
 function captureSuppressed(): boolean {
-  return useBrainStore.getState().capturePaused || useVitalsStore.getState().veiled;
+  const b = useBrainStore.getState();
+  // Fail-closed before the persisted state hydrates: capturePaused defaults false
+  // at cold start, so a session the wearer left incognito/veiled last launch would
+  // relay captured content until hydrate() restores the real flags. Suppress until
+  // then (refute 2026-07-17) — the same cold-start guard the notify veil uses.
+  if (!b.hydrated) return true;
+  return b.capturePaused || useVitalsStore.getState().veiled;
 }
 
 /** Forward a lens emit to the Brain. Returns the Brain's reply (for "ask") or

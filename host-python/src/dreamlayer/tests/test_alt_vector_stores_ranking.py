@@ -504,3 +504,48 @@ class TestRealChromaPersistentResidue:
         cols = client.list_collections()
         names = [c if isinstance(c, str) else getattr(c, "name", c) for c in cols]
         assert "resid" not in names
+
+
+# ===========================================================================
+# Finding 5 (refute 2026-07-17): the alternate stores must honor HIDDEN_KINDS
+# on a kind=None recall, exactly like Retriever — else a `stasis` bookmark (the
+# wearer's verbatim unfinished sentence) surfaces in "what did I say about X"
+# and the stores diverge from the linear reference.
+# ===========================================================================
+class TestAltStoresHideStasisKind:
+    def _seeded(self):
+        db = MemoryDB(":memory:")
+        db.add_memory("stasis", "the wifi password is hunter2",
+                      embedding=None, confidence=0.9)
+        db.add_memory("object", "we set up the wifi at home",
+                      embedding=None, confidence=0.5)
+        return db
+
+    def test_vector_store_hides_stasis_but_keeps_it_for_explicit_kind(self):
+        emb = MockEmbeddingProvider()
+        db = self._seeded()
+        got = VectorStore(db, embedder=emb).search("wifi password", top_k=5)
+        # REVERT-FAILING: without the HIDDEN_KINDS filter the stasis bookmark
+        # (higher confidence) ranks first on a kind-less recall.
+        assert "stasis" not in [m.get("kind") for _, m in got]
+        ex = VectorStore(db, embedder=emb).search("wifi password",
+                                                  kind="stasis", top_k=5)
+        assert [m.get("kind") for _, m in ex] == ["stasis"]   # explicit still works
+
+    def test_chroma_real_branch_hides_stasis(self, monkeypatch, tmp_path):
+        fake, _disk = _make_fake_chroma()
+        monkeypatch.setattr(chroma_store, "_HAS_CHROMA", True)
+        monkeypatch.setattr(chroma_store, "chromadb", fake, raising=False)
+        emb = MockEmbeddingProvider()
+        db = self._seeded()
+        got = ChromaStore(db, embedder=emb, path=str(tmp_path / "c")).search(
+            "wifi password", top_k=5)
+        assert "stasis" not in [m.get("kind") for _, m in got]   # REVERT-FAILING
+
+    def test_lance_real_branch_hides_stasis(self, monkeypatch):
+        _install_fake_lance(monkeypatch)
+        emb = MockEmbeddingProvider()
+        db = self._seeded()
+        got = LanceStore(db, embedder=emb, uri="mem://hk").search(
+            "wifi password", top_k=5)
+        assert "stasis" not in [m.get("kind") for _, m in got]   # REVERT-FAILING
