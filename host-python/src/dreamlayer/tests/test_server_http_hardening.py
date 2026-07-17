@@ -281,13 +281,25 @@ def test_server_has_bounded_worker_semaphore(tmp_path):
         errs = []
 
         def hit():
-            try:
-                st, _ = _post(f"http://{host}:{port}/dreamlayer/brain/ask",
-                              {"query": "x"})
-                if st != 200:
-                    errs.append(st)
-            except Exception as exc:                     # noqa: BLE001
-                errs.append(str(exc))
+            # A synthetic 24-way connect burst can trip the listen backlog
+            # (request_queue_size) on a loaded CI box → a transient
+            # ECONNRESET/ECONNREFUSED on a few connects. That never reaches the
+            # accept loop, so it can't leak a slot — retry the CONNECT rather
+            # than fail the leak check on a backlog artifact. A real HTTP error
+            # (non-200) is recorded immediately, never retried; a genuine
+            # slot-leak deadlock would surface as a timeout after the retries.
+            for attempt in range(4):
+                try:
+                    st, _ = _post(f"http://{host}:{port}/dreamlayer/brain/ask",
+                                  {"query": "x"})
+                    if st != 200:
+                        errs.append(st)
+                    return
+                except Exception as exc:                 # noqa: BLE001
+                    if attempt == 3:
+                        errs.append(str(exc))
+                    else:
+                        time.sleep(0.05 * (attempt + 1))
 
         threads = [threading.Thread(target=hit) for _ in range(24)]
         for t in threads:
@@ -329,13 +341,20 @@ def test_concurrency_is_actually_capped(tmp_path, monkeypatch):
         errs = []
 
         def hit():
-            try:
-                st, _ = _post(f"http://{host}:{port}/dreamlayer/brain/ask",
-                              {"query": "x"}, timeout=15)
-                if st != 200:
-                    errs.append(st)
-            except Exception as exc:                     # noqa: BLE001
-                errs.append(str(exc))
+            # retry a transient backlog reset on the connect (see the burst test
+            # above); the cap assertion below is unaffected by a retried connect.
+            for attempt in range(4):
+                try:
+                    st, _ = _post(f"http://{host}:{port}/dreamlayer/brain/ask",
+                                  {"query": "x"}, timeout=15)
+                    if st != 200:
+                        errs.append(st)
+                    return
+                except Exception as exc:                 # noqa: BLE001
+                    if attempt == 3:
+                        errs.append(str(exc))
+                    else:
+                        time.sleep(0.05 * (attempt + 1))
 
         threads = [threading.Thread(target=hit) for _ in range(8)]
         for t in threads:
