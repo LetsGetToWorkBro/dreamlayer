@@ -5,7 +5,7 @@
     "entry": "plugin:plugin",
     "author": "DreamLayer Team",
     "official": true,
-    "description": "Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+    "description": "Look at a shelf, get the better pick. Nutri-Score becomes a rating, allergens get flagged, straight from open data. No account, no key.",
     "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
     "requires": [
       "network"
@@ -13,12 +13,12 @@
     "api": "2",
     "checksum": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
     "signature": "",
-    "forwho": "For anyone with dietary goals or allergies — or who just wants the better pick.",
+    "forwho": "For anyone with a diet, an allergy, or a habit of squinting at the small print.",
     "screenshot": "https://dreamlayer.app/plugin-shots/open-food-facts.png",
     "long": [
-      "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
-      "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
-      "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."
+      "This is what gives TasteLens something to rank on. Look at a shelf or a menu and it sorts the options by your rules.",
+      "Every item scored A to E by Nutri-Score, allergens flagged, pulled live from the Open Food Facts community database. Free, no API key.",
+      "Your diet stays on your device. The only thing that leaves is the product name, so it can look the item up."
     ],
     "pricing": {
       "model": "free"
