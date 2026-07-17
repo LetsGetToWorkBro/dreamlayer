@@ -5,7 +5,7 @@
     "entry": "plugin:plugin",
     "author": "DreamLayer Team",
     "official": true,
-    "description": "A quiet coach that tallies your “um / like / you know” as you speak.",
+    "description": "A quiet coach that counts your um, uh, and you know as you talk, in the corner of your eye.",
     "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
     "requires": [
       "perception",
@@ -17,9 +17,9 @@
     "forwho": "For anyone who presents, pitches, or records.",
     "screenshot": "https://dreamlayer.app/plugin-shots/filler-word-counter.png",
     "long": [
-      "Public speaking, on your side. It listens to your own words and keeps a running count of filler words in the corner of your eye — so you hear yourself, and drop them.",
-      "It knows the usual suspects — um, uh, like, you know, basically — and tracks a rough per-sentence rate as you go.",
-      "Nothing is recorded or sent anywhere; the tally lives on your glasses and resets when you’re done."
+      "Public speaking, on your side. It listens to your own words and keeps a running count in the corner of your eye, so you hear yourself and drop them.",
+      "It knows the usual suspects, um, uh, like, you know, basically, and tracks a rough per-sentence pace as you go.",
+      "Nothing is recorded and nothing is sent. The tally lives on your glasses and resets when you're done."
     ],
     "pricing": {
       "model": "free"

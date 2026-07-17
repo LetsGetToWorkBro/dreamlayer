@@ -102,6 +102,11 @@
     box-shadow:var(--bev-out),var(--shadow);
     transition:background .18s var(--ease)}
   .card:hover{background:var(--face-hi)}
+  /* preview thumbnail: a full-bleed banner at the top of the tile so you
+     see the on-glass shot before opening the detail */
+  .card .thumb{display:block;width:calc(100% + 36px);margin:-18px -18px 14px;
+    aspect-ratio:640/340;object-fit:cover;background:#0B1012;
+    border-bottom:1px solid var(--frame)}
   .card:hover h3{text-decoration:underline;text-underline-offset:3px}
   .card .actions,.card .rate,.card .star{cursor:default}
   .card .top{display:flex;gap:12px;align-items:flex-start}
@@ -231,21 +236,33 @@
     opacity:0;pointer-events:none;transition:opacity .3s var(--ease),transform .3s var(--ease)}
   .toast.on{opacity:1;transform:translate(-50%,0)}
   @media(max-width:680px){
-    /* tighter rhythm; each segmented control is one clean strip that
-       centres when it fits and scrolls inside the window when it
-       doesn't — nothing gets cut off */
+    /* tighter rhythm; each segmented control wraps to fit the window so
+       every option stays visible — no side-scrolling, nothing cut off */
     .hero{padding:30px 0 4px}
     h1{font-size:clamp(27px,8vw,38px)}
     .hero p{font-size:15px;max-width:38ch}
     .search{margin-top:18px}
     .toolbar{margin-top:8px;padding:11px 0 10px}
     .toolrow{flex-direction:column;align-items:center;gap:11px}
-    .tabs,.seg{flex-wrap:nowrap;max-width:100%;overflow-x:auto;overflow-y:hidden;
-      scrollbar-width:none;-webkit-overflow-scrolling:touch}
-    .tabs::-webkit-scrollbar,.seg::-webkit-scrollbar{display:none}
+    .tabs,.seg{flex-wrap:wrap;justify-content:center;max-width:100%;row-gap:7px}
     .tab,.seg button{flex:none;padding:7px 12px;font-size:12.5px}
     .statusline{margin:12px auto 4px}
-    .grid{grid-template-columns:1fr;gap:14px;padding:4px 0 40px}
+    /* two tiles per row on phones; keep them from overflowing the column */
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:4px 0 40px}
+    .card{padding:12px}
+    .card .thumb{width:calc(100% + 24px);margin:-12px -12px 10px}
+    /* tighter header so the name has room in a half-width tile; the
+       thumbnail already identifies the plugin, so the letter-icon (which
+       ate the name's width at 2-up) is dropped here */
+    .card .top{gap:8px}
+    .card .icon{display:none}
+    .card h3{font-size:14.5px;gap:5px}
+    .card .by{font-size:11.5px}
+    .featured-dot{font-size:9px;padding:1px 5px}
+    .price{font-size:11px;padding:2px 7px}
+    .desc{font-size:13px}
+    .actions{flex-wrap:wrap}
+    .actions .btn{flex:1 1 auto}
     .toolbar{top:var(--mbh,28px)}
   }
   @media(max-width:400px){.tab,.seg button{padding:6px 10px;font-size:12px}}
@@ -392,69 +409,69 @@
 const SNAPSHOT = {
   "plugins": [
     { "name":"face-synth","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"Your head is a MIDI controller — yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
+      "description":"Your head is the MIDI controller. Tilt to pick the note, tap to play it, and how hard you move is how hard it hits. Get a few people on the mesh and you're a band.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "requires":["midi"],"tags":["music","creative","mesh","featured"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/face-synth.png",
-      "forwho":"For musicians, performers, and tinkerers who want to play the world.",
+      "forwho":"For musicians, performers, and anyone who wants to play the world.",
       "long":[
-        "Turn your glasses into a musical instrument — no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
-        "You can’t play a wrong note: pitches are locked to a scale, so every move lands in key.",
-        "Jam together — everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."],
+        "No controller, no hands, no cables. Where you look is the note, and how hard you move is how hard it hits.",
+        "You can't play a wrong note. Everything is locked to a scale, so every twitch of your head lands in key.",
+        "Everyone in a GhostMode circle is a separate voice in one band. The notes ride the mesh, so every rig hears the whole thing."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"open-food-facts","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"Rank a shelf by Open Food Facts — Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+      "description":"Look at a shelf, get the better pick. Nutri-Score becomes a rating, allergens get flagged, straight from open data. No account, no key.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
       "requires":["network"],"tags":["shopping","food","connector","tastelens","featured"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/open-food-facts.png",
-      "forwho":"For anyone with dietary goals or allergies — or who just wants the better pick.",
+      "forwho":"For anyone with a diet, an allergy, or a habit of squinting at the small print.",
       "long":[
-        "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules — this connector is what gives it something to rank on.",
-        "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
-        "Private by design: your dietary rules stay on your device — only the product name leaves it, to look the item up."],
+        "This is what gives TasteLens something to rank on. Look at a shelf or a menu and it sorts the options by your rules.",
+        "Every item scored A to E by Nutri-Score, allergens flagged, pulled live from the Open Food Facts community database. Free, no API key.",
+        "Your diet stays on your device. The only thing that leaves is the product name, so it can look the item up."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"currency-converter","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"Look at a foreign price tag and see it in your own money — live rates, right on the panel.",
+      "description":"Look at a foreign price and see it in your own money, right on the panel. Live rate, no mental math, no phone.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
       "requires":["object_lens","network"],"tags":["travel","shopping","utility","connector"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/currency-converter.png",
-      "forwho":"For travellers and anyone shopping across currencies.",
+      "forwho":"For travellers and anyone shopping across a border.",
       "long":[
-        "Abroad, prices stop being abstract. Look at a tag or a menu and the look-at-a-thing panel shows the amount in your home currency, inline — no phone, no mental math.",
-        "It converts with live exchange rates (free, no account) and shows the rate it used, so you always know what you’re really paying.",
-        "Private by design: only the number and its currency are looked up — never where you are or what you bought."],
+        "Abroad, prices stop being abstract. Look at a tag or a menu and the number shows up in your home currency, inline.",
+        "It uses live exchange rates, free and no account, and shows you the rate it used so you know what you're really paying.",
+        "Only the number and its currency get looked up. Never where you are, never what you bought."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"hud-reactions","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"Throw 🎉 👏 ❤️ 🔥 onto your HUD — and everyone in your GhostMode circle sees it too.",
+      "description":"Throw 🎉 👏 ❤️ 🔥 onto your HUD, and everyone in your GhostMode circle sees it land too.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
       "requires":["cards","mesh"],"tags":["social","fun","mesh"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/hud-reactions.png",
       "forwho":"For friends, gigs, and anyone sharing a moment on the mesh.",
       "long":[
-        "Tap to react. A burst lands on your HUD, and if you’re in a GhostMode circle, it lands on theirs — a silent “yes!” across a room.",
-        "Only the tiny symbol crosses the mesh, signed and small — never who you are or where you’re standing. It rides the same “only feeling travels” rule as the rest of GhostMode.",
-        "Great for concerts, watch parties, and inside jokes with the people next to you."],
+        "Tap to react. A burst lands on your HUD, and if you're in a circle it lands on theirs. A silent yes across a room.",
+        "Only the tiny symbol crosses the mesh, signed and small. Never who you are, never where you're standing.",
+        "Made for concerts, watch parties, and inside jokes with the people next to you."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"filler-word-counter","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"A quiet coach that tallies your “um / like / you know” as you speak.",
+      "description":"A quiet coach that counts your um, uh, and you know as you talk, in the corner of your eye.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
       "requires":["perception","cards"],"tags":["coaching","speaking","productivity"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/filler-word-counter.png",
       "forwho":"For anyone who presents, pitches, or records.",
       "long":[
-        "Public speaking, on your side. It listens to your own words and keeps a running count of filler words in the corner of your eye — so you hear yourself, and drop them.",
-        "It knows the usual suspects — um, uh, like, you know, basically — and tracks a rough per-sentence rate as you go.",
-        "Nothing is recorded or sent anywhere; the tally lives on your glasses and resets when you’re done."],
+        "Public speaking, on your side. It listens to your own words and keeps a running count in the corner of your eye, so you hear yourself and drop them.",
+        "It knows the usual suspects, um, uh, like, you know, basically, and tracks a rough per-sentence pace as you go.",
+        "Nothing is recorded and nothing is sent. The tally lives on your glasses and resets when you're done."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 },
     { "name":"air-drums","version":"0.1.0","author":"DreamLayer Team","official":true,
-      "description":"Play a drum kit in the air — head-nods and taps fire real MIDI drums.",
+      "description":"Play a drum kit in the air. Nod for a kick, flick left for a snare, right for a hat. Real MIDI, any DAW.",
       "homepage":"https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
       "requires":["midi"],"tags":["music","creative","midi"],"pricing":{"model":"free"},
       "screenshot":"https://dreamlayer.app/plugin-shots/air-drums.png",
       "forwho":"For drummers, producers, and fidgeters.",
       "long":[
-        "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash — each gesture fires a General-MIDI drum on channel 10, into any DAW or drum machine.",
-        "Velocity follows how hard you move, so it feels dynamic, not robotic.",
+        "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash. Each one fires a General MIDI drum on channel 10.",
+        "Velocity follows how hard you move, so it feels dynamic instead of robotic.",
         "Pairs with Face Synth for a hands-free one-person band."],
       "downloads":0,"rating":0,"ratings_count":0,"comments_count":0 }
   ]
@@ -595,6 +612,7 @@ function render(){
       ? (p.requires||[]).map(r=>`<span class="chip perm">needs ${esc(r)}</span>`).join("")
       : '<span class="chip perm">no special access</span>';
     return `<div class="card${p.official?' official':''}" data-name="${esc(p.name)}" role="button" tabindex="0" aria-label="${esc(p.name)} — open details">
+      ${p.screenshot?`<img class="thumb" src="${esc(p.screenshot)}" alt="${esc(p.name)} on the glass" loading="lazy">`:""}
       <div class="top">
         <div class="icon">${esc(initial)}</div>
         <div style="min-width:0">

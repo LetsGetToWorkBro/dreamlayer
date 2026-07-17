@@ -147,6 +147,11 @@ export default function Plugins() {
           const pending = installedMap[p.name]?.status === "pending";
           return (
             <Card key={p.name} delay={i * 40}>
+              {p.screenshot ? (
+                <Pressable onPress={() => setDetail(p)}>
+                  <Image source={{ uri: p.screenshot }} style={st.thumb} resizeMode="cover" />
+                </Pressable>
+              ) : null}
               <View style={st.top}>
                 <View style={st.icon}>
                   <Text style={st.iconText}>{(p.name[0] || "?").toUpperCase()}</Text>
@@ -372,6 +377,16 @@ const st = StyleSheet.create({
   tabOn: { backgroundColor: colors.accentMemory, borderColor: colors.accentMemory },
   tabText: { color: colors.textSecondary, fontSize: 12, letterSpacing: 0.6 },
   tabTextOn: { color: "#FFFFFF", fontWeight: "700" },
+  // preview banner at the top of the tile — bleeds to the card edges so you
+  // see the on-glass shot before opening the detail
+  thumb: {
+    marginTop: -space.lg,
+    marginHorizontal: -space.lg,
+    marginBottom: space.md,
+    alignSelf: "stretch",
+    aspectRatio: 640 / 340,
+    backgroundColor: "#0B1012",
+  },
   top: { flexDirection: "row", alignItems: "center", gap: space.md },
   icon: {
     width: 42,

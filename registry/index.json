@@ -8,7 +8,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Your head is a MIDI controller \u2014 yaw picks the note, pitch bends the filter, a tap plays it. Multiple wearers become a distributed band over the mesh.",
+      "description": "Your head is the MIDI controller. Tilt to pick the note, tap to play it, and how hard you move is how hard it hits. Get a few people on the mesh and you're a band.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/face_synth.py",
       "url": "registry/packages/face-synth-0.1.0.json",
       "checksum": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
@@ -22,11 +22,11 @@
         "featured"
       ],
       "screenshot": "https://dreamlayer.app/plugin-shots/face-synth.png",
-      "forwho": "For musicians, performers, and tinkerers who want to play the world.",
+      "forwho": "For musicians, performers, and anyone who wants to play the world.",
       "long": [
-        "Turn your glasses into a musical instrument \u2014 no controller, no hands. Tilt your head to choose a note, tap to play it, and how loud you are sets how hard it hits.",
-        "You can\u2019t play a wrong note: pitches are locked to a scale, so every move lands in key.",
-        "Jam together \u2014 everyone on a GhostMode circle becomes a separate voice in one band, their notes carried over the mesh so every rig hears the whole ensemble."
+        "No controller, no hands, no cables. Where you look is the note, and how hard you move is how hard it hits.",
+        "You can't play a wrong note. Everything is locked to a scale, so every twitch of your head lands in key.",
+        "Everyone in a GhostMode circle is a separate voice in one band. The notes ride the mesh, so every rig hears the whole thing."
       ],
       "downloads": 0,
       "rating": 0,
@@ -42,7 +42,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Rank a shelf by Open Food Facts \u2014 Nutri-Score becomes a rating, allergens are flagged. A real TasteLens connector, no key, open data.",
+      "description": "Look at a shelf, get the better pick. Nutri-Score becomes a rating, allergens get flagged, straight from open data. No account, no key.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openfoodfacts.py",
       "url": "registry/packages/open-food-facts-0.1.0.json",
       "checksum": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
@@ -57,11 +57,11 @@
         "featured"
       ],
       "screenshot": "https://dreamlayer.app/plugin-shots/open-food-facts.png",
-      "forwho": "For anyone with dietary goals or allergies \u2014 or who just wants the better pick.",
+      "forwho": "For anyone with a diet, an allergy, or a habit of squinting at the small print.",
       "long": [
-        "Shop smarter. Look at a shelf or a menu and TasteLens ranks it against your rules \u2014 this connector is what gives it something to rank on.",
-        "Every item is scored by its Nutri-Score (A is best, E worst) and its allergens are flagged, pulled live from Open Food Facts, a free community food database. No account, no API key.",
-        "Private by design: your dietary rules stay on your device \u2014 only the product name leaves it, to look the item up."
+        "This is what gives TasteLens something to rank on. Look at a shelf or a menu and it sorts the options by your rules.",
+        "Every item scored A to E by Nutri-Score, allergens flagged, pulled live from the Open Food Facts community database. Free, no API key.",
+        "Your diet stays on your device. The only thing that leaves is the product name, so it can look the item up."
       ],
       "downloads": 0,
       "rating": 0,
@@ -77,7 +77,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Look at a foreign price tag and see it in your own money \u2014 live rates, right on the panel.",
+      "description": "Look at a foreign price and see it in your own money, right on the panel. Live rate, no mental math, no phone.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/currency.py",
       "url": "registry/packages/currency-converter-0.1.0.json",
       "checksum": "sha256:0c36ad8bf1aed59b378f9cd6c71dc0744fd0c0a30be09fdaf0e35ac4f469052d",
@@ -92,11 +92,11 @@
         "connector"
       ],
       "screenshot": "https://dreamlayer.app/plugin-shots/currency-converter.png",
-      "forwho": "For travellers and anyone shopping across currencies.",
+      "forwho": "For travellers and anyone shopping across a border.",
       "long": [
-        "Abroad, prices stop being abstract. Look at a tag or a menu and the look-at-a-thing panel shows the amount in your home currency, inline \u2014 no phone, no mental math.",
-        "It converts with live exchange rates (free, no account) and shows the rate it used, so you always know what you\u2019re really paying.",
-        "Private by design: only the number and its currency are looked up \u2014 never where you are or what you bought."
+        "Abroad, prices stop being abstract. Look at a tag or a menu and the number shows up in your home currency, inline.",
+        "It uses live exchange rates, free and no account, and shows you the rate it used so you know what you're really paying.",
+        "Only the number and its currency get looked up. Never where you are, never what you bought."
       ],
       "downloads": 0,
       "rating": 0,
@@ -112,7 +112,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Throw \ud83c\udf89 \ud83d\udc4f \u2764\ufe0f \ud83d\udd25 onto your HUD \u2014 and everyone in your GhostMode circle sees it too.",
+      "description": "Throw \ud83c\udf89 \ud83d\udc4f \u2764\ufe0f \ud83d\udd25 onto your HUD, and everyone in your GhostMode circle sees it land too.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/reactions.py",
       "url": "registry/packages/hud-reactions-0.1.0.json",
       "checksum": "sha256:46358ee481b67a1bd9433b34275fb7094ea97928f789b1f781e04b57c51f6edf",
@@ -128,9 +128,9 @@
       "screenshot": "https://dreamlayer.app/plugin-shots/hud-reactions.png",
       "forwho": "For friends, gigs, and anyone sharing a moment on the mesh.",
       "long": [
-        "Tap to react. A burst lands on your HUD, and if you\u2019re in a GhostMode circle, it lands on theirs \u2014 a silent \u201cyes!\u201d across a room.",
-        "Only the tiny symbol crosses the mesh, signed and small \u2014 never who you are or where you\u2019re standing. It rides the same \u201conly feeling travels\u201d rule as the rest of GhostMode.",
-        "Great for concerts, watch parties, and inside jokes with the people next to you."
+        "Tap to react. A burst lands on your HUD, and if you're in a circle it lands on theirs. A silent yes across a room.",
+        "Only the tiny symbol crosses the mesh, signed and small. Never who you are, never where you're standing.",
+        "Made for concerts, watch parties, and inside jokes with the people next to you."
       ],
       "downloads": 0,
       "rating": 0,
@@ -146,7 +146,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "A quiet coach that tallies your \u201cum / like / you know\u201d as you speak.",
+      "description": "A quiet coach that counts your um, uh, and you know as you talk, in the corner of your eye.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/filler.py",
       "url": "registry/packages/filler-word-counter-0.1.0.json",
       "checksum": "sha256:72b6f0b4ad695be0b49f4390c115e237fa9442c3bf7fd1b1a0e4d5055d7b633d",
@@ -162,9 +162,9 @@
       "screenshot": "https://dreamlayer.app/plugin-shots/filler-word-counter.png",
       "forwho": "For anyone who presents, pitches, or records.",
       "long": [
-        "Public speaking, on your side. It listens to your own words and keeps a running count of filler words in the corner of your eye \u2014 so you hear yourself, and drop them.",
-        "It knows the usual suspects \u2014 um, uh, like, you know, basically \u2014 and tracks a rough per-sentence rate as you go.",
-        "Nothing is recorded or sent anywhere; the tally lives on your glasses and resets when you\u2019re done."
+        "Public speaking, on your side. It listens to your own words and keeps a running count in the corner of your eye, so you hear yourself and drop them.",
+        "It knows the usual suspects, um, uh, like, you know, basically, and tracks a rough per-sentence pace as you go.",
+        "Nothing is recorded and nothing is sent. The tally lives on your glasses and resets when you're done."
       ],
       "downloads": 0,
       "rating": 0,
@@ -180,7 +180,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Play a drum kit in the air \u2014 head-nods and taps fire real MIDI drums.",
+      "description": "Play a drum kit in the air. Nod for a kick, flick left for a snare, right for a hat. Real MIDI, any DAW.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
       "url": "registry/packages/air-drums-0.1.0.json",
       "checksum": "sha256:0ea4e9983337f9e43f9806d952c550646c5eb1cf8aeabb8c5f8f991893a9c47c",
@@ -195,8 +195,8 @@
       "screenshot": "https://dreamlayer.app/plugin-shots/air-drums.png",
       "forwho": "For drummers, producers, and fidgeters.",
       "long": [
-        "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash \u2014 each gesture fires a General-MIDI drum on channel 10, into any DAW or drum machine.",
-        "Velocity follows how hard you move, so it feels dynamic, not robotic.",
+        "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash. Each one fires a General MIDI drum on channel 10.",
+        "Velocity follows how hard you move, so it feels dynamic instead of robotic.",
         "Pairs with Face Synth for a hands-free one-person band."
       ],
       "downloads": 0,
