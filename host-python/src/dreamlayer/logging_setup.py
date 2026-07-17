@@ -142,7 +142,14 @@ def _sanitize(val: object, depth: int = 0) -> object:
                          else _sanitize(v, depth + 1)) for k, v in val.items()}
     if isinstance(val, (list, tuple)):
         return [_sanitize(v, depth + 1) for v in val]
-    return val
+    if isinstance(val, (str, int, float, bool)) or val is None:
+        return val
+    # An opaque value (a pydantic model / dataclass / arbitrary object) is not
+    # JSON-serialisable, and its repr can carry PII the key-based redaction can't
+    # reach inside (extra={"result": <obj with .name/.transcript>}). Emit a
+    # type-only marker — NEVER the raw repr — so a caller can't bypass redaction
+    # by handing the logger an unserialisable value (refute 2026-07-17).
+    return f"<unserialised:{type(val).__name__}>"
 
 
 def _redact(val: object) -> str:
@@ -187,17 +194,21 @@ class JsonLineFormatter(logging.Formatter):
                 if _is_sensitive(key):
                     payload[key] = _redact(val)
                     continue
+                # Redact FIRST, THEN serialise the SANITISED structure. _sanitize
+                # walks nested dicts/lists redacting sensitive keys (extra=
+                # {"result": {"name": …, "transcript": …}}) and replaces opaque
+                # objects with a type marker, so its output is always JSON-safe.
+                # The old code tested json.dumps on the RAW value and fell through
+                # to repr(val) when it failed — skipping redaction entirely, so
+                # any non-serialisable value (a model, or a dict with ONE non-
+                # serialisable leaf) leaked verbatim past the scrub (refute
+                # 2026-07-17; the _sanitize wiring itself was the 2026-07-15 fix).
+                safe = _sanitize(val)
                 try:
-                    json.dumps(val)          # only serialisable extras
-                    # Recurse: a sensitive value nested under a benign key
-                    # (extra={"result": {"name": …, "transcript": …}}) is NOT
-                    # caught by the top-level _is_sensitive(key) check above, so
-                    # _sanitize walks it and redacts the inner sensitive keys.
-                    # (This wiring was missing — _sanitize existed but was never
-                    # called, so nested PII logged verbatim; audit 2026-07-15.)
-                    payload[key] = _sanitize(val)
+                    json.dumps(safe)
+                    payload[key] = safe
                 except (TypeError, ValueError):
-                    payload[key] = repr(val)
+                    payload[key] = repr(safe)
         return json.dumps(payload, separators=(",", ":"))
 
 

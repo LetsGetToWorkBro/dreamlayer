@@ -1262,7 +1262,17 @@ function isLocalUrl(u){
   else if(u.slice(0,2)==="//")rest=u.slice(2);          // //authority (scheme-relative)
   if(rest===null)return null;                           // no "//" authority — can't claim local
   let auth=rest.split("/")[0].split("?")[0].split("#")[0];
-  const at=auth.lastIndexOf("@");if(at>=0)auth=auth.slice(at+1);   // drop userinfo (host is after the last @)
+  const at=auth.lastIndexOf("@");
+  if(at>=0){
+    // urllib.urlsplit rejects a bracket in the USERINFO (raises ValueError, which
+    // is_local_endpoint catches -> REMOTE): "http://[::1]@127.0.0.1" is remote,
+    // NOT the loopback the naive after-the-@ strip would green. Mirror that or the
+    // banner shows "on your device" for a host the server silences in incognito
+    // and counts as cloud egress (refute 2026-07-17).
+    const ui=auth.slice(0,at);
+    if(ui.indexOf("[")>=0||ui.indexOf("]")>=0)return false;
+    auth=auth.slice(at+1);                              // drop userinfo (host is after the last @)
+  }
   if(auth[0]==="["){
     // A bracket holds an IPv6 literal ONLY. Python's urlsplit rejects (ValueError
     // -> remote) a bracketed name/IPv4 ("[localhost]", "[127.0.0.1]") and any junk

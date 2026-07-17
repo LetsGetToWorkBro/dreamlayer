@@ -138,9 +138,14 @@ def test_strip_secrets_removes_exactly_the_secret_fields(tmp_path):
     brain = _brain(tmp_path)
     brain.config.token = "supersecret"
     brain.config.cloud_api_key = "sk-hidden"
+    brain.config.api_key = "sk-primary-provider"    # the PRIMARY provider key
     snap = cloud_sync.strip_secrets(brain.export_backup())
     assert "token" not in snap["config"] and "cloud_api_key" not in snap["config"]
+    # REVERT-FAILING: api_key is a clear-text provider secret and must not sync
+    # off-device either (refute 2026-07-17).
+    assert "api_key" not in snap["config"]
     assert "supersecret" not in json.dumps(snap) and "sk-hidden" not in json.dumps(snap)
+    assert "sk-primary-provider" not in json.dumps(snap)
     # non-secret config survives
     assert snap["config"]["plan"] == "free"
 

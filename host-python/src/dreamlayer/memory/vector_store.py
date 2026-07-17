@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 
 from .embeddings import MockEmbeddingProvider, cosine, unpack_embedding
+from .retrieval import HIDDEN_KINDS   # shared: kinds a kind=None recall hides
 
 log = logging.getLogger("dreamlayer.vector_store")
 
@@ -59,6 +60,8 @@ class VectorStore:
         qv = self.embedder.embed(query)
         scored = []
         for m in self.db.memories(kind=kind):
+            if kind is None and m.get("kind") in HIDDEN_KINDS:
+                continue                          # bookmarks aren't recall answers
             sim = cosine(qv, self._emb_of(m))
             conf = m.get("confidence")
             conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
@@ -200,6 +203,8 @@ class VectorStore:
                 m = next((x for x in self.db.memories() if x["id"] == mid), None)
             if m is None:
                 continue           # dead row (purged) — skip, don't count it
+            if kind is None and m.get("kind") in HIDDEN_KINDS:
+                continue           # hidden bookmark — mirror the linear reference
             sim = 1.0 - float(dist)      # cosine distance → cosine similarity
             conf = m.get("confidence")
             conf = 0.5 if conf is None else float(conf)   # 0.0 stays 0.0

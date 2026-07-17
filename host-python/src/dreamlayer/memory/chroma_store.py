@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from .embeddings import MockEmbeddingProvider, unpack_embedding
+from .retrieval import HIDDEN_KINDS   # shared: kinds a kind=None recall hides
 from .vector_store import VectorStore
 
 log = logging.getLogger("dreamlayer.chroma_store")
@@ -101,6 +102,8 @@ class ChromaStore:
                 m = by_id.get(mid)
                 if m is None:
                     continue           # dead row (purged) — skip, don't count it
+                if kind is None and m.get("kind") in HIDDEN_KINDS:
+                    continue           # hidden bookmark — mirror the linear reference
                 sim = 1.0 - float(dist)   # cosine space -> sim = 1 - cosine_distance = cos
                 conf = m.get("confidence")
                 conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
