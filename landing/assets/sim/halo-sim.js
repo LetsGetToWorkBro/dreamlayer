@@ -26,7 +26,82 @@
     amber: "#FF6600",      // WARNING_AMBER (fact-check "check this")
     recall: "#5B7CFF",     // face-recall eyebrow
     border: "#2A3C44",
+    trace: "#00FFAA",      // MEMORY_TRACE
+    coralDim: "#7A3A2C",   // ACCENT_ATTENTION_DIM
   };
+
+  /* ---- Juno, as pixels — the desk accessory earns her seat on the glass.
+     32x32, quantized from landing/assets/juno/juno_icon32.png into three
+     palette levels: 1 outline, 2 body, 3 wings and highlights. Keep the
+     three copies in lockstep: here, halo-lua/display/renderer.lua and
+     hud/renderer.py (JUNO_ROWS). ------------------------------------- */
+  var JUNO_ROWS = [
+    ".......................1........",
+    "......................121.......",
+    ".................1221122........",
+    ".................1222322........",
+    "...............1.1232121........",
+    "..1221.......1222222212...1221..",
+    "..23332.....122233232....23332..",
+    "..1333331...122332212..2333331..",
+    "...2333332..12232211113333332...",
+    "...133333331.1232...233333331...",
+    "....133333332.22..1233333331....",
+    ".....1233333323322233333321.....",
+    ".......223332333322333322.......",
+    "..........222333232221..........",
+    ".......12232233323233221........",
+    ".....133333223331233333331......",
+    "....23333321233321333333332.....",
+    "....3333322.233331.23333333.....",
+    ".....22221.1333332...12222......",
+    "...........13333331.............",
+    "...........23233332.............",
+    "...........2223333321...........",
+    "...........222233333322.........",
+    "...........1222223333331........",
+    "............223222333333........",
+    "............122222133232........",
+    ".............222.2111.1.........",
+    "..............12222.............",
+    "...............2222.............",
+    "...............2211.............",
+    "...............11...............",
+    "................................"
+  ];
+  // horizontal runs [y, x, w, level], built once
+  var JUNO_SPANS = (function () {
+    var out = [], y, x, x2, row, ch;
+    for (y = 0; y < JUNO_ROWS.length; y++) {
+      row = JUNO_ROWS[y];
+      for (x = 0; x < row.length;) {
+        ch = row[x];
+        if (ch === ".") { x++; continue; }
+        x2 = x;
+        while (x2 + 1 < row.length && row[x2 + 1] === ch) x2++;
+        out.push([y, x, x2 - x + 1, +ch]);
+        x = x2 + 1;
+      }
+    }
+    return out;
+  })();
+  // her liveries (level -> palette). Veil drops the outline: gone dark.
+  var JUNO_TEAL = { 1: C.tealDim, 2: C.teal, 3: C.trace };
+  var JUNO_VEIL = { 2: C.coralDim, 3: C.coral };
+
+  // Draw Juno centred on (cx, cy) at integer pixel scale px (pixel art
+  // never tweens — scale in whole steps).
+  function drawJuno(c, cx, cy, px, colors, alpha) {
+    var ox = cx - 16 * px, oy = cy - 16 * px, i, s, col;
+    if (alpha != null) { c.save(); c.globalAlpha = alpha; }
+    for (i = 0; i < JUNO_SPANS.length; i++) {
+      s = JUNO_SPANS[i]; col = colors[s[3]];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect(ox + s[1] * px, oy + s[0] * px, s[2] * px, px);
+    }
+    if (alpha != null) c.restore();
+  }
 
   /* ======================================================================
      1. VOICE GRAMMAR — port of orchestrator/voice.py parse_intent
@@ -658,10 +733,12 @@
   };
 
   Glass.prototype._ready = function (t) {
-    var c = this.ctx, br = 0.45 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.6));
-    c.strokeStyle = rgba(C.teal, 0.6 * br); c.lineWidth = 2;
-    c.beginPath(); c.arc(CX, CX, 26, 0, Math.PI * 2); c.stroke();
-    c.fillStyle = rgba(C.teal, br); c.beginPath(); c.arc(CX, CX, 5, 0, Math.PI * 2); c.fill();
+    // Juno at the core — the brain is listening, in person. She bobs and
+    // breathes; the panel's desk accessory and the device ReadyCard wear
+    // the same sprite.
+    var bob = Math.round(2 * Math.sin(t * 1.6));
+    drawJuno(this.ctx, CX, 112 + bob, 3, JUNO_TEAL,
+      0.75 + 0.25 * Math.sin(t * 3.2));
     this.text("listening for what matters", CX, 192, "xs", C.ghost);
   };
   Glass.prototype._figment = function (f, t) {
@@ -686,11 +763,11 @@
   };
   Glass.prototype._answer = function (card, t) {
     var c = this.ctx;
-    // a soft bloomed cue ring — the "answer on the glass" arriving
+    // mini Juno delivers the answer — the cue dot grew wings; she
+    // breathes softly as the answer arrives
     var br = 0.5 + 0.5 * Math.sin((t || 0) * 2.2);
-    c.strokeStyle = rgba(C.teal, 0.14 + 0.12 * br); c.lineWidth = 1.5;
-    c.beginPath(); c.arc(CX, 66, 4, 0, Math.PI * 2); c.stroke();
-    this.text("ANSWER", CX, 66, "sm", C.teal);
+    drawJuno(c, CX, 46, 1, JUNO_TEAL, 0.8 + 0.2 * br);
+    this.text("ANSWER", CX, 70, "sm", C.teal);
     // hero answer — wrap to at most two lines, drop a size if long
     var p = String(card.primary), lines = this._wrap(p, p.length > 14 ? 16 : 12).slice(0, 2);
     var tok = (p.length > 22 || lines.length > 1) ? "lg" : "xl";
@@ -746,11 +823,9 @@
     for (var j = 0; j < lines.length; j++) this.text(lines[j], CX, 130 + j * 26, "md", C.text);
   };
   Glass.prototype._veil = function (t) {
-    var c = this.ctx, x = CX, y = CX - 6, r = 26;
-    c.strokeStyle = rgba(C.coral, 0.9); c.lineWidth = 2; c.beginPath();
-    for (var i = 0; i < 6; i++) { var a = Math.PI / 180 * (60 * i - 30), px = x + r * Math.cos(a), py = y + r * Math.sin(a); i ? c.lineTo(px, py) : c.moveTo(px, py); }
-    c.closePath(); c.stroke();
-    c.fillStyle = rgba(C.coral, 0.9); c.fillRect(x - 8, y - 8, 5, 16); c.fillRect(x + 3, y - 8, 5, 16);
+    // Juno goes dark: still on the glass, wings down, seeing nothing.
+    // She holds perfectly still — nothing about the veil may feel ambient.
+    drawJuno(this.ctx, CX, 106, 3, JUNO_VEIL, 0.6);
     this.text("PRIVACY VEIL", CX, 176, "sm", C.coral);
     this.text("Nothing is captured", CX, 198, "xs", C.ghost);
   };
