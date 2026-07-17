@@ -595,7 +595,7 @@
     this.figment = null;
     this.card = { type: "brief", eyebrow: "YOUR DAY",
       primary: "Three meetings, one deadline.",
-      detail: "Clear after 3pm.", footer: "next — 10:00 standup", shownAt: now() };
+      detail: "Clear after 3pm.", footer: "next · 10:00 standup", shownAt: now() };
     return "Your day: three meetings, one deadline, clear after three.";
   };
   // Truth Lens / Veritas (cards.fact_check) — a quiet verdict on a claim.
@@ -687,8 +687,30 @@
   function Glass(canvas, sim) {
     this.cv = canvas; this.ctx = canvas.getContext("2d"); this.sim = sim;
     this._t0 = now(); this._last = now(); this._raf = 0; this._on = true;
+    this._sparks = []; this._junoIn = null; this._wasReady = false;  // fly-in state
     this.resize();
   }
+  // Juno's arrival sparkles: spawned along her flight, aged + drawn each frame.
+  Glass.prototype._spawnSparks = function (x, y, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, s = 0.5 + Math.random() * 1.6;
+      this._sparks.push({ x: x + (Math.random() - 0.5) * 22, y: y + (Math.random() - 0.5) * 22,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0, max: 12 + Math.random() * 16, r: 2 + Math.random() * 2.5 });
+    }
+  };
+  Glass.prototype._drawSparks = function () {
+    var c = this.ctx, keep = [];
+    for (var i = 0; i < this._sparks.length; i++) {
+      var s = this._sparks[i]; s.x += s.vx; s.y += s.vy; s.vy += 0.02; s.life++;
+      var lf = 1 - s.life / s.max; if (lf <= 0) continue;
+      var col = Math.random() < 0.55 ? C.trace : C.text, r = s.r * lf;
+      c.strokeStyle = rgba(col, lf * 0.9); c.lineWidth = 1;
+      c.beginPath(); c.moveTo(s.x - r, s.y); c.lineTo(s.x + r, s.y);
+      c.moveTo(s.x, s.y - r); c.lineTo(s.x, s.y + r); c.stroke();
+      keep.push(s);
+    }
+    this._sparks = keep;
+  };
   Glass.prototype.resize = function () {
     var dpr = Math.min(root.devicePixelRatio || 1, 2);
     var css = this.cv.clientWidth || 320;
@@ -716,6 +738,12 @@
     // interrupts a running figment, then the glass returns to the countdown —
     // the way an active request takes the stage on the device.
     var fresh = sim.card && sim.card.shownAt != null && (now() - sim.card.shownAt) < 5;
+    // Juno flies in whenever the glass returns to the ready state (a card or
+    // figment clearing, or the veil lifting). The veil itself stays a hard
+    // cut — nothing about it may feel ambient — so there is no fly-out.
+    var isReady = !sim.incognito && !(sim.figment && !sim.figment.ended) && !sim.card;
+    if (isReady && !this._wasReady) this._junoIn = t;
+    this._wasReady = isReady;
     if (sim.incognito) this._veil(t);
     else if (fresh && sim.card.type === "recall") this._recall(sim.card);
     else if (fresh && sim.card.type === "answer") this._answer(sim.card, t);
@@ -729,16 +757,26 @@
     else if (sim.card && sim.card.type === "brief") this._brief(sim.card);
     else if (sim.card && sim.card.type === "toast") this._toast(sim.card);
     else this._ready(t);
+    this._drawSparks();          // arrival sparkles overlay the glass, then fade
     c.restore();
   };
 
   Glass.prototype._ready = function (t) {
-    // Juno at the core — the brain is listening, in person. She bobs and
-    // breathes; the panel's desk accessory and the device ReadyCard wear
-    // the same sprite.
-    var bob = Math.round(2 * Math.sin(t * 1.6));
-    drawJuno(this.ctx, CX, 112 + bob, 3, JUNO_TEAL,
-      0.75 + 0.25 * Math.sin(t * 3.2));
+    // Juno at the core — the brain is listening, in person. On arrival she
+    // flies up from below on a sparkle trail and settles; then she bobs and
+    // breathes. The panel's desk accessory and the device ReadyCard wear the
+    // same sprite (the fly-in is this surface's flourish).
+    var inT = this._junoIn != null ? (t - this._junoIn) : 999, DUR = 0.85;
+    var cx = CX, cy, al;
+    if (inT < DUR) {
+      var e = inT / DUR; e = e * e * (3 - 2 * e);          // smoothstep
+      cx = CX + (1 - e) * 64; cy = 112 + (1 - e) * 150; al = Math.min(1, e * 1.6);
+      this._spawnSparks(cx, cy, inT < DUR * 0.9 ? 2 : 6);  // trail, then a settle shimmer
+    } else {
+      var bob = Math.round(2 * Math.sin(t * 1.6));
+      cy = 112 + bob; al = 0.75 + 0.25 * Math.sin(t * 3.2);
+    }
+    drawJuno(this.ctx, cx, cy, 3, JUNO_TEAL, al);
     this.text("listening for what matters", CX, 192, "xs", C.ghost);
   };
   Glass.prototype._figment = function (f, t) {
