@@ -177,7 +177,13 @@ class JsonLineFormatter(logging.Formatter):
                     continue
                 try:
                     json.dumps(val)          # only serialisable extras
-                    payload[key] = val
+                    # Recurse: a sensitive value nested under a benign key
+                    # (extra={"result": {"name": …, "transcript": …}}) is NOT
+                    # caught by the top-level _is_sensitive(key) check above, so
+                    # _sanitize walks it and redacts the inner sensitive keys.
+                    # (This wiring was missing — _sanitize existed but was never
+                    # called, so nested PII logged verbatim; audit 2026-07-15.)
+                    payload[key] = _sanitize(val)
                 except (TypeError, ValueError):
                     payload[key] = repr(val)
         return json.dumps(payload, separators=(",", ":"))
