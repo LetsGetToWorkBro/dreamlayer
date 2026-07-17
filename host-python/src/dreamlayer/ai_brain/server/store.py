@@ -7,6 +7,7 @@ inspect, back up, or hand-edit.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import time
@@ -17,6 +18,15 @@ from typing import Optional
 CONFIG_FILE = "brain_config.json"
 HISTORY_FILE = "brain_history.jsonl"
 ACTIVITY_FILE = "brain_activity.jsonl"
+
+# A crashed save between mkstemp and the atomic replace can leave a
+# uniquely-named "<config>.<rand>.tmp" orphan (the per-writer temp no longer
+# self-limits to one fixed name the way "<config>.tmp" did). save() sweeps such
+# orphans, but only ones older than this grace window, so a CONCURRENT saver's
+# in-flight temp is never yanked out from under its own replace.
+_TMP_REAP_GRACE = 60.0
+
+log = logging.getLogger("dreamlayer.ai_brain.server.store")
 
 
 def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
@@ -52,6 +62,122 @@ def replace_atomic(src, dst, timeout: float = 10.0, burst: int = 50) -> None:
         delay = min(delay * 2, 0.05)
 
 
+def _reap_stale_tmps(d: Path) -> None:
+    """Best-effort sweep of orphaned '<config>.*.tmp' temps in `d`.
+
+    save() writes to a per-writer unique tempfile.mkstemp temp, then atomically
+    replaces the target with it. A hard crash BETWEEN mkstemp and replace leaves
+    that uniquely-named temp behind and — unlike the old fixed '<config>.tmp'
+    name, which the next save reused/overwrote — a unique name is never touched
+    again, so orphans would accumulate forever (refute 2026-07-17). Only temps
+    older than _TMP_REAP_GRACE are removed, so a concurrent saver's just-created
+    temp is left alone (its own replace still needs it). All errors are
+    swallowed: reaping is hygiene, never a reason to fail a save."""
+    cutoff = time.time() - _TMP_REAP_GRACE
+    try:
+        candidates = list(d.glob(CONFIG_FILE + ".*.tmp"))
+    except OSError:
+        return
+    for f in candidates:
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
+
+
+def _current_user_sid() -> Optional[str]:
+    """The calling process's user SID as a string ("S-1-5-...") on Windows.
+
+    Read straight off the process token (OpenProcessToken + GetTokenInformation
+    for TokenUser), so it's locale- and domain-independent — unlike a username,
+    which icacls would have to resolve through whatever the box's naming context
+    is. Returns None on any failure; the caller falls back to the account name.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    TOKEN_QUERY = 0x0008
+    TokenUser = 1
+    # WinDLL exists only on Windows; this fn is only reached on nt (guarded by
+    # _harden_windows_acl), but mypy checks it on every platform.
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+
+    token = wintypes.HANDLE()
+    if not advapi32.OpenProcessToken(
+            kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token)):
+        return None
+    try:
+        size = wintypes.DWORD(0)
+        advapi32.GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(size))
+        if not size.value:
+            return None
+        buf = ctypes.create_string_buffer(size.value)
+        if not advapi32.GetTokenInformation(
+                token, TokenUser, buf, size, ctypes.byref(size)):
+            return None
+        # TOKEN_USER begins with SID_AND_ATTRIBUTES { PSID Sid; ... }; the SID
+        # pointer is the first machine-word of the buffer.
+        psid = ctypes.cast(buf, ctypes.POINTER(ctypes.c_void_p))[0]
+        str_sid = ctypes.c_wchar_p()
+        if not advapi32.ConvertSidToStringSidW(
+                ctypes.c_void_p(psid), ctypes.byref(str_sid)):
+            return None
+        try:
+            return str_sid.value
+        finally:
+            kernel32.LocalFree(str_sid)
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def _harden_windows_acl(path: str) -> None:
+    """Windows only: make `path` readable/writable by ONLY the current user.
+
+    POSIX chmod(0o600) is a no-op for ACLs on Windows — it toggles just the
+    read-only attribute and sets NO ACL, so a secret config's confidentiality
+    would rest entirely on whatever ACLs it inherited from the user profile.
+    This strips inheritance and grants Full control to only the current user's
+    SID, so the pairing token + provider API keys aren't exposed to other
+    principals on a shared or misconfigured box.
+
+    Best-effort by contract: any failure is logged and swallowed — the
+    POSIX-correct 0o600 already ran, and persisting the privacy posture must
+    never crash on ACL plumbing. A hard no-op on non-Windows, so the POSIX save
+    path is not touched (returns before importing anything).
+    """
+    if os.name != "nt":
+        return
+    import subprocess
+
+    grantee = None
+    try:
+        sid = _current_user_sid()
+        if sid:
+            grantee = "*" + sid          # icacls accepts *<SID> for a grantee
+    except Exception as exc:             # ctypes/token lookup is fragile; degrade
+        log.debug("owner-only ACL: SID lookup failed for %s: %s", path, exc)
+    if grantee is None:
+        try:
+            import getpass
+            grantee = getpass.getuser()
+        except Exception as exc:
+            log.warning(
+                "owner-only ACL: could not resolve current user for %s: %s",
+                path, exc)
+            return
+    try:
+        subprocess.run(
+            ["icacls", path, "/inheritance:r", "/grant:r", grantee + ":F"],
+            check=True,
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception as exc:
+        log.warning("owner-only ACL hardening failed for %s: %s", path, exc)
+
+
 def _is_allowed_root(path: str) -> bool:
     """True if `path` may be indexed by the Brain.
 
@@ -74,6 +200,59 @@ def _is_allowed_root(path: str) -> bool:
     except (OSError, RuntimeError, ValueError):
         return False
     for root in allowed_roots:
+        if p == root or root in p.parents:
+            return True
+    return False
+
+
+# Dot-directories whose contents are secrets-at-rest by convention. ~/.config is
+# deliberately excluded — too broad, it holds ordinary app state — so this stays
+# to the clearly-secret ones (private keys, cloud creds, GPG keyrings).
+_SECRET_DOTDIRS = (".ssh", ".aws", ".gnupg")
+
+
+def _state_dir() -> Optional[Path]:
+    """The Brain's OWN state directory, resolved exactly the way every entry
+    point resolves it ($DREAMLAYER_DIR, else ~/.dreamlayer). It holds
+    brain_config.json — the pairing token + cloud_api_key + api_key in CLEAR —
+    plus the query/activity logs. None if it can't be resolved."""
+    base = os.environ.get("DREAMLAYER_DIR") or str(Path.home() / ".dreamlayer")
+    try:
+        return Path(base).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _is_index_denied(path: str) -> bool:
+    """True if `path` must be kept OUT of the Brain's index even when it passes
+    the _is_allowed_root allow-list (i.e. resolves under the user's home tree).
+
+    The allow-list permits anything under home, but the Brain's OWN state dir
+    lives there too — and its brain_config.json holds the pairing token and both
+    provider API keys in clear, while brain_history/activity hold past queries. A
+    '.json' target matches index.TEXT_EXTS, so without this denylist a symlink
+    inside a watched folder pointing at <statedir>/brain_config.json — or simply
+    adding <statedir> as a watched folder — would ingest those secrets and make
+    them RECALLABLE via /brain/ask, undercutting the 0o600/ACL secret-at-rest
+    work (refute-remediation 2026-07-17). Common secret-at-rest dotdirs (~/.ssh,
+    ~/.aws, ~/.gnupg) are refused for the same reason. The path is fully resolved
+    first so `..`/symlink escapes can't smuggle a denied target past the check;
+    an unresolvable path is refused (default-deny). This is index-only, distinct
+    from _is_allowed_root, so the Windows calendar reader can still load its
+    <statedir>/calendars/*.ics feeds (which never reach the index)."""
+    try:
+        p = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return True
+    sd = _state_dir()
+    if sd is not None and (p == sd or sd in p.parents):
+        return True
+    try:
+        home = Path.home().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    for name in _SECRET_DOTDIRS:
+        root = home / name
         if p == root or root in p.parents:
             return True
     return False
@@ -216,16 +395,29 @@ class BrainConfig:
     @classmethod
     def load(cls, cfg_dir: Path | str) -> "BrainConfig":
         p = Path(cfg_dir) / CONFIG_FILE
-        if p.exists():
-            try:
-                data = json.loads(p.read_text())
-                known = {f.name for f in field_list(cls)}
-                inst = cls(**{k: v for k, v in data.items() if k in known})
-                inst.sanitize_folders()   # a tampered/legacy file can't smuggle disallowed roots
-                return inst
-            except (ValueError, TypeError, json.JSONDecodeError):
-                pass
-        return cls()
+        try:
+            raw = p.read_text()
+        except FileNotFoundError:
+            return cls()                  # no config yet — first run
+        except OSError as exc:
+            # PermissionError etc.: a config the new owner-only ACL (Windows) or
+            # a bad mode made unreadable to THIS process would otherwise crash
+            # load — dropping the wearer out of Incognito and losing their
+            # watched folders. A missing-OR-unreadable config falls back to
+            # defaults, never raises (refute-remediation 2026-07-17). ``exists()``
+            # was dropped here: it re-raises PermissionError on an unreadable path
+            # exactly like read_text, so guarding read_text alone still crashed.
+            log.warning("brain_config load: %s unreadable (%s); using defaults",
+                        p, exc)
+            return cls()
+        try:
+            data = json.loads(raw)
+            known = {f.name for f in field_list(cls)}
+            inst = cls(**{k: v for k, v in data.items() if k in known})
+            inst.sanitize_folders()   # a tampered/legacy file can't smuggle disallowed roots
+            return inst
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return cls()
 
     def save(self, cfg_dir: Path | str) -> None:
         # tmp + atomic replace: a plain write_text can be caught torn by a crash
@@ -237,32 +429,41 @@ class BrainConfig:
         # contention, matching the JSON stores.
         d = Path(cfg_dir)
         d.mkdir(parents=True, exist_ok=True)
+        _reap_stale_tmps(d)   # sweep crash-orphaned unique temps (age-gated)
         target = d / CONFIG_FILE
-        tmp = target.with_suffix(target.suffix + ".tmp")
         # This file holds the pairing token AND the provider API keys
         # (cloud_api_key/api_key) in clear, so it must never be group/world
         # readable. write_text lands at the umask default (0o644 on POSIX),
         # which the login-entry fix (token moved off the HKCU Run value / the
         # LaunchAgent plist into this file) turned into a fresh world-readable
-        # secret leak. Create the tmp private from its first byte (O_CREAT with
-        # 0o600 — not chmod-after, which leaves a readable window) and re-assert
-        # 0o600 on the swapped-in target, so neither the tmp nor the final file
-        # ever exposes the secrets (refute 2026-07-17). On Windows the mode arg
-        # is largely inert but harmless; ACL inheritance from the user profile
-        # already scopes it there.
+        # secret leak.
+        #
+        # The temp is a per-writer UNIQUE file from tempfile.mkstemp: it opens
+        # O_EXCL at mode 0o600, so it is private from its first byte AND no two
+        # savers can collide on it. The old fixed "<config>.tmp" opened without
+        # O_EXCL was reopen-and-truncate: a stale 0o644 tmp left by a crash or an
+        # older build would be reused KEEPING its world-readable mode, leaking
+        # the secrets through the temp (refute 2026-07-17). 0o600 is re-asserted
+        # on the swapped-in target, and _harden_windows_acl adds the owner-only
+        # ACL that chmod cannot express on Windows (no-op elsewhere).
         payload = json.dumps(asdict(self), indent=2)
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd, tmp = tempfile.mkstemp(dir=str(d), prefix=CONFIG_FILE + ".",
+                                   suffix=".tmp")
         try:
             with os.fdopen(fd, "w") as fh:
                 fh.write(payload)
-            replace_atomic(str(tmp), str(target))
+            replace_atomic(tmp, str(target))
         except Exception:
-            tmp.unlink(missing_ok=True)     # no torn residue if the swap fails
+            try:
+                os.unlink(tmp)             # no torn/readable residue if it fails
+            except OSError:
+                pass
             raise
         try:
             os.chmod(target, 0o600)         # re-assert after the atomic swap
         except OSError:
             pass
+        _harden_windows_acl(str(target))    # Windows ACL; no-op on POSIX
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

@@ -96,10 +96,198 @@ def test_install_launch_agent_writes_plist(tmp_path, monkeypatch):
     assert "7778" in body
     assert "--dir" in body and cfg in body
     assert BrainConfig.load(cfg).token == "rune"
-    # The login agent IS the LAN appliance the phone pairs with, so it must
-    # opt into a network-reachable bind explicitly (re-audit 2026-07). A bare
-    # `python -m …server` stays loopback; only this deployment path binds 0.0.0.0.
-    assert "--host" in body and "0.0.0.0" in body
+    # Login autostart now launches the full menu-bar APP (server + menu bar in
+    # one process), not the headless `-m …server` that had no UI (audit
+    # 2026-07-17). The appliance binds 0.0.0.0 internally (app_main._serve), so
+    # no --host leaks onto argv.
+    assert "dreamlayer.ai_brain.menubar" in body
+    assert "dreamlayer.ai_brain.server" not in body
+    assert "--host" not in body
+
+
+def test_launch_agent_args_frozen_is_the_app_bundle():
+    # Frozen (.app): the plist runs the bundle launcher directly — the same
+    # server + menu bar the double-click app runs, NOT the headless server.
+    args = menubar.launch_agent_args(
+        directory="/Users/me/.dreamlayer", port=7778,
+        executable="/Applications/DreamLayer.app/Contents/MacOS/DreamLayer",
+        frozen=True)
+    assert args[0] == "/Applications/DreamLayer.app/Contents/MacOS/DreamLayer"
+    assert "-m" not in args and "dreamlayer.ai_brain.server" not in args
+    assert "--dir" in args and "--port" in args
+
+
+def test_launch_agent_args_source_brings_up_a_server_with_the_menubar(monkeypatch):
+    # The source LaunchAgent runs the MENU-BAR module entry (never the headless
+    # `-m dreamlayer.ai_brain.server`)…
+    args = menubar.launch_agent_args(
+        directory="/Users/me/.dreamlayer", port=7777,
+        executable="/usr/bin/python3", frozen=False)
+    assert args[:4] == ["/usr/bin/python3", "-m",
+                        "dreamlayer.ai_brain.menubar", "--dir"]
+    assert "dreamlayer.ai_brain.server" not in args
+    assert "--port" not in args              # default port omitted
+    # …but that entry (menubar.main → run_menubar) must now bring up the Brain
+    # server TOO, not just a menu bar pointed at a server that never starts (a
+    # permanently grey/offline dot with no pairing target). Finding A: assert the
+    # login-autostart entry requests a server (serve=True).
+    captured = {}
+
+    def fake_run_menubar(directory=None, port=menubar.DEFAULT_PORT, serve=False):
+        captured["serve"] = serve
+        captured["dir"] = directory
+        return 0
+    monkeypatch.setattr(menubar, "run_menubar", fake_run_menubar)
+    assert menubar.main(["--dir", "/Users/me/.dreamlayer"]) == 0
+    assert captured["serve"] is True         # the autostart serves, not just UI
+
+
+def test_source_autostart_serves_on_0_0_0_0_with_a_pairing_token(monkeypatch):
+    # The other half of Finding A: the server the source autostart starts binds
+    # 0.0.0.0 (LAN-reachable pairing target) and mints a pairing token on first
+    # run — exactly like the frozen .app's app_main._serve. Without this the dot
+    # stays grey and the paired phone has no target.
+    import dreamlayer.ai_brain.server.server as srv
+    captured: dict = {}
+
+    class _Cfg:
+        token = ""
+
+    class _FakeBrain:
+        def __init__(self, d):
+            self.config = _Cfg()
+
+        def save(self):
+            captured["saved"] = True
+
+        def start_watching(self): ...
+        def start_brief_scheduler(self): ...
+        def start_calendar_sync(self): ...
+
+    class _FakeServer:
+        def serve_forever(self):
+            captured["served"] = True        # returns at once so _serve_brain ends
+
+    def _capture(brain, host, port):
+        # mint happened before bind → token present when we authenticate
+        captured["host"] = host
+        captured["port"] = port
+        captured["token"] = brain.config.token
+        return _FakeServer()
+
+    monkeypatch.setattr(srv, "Brain", _FakeBrain)
+    monkeypatch.setattr(srv, "make_brain_server", _capture)
+    status: dict = {}
+    menubar._serve_brain("/tmp/x", 7777, status)     # thread target, run inline
+    assert status.get("bound") is True and status.get("error") is None
+    assert captured["host"] == "0.0.0.0"             # LAN-reachable, not loopback
+    assert captured["port"] == 7777
+    assert captured["token"]                          # a pairing token was minted
+    assert captured.get("served") is True
+
+
+def test_install_launch_agent_has_log_paths_and_throttle(tmp_path, monkeypatch):
+    # A boot-failing agent otherwise respawns on launchd's 10s KeepAlive floor
+    # forever, and a windowed crash vanishes with no console. The plist now
+    # points stdout/stderr at <state>/brain.log and sets a ThrottleInterval.
+    monkeypatch.setattr(menubar.Path, "home", lambda: tmp_path)
+    cfg = str(tmp_path / "cfg")
+    p = menubar.install_launch_agent(directory=cfg, token="rune", port=7778)
+    body = p.read_text()
+    assert "<key>StandardOutPath</key>" in body
+    assert "<key>StandardErrorPath</key>" in body
+    assert "brain.log" in body
+    assert "<key>ThrottleInterval</key>" in body
+    import xml.etree.ElementTree as ET
+    ET.fromstring(body)                       # still well-formed XML
+
+
+def test_uninstall_login_removes_the_plist(tmp_path, monkeypatch):
+    # The macOS mirror of the Windows tray's --uninstall-login (previously only
+    # Windows had an uninstall path).
+    monkeypatch.setattr(menubar.Path, "home", lambda: tmp_path)
+    p = menubar.install_launch_agent(directory=str(tmp_path / "cfg"),
+                                     token="rune", port=7778)
+    assert p.exists()
+    assert menubar.uninstall_launch_agent() is True
+    assert not p.exists()
+    assert menubar.uninstall_launch_agent() is False      # idempotent
+
+
+def test_main_uninstall_login_removes_the_plist(tmp_path, monkeypatch):
+    monkeypatch.setattr(menubar.Path, "home", lambda: tmp_path)
+    menubar.install_launch_agent(directory=str(tmp_path / "cfg"),
+                                 token="rune", port=7778)
+    assert menubar.agent_path().exists()
+    assert menubar.main(["--uninstall-login"]) == 0
+    assert not menubar.agent_path().exists()
+
+
+# -- opt-in "Check for updates" (click-only; injectable offline seam) ----------
+
+def _fake_release(tag, url="https://example/rel"):
+    import json as _json
+
+    def _fetch(fetch_url, timeout):
+        assert fetch_url == menubar.RELEASES_API      # hits the releases repo
+        return _json.dumps({"tag_name": tag, "html_url": url}).encode()
+    return _fetch
+
+
+def test_check_for_update_reports_available_current_and_error():
+    up = menubar.check_for_update(current="0.2.0", fetch_fn=_fake_release("v9.9.9"))
+    assert up["status"] == "update" and "9.9.9" in up["message"]
+    assert up["url"] == "https://example/rel"
+
+    same = menubar.check_for_update(current="0.2.0", fetch_fn=_fake_release("v0.2.0"))
+    assert same["status"] == "current"
+    assert "up to date" in same["message"].lower()
+
+    def boom(url, timeout):
+        raise ConnectionError("offline")
+    err = menubar.check_for_update(current="0.2.0", fetch_fn=boom)
+    assert err["status"] == "error" and "check" in err["message"].lower()
+    assert err["url"] == menubar.RELEASES_PAGE          # falls back to the page
+
+
+def test_check_for_update_prerelease_and_nonsemver_dont_false_current():
+    # Finding C: the version compare must NEVER claim "up to date" it can't
+    # justify. The old truncating parser read 1.2.3-rc1 == 1.2.3 (an rc user
+    # never saw the stable release) and mapped a non-semver latest → (0,) (which
+    # masked a real newer release).
+    #
+    # A pre-release running version is offered the stable release (rc sorts
+    # BELOW its release):
+    rc = menubar.check_for_update(current="1.2.3-rc1",
+                                  fetch_fn=_fake_release("v1.2.3"))
+    assert rc["status"] == "update"
+    assert rc["latest"] == "v1.2.3"
+    # A stable running version is NOT told to "downgrade" to a pre-release:
+    stable = menubar.check_for_update(current="1.2.3",
+                                      fetch_fn=_fake_release("v1.2.3-rc1"))
+    assert stable["status"] == "current"
+    # A non-semver latest tag ("nightly"/"stable") must NOT read as "current" —
+    # surface the release so the user can open it, never a false "up to date":
+    ns = menubar.check_for_update(current="1.2.3",
+                                  fetch_fn=_fake_release("nightly"))
+    assert ns["status"] != "current"
+    assert ns["latest"] == "nightly"
+    assert "up to date" not in ns["message"].lower()
+    # …and the clean cases still work: v-prefix equals bare, equal → current.
+    eq = menubar.check_for_update(current="1.2.3", fetch_fn=_fake_release("v1.2.3"))
+    assert eq["status"] == "current"
+    newer = menubar.check_for_update(current="1.2.3",
+                                     fetch_fn=_fake_release("v1.2.4"))
+    assert newer["status"] == "update"
+    older = menubar.check_for_update(current="1.3.0",
+                                     fetch_fn=_fake_release("v1.2.9"))
+    assert older["status"] == "current"
+
+
+def test_check_for_update_targets_the_releases_repo():
+    assert menubar.RELEASES_REPO == "LetsGetToWorkBro/dreamlayer-releases"
+    assert menubar.RELEASES_API.endswith(
+        "/repos/LetsGetToWorkBro/dreamlayer-releases/releases/latest")
 
 
 def test_install_launch_agent_pins_dir_even_when_directory_is_none(tmp_path, monkeypatch):
