@@ -59,6 +59,37 @@ class TestBuildRequest:
         assert url == "https://openrouter.ai/api/v1/chat/completions"
         assert headers["Authorization"] == "Bearer or-1"
 
+    def test_groq_preset_is_openai_compatible(self):
+        # Groq's /openai/v1 base already carries /v1, so the adapter must NOT
+        # double it — POST lands on /openai/v1/chat/completions, not /v1/v1/….
+        p = be.PROVIDER_PRESETS["groq"]
+        wire, url, _, headers = be._build_cloud_request(
+            _cfg(cloud_provider="groq", cloud_base_url=p["base_url"],
+                 cloud_api_key="gsk-1", cloud_model=p["model"]), "hi")
+        assert wire == "openai"
+        assert url == "https://api.groq.com/openai/v1/chat/completions"
+        assert headers["Authorization"] == "Bearer gsk-1"
+
+    def test_together_preset_is_openai_compatible(self):
+        p = be.PROVIDER_PRESETS["together"]
+        wire, url, _, headers = be._build_cloud_request(
+            _cfg(cloud_provider="together", cloud_base_url=p["base_url"],
+                 cloud_api_key="tg-1", cloud_model=p["model"]), "hi")
+        assert wire == "openai"
+        assert url == "https://api.together.xyz/v1/chat/completions"
+        assert headers["Authorization"] == "Bearer tg-1"
+
+    def test_deepseek_preset_is_openai_compatible(self):
+        # DeepSeek's base is the host root (like OpenAI); the adapter appends
+        # /v1/chat/completions, which DeepSeek accepts as a compat alias.
+        p = be.PROVIDER_PRESETS["deepseek"]
+        wire, url, _, headers = be._build_cloud_request(
+            _cfg(cloud_provider="deepseek", cloud_base_url=p["base_url"],
+                 cloud_api_key="ds-1", cloud_model=p["model"]), "hi")
+        assert wire == "openai"
+        assert url == "https://api.deepseek.com/v1/chat/completions"
+        assert headers["Authorization"] == "Bearer ds-1"
+
 
 class TestParseResponse:
     def test_openai_shape(self):
@@ -102,3 +133,55 @@ def test_cloud_chat_injected_still_works():
     c = BrainConfig(cloud_provider="openai", cloud_model="m", cloud_api_key="k")
     out = be.cloud_chat(c, "q", http_post=lambda url, payload: {"text": "ok"})
     assert out == "ok"
+
+
+# --- OpenAI-compatible provider presets (issue #389) -----------------------------
+#
+# Groq / Together / DeepSeek are one-click presets: pre-fill a base URL + model,
+# speak the OpenAI wire, and require a key (remote → amber egress warning). Each
+# lives in FOUR mirrored spots that must stay in sync — backends.PROVIDER_PRESETS,
+# the panel's CPROV and APROV JS tables, and the two <select> option lists. These
+# tests bite if any spot drifts.
+
+# expected shape: base_url that the adapter must resolve to /…/chat/completions
+_OPENAI_COMPAT_PRESETS = {
+    "groq": ("Groq", "https://api.groq.com/openai/v1",
+             "https://api.groq.com/openai/v1/chat/completions"),
+    "together": ("Together AI", "https://api.together.xyz/v1",
+                 "https://api.together.xyz/v1/chat/completions"),
+    "deepseek": ("DeepSeek", "https://api.deepseek.com",
+                 "https://api.deepseek.com/v1/chat/completions"),
+}
+
+
+class TestOpenAICompatPresets:
+    def test_backends_presets_are_well_formed(self):
+        for key, (label, base_url, expected_url) in _OPENAI_COMPAT_PRESETS.items():
+            p = be.PROVIDER_PRESETS[key]
+            assert p["label"] == label
+            assert p["base_url"] == base_url
+            assert p["wire"] == "openai"          # OpenAI wire, no new adapter
+            assert p["needs_key"] is True         # remote → key field + egress warn
+            assert p["model"]                     # a sensible default is pre-filled
+            # the preset resolves to a real OpenAI chat-completions endpoint
+            _, url, _, _ = be._build_cloud_request(
+                _cfg(cloud_provider=key, cloud_base_url=p["base_url"],
+                     cloud_api_key="k", cloud_model=p["model"]), "hi")
+            assert url == expected_url
+
+    def test_presets_are_remote_so_the_egress_warning_fires(self):
+        # amber (remote), never green (on-device) — the privacy contract.
+        for key in _OPENAI_COMPAT_PRESETS:
+            assert be.is_local_endpoint(be.PROVIDER_PRESETS[key]["base_url"]) is False
+
+    def test_panel_dropdowns_and_tables_mirror_backends(self):
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        for key, (label, base_url, _url) in _OPENAI_COMPAT_PRESETS.items():
+            p = be.PROVIDER_PRESETS[key]
+            # both <select>s (cloud escalation + primary API brain) list it
+            assert html.count(f'<option value="{key}">{label}</option>') == 2
+            # both JS preset tables (CPROV + APROV) carry the same base + model,
+            # so the dropdown pre-fills exactly what backends would build.
+            entry = f'{key}:{{base:"{base_url}",model:"{p["model"]}",key:true}}'
+            assert html.count(entry) == 2

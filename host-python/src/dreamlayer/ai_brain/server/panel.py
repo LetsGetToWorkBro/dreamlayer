@@ -525,6 +525,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         <option value="anthropic">Anthropic</option>
         <option value="gemini">Google Gemini</option>
         <option value="openrouter">OpenRouter</option>
+        <option value="groq">Groq</option>
+        <option value="together">Together AI</option>
+        <option value="deepseek">DeepSeek</option>
         <option value="ollama">Ollama · local (free)</option>
         <option value="dreamlayer">DreamLayer Cloud</option>
         <option value="custom">Custom (OpenAI-compatible)</option>
@@ -627,6 +630,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
           <option value="anthropic">Anthropic</option>
           <option value="gemini">Google Gemini</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
+          <option value="together">Together AI</option>
+          <option value="deepseek">DeepSeek</option>
           <option value="ollama">Ollama · local</option>
         </select>
         <input type="text" id="abase" placeholder="http://localhost:1234/v1" oninput="renderApiWarn()" style="max-width:230px">
@@ -1247,6 +1253,9 @@ const APROV={custom:{base:"",model:"",key:true},openai:{base:"https://api.openai
   anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},
   gemini:{base:"https://generativelanguage.googleapis.com",model:"gemini-1.5-flash",key:true},
   openrouter:{base:"https://openrouter.ai/api",model:"openai/gpt-4o-mini",key:true},
+  groq:{base:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile",key:true},
+  together:{base:"https://api.together.xyz/v1",model:"meta-llama/Llama-3.3-70B-Instruct-Turbo",key:true},
+  deepseek:{base:"https://api.deepseek.com",model:"deepseek-chat",key:true},
   ollama:{base:"http://localhost:11434",model:"llama3.2",key:false}};
 function apiPreset(apply){const p=APROV[$("aprov").value]||APROV.custom;
   if(apply){$("abase").value=p.base;$("amodel").value=p.model;}
@@ -1418,6 +1427,9 @@ const CPROV={
   anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},
   gemini:{base:"https://generativelanguage.googleapis.com",model:"gemini-1.5-flash",key:true},
   openrouter:{base:"https://openrouter.ai/api",model:"openai/gpt-4o-mini",key:true},
+  groq:{base:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile",key:true},
+  together:{base:"https://api.together.xyz/v1",model:"meta-llama/Llama-3.3-70B-Instruct-Turbo",key:true},
+  deepseek:{base:"https://api.deepseek.com",model:"deepseek-chat",key:true},
   ollama:{base:"http://localhost:11434",model:"llama3.2",key:false},
   dreamlayer:{base:"https://api.dreamlayer.app",model:"dreamlayer-standard",key:true},
   custom:{base:"",model:"",key:true},
