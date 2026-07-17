@@ -2242,10 +2242,42 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 brain.activity.add("config", f"Cleared {what}")
             self._json(200, {"ok": True, "stats": brain.index.stats()})
 
+        def _account_remote_test(self, provider, base, label) -> "dict | None":
+            """A 'Test connection' probe still leaves the device when the
+            endpoint is REMOTE — so it must obey the SAME rule as a real query:
+            refused while incognito, and counted+logged as egress otherwise.
+            Before this, the test path fired a fixed prompt PLUS the wearer's API
+            key to a public host uncounted and even while incognito, directly
+            contradicting the panel's promise ('counted and logged … silenced
+            while you're incognito'). Locality is judged on the EFFECTIVE base
+            (a blank base_url falls back to the provider preset, which is
+            remote), so a blank-but-preset endpoint isn't under-counted. Returns
+            a refusal dict to short-circuit, or None to proceed; a local/unset
+            endpoint is not egress. (audit 2026-07-15, sibling-call-site of
+            _ask_cloud / _ask_primary_api.)"""
+            from .backends import is_local_endpoint, PROVIDER_PRESETS
+            preset = PROVIDER_PRESETS.get(provider or "custom",
+                                          PROVIDER_PRESETS["custom"])
+            effective = (base or "").strip() or preset.get("base_url", "")
+            if not effective or is_local_endpoint(effective):
+                return None                     # on-device / unset: free
+            if brain.incognito_now():
+                return {"ok": False, "error":
+                        "a remote endpoint isn't tested while you're incognito"}
+            brain.config.cloud_calls += 1
+            brain.activity.add("cloud-egress", label)
+            brain.save()
+            return None
+
         def _post_cloud_test(self, path, qs):
             """Probe the configured cloud provider — local-only."""
             if not self._from_localhost():
                 self._json(403, {"error": "local-only"}); return
+            refusal = self._account_remote_test(
+                brain.config.cloud_provider, brain.config.cloud_base_url,
+                "Tested the cloud endpoint")
+            if refusal is not None:
+                self._json(200, refusal); return
             from .backends import cloud_test
             self._json(200, cloud_test(brain.config))
 
@@ -2253,6 +2285,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Probe the wearer's primary API brain (api_* config) — local-only."""
             if not self._from_localhost():
                 self._json(403, {"error": "local-only"}); return
+            refusal = self._account_remote_test(
+                brain.config.api_provider, brain.config.api_base_url,
+                "Tested your API brain")
+            if refusal is not None:
+                self._json(200, refusal); return
             from .backends import api_test
             self._json(200, api_test(brain.config))
 
