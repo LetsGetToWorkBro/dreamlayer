@@ -28,6 +28,92 @@ def _ellipsize(text: str, max_chars: int) -> str:
     return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
 
 
+# ---------------------------------------------------------------------------
+# Juno, as pixels — the desk accessory earns her seat on the glass.
+# 32x32, quantized from landing/assets/juno/juno_icon32.png into three
+# palette levels: 1 outline, 2 body, 3 wings and highlights. Keep the
+# three copies in lockstep: here, halo-lua/display/renderer.lua
+# (JUNO_ROWS) and landing/assets/sim/halo-sim.js (JUNO_ROWS).
+# ---------------------------------------------------------------------------
+_JUNO_ROWS = (
+    ".......................1........",
+    "......................121.......",
+    ".................1221122........",
+    ".................1222322........",
+    "...............1.1232121........",
+    "..1221.......1222222212...1221..",
+    "..23332.....122233232....23332..",
+    "..1333331...122332212..2333331..",
+    "...2333332..12232211113333332...",
+    "...133333331.1232...233333331...",
+    "....133333332.22..1233333331....",
+    ".....1233333323322233333321.....",
+    ".......223332333322333322.......",
+    "..........222333232221..........",
+    ".......12232233323233221........",
+    ".....133333223331233333331......",
+    "....23333321233321333333332.....",
+    "....3333322.233331.23333333.....",
+    ".....22221.1333332...12222......",
+    "...........13333331.............",
+    "...........23233332.............",
+    "...........2223333321...........",
+    "...........222233333322.........",
+    "...........1222223333331........",
+    "............223222333333........",
+    "............122222133232........",
+    ".............222.2111.1.........",
+    "..............12222.............",
+    "...............2222.............",
+    "...............2211.............",
+    "...............11...............",
+    "................................",
+)
+
+
+def _juno_spans() -> list[tuple[int, int, int, int]]:
+    """Horizontal runs (y, x, width, level), built once at import."""
+    spans = []
+    for y, row in enumerate(_JUNO_ROWS):
+        x = 0
+        while x < len(row):
+            ch = row[x]
+            if ch == ".":
+                x += 1
+                continue
+            x2 = x
+            while x2 + 1 < len(row) and row[x2 + 1] == ch:
+                x2 += 1
+            spans.append((y, x, x2 - x + 1, int(ch)))
+            x = x2 + 1
+    return spans
+
+
+_JUNO_SPANS = _juno_spans()
+
+# Her liveries (level -> theme color). Veil drops the outline level:
+# gone dark, not re-lit.
+_JUNO_TEAL = {1: T.ACCENT_MEMORY_DIM, 2: T.ACCENT_MEMORY, 3: T.MEMORY_TRACE}
+_JUNO_SUCCESS = {1: T.ACCENT_SUCCESS_DIM, 2: T.ACCENT_SUCCESS, 3: T.ACCENT_SUCCESS}
+_JUNO_VEIL = {2: T.ACCENT_ATTENTION_DIM, 3: T.PRIVACY_DANGER}
+
+
+def draw_juno(draw, cx, cy, px, colors, alpha=255):
+    """Draw Juno centred on (cx, cy) at integer pixel scale `px` (pixel
+    art never tweens — scale in whole steps). `colors` maps level to a
+    theme color; a missing level is skipped."""
+    ox, oy = cx - 16 * px, cy - 16 * px
+    for y, x, w, level in _JUNO_SPANS:
+        color = colors.get(level)
+        if color is None:
+            continue
+        r_, g_, b_ = _hex_to_rgb(color)
+        draw.rectangle(
+            [ox + x * px, oy + y * px,
+             ox + (x + w) * px - 1, oy + (y + 1) * px - 1],
+            fill=(r_, g_, b_, alpha))
+
+
 def _font(size_token: str) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     px = FONT_PX.get(size_token, 13)
     candidates = [
@@ -589,13 +675,8 @@ class CardRenderer:
     # ------------------------------------------------------------------
 
     def _ready(self, draw, card):
-        hex_pts = []
-        for i in range(6):
-            angle = math.radians(60 * i - 30)
-            hex_pts.append((CX + 8 * math.cos(angle), CY + 8 * math.sin(angle)))
-        hex_pts.append(hex_pts[0])
-        r_, g_, b_ = _hex_to_rgb(T.MEMORY_TRACE)
-        draw.polygon(hex_pts[:6], fill=(r_, g_, b_, 255))
+        # Juno at the core — the brain is listening, in person
+        draw_juno(draw, CX, CY, 1, _JUNO_TEAL)
         grad_arc(draw, CX, CY, 24, 180, 360, RAMP_MEMORY, 32)
         draw_elliptical_arc(draw, CX, CY, 36, 36, 0, 270, 1, T.MEMORY_TRACE, alpha=34)
         draw_elliptical_arc(draw, CX, CY, 48, 48, 270, 90, 1, T.MEMORY_TRACE, alpha=17)
@@ -806,7 +887,8 @@ class CardRenderer:
     def _privacy_veil(self, draw, card):
         self._arc(draw, CX, CY, 108, 10, 350, 1, T.PRIVACY_DANGER, alpha=34)
         self._circle(draw, CX, CY, 88, 1, T.PRIVACY_DANGER, alpha=18)
-        draw_shield_glyph(draw, (CX, CY - 14), 52, 2, T.PRIVACY_DANGER, alpha=255, pause_bars=True)
+        # Juno goes dark: still with you, wings down, seeing nothing
+        draw_juno(draw, CX, CY - 14, 2, _JUNO_VEIL)
         self._text_rgba(draw, CX, CY + 32, "PRIVACY VEIL", "sm", T.PRIVACY_CAUTION, alpha=220)
         self._text_rgba(draw, CX, CY + 48, "Nothing is captured", "xs", T.TEXT_GHOST, alpha=140)
 
@@ -1126,9 +1208,10 @@ class CardRenderer:
         accent = T.ACCENT_SUCCESS if action else T.ACCENT_MEMORY
         body = str(card.get("primary") or "")
         self._pane(draw, 132, 78)
-        # eyebrow with a bloomed status dot
-        bloom_ring(draw, CX - 40, 64, 3, accent)
-        self._dot(draw, CX - 40, 64, 3, accent)
+        # the status dot grew wings: mini Juno signs her own card
+        draw_juno(draw, CX - 40, 62, 1,
+                  _JUNO_SUCCESS if action else _JUNO_TEAL)
+        bloom_ring(draw, CX - 40, 62, 15, accent)
         self._text_rgba(draw, CX + 6, 64, "JUNO",
                         "xs", accent, alpha=235)
         grad_line(draw, 60, 82, 196, 82, RAMP_SUCCESS if action else RAMP_MEMORY)
