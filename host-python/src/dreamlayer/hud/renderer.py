@@ -772,8 +772,8 @@ class CardRenderer:
             alpha = 255 - ((i * 3) % n) * 18
             self._arc(draw, CX, CY, 40, a0, a0 + span - gap, 2,
                       T.MEMORY_TRACE, alpha=max(40, alpha))
-        self._dot(draw, CX, CY, 3, T.MEMORY_TRACE, alpha=255)
-        self._dot(draw, CX, CY, 6, T.MEMORY_TRACE, alpha=40)
+        # Juno at the still centre — the thought the chase circles around
+        draw_juno(draw, CX, CY, 1, _JUNO_TEAL)
 
     def _object_recall(self, draw, card):
         """Meridian Solid v3 — a spatial scene, not a text list.
@@ -870,8 +870,9 @@ class CardRenderer:
         lengths = [38.0, 52.0, 44.0, 30.0, 46.0]
         draw_radial_rays(draw, CX, CY - 10, 5, lengths,
                          T.MEMORY_TRACE, alpha=160, tip_bloom=True, stroke=1)
-        self._dot(draw, CX, CY - 10, 3, T.MEMORY_TRACE, alpha=200)
-        bloom_ring(draw, CX, CY - 10, 3, T.MEMORY_TRACE)
+        # the rays fan out from Juno — she is the one bringing the memory back
+        draw_juno(draw, CX, CY - 10, 1, _JUNO_TEAL)
+        bloom_ring(draw, CX, CY - 10, 15, T.MEMORY_TRACE)
         self._multiline_text(draw, CX, CY + 50, summary, "md", T.TEXT_SECONDARY, max_width=180)
         if person:
             self._text_rgba(draw, CX, CY + 78, f"With {person}",
@@ -1259,10 +1260,11 @@ class CardRenderer:
         question = str(card.get("detail") or "")
         footer = str(card.get("footer") or "")
         self._pane(draw, 128, 78)
-        # dot sits clear of the 25-char eyebrow (its bloom was grazing the first
-        # glyph — the golden eyeball pass in #87; mirrors the Lua CX-88 nudge)
-        bloom_ring(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
-        self._dot(draw, CX - 88, 70, 3, T.ACCENT_MEMORY)
+        # mini-Juno sits clear of the 25-char eyebrow, where the dot did
+        # (the CX-88 nudge from the golden eyeball pass in #87 still applies):
+        # she's the one surfacing the answer, so she signs the card
+        draw_juno(draw, CX - 88, 70, 1, _JUNO_TEAL)
+        bloom_ring(draw, CX - 88, 70, 15, T.ACCENT_MEMORY)
         self._text_rgba(draw, CX + 4, 70, "ON THE TIP OF YOUR TONGUE",
                         "xs", T.ACCENT_MEMORY, alpha=225)
         grad_line(draw, 52, 88, 204, 88, RAMP_MEMORY)

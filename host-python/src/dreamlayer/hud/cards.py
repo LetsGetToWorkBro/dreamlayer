@@ -590,7 +590,7 @@ def taste(ranking=None, unavailable: bool = False) -> dict:
             continue                          # the winner is the hero, not a row
         mark = "" if it.ok else "✕ "
         why = " · ".join(it.reasons)
-        rows.append(f"{mark}{it.label}" + (f" — {why}" if why else ""))
+        rows.append(f"{mark}{it.label}" + (f" · {why}" if why else ""))
     eyebrow = "BEST PICK" if not unavailable else "TASTELENS"
     accent = T.TEXT_GHOST if unavailable else T.ACCENT_MEMORY
     lines = [eyebrow] + ([primary] if primary else []) + rows[:6]
@@ -1197,8 +1197,8 @@ ALL_SAMPLES: dict[str, dict] = {
         "has_avatar": True,
         "contact_id": "c-jordan-001",
     },
-    "juno_reply":        juno_reply("The lease is in your Documents — due Friday.", "answer"),
-    "hark":                hark(clue="Marcus is 2 min away — you owe him the lease.",
+    "juno_reply":        juno_reply("The lease is in your Documents, due Friday.", "answer"),
+    "hark":                hark(clue="Marcus is 2 min away. You owe him the lease.",
                                 detail="from your last chat"),
     "listening":           listening(source="voice"),
     "fact_check":          fact_check(
@@ -1208,7 +1208,7 @@ ALL_SAMPLES: dict[str, dict] = {
         corroboration="elevated · seen before"),
     "answer_ahead":        answer_ahead(
         question="When did we last ship to Denver?",
-        answer="March 14th — two pallets.",
+        answer="March 14th, two pallets.",
         speaker="Priya", source="your files"),
     "morning_brief":       morning_brief(
         text="Two meetings and the lease is due Friday. Marcus texted twice.",
