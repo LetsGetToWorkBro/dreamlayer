@@ -206,6 +206,40 @@ class TestIncognitoNeverFetches:
         out = ws.load_ics_sources(BrainConfig(network_mode="lan_only"))
         assert [name for name, _ in out] == ["home"]
 
+    def test_calendars_dir_symlink_escaping_allowlist_is_refused(
+            self, tmp_path, monkeypatch):
+        # A junction/symlink dropped in <state>/calendars that RESOLVES outside
+        # the user's own tree must be refused — the `*.ics` glob lists it, but
+        # every glob result flows through store._is_allowed_root (which
+        # resolve()s), the same default-deny gate that guards calendar_ics file
+        # entries and watched folders (audit 2026-07-17). Revert-failing: drop
+        # the _is_allowed_root check on glob paths and `escape` gets read.
+        import os
+        from dreamlayer.ai_brain.server import store
+        # Narrow the allow-list to `allowed/` so `outside/` is genuinely outside
+        # the user tree (real HOME/tmp on CI both contain pytest's tmp_path).
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir(); outside.mkdir()
+        monkeypatch.setenv("HOME", str(allowed))          # POSIX Path.home()
+        monkeypatch.setattr(store.tempfile, "gettempdir", lambda: str(allowed))
+        state = allowed / ".dreamlayer"
+        cal = state / "calendars"; cal.mkdir(parents=True)
+        monkeypatch.setenv("DREAMLAYER_DIR", str(state))
+        # a readable .ics OUTSIDE the allow-list — the symlink's real target
+        secret = outside / "secret.ics"
+        secret.write_text(_ics(_vevent("Exfil", "20260101T000000Z"),
+                               name="Secret"))
+        (cal / "home.ics").write_text(_ics(name="Home"))  # legit, allow-listed
+        try:
+            os.symlink(secret, cal / "escape.ics")        # junction analogue
+        except (OSError, NotImplementedError):
+            import pytest
+            pytest.skip("symlinks unavailable (Windows without privilege)")
+        names = [name for name, _ in ws.load_ics_sources(BrainConfig())]
+        assert "home" in names            # the allow-listed file is still read
+        assert "escape" not in names      # the escaping junction is refused
+
 
 # ---------------------------------------------------------------------------
 # Wiring: the Brain picks the honest platform default; seams still win

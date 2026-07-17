@@ -12,8 +12,20 @@
  */
 import * as Notifications from "expo-notifications";
 import { t } from "../i18n";
+import { useBrainStore } from "../state/useBrainStore";
+import { useVitalsStore } from "../state/useVitalsStore";
 
 let requested = false;
+
+/** Is the Veil up right now? This is the SAME composite signal the relay
+ *  chokepoint enforces (lensRelay.captureSuppressed / useBrainStore.veilClosed):
+ *  the phone/session paused capture (capturePaused, which local incognito forces
+ *  on synchronously) OR the glasses raised the Veil (PRIVACY_VEIL telemetry →
+ *  useVitalsStore.veiled). While it's up, recalled personal content must not
+ *  reach a local notification (lock screen / notification log). */
+function veiled(): boolean {
+  return useBrainStore.getState().capturePaused || useVitalsStore.getState().veiled;
+}
 
 export async function ensurePermission(): Promise<boolean> {
   try {
@@ -64,13 +76,32 @@ export async function ensureChannel(channel: NotifyChannel): Promise<void> {
       importance,
       // the brand teal on the notification LED, matching the small-icon accent
       lightColor: "#0B6B52",
+      // Defense in depth: these channels carry personal content (a sender/subject,
+      // the synthesized brief). PRIVATE keeps the notification on the lock screen
+      // but lets the OS redact its content on a SECURE lock screen — the correct
+      // posture for personal channels, and identical to today when the phone is
+      // unlocked. The veil gate in pushLocal is the actual leak-closer; this
+      // narrows the blast radius if content ever slips through.
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PRIVATE,
     } as never);
   } catch {
     /* channels unavailable (web/tests) — scheduling will still degrade safely */
   }
 }
 
-/** Present a local notification now. Silently no-ops without permission. */
+/** Present a local notification now. Silently no-ops without permission.
+ *
+ *  Veil gate (single chokepoint — every caller, present and future, is covered
+ *  here rather than at each call-site): message/brief notifications render
+ *  recalled personal content (sender + subject/body, the synthesized brief). If
+ *  they fired while the wearer is incognito or the Veil is up, that content would
+ *  land on the Android/iOS lock screen and persist in the notification log during
+ *  a session the wearer set to private. So while `veiled()`, we still post a
+ *  notification (so the wearer isn't silently cut off from "something arrived"),
+ *  but strip it to a content-free placeholder: the channel's own localized name
+ *  as the title and an EMPTY body — no sender, no subject, no text, no brief.
+ *  Nothing personal reaches the lock screen or log. Normal (non-veiled) posting
+ *  is byte-for-byte unchanged. */
 export async function pushLocal(
   title: string,
   body: string,
@@ -79,8 +110,13 @@ export async function pushLocal(
   try {
     if (!(await ensurePermission())) return;
     await ensureChannel(channel);
+    const content = veiled()
+      ? // content-free placeholder: the passed title is the SENDER for messages,
+        // so it can't be reused — fall back to the generic, localized channel name.
+        { title: t(CHANNELS[channel].nameKey), body: "" }
+      : { title, body: (body || "").slice(0, 140) };
     await Notifications.scheduleNotificationAsync({
-      content: { title, body: (body || "").slice(0, 140) },
+      content,
       // a channelId-only trigger = "present now, on this channel" on Android;
       // null = "present now" everywhere else
       trigger: isAndroid() ? ({ channelId: channel } as never) : null,

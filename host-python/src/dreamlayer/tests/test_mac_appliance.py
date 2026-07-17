@@ -83,11 +83,35 @@ def test_launch_agent_plist_is_valid_and_runs_the_server():
 
 def test_install_launch_agent_writes_plist(tmp_path, monkeypatch):
     monkeypatch.setattr(menubar.Path, "home", lambda: tmp_path)
-    p = menubar.install_launch_agent(directory=str(tmp_path / "cfg"), token="rune", port=7778)
+    cfg = str(tmp_path / "cfg")
+    p = menubar.install_launch_agent(directory=cfg, token="rune", port=7778)
     assert p.exists() and p.name == "vision.dreamlayer.brain.plist"
     body = p.read_text()
-    assert "--token" in body and "rune" in body and "7778" in body
+    # The pairing token must NEVER land in the plist ProgramArguments: the plist
+    # is readable and argv shows in `ps`, so a `--token <secret>` there leaked
+    # the pairing secret exactly like the Windows HKCU Run value did (refute
+    # 2026-07-17). It is persisted to brain_config.json instead, and the plist
+    # is pinned to that --dir so login-time resolves the same config.
+    assert "--token" not in body and "rune" not in body
+    assert "7778" in body
+    assert "--dir" in body and cfg in body
+    assert BrainConfig.load(cfg).token == "rune"
     # The login agent IS the LAN appliance the phone pairs with, so it must
     # opt into a network-reachable bind explicitly (re-audit 2026-07). A bare
     # `python -m …server` stays loopback; only this deployment path binds 0.0.0.0.
     assert "--host" in body and "0.0.0.0" in body
+
+
+def test_install_launch_agent_pins_dir_even_when_directory_is_none(tmp_path, monkeypatch):
+    # Regression: with directory=None the plist previously carried no --dir, so a
+    # DREAMLAYER_DIR set only in the install shell would send the token to dir A
+    # while the login agent re-resolved dir B, found none, and minted a fresh one
+    # (breaking the paired phone). The token dir is now pinned into the plist.
+    monkeypatch.setattr(menubar.Path, "home", lambda: tmp_path)
+    envdir = str(tmp_path / "envcfg")
+    monkeypatch.setenv("DREAMLAYER_DIR", envdir)
+    p = menubar.install_launch_agent(directory=None, token="rune", port=7778)
+    body = p.read_text()
+    assert "--token" not in body and "rune" not in body
+    assert "--dir" in body and envdir in body
+    assert BrainConfig.load(envdir).token == "rune"

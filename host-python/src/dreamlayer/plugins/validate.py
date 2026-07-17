@@ -74,6 +74,18 @@ _DANGER_CALLS = {
     ("asyncio", "open_connection"): "network",
     ("asyncio", "open_unix_connection"): "network",
 }
+# asyncio EVENT-LOOP socket openers (loop.create_connection(...)). The loop is
+# usually an unresolved call result — asyncio.new_event_loop().create_connection()
+# — so the module-qualified table above never sees the receiver. These method
+# names are distinctive raw-socket openers; flag them on ANY receiver so a
+# connector can't reach the network through a loop without declaring it. Over-
+# declaration is the safe direction (refute 2026-07-17). ``ssl`` egress
+# (ssl.get_server_certificate opens a TCP socket) is caught via _DANGER_IMPORTS.
+_NET_METHOD_OPENERS = {
+    "create_connection", "create_unix_connection", "sock_connect",
+    "create_datagram_endpoint", "connect_accepted_socket",
+    "create_server", "create_unix_server",
+}
 # modules any of whose attributes reaching a dynamic name (getattr(mod, x)) we
 # can't resolve statically — treated as a sensitive receiver so a dynamic
 # attribute grab can't launder a call past the (module, attr) table.
@@ -90,6 +102,7 @@ _DANGER_IMPORTS = {
     # additional network-egress modules the old table missed, so a plugin could
     # exfiltrate via SMTP/FTP/telnet/websockets without declaring 'network'
     # (audit 2026-07-14).
+    "ssl": "network",   # ssl.get_server_certificate((host,port)) opens a TCP socket
     "smtplib": "network", "ftplib": "network", "telnetlib": "network",
     "websocket": "network", "websockets": "network",
     "httpx": "network", "aiohttp": "network",
@@ -197,10 +210,17 @@ class _DangerScanner(ast.NodeVisitor):
             elif f.id in self._call_alias:         # renamed `from … import x`
                 mod, attr = self._call_alias[f.id]
                 self._flag_modattr(mod, attr, f"{mod}.{attr}()")
-        elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-            # resolve the receiver through the alias map (o -> os)
-            mod = self._resolve_mod(f.value.id)
-            self._flag_modattr(mod, f.attr, f"{mod}.{f.attr}()")
+        elif isinstance(f, ast.Attribute):
+            if isinstance(f.value, ast.Name):
+                # resolve the receiver through the alias map (o -> os)
+                mod = self._resolve_mod(f.value.id)
+                self._flag_modattr(mod, f.attr, f"{mod}.{f.attr}()")
+            # An asyncio event-loop's raw-socket openers reach the network, but the
+            # loop is typically an unresolved call result (new_event_loop()...), so
+            # the module-qualified check above never sees it. Flag the distinctive
+            # opener method names on ANY receiver (refute 2026-07-17).
+            if f.attr in _NET_METHOD_OPENERS:
+                self._need("network", f".{f.attr}()")
         self.generic_visit(node)
 
     def _scan_getattr(self, node):

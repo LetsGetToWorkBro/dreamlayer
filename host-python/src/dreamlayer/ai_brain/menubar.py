@@ -97,13 +97,30 @@ def install_launch_agent(directory: str | None = None, token: str = "",
     phone pairs with, so it must be LAN-reachable. Safety comes from the token —
     a non-loopback bind with no token mints one on first run (server __main__).
     (A bare `python -m …server` stays loopback-only; only this deployment path
-    opts into the LAN.)"""
+    opts into the LAN.)
+
+    The pairing token is NEVER put in the plist ProgramArguments. The plist under
+    ~/Library/LaunchAgents is readable, and argv is visible to any `ps`, so a
+    `--token <secret>` there leaked the pairing secret exactly like the Windows
+    HKCU Run value did. Instead the token is persisted to brain_config.json (the
+    launched server reads it from disk via BrainConfig.load — the same path
+    run_menubar and server __main__ already use), and the plist is pinned to that
+    --dir so login-time and install-time agree on where the token lives
+    (refute 2026-07-17; this is the macOS half of the Windows tray fix)."""
     args = [sys.executable, "-m", "dreamlayer.ai_brain.server",
             "--host", "0.0.0.0", "--port", str(port)]
+    if token:
+        from .server.store import BrainConfig
+        cfg_dir = directory or os.environ.get(
+            "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
+        cfg = BrainConfig.load(cfg_dir)
+        if cfg.token != token:
+            cfg.token = token
+            cfg.save(cfg_dir)
+        directory = cfg_dir   # pin the plist --dir to where the token lives
     if directory:
         args += ["--dir", directory]
-    if token:
-        args += ["--token", token]
+    # NB: no `--token` — the launched server reads it from brain_config.json.
     p = agent_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(launch_agent_plist(args, working_dir=directory or str(Path.home())))
