@@ -280,8 +280,13 @@ class TestLanceConfidenceZeroNotCoerced:
 
 
 # ===========================================================================
-# Finding 4 (ChromaStore): a persistent collection must be dropped on forget
-# even when THIS instance never searched (fresh process after restart).
+# Finding 4 (ChromaStore): forgetting must reach the PERSISTED collection even
+# when THIS instance never searched (fresh process after restart). #415 keys
+# vectors by stable memory_id, so evict() deletes exactly one vector (via
+# _get_col, which opens the persisted collection); purge_all() drops the whole
+# collection. The gap #415 left: _drop_collection early-returned when
+# _client/_col were both None, so purge_all BEFORE any search left the on-disk
+# collection intact — the lazy client-open in _drop_collection closes that.
 # ===========================================================================
 def _make_fake_chroma():
     disk: dict[str, dict] = {}   # path -> {name: collection}  (== on-disk state)
@@ -295,10 +300,22 @@ def _make_fake_chroma():
             for i, e, meta in zip(ids, embeddings, metadatas):
                 self.items[i] = (list(e), meta)
 
-        def query(self, query_embeddings, n_results):
+        def count(self):
+            return len(self.items)
+
+        def delete(self, ids):
+            # single-vector forget: drop exactly the given ids (#415 keys by
+            # stable memory_id, so evict removes one vector, not the collection)
+            for i in ids:
+                self.items.pop(i, None)
+
+        def query(self, query_embeddings, n_results, where=None):
             q = query_embeddings[0]
-            scored = sorted((1.0 - _dot(q, e), i)
-                            for i, (e, _m) in self.items.items())
+            items = self.items.items()
+            if where:                       # kind isolation lives in the query
+                want = where.get("kind")
+                items = [(i, ev) for i, ev in items if ev[1].get("kind") == want]
+            scored = sorted((1.0 - _dot(q, e), i) for i, (e, _m) in items)
             scored = scored[:n_results]
             return {"ids": [[i for _d, i in scored]],
                     "distances": [[d for d, _i in scored]]}
@@ -349,21 +366,30 @@ class TestChromaPersistentResidue:
         # leaving the forgotten embedding sitting in the persisted collection.
         assert "mem" not in disk[path], "persistent collection (embedding) survived forget"
 
-    def test_evict_before_search_also_drops_on_disk_collection(self, monkeypatch, tmp_path):
+    def test_evict_before_search_removes_only_that_vector_on_disk(self, monkeypatch, tmp_path):
+        # #415 keys vectors by stable memory_id, so evict() deletes exactly the
+        # forgotten vector — even on a fresh never-searched instance, which
+        # opens the persisted collection (via _get_col) to remove that one id.
+        # The kept memory's vector (and the collection) survive.
         fake, disk = _make_fake_chroma()
         monkeypatch.setattr(chroma_store, "_HAS_CHROMA", True)
         monkeypatch.setattr(chroma_store, "chromadb", fake, raising=False)
         path = str(tmp_path / "chroma")
         emb = MockEmbeddingProvider()
         db = MemoryDB(":memory:")
-        mid = db.add_memory("scene", "keys on the counter",
-                            embedding=emb.embed("keys on the counter"), confidence=0.6)
-        ChromaStore(db, embedder=emb, path=path, collection="mem").search("keys", top_k=1)
-        assert disk[path]["mem"].items != {}
+        keep = db.add_memory("scene", "keys on the counter",
+                             embedding=emb.embed("keys on the counter"), confidence=0.6)
+        drop = db.add_memory("scene", "the spare key under the mat",
+                             embedding=emb.embed("the spare key under the mat"), confidence=0.6)
+        ChromaStore(db, embedder=emb, path=path, collection="mem").search("keys", top_k=2)
+        assert {str(keep), str(drop)} <= set(disk[path]["mem"].items)   # both persisted
 
         fresh = ChromaStore(db, embedder=emb, path=path, collection="mem")
-        fresh.evict(mid)                              # forget one, before search
-        assert "mem" not in disk[path]                # REVERT-FAILING
+        fresh.evict(drop)                             # forget one, before search
+        # REVERT-FAILING: the forgotten vector is gone from the on-disk
+        # collection; the kept one (and the collection) survive.
+        assert str(drop) not in disk[path]["mem"].items
+        assert str(keep) in disk[path]["mem"].items
 
     def test_realpath_matches_linear_reference(self, monkeypatch, tmp_path):
         # Dep-free pin that Chroma's real branch (over-fetch + blend + re-sort +
