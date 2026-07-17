@@ -80,6 +80,34 @@ class TestOneClickDiscovery:
         # every discovered endpoint is localhost → on-device by construction
         assert all(is_local_endpoint(a["base_url"]) for a in found.values())
 
+    def test_discover_finds_gpt4all_and_koboldcpp(self):
+        # GPT4All (:4891) and KoboldCpp (:5001) both expose an OpenAI-compatible
+        # /v1/models endpoint; a running one must be discovered with its models.
+        def fake(url, timeout):
+            if "4891" in url:
+                return {"data": [{"id": "Llama-3-8B-Instruct"}]}   # GPT4All up
+            if "5001" in url:
+                return {"data": [{"id": "koboldcpp/tiefighter"}]}  # KoboldCpp up
+            raise ConnectionError("down")                          # all else off
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"GPT4All", "KoboldCpp"}
+        assert found["GPT4All"]["provider"] == "custom"
+        assert found["GPT4All"]["base_url"] == "http://localhost:4891/v1"
+        assert found["GPT4All"]["models"] == ["Llama-3-8B-Instruct"]
+        assert found["KoboldCpp"]["provider"] == "custom"
+        assert found["KoboldCpp"]["base_url"] == "http://localhost:5001/v1"
+        assert found["KoboldCpp"]["models"] == ["koboldcpp/tiefighter"]
+        # both endpoints are localhost → on-device by construction
+        assert all(is_local_endpoint(a["base_url"]) for a in found.values())
+
+    def test_gpt4all_and_koboldcpp_base_urls_do_not_double_the_v1_segment(self):
+        # the /v1-suffixed base_urls discovery hands back for the new agents must
+        # resolve to a single /v1 segment, not /v1/v1/chat/completions
+        _, u1, _, _ = _build_request("custom", "http://localhost:4891/v1", "m", "", "q")
+        _, u2, _, _ = _build_request("custom", "http://localhost:5001/v1", "m", "", "q")
+        assert u1 == "http://localhost:4891/v1/chat/completions"
+        assert u2 == "http://localhost:5001/v1/chat/completions"
+
     def test_discover_empty_when_nothing_running(self):
         def down(url, timeout):
             raise OSError("refused")
