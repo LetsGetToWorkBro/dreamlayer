@@ -304,6 +304,16 @@ local JUNO_TEAL    = { P.accent_memory_dim, P.accent_memory, P.memory_trace }
 local JUNO_SUCCESS = { P.accent_success_dim, P.accent_success, P.accent_success }
 local JUNO_VEIL    = { [2] = P.accent_attention_dim, [3] = P.privacy_danger }
 
+-- The Platinum title-bar pinstripe, in the glass palette: three stacked
+-- hairlines (bright -> mid -> dim teal). A quiet bridge to the panel's
+-- pinstripe, drawn only in the eyebrow rule where it never meets body text.
+local function pinstripe_rule(x0, x1, y)
+  if not HAS_FRAME then return end
+  frame.display.line(x0, y,   x1, y,   P.memory_trace)
+  frame.display.line(x0, y+1, x1, y+1, P.accent_memory)
+  frame.display.line(x0, y+2, x1, y+2, P.accent_memory_dim)
+end
+
 -- ---------------------------------------------------------------------------
 -- Per-card draw functions  (t = eased 0→1 for enter/exit scaling)
 -- All radii are multiplied by `scale` = lerp(0.94, 1.0, t) during ENTER,
@@ -471,9 +481,8 @@ local function draw_loading(sc, enter_t, idle_t)
       local a0 = -90 + i * span + gap / 2
       arc(CX,CY,r, a0, a0 + span - gap, CHASE_BANDS[i % 3 + 1], 3)
     end
-    frame.display.circle(CX,CY,3,P.memory_trace,true)
-    frame.display.circle(CX,CY,floor(6*sc),P.accent_memory_dim,false)
-    MAT.bloom_ring(CX,CY,6,P.memory_trace)
+    -- Juno at the still centre — the thought the chase circles around
+    draw_juno(CX,CY,1,JUNO_TEAL)
   end
 end
 
@@ -599,8 +608,9 @@ local function draw_proactive_memory(card, sc, enter_t, exit_t)
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     radial_rays(CX,CY-10, floor(5*sc),floor(52*sc), 5,P.memory_trace,2)
-    frame.display.circle(CX,CY-10,3,P.memory_trace,true)
-    MAT.bloom_ring(CX,CY-10,3,P.memory_trace)
+    -- the rays fan out from Juno — she is the one bringing the memory back
+    draw_juno(CX,CY-10,1,JUNO_TEAL)
+    MAT.bloom_ring(CX,CY-10,15,P.memory_trace)
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
     text(summary,CX,CY+50,P.text_secondary, "lg")
@@ -628,6 +638,12 @@ local function draw_person_context(card, sc, enter_t, exit_t)
     if exit_t == 0 then
       MAT.glass_disc(CX, 96, floor(56*sc), MAT.PANE, 3)
     end
+    -- recognition jewel — concentric memory rings set the face the way
+    -- saved_memory sets a save; knowing someone is a moment worth framing
+    frame.display.circle(CX, 84, floor(60*sc), P.border_subtle, false)
+    frame.display.circle(CX, 84, floor(54*sc), P.accent_memory_dim, false)
+    frame.display.circle(CX, 84, floor(48*sc), P.memory_trace, false)
+    MAT.bloom_ring(CX, 84, floor(60*sc), P.memory_trace)
     frame.display.circle(CX, 84, floor(18*sc), P.border_subtle, false)
     MAT.bloom_ring(CX, 84, floor(18*sc), P.accent_memory_static)
     polar_segs(CX,84, floor(26*sc),floor(44*sc), 12,{0,1,2},P.memory_trace,P.border_subtle,{5,6,7})
@@ -1198,7 +1214,7 @@ local function draw_juno_reply(card, sc, enter_t, exit_t)
     draw_juno(CX-40, 62, 1, action and JUNO_SUCCESS or JUNO_TEAL)
     MAT.bloom_ring(CX-40, 62, 15, accent)
     text("JUNO", CX+6, 64, accent, "sm")
-    MAT.grad_line(60, 82, 196, 82, ramp)
+    pinstripe_rule(60, 196, 81)
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     if #body <= 20 then
@@ -1218,13 +1234,13 @@ local function draw_answer_ahead(card, sc, enter_t, exit_t)
   end
   frame.display.circle(CX, 128, floor(82*sc), P.border_subtle, false)
   if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
-    -- dot sits clear of the 25-char eyebrow (its bloom was grazing the
-    -- first glyph — found in the golden eyeball pass). Mini Juno stays
-    -- off this card for the same reason: her wings graze the eyebrow.
-    frame.display.circle(CX-88, 70, 3, P.accent_memory, true)
-    MAT.bloom_ring(CX-88, 70, 3, P.accent_memory)
+    -- mini-Juno sits clear of the 25-char eyebrow, where the dot did
+    -- (the CX-88 nudge from the golden eyeball pass still applies): she
+    -- is the one surfacing the answer, so she signs the card
+    draw_juno(CX-88, 70, 1, JUNO_TEAL)
+    MAT.bloom_ring(CX-88, 70, 15, P.accent_memory)
     text(card.eyebrow or "ON THE TIP OF YOUR TONGUE", CX+4, 70, P.accent_memory, "sm")
-    MAT.grad_line(52, 88, 204, 88, MAT.RAMP_MEMORY)
+    pinstripe_rule(52, 204, 87)
   end
   if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
     if #answer <= 22 then
