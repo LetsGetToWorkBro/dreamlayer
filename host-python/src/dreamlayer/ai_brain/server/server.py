@@ -58,6 +58,50 @@ from .brain_waypath import WaypathOps
 
 TOKEN_HEADER = "X-DreamLayer-Token"
 
+# --- HTTP request-surface hardening (audit 2026-07-17, "HTTP surface" B-→A) ---
+# Bounded reads, a per-connection socket timeout, a wall-clock body deadline,
+# and a worker-thread ceiling keep an authed/loopback caller from driving
+# unbounded memory, filling the disk, pinning a worker with slowloris (or a
+# byte-dribbling slow-POST), or exhausting the process's threads. All are module
+# constants so they are tunable in one place and assertable from tests.
+MAX_JSON_BODY = 16 * 1024 * 1024        # 16 MiB — cap for JSON bodies (_body/_raw)
+MAX_UPLOAD_BODY = 64 * 1024 * 1024      # 64 MiB — larger cap for file uploads
+SOCKET_TIMEOUT_S = 30.0                 # per-connection PER-RECV read timeout (anti-slowloris)
+MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
+MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
+
+
+class _RequestTooLarge(Exception):
+    """A request body exceeded its size cap → mapped to HTTP 413. Carries the
+    cap so the handler can report it without re-deriving it."""
+
+    def __init__(self, limit: int):
+        super().__init__(f"request body exceeds {limit} bytes")
+        self.limit = limit
+
+
+class _BadContentLength(Exception):
+    """A malformed (non-numeric) Content-Length header → mapped to HTTP 400
+    instead of an unhandled int() ValueError surfacing as a 500 traceback."""
+
+
+class _LengthRequired(Exception):
+    """A body the server cannot length-delimit — a request carrying a
+    ``Transfer-Encoding`` (e.g. chunked) header but no usable Content-Length.
+    Python's http.server does not decode chunked bodies, so treating it as an
+    empty body silently accepted a real payload (a 0-byte /upload artifact
+    reported ok). Mapped to HTTP 411 Length Required (audit 2026-07-17,
+    refute-remediation finding 2)."""
+
+
+class _RequestTimeout(Exception):
+    """The request body did not fully arrive within MAX_REQUEST_BODY_SECONDS of
+    wall-clock time. The per-recv socket timeout only bounds a single stalled
+    recv; a slow-POST that dribbles a byte just under it resets that clock
+    indefinitely, pinning a worker thread and a semaphore slot. This
+    total-duration bound is what actually reclaims them. Mapped to HTTP 408
+    (audit 2026-07-17, refute-remediation finding 1)."""
+
 
 def authorize(token: str, provided, from_localhost: bool) -> bool:
     """The Brain's access policy, as one pure decision.
@@ -140,6 +184,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # interleave a read-modify-write and lose or corrupt data (audit
         # 2026-07-14). Re-entrant so a helper can nest inside a held section.
         self._store_lock = threading.RLock()
+        # Serializes the cloud-egress counter (config.cloud_calls). The threaded
+        # server can run two cloud asks concurrently; a bare ``+= 1`` is a
+        # non-atomic load-add-store that loses a count under that race, so the
+        # ledger the panel promises ("every one is logged") could silently
+        # undercount. A dedicated Lock — not the store RLock, which guards the
+        # JSON files — keeps the critical section to just the increment
+        # (audit 2026-07-17). Touch the counter only via ``bump_cloud_calls``.
+        self._egress_lock = threading.Lock()
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
         self.activity = ActivityLog(self.cfg_dir)
@@ -416,6 +468,17 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
     def save(self) -> None:
         self.config.save(self.cfg_dir)
 
+    def bump_cloud_calls(self, n: int = 1) -> None:
+        """Atomically advance the cloud-egress ledger (config.cloud_calls).
+
+        Every egress site — both ask paths and the endpoint-test probe — routes
+        its increment through here so the load-add-store runs under
+        ``_egress_lock`` and can't lose a count when two egress events race on
+        the threaded server (audit 2026-07-17). Small, targeted critical section:
+        just the increment; the surrounding activity-log + save stay outside."""
+        with self._egress_lock:
+            self.config.cloud_calls += n
+
     def apply_config(self, updates: dict) -> None:
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
@@ -510,7 +573,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             # …then account for it before the request (mirrors _ask_cloud's
             # count-log-save-before-call ordering — reaching here means the
             # query is leaving the device).
-            self.config.cloud_calls += 1
+            self.bump_cloud_calls()
             self.activity.add("cloud-egress", f"Asked your API brain: {query[:70]}")
             self.save()
         try:
@@ -536,7 +599,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         successful answers silently under-reported egress — a real gap for a
         product whose panel promises "every one is logged"."""
         from .backends import cloud_chat
-        self.config.cloud_calls += 1                    # the query is leaving now
+        self.bump_cloud_calls()                         # the query is leaving now
         self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
         self.save()
         try:
@@ -1469,6 +1532,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                    lockout_s=300.0)
 
     class Handler(BaseHTTPRequestHandler):
+        # Per-connection read timeout: StreamRequestHandler.setup() applies this
+        # via self.connection.settimeout(), so a slowloris client that opens a
+        # socket and dribbles (or never finishes) its request can no longer pin
+        # a worker thread forever — the read raises socket.timeout and the
+        # worker is reclaimed (audit 2026-07-17, anti-slowloris).
+        timeout = SOCKET_TIMEOUT_S
+
         def log_message(self, *a):
             pass
 
@@ -1546,17 +1616,83 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             host = (self.headers.get("Host") or "").lower()
             return bool(origin_host) and origin_host == host
 
+        def _read_capped(self, max_bytes: int) -> bytes:
+            """Read the request body, bounded by ``max_bytes`` AND a wall-clock
+            deadline.
+
+            An authed/loopback caller must not be able to drive unbounded memory
+            or fill the disk, so the whole body is never allocated first: a
+            Content-Length that declares more than the cap is refused *before a
+            single byte is read* (→ 413), and an accepted body is read at most
+            up to the cap (which the declared length is already ≤). A malformed
+            (non-numeric) Content-Length is rejected as 400 rather than raising
+            an unhandled ``int()`` ValueError deep in a handler as a 500
+            (audit 2026-07-17).
+
+            Two subtler defects a refute pass confirmed (audit 2026-07-17):
+
+            * Slow-POST (finding 1): the per-recv socket timeout is an
+              *inactivity* timeout — a client that dribbles one byte just under
+              it resets that clock forever, pinning a worker + a semaphore slot.
+              So the body is read in bounded slices (``read1`` → one recv each)
+              against a MAX_REQUEST_BODY_SECONDS wall-clock deadline; exceeding
+              it aborts the read (→ 408) regardless of per-recv activity. The
+              per-recv timeout still bounds a single stalled recv; this ADDS a
+              total-duration bound and leaves a steady upload that finishes
+              within the cap untouched.
+
+            * Undelimitable body (finding 2): Python's http.server does not decode
+              chunked bodies, so a POST carrying a ``Transfer-Encoding`` header
+              but no usable Content-Length would otherwise return b"" — silently
+              accepted as empty (a 0-byte /upload artifact reported ok). A body we
+              cannot length-delimit is rejected (→ 411) instead of forged into an
+              empty one. A genuinely empty body (no Transfer-Encoding, absent or
+              zero Content-Length) stays a valid empty body."""
+            raw = self.headers.get("Content-Length")
+            if not raw:
+                # A body was indicated but can't be length-delimited (chunked /
+                # any Transfer-Encoding with no Content-Length): reject rather
+                # than forge an empty body. A plain bodyless POST (no
+                # Transfer-Encoding) is still a valid empty body.
+                if self.headers.get("Transfer-Encoding"):
+                    raise _LengthRequired()
+                return b""
+            try:
+                n = int(raw)
+            except (TypeError, ValueError):
+                raise _BadContentLength()
+            if n <= 0:
+                return b""
+            if n > max_bytes:
+                raise _RequestTooLarge(max_bytes)   # oversize — nothing read
+            # n is already ≤ the cap here, so this allocates at most the cap.
+            # Read in bounded slices against a wall-clock deadline: ``read1``
+            # does at most one recv and returns whatever arrived, so the deadline
+            # is re-checked after every recv instead of blocking inside a single
+            # read(n) that a byte-dribbling slow-POST could stretch indefinitely
+            # (each dribbled byte otherwise resets the per-recv socket timeout).
+            deadline = time.monotonic() + MAX_REQUEST_BODY_SECONDS
+            chunks = []
+            remaining = n
+            while remaining > 0:
+                if time.monotonic() > deadline:
+                    raise _RequestTimeout()
+                chunk = self.rfile.read1(min(remaining, 65536))
+                if not chunk:
+                    break                            # client closed early — take what came
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            return b"".join(chunks)
+
         def _body(self) -> dict:
-            n = int(self.headers.get("Content-Length", 0) or 0)
-            raw = self.rfile.read(n) if n else b""
+            raw = self._read_capped(MAX_JSON_BODY)
             try:
                 return json.loads(raw.decode("utf-8")) if raw else {}
             except (ValueError, UnicodeDecodeError):
                 return {}
 
-        def _raw(self) -> bytes:
-            n = int(self.headers.get("Content-Length", 0) or 0)
-            return self.rfile.read(n) if n else b""
+        def _raw(self, max_bytes: int = MAX_JSON_BODY) -> bytes:
+            return self._read_capped(max_bytes)
 
         # -- GET handlers (one named method per endpoint) ---------------
         # Public handlers run BEFORE the auth gate (static, same-origin assets
@@ -1995,7 +2131,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Drag-drop a file into a watched folder, then reindex."""
             folder = (qs.get("folder", [""])[0])
             name = Path(qs.get("name", ["dropped.txt"])[0]).name
-            ok = _write_upload(brain, folder, name, self._raw())
+            ok = _write_upload(brain, folder, name, self._raw(MAX_UPLOAD_BODY))
             if ok:
                 brain.activity.add("upload", f"Added {name}")
             brain.reindex()
@@ -2264,7 +2400,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if brain.incognito_now():
                 return {"ok": False, "error":
                         "a remote endpoint isn't tested while you're incognito"}
-            brain.config.cloud_calls += 1
+            brain.bump_cloud_calls()
             brain.activity.add("cloud-egress", label)
             brain.save()
             return None
@@ -2396,7 +2532,29 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                         handler = h; break
             if handler is None:
                 self._json(404, {"error": "not found"}); return
-            handler(self, path, qs)
+            # The body is read lazily inside each handler (via _body/_raw), so
+            # the size/format guards land here where the response can still be
+            # chosen: an oversize body is a 413 and a malformed Content-Length a
+            # 400 — never an unhandled 500 (audit 2026-07-17).
+            try:
+                handler(self, path, qs)
+            except _RequestTooLarge as exc:
+                self.close_connection = True   # don't drain the oversize body
+                self._json(413, {"error": "request body too large",
+                                 "limit": exc.limit})
+            except _BadContentLength:
+                self.close_connection = True
+                self._json(400, {"error": "invalid Content-Length"})
+            except _LengthRequired:
+                # a body we can't length-delimit (chunked, no Content-Length):
+                # demand a length instead of writing a phantom empty body.
+                self.close_connection = True
+                self._json(411, {"error": "Content-Length required"})
+            except _RequestTimeout:
+                # the body didn't fully arrive within the wall-clock deadline —
+                # a byte-dribbling slow-POST; abort so the worker + slot free up.
+                self.close_connection = True
+                self._json(408, {"error": "request body read timed out"})
 
     class _BrainServer(ThreadingHTTPServer):
         # The stdlib default (allow_reuse_address = 1) is a POSIX convenience:
@@ -2407,6 +2565,31 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         # (WSAEADDRINUSE) instead; Windows needs no flag to rebind after a
         # clean close, so nothing is lost.
         allow_reuse_address = os.name != "nt"
+
+        # Bounded concurrency: ThreadingHTTPServer spawns one thread per
+        # connection unbounded, so a flood of sockets could exhaust the
+        # process's threads (thread-exhaustion DoS). A BoundedSemaphore caps the
+        # in-flight worker count — the accept loop blocks (backpressure) once the
+        # ceiling is reached instead of spawning without limit, and each worker
+        # releases its slot when it finishes (audit 2026-07-17). Sized well above
+        # normal panel/phone load so healthy traffic never queues.
+        _slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+
+        def process_request(self, request, client_address):
+            # Runs in the serve_forever accept loop: acquiring here throttles new
+            # connections when the pool is saturated rather than in the worker.
+            self._slots.acquire()
+            try:
+                super().process_request(request, client_address)
+            except BaseException:
+                self._slots.release()   # thread never started — don't leak a slot
+                raise
+
+        def process_request_thread(self, request, client_address):
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                self._slots.release()
 
     return _BrainServer((host, port), Handler)
 

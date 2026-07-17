@@ -22,18 +22,58 @@ Extra Windows-only entry modes (dispatched before the server starts):
 """
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import secrets
 import sys
 import threading
 import time
+import webbrowser
 from pathlib import Path
+
+# The single-instance lock lives in the state dir; holding it is what makes a
+# 2nd launch back off instead of racing the busy port.
+LOCK_FILE = "dreamlayer.lock"
+_INSTANCE_LOCK: list = []          # keeps the live lock handle for process life
 
 
 def _cfg_dir(argv: list[str] | None = None) -> str:
     return (_flag(argv or [], "--dir")
             or os.environ.get("DREAMLAYER_DIR", str(Path.home() / ".dreamlayer")))
+
+
+def acquire_single_instance_lock(lock_dir: str):
+    """Acquire an exclusive OS lock on ``<lock_dir>/dreamlayer.lock``.
+
+    Returns an opaque handle (the lock is held only while the handle stays
+    open) when this is the sole running instance, or ``None`` ONLY when another
+    instance already HOLDS the lock (the contended/would-block case). POSIX uses
+    ``fcntl.flock``, Windows uses ``msvcrt.locking`` — both non-blocking, so a
+    second launch fails fast instead of waiting.
+
+    A failure to create/open the lock file itself (permission denied, read-only
+    mount) is a DISTINCT failure and propagates as ``OSError`` — it must NOT be
+    mistaken for "already running". Conflating the two made an unwritable state
+    dir look like a second instance, so the app printed "already running", opened
+    a URL to a server that never came up, and exited 0 — masking the real failure
+    (audit 2026-07-17). The lock dir is injected so the guard is unit-testable."""
+    # mkdir/open failures propagate as OSError (create/open failure), which the
+    # caller handles distinctly from a held lock — do NOT swallow them to None.
+    Path(lock_dir).mkdir(parents=True, exist_ok=True)
+    fh = open(Path(lock_dir) / LOCK_FILE, "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None                 # the lock is genuinely HELD → back off
+    return fh
 
 
 def _flag(argv: list[str], name: str) -> str | None:
@@ -46,8 +86,15 @@ def _flag(argv: list[str], name: str) -> str | None:
     return None
 
 
-def _serve(cfg_dir: str, port: int) -> None:
-    """Build the Brain and serve forever (runs on a background daemon thread)."""
+def _serve(cfg_dir: str, port: int, status: dict | None = None) -> None:
+    """Build the Brain and serve forever (runs on a background daemon thread).
+
+    A bind failure (port already in use, etc.) must NOT die silently on this
+    daemon thread: a windowed build has ``sys.stderr is None``, so the traceback
+    goes nowhere and the UI would keep authenticating against a server that
+    never came up. Catch the startup/bind failure, log it, and record it in
+    ``status`` so the main thread can surface it and exit instead of running the
+    UI against a dead server (audit 2026-07-17)."""
     from dreamlayer.ai_brain.server.server import Brain, make_brain_server
     brain = Brain(cfg_dir)
     if not brain.config.token:                     # first run — mint a pairing token
@@ -61,7 +108,17 @@ def _serve(cfg_dir: str, port: int) -> None:
     brain.start_watching()                         # reindex watched folders on change
     brain.start_brief_scheduler()                  # morning brief at brief_hour
     brain.start_calendar_sync()                    # calendar → agenda (per-platform source)
-    make_brain_server(brain, host="0.0.0.0", port=port).serve_forever()
+    try:
+        server = make_brain_server(brain, host="0.0.0.0", port=port)
+    except Exception as exc:                        # bind failed (port in use, …)
+        logging.getLogger("dreamlayer.appliance").error(
+            "Brain server failed to start on port %s: %s", port, exc)
+        if status is not None:
+            status["error"] = exc
+        return
+    if status is not None:
+        status["bound"] = True
+    server.serve_forever()
 
 
 def _smoke(port: int) -> int:
@@ -75,9 +132,50 @@ def _smoke(port: int) -> int:
             with opener.open(f"http://127.0.0.1:{port}/", timeout=2) as r:
                 if r.status == 200:
                     return 0
+                time.sleep(0.5)      # 2xx-non-200 (e.g. 204): don't spin tight
         except Exception:
             time.sleep(0.5)
     return 1
+
+
+def _wait_ready(port: int, status: dict | None = None,
+                timeout: float = 20.0) -> bool:
+    """Poll loopback until the server answers (socket bound AND the pairing
+    token minted/persisted), the serve thread reports a startup error, or the
+    timeout elapses. This replaces a fixed 1.0s sleep that raced the token
+    mint — on a slow first run the UI launched before the token was persisted,
+    cached an empty token, and showed a permanently grey dot. Returns True when
+    the server is ready."""
+    import urllib.request
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if status is not None and status.get("error") is not None:
+            return False
+        try:
+            with opener.open(f"http://127.0.0.1:{port}/", timeout=1) as r:
+                if r.status == 200:
+                    return True
+                time.sleep(0.1)      # 2xx-non-200 (e.g. 204): don't spin tight
+        except Exception:
+            time.sleep(0.1)
+    return False
+
+
+def _focus_existing(port: int) -> None:
+    """Best-effort: bring the already-running instance's panel forward by
+    opening its local URL (the OS focuses the existing window/tab)."""
+    try:
+        webbrowser.open(f"http://127.0.0.1:{port}/")
+    except Exception:
+        pass
+
+
+def _already_running(port: int) -> None:
+    logging.getLogger("dreamlayer.appliance").warning(
+        "DreamLayer is already running — focusing the existing instance and "
+        "exiting instead of starting a second server.")
+    _focus_existing(port)
 
 
 def main() -> int:
@@ -95,10 +193,47 @@ def main() -> int:
     cfg_dir = _cfg_dir(argv)
     port = int(_flag(argv, "--port") or os.environ.get("DREAMLAYER_PORT", "7777"))
     Path(cfg_dir).mkdir(parents=True, exist_ok=True)
-    threading.Thread(target=_serve, args=(cfg_dir, port), daemon=True).start()
+
+    # Single-instance guard: take an exclusive OS lock BEFORE starting a server.
+    # Without it a 2nd launch hits the busy port :7777, its _serve daemon thread
+    # dies SILENTLY (windowed build → sys.stderr is None), yet the tray/menubar
+    # still comes up as a 2nd icon talking to the 1st instance. If the lock is
+    # already held the appliance is running: surface it, focus the existing
+    # window, and exit cleanly (audit 2026-07-17).
+    try:
+        lock = acquire_single_instance_lock(cfg_dir)
+    except OSError as exc:
+        # DISTINCT failure: the lock file couldn't be created/opened (permission
+        # denied, read-only mount) — this is NOT "already running". A false
+        # "already running" here would focus a nonexistent instance and exit 0,
+        # masking an unwritable state dir. Log it and fail OPEN — start the server
+        # anyway (without the guard) so the app still runs (audit 2026-07-17).
+        logging.getLogger("dreamlayer.appliance").error(
+            "Single-instance lock unavailable in %s (%s); starting without it.",
+            cfg_dir, exc)
+        lock = None
+    else:
+        if lock is None:                           # the lock is genuinely HELD
+            _already_running(port)
+            return 0
+        _INSTANCE_LOCK.append(lock)                # hold the lock for process life
+
+    status: dict = {}
+    threading.Thread(target=_serve, args=(cfg_dir, port, status),
+                     daemon=True).start()
     if "--smoke" in argv:
         return _smoke(port)
-    time.sleep(1.0)                                # let the socket bind before polling
+    # Wait for readiness instead of a fixed sleep, so the UI never launches
+    # before the token is minted. If the server failed to bind, surface it and
+    # exit rather than running the UI against a dead server.
+    if not _wait_ready(port, status):
+        if status.get("error") is not None:
+            logging.getLogger("dreamlayer.appliance").error(
+                "Not starting the UI: the Brain server did not come up (%s).",
+                status["error"])
+            return 1
+        logging.getLogger("dreamlayer.appliance").warning(
+            "Brain server slow to answer; starting the UI anyway.")
     if platform.system() == "Windows":
         from dreamlayer.ai_brain.tray_windows import run_tray
         return run_tray(cfg_dir, port)

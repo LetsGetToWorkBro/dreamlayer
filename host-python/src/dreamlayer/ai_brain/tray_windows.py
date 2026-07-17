@@ -25,11 +25,19 @@ import threading
 import urllib.request
 from pathlib import Path
 
-from .menubar import DEFAULT_PORT, fetch_status, status_summary
+from .menubar import (DEFAULT_PORT, check_for_update, fetch_status,
+                      status_summary)
 
 # the Run-key value name — the reversible unit --uninstall-login deletes
 RUN_VALUE = "DreamLayer"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+# What the Windows tray actually syncs. Contacts and Reminders are macOS-only
+# (the panel marks them unavailable on Windows), so the tray must NOT claim to
+# have synced them — only Calendar. The old toast said "Synced calendar,
+# contacts, reminders", which was dishonest on Windows (audit 2026-07-17).
+SYNC_ENDPOINTS = ("/dreamlayer/calendar/sync",)
+SYNC_TOAST = "Synced calendar"
 
 # traffic-light dot colors, keyed by the status_summary icon (same semantics
 # as the menu bar: green healthy, yellow cloud-unconfigured, shades for
@@ -224,13 +232,23 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
     from .server.store import BrainConfig
     cfg_dir = directory or os.environ.get(
         "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
-    token = BrainConfig.load(cfg_dir).token
+    auth = {"token": BrainConfig.load(cfg_dir).token}
+
+    def _token():
+        # Re-read from config if the first read was empty. On a slow first run
+        # the server mints/persists the token just after the UI started, and a
+        # cached empty token would leave the dot permanently grey (authorize
+        # needs the exact token even from loopback).
+        if not auth["token"]:
+            auth["token"] = BrainConfig.load(cfg_dir).token
+        return auth["token"]
 
     state: dict = {"summary": status_summary(None), "incognito": False}
 
     def _api(path, method="GET", body=b"{}"):
         url = f"http://127.0.0.1:{port}{path}"
-        headers = {"X-DreamLayer-Token": token, "Content-Type": "application/json"}
+        headers = {"X-DreamLayer-Token": _token(),
+                   "Content-Type": "application/json"}
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         req = urllib.request.Request(url, headers=headers,
                                      data=(body if method == "POST" else None),
@@ -239,7 +257,7 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
             return json.loads(r.read().decode("utf-8"))
 
     def refresh(icon):
-        st = fetch_status(port, token)
+        st = fetch_status(port, _token())
         state["summary"] = status_summary(st)
         state["incognito"] = bool((st or {}).get("incognito"))
         icon.icon = _dot_image(dot_color(state["summary"]))
@@ -258,17 +276,38 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         webbrowser.open(url)
 
     def sync_now(icon, item):
-        for ep in ("/dreamlayer/calendar/sync", "/dreamlayer/contacts/sync",
-                   "/dreamlayer/reminders/sync"):
+        # Only what Windows actually syncs — Calendar. Contacts/Reminders are
+        # macOS-only, so the toast must not claim them (SYNC_ENDPOINTS/SYNC_TOAST).
+        for ep in SYNC_ENDPOINTS:
             try:
                 _api(ep, "POST")
             except Exception:
                 pass
         try:
-            icon.notify("Synced calendar, contacts, reminders", "DreamLayer")
+            icon.notify(SYNC_TOAST, "DreamLayer")
         except Exception:
             pass
         refresh(icon)
+
+    def check_updates(icon, item):
+        # Click-only: the network fetch runs ONLY here, never on the refresh
+        # loop. Offline/error degrades to a "couldn't check" toast. Run it OFF
+        # the message-loop thread — pystray invokes menu callbacks on the thread
+        # pumping the loop, so a slow/timing-out fetch would freeze the tray for
+        # up to the fetch timeout per click (same fix as the macOS menu bar;
+        # audit 2026-07-17).
+        def _work():
+            res = check_for_update()
+            try:
+                icon.notify(res["message"], "DreamLayer")
+            except Exception:
+                pass
+            if res["status"] == "update":
+                try:
+                    webbrowser.open(res["url"])
+                except Exception:
+                    pass
+        threading.Thread(target=_work, daemon=True).start()
 
     def toggle_incognito(icon, item):
         want = not state["incognito"]
@@ -293,6 +332,8 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         MenuItem("Sync now", sync_now),
         MenuItem("Incognito", toggle_incognito,
                  checked=lambda item: state["incognito"]),
+        Menu.SEPARATOR,
+        MenuItem("Check for updates", check_updates),
         Menu.SEPARATOR,
         MenuItem(lambda item: state["summary"]["lines"][0], None, enabled=False),
         Menu.SEPARATOR,

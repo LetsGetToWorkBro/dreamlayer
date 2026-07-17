@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..schema import Answer
-from .store import _is_allowed_root
+from .store import _is_allowed_root, _is_index_denied
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +94,12 @@ class FileIndex:
             # path outside the allow-list is ever read regardless of how it got
             # into the list (refute-remediation 2026-07: the add_folder gate was
             # not the only writer). Skip + record rather than index it.
-            if not _is_allowed_root(folder):
+            # _is_index_denied additionally refuses the Brain's OWN state dir
+            # (whose brain_config.json holds the token + provider keys in clear)
+            # and secret dotdirs even though they pass the home-tree allow-list,
+            # so "add ~/.dreamlayer as a watched folder" cannot recall its own
+            # secrets via /brain/ask (refute-remediation 2026-07-17).
+            if not _is_allowed_root(folder) or _is_index_denied(folder):
                 log.warning("reindex: skipping disallowed folder %r", folder)
                 continue
             base = Path(folder).expanduser()
@@ -104,6 +109,22 @@ class FileIndex:
                 if not path.is_file() or path.suffix.lower() not in exts:
                     continue
                 if self._excluded(path):
+                    continue
+                # Per-FILE allow-list re-check at the walk sink. The folder ROOT
+                # was allow-listed above, but rglob yields the folder's contents,
+                # and a symlink inside an allowed folder can RESOLVE to a target
+                # outside the allow-list (~/watched/notes.txt -> /etc/passwd, and
+                # .txt matches TEXT_EXTS). The root gate never sees that per-file
+                # swap (TOCTOU). _is_allowed_root resolve()s, so the escaping
+                # symlink is skipped rather than read, ingested, and surfaced via
+                # /brain/ask (refute-remediation 2026-07-17).
+                # _is_index_denied also catches a symlink whose target resolves
+                # INTO the Brain's state dir or a secret dotdir (e.g.
+                # ~/watched/cfg.json -> <statedir>/brain_config.json): that target
+                # passes the home-tree allow-list but must never be indexed and
+                # recalled (refute-remediation 2026-07-17).
+                if not _is_allowed_root(str(path)) or _is_index_denied(str(path)):
+                    log.warning("reindex: skipping disallowed file %r", str(path))
                     continue
                 try:
                     if path.stat().st_size > cap:
