@@ -866,7 +866,7 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
 @media (max-width:900px){
   :root{--tbh:24px}
   .deskicons{display:none}
-  .mw{width:calc(100vw - 16px);margin:5svh auto}
+  .mw{width:calc(100vw - 16px);margin:32px auto}
   .mw.tilt-l,.mw.tilt-r{translate:none}
   .lens-grid{grid-template-columns:repeat(2,1fr)}
   .vid-grid{grid-template-columns:1fr;max-width:420px;margin:0 auto}
@@ -879,8 +879,17 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   .tier .rail i::after{transform:scaleY(0);transform-origin:top}
   .tier.lit .rail i::after{transform:scaleY(1)}
   /* the window is its own height — no forced 100svh, so the first scroll
-     goes straight to the next window instead of through empty desktop */
-  .hero{min-height:auto;padding:2svh 0 4svh}
+     goes straight to the next window instead of through empty desktop.
+     And the first screen must not breathe with the browser chrome: iOS
+     browsers re-evaluate viewport units when the URL bar collapses
+     mid-scroll (Brave treats svh as live), which visibly stretched the
+     hero window. Up here it's fixed px only. */
+  .hero{min-height:auto;padding:14px 0 24px}
+  .hero-screen{min-height:0}
+  .hero-core{padding:54px var(--gutter) 46px}
+  .hero-cta{margin-top:26px}
+  .sec-head{margin-bottom:34px}
+  .story-steps{padding:0 0 26px}
   /* Juno steps aside on small screens — off to the window's right edge,
      a little smaller and dimmer, so the copy never sits on her dress */
   .hero .hero-juno{width:min(56%,290px);left:72%;top:32%;opacity:.94}
