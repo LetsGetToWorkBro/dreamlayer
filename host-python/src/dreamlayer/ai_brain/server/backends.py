@@ -38,6 +38,23 @@ PROVIDER_PRESETS: dict[str, dict] = {
     "openrouter": {
         "label": "OpenRouter", "base_url": "https://openrouter.ai/api",
         "model": "openai/gpt-4o-mini", "needs_key": True, "wire": "openai"},
+    "groq": {
+        # Groq's OpenAI-compatible surface lives under /openai/v1 (docs:
+        # console.groq.com/docs/openai). The /v1 in the base means
+        # _build_request appends only /chat/completions, not /v1/chat/….
+        "label": "Groq", "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile", "needs_key": True, "wire": "openai"},
+    "together": {
+        # Together AI, OpenAI-compatible (docs: docs.together.ai).
+        "label": "Together AI", "base_url": "https://api.together.xyz/v1",
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "needs_key": True, "wire": "openai"},
+    "deepseek": {
+        # DeepSeek, OpenAI-compatible (docs: api-docs.deepseek.com). Host root
+        # like OpenAI — _build_request adds /v1/chat/completions, which DeepSeek
+        # accepts (its /v1 is a compat alias, unrelated to model version).
+        "label": "DeepSeek", "base_url": "https://api.deepseek.com",
+        "model": "deepseek-chat", "needs_key": True, "wire": "openai"},
     "ollama": {
         "label": "Ollama · local", "base_url": "http://localhost:11434",
         "model": "llama3.2", "needs_key": False, "wire": "openai"},
