@@ -244,6 +244,19 @@ def grad_line(draw, x0, y0, x1, y1, ramp=RAMP_MEMORY, stroke=1):
         px, py = nx, ny
 
 
+def pinstripe_rule(draw, x0, x1, y, alpha=150):
+    """The Platinum title-bar pinstripe, in the glass palette: three stacked
+    hairlines (bright -> mid -> dim teal). A quiet bridge to the panel's
+    pinstripe, drawn only in the eyebrow rule where it never meets body text
+    (mirrors the device Lua pinstripe_rule)."""
+    bands = ((0, T.MEMORY_TRACE, alpha),
+             (1, T.ACCENT_MEMORY, int(alpha * 0.7)),
+             (2, T.ACCENT_MEMORY_DIM, int(alpha * 0.5)))
+    for dy, color, a in bands:
+        r, g, b = _hex_to_rgb(color)
+        draw.line([(x0, y + dy), (x1, y + dy)], fill=(r, g, b, a), width=1)
+
+
 def grad_arc(draw, cx, cy, r, a0, a1, ramp=RAMP_MEMORY, steps=32, stroke=1):
     sweep = a1 - a0
     def pt(deg):
@@ -891,6 +904,12 @@ class CardRenderer:
         conf     = card.get("confidence")
 
         glass_disc(draw, CX, 96, 56, PANE, 3)
+        # recognition jewel — concentric memory rings set the face the way
+        # saved_memory sets a save; knowing someone is a moment worth framing
+        for jr, jc in ((60, T.BORDER_SUBTLE), (54, T.ACCENT_MEMORY_DIM),
+                       (48, T.MEMORY_TRACE)):
+            self._arc(draw, CX, 84, jr, 0, 360, 1, jc, alpha=255)
+        bloom_ring(draw, CX, 84, 60, T.MEMORY_TRACE)
         self._circle(draw, CX, 84, 18, 1, T.BORDER_SUBTLE, alpha=255)
         bloom_ring(draw, CX, 84, 18, T.ACCENT_MEMORY_STATIC)
         draw_polar_segments(draw, CX, 84, 26, 44, 12, [0, 1, 2],
@@ -1246,7 +1265,7 @@ class CardRenderer:
         bloom_ring(draw, CX - 40, 62, 15, accent)
         self._text_rgba(draw, CX + 6, 64, "JUNO",
                         "xs", accent, alpha=235)
-        grad_line(draw, 60, 82, 196, 82, RAMP_SUCCESS if action else RAMP_MEMORY)
+        pinstripe_rule(draw, 60, 196, 81)
         if len(body) <= 20:
             self._text(draw, CX, 132, body, self._fit(body, 200), T.TEXT_PRIMARY)
         else:
@@ -1267,7 +1286,7 @@ class CardRenderer:
         bloom_ring(draw, CX - 88, 70, 15, T.ACCENT_MEMORY)
         self._text_rgba(draw, CX + 4, 70, "ON THE TIP OF YOUR TONGUE",
                         "xs", T.ACCENT_MEMORY, alpha=225)
-        grad_line(draw, 52, 88, 204, 88, RAMP_MEMORY)
+        pinstripe_rule(draw, 52, 204, 87)
         self._text(draw, CX, 126, answer, self._fit(answer, 196), T.TEXT_PRIMARY)
         if question:
             self._text_rgba(draw, CX, 166, question, "sm",
