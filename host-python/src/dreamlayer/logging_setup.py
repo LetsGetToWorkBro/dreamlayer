@@ -93,6 +93,12 @@ _RESERVED = {
 _SENSITIVE_KEYS = {
     "name", "names", "summary", "transcript", "transcripts",
     "embedding", "embeddings", "contact", "contacts", "query", "answer",
+    # ``reply`` is a Juno/API-brain answer — attacker-influenceable free text
+    # (extra={"reply": juno_text}). Added as a KEY, not a substring root, so it
+    # redacts ``reply``/``user_reply`` (exact + ``_reply`` suffix) without a
+    # loose "reply" substring catching unrelated words. ``reply_text`` already
+    # falls under the ``text`` rule; ``reply_content`` under ``content``.
+    "reply",
     "token", "api_key", "apikey", "key", "secret", "secrets", "password",
     "passphrase", "text", "caption", "captions", "email", "phone",
     "address", "prompt", "content", "message_body", "credential",
@@ -163,6 +169,12 @@ class JsonLineFormatter(logging.Formatter):
             "ts": round(record.created, 3),
             "level": record.levelname,
             "logger": record.name,
+            # msg is the rendered message body and is emitted VERBATIM — it is
+            # deliberately NOT redacted (redacting arbitrary text would mangle
+            # legit logs). The extras path (``extra={...}``) is the redaction
+            # seam: callers MUST pass sensitive values (names, transcripts,
+            # replies, tokens) via ``extra=`` — never interpolate them into the
+            # message string — so ``_is_sensitive``/``_sanitize`` can scrub them.
             "msg": record.getMessage(),
         }
         cid = _CID.get()

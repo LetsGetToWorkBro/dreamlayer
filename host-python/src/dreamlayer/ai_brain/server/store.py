@@ -239,12 +239,30 @@ class BrainConfig:
         d.mkdir(parents=True, exist_ok=True)
         target = d / CONFIG_FILE
         tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_text(json.dumps(asdict(self), indent=2))
+        # This file holds the pairing token AND the provider API keys
+        # (cloud_api_key/api_key) in clear, so it must never be group/world
+        # readable. write_text lands at the umask default (0o644 on POSIX),
+        # which the login-entry fix (token moved off the HKCU Run value / the
+        # LaunchAgent plist into this file) turned into a fresh world-readable
+        # secret leak. Create the tmp private from its first byte (O_CREAT with
+        # 0o600 — not chmod-after, which leaves a readable window) and re-assert
+        # 0o600 on the swapped-in target, so neither the tmp nor the final file
+        # ever exposes the secrets (refute 2026-07-17). On Windows the mode arg
+        # is largely inert but harmless; ACL inheritance from the user profile
+        # already scopes it there.
+        payload = json.dumps(asdict(self), indent=2)
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(payload)
             replace_atomic(str(tmp), str(target))
         except Exception:
             tmp.unlink(missing_ok=True)     # no torn residue if the swap fails
             raise
+        try:
+            os.chmod(target, 0o600)         # re-assert after the atomic swap
+        except OSError:
+            pass
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

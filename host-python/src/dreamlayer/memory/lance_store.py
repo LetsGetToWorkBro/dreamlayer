@@ -41,16 +41,41 @@ class LanceStore:
             data = []
             for i, m in enumerate(rows):
                 emb = unpack_embedding(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
-                data.append({"idx": i, "vector": emb, "conf": m.get("confidence") or 0.5})
+                conf = m.get("confidence")
+                conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
+                data.append({"idx": i, "vector": emb, "conf": conf})
             conn = lancedb.connect(self._uri)
             tbl = conn.create_table(self._table, data=data, mode="overwrite")
-            hits = tbl.search(self.embedder.embed(query)).limit(top_k).to_list()
+            # Lance ranks by RAW vector distance; the confidence blend can
+            # reorder neighbours, so asking for only top_k could drop a
+            # high-confidence memory whose blended score would win. Over-fetch
+            # every candidate, re-score with the confidence blend, then re-sort
+            # — the same semantics VectorStore._linear uses, so the two paths
+            # agree on the ranking by construction (issue #395).
+            q = tbl.search(self.embedder.embed(query))
+            # Request cosine so `1 - _distance` IS cosine similarity. Lance
+            # defaults to L2, which the `1 - dist` read below would misinterpret
+            # as cosine. `.metric` was renamed `.distance_type` across versions;
+            # try both. If NEITHER setter exists we cannot force cosine, so fall
+            # through to the linear scan rather than silently read L2 as cosine —
+            # the comment promised this fallback but the code used to proceed on
+            # default L2, reintroducing the very bug this guards (refute 2026-07-17).
+            if hasattr(q, "metric"):
+                q = q.metric("cosine")
+            elif hasattr(q, "distance_type"):
+                q = q.distance_type("cosine")
+            else:
+                return self._fallback.search(query, kind=kind, top_k=top_k)
+            hits = q.limit(len(rows)).to_list()
             out = []
             for h in hits:
                 m = rows[int(h["idx"])]
-                sim = 1.0 - float(h.get("_distance", 0.0))
-                out.append((0.5 * sim + 0.5 * (m.get("confidence") or 0.5), m))
-            return out
+                sim = 1.0 - float(h.get("_distance", 0.0))   # cosine dist -> sim
+                conf = m.get("confidence")
+                conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
+                out.append((0.5 * sim + 0.5 * conf, m))
+            out.sort(key=lambda x: x[0], reverse=True)
+            return out[:top_k]
         except Exception as exc:
             log.error("[lance_store] query failed: %s; linear fallback", exc)
             return self._fallback.search(query, kind=kind, top_k=top_k)

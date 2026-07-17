@@ -124,32 +124,37 @@ def test_off_shop_fn_caches_by_label():
 
 
 def test_default_fetch_retries_transient_then_succeeds(monkeypatch):
-    import urllib.request, urllib.error
+    # The hardened fetch talks through the shared no-redirect opener, so the
+    # test drives that seam (read(n) takes a size arg, per read_capped). The
+    # retry/error-classification loop under test is unchanged by the hardening.
+    import urllib.error
     from dreamlayer.plugins import openfoodfacts as off
     calls = {"n": 0}
     class FakeResp:
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def read(self): return b'{"ok":1}'
-    def fake_urlopen(req, timeout=0):
-        calls["n"] += 1
-        if calls["n"] < 3:
-            raise urllib.error.URLError("temporary")
-        return FakeResp()
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        def read(self, n=-1): return b'{"ok":1}'
+    class FakeOpener:
+        def open(self, req, timeout=0):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise urllib.error.URLError("temporary")
+            return FakeResp()
+    monkeypatch.setattr(off, "no_redirect_opener", lambda: FakeOpener())
     assert off._default_fetch("http://x", retries=2, backoff=0) == '{"ok":1}'
     assert calls["n"] == 3                          # failed twice, succeeded third
 
 
 def test_default_fetch_does_not_retry_4xx(monkeypatch):
-    import urllib.request, urllib.error
+    import urllib.error
     import pytest
     from dreamlayer.plugins import openfoodfacts as off
     calls = {"n": 0}
-    def fake_urlopen(req, timeout=0):
-        calls["n"] += 1
-        raise urllib.error.HTTPError("http://x", 404, "nf", {}, None)
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    class FakeOpener:
+        def open(self, req, timeout=0):
+            calls["n"] += 1
+            raise urllib.error.HTTPError("http://x", 404, "nf", {}, None)
+    monkeypatch.setattr(off, "no_redirect_opener", lambda: FakeOpener())
     with pytest.raises(urllib.error.HTTPError):
         off._default_fetch("http://x", retries=3, backoff=0)
     assert calls["n"] == 1                          # 4xx isn't retried

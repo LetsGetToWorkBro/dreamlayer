@@ -133,11 +133,25 @@ class ChromaStore:
         self._fallback.purge_all()
 
     def _drop_collection(self) -> None:
-        if self._client is None and self._col is None:
-            return
-        try:
-            if self._client is not None:
-                self._client.delete_collection(self._collection)
-        except Exception as exc:
-            log.warning("[chroma_store] collection drop failed: %s", exc)
+        # A PERSISTENT collection can hold a forgotten embedding even when THIS
+        # instance never searched — a fresh process after a restart has
+        # _client/_col both None, but the on-disk collection from a prior
+        # session survives. Early-returning on `_client is None and _col is
+        # None` left that collection undropped, so a forget/erase that ran
+        # BEFORE any search left the forgotten embedding fully recallable on
+        # disk (audit 2026-07-17). Lazily open the persistent client so the
+        # on-disk collection is actually dropped.
+        client = self._client
+        if client is None and _HAS_CHROMA and self._path:
+            try:
+                client = chromadb.PersistentClient(path=self._path)
+            except Exception as exc:
+                log.warning("[chroma_store] client open for drop failed: %s", exc)
+                client = None
+        if client is not None:
+            try:
+                client.delete_collection(self._collection)
+            except Exception as exc:
+                log.warning("[chroma_store] collection drop failed: %s", exc)
         self._col = None
+        self._client = None

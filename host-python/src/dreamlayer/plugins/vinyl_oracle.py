@@ -28,6 +28,8 @@ from typing import Callable, Optional, cast
 
 from dreamlayer.sdk import PanelProvider, PanelRow
 
+from ._egress import no_redirect_opener, read_capped
+
 SEARCH_URL = "https://api.discogs.com/database/search"
 
 # Discogs pressing formats we surface a short badge for; anything else passes
@@ -110,20 +112,26 @@ def lookup(artist: str, title: str, fetch_fn: Callable[[str], object],
 def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
     """The shipped network fetch: urllib with a couple of retries on transient
     failures (5xx / connection errors). Discogs *requires* a descriptive
-    User-Agent and 429s aggressive clients, so this backs off politely."""
+    User-Agent and 429s aggressive clients, so this backs off politely.
+
+    Hardened egress (audit 2026-07-17) via the shared :mod:`plugins._egress`
+    primitives: the read is size-capped (response-OOM) and 3xx redirects are
+    refused (SSRF-via-redirect), so egress can't leave the Discogs host
+    build_query pins — matching the openlibrary sibling."""
     import time
     import urllib.error
     import urllib.request
     req = urllib.request.Request(
         url, headers={"User-Agent": "DreamLayer-VinylOracle/0.1 (+https://dreamlayer.app)"})
+    opener = no_redirect_opener()
     last: Exception = RuntimeError("no attempt")
     for attempt in range(max(1, retries + 1)):
         try:
-            with urllib.request.urlopen(req, timeout=4) as r:   # network capability
-                return r.read().decode("utf-8", "replace")
+            with opener.open(req, timeout=4) as r:   # network capability, no redirects
+                return read_capped(r).decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             last = e
-            if e.code < 500 and e.code != 429:    # 4xx won't get better on retry
+            if e.code < 500 and e.code != 429:    # 3xx (refused redirect) / 4xx won't improve
                 raise                             # (429 is worth a backoff)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e

@@ -1240,14 +1240,52 @@ function pickModel(m,silent){modelSel=m;
 // a public host), or anything unparseable — is a REMOTE endpoint your queries
 // leave the device to reach.
 function isLocalUrl(u){
-  let host;try{host=new URL(u).hostname.toLowerCase();}catch(e){return null;}   // null = can't tell yet
-  if(!host)return null;
-  if(host[0]==="["&&host[host.length-1]==="]")host=host.slice(1,-1);            // strip IPv6 brackets
-  if(host==="localhost"||host.endsWith(".local")||host==="::1")return true;
-  const m=host.match(/^(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)$/);
-  if(m){const a=+m[1],b=+m[2];
+  // Locality MUST match backends.is_local_endpoint exactly: this banner tells the
+  // wearer whether a query leaves the device, and the server's egress accounting
+  // is the source of truth. Python classifies with urllib.urlsplit, so we mirror
+  // urlsplit's host extraction with string ops rather than reading
+  // new URL().hostname — which diverged on 7 adversarial inputs by showing "on
+  // your device" for a host the server counts as REMOTE egress (audit 2026-07-17):
+  //   * new URL IDNA-folds a fullwidth homoglyph host ("http://ｌｏｃ
+  //     ａｌｈｏｓｔ") to ASCII "localhost"; urlsplit keeps
+  //     the raw host -> remote.
+  //   * new URL tolerates a missing/single/back slash ("http:localhost",
+  //     "http:/x", "http:\\x") and still yields host "localhost"; urlsplit needs a
+  //     real "//" authority or there is no host -> remote.
+  // So: strip the chars urlsplit strips, require a "//" authority, take the host
+  // WITHOUT any Unicode mapping, and never claim local for anything else.
+  u=(u||"").replace(/[\t\r\n]/g,"");                    // urlsplit strips these too
+  if(!u)return null;                                    // empty (still typing) — unknown
+  let rest=null;
+  const sm=u.match(/^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//);
+  if(sm)rest=u.slice(sm[0].length);                     // scheme://authority
+  else if(u.slice(0,2)==="//")rest=u.slice(2);          // //authority (scheme-relative)
+  if(rest===null)return null;                           // no "//" authority — can't claim local
+  let auth=rest.split("/")[0].split("?")[0].split("#")[0];
+  const at=auth.lastIndexOf("@");if(at>=0)auth=auth.slice(at+1);   // drop userinfo (host is after the last @)
+  if(auth[0]==="["){
+    // A bracket holds an IPv6 literal ONLY. Python's urlsplit rejects (ValueError
+    // -> remote) a bracketed name/IPv4 ("[localhost]", "[127.0.0.1]") and any junk
+    // after "]" ("[::1]extra", "[::1].local"); is_local_endpoint counts an IPv6
+    // local only in ::1/128. Mirror all of that or the naive "extract the brackets"
+    // reads local for a host the server treats as remote (refute 2026-07-17).
+    const e=auth.indexOf("]");
+    if(e<0)return false;                                 // unterminated bracket -> remote
+    const after=auth.slice(e+1);
+    if(after!==""&&after[0]!==":")return false;          // junk after "]" -> Python ValueError -> remote
+    return auth.slice(1,e).toLowerCase()==="::1";        // loopback IPv6 only; any other -> remote
+  }
+  let host=auth.split(":")[0].toLowerCase();             // non-bracketed: drop :port
+  if(!host)return false;
+  if(host==="localhost"||host.endsWith(".local"))return true;
+  const m=host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);   // ASCII \d only — a fullwidth digit never matches
+  if(m){const o=[m[1],m[2],m[3],m[4]];
+    // Python's ipaddress rejects leading-zero and >255 octets (both -> remote);
+    // mirror both so "010.0.0.1"/"10.999.0.0" can't read local here yet remote there.
+    for(let i=0;i<4;i++){if(o[i].length>1&&o[i][0]==="0")return false;if(+o[i]>255)return false;}
+    const a=+o[0],b=+o[1];
     return a===127||a===10||(a===192&&b===168)||(a===172&&b>=16&&b<=31)||(a===169&&b===254);}
-  return false;                                                                 // public / bare host → remote
+  return false;                                         // public / bare host → remote
 }
 const APROV={custom:{base:"",model:"",key:true},openai:{base:"https://api.openai.com",model:"gpt-4o-mini",key:true},
   anthropic:{base:"https://api.anthropic.com",model:"claude-3-5-haiku-latest",key:true},

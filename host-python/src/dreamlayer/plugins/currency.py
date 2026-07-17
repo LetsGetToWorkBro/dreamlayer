@@ -11,10 +11,11 @@ Demonstrates: an object-lens `PanelProvider` + the `network` capability, and
 from __future__ import annotations
 
 import json
-import urllib.request
 from typing import Callable, Optional
 
 from dreamlayer.sdk import PanelProvider, PanelRow
+
+from ._egress import no_redirect_opener, read_capped
 
 _SYMBOL = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "AUD": "A$",
            "CAD": "C$", "CHF": "CHF ", "CNY": "¥", "INR": "₹", "MXN": "MX$"}
@@ -32,14 +33,21 @@ def format_money(amount: float, currency: str) -> str:
 
 def _default_rates_fetch(base: str, quote: str) -> Optional[float]:
     """Live rate `quote` per `base` from a free, no-key endpoint. Returns None
-    on any failure — the provider then just shows the original price."""
+    on any failure — the provider then just shows the original price.
+
+    Hardened egress (audit 2026-07-17) via the shared :mod:`plugins._egress`
+    primitives: the read is size-capped (response-OOM) and 3xx redirects are
+    refused (SSRF-via-redirect), so egress can't leave the frankfurter.app host.
+    A refused redirect / oversized body surfaces as an exception the outer
+    ``except`` turns into None, so the provider just shows the original price."""
     if base.upper() == quote.upper():
         return 1.0
     url = (f"https://api.frankfurter.app/latest?from={base.upper()}"
            f"&to={quote.upper()}")
     try:
-        with urllib.request.urlopen(url, timeout=4) as resp:      # network cap
-            data = json.loads(resp.read().decode("utf-8"))
+        opener = no_redirect_opener()
+        with opener.open(url, timeout=4) as resp:      # network cap, no redirects
+            data = json.loads(read_capped(resp).decode("utf-8"))
         return float(data["rates"][quote.upper()])
     except Exception:
         return None
