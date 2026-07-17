@@ -104,6 +104,27 @@ def _current_user_sid() -> Optional[str]:
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)  # type: ignore[attr-defined]
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
 
+    # Declare argtypes/restypes explicitly. ctypes otherwise assumes every arg
+    # and return is a C int, which on Win64 truncates 64-bit HANDLEs and SID
+    # pointers to 32 bits — the old code only "worked" by luck of handle
+    # sign-extension. Pinning the signatures makes the marshalling correct.
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [wintypes.HLOCAL]
+    kernel32.LocalFree.restype = wintypes.HLOCAL
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD)]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    advapi32.ConvertSidToStringSidW.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p)]
+    advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+
     token = wintypes.HANDLE()
     if not advapi32.OpenProcessToken(
             kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token)):
@@ -133,14 +154,34 @@ def _current_user_sid() -> Optional[str]:
 
 
 def _harden_windows_acl(path: str) -> None:
-    """Windows only: make `path` readable/writable by ONLY the current user.
+    """Windows only: restrict `path` to the current user + LocalSystem + the
+    Administrators group, so no *other regular user* can read it.
 
     POSIX chmod(0o600) is a no-op for ACLs on Windows — it toggles just the
     read-only attribute and sets NO ACL, so a secret config's confidentiality
     would rest entirely on whatever ACLs it inherited from the user profile.
-    This strips inheritance and grants Full control to only the current user's
-    SID, so the pairing token + provider API keys aren't exposed to other
-    principals on a shared or misconfigured box.
+    This strips inheritance and re-grants Full control to exactly three
+    principals:
+
+      * ``S-1-5-18``     LocalSystem     — AV, backup, and OS agents run here;
+      * ``S-1-5-32-544`` Administrators  — admin tooling / the elevated installer;
+      * the current user's SID           — the app itself.
+
+    Stripping inheritance also drops the inherited SYSTEM/Administrators ACEs,
+    so they MUST be re-granted or a plain ``/grant:r *<userSID>:F`` would lock
+    out AV/backup/OS-agent readers (and, if the user grant itself failed, the
+    app). Confidentiality vs other regular users is still preserved — Users and
+    Everyone are gone — while SYSTEM/Administrators (which can read anything on
+    the box anyway) keep access. Both well-known SIDs are locale- and
+    domain-independent, so this holds regardless of language pack or domain.
+
+    The grantee is the process-token SID, never a bare account name: on a
+    domain-joined box a bare ``getpass.getuser()`` name can fail to map once
+    inheritance is stripped, leaving the file unreadable by the app — the
+    lockout path. So if the SID can't be resolved we do NOT strip inheritance
+    behind a possibly-unmappable grant; we skip the whole ACL step and leave the
+    file at its inherited-profile baseline (already not world-readable), logging
+    a warning. Never leave the file in a state the app can't read.
 
     Best-effort by contract: any failure is logged and swallowed — the
     POSIX-correct 0o600 already ran, and persisting the privacy posture must
@@ -151,25 +192,30 @@ def _harden_windows_acl(path: str) -> None:
         return
     import subprocess
 
-    grantee = None
     try:
         sid = _current_user_sid()
-        if sid:
-            grantee = "*" + sid          # icacls accepts *<SID> for a grantee
     except Exception as exc:             # ctypes/token lookup is fragile; degrade
-        log.debug("owner-only ACL: SID lookup failed for %s: %s", path, exc)
-    if grantee is None:
-        try:
-            import getpass
-            grantee = getpass.getuser()
-        except Exception as exc:
-            log.warning(
-                "owner-only ACL: could not resolve current user for %s: %s",
-                path, exc)
-            return
+        log.warning("owner-only ACL: SID lookup failed for %s (%s); leaving the "
+                    "inherited ACL baseline (still not world-readable)", path, exc)
+        return
+    if not sid:
+        log.warning("owner-only ACL: could not resolve the current-user SID for "
+                    "%s; leaving the inherited ACL baseline (still not "
+                    "world-readable)", path)
+        return
+
+    # Locale/domain-independent well-known SIDs kept alongside the user so that
+    # stripping inheritance doesn't evict the OS/AV/backup readers (or the app).
+    local_system = "S-1-5-18"
+    administrators = "S-1-5-32-544"
     try:
         subprocess.run(
-            ["icacls", path, "/inheritance:r", "/grant:r", grantee + ":F"],
+            # icacls accepts *<SID> for a grantee, so these stay locale/domain
+            # independent even though inheritance dropped the resolved-name ACEs.
+            ["icacls", path, "/inheritance:r", "/grant:r",
+             "*" + local_system + ":F",
+             "*" + administrators + ":F",
+             "*" + sid + ":F"],
             check=True,
             capture_output=True,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -431,6 +477,13 @@ class BrainConfig:
         d.mkdir(parents=True, exist_ok=True)
         _reap_stale_tmps(d)   # sweep crash-orphaned unique temps (age-gated)
         target = d / CONFIG_FILE
+        # Whether we're creating the config for the first time. The owner-only
+        # Windows ACL is set once, on create, and persists across the atomic
+        # in-place replaces below — so this gates _harden_windows_acl to skip
+        # the icacls subprocess + token lookup on every UNCHANGED re-save (a
+        # folder-add / config-patch / pairing all re-save, and that per-save
+        # Windows latency is what item 3 removes). Captured before the replace.
+        newly_created = not target.exists()
         # This file holds the pairing token AND the provider API keys
         # (cloud_api_key/api_key) in clear, so it must never be group/world
         # readable. write_text lands at the umask default (0o644 on POSIX),
@@ -463,7 +516,11 @@ class BrainConfig:
             os.chmod(target, 0o600)         # re-assert after the atomic swap
         except OSError:
             pass
-        _harden_windows_acl(str(target))    # Windows ACL; no-op on POSIX
+        if newly_created:
+            # Windows ACL; no-op on POSIX. Only on create — the owner-only DACL
+            # persists across in-place replaces, so re-shelling icacls on every
+            # unchanged save would be pure latency (item 3).
+            _harden_windows_acl(str(target))
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

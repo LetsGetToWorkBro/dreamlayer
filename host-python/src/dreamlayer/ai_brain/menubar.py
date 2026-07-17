@@ -17,6 +17,7 @@ import os
 import secrets
 import sys
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -381,6 +382,66 @@ def serve_brain_in_background(directory: str | None, port: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Loopback pairing-token cache (re-read on empty AND on auth failure)
+# ---------------------------------------------------------------------------
+
+class _TokenCache:
+    """Caches the loopback pairing token and re-reads it from brain_config.json
+    whenever the cache is empty. One rule ("empty → re-read") covers two races:
+
+      * the grey-dot STARTUP race — the server persists the token just after the
+        UI started, so the very first read can be empty; and
+      * a mid-session token ROTATION — the panel's "rotate" action mints a new
+        token into brain_config.json. An auth failure (401/403) on a loopback
+        call invalidates the cache (see ``invalidate``), so the next ``get`` picks
+        up the freshly-minted token WITHOUT an app restart. Before this, a cached
+        NON-empty token was never re-read for the process lifetime, so a rotation
+        stranded the UI on the old token → every call 401s → a permanent grey dot.
+    """
+
+    def __init__(self, cfg_dir, loader):
+        self._cfg_dir = cfg_dir
+        self._loader = loader
+        self.token = loader(cfg_dir).token
+
+    def get(self) -> str:
+        if not self.token:
+            self.token = self._loader(self._cfg_dir).token
+        return self.token
+
+    def invalidate(self) -> None:
+        # Clear ONCE so the next get() re-reads config. Deliberately not a tight
+        # retry loop: a genuinely-wrong (still-401) token simply clears again on
+        # its next failed response; the 15s refresh tick retries meanwhile.
+        self.token = ""
+
+
+def _authed_api(port: int, auth: "_TokenCache", path: str, method: str = "GET",
+                body: bytes = b"{}", opener=None):
+    """Loopback API call carrying the cached pairing token. On a 401/403 (auth
+    failure) it INVALIDATES the token cache so the next ``_token()`` re-reads the
+    rotated token from brain_config.json — recovering a mid-session token
+    rotation without a restart. The HTTPError still propagates (the caller's
+    ``except`` already swallows it); the clear happens once per failed response,
+    and the 15s refresh tick retries with the fresh token."""
+    url = f"http://127.0.0.1:{port}{path}"
+    headers = {"X-DreamLayer-Token": auth.get(),
+               "Content-Type": "application/json"}
+    if opener is None:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(url, headers=headers,
+                                 data=(body if method == "POST" else None),
+                                 method=method)
+    try:
+        with opener.open(req, timeout=6) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            auth.invalidate()
+        raise
+
+
+# ---------------------------------------------------------------------------
 # The menu-bar app (rumps; macOS only)
 # ---------------------------------------------------------------------------
 
@@ -401,16 +462,15 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
         # starts its server in app_main and calls run_menubar(serve=False), so
         # this never double-serves there (audit 2026-07-17).
         serve_brain_in_background(cfg_dir, port)
-    auth = {"token": BrainConfig.load(cfg_dir).token}
+    auth = _TokenCache(cfg_dir, BrainConfig.load)
 
     def _token() -> str:
-        # Re-read from config if the first read was empty. On a slow first run
-        # the server mints/persists the token just after the UI started, and a
-        # cached empty token would leave the dot permanently grey (authorize
-        # needs the exact token even from loopback).
-        if not auth["token"]:
-            auth["token"] = BrainConfig.load(cfg_dir).token
-        return auth["token"]
+        # Re-read from config if the cache is empty. On a slow first run the
+        # server mints/persists the token just after the UI started, and a cached
+        # empty token would leave the dot permanently grey (authorize needs the
+        # exact token even from loopback). An auth failure in _api() also clears
+        # the cache, so this re-reads a ROTATED token without a restart.
+        return auth.get()
 
     class App(rumps.App):
         def __init__(self):
@@ -421,15 +481,9 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             rumps.Timer(self.refresh, 15).start()
 
         def _api(self, path, method="GET", body=b"{}"):
-            url = f"http://127.0.0.1:{port}{path}"
-            headers = {"X-DreamLayer-Token": _token(),
-                       "Content-Type": "application/json"}
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            req = urllib.request.Request(url, headers=headers,
-                                         data=(body if method == "POST" else None),
-                                         method=method)
-            with opener.open(req, timeout=6) as r:
-                return json.loads(r.read().decode("utf-8"))
+            # _authed_api carries the cached token and, on a 401/403, invalidates
+            # the cache so the next _token() re-reads a rotated token from config.
+            return _authed_api(port, auth, path, method, body)
 
         def refresh(self, _):
             st = fetch_status(port, _token())       # fetch ONCE per tick (was twice)

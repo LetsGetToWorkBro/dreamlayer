@@ -16,9 +16,14 @@ three-part hardening of BrainConfig.save():
     reopen-truncated into leaking the fresh secrets through a 0o644 handle.
 
   * FIX 1 — on Windows chmod(0o600) only toggles the read-only bit and sets NO
-    ACL, so save() adds an owner-only ACL step (strip inheritance, grant Full
-    control to ONLY the current user). Guarded to run on the Windows CI leg and
-    skip on POSIX; a wiring test confirms save() invokes it on every platform.
+    ACL, so save() adds an owner-only ACL step: strip inheritance, then grant
+    Full control to the current user PLUS the locale/domain-independent
+    well-known SIDs S-1-5-18 (LocalSystem) and S-1-5-32-544 (Administrators) —
+    so stripping inheritance doesn't lock out AV/backup/OS-agent readers while
+    still evicting Users/Everyone. It runs only when the config is first created
+    (the DACL persists across the atomic in-place re-saves), and is skipped on
+    POSIX; the nt-gated test parses the real DACL and a wiring test confirms the
+    create-runs / unchanged-resave-skips gating.
 """
 from __future__ import annotations
 
@@ -224,15 +229,25 @@ def test_concurrent_saves_never_collide_or_widen_mode(tmp_path):
 
 # -- FIX 1: the Windows owner-only ACL step ------------------------------------
 
-def test_save_invokes_the_windows_acl_hardener(tmp_path, monkeypatch):
-    # cross-platform wiring: save() must call the ACL hardener with the FINAL
-    # target path. On POSIX the hardener is a no-op, but the same code path is
-    # what runs (and matters) on the Windows leg.
+def test_save_hardens_acl_on_create_but_skips_unchanged_resave(tmp_path,
+                                                               monkeypatch):
+    # cross-platform wiring + item 3: the ACL hardener shells icacls and does a
+    # token lookup, so save() must run it ONLY when it would change something —
+    # on the first create of the file — and SKIP it on a later re-save that
+    # overwrites an already-hardened target (the owner-only DACL persists across
+    # the atomic in-place replace). On POSIX the hardener is a no-op, but this is
+    # the exact gating that runs (and matters) on the Windows leg.
     cfg = tmp_path / "cfg"
     calls: list[str] = []
     monkeypatch.setattr(store, "_harden_windows_acl", lambda p: calls.append(p))
+
+    # first save creates the file → hardener runs with the FINAL target path
     BrainConfig(token="tok").save(cfg)
     assert calls == [str(cfg / store.CONFIG_FILE)]
+
+    # a second save overwrites the existing target → hardener is NOT re-run
+    BrainConfig(token="tok2", api_key="k").save(cfg)
+    assert calls == [str(cfg / store.CONFIG_FILE)]   # still just the one create
 
 
 @posix_only
@@ -248,8 +263,9 @@ def test_harden_windows_acl_is_a_noop_on_posix(tmp_path):
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows ACL semantics")
 def test_windows_config_acl_is_owner_only(tmp_path):
-    # runs only on test-windows: prove the ACL step actually ran — inheritance
-    # stripped and no broad principals left in the DACL, only the current user.
+    # runs only on test-windows: prove the ACL step actually reshaped the real
+    # DACL — inheritance disabled, no broad principal, and Full control granted
+    # to exactly the current user + SYSTEM + Administrators (item 1/5).
     cfg = tmp_path / "cfg"
     BrainConfig(token="tok", cloud_api_key="ck", api_key="ak").save(cfg)
     target = cfg / store.CONFIG_FILE
@@ -259,13 +275,24 @@ def test_windows_config_acl_is_owner_only(tmp_path):
 
     # /inheritance:r removed inherited ACEs — none of the "(I)" inherited flags
     # should remain in the listing.
-    assert "(I)" not in out
-    # no broadly-scoped principal may appear in the hardened DACL
+    assert "(I)" not in out, out
+    # NO broadly-scoped principal may appear in the hardened DACL — the whole
+    # point is that other regular users (Users/Everyone) can no longer read it.
     for broad in ("Everyone", "Authenticated Users",
                   "BUILTIN\\Users", "\\Users:"):
-        assert broad not in out
-    # the current user IS granted (by SID or by account name)
+        assert broad not in out, f"{broad!r} unexpectedly still in DACL:\n{out}"
+
+    # SYSTEM and Administrators are re-granted alongside the user (well-known
+    # SIDs S-1-5-18 / S-1-5-32-544), so stripping inheritance didn't lock out
+    # AV/backup/OS agents. They resolve to names, but tolerate raw-SID display.
+    assert ("NT AUTHORITY\\SYSTEM" in out) or ("S-1-5-18" in out), out
+    assert ("Administrators" in out) or ("S-1-5-32-544" in out), out
+
+    # the current user IS granted (by resolved account name or by SID)
     import getpass
     sid = store._current_user_sid() or ""
     user = getpass.getuser()
-    assert (sid and sid in out) or (user and user in out)
+    assert (sid and sid in out) or (user and user in out), out
+
+    # every surviving ACE is Full control (":(F)"), matching the three grants
+    assert ":(F)" in out, out

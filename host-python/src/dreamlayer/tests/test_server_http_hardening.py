@@ -31,6 +31,16 @@ A later refute pass (audit 2026-07-17) confirmed two gaps the first pass left:
   7. A body the server can't length-delimit (Transfer-Encoding present, no
      usable Content-Length) was returned as b"" — silently accepted as empty, so
      /upload wrote a 0-byte file and answered ok. Fix: reject → 411, no artifact.
+
+A follow-up (audit 2026-07-17) split the read and send deadlines:
+
+  8. settimeout() sets ONE deadline governing both recv and send, so the 30 s
+     anti-slowloris READ bound also severed the SEND path — a client legitimately
+     but slowly draining a LARGE response (a /backup export, a big memory dump
+     over a slow/mobile link) was cut at 30 s mid-download. Fix: once the request
+     is fully read, end_headers() raises the socket timeout to a generous but
+     finite SEND_TIMEOUT_S just before the body is written; handle_one_request()
+     restores the tight read bound per request so no slowloris-on-read reopens.
 """
 from __future__ import annotations
 
@@ -61,6 +71,17 @@ def _serve(brain):
 def _post(url, body, headers=None, timeout=10):
     data = body if isinstance(body, (bytes, bytearray)) else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers=headers or {})
+    # bypass any ambient HTTP proxy — this is a loopback call
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def _get(url, headers=None, timeout=10):
+    req = urllib.request.Request(url, headers=headers or {}, method="GET")
     # bypass any ambient HTTP proxy — this is a loopback call
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
@@ -548,5 +569,54 @@ def test_empty_body_post_without_transfer_encoding_still_ok(tmp_path):
                b"\r\n")                                   # no Content-Length, no body
         resp = _raw_http(host, port, raw, read_timeout=5)
         assert _status_of(resp) == 200
+    finally:
+        server.shutdown(); server.server_close()
+
+
+# ---------------------------------------------------------------------------
+# 8. send-side timeout is separated from the read timeout → a slow legitimate
+#    drain of a LARGE response isn't severed at the 30 s anti-slowloris bound
+# ---------------------------------------------------------------------------
+
+def test_send_timeout_constant_is_generous_and_finite():
+    # The send bound is a distinct, named constant: strictly larger than the
+    # per-recv read bound (so a slow large-response drain isn't cut at 30 s) yet
+    # finite (a slow drain must still not hang a worker forever).
+    assert srv.SEND_TIMEOUT_S > srv.SOCKET_TIMEOUT_S
+    assert 0 < srv.SEND_TIMEOUT_S < float("inf")
+
+
+def test_large_response_raises_send_timeout_above_read_bound(tmp_path, monkeypatch):
+    # settimeout() governs BOTH recv and send, so the 30 s read bound would also
+    # sever the SEND path — a client slowly draining a big /backup export could be
+    # cut at 30 s mid-download. The fix raises the socket timeout to the generous
+    # SEND bound once the request is fully read, just before the body is written.
+    # Assert that at that moment the connection's timeout has been raised above
+    # SOCKET_TIMEOUT_S (and up to SEND_TIMEOUT_S), and that the full large body
+    # still arrives. Reverted (one settimeout governing both, never re-raised for
+    # the send phase): _extend_send_timeout is never invoked, `seen` stays empty
+    # and the assertion breaks.
+    seen = []
+    orig_extend = srv._extend_send_timeout
+
+    def spy(conn):
+        orig_extend(conn)                                # perform the real bump
+        seen.append(conn.gettimeout())                  # capture it at write time
+
+    monkeypatch.setattr(srv, "_extend_send_timeout", spy)
+
+    brain = Brain(tmp_path)
+    payload = "x" * (2 * 1024 * 1024)                    # a ~2 MiB export body
+    brain.export_backup = lambda: {"blob": payload}      # /backup is local-only + gated
+    server, host, port = _serve(brain)
+    try:
+        status, body = _get(f"http://{host}:{port}/dreamlayer/backup", timeout=15)
+        assert status == 200
+        assert len(body) >= len(payload)                 # the whole large body arrived
+        assert seen                                      # the bump ran during the write
+        # at body-write time the socket timeout was the generous SEND bound,
+        # strictly above the anti-slowloris read bound
+        assert seen[0] == srv.SEND_TIMEOUT_S
+        assert seen[0] > srv.SOCKET_TIMEOUT_S
     finally:
         server.shutdown(); server.server_close()

@@ -140,6 +140,39 @@ def test_render_card_provider_only_raises_and_types():
         sdk.render_card(currency_plugin())
 
 
+def test_preview_grants_only_declared_capabilities_not_everything():
+    """REVERT-FAILING: the author-only preview harness EXECUTES an untrusted
+    package's register(), so it must run it with the plugin's DECLARED caps
+    only (plus the always-open object_lens/glance/cards surfaces smoke_load
+    grants) — never all of KNOWN_CAPABILITIES. Before the fix the preview built
+    a PluginContext over the full KNOWN set, a second ungated full-capability
+    grant outside the device's fail-closed load path: a "what does this plugin
+    do" call would hand register() network/vision/memory/… it never asked for.
+    """
+    from dreamlayer.sdk import make_plugin
+    from dreamlayer.plugins.package import KNOWN_CAPABILITIES
+
+    seen: dict = {}
+
+    def spy(ctx):
+        seen["caps"] = ctx.capabilities
+        seen["network"] = ctx.has("network")
+
+    # requires=() → declares NOTHING; reaching for an undeclared cap (network)
+    # must be refused. The preview context must equal the always-open set only.
+    sdk.contributions(make_plugin("greedy", spy, requires=()))
+    assert seen["caps"] == frozenset({"object_lens", "glance", "cards"})
+    assert seen["network"] is False
+    assert "network" not in seen["caps"]
+    # the exact bug this guards against: the old harness granted the full set
+    assert seen["caps"] != frozenset(KNOWN_CAPABILITIES)
+
+    # and a DECLARED capability IS granted (well-behaved plugins are unchanged)
+    sdk.contributions(make_plugin("net", spy, requires=("network",)))
+    assert seen["network"] is True
+    assert seen["caps"] == frozenset({"network", "object_lens", "glance", "cards"})
+
+
 def test_package_from_dir_builds_a_valid_package(tmp_path):
     # the helper the CLI and every scaffold test use
     (tmp_path / "plugin.py").write_text(SDK_ONLY_SRC, encoding="utf-8")

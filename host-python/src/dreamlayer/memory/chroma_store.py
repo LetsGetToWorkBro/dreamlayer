@@ -123,7 +123,19 @@ class ChromaStore:
     # re-derives it from the live DB rows. Best-effort + fallback delegation;
     # never raises into a forget path.
     def evict(self, memory_id: int) -> None:
-        col = self._get_col()
+        # Retry a transient _get_col() open failure a couple of times before
+        # giving up: a PersistentClient that momentarily fails to open (a stale
+        # lock, a slow disk) returns None here, and skipping the delete would
+        # strand the forgotten vector's bytes on disk (not recallable — the DB
+        # row is already gone — but a forget-completeness gap). _get_col re-opens
+        # the client each call while _col is None, so a later attempt can win. A
+        # persistent failure still just logs and delegates to the fallback —
+        # best-effort, never raising into the forget path.
+        col = None
+        for _ in range(3):
+            col = self._get_col()
+            if col is not None:
+                break
         if col is not None:
             try:
                 col.delete(ids=[str(memory_id)])

@@ -6,6 +6,10 @@ injectable poster.
 """
 from __future__ import annotations
 
+import urllib.error
+
+import pytest
+
 from dreamlayer.ai_brain.server.store import BrainConfig
 from dreamlayer.ai_brain.server.backends import pull_model
 from dreamlayer.ai_brain import menubar
@@ -64,6 +68,43 @@ def test_status_summary_green_yellow_incognito_offline():
 
     off = menubar.status_summary(None)
     assert off["icon"] == "⚪" and "offline" in off["title"].lower()
+
+
+# -- stale-token recovery: a mid-session rotation is picked up, no restart ------
+
+def test_menu_bar_recovers_from_a_rotated_pairing_token(tmp_path):
+    # The menu bar caches the pairing token and, before this fix, re-read it from
+    # config ONLY while empty (the grey-dot startup-race fix). So once a NON-empty
+    # token was cached it was never re-read for the process lifetime: a mid-session
+    # token ROTATION (the panel "rotate" action mints a new token into
+    # brain_config.json) stranded the UI on the OLD token → every loopback call
+    # 401s → a permanent grey dot until restart. The fix: an _api 401/403 clears
+    # the cache so the next _token() re-reads the fresh token.
+    cfg = tmp_path / "cfg"; cfg.mkdir()
+    BrainConfig(token="old").save(cfg)
+
+    auth = menubar._TokenCache(str(cfg), BrainConfig.load)
+    assert auth.get() == "old"                       # cached the initial token
+
+    # the panel rotates the token: a NEW token is persisted to brain_config.json …
+    BrainConfig(token="new").save(cfg)
+    # … but a non-empty cache still hands out the stale token (the bug's setup):
+    assert auth.get() == "old"
+
+    # an _api call authenticating with the stale token comes back 401
+    class _Opener401:
+        def open(self, req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized",
+                                         {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        menubar._authed_api(7777, auth, "/dreamlayer/config", "POST",
+                            b"{}", opener=_Opener401())
+
+    # the 401 INVALIDATED the cache → the next read recovers the rotated token
+    # WITHOUT a restart. The reverted "re-read only while empty" logic (no
+    # invalidate on auth failure) would stay stuck on "old" and fail here.
+    assert auth.get() == "new"
 
 
 # -- launch-at-login plist ----------------------------------------------------

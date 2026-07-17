@@ -16,14 +16,39 @@ from __future__ import annotations
 
 from typing import Optional
 
+# Extension surfaces the real load path always grants (see
+# ``plugins/validate.py`` ``smoke_load``): a plugin may reach
+# object_lens/glance/cards without a per-device capability grant. The preview
+# mirrors that set so a declared-capabilities preview matches the smoke-load
+# contract exactly.
+_ALWAYS_AVAILABLE = frozenset({"object_lens", "glance", "cards"})
 
-def _plugin_object(plugin):
-    """Accept a plugin object, a factory callable, or a PluginPackage."""
+
+def _resolve(plugin):
+    """Resolve ``plugin`` (a plugin object, a factory callable, or a
+    ``PluginPackage``) to ``(plugin_object, capabilities)``.
+
+    ``capabilities`` is exactly what the plugin **declared** — a package's
+    ``manifest.requires`` (or a plugin object's ``.requires``) — unioned with
+    the always-open extension surfaces ``smoke_load`` grants, and nothing else.
+
+    It must NEVER be all of ``KNOWN_CAPABILITIES``: this author-only preview
+    still *executes* an untrusted package's ``register()`` in full, and a
+    context carrying every capability would be a second, ungated grant living
+    outside the device's fail-closed load path — so a "what does this plugin
+    do" call on an untrusted package would run its ``register()`` with
+    network/vision/memory/… it never asked for. Granting only the declared
+    envelope keeps the preview inside the same contract the real load enforces:
+    register() can't be handed an undeclared capability here either."""
     from ..plugins.package import PluginPackage
     from ..plugins.store import load_plugin_object
     if isinstance(plugin, PluginPackage):
-        return load_plugin_object(plugin)
-    return plugin() if callable(plugin) and not hasattr(plugin, "register") else plugin
+        obj = load_plugin_object(plugin)
+        declared = plugin.manifest.requires
+    else:
+        obj = plugin() if callable(plugin) and not hasattr(plugin, "register") else plugin
+        declared = getattr(obj, "requires", ())
+    return obj, frozenset(declared) | _ALWAYS_AVAILABLE
 
 
 def registered_card_types(plugin) -> list:
@@ -31,11 +56,10 @@ def registered_card_types(plugin) -> list:
     ``register`` against a renderer). Empty for provider-only plugins."""
     from ..hud.renderer import CardRenderer
     from ..plugins.base import PluginContext, PluginRegistry
-    from ..plugins.package import KNOWN_CAPABILITIES
+    obj, caps = _resolve(plugin)
     renderer = CardRenderer()
-    ctx = PluginContext(renderer=renderer,
-                        capabilities=frozenset(KNOWN_CAPABILITIES), config={})
-    PluginRegistry(ctx).load_all([_plugin_object(plugin)])
+    ctx = PluginContext(renderer=renderer, capabilities=caps, config={})
+    PluginRegistry(ctx).load_all([obj])
     return list(renderer._extra.keys())
 
 
@@ -46,9 +70,9 @@ def contributions(plugin) -> dict:
     the store/CLI show "what does this plugin do" without pluggy-style hook
     discovery (see docs/adr/0001-plugin-extension-model.md)."""
     from ..plugins.base import PluginContext, PluginRegistry
-    from ..plugins.package import KNOWN_CAPABILITIES
-    ctx = PluginContext(capabilities=frozenset(KNOWN_CAPABILITIES), config={})
-    PluginRegistry(ctx).load_all([_plugin_object(plugin)])
+    obj, caps = _resolve(plugin)
+    ctx = PluginContext(capabilities=caps, config={})
+    PluginRegistry(ctx).load_all([obj])
     out: dict = {}
     for kind, items in ctx.added.items():
         if items:
@@ -64,13 +88,12 @@ def render_card(plugin, card: Optional[dict] = None):
     card renderer."""
     from ..hud.renderer import CardRenderer
     from ..plugins.base import PluginContext, PluginRegistry
-    from ..plugins.package import KNOWN_CAPABILITIES
 
+    obj, caps = _resolve(plugin)
     renderer = CardRenderer()
-    ctx = PluginContext(renderer=renderer,
-                        capabilities=frozenset(KNOWN_CAPABILITIES), config={})
+    ctx = PluginContext(renderer=renderer, capabilities=caps, config={})
     reg = PluginRegistry(ctx)
-    reg.load_all([_plugin_object(plugin)])
+    reg.load_all([obj])
     reg.start_all()                       # v2 plugins may finish wiring in start()
     types = list(renderer._extra.keys())
     if not types:

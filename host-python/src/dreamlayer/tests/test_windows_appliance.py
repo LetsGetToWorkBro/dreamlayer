@@ -59,6 +59,45 @@ def test_status_lines_are_shared_with_the_mac_menu():
     assert any(line == "Model: keyword" for line in s["lines"])
 
 
+# -- stale-token recovery: a mid-session rotation is picked up, no restart ------
+
+def test_tray_recovers_from_a_rotated_pairing_token(tmp_path):
+    # The tray caches the pairing token and, before this fix, re-read it from
+    # config ONLY while empty (the grey-dot startup-race fix). So once a NON-empty
+    # token was cached it was never re-read for the process lifetime: a mid-session
+    # token ROTATION (the panel "rotate" action mints a new token into
+    # brain_config.json) stranded the UI on the OLD token → every loopback call
+    # 401/403s → a permanent grey dot until restart. The fix: an _api 401/403
+    # clears the cache so the next _token() re-reads the fresh token.
+    import urllib.error
+    from dreamlayer.ai_brain.server.store import BrainConfig
+    cfg = tmp_path / "cfg"; cfg.mkdir()
+    BrainConfig(token="old").save(cfg)
+
+    auth = tray_windows._TokenCache(str(cfg), BrainConfig.load)
+    assert auth.get() == "old"                       # cached the initial token
+
+    # the panel rotates the token: a NEW token is persisted to brain_config.json …
+    BrainConfig(token="new").save(cfg)
+    # … but a non-empty cache still hands out the stale token (the bug's setup):
+    assert auth.get() == "old"
+
+    # an _api call authenticating with the stale token comes back 403
+    class _Opener403:
+        def open(self, req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 403, "Forbidden",
+                                         {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        tray_windows._authed_api(7777, auth, "/dreamlayer/config", "POST",
+                                 b"{}", opener=_Opener403())
+
+    # the 403 INVALIDATED the cache → the next read recovers the rotated token
+    # WITHOUT a restart. The reverted "re-read only while empty" logic (no
+    # invalidate on auth failure) would stay stuck on "old" and fail here.
+    assert auth.get() == "new"
+
+
 # -- start-at-login: the Run-entry command (pure) -------------------------------
 
 def test_build_login_entry_source_mirrors_the_launch_agent():
