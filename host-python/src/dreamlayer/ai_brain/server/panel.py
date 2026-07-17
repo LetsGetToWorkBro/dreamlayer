@@ -191,6 +191,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
   /* connections + switches — the toggle is a Platinum slide switch */
   .conn{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:16px 0;border-top:1px solid var(--line)}
+  .conn .cthumb{width:96px;height:51px;flex:none;object-fit:cover;border:1px solid var(--frame);border-radius:5px;background:#0B1012}
   .conn:first-of-type{border-top:0;padding-top:4px}
   .conn-t{font-size:1rem;font-weight:600} .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:46ch}
   .sw{position:relative;display:inline-block;width:46px;height:24px;flex:none;cursor:pointer}
@@ -1619,7 +1620,7 @@ async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch
   if(!(r.installed||[]).length){ul.innerHTML='<li class="conn-s" style="margin:0">No plugins installed yet — browse the store.</li>';return;}
   ul.innerHTML=(r.installed||[]).map(p=>{
     const perms=(p.requires||[]).length?(p.requires||[]).map(x=>"needs "+esc(x)).join(" · "):"no special access";
-    return '<li class="conn"><div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
+    return '<li class="conn">'+(p.screenshot?'<img class="cthumb" src="'+esc(p.screenshot)+'" alt="'+esc(p.name)+' on the glass" onclick="openPluginDetail(\''+esc(p.name)+'\')" style="cursor:pointer">':'')+'<div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
       '<div class="conn-s">'+perms+' · <span style="color:var(--memory)">See what it does →</span></div></div>'+
       '<button class="sm ghost" onclick="removePlugin(\''+esc(p.name)+'\')">Remove</button></li>';
   }).join("");}

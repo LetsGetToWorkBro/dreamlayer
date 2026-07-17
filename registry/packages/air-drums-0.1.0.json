@@ -5,7 +5,7 @@
     "entry": "plugin:plugin",
     "author": "DreamLayer Team",
     "official": true,
-    "description": "Play a drum kit in the air — head-nods and taps fire real MIDI drums.",
+    "description": "Play a drum kit in the air. Nod for a kick, flick left for a snare, right for a hat. Real MIDI, any DAW.",
     "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/air_drums.py",
     "requires": [
       "midi"
@@ -16,8 +16,8 @@
     "forwho": "For drummers, producers, and fidgeters.",
     "screenshot": "https://dreamlayer.app/plugin-shots/air-drums.png",
     "long": [
-      "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash — each gesture fires a General-MIDI drum on channel 10, into any DAW or drum machine.",
-      "Velocity follows how hard you move, so it feels dynamic, not robotic.",
+      "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash. Each one fires a General MIDI drum on channel 10.",
+      "Velocity follows how hard you move, so it feels dynamic instead of robotic.",
       "Pairs with Face Synth for a hands-free one-person band."
     ],
     "pricing": {
