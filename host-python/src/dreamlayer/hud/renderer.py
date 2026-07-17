@@ -619,27 +619,58 @@ class CardRenderer:
         draw.text((x, y), str(text), font=_font(size),
                   fill=(r, g, b, alpha), anchor=anchor)
 
-    def _multiline_text(self, draw, x, y, text, size, color, max_width=192):
+    def _multiline_text(self, draw, x, y, text, size, color, max_width=192,
+                        max_lines=8):
         font = _font(size)
+
+        def _w(s):
+            try:
+                return font.getlength(s)
+            except AttributeError:
+                return len(s) * FONT_PX.get(size, 13) * 0.6
+
         words = str(text).split()
         lines: list[str] = []
         current = ""
+        truncated = False
         for word in words:
+            # Hard-break a word too wide to fit on its own line, so a single
+            # unbroken run (an untrusted Juno/API-brain reply can be one) can't
+            # spill a 35000px band off the glass (audit 2026-07-15).
+            while _w(word) > max_width and len(word) > 1:
+                cut = len(word)
+                while cut > 1 and _w(word[:cut]) > max_width:
+                    cut -= 1
+                if current:
+                    lines.append(current); current = ""
+                lines.append(word[:cut]); word = word[cut:]
+                if len(lines) >= max_lines:
+                    break
+            if len(lines) >= max_lines:
+                truncated = True; break
             test = (current + " " + word).strip()
-            try:
-                w = font.getlength(test)
-            except AttributeError:
-                w = len(test) * FONT_PX.get(size, 13) * 0.6
-            if w <= max_width:
+            if _w(test) <= max_width:
                 current = test
             else:
                 if current:
                     lines.append(current)
                 current = word
-        if current:
+            if len(lines) >= max_lines:
+                truncated = True; break
+        if current and len(lines) < max_lines:
             lines.append(current)
+        elif current:
+            truncated = True
         if not lines:
             return
+        lines = lines[:max_lines]
+        if truncated:
+            # cap the card: an overlong reply can't garble the whole face — the
+            # last visible line ends in an ellipsis.
+            last = lines[-1]
+            while last and _w(last + "…") > max_width:
+                last = last[:-1]
+            lines[-1] = last + "…"
         line_h = FONT_PX.get(size, 13) + 5
         total_h = len(lines) * line_h
         start_y = y - total_h / 2 + line_h / 2

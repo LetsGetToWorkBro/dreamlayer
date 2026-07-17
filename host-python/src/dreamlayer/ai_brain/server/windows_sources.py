@@ -271,11 +271,22 @@ def ics_events(text: str, calendar: str = "", now: float | None = None,
     return events
 
 
+# Calendars are small; cap every .ics read (file OR URL) so a caller-set
+# calendar_ics pointing at a multi-GB file (C:\pagefile.sys) or a URL that
+# streams gigabytes can't OOM the sync thread (audit 2026-07-15).
+ICS_MAX_BYTES = 4_000_000
+
+
 def _fetch_ics_url(url: str, timeout: float = 10.0) -> str:
     import urllib.request
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(url, timeout=timeout) as r:
-        return r.read().decode("utf-8", "ignore")
+        return r.read(ICS_MAX_BYTES).decode("utf-8", "ignore")
+
+
+def _read_ics_file(path: Path, cap: int = ICS_MAX_BYTES) -> str:
+    with path.open("rb") as f:
+        return f.read(cap).decode("utf-8", "ignore")
 
 
 def _calendar_source_name(src: str) -> str:
@@ -315,9 +326,28 @@ def load_ics_sources(config=None,
             if src.startswith(("http://", "https://")):
                 if lan_only:
                     continue            # Incognito: no fetches, period
+                # SSRF guard: calendar_ics is caller-settable, so a URL feed
+                # must be a PUBLIC https endpoint. Refuse cleartext http and any
+                # loopback / link-local / RFC-1918 target — otherwise a token
+                # holder turns the Brain into a request primitive into the local
+                # network or cloud metadata (http://169.254.169.254/…) or its
+                # own loopback API (audit 2026-07-15).
+                from .backends import is_local_endpoint
+                if not src.startswith("https://") or is_local_endpoint(src):
+                    continue
                 text = fetch(src)
             else:
-                text = Path(src).expanduser().read_text(errors="ignore")
+                # File path: same default-deny allow-list as watched folders,
+                # resolve()d so `..` / symlinks / junctions / UNC shares /
+                # drive-roots that escape the user's own tree are refused. A
+                # token holder must not be able to read C:\Windows, another
+                # user's profile, or \\server\share via a calendar entry
+                # (audit 2026-07-15 — the Windows analogue of the folder
+                # allow-list the Mac never needed).
+                from .store import _is_allowed_root
+                if not _is_allowed_root(src):
+                    continue
+                text = _read_ics_file(Path(src).expanduser())
         except Exception:
             continue
         out.append((_calendar_source_name(src), text))

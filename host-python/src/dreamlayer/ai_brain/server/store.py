@@ -228,9 +228,23 @@ class BrainConfig:
         return cls()
 
     def save(self, cfg_dir: Path | str) -> None:
+        # tmp + atomic replace: a plain write_text can be caught torn by a crash
+        # or AV lock mid-write, and BrainConfig.load() turns a JSONDecodeError
+        # into cls() DEFAULTS — silently dropping the wearer out of Incognito
+        # (network_mode → "connected") and losing their watched folders. The
+        # config store holds the privacy posture, so it must never half-write
+        # (audit 2026-07-15). replace_atomic also rides out Windows share-mode
+        # contention, matching the JSON stores.
         d = Path(cfg_dir)
         d.mkdir(parents=True, exist_ok=True)
-        (d / CONFIG_FILE).write_text(json.dumps(asdict(self), indent=2))
+        target = d / CONFIG_FILE
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(asdict(self), indent=2))
+        try:
+            replace_atomic(str(tmp), str(target))
+        except Exception:
+            tmp.unlink(missing_ok=True)     # no torn residue if the swap fails
+            raise
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

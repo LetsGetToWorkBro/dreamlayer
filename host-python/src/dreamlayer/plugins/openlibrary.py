@@ -19,6 +19,7 @@ the actual egress channel is what the OFF precedent does).
 from __future__ import annotations
 
 import json
+import math
 import urllib.parse
 from typing import Callable, Optional, cast
 
@@ -40,7 +41,19 @@ def parse_book(doc: dict) -> dict:
     avg = doc.get("ratings_average")
     count = doc.get("ratings_count") or 0
     if avg is not None and count:
-        out["rating"] = round(float(avg), 2)
+        # Clamp to the real 0–5 rating scale and reject non-finite values: the
+        # response is untrusted (a spoofed / MITM'd Open Library reply could send
+        # ratings_average: 999999 or 1e400=inf), and `rating` feeds BOTH the
+        # taste ranking score and the "N★" HUD string — an unbounded value would
+        # force the attacker's book to win "BEST PICK" and print inf★ on the
+        # glass (audit 2026-07-15; the openfoodfacts sibling is bounded by an
+        # enum, this one trusted a raw float).
+        try:
+            r = float(avg)
+        except (TypeError, ValueError):
+            r = None
+        if r is not None and math.isfinite(r):
+            out["rating"] = round(max(0.0, min(5.0, r)), 2)
     authors = doc.get("author_name") or []
     if authors:
         out["author"] = str(authors[0])

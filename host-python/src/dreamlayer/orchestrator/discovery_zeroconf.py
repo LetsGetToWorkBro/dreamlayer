@@ -33,9 +33,17 @@ class Discovery:
         try:
             self._zc = Zeroconf()
             addr = socket.inet_aton(socket.gethostbyname(socket.gethostname()))
+            # Advertise presence/host/port ONLY — never the pairing token. A
+            # zeroconf TXT record is unauthenticated multicast: any device (or a
+            # passive listener) on the LAN reads it in the clear, so putting the
+            # secret here defeats the pairing it's meant to protect. Discovery
+            # returns {name, host, port}; the token is exchanged over the
+            # authenticated pairing channel, not broadcast (audit 2026-07-15).
+            # `token` stays in the signature for call-compatibility but is not
+            # published.
             self._info = ServiceInfo(
                 SERVICE, f"{name}.{SERVICE}", addresses=[addr], port=port,
-                properties={"token": token} if token else {})
+                properties={})
             self._zc.register_service(self._info)
             return True
         except Exception as exc:
