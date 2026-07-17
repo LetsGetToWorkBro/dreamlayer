@@ -42,7 +42,11 @@ class ChromaStore:
                 chromadb.PersistentClient(path=self._path) if self._path
                 else chromadb.EphemeralClient()
             )
-            self._col = self._client.get_or_create_collection(self._collection)
+            # Cosine space so sim = 1 - cosine_distance is exactly cosine
+            # similarity — chroma's default is squared-L2, which the `1 - dist`
+            # read below would misinterpret as cosine (issue #395).
+            self._col = self._client.get_or_create_collection(
+                self._collection, metadata={"hnsw:space": "cosine"})
         except Exception as exc:
             log.error("[chroma_store] init failed: %s; linear fallback", exc)
             return None
@@ -59,15 +63,25 @@ class ChromaStore:
             ids, embs, metas = [], [], []
             for i, m in enumerate(rows):
                 emb = unpack_embedding(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
-                ids.append(str(i)); embs.append(emb); metas.append({"conf": m.get("confidence") or 0.5})
+                conf = m.get("confidence")
+                conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
+                ids.append(str(i)); embs.append(emb); metas.append({"conf": conf})
             col.upsert(ids=ids, embeddings=embs, metadatas=metas)
-            res = col.query(query_embeddings=[self.embedder.embed(query)], n_results=top_k)
+            # Chroma pre-ranks by raw distance, so asking for only top_k could
+            # drop a high-confidence memory whose blended score would win. Fetch
+            # every candidate, then re-score with the confidence blend and
+            # re-sort — the same semantics VectorStore._linear uses, so the two
+            # paths agree on the ranking by construction (issue #395).
+            res = col.query(query_embeddings=[self.embedder.embed(query)], n_results=len(ids))
             out = []
             for idx, dist in zip(res["ids"][0], res["distances"][0]):
                 m = rows[int(idx)]
-                sim = 1.0 - float(dist)
-                out.append((0.5 * sim + 0.5 * (m.get("confidence") or 0.5), m))
-            return out
+                sim = 1.0 - float(dist)   # cosine space -> sim = 1 - cosine_distance = cos
+                conf = m.get("confidence")
+                conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
+                out.append((0.5 * sim + 0.5 * conf, m))
+            out.sort(key=lambda x: x[0], reverse=True)
+            return out[:top_k]
         except Exception as exc:
             log.error("[chroma_store] query failed: %s; linear fallback", exc)
             return self._fallback.search(query, kind=kind, top_k=top_k)
