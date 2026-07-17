@@ -194,6 +194,12 @@ _LOCAL_AGENT_PROBES = (
     {"label": "Text-Gen-WebUI", "provider": "custom",
      "base_url": "http://localhost:5000/v1",
      "models_url": "http://localhost:5000/v1/models"},
+    {"label": "GPT4All", "provider": "custom",
+     "base_url": "http://localhost:4891/v1",
+     "models_url": "http://localhost:4891/v1/models"},
+    {"label": "KoboldCpp", "provider": "custom",
+     "base_url": "http://localhost:5001/v1",
+     "models_url": "http://localhost:5001/v1/models"},
 )
 
 
