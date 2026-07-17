@@ -57,25 +57,50 @@ class ChromaStore:
         if col is None:
             return self._fallback.search(query, kind=kind, top_k=top_k)
         try:
-            rows = list(self.db.memories(kind=kind))
+            # Key vectors by the STABLE memory_id, mirroring vector_store.py —
+            # never by row position. The old `str(i)` keys went stale the moment
+            # a narrower kind= call re-upserted ids 0..M-1 over a collection
+            # still holding M..N-1: a stale hit made `rows[int(idx)]` raise
+            # IndexError and the blanket except silently degraded every later
+            # query to the linear fallback (issue #409).
+            #
+            # Stable ids mean a persistent collection accumulates rows across
+            # ALL kind= filters, so kind isolation must live in the QUERY (a
+            # where={"kind": ...} metadata filter), not in the upsert set —
+            # otherwise a kind="commitment" query could surface an object vector
+            # a prior kind=None call upserted.
+            rows = list(self.db.memories())
             if not rows:
                 return []
             ids, embs, metas = [], [], []
-            for i, m in enumerate(rows):
+            by_id = {}
+            for m in rows:
                 emb = unpack_embedding(m["embedding"]) if m.get("embedding") else self.embedder.embed(m["summary"])
                 conf = m.get("confidence")
                 conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
-                ids.append(str(i)); embs.append(emb); metas.append({"conf": conf})
+                mid = str(m["id"])
+                ids.append(mid); embs.append(emb)
+                metas.append({"conf": conf, "kind": m.get("kind") or ""})
+                by_id[mid] = m
             col.upsert(ids=ids, embeddings=embs, metadatas=metas)
             # Chroma pre-ranks by raw distance, so asking for only top_k could
             # drop a high-confidence memory whose blended score would win. Fetch
             # every candidate, then re-score with the confidence blend and
             # re-sort — the same semantics VectorStore._linear uses, so the two
-            # paths agree on the ranking by construction (issue #395).
-            res = col.query(query_embeddings=[self.embedder.embed(query)], n_results=len(ids))
+            # paths agree on the ranking by construction (issue #395). Size the
+            # window by the COLLECTION, not the live batch: stale vectors (rows
+            # purged from the DB but not yet evicted here) still occupy query
+            # slots, and a window sized to the live rows could truncate a live
+            # candidate behind them.
+            res = col.query(
+                query_embeddings=[self.embedder.embed(query)],
+                n_results=col.count(),
+                where={"kind": kind} if kind is not None else None)
             out = []
-            for idx, dist in zip(res["ids"][0], res["distances"][0]):
-                m = rows[int(idx)]
+            for mid, dist in zip(res["ids"][0], res["distances"][0]):
+                m = by_id.get(mid)
+                if m is None:
+                    continue           # dead row (purged) — skip, don't count it
                 sim = 1.0 - float(dist)   # cosine space -> sim = 1 - cosine_distance = cos
                 conf = m.get("confidence")
                 conf = 0.5 if conf is None else float(conf)   # explicit 0.0 stays 0.0
@@ -87,14 +112,20 @@ class ChromaStore:
             return self._fallback.search(query, kind=kind, top_k=top_k)
 
     # -- forget hooks: wired into Retriever.purge_* so this store is not
-    # purge-blind (audit 2026-07-14). Chroma keyed vectors by transient row
-    # index, not memory_id, so a single vector can't be precisely targeted;
-    # both hooks therefore drop the whole persisted collection and let the next
-    # search re-derive it from the (now-purged) live DB rows — no residue, no
-    # orphaned vectors. Best-effort + fallback delegation; never raises into a
-    # forget path.
+    # purge-blind (audit 2026-07-14). Vectors are keyed by the stable memory_id,
+    # so evict() deletes exactly that one vector — "forget that" leaves no
+    # recallable embedding behind and the rest of the collection (and its HNSW
+    # index) survives. purge_all() still drops the whole persisted collection:
+    # erase-everything should leave no index residue at all, and the next search
+    # re-derives it from the live DB rows. Best-effort + fallback delegation;
+    # never raises into a forget path.
     def evict(self, memory_id: int) -> None:
-        self._drop_collection()
+        col = self._get_col()
+        if col is not None:
+            try:
+                col.delete(ids=[str(memory_id)])
+            except Exception as exc:
+                log.warning("[chroma_store] evict(%s) failed: %s", memory_id, exc)
         self._fallback.evict(memory_id)
 
     def purge_all(self) -> None:

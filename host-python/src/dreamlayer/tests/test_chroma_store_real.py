@@ -1,8 +1,13 @@
 """ChromaDB real-path semantic recall (issue #282): ranking, the
 0.5*sim + 0.5*confidence blend, kind filtering, the empty-DB early return,
-and the linear fallback. Needs chromadb (importorskip); path=None builds an
-EphemeralClient (no disk state) and the default MockEmbeddingProvider is
-deterministic, so ranking and score assertions are stable across runs."""
+and the linear fallback. Issue #409 adds the stable-memory_id keying pins:
+broad->narrow kind= searches must stay on the chroma path (no IndexError->
+silent-degradation), kind isolation must hold against cross-kind vectors
+accumulated in the persistent collection, and evict() must delete exactly one
+vector instead of dropping the collection. Needs chromadb (importorskip);
+path=None builds an EphemeralClient (no disk state) and the default
+MockEmbeddingProvider is deterministic, so ranking and score assertions are
+stable across runs."""
 import pytest
 
 from dreamlayer.memory.chroma_store import ChromaStore
@@ -131,6 +136,70 @@ class TestRealPath:
         raw_top = max(rows, key=lambda r: cosine(qv, emb.embed(r[1])))[1]
         assert raw_top != rows[0][1]                       # raw top-1 is a DIFFERENT row
         assert cosine(qv, emb.embed(rows[0][1])) < cosine(qv, emb.embed(raw_top))
+
+
+class TestStableMemoryIdKeys:
+    """Issue #409: vectors are keyed by the STABLE memory_id, not the transient
+    row index — and kind isolation lives in the query (a where={"kind": ...}
+    metadata filter), not the upsert set. The pinned symptom is the
+    IndexError->silent-degradation route: keyed positionally, a broad upsert of
+    N rows followed by a narrower kind= re-upsert of M<N rows left stale ids
+    M..N-1 in the collection; a stale hit made `rows[int(idx)]` raise
+    IndexError, the blanket except swallowed it, and the chroma path quietly
+    fell back to the linear scan until the collection was dropped."""
+
+    def test_broad_then_narrow_kind_search_stays_on_chroma(self, monkeypatch):
+        # The #409 core: a broad search() upserts all N rows; a narrower kind=
+        # search() must still be served by the chroma path — no silent degrade.
+        # The query text IS an object memory's summary, so on row-index keys the
+        # stale positional id of that object ranks top-2 in the narrow query and
+        # `rows[stale]` raises IndexError -> fallback (the spy catches it).
+        emb = MockEmbeddingProvider()
+        store = _store(_seeded(emb), "t409_degrade")
+        degraded = _fallback_spy(store, monkeypatch)
+        q = ROWS[3][1]                                  # the passport OBJECT text
+        store.search(q, top_k=3)                        # broad: upserts all N
+        out = store.search(q, kind="commitment", top_k=3)   # narrow: M < N
+        assert store._col is not None and degraded == []    # chroma handled BOTH
+        assert len(out) == 2                          # only 2 commitments exist
+        assert all(m["kind"] == "commitment" for _, m in out)
+
+    def test_kind_filter_never_surfaces_another_kinds_vector(self, monkeypatch):
+        # Keyed by memory_id, the persistent collection accumulates rows across
+        # ALL kind= filters, so the broad upsert below leaves object vectors in
+        # the collection. The kind= query must still return ONLY commitments —
+        # enforced by the query's where filter, not by what's in the upsert set.
+        emb = MockEmbeddingProvider()
+        store = _store(_seeded(emb), "t409_isolation")
+        degraded = _fallback_spy(store, monkeypatch)
+        store.search("anything", top_k=5)               # broad upsert, all kinds
+        q = ROWS[3][1]                                  # matches an OBJECT exactly
+        out = store.search(q, kind="commitment", top_k=5)
+        assert degraded == []                           # real chroma path, not fallback
+        assert len(out) == 2                            # only 2 commitments exist
+        assert all(m["kind"] == "commitment" for _, m in out)
+        assert all(m["summary"] != q for _, m in out)   # the object did not leak
+
+    def test_evict_deletes_one_vector_and_keeps_the_collection(self, monkeypatch):
+        # The #409 bonus: keyed by memory_id, evict() deletes exactly that one
+        # vector instead of dropping the whole collection (the wart the old
+        # forget-hooks comment called out). The rest of the index survives and
+        # the next search still runs on the real chroma path.
+        emb = MockEmbeddingProvider()
+        db = _seeded(emb)
+        store = _store(db, "t409_evict")
+        degraded = _fallback_spy(store, monkeypatch)
+        store.search("snake plant", top_k=3)            # build + populate
+        col = store._col
+        assert col is not None and col.count() == len(ROWS)
+        victim = next(m["id"] for m in db.memories() if m["summary"] == ROWS[0][1])
+        db.purge_memory(victim)                         # the row is forgotten...
+        store.evict(victim)                             # ...so its vector must go too
+        assert store._col is col                        # collection NOT dropped
+        assert col.count() == len(ROWS) - 1             # exactly one vector deleted
+        out = store.search("where is my snake plant", top_k=len(ROWS))
+        assert degraded == []                           # still the real chroma path
+        assert all(m["id"] != victim for _, m in out)   # dead id never surfaces
 
 
 class TestLinearFallback:
