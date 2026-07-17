@@ -222,6 +222,13 @@ class TestIncognitoNeverFetches:
         outside = tmp_path / "outside"
         allowed.mkdir(); outside.mkdir()
         monkeypatch.setenv("HOME", str(allowed))          # POSIX Path.home()
+        # Path.home() reads USERPROFILE (not HOME) on Windows, so narrow that too
+        # or the escape target — which lives under the real temp/profile tree on
+        # the Windows runner — stays inside the allow-list and the test can't tell
+        # a refused escape from an allowed one (test-windows CI, 2026-07-17).
+        monkeypatch.setenv("USERPROFILE", str(allowed))   # Windows Path.home()
+        monkeypatch.delenv("HOMEDRIVE", raising=False)     # don't let these override
+        monkeypatch.delenv("HOMEPATH", raising=False)
         monkeypatch.setattr(store.tempfile, "gettempdir", lambda: str(allowed))
         state = allowed / ".dreamlayer"
         cal = state / "calendars"; cal.mkdir(parents=True)
