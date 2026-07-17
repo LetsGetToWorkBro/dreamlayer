@@ -20,12 +20,18 @@ class PluginOps(OpsHost):
         caps = {"object_lens", "glance", "perception", "cards", "ring", "shop"}
         if getattr(self, "mesh", None) is not None:
             caps.add("mesh")
-        # the hub can reach the internet unless the Veil / incognito is on
+        # The hub reaches the internet only when the privacy gate CLEARLY allows
+        # capture. Fail CLOSED: if the gate is absent or raises, network is NOT
+        # granted (audit 2026-07-17 — silence is not permission; a privacy
+        # primitive with no clear allow signal must deny). The previous
+        # `except: caps.add("network")` fail-OPENED, handing plugins egress
+        # exactly when the trust signal was unreadable.
+        privacy = getattr(self, "privacy", None)
         try:
-            if self.privacy.allow_capture():
+            if privacy is not None and privacy.allow_capture():
                 caps.add("network")
         except Exception:
-            caps.add("network")
+            pass
         try:
             if self.brain is not None and self.brain.has_vision():
                 caps.add("vision")

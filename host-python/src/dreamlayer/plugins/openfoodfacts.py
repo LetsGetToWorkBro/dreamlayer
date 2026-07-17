@@ -18,6 +18,8 @@ import json
 import urllib.parse
 from typing import Callable, Optional, cast
 
+from ._egress import no_redirect_opener, read_capped
+
 # Nutri-Score grade → a 0–5 rating TasteLens can rank on (A is best).
 NUTRISCORE_RATING = {"a": 4.8, "b": 4.0, "c": 3.0, "d": 2.0, "e": 1.0}
 
@@ -89,20 +91,26 @@ def off_shop_fn(fetch_fn: Callable[[str], object], ttl: float = 300.0,
 def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
     """The shipped network fetch: urllib with a couple of retries on transient
     failures (5xx / connection errors), since Open Food Facts 503s under load.
-    A descriptive User-Agent is what OFF asks of API clients."""
+    A descriptive User-Agent is what OFF asks of API clients.
+
+    Hardened egress (audit 2026-07-17) via the shared :mod:`plugins._egress`
+    primitives: the read is size-capped (response-OOM) and 3xx redirects are
+    refused (SSRF-via-redirect), so egress can't leave the OFF host build_query
+    pins — matching the openlibrary sibling."""
     import time
     import urllib.error
     import urllib.request
     req = urllib.request.Request(
         url, headers={"User-Agent": "DreamLayer-TasteLens/0.1 (+https://dreamlayer.app)"})
+    opener = no_redirect_opener()
     last: Exception = RuntimeError("no attempt")
     for attempt in range(max(1, retries + 1)):
         try:
-            with urllib.request.urlopen(req, timeout=4) as r:   # network capability
-                return r.read().decode("utf-8", "replace")
+            with opener.open(req, timeout=4) as r:   # network capability, no redirects
+                return read_capped(r).decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             last = e
-            if e.code < 500:                      # 4xx won't get better on retry
+            if e.code < 500:                      # 3xx (refused redirect) / 4xx won't improve
                 raise
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e

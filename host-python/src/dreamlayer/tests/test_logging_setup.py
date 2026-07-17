@@ -77,6 +77,26 @@ class TestJsonFormatter:
         # Non-sensitive extras ride through untouched.
         assert obj["seam"] == "cloud"
 
+    def test_reply_is_redacted(self):
+        """Regression (privacy): a Juno/API-brain answer passed as
+        extra={"reply": ...} is attacker-influenceable free text and must be
+        redacted, both at the top level and nested under a benign key
+        (extra={"result": {"reply": ...}}). Benign siblings still ride through.
+        FAILS ON REVERT of the ``reply`` sensitive key in logging_setup."""
+        obj = json.loads(JsonLineFormatter().format(_record(
+            "answered",
+            reply="secret answer",                  # top-level Juno answer
+            result={"reply": "nested secret", "ok": True},  # nested answer
+            seam="cloud",                            # benign, must survive
+        )))
+        scrubbed = json.dumps({k: v for k, v in obj.items() if k != "ts"})
+        assert "secret answer" not in scrubbed
+        assert "nested secret" not in scrubbed
+        assert obj["reply"].startswith("<redacted")
+        assert obj["result"]["reply"].startswith("<redacted")
+        assert obj["result"]["ok"] is True           # benign nested key survives
+        assert obj["seam"] == "cloud"
+
 
 class TestConfigure:
     def teardown_method(self):

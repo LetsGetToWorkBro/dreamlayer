@@ -51,7 +51,12 @@ def _serve(cfg_dir: str, port: int) -> None:
     from dreamlayer.ai_brain.server.server import Brain, make_brain_server
     brain = Brain(cfg_dir)
     if not brain.config.token:                     # first run — mint a pairing token
-        brain.config.token = secrets.token_hex(8)
+        # 128-bit, matching ai_brain.server.__main__ (which mints token_hex(16)
+        # before a non-loopback bind). This appliance binds 0.0.0.0 below, so
+        # the token is network-exposed and must not be weaker than the
+        # launcher's — the prior 64-bit mint was brute-forceable by comparison
+        # (audit 2026-07-17).
+        brain.config.token = secrets.token_hex(16)
         brain.save()
     brain.start_watching()                         # reindex watched folders on change
     brain.start_brief_scheduler()                  # morning brief at brief_hour

@@ -58,7 +58,42 @@ def test_build_login_entry_source_mirrors_the_launch_agent():
     # LaunchAgent (see test_mac_appliance.py).
     assert "--host 0.0.0.0" in cmd
     assert "--port 7778" in cmd
-    assert "--dir" in cmd and "--token rune" in cmd
+    assert "--dir" in cmd
+    # SECURITY (audit 2026-07-17): the pairing token is NEVER on the command
+    # line. An HKCU Run value is readable by any process running as the user, so
+    # `--token <secret>` there leaked the pairing secret registry-/ps-visible.
+    # The launched server reads the token from brain_config.json instead.
+    assert "--token" not in cmd and "rune" not in cmd
+
+
+def test_login_entry_never_embeds_the_pairing_token():
+    # Even when a token is passed, build_login_entry must not emit it — the
+    # command a Run key holds is world-readable to every user-level process.
+    secret = "s3cr3t-pairing-abcdef0123456789"
+    src = tray_windows.build_login_entry(
+        directory=r"C:\Users\me\.dreamlayer", token=secret, port=7778,
+        executable=r"C:\Python311\python.exe", frozen=False)
+    frozen = tray_windows.build_login_entry(
+        directory=r"D:\state", token=secret, port=7778,
+        executable=r"C:\Apps\DreamLayer.exe", frozen=True)
+    for cmd in (src, frozen):
+        assert secret not in cmd
+        assert "--token" not in cmd
+    # …and the source entry still launches the server, which resolves the token
+    # from the on-disk config it points at via --dir.
+    assert "-m dreamlayer.ai_brain.server" in src
+    assert "--dir" in src
+
+
+def test_appliance_resolves_pairing_token_from_on_disk_config(tmp_path):
+    # The other half of the fix: the process the login entry launches reads the
+    # pairing token from brain_config.json (0600-equivalent) — no token needed
+    # on argv. Constructing a Brain over a cfg dir loads exactly the persisted
+    # token, which is what run_tray/the server authenticate with.
+    from dreamlayer.ai_brain.server import Brain
+    from dreamlayer.ai_brain.server.store import BrainConfig
+    BrainConfig(token="persisted-secret").save(tmp_path)
+    assert Brain(tmp_path).config.token == "persisted-secret"
 
 
 def test_build_login_entry_frozen_is_just_the_app():

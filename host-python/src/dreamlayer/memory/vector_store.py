@@ -125,6 +125,21 @@ class VectorStore:
                     (mid, m.get("kind") or "", sqlite_vec.serialize_float32(emb)))
             self._indexed_ids.add(mid)
 
+    def _table_ready(self) -> bool:
+        """True once the vec0 table has actually been created (first search).
+        evict/purge_all can fire BEFORE any search — a "forget that" issued the
+        moment this store is enabled — when memory_vec does not yet exist. A
+        bare ``DELETE FROM memory_vec`` then raises OperationalError('no such
+        table'), which propagates out of Retriever.purge_memory and SKIPS the
+        downstream bias discard, so forget silently leaves a rank-ghost behind
+        (audit 2026-07-17). A missing table means nothing is indexed yet, so
+        forget is simply an empty no-op."""
+        with self.db._lock:
+            row = self.db.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='memory_vec'").fetchone()
+        return row is not None
+
     def evict(self, memory_id: int) -> None:
         """Drop a purged memory's vector so it can never be recalled again and
         never occupies a top-k slot. Without this the vec table only ever grew:
@@ -134,12 +149,12 @@ class VectorStore:
         Wired into Retriever.purge_memory (audit 2026-07-14): "forget that" must
         reach this table too — it lives inside db.conn, which the DB-level purge
         never touched, so a forgotten memory left a fully recallable embedding
-        the moment this store was enabled."""
-        if not self._ensure_loaded():
-            return
-        with self.db._lock:
-            self.db.conn.execute(
-                "DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
+        the moment this store was enabled. Tolerates a not-yet-created table
+        (forget before the first search) so it never raises into purge_memory."""
+        if self._ensure_loaded() and self._table_ready():
+            with self.db._lock:
+                self.db.conn.execute(
+                    "DELETE FROM memory_vec WHERE memory_id=?", (memory_id,))
         self._indexed_ids.discard(memory_id)
 
     def purge_all(self) -> None:
@@ -147,11 +162,11 @@ class VectorStore:
         Retriever.purge_all. memory_vec lives in db.conn but is NOT one of the
         tables db.purge_all() deletes, so without this an erase left every
         embedding behind (a privacy residue) the moment this store was enabled.
-        No-op when the extension never loaded (table was never created)."""
-        if not self._ensure_loaded():
-            return
-        with self.db._lock:
-            self.db.conn.execute("DELETE FROM memory_vec")
+        No-op when the extension never loaded, or before the first search built
+        the table — an erase-before-search must not raise into purge_all."""
+        if self._ensure_loaded() and self._table_ready():
+            with self.db._lock:
+                self.db.conn.execute("DELETE FROM memory_vec")
         self._indexed_ids.clear()
 
     def _search_indexed(self, query, kind, top_k):

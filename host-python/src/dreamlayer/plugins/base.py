@@ -287,10 +287,28 @@ class PluginContext:
         """Register a TasteLens price/review connector: fn(label, attrs) ->
         {rating?, price?, …}. Consulted when a shelf/menu is ranked.
 
-        A shop connector reaches an external price/review source, so it must
-        have declared either the ``shop`` entitlement or ``network`` (its egress
-        channel) — enforced at the call site (audit 2026-07-14). An undeclared
-        reach is refused and recorded, never wired into the taste registry."""
+        A shop connector may be admitted on either the ``shop`` entitlement or
+        ``network`` (its egress channel) — enforced at the call site (audit
+        2026-07-14). An undeclared reach is refused and recorded, never wired
+        into the taste registry.
+
+        This ``shop OR network`` test is an *admission* gate, NOT the egress
+        gate (audit 2026-07-17). Because a non-network shop connector is real —
+        a local/offline rating source, or one whose egress is done by the
+        isolation subprocess child, declares only ``shop`` (or ``()``) — ``shop``
+        must stay a sufficient key; ``test_add_shop_provider_requires_shop_or_
+        network`` pins that. Actual *network egress* by a shop connector is
+        gated at two independent points that this OR does not weaken:
+          * install — ``validate``/``scan_source`` forces any connector that
+            imports urllib/http/socket/smtplib/… to declare ``network``, else a
+            hard error blocks the install (an undeclared reach can't ship); and
+          * load — ``PluginRegistry.load`` skips a plugin whose declared
+            ``network`` the host doesn't grant, and ``_plugin_capabilities``
+            grants ``network`` only when the privacy gate clearly allows capture
+            (fail-closed since the 2026-07-17 hardening).
+        Tightening this to ``network``-only would reject those legitimate
+        ``shop``-only connectors with no egress-security gain, so it is left as
+        is by design."""
         if not (self.has("shop") or self.has("network")):
             self.added.setdefault("rejected", []).append(
                 ("shop_provider", "shop"))

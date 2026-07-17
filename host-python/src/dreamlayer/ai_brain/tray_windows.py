@@ -79,12 +79,22 @@ def build_login_entry(directory: str | None = None, token: str = "",
 
     Bundled app (PyInstaller): the exe IS the appliance — server + tray in
     one process — so the entry is just the exe (plus --dir/--port when
-    non-default). Source install: mirror the macOS LaunchAgent exactly and
-    register the headless server. Binds 0.0.0.0 on purpose for the same
-    reason install_launch_agent does: the login entry IS the always-on
-    appliance the phone pairs with, so it must be LAN-reachable; safety
-    comes from the token (a non-loopback bind with no token mints one on
-    first run — server __main__).
+    non-default). Source install: register the headless server. Binds 0.0.0.0
+    on purpose for the same reason install_launch_agent does: the login entry
+    IS the always-on appliance the phone pairs with, so it must be
+    LAN-reachable.
+
+    The pairing token is NEVER put on this command line. An HKCU Run value is
+    readable by every process running as the user (Task Manager's command
+    column, ``reg query``, any ps-equivalent), so ``--token <secret>`` in the
+    entry leaked the pairing secret registry-/ps-visible. Instead the launched
+    server reads the token from the on-disk ``brain_config.json`` (0600-
+    equivalent), exactly like the macOS launch-agent fix — so the `token`
+    parameter is accepted for signature/API compatibility but deliberately not
+    emitted here (install_login_entry persists it to config instead). A
+    non-loopback bind with no persisted token still mints one on first run
+    (server __main__), so start-at-login keeps working either way (audit
+    2026-07-17).
     """
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
@@ -100,8 +110,7 @@ def build_login_entry(directory: str | None = None, token: str = "",
             "--host", "0.0.0.0", "--port", str(port)]
     if directory:
         args += ["--dir", directory]
-    if token:
-        args += ["--token", token]
+    # NB: no `--token` — see the docstring. The token lives in brain_config.json.
     return login_command(exe, args)
 
 
@@ -113,11 +122,36 @@ def install_login_entry(directory: str | None = None, token: str = "",
                         port: int = DEFAULT_PORT,
                         value_name: str = RUN_VALUE) -> str:
     """Write the HKCU Run entry so the Brain starts at login. Returns the
-    command written. Raises OSError off-Windows (there is no registry)."""
+    command written. Raises OSError off-Windows (there is no registry).
+
+    A supplied token is persisted to ``brain_config.json`` (the 0600-equivalent
+    on-disk config the launched server reads) rather than written onto the Run
+    command line, so the pairing secret never becomes registry-/ps-visible. The
+    command itself carries no token (see build_login_entry)."""
     if sys.platform != "win32":
         raise OSError("the HKCU Run registry exists only on Windows")
+    import os
     import winreg
-    cmd = build_login_entry(directory, token, port)
+    from .server.store import BrainConfig
+    if token:
+        # translate the old `--token <secret>` intent into config: the server
+        # this entry launches reads the token from disk, not from argv.
+        cfg_dir = directory or os.environ.get(
+            "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
+        cfg = BrainConfig.load(cfg_dir)
+        if cfg.token != token:
+            cfg.token = token
+            cfg.save(cfg_dir)
+        # Pin the login command to the SAME dir we just wrote the token to.
+        # build_login_entry omits --dir when directory is None, but cfg_dir was
+        # resolved from DREAMLAYER_DIR/default HERE; if that env var was set only
+        # in the install shell (not a persisted user var), the login server would
+        # re-resolve a DIFFERENT dir, find no token, and mint a fresh one —
+        # silently dropping the operator's token and breaking the paired phone.
+        # Passing the resolved dir makes install-time and login-time agree
+        # (refute 2026-07-17).
+        directory = cfg_dir
+    cmd = build_login_entry(directory, port=port)
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
                             winreg.KEY_SET_VALUE) as key:
         winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, cmd)
