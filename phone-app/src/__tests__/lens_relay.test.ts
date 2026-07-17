@@ -40,6 +40,7 @@ beforeEach(() => {
     demoMode: false,
     capturePaused: false,
     incognito: false,
+    hydrated: true,   // normal runtime after hydrate(); cold start has its own test
   });
   useVitalsStore.getState().reset();
   setQuestionProvider(() => "");
@@ -154,6 +155,20 @@ describe("relay service forwards to the Brain", () => {
     useBrainStore.setState({ capturePaused: true });
     await relayEmit({ tag: "look" });
     expect(calls.length).toBe(1);
+  });
+
+  it("fail-closed before hydration: capture is suppressed until the store hydrates", async () => {
+    // Cold start: `hydrated` is false and capturePaused defaults false, so a
+    // session the wearer left incognito/veiled last launch would otherwise relay
+    // captured content. The relay must refuse until hydrate() restores the real
+    // flags (refute 2026-07-17). Mac is "connected" here to isolate the veil gate
+    // from the pairing gate.
+    (global as any).fetch = jest.fn();
+    useBrainStore.setState({ hydrated: false, capturePaused: false });
+    setQuestionProvider(() => "a private question");
+    expect(await relayEmit({ tag: "ask", id: "z" })).toBeNull();      // REVERT-FAILING
+    expect(await feed("translated overheard speech", "whisper")).toBe(false);
+    expect((global as any).fetch).not.toHaveBeenCalled();
   });
 
   it("a Veil raised on the GLASSES silences the relay too (audit 2026-07-14)", async () => {

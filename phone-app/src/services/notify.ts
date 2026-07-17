@@ -24,7 +24,14 @@ let requested = false;
  *  useVitalsStore.veiled). While it's up, recalled personal content must not
  *  reach a local notification (lock screen / notification log). */
 function veiled(): boolean {
-  return useBrainStore.getState().capturePaused || useVitalsStore.getState().veiled;
+  const b = useBrainStore.getState();
+  // Fail-closed before the persisted state hydrates: at cold start capturePaused
+  // defaults false, so a wearer who left incognito/the Veil ON last session would
+  // briefly read as un-veiled and leak content to the lock screen. Until hydrate()
+  // restores the real flags (sets `hydrated`), treat the session as veiled
+  // (refute 2026-07-17).
+  if (!b.hydrated) return true;
+  return b.capturePaused || useVitalsStore.getState().veiled;
 }
 
 export async function ensurePermission(): Promise<boolean> {

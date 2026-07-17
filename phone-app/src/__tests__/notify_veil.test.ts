@@ -41,7 +41,9 @@ function load(os: "ios" | "android" = "android") {
   const notify = require("../services/notify") as typeof import("../services/notify");
   const { useBrainStore } = require("../state/useBrainStore");
   const { useVitalsStore } = require("../state/useVitalsStore");
-  useBrainStore.setState({ capturePaused: false, incognito: false });
+  // hydrated:true = the normal runtime state after hydrate() restores persisted
+  // flags; the cold-start (hydrated:false) case is exercised by its own test.
+  useBrainStore.setState({ capturePaused: false, incognito: false, hydrated: true });
   useVitalsStore.getState().reset();
   return { notify, spy, useBrainStore, useVitalsStore };
 }
@@ -105,6 +107,25 @@ describe("the Veil strips personal content from local notifications", () => {
     const c = scheduledContent(spy);
     expect(c.title).toBe("Marcus");
     expect(c.body).toBe("lunch tomorrow?");
+  });
+
+  it("cold start (store not hydrated) → fail-closed, NO personal content leaks", async () => {
+    const { notify, spy, useBrainStore, useVitalsStore } = load("android");
+    // Before hydrate() restores persisted incognito/veil, `hydrated` is false and
+    // capturePaused defaults false — a wearer who left incognito ON last session
+    // must NOT leak content in this window (refute 2026-07-17).
+    useBrainStore.setState({ capturePaused: false, incognito: false, hydrated: false });
+    expect(useVitalsStore.getState().veiled).toBe(false);
+
+    await notify.pushLocal("Marcus", "Lease: sign the renewal by Friday", "messages");
+
+    const c = scheduledContent(spy);
+    expect(c.body).toBe(""); // REVERT-FAILING: content-free until hydrated
+    expect(c.title).not.toBe("Marcus");
+    const blob = JSON.stringify(c);
+    expect(blob).not.toContain("Marcus");
+    expect(blob).not.toContain("Lease");
+    expect(blob).not.toContain("Friday");
   });
 
   it("lifting the Veil (PRIVACY_RESUMED) restores full content", async () => {

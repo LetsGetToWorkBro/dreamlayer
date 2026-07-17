@@ -37,7 +37,11 @@ available = _HAS_FERNET
 
 # Config fields that must never leave the device. Kept explicit and tested —
 # a new secret field should be added here the day it is added to BrainConfig.
-SECRET_FIELDS = ("token", "cloud_api_key")
+# ``api_key`` is the PRIMARY api-brain provider key (store.py classifies it a
+# clear-text secret alongside ``cloud_api_key``); it was missing here, so it
+# rode into the sync snapshot and would restore onto every other device,
+# defeating "each device keeps its own key" (refute 2026-07-17).
+SECRET_FIELDS = ("token", "cloud_api_key", "api_key")
 
 
 class SyncUnavailable(RuntimeError):
