@@ -94,9 +94,29 @@ def test_memory_doc_fallback():
 
 
 # --- voice: VAD energy fallback; ASR empty fallback --------------------------
-def test_vad_and_asr_fallback():
+def test_vad_and_asr_fallback(monkeypatch):
+    # Force both "voice dep not installed" branches explicitly (the
+    # module-global _HAS_SILERO / _HAS_FW flags in vad_gate.py /
+    # asr_faster_whisper.py) instead of relying on the packages actually
+    # being absent: with silero-vad installed (issue #460, third instance of
+    # the #449 class), SileroVADGate.is_speech() prefers the real model,
+    # which correctly refuses this alternating-tone burst as not-speech, so
+    # the energy-fallback assertion below fails for environment reasons, not
+    # a real regression. Symmetrically, with faster-whisper installed,
+    # FasterWhisperASR().transcribe() only returns "" via the `_model is
+    # None` early return, which a loaded real model bypasses entirely. Mirrors
+    # test_voice_pipeline_real.py::TestVADFallback
+    # .test_forced_unavailable_uses_energy_heuristic and ::TestASRFallback
+    # .test_forced_unavailable_returns_empty_without_raising, which prove the
+    # same two guards in an environment where the deps ARE installed. This
+    # seams test itself stays as the one-file zero-deps integration smoke the
+    # module promises, not redundant with those dedicated classes.
+    from dreamlayer.orchestrator import vad_gate
+    from dreamlayer.orchestrator import asr_faster_whisper
     from dreamlayer.orchestrator.vad_gate import SileroVADGate
     from dreamlayer.orchestrator.asr_faster_whisper import FasterWhisperASR
+    monkeypatch.setattr(vad_gate, "_HAS_SILERO", False)
+    monkeypatch.setattr(asr_faster_whisper, "_HAS_FW", False)
     gate = SileroVADGate(threshold=0.05)
     assert gate.is_speech([0.5, -0.6, 0.55, -0.5] * 40) is True   # loud
     assert gate.is_speech([0.0, 0.001, -0.001] * 40) is False     # silence
