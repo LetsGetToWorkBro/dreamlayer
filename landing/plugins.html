@@ -55,6 +55,10 @@
   h1{font-family:var(--chi);font-weight:400;color:var(--ink);
     font-size:clamp(30px,5.4vw,46px);letter-spacing:.005em;margin:12px 0 10px;line-height:1.1}
   .hero p{color:var(--ink2);max-width:560px;margin:0 auto;font-size:16.5px}
+  /* a live lens disc — the true renderer, cycling the World lenses */
+  .hero-lens{width:132px;height:132px;border-radius:50%;display:block;margin:0 auto 16px;
+    background:#000;box-shadow:0 0 0 1px rgba(44,199,154,.28),0 0 0 8px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.28)}
+  @media (max-width:600px){ .hero-lens{width:104px;height:104px;margin-bottom:12px} }
   /* ---------- search: a white inset well ---------- */
   .search{max-width:520px;margin:26px auto 0;position:relative}
   .search input{width:100%;background:#fff;border:1px solid var(--frame);border-radius:0;
@@ -306,6 +310,7 @@
   <div class="mbody screen">
 <main class="wrap">
   <section class="hero">
+    <canvas class="hero-lens" id="heroLens" role="img" aria-label="A DreamLayer lens, rendered live"></canvas>
     <span class="eyebrow">Plugin Store</span>
     <h1>Build on the layer.</h1>
     <p>New lenses, controllers, and connectors for DreamLayer — from the DreamLayer
@@ -838,6 +843,31 @@ async function refresh(){
   }
 }
 refresh();
+</script>
+<script src="assets/sim/halo-sim.js" defer></script>
+<script>
+/* the hero lens: the real renderer, cycling the World lenses (a look resolves,
+   not a mockup). Reduced-motion holds one settled frame. */
+(function(){
+  var cv=document.getElementById("heroLens"); if(!cv) return;
+  var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var LENS=[
+    ["object",  {eyebrow:"JUNO",             title:"Snake plant",           cap:"water every 2 weeks", ghost:"last done · Tuesday"}],
+    ["intro",   {eyebrow:"INTRODUCTION",     title:"“Hi, I’m Maya.”",initial:"M",cap:"Maya · kept",  ghost:"introduced herself · kept"}],
+    ["waypath", {eyebrow:"LUCID RECALL",     title:"North rack",            cap:"your bike",           ghost:"seen 8:12 AM · high"}],
+    ["keep",    {eyebrow:"DRIFT DETECTED",   title:"Send the lease",        cap:"→ Marcus",            ghost:"Friday before noon"}],
+    ["rosetta", {eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus.”",    cap:"read back in yours",  ghost:"live · on device"}]
+  ];
+  function boot(){
+    if(!window.Halo){ return setTimeout(boot,60); }
+    var sim=new Halo.Sim(), g=new Halo.Glass(cv,sim);
+    if(reduced){ g.show(LENS[0][0],LENS[0][1],true); g.render(); return; }
+    var i=0; g.start();
+    function next(){ g.show(LENS[i][0],LENS[i][1]); i=(i+1)%LENS.length; }
+    next(); setInterval(next, 3400);
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot); else boot();
+})();
 </script>
 <script>window.PLATINUM={app:"Plugin Store",daLine:"easy on, easy off."}</script>
 <script src="assets/platinum/platinum.js" defer></script>
