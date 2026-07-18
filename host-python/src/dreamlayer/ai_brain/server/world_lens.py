@@ -68,10 +68,28 @@ class _BrainVisionRouter:
         return getattr(self._brain, "_backend", None) is not None
 
     def explain(self, frame, label, want: str = "quick"):
-        from .backends import vision_answer
+        from .backends import vision_answer, is_local_endpoint
         from ...object_lens.vision_recognizer import frame_to_b64
-        return vision_answer(getattr(self._brain, "_backend", None),
-                             label, frame_to_b64(frame), want)
+        backend = getattr(self._brain, "_backend", None)
+        cfg = getattr(self._brain, "config", None)
+        url = getattr(cfg, "ollama_url", "") if cfg is not None else ""
+        # A REMOTE vision backend (off-box ollama_url) receiving the wearer's
+        # photo IS cloud egress — gate it on the privacy posture and COUNT it,
+        # instead of silently shipping the frame off-box uncounted and unstoppable
+        # by the wearer's on-device-only posture (refute 2026-07-18: the look path
+        # never read no_cloud and never bumped cloud_calls, unlike ask). The
+        # default local backend (127.0.0.1 ollama, MLX, none) is not egress.
+        if url and not is_local_endpoint(url):
+            try:
+                if self._brain.incognito_now():
+                    return None                  # on-device-only → no remote vision
+            except Exception:
+                return None                      # unreadable posture → fail closed
+            try:
+                self._brain.bump_cloud_calls()
+            except Exception:
+                pass
+        return vision_answer(backend, label, frame_to_b64(frame), want)
 
 
 class WorldLensHost:
@@ -127,9 +145,21 @@ class WorldLensHost:
 
     def _plugin_capabilities(self) -> frozenset:
         try:
-            return self.brain.plugin_capabilities()
+            caps = set(self.brain.plugin_capabilities())
         except Exception:
             return frozenset()
+        # Veil-aware, fail-closed: the world lens is REMOTELY reachable, so a
+        # plugin gets `network` egress ONLY when the privacy gate CLEARLY allows
+        # capture — mirroring the orchestrator's hardened grant (ops_plugins.py,
+        # "silence is not permission"). The Brain's own plugin_capabilities grants
+        # network on `not lan_only` alone, blind to the incognito/veil posture, so
+        # strip it here whenever capture isn't allowed (refute 2026-07-18).
+        try:
+            if not self.privacy.allow_capture():
+                caps.discard("network")
+        except Exception:
+            caps.discard("network")            # unreadable posture → no egress
+        return frozenset(caps)
 
     def plugin_context(self, renderer=None, config=None):
         from ...plugins import PluginContext
@@ -162,7 +192,18 @@ class WorldLensHost:
         if store is None:
             return
         try:
-            store.load_installed(self, isolate=isolate)
+            # require_sandbox=True: the world lens is REMOTELY reachable (POST
+            # /brain/look from a paired phone) and runs UNTRUSTED installed
+            # plugins. On a host without a kernel sandbox (bwrap/nsjail/WASM) the
+            # jail silently degrades to a plain subprocess with the full host-user
+            # OS authority — an untrusted plugin could read the pairing token /
+            # memory store off disk and egress it, never crossing the RPC surface.
+            # Fail CLOSED: an untrusted plugin that can't be sandboxed is NOT
+            # loaded (the object lens + first-party providers still serve); a WASM
+            # runtime or a kernel sandbox re-enables third-party plugins here
+            # (refute 2026-07-18: this was the first production path to run
+            # installed plugins, and it ran them unsandboxed on the Mac Brain).
+            store.load_installed(self, isolate=isolate, require_sandbox=True)
         except Exception as exc:
             if self.health is not None:
                 self.health.record_failure("world_lens:plugins", exc)

@@ -4,7 +4,10 @@ import { useBrainStore } from "../state/useBrainStore";
 const CONNECTED = { connected: true, url: "http://mac.local", token: "t" };
 
 beforeEach(() => {
-  useBrainStore.setState({ macMini: { connected: false, url: "", token: "" }, demoMode: false } as never);
+  useBrainStore.setState({
+    macMini: { connected: false, url: "", token: "" },
+    demoMode: false, capturePaused: false,   // Veil open by default; a test opts in
+  } as never);
   (global as unknown as { fetch?: unknown }).fetch = undefined;
 });
 
@@ -58,6 +61,25 @@ describe("useBrainStore.look", () => {
     const res = await useBrainStore.getState().look("b64");
     expect(res.ok).toBe(false);
     expect(res.veiled).toBe(true);
+  });
+
+  it("refuses to send the photo when the Veil is closed", async () => {
+    // capture paused / incognito / glasses Veil raised → the phone must NOT ship
+    // the photo (enforce, don't trust the Brain's separate posture).
+    useBrainStore.setState({ macMini: CONNECTED, capturePaused: true } as never);
+    const fetchFn = mockFetch({ ok: true, panel: { rows: [] } });
+    const res = await useBrainStore.getState().look("b64");
+    expect(fetchFn).not.toHaveBeenCalled();   // REVERT-FAILING: nothing past the Veil
+    expect(res.ok).toBe(false);
+    expect(res.veiled).toBe(true);
+  });
+
+  it("filters malformed (non-object) rows instead of crashing", async () => {
+    useBrainStore.setState({ macMini: CONNECTED } as never);
+    mockFetch({ ok: true, panel: { rows: [null, { label: "real" }, 42], sources: [] } });
+    const res = await useBrainStore.getState().look("b64");
+    expect(res.ok).toBe(true);
+    expect(res.rows).toEqual([{ label: "real" }]);   // null + 42 dropped, no crash
   });
 
   it("returns a demo panel in demo mode without a Brain", async () => {

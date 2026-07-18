@@ -62,6 +62,29 @@ _PERSON_SUFFIX = ("man", "men", "woman", "women", "boy", "girl",
 
 _WORD_RE = re.compile(r"[a-z]+")
 
+# A proper-name SHAPE the person-token denylist can't see: a Title-Case
+# alphabetic word (Maya, Chen, Taylor). Legit object labels are lowercase
+# category nouns ("almond milk", "espresso machine"), so a run of these signals a
+# proper NAME, not an object.
+_NAME_TOKEN_RE = re.compile(r"^[A-Z][a-z]+$")
+
+
+def _looks_like_a_personal_name(label: str) -> bool:
+    """True when the label has 2+ Title-Case alphabetic words — a personal-name
+    shape (``Maya Chen``, ``Taylor Swift``, ``John Smith``).
+
+    The person-token denylist catches CATEGORIES of humans ("a man", "the woman")
+    but not IDENTITIES: a VLM that names a person — celebrity recognition, or a
+    crafted nametag/caption steering the label — returns a proper name that no
+    person-word matches, and it lands as the panel title on the glass (refute
+    2026-07-18, a live break of the "never identify a stranger" contract). Object
+    labels are lowercase common nouns, so this fires only on proper names; it
+    over-defers a multi-word proper-noun brand/landmark to the Social-Lens path,
+    which is the privacy-safe direction (brand/title still ride the attributes)."""
+    caps = [t for t in (label or "").split() if _NAME_TOKEN_RE.match(t)]
+    return len(caps) >= 2
+
+
 DEFAULT_TAXONOMY = [
     "laptop", "mug", "book", "houseplant", "phone", "keys",
     "bottle", "backpack", "car", "watch",
@@ -82,6 +105,8 @@ def _names_a_person(label: str) -> bool:
     Lens, while objects pass. (Role-only words like "surgeon" carry no
     person-indicator and read as scene description, not identification.)
     """
+    if _looks_like_a_personal_name(label):              # "Maya Chen" — a NAMED person
+        return True
     toks = _WORD_RE.findall((label or "").lower())
     for t in toks:
         if t in PERSON_TOKENS:
