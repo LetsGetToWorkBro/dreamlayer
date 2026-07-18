@@ -142,10 +142,19 @@ class ObjectRecognizer:
                 return None
             label, confidence, attrs = got
 
-        if _names_a_person(label):
+        # Layered "never identify a stranger" defence: the deterministic
+        # denylist + name-shape (_names_a_person), then the OPTIONAL Presidio
+        # text-NER layer (catches a lone given name the shape rule misses), then
+        # the OPTIONAL visual person DETECTOR (defers a human the VLM mislabelled
+        # as an object). The two optional layers are fail-safe — a missing dep or
+        # any error is a no-op, so they can only ADD a deferral (person_guard.py).
+        from . import person_guard
+        if _names_a_person(label) or person_guard.label_is_a_person(label):
             return None                       # a person → defer to Social Lens
         if confidence < self.min_confidence:
             return None
+        if person_guard.frame_is_dominated_by_a_person(frame):
+            return None                       # visual ground truth: a human subject
         return ObjectSighting(label=label, confidence=confidence,
                               attributes=attrs or {})
 

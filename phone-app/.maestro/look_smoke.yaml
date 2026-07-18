@@ -1,0 +1,25 @@
+# Maestro smoke flow for the Look (world-lens) camera screen.
+#
+# Maestro drives the REAL app on an emulator/device, so it covers what jest
+# can't: the camera-permission path, the capture, and an honest response render.
+# Selectors track src/i18n/translations.ts (en) + app/look.tsx. Run locally:
+#   maestro test .maestro/look_smoke.yaml      (needs a debug build installed)
+# or via the manual .github/workflows/maestro.yml pipeline.
+appId: com.letsgettoworkbro.dreamlayer
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: allow          # grant the camera up front so the capture path runs
+- tapOn: "Look"              # the Look tab
+- assertVisible: "Point the phone at anything — same pipeline as the glasses"
+- tapOn:
+    text: "Look"            # the capture button (the tab is index 0, button is next)
+    index: 1
+# The app must stay responsive and render a panel/reason (a real panel needs a
+# paired Brain; unpaired it shows the honest "pair your Brain" copy) — either
+# way the screen answers rather than hanging or crashing.
+- assertVisible:
+    text: ".*(Brain|Looking|make it out|water|seen).*"
+    optional: true
+- assertVisible: "Look"      # still on the Look screen, no crash

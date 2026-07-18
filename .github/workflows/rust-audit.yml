@@ -1,0 +1,82 @@
+name: rust-audit
+
+# Supply-chain gate for the Rust safety core (reality-core/, crate reality_core).
+# Complements — does NOT replace — rust-core.yml: that workflow proves the core
+# is CORRECT (builds + cross-language parity); this one proves its dependency
+# supply chain is CLEAN.
+#
+# reality_core has ZERO third-party dependencies today (pure integer/float logic,
+# ADR 0003), so every check here is trivially green right now. That is the point:
+# this workflow is the tripwire for the day a crate is added. It runs two
+# complementary RustSec-backed tools against the crate:
+#   * cargo-deny  — advisories + licenses + banned/duplicate crates + source
+#                   registries, driven by reality-core/deny.toml
+#   * cargo-audit — the RustSec advisory DB against the resolved Cargo.lock
+#
+# ENFORCING / BLOCKING: a red check means either a newly-disclosed advisory hit a
+# (future) dependency, or a newly-added dependency violates deny.toml (bad
+# license, unknown registry, ...). Because it is path-filtered to the crate + this
+# workflow, plus a weekly cron, it blocks exactly the changes that can introduce a
+# vulnerable or non-compliant dependency, and still catches newly-published
+# advisories against an unchanged tree.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "reality-core/**"
+      - ".github/workflows/rust-audit.yml"
+  pull_request:
+    paths:
+      - "reality-core/**"
+      - ".github/workflows/rust-audit.yml"
+  schedule:
+    # Mondays 07:00 UTC — staggered an hour after the Python dep-audit cron so a
+    # freshly-disclosed advisory surfaces weekly even with no code change.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    # Advisories + licenses + bans + sources, per reality-core/deny.toml.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: cargo-deny (advisories, licenses, bans, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: reality-core/Cargo.toml
+          command: check
+          # scan every feature's dependencies, matching deny.toml's [graph]
+          arguments: --all-features
+
+  cargo-audit:
+    runs-on: ubuntu-latest
+    # RustSec advisory DB against the crate's resolved lockfile. Kept as a
+    # separate tool from cargo-deny on purpose: audit-check is the canonical
+    # RustSec scanner and gives a second, independent read on the same tree.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Ensure a Cargo.lock exists
+        # reality-core/Cargo.lock is committed, so this is normally a no-op; the
+        # guard keeps the job correct if the lockfile is ever removed. reality_core
+        # lives in a subdirectory with no workspace at the repo root, so we point
+        # cargo explicitly at its manifest.
+        run: |
+          if [ ! -f reality-core/Cargo.lock ]; then
+            echo "No lockfile found — generating one from reality-core/Cargo.toml"
+            cargo generate-lockfile --manifest-path reality-core/Cargo.toml
+          fi
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit (reality-core/Cargo.lock)
+        # `cargo audit` exits non-zero when it finds a known vulnerability, which
+        # is what gates this job. --file targets the crate's own lockfile because
+        # there is no root workspace lockfile to discover.
+        run: cargo audit --file reality-core/Cargo.lock

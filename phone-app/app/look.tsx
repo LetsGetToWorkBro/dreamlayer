@@ -126,6 +126,15 @@ function LiveLook() {
       const res = await look(photo?.base64 ?? "");
       setPanel(res);
       play(res.ok ? "success" : "warn");
+      // expo-camera ALWAYS writes the JPEG to the app cache; we only ever use the
+      // in-memory base64, so delete the on-disk copy — a captured frame must not
+      // linger in the cache after the look (refute 2026-07-18). Best-effort:
+      // fire-and-forget, cleanup failure must never affect the result.
+      if (photo?.uri) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const FileSystem = require("expo-file-system/legacy");
+        FileSystem.deleteAsync(photo.uri, { idempotent: true }).catch(() => {});
+      }
     } catch {
       setPanel({ ok: false, rows: [], sources: [], reason: t("look.captureFailed") });
       play("warn");
