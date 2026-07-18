@@ -64,3 +64,39 @@ jobs:
           # any distribution can't be audited — which our own editable package
           # always trips. Every third-party dependency is still fully scanned.
           pip-audit --skip-editable --progress-spinner=off
+
+      - name: License gate — no strong-copyleft in the shipped dependency tree
+        run: |
+          # A CVE gate says nothing about LICENSES. A dep that quietly resolves to
+          # a GPL/AGPL version would obligate the proprietary app to copyleft — a
+          # supply-chain risk pip-audit can't see. This fails the build if any
+          # shipped dependency carries strong copyleft (GPL/AGPL). LGPL (weak
+          # copyleft, dynamic linking) and permissive licenses pass; the same
+          # denylist gates PRs in dependency-review.yml. CI-only tooling is
+          # excluded — it is never distributed with the product.
+          pip install pip-licenses
+          pip-licenses --format=json > licenses.json
+          python - <<'PY'
+          import json, sys
+          # CI/build tooling only — not shipped in the app, so its license is moot
+          IGNORE = {"pip", "pip-audit", "pip-licenses", "setuptools", "wheel",
+                    "ruff", "mypy", "pytest", "pytest-cov", "coverage",
+                    "prettytable", "wcwidth", "cyclonedx-python-lib",
+                    "packaging", "tomli", "pluggy", "iniconfig"}
+          bad = []
+          for pkg in json.load(open("licenses.json")):
+              name = pkg.get("Name", "")
+              lic = (pkg.get("License") or "").lower()
+              if name.lower() in IGNORE:
+                  continue
+              if "lgpl" in lic:            # weak copyleft (dynamic link) — allowed
+                  continue
+              if "gpl" in lic or "agpl" in lic or "affero" in lic:
+                  bad.append((name, pkg.get("License")))
+          if bad:
+              print("FAIL: strong-copyleft (GPL/AGPL) licenses in the shipped tree:")
+              for n, l in bad:
+                  print(f"  {n}: {l}")
+              sys.exit(1)
+          print("License gate: no strong-copyleft (GPL/AGPL) dependencies")
+          PY

@@ -1,0 +1,39 @@
+name: dependency-review
+
+# Supply-chain gate at the PR seam, complementary to dep-audit.yml (pip-audit,
+# which scans *resolved installed* versions weekly + on dep changes). This runs
+# GitHub's dependency-review-action on the PR diff itself: it blocks a pull
+# request that INTRODUCES a dependency with a known advisory or an incompatible
+# license before it ever merges, and posts the findings inline on the PR. The
+# two together cover both "a new CVE landed on a dep we already ship" (pip-audit
+# cron) and "this PR adds a bad dep" (here).
+
+on:
+  pull_request:
+    paths:
+      - "host-python/pyproject.toml"
+      - "host-python/uv.lock"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+
+permissions:
+  contents: read
+  pull-requests: write   # so the action can comment its summary on the PR
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail the PR on a moderate-or-worse advisory in an added dependency.
+          fail-on-severity: moderate
+          # Copyleft licenses that would compromise the product's proprietary
+          # distribution are denied; the Python license gate in dep-audit.yml
+          # enforces the same allowlist against the resolved tree.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-3.0
+          comment-summary-in-pr: on-failure
