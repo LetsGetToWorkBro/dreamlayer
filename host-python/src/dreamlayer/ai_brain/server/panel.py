@@ -513,6 +513,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
     <div id="pairout"></div>
+    <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
+      <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
+      <button id="livebtn" onclick="liveLink()">Get the link</button></div>
+    <div id="liveout"></div>
   </section>
 
   <section>
@@ -1460,6 +1464,16 @@ async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode
 }
 function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.clipboard.writeText(c).then(()=>toast("Copied"));}
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
+async function liveLink(){const out=$("liveout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
+  let r;try{r=await api("/dreamlayer/live/link");}catch(e){r=null;}
+  if(!r||!r.url){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
+    'The Live Lens link is offered only from the Brain itself. Open <b>http://localhost:7777/</b> on this machine '+
+    'and try again — the link still points the phone at this Brain\'s LAN address.</div></div>';return;}
+  const qr=r.qr?`<div class="qrbox">${r.qr}</div><div class="conn-s" style="margin:6px 0 10px">Scan with the phone's camera — the link carries the pairing token, so treat it like the pairing code.</div>`:"";
+  out.innerHTML=`<div class="paircode">${qr}<div class="foot"><span class="url">${esc(r.url)}</span></div>`+
+    `<div class="conn-s" style="margin-top:8px">${esc(r.note||"")}</div></div>`;
+  toast("Live Lens link ready");
+}
 async function loadHistory(){const h=await api("/dreamlayer/history");
   $("history").innerHTML=(h.items||[]).map(x=>{
     const tag=x.kind==="ask"?(x.tier||"ask"):x.kind;
