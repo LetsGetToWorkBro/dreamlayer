@@ -1520,9 +1520,13 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
 
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
-                      port: int = 7777) -> ThreadingHTTPServer:
+                      port: int = 7777, *,
+                      tls_port: "Optional[int]" = None) -> ThreadingHTTPServer:
     # the token is read live in _authed (via authorize) so rotation applies;
-    # nothing here needs to close over it.
+    # nothing here needs to close over it. tls_port is advertisement only —
+    # it tells /dreamlayer/live/link that a sibling https listener exists
+    # (started by __main__ --tls) so the panel can hand out the secure link
+    # a phone browser needs before it may open its camera.
 
     # Brute-force lockout on the token endpoint: without it a LAN attacker could
     # grind the Brain token unthrottled (audit 2026-07-14 — the limiter existed
@@ -1779,6 +1783,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if html is None:
                 self._json(404, {"error": "builder assets not found"}); return
             body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _get_live(self, path, qs):
+            """The Live Lens — a phone browser becomes the glasses (live.py).
+            PUBLIC like the builder, but stricter: this HTML embeds NO token in
+            any case; the credential rides the URL fragment of the link/QR the
+            panel hands out (see _get_live_link), so the page itself is inert."""
+            from .live import render_live
+            body = render_live().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -2045,10 +2062,41 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from .qr import to_svg
             self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
 
+        def _get_live_link(self, path, qs):
+            """The Live Lens link + QR — only handed to the local panel, exactly
+            like the pairing code (the link carries the token, so the link IS
+            the credential). The token rides the URL FRAGMENT, which browsers
+            never send over the wire, so it can't leak into logs. When --tls is
+            on we hand out the https link — the one whose secure context lets a
+            phone browser open its camera."""
+            if not self._from_localhost():
+                self._json(403, {"error": "the Live Lens link is local-only"}); return
+            port = self.server.server_address[1]
+            ip = lan_ip()
+            host = ip if ip and ip != "127.0.0.1" else "127.0.0.1"
+            frag = "#t=" + urllib.parse.quote(brain.config.token or "")
+            http_url = f"http://{host}:{port}/dreamlayer/live"
+            tls_port = getattr(self.server, "tls_port", None)
+            https_url = (f"https://{host}:{tls_port}/dreamlayer/live"
+                         if tls_port else "")
+            best = (https_url or http_url) + frag
+            from .qr import to_svg
+            brain.activity.add("look", "Generated a Live Lens link")
+            self._json(200, {
+                "url": best, "http_url": http_url + frag,
+                "https": bool(https_url),
+                "note": ("scan with the phone camera — accept the one-time "
+                         "certificate warning (it is this Brain's own)"
+                         if https_url else
+                         "cameras need a secure page: restart the Brain with "
+                         "--tls for the https link; asking works over http"),
+                "qr": to_svg(best)})
+
         # -- GET route table --------------------------------------------
         # exact-path public routes, resolved BEFORE the auth gate
         _GET_PUBLIC = {
             "/": _get_root,
+            "/dreamlayer/live": _get_live,
             "/dreamlayer/build": _get_builder,
             "/dreamlayer/build/figment.js": _get_builder_asset,
             "/dreamlayer/build/qr.js": _get_builder_asset,
@@ -2091,6 +2139,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
+            "/dreamlayer/live/link": _get_live_link,
         }
 
         # -- routing ----------------------------------------------------
@@ -2205,6 +2254,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             b = self._body()
             ans = brain.ask(b.get("query", ""), no_cloud=bool(b.get("no_cloud")))
             self._json(200, _answer_json(ans))
+
+        def _post_live_look(self, path, qs):
+            """One Live Lens look: a JPEG frame in, a budget-clamped HUD card
+            out. The frame is decoded in memory and classified by the LOCAL
+            vision ladder only — this route performs zero cloud egress in every
+            posture (live.look guarantees it; test_live_lens pins it). The
+            frame cap rides the same 413-before-read machinery as every body."""
+            from . import live as live_mod
+            data = self._raw(live_mod.MAX_FRAME_BYTES)
+            self._json(200, live_mod.look(brain, data))
 
         def _post_plugins_install(self, path, qs):
             """Install a plugin from the posted descriptor."""
@@ -2568,6 +2627,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/restore": _post_restore,
             "/dreamlayer/message/draft": _post_message_draft,
             "/dreamlayer/message/send": _post_message_send,
+            "/dreamlayer/live/look": _post_live_look,
         }
         # prefix/dynamic routes (ordered fallback for non-exact paths)
         _POST_ROUTES_PREFIX = [
@@ -2617,6 +2677,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(408, {"error": "request body read timed out"})
 
     class _BrainServer(ThreadingHTTPServer):
+        # sibling https listener's port (set by the factory when __main__
+        # started one with --tls) — advertised by /dreamlayer/live/link so the
+        # panel can hand out the secure URL a phone camera requires.
+        tls_port: "Optional[int]" = None
+
         # The stdlib default (allow_reuse_address = 1) is a POSIX convenience:
         # it lets a restart rebind through TIME_WAIT. On Windows SO_REUSEADDR
         # means something else entirely — "bind even if another socket is
@@ -2651,7 +2716,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             finally:
                 self._slots.release()
 
-    return _BrainServer((host, port), Handler)
+    server = _BrainServer((host, port), Handler)
+    server.tls_port = tls_port          # advertised by /dreamlayer/live/link
+    return server
 
 
 def _write_upload(brain: Brain, folder: str, name: str, data: bytes) -> bool:

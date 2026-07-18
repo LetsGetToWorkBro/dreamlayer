@@ -1,0 +1,310 @@
+"""Live Lens — a phone browser becomes the glasses (ai_brain/server/live.py).
+
+The load-bearing claims, each pinned here:
+  * the HUD budget is the REAL canonical unit (MAX_LINES x MAX_TEXT_LEN utf-8
+    bytes from reality_compiler.v2.figment), enforced on every card;
+  * a look runs the LOCAL vision ladder only — zero cloud egress in every
+    posture, and the decoded frame never touches disk;
+  * the page is public but inert (never embeds the token — the credential
+    rides the link's URL fragment, handed out local-only like pairing);
+  * the look route sits behind the same token gate + 413-before-read body cap
+    as the rest of the surface;
+  * --tls machinery mints a reusable appliance cert so a phone browser gets
+    the secure context its camera requires.
+"""
+from __future__ import annotations
+
+import io
+import json
+import threading
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+import dreamlayer.ai_brain.server.live as live
+from dreamlayer.ai_brain.server import Brain, make_brain_server
+from dreamlayer.ai_brain.server.live import (
+    MAX_FRAME_BYTES, decode_frame, look, render_live, wrap_hud_lines,
+)
+from dreamlayer.ai_brain.server.store import BrainConfig
+from dreamlayer.reality_compiler.v2.figment import MAX_LINES, MAX_TEXT_LEN
+
+TOKEN = "rune-birch"
+
+
+def _brain(tmp_path, **cfg) -> Brain:
+    d = tmp_path / "cfg"
+    d.mkdir()
+    BrainConfig(token=TOKEN, **cfg).save(d)
+    return Brain(d)
+
+
+def _jpeg(size=(64, 64), color=(30, 200, 90)) -> bytes:
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+# --- the HUD budget: the canonical unit, enforced ---------------------------
+
+class TestWrapHudLines:
+    def test_ascii_fits_and_wraps(self):
+        lines = wrap_hud_lines("the passport is in the top drawer of the desk")
+        assert 1 <= len(lines) <= MAX_LINES
+        for ln in lines:
+            assert len(ln.encode("utf-8")) <= MAX_TEXT_LEN
+
+    def test_multibyte_counts_bytes_not_chars(self):
+        # the unit is UTF-8 BYTES (the glass's 24-byte slot buffers): CJK gets
+        # 8 chars per line, not 24 — the parity rule all interpreters share.
+        lines = wrap_hud_lines("記憶は自分のものだから守る価値がある")
+        for ln in lines:
+            assert len(ln.encode("utf-8")) <= MAX_TEXT_LEN
+
+    def test_over_budget_word_is_split_not_dropped(self):
+        lines = wrap_hud_lines("a" * 60)
+        assert lines[0] == "a" * MAX_TEXT_LEN
+        assert "".join(lines).rstrip("…").count("a") == 60
+
+    def test_overflow_truncates_to_max_lines_with_marker(self):
+        lines = wrap_hud_lines("word " * 60)
+        assert len(lines) == MAX_LINES
+        assert lines[-1].endswith("…")
+        for ln in lines:
+            assert len(ln.encode("utf-8")) <= MAX_TEXT_LEN
+
+    def test_empty_is_empty(self):
+        assert wrap_hud_lines("") == []
+
+
+# --- frame decode: in memory, bounded, never trusting the bytes -------------
+
+class TestDecodeFrame:
+    def test_jpeg_roundtrip(self):
+        pytest.importorskip("PIL")
+        arr = decode_frame(_jpeg())
+        assert arr is not None and arr.shape == (64, 64, 3)
+
+    def test_garbage_is_none_not_a_crash(self):
+        assert decode_frame(b"") is None
+        assert decode_frame(b"not an image at all") is None
+
+    def test_large_frame_is_downscaled(self):
+        pytest.importorskip("PIL")
+        arr = decode_frame(_jpeg(size=(1600, 1200)))
+        assert arr is not None and max(arr.shape[:2]) <= 512
+
+
+# --- look(): the local ladder, the ledger, and the no-egress guarantee ------
+
+class TestLook:
+    def test_hit_becomes_a_budget_card_and_ledger_entry(self, tmp_path, monkeypatch):
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("houseplant", 0.87))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "houseplant"
+        assert out["tier"] == "laptop"                    # on-device class
+        for ln in out["lines"]:
+            assert len(ln.encode("utf-8")) <= MAX_TEXT_LEN
+        assert len(out["lines"]) <= MAX_LINES
+        assert any(i["kind"] == "look" for i in brain.activity.recent())
+
+    def test_no_recognition_is_honest_not_invented(self, tmp_path, monkeypatch):
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        monkeypatch.setattr(live, "_ladder", lambda arr: None)
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == ""
+        assert out["confidence"] == 0.0
+
+    def test_backend_crash_degrades_to_no_recognition(self, tmp_path, monkeypatch):
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        def boom(arr):
+            raise RuntimeError("backend died mid-frame")
+        monkeypatch.setattr(live, "_ladder", boom)
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == ""   # graceful, never a 500
+
+    def test_undecodable_frame_reports_reason(self, tmp_path):
+        brain = _brain(tmp_path)
+        out = look(brain, b"junk")
+        assert out["ok"] is False and "decode" in out["reason"]
+
+    def test_look_never_egresses_and_never_writes_the_frame(self, tmp_path, monkeypatch):
+        # The privacy claim, both halves. Egress: cloud_calls stays 0 even with
+        # a cloud provider fully configured. Residue: no new non-state file
+        # appears anywhere under the brain dir (state = the json/db files the
+        # activity ledger and config legitimately touch).
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path, cloud_provider="openai",
+                       cloud_api_key="sk-x", cloud_model="gpt-4o-mini")
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        allowed = {".json", ".jsonl", ".db", ".db-journal", ".db-wal", ".db-shm"}
+        before = {p for p in Path(tmp_path).rglob("*")
+                  if p.is_file() and p.suffix not in allowed}
+        out = look(brain, _jpeg())
+        assert out["ok"] is True
+        assert brain.config.cloud_calls == 0              # zero egress, always
+        after = {p for p in Path(tmp_path).rglob("*")
+                 if p.is_file() and p.suffix not in allowed}
+        assert after == before                            # no frame residue
+
+
+# --- the page: public but inert ---------------------------------------------
+
+class TestPage:
+    def test_page_has_the_working_parts(self):
+        html = render_live()
+        assert "getUserMedia" in html                     # camera
+        assert "/dreamlayer/live/look" in html            # look wire
+        assert "/dreamlayer/brain/ask" in html            # the PRODUCTION ask
+        assert "veil" in html                             # the wearer's posture
+        assert "isSecureContext" in html                  # honest camera gate
+        assert f'"maxTextLen": {MAX_TEXT_LEN}' in html \
+            or f'"maxTextLen":{MAX_TEXT_LEN}' in html     # real budget injected
+
+    def test_page_never_embeds_a_token(self, tmp_path):
+        # the credential rides the URL fragment of the panel's link — the HTML
+        # itself must be inert no matter who fetches it.
+        assert TOKEN not in render_live()
+
+
+# --- the HTTP surface: gate, caps, link ------------------------------------
+
+def _serve(brain):
+    server = make_brain_server(brain, "127.0.0.1", 0, tls_port=7877)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def _req(url, data=None, headers=None, method=None):
+    req = urllib.request.Request(url, data=data, headers=headers or {},
+                                 method=method)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(req, timeout=10) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+class TestHttpSurface:
+    def test_page_is_public_and_inert_look_is_gated(self, tmp_path, monkeypatch):
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("book", 0.8))
+        server, base = _serve(brain)
+        try:
+            status, body = _req(base + "/dreamlayer/live")
+            assert status == 200
+            page = body.decode("utf-8")
+            assert "getUserMedia" in page and TOKEN not in page
+            # no token → 401 before anything is looked at
+            status, _ = _req(base + "/dreamlayer/live/look", data=_jpeg())
+            assert status == 401
+            # token → a real card from the (injected) ladder
+            status, body = _req(base + "/dreamlayer/live/look", data=_jpeg(),
+                                headers={"X-DreamLayer-Token": TOKEN})
+            assert status == 200
+            out = json.loads(body)
+            assert out["ok"] is True and out["label"] == "book"
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_oversize_frame_is_413_before_read(self, tmp_path):
+        # The refusal happens on the DECLARED length, before any body byte is
+        # read (the hardening contract) — so speak raw HTTP: send only the
+        # headers claiming an oversize body and read the early 413. urllib
+        # can't test this; it breaks its own pipe mid-upload when the server
+        # (correctly) refuses without draining.
+        import socket
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)
+        host, port = "127.0.0.1", server.server_address[1]
+        try:
+            req = (f"POST /dreamlayer/live/look HTTP/1.1\r\n"
+                   f"Host: {host}:{port}\r\n"
+                   f"X-DreamLayer-Token: {TOKEN}\r\n"
+                   f"Content-Length: {MAX_FRAME_BYTES + 1}\r\n"
+                   f"\r\n").encode()
+            with socket.create_connection((host, port), timeout=10) as s:
+                s.sendall(req)                 # headers only — no body follows
+                s.settimeout(10)
+                buf = b""
+                while b"\r\n\r\n" not in buf:
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+            assert b" 413 " in buf.split(b"\r\n", 1)[0]
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_link_is_local_only_carries_fragment_and_advertises_tls(self, tmp_path):
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)                      # tls_port=7877 above
+        try:
+            status, body = _req(base + "/dreamlayer/live/link",
+                                headers={"X-DreamLayer-Token": TOKEN})
+            assert status == 200
+            out = json.loads(body)
+            assert out["url"].startswith("https://")      # the camera-able link
+            assert "#t=" + TOKEN in out["url"]            # fragment credential
+            assert out["https"] is True
+            assert out["qr"].lstrip().startswith("<svg")
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_ask_honors_the_veil_with_cloud_configured(self, tmp_path):
+        # the Live Lens sends no_cloud with every veiled ask; even a fully
+        # cloud-wired Brain must not egress — the production /brain/ask
+        # contract, pinned from the page's exact call shape.
+        brain = _brain(tmp_path, cloud_provider="openai",
+                       cloud_api_key="sk-x", cloud_model="gpt-4o-mini")
+        server, base = _serve(brain)
+        try:
+            status, body = _req(
+                base + "/dreamlayer/brain/ask",
+                data=json.dumps({"query": "what is my lease", "no_cloud": True}
+                                ).encode(),
+                headers={"X-DreamLayer-Token": TOKEN,
+                         "Content-Type": "application/json"})
+            assert status == 200
+            assert brain.config.cloud_calls == 0
+        finally:
+            server.shutdown(); server.server_close()
+
+
+# --- tls.py: the appliance certificate --------------------------------------
+
+class TestTls:
+    def test_mints_reuses_and_loads(self, tmp_path):
+        pytest.importorskip("cryptography")
+        from dreamlayer.ai_brain.server.tls import (
+            ensure_self_signed, make_ssl_context,
+        )
+        pair = ensure_self_signed(tmp_path)
+        assert pair is not None
+        cert_p, key_p = pair
+        assert cert_p.exists() and key_p.exists()
+        assert (key_p.stat().st_mode & 0o777) == 0o600    # private stays private
+        first = cert_p.read_bytes()
+        again = ensure_self_signed(tmp_path)              # second call: reuse
+        assert again is not None and again[0].read_bytes() == first
+        ctx = make_ssl_context(cert_p, key_p)             # loadable = valid pair
+        assert ctx is not None
+
+    def test_cert_names_loopback(self, tmp_path):
+        pytest.importorskip("cryptography")
+        from cryptography import x509
+        from dreamlayer.ai_brain.server.tls import ensure_self_signed
+        cert_p, _ = ensure_self_signed(tmp_path)
+        cert = x509.load_pem_x509_certificate(cert_p.read_bytes())
+        ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        ips = {str(i) for i in ext.value.get_values_for_type(x509.IPAddress)}
+        assert "127.0.0.1" in ips
