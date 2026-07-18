@@ -46,30 +46,62 @@ def wit_world() -> str:
         return f.read()
 
 
+def _strip_wit_comments(text: str) -> str:
+    """Drop WIT comments so a comment containing ``name: func`` (a doc comment, a
+    note) can't be parsed as a phantom function (refute 2026-07-18)."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)   # block comments
+    text = re.sub(r"//[^\n]*", " ", text)                # line + /// doc comments
+    return text
+
+
+def _wit_blocks(text: str, keyword: str):
+    """Yield ``(name, body)`` for each ``keyword NAME { ... }`` with BALANCED
+    braces — so a nested record/variant/enum inside an interface does not
+    truncate the body at its first ``}`` (which would hide every function after it
+    while still passing the equality check — refute 2026-07-18)."""
+    for m in re.finditer(rf"\b{keyword}\s+([a-z0-9\-]+)\s*\{{", text):
+        depth, i, start = 1, m.end(), m.end()
+        while i < len(text) and depth:
+            depth += 1 if text[i] == "{" else -1 if text[i] == "}" else 0
+            i += 1
+        yield m.group(1), text[start:i - 1]
+
+
+def _remove_nested_braces(body: str) -> str:
+    """Strip inner ``{...}`` blocks (record/variant/enum/flags/resource bodies) so
+    their fields/methods aren't mistaken for the interface's own functions."""
+    prev = None
+    while prev != body:
+        prev = body
+        body = re.sub(r"\{[^{}]*\}", " ", body)
+    return body
+
+
 def wit_interface_functions() -> dict:
     """Parse the WIT into ``{interface_name: {func_name}}`` with names normalised
-    to the snake_case the core-ABI catalog uses (WIT is kebab-case). A tiny,
-    dependency-free parser — enough to cross-check the runtime catalog against the
-    formal contract, not a full WIT parser."""
-    text = wit_world()
+    to the snake_case the core-ABI catalog uses (WIT is kebab-case). A small,
+    dependency-free parser — comment-stripped and brace-balanced so it can't be
+    fooled into hiding or inventing a function — enough to cross-check the runtime
+    catalog against the formal contract, not a full WIT parser."""
+    text = _strip_wit_comments(wit_world())
     out: dict = {}
-    for m in re.finditer(r"interface\s+([a-z0-9\-]+)\s*\{([^}]*)\}", text):
-        iface = m.group(1).replace("-", "_")
+    for name, body in _wit_blocks(text, "interface"):
+        flat = _remove_nested_braces(body)
         funcs = {fm.group(1).replace("-", "_")
-                 for fm in re.finditer(r"([a-z0-9\-]+)\s*:\s*func", m.group(2))}
-        out[iface] = funcs
+                 for fm in re.finditer(r"([a-z0-9\-]+)\s*:\s*func", flat)}
+        out[name.replace("-", "_")] = funcs
     return out
 
 
 def wit_world_imports() -> set:
-    """The interface names the `world plugin` imports — the full grantable
-    capability surface a plugin may draw from."""
-    text = wit_world()
-    m = re.search(r"world\s+plugin\s*\{([^}]*)\}", text)
-    if not m:
-        return set()
-    return {im.group(1).replace("-", "_")
-            for im in re.finditer(r"import\s+([a-z0-9\-]+)\s*;", m.group(1))}
+    """The interface names a ``world`` imports — the full grantable capability
+    surface a plugin may draw from."""
+    text = _strip_wit_comments(wit_world())
+    imports = set()
+    for _, body in _wit_blocks(text, "world"):
+        for im in re.finditer(r"import\s+([a-z0-9\-]+)\s*;", body):
+            imports.add(im.group(1).replace("-", "_"))
+    return imports
 
 
 def capability_function_names() -> dict:
@@ -88,23 +120,34 @@ except Exception:
     wasmtime = None                     # type: ignore
     _HAS_WASMTIME = False
 
-# The host-function surface, grouped by capability. The guest imports these from
-# the "dreamlayer" module; only the functions of *granted* capabilities are
-# linked. Each entry: import name -> (param ValTypes, result ValTypes) as a
-# lazy factory (ValType objects need wasmtime present). Keep this small and
-# auditable — it is the trusted boundary.
+# Per-function arity (count of i32 params, count of i32 results) as PURE DATA —
+# the core-ABI shape of each host function in the WIT. `_catalog` materialises
+# ValTypes from these; keeping the cap→function STRUCTURE in
+# capability_function_names() (the single source) means `_catalog` cannot expose
+# a function the names dict — and therefore the WIT cross-check — doesn't know
+# about, so runtime enforcement and the formal contract cannot silently drift.
+_SIGNATURES = {
+    "log":       (2, 0),   # (ptr, len) -> ()
+    "fs_read":   (1, 1),   # (offset) -> byte
+    "net_get":   (1, 1),   # (req_id) -> status
+    "show_card": (2, 0),   # (ptr, len) -> ()
+}
+
+
 def _catalog():
+    """The host-function surface, grouped by capability, with wasmtime ValTypes.
+    Derived from capability_function_names() + _SIGNATURES so it is provably a
+    superset of nothing the contract lacks (a function missing a signature raises,
+    caught by the tests)."""
     i32 = wasmtime.ValType.i32
-    return {
-        # a plugin that only wants to speak to the host log needs just this
-        "log":  {"log": ([i32(), i32()], [])},          # (ptr, len) -> ()
-        # read a byte from the granted package sandbox
-        "fs":   {"fs_read": ([i32()], [i32()])},        # (offset) -> byte
-        # a single mediated fetch handle (host decides what it means)
-        "net":  {"net_get": ([i32()], [i32()])},        # (req_id) -> status
-        # surface a card to the wearer
-        "cards": {"show_card": ([i32(), i32()], [])},   # (ptr, len) -> ()
-    }
+    cat: dict = {}
+    for cap, fnames in capability_function_names().items():
+        cat[cap] = {}
+        for fn in fnames:
+            n_params, n_results = _SIGNATURES[fn]
+            cat[cap][fn] = ([i32() for _ in range(n_params)],
+                            [i32() for _ in range(n_results)])
+    return cat
 
 
 def available() -> bool:

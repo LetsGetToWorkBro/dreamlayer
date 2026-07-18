@@ -45,6 +45,39 @@ def test_each_interface_declares_at_least_one_func():
         assert funcs, f"interface {iface} declares no functions"
 
 
+def test_parser_sees_functions_after_a_nested_record(monkeypatch):
+    """A nested record/variant inside an interface must NOT truncate the parse and
+    hide the functions after it — the drift the naive [^}]* regex missed (refute
+    2026-07-18)."""
+    wit = """
+    package dreamlayer:host@0.1.0;
+    interface fs {
+        fs-read: func(offset: u32) -> u32;
+        record stat { size: u32, mode: u32 }   // nested {} must not truncate
+        fs-stat: func(path: u32) -> u32;
+    }
+    world plugin { import fs; }
+    """
+    monkeypatch.setattr(wch, "wit_world", lambda: wit)
+    funcs = wch.wit_interface_functions()
+    assert funcs == {"fs": {"fs_read", "fs_stat"}}   # BOTH funcs seen
+
+
+def test_parser_ignores_functions_in_comments(monkeypatch):
+    """A doc/line comment containing 'name: func' must not be parsed as a phantom
+    function (refute 2026-07-18)."""
+    wit = """
+    interface log {
+        /// show-card: func would surface a card (this is prose, not a decl)
+        // danger: func here is a comment too
+        log: func(ptr: u32, len: u32);
+    }
+    world plugin { import log; }
+    """
+    monkeypatch.setattr(wch, "wit_world", lambda: wit)
+    assert wch.wit_interface_functions() == {"log": {"log"}}
+
+
 def test_catalog_matches_wit_when_wasmtime_present():
     """When wasmtime is installed, the live `_catalog` (with ValType sigs) must
     expose exactly the WIT function names — closes the loop from contract →
