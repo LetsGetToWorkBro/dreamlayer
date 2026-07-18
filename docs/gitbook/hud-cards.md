@@ -27,6 +27,8 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![ReadyCard](assets/cards/ready.webp)
 
+![Juno arrives — the fly-in, rendered live in the browser sim](assets/motion/juno_ready.gif)
+
 - **Appears:** on boot, on `show_ready`, on resume from the veil, on connect.
 - **Shows:** the calm mark — a memory-trace core inside gradient rings with
   satellite dots. No text; it means "I am here and not listening."
@@ -105,6 +107,8 @@ Each entry lists: when the card appears, what it shows, its materials
 
 ![ObjectRecallCard](assets/cards/object_recall.webp)
 
+![Juno glances at the object and the panel resolves — rendered live](assets/motion/object_recall.gif)
+
 - **Appears:** "where did I leave my keys?" — object recall.
 - **Shows:** a spatial scene, not a list: the place as a translucent field,
   the object as a layered diamond jewel with orbit arcs and bloom, you as a
@@ -129,6 +133,8 @@ Each entry lists: when the card appears, what it shows, its materials
 ### CommitmentDriftCard
 
 ![CommitmentDriftCard](assets/cards/commitment_drift.webp)
+
+![The promise drifting to the rim of sight and glowing — rendered live](assets/motion/commitment_drift.gif)
 
 - **Appears:** when a tracked promise starts to slip
   (`orchestrator.tick_drift`).
@@ -212,6 +218,8 @@ of its own, all device-rendered:
 ### PersonContextCard
 
 ![PersonContextCard](assets/cards/person_context.webp)
+
+![An introduction, kept — the avatar ring blooms open, rendered live](assets/motion/person_intro.gif)
 
 - **Appears:** someone you know is in view (anticipation person cue).
 - **Shows:** name in hero type, one why-line ("owes you the lease"),

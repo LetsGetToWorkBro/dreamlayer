@@ -236,6 +236,13 @@ illustrative.
 | ![Kiln](assets/cards/kiln.webp) | **Kiln** — an offline-total firing companion; the Brain absent by design, the log kept as a lab notebook. |
 | ![Stasis](assets/cards/stasis.webp) | **Stasis** — save states for your mind: a double-nod holds the exact thought you were interrupted in, verbatim, and puts you back inside it later. No summary, no LLM. |
 
+**In motion.** The same lenses, rendered live by the browser sim (the real
+renderer, not a mockup) — a look resolves rather than cuts:
+
+| | |
+|---|---|
+| ![Rosetta Live in motion](assets/motion/rosetta_live.gif) | ![Waypath in motion](assets/motion/waypath.gif) |
+
 ### Ember — the four states of tending a memory
 
 Ember is spaced repetition for the moments you *choose* to keep. The flame
