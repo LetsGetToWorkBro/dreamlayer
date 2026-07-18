@@ -1,41 +1,33 @@
-The Brain got a face. The entire control panel is now Mac OS 8.1 Platinum: pinstripe title bars, Chicago type, real window chrome, the works. It matches the new dreamlayer.app desktop, because your local brain and its website should look like they came from the same machine. Same engine underneath. Zero features touched, zero features lost.
-
-And the Brain runs on Windows now. Same server, same panel, same pairing. The menu bar dot becomes a tray dot. That's the whole port story from where you sit.
+0.2.0 gave the Brain a face and put it on Windows. 0.3.0 is the pass where I tried to break it and couldn't. Both apps got hardened, both got more brains to plug into, and the first plugin someone who isn't me wrote is now in the store.
 
 <img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_home.png" alt="The Brain panel, Home, Platinum" />
 
 ## Install (macOS 12+)
 
-Download `DreamLayer.dmg` below, double-click, drag DreamLayer to Applications. Runs from the menu bar. Signed and notarized, so Gatekeeper stays quiet. Upgrading from 0.1.0: drag over the old one, your data doesn't live in the app bundle.
+Download `DreamLayer.dmg` below, double-click, drag DreamLayer to Applications. Runs from the menu bar. Signed and notarized, so Gatekeeper stays quiet. Upgrading: drag over the old one, your data doesn't live in the app bundle.
 
 ## Install (Windows 10/11)
 
-Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin prompt, Start menu entry, optional start when you sign in. The Brain lives in the system tray: same menu as the Mac, Open panel, Sync now, Incognito, Quit. The panel opens in a native WebView2 window, or your browser if you don't have the runtime.
+Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin prompt, Start menu entry, optional start when you sign in. The Brain lives in the system tray with the same menu as the Mac. Panel opens in a native WebView2 window, or your browser if you don't have the runtime.
 
-Windows will ask you two things on first launch, both normal:
+Same two first-launch clicks as before: SmartScreen "More info, Run anyway" because this build isn't code signed yet, and the firewall "allow on private networks" so the phone can reach the panel on `:7777`. Uninstalling leaves `~/.dreamlayer` alone.
 
-- SmartScreen says "Windows protected your PC" because this build isn't code signed yet. More info, Run anyway. This is Windows' Gatekeeper moment.
-- The firewall asks about incoming connections. Allow on private networks, or your phone can't reach the panel on `:7777`. Pairing is still token-gated either way.
+## What's new since 0.2.0
 
-Uninstalling removes the app and the login entry but leaves `~/.dreamlayer` alone. Your index and history are yours, not the installer's.
-
-## What's new since 0.1.0
-
-- The whole panel is a Platinum desktop now. Every card is a proper window with a pinstriped title bar. If you know why the corners look like that, welcome home. If you don't, it still just works.
-- Juno lives on the panel as a desk accessory. A little animated window in the corner, "the brain is listening." It is not a mascot, it is a status light with wings.
-- Real fonts ship inside the app, ChicagoFLF and Space Grotesk. Nothing is fetched from a CDN, because nothing in this app fetches anything unless you turn cloud on.
+- I spent a week trying to break my own Brain and then fixed everything I found. Both the Mac and Windows appliances got a hardening pass: bounded worker concurrency so a flood of connections can't exhaust the process, tighter file permissions on your data, a clean start and stop lifecycle, and a manual "Check for updates" in the menu that pings the releases page only when you click it and never in the background. Nothing about how you use it changed. It just holds up better when poked.
+- More brains to plug into, one tap each. Groq, Together, and DeepSeek are in as OpenAI-compatible presets, and the panel now one-click discovers GPT4All and KoboldCpp if you're already running them. Local stays local, remote still gets flagged and counted, same as always.
 
 <img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_intelligence.png" alt="Intelligence, Platinum" />
 
-- Same brain controls as 0.1.0 under the new paint: keyword search with zero models, Ollama, or plug in whatever agent you already run. One tap, local stays local, remote gets flagged and counted.
-- The Brain ships on Windows. Not a wrapper, the same Python server and the same panel, built into `DreamLayer.exe` with a Platinum installer to match. What's different on Windows is stated honestly in the panel instead of pretended around: no iMessage there, mail reads from a local Thunderbird profile if you have one, calendars come from `.ics` files and URLs.
+- The first community plugin shipped. Someone who isn't me wrote an Open Library book connector for TasteLens: look at a shelf, get ratings and edition info on the glass, pulled from open data with no key. It went through the same safety gate as everything else. This is the whole bet paying out, the Brain stays small and the connectors come from you.
+- The plugin store shows what you're actually getting now. Every listing has a real screenshot of the plugin's on-glass output, not concept art, and a thumbnail on the tile before you open it. Browse it at dreamlayer.app/plugins or from the panel.
 
 <img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_capabilities.png" alt="Capabilities, Platinum" />
 
-- The rest of the family got the same treatment: dreamlayer.app is a Platinum desktop, and the phone app shipped its own Platinum reskin with a new 5-tab layout. Those live in this repo too, they just don't ship in this dmg.
+- The Mac dmg now wears the same Platinum window dressing as the Windows installer, so the two front doors finally match.
 
 ## Good to know
 
 - Still a pre-hardware build. The Brain, panel, phone pairing, plugins, and simulator are real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does.
 - The full source for the dmg and the exe is this repository. Don't trust me, build it yourself: `.github/workflows/build-macos-app.yml` and `.github/workflows/build-windows-app.yml` are the recipes.
-- Found something broken? Open an issue with logs and I'll actually read it. Want a lens? `examples/hello-lens`.
+- Found something broken? Open an issue with logs and I'll actually read it. Want to write a plugin? `examples/hello-lens`, and the open issues are the menu.
