@@ -19,8 +19,19 @@ def _seeded_db():
 
 
 # --- memory: local embedder falls back to the deterministic mock -------------
-def test_local_embedder_fallback():
+def test_local_embedder_fallback(monkeypatch):
+    # Force the "sentence-transformers not installed" branch explicitly (the
+    # module-global _HAS_ST flag in embedder_local.py) instead of relying on
+    # the package actually being absent: with the optional dep installed
+    # (issue #449), LocalEmbeddingProvider used to load the real 384-d MiniLM
+    # model here and this assertion (pinned to the 32-d mock width) failed
+    # for environment reasons, not a real regression. Mirrors
+    # test_embedder_local_real.py::TestMockFallback
+    # .test_forced_unavailable_degrades_to_mock_without_raising, which proves
+    # the same _HAS_ST guard in an environment where the dep IS installed.
+    from dreamlayer.memory import embedder_local
     from dreamlayer.memory.embedder_local import LocalEmbeddingProvider
+    monkeypatch.setattr(embedder_local, "_HAS_ST", False)
     emb = LocalEmbeddingProvider()
     v = emb.embed("snake plant")
     assert isinstance(v, list) and len(v) == MockEmbeddingProvider.DIM
