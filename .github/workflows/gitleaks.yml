@@ -1,25 +1,43 @@
 name: gitleaks
 
 # Secret scanning, introduced 2026-07-18: nothing in CI stopped an API key, a
-# real pairing token, or a private key from being committed. gitleaks scans the
-# tree (and its history) against its built-in rule set PLUS this repo's
-# `.gitleaks.toml`, which extends the defaults and allowlists the KNOWN test
-# fixtures (the fake `sk-...` keys, the `rune-birch` pairing token, the well-known
-# Windows SIDs) so the scan is clean today while a REAL secret still trips it.
+# real pairing token, or a private key from being committed. gitleaks scans
+# against its built-in rule set PLUS this repo's `.gitleaks.toml`, which extends
+# the defaults and allowlists the KNOWN test fixtures (the fake `sk-...` keys, the
+# `rune-birch` pairing token, the well-known Windows SIDs) so the scan is clean
+# today while a REAL secret still trips it.
 #
-# ENFORCING (BLOCKING). Unlike the SAST pass (semgrep.yml), there is no backlog
-# to triage — the tree is clean at introduction — so a non-zero gitleaks exit
-# means a genuine secret entered the code and this check MUST go red. It runs the
-# OSS gitleaks binary via its public Docker image, so it needs NO paid
-# gitleaks-action license/key. Runs on PRs and pushes to main, plus a weekly
-# sweep (a gitleaks rule update can flag a pre-existing leak the old rules missed).
+# ENFORCING (BLOCKING). A non-zero gitleaks exit means a genuine secret entered
+# the code and this check MUST go red. It runs the OSS gitleaks binary via its
+# public Docker image, so it needs NO paid gitleaks-action license/key.
+#
+# TWO SCAN MODES (refute 2026-07-18 — the weekly job used to run the identical
+# current-tree command, so the "history sweep" it advertised never existed):
+#   * push / pull_request → CURRENT TREE only (--no-git). Fast, and avoids a
+#     long-gone fixture in an old commit reddening the merge gate.
+#   * schedule (weekly)   → FULL GIT HISTORY. Catches a secret added-then-removed
+#     within a PR (gone from the final tree, permanent in history) and a leak a
+#     gitleaks rule update newly recognises. Needs the full history, so the
+#     checkout fetches depth 0 only for the scheduled run.
+#
+# GATE SELF-TEST: a valid-but-wrong `.gitleaks.toml` (e.g. `useDefault` silently
+# off) makes the scan pass while detecting NOTHING — a fail-OPEN gate. The first
+# step plants a canary secret and asserts THIS config still flags it, so a vacuous
+# config fails the job instead of shipping green.
+#
+# KNOWN RESIDUALS (documented, not silently trusted away): gitleaks honours an
+# inline `# gitleaks:allow` comment and scans the config from the PR's own head,
+# so a contributor CAN weaken the gate in the same PR. The `.github/CODEOWNERS`
+# entry on `.gitleaks.toml` + this workflow is the mitigation — it routes any such
+# change to a human owner (enforced when branch protection requires code-owner
+# review). Neither is a scanner bug; both are visible in the diff under review.
 
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
-    - cron: "0 8 * * 1"      # Mondays 08:00 UTC
+    - cron: "0 8 * * 1"      # Mondays 08:00 UTC — full-history sweep
 
 permissions:
   contents: read
@@ -28,17 +46,48 @@ jobs:
   gitleaks:
     runs-on: ubuntu-latest
     steps:
+      # Full history ONLY for the weekly sweep; shallow otherwise. NOTE the quoted
+      # '0'/'1': an unquoted `&& 0 || 1` would collapse to 1 because 0 is falsy in
+      # a GitHub expression — the strings dodge that.
       - uses: actions/checkout@v7
-      - name: gitleaks detect (OSS image, no action license)
-        # Scan the CURRENT working tree (--no-git), not git history: a real
-        # secret in the code we ship is what must block, and this avoids a
-        # false-positive on some long-gone test fixture in an old commit reddening
-        # the gate at introduction. A full-history sweep can be added on the
-        # weekly cron once the tree is triaged clean. Official image (ghcr).
+        with:
+          fetch-depth: ${{ github.event_name == 'schedule' && '0' || '1' }}
+
+      - name: Gate self-test — prove detection is live (guards a fail-open config)
+        # Plant a canary secret in a throwaway dir OUTSIDE the repo (so the real
+        # scan never sees it) and run THIS config against it. gitleaks exits 1 when
+        # it finds the canary — that is the healthy path. If it exits 0, detection
+        # is disabled (a fail-open config) and we fail the job.
         run: |
+          canary="$RUNNER_TEMP/gl-canary"
+          mkdir -p "$canary"
+          # Assemble the canary AWS key from two fragments so THIS workflow file
+          # never itself contains a contiguous AKIA-token — otherwise the tree
+          # scan below flags the gate's own canary. At runtime the full key lands
+          # in canary.txt (outside the repo), where the self-test scans it.
+          canary_key="AKIA""QYLPMN5HGXO4VB2C"
+          printf 'aws_key = "%s"\n' "$canary_key" > "$canary/canary.txt"
+          if docker run --rm -v "$PWD:/repo:ro" -v "$canary:/canary:ro" \
+               ghcr.io/gitleaks/gitleaks:latest detect \
+               --no-git --source=/canary --config=/repo/.gitleaks.toml \
+               --redact --exit-code=1; then
+            echo "::error::gitleaks did NOT flag the canary secret — the .gitleaks.toml is fail-open (detection disabled)."
+            exit 1
+          fi
+          echo "canary flagged as expected — detection is live."
+
+      - name: gitleaks detect (OSS image, no action license)
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            mode=""            # scan full git history (weekly deep sweep)
+            echo "scheduled run → scanning full git history"
+          else
+            mode="--no-git"    # scan the current tree only (push / PR gate)
+            echo "push/PR run → scanning the current tree"
+          fi
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
             detect \
-            --no-git \
+            $mode \
             --source=/repo \
             --config=/repo/.gitleaks.toml \
             --redact \

@@ -145,3 +145,28 @@ def frame_is_dominated_by_a_person(frame) -> bool:
     except Exception as exc:                       # noqa: BLE001 — never break a look
         log.debug("[person_guard] frame detection failed: %s", exc)
     return False
+
+
+def defers_person(label: str, frame=None) -> bool:
+    """The single "this is a person — defer to the Social Lens, never identify"
+    decision that EVERY world-lens surface must apply before it shows or stores a
+    label: the deterministic denylist + name-shape guard (recognizer._names_a_
+    person), the optional Presidio text layer (label_is_a_person), and — when a
+    frame is supplied — the optional visual detector. Any layer firing → True.
+
+    Centralised on purpose. The refute of 2026-07-18 found the person defence
+    applied only on the image route inside ObjectRecognizer.recognize(): the
+    label route (world_lens.look_sighting) and the Live Lens (ai_brain live.look)
+    each reached the glass through a DIFFERENT call-site that skipped it. Routing
+    every entry point through one primitive is how a new surface cannot silently
+    drop a layer the others enforce. Fail-safe throughout — a missing optional
+    dep or any error in a layer is a no-op, so this can only ADD a deferral."""
+    # Import lazily to avoid an import cycle (recognizer imports person_guard).
+    from .recognizer import _names_a_person
+    if _names_a_person(label):
+        return True
+    if label_is_a_person(label):
+        return True
+    if frame is not None and frame_is_dominated_by_a_person(frame):
+        return True
+    return False

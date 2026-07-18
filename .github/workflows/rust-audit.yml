@@ -36,6 +36,13 @@ on:
     - cron: "0 7 * * 1"
   workflow_dispatch:
 
+# Least privilege: these jobs only read the checkout — cargo-deny/cargo-audit
+# make no API writes. Set explicitly so the job never inherits a read-write
+# default token (refute 2026-07-18: this workflow shipped with no permissions
+# block while every sibling gate pinned one).
+permissions:
+  contents: read
+
 jobs:
   cargo-deny:
     runs-on: ubuntu-latest
