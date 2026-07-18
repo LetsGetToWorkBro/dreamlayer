@@ -1,0 +1,48 @@
+# Maestro E2E for the phone app (the Look/world-lens camera flow).
+#
+# jest covers the store logic; Maestro drives the REAL app on an Android emulator
+# — the camera-permission path, the capture, and an honest response render that a
+# unit test can't reach. This is MANUAL/informational, not a PR gate: it builds a
+# debug APK + boots an emulator (slow, and emulator E2E is inherently flakier than
+# a unit run), so it runs on demand (workflow_dispatch) rather than blocking every
+# PR. Promote to a nightly `schedule` once it's proven stable in your runners.
+name: maestro
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: phone-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Build a debug APK (expo prebuild → gradle)
+        working-directory: phone-app
+        run: |
+          npm ci
+          npx expo prebuild --platform android --no-install
+          cd android && ./gradlew assembleDebug --no-daemon
+      - name: Install Maestro
+        run: |
+          curl -Ls https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run Maestro on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r phone-app/android/app/build/outputs/apk/debug/app-debug.apk
+            maestro test phone-app/.maestro/

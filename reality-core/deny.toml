@@ -1,0 +1,67 @@
+# cargo-deny configuration for the reality_core crate (see .github/workflows/
+# rust-audit.yml, which enforces it).
+#
+# Why this exists even though reality_core has ZERO third-party dependencies
+# today: the crate is the on-glass safety core (ADR 0003) and is *deliberately*
+# dependency-free — pure integer/float logic that cross-compiles to a 256KB-class
+# MCU. That makes every check below trivially green right now. The point is to
+# make it STAY that way: the day someone adds a crate to Cargo.toml, this config
+# turns "a new transitive dependency slipped in" into a red check instead of a
+# silent supply-chain expansion — vulnerabilities and non-allowlisted licenses
+# become hard failures, an unexpected registry becomes a hard failure, and a
+# duplicate-version fan-out or an unmaintained crate becomes a visible warning.
+#
+# Schema: cargo-deny 0.16+ (the `version = 2` semantics). Under version 2 the
+# per-advisory severity knobs were folded into sane defaults, so we set only what
+# we mean to override.
+
+[graph]
+# Evaluate the crate with all Cargo features enabled, so a dependency that only
+# appears behind a future feature flag is still audited rather than hidden.
+all-features = true
+
+[advisories]
+version = 2
+# Under version 2 the defaults already encode the policy we want:
+#   * security vulnerabilities  -> ERROR  (deny; fails the build)
+#   * unsound advisories        -> ERROR
+#   * unmaintained crates       -> WARN   (surfaced, non-blocking)
+#   * notice advisories         -> WARN
+# so there is nothing to restate for those. We only tighten `yanked`.
+yanked = "deny"
+# Advisory IDs to intentionally ignore, with a justification comment each. Empty
+# today (no dependencies -> no advisories to triage).
+ignore = []
+
+[licenses]
+version = 2
+# reality_core itself is Apache-2.0 (see Cargo.toml `license`). Any dependency
+# must resolve to one of these OSI-approved, redistribution-friendly licenses;
+# anything else (notably copyleft such as GPL) is an ERROR under version 2.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "Unicode-3.0",   # unicode-ident and friends relicensed to this
+    "ISC",
+]
+# Require a high-confidence license detection before accepting a crate.
+confidence-threshold = 0.9
+# Per-crate license exceptions (crate + allowed license). None needed today.
+exceptions = []
+
+[bans]
+# A dependency-free crate can never have version fan-out today; keep this a
+# WARNING so a future duplicate (two versions of the same crate pulled in
+# transitively) is visible in the log without blocking a legitimate merge.
+multiple-versions = "warn"
+# Wildcard ("*") version requirements are fine for a leaf crate with no deps;
+# revisit if this ever grows a dependency tree.
+wildcards = "allow"
+
+[sources]
+# Only crates.io is expected. An unknown alternate registry or a git dependency
+# from an unvetted host is a supply-chain red flag -> ERROR.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

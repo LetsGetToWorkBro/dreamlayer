@@ -1,0 +1,170 @@
+# DreamLayer privacy & safety contract — custom Semgrep rules.
+#
+# These encode the invariants this codebase already enforces elsewhere (chiefly
+# host-python/src/dreamlayer/tests/test_logging_discipline.py and
+# host-python/src/dreamlayer/logging_setup.py) as reusable SAST rules that fire
+# on EVERY file the semgrep workflow scans — not just the shipped `dreamlayer/`
+# package the AST-guard test walks. They are loaded by `.github/workflows/
+# semgrep.yml` via `--config .semgrep/`.
+#
+# Severity here is advisory metadata for the SARIF report; at introduction the
+# workflow is non-blocking (see its header). WARNING = a discipline/privacy
+# smell to review; ERROR = a class we never intend to ship (RCE, TLS bypass,
+# unsafe deserialization).
+
+rules:
+  # --------------------------------------------------------------------------
+  # pii-in-log-message — the "no PII in the log MESSAGE string" contract, as a
+  # reusable rule. logging_setup.JsonLineFormatter redacts values passed via
+  # extra={...} but emits record.getMessage() VERBATIM, so interpolating a
+  # sensitive-named value INTO the message string bypasses redaction. The
+  # shipped tree is guarded by tests/test_logging_discipline.py's AST scan;
+  # this mirrors that guard so it also covers new/ancillary Python that the
+  # test's `dreamlayer/`-only walk does not reach. Recognition keys on the
+  # logging METHOD NAME on ANY receiver (bare/aliased logger, self-attr, or an
+  # inline logging.getLogger(...)) — exactly like the test.
+  - id: pii-in-log-message
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Sensitive-named value interpolated into a log MESSAGE string. The message
+      (record.getMessage()) is emitted verbatim and is NOT redacted — only the
+      extra={...} path is scrubbed by logging_setup.JsonLineFormatter. Pass the
+      value via extra={...} instead so it is redacted. See
+      tests/test_logging_discipline.py and logging_setup._SENSITIVE_ROOTS.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      contract: no-pii-in-log-message
+      references:
+        - host-python/src/dreamlayer/logging_setup.py
+        - host-python/src/dreamlayer/tests/test_logging_discipline.py
+    patterns:
+      - pattern-either:
+          # f-string:  log.info(f"reply={juno_text}")
+          - pattern: $LOG.$METH(f"...{$VAL}...", ...)
+          # %-format / concat:  log.warning("to=%s" % email)
+          - pattern: $LOG.$METH($FMT % $VAL, ...)
+          # str.format:  log.error("t={}".format(transcript))
+          - pattern: $LOG.$METH($FMT.format(..., $VAL, ...), ...)
+          # %-lazy args:  log.info("name=%s", user_name)  (getMessage() renders it)
+          - pattern: $LOG.$METH($FMT, ..., $VAL, ...)
+      # recognise ONLY logging emit methods (any receiver) — mirrors _LOG_METHODS
+      - metavariable-regex:
+          metavariable: $METH
+          regex: ^(debug|info|warning|warn|error|exception|critical|fatal|log)$
+      # ...whose interpolated value's identifier matches a sensitive root
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: (?i).*(summary|transcript|email|token|secret|password|api_?key|cue|reply|query|answer|caption|address|phone).*
+
+  # --------------------------------------------------------------------------
+  # eval-exec — arbitrary code execution. Never on untrusted input; flagged
+  # wholesale so any new call site is reviewed.
+  - id: eval-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Use of eval()/exec() executes arbitrary code. If any part of the argument
+      derives from untrusted input (a request body, a pairing payload, a memory
+      field, plugin data) this is remote code execution. Replace with a specific
+      parser (ast.literal_eval, json.loads, a lookup table).
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+
+  # --------------------------------------------------------------------------
+  # subprocess-shell-true — shell=True invites command injection when any part
+  # of the command is caller-influenced. Pass an argv list without a shell.
+  - id: subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess call with shell=True. If any part of the command string is
+      caller-influenced this is a shell-injection sink. Pass an argv list
+      (["cmd", arg, ...]) with shell=False (the default) instead.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.check_call(..., shell=True, ...)
+          - pattern: subprocess.check_output(..., shell=True, ...)
+
+  # --------------------------------------------------------------------------
+  # yaml-unsafe-load — yaml.load without a Safe loader can instantiate arbitrary
+  # Python objects from the document (deserialization RCE). Use yaml.safe_load
+  # or pass Loader=yaml.SafeLoader.
+  - id: yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: >-
+      yaml.load() without a SafeLoader can construct arbitrary Python objects
+      from the document and is a deserialization RCE on untrusted input. Use
+      yaml.safe_load(...) or yaml.load(..., Loader=yaml.SafeLoader).
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: HIGH
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader)
+      - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader)
+      - pattern-not: yaml.load(..., Loader=SafeLoader)
+      - pattern-not: yaml.load(..., Loader=CSafeLoader)
+
+  # --------------------------------------------------------------------------
+  # requests-verify-false — disabling TLS certificate verification silently
+  # exposes every request to MITM. There is no legitimate reason to ship it.
+  - id: requests-verify-false
+    languages: [python]
+    severity: ERROR
+    message: >-
+      TLS certificate verification disabled (verify=False / unverified SSL
+      context). This makes the connection trivially MITM-able and must never
+      ship. Remove verify=False; if a private CA is needed, pass its bundle via
+      verify="/path/to/ca.pem" instead.
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: requests.$M(..., verify=False, ...)
+          - pattern: httpx.$M(..., verify=False, ...)
+          - pattern: $CLIENT.request(..., verify=False, ...)
+          - pattern: $SESSION.get(..., verify=False, ...)
+          - pattern: $SESSION.post(..., verify=False, ...)
+          - pattern: $ANY(..., verify=False, ...)
+          - pattern: ssl._create_unverified_context(...)
+
+  # --------------------------------------------------------------------------
+  # pickle-loads — pickle deserializes arbitrary objects and executes reduce
+  # hooks; loading untrusted bytes is RCE. Prefer json / a schema'd format.
+  - id: pickle-loads
+    languages: [python]
+    severity: WARNING
+    message: >-
+      pickle.load()/pickle.loads() executes arbitrary code during
+      deserialization. If the bytes come from anywhere untrusted (a network
+      peer, a cache written by another process, a plugin) this is RCE. Prefer
+      json or a schema-validated format for anything crossing a trust boundary.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: cPickle.loads(...)
+          - pattern: cPickle.load(...)

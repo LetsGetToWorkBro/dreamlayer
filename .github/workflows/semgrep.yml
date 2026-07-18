@@ -1,0 +1,80 @@
+name: semgrep
+
+# Static application security testing (SAST), introduced 2026-07-18: the repo
+# already had dependency-CVE scanning (dep-audit.yml) and, alongside this, secret
+# scanning (gitleaks.yml) — but NOTHING that reads the code itself for the classic
+# source-level defects (injection, unsafe deserialization, disabled TLS, PII
+# interpolated into a log message). Semgrep fills that gap. It scans host-python/
+# and phone-app/ with the community `p/python` + `p/security-audit` rulesets PLUS
+# DreamLayer's own privacy-contract rules in `.semgrep/` (the "no PII in a log
+# MESSAGE string" guard, eval/exec, shell=True, yaml.load, verify=False, pickle)
+# and publishes findings to the Security tab as SARIF (code-scanning alerts).
+#
+# INFORMATIONAL AT INTRODUCTION — deliberately NON-BLOCKING. A first SAST pass
+# over an existing tree surfaces a backlog, and red-blocking every open PR on a
+# backlog nobody has triaged yet is exactly how a security gate gets muted or
+# deleted. So the scan step is `continue-on-error: true`: findings land in the
+# Security tab WITHOUT failing the check. This is the same shape a mature repo
+# uses to introduce SAST — report first, gate second. Once the backlog is triaged
+# to zero, remove `continue-on-error` (or add `--error` to the semgrep command)
+# to TIGHTEN THIS TO BLOCKING, the way dep-audit.yml is already an enforcing gate.
+# Until then it is a reporting surface, not a merge gate.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "host-python/**"
+      - "phone-app/**"
+      - ".semgrep/**"
+      - ".github/workflows/semgrep.yml"
+  pull_request:
+    paths:
+      - "host-python/**"
+      - "phone-app/**"
+      - ".semgrep/**"
+      - ".github/workflows/semgrep.yml"
+  schedule:
+    - cron: "0 8 * * 1"      # Mondays 08:00 UTC — pick up newly-published rules
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read          # checkout
+      security-events: write  # upload-sarif -> code-scanning alerts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+      - name: Run Semgrep (SARIF, non-blocking at introduction)
+        # continue-on-error keeps a fresh backlog of findings from red-blocking
+        # PRs: the SARIF still uploads below and the alerts still surface in the
+        # Security tab. Remove this line to make the scan a blocking gate.
+        continue-on-error: true
+        env:
+          SEMGREP_SEND_METRICS: "off"   # privacy-first repo: no telemetry
+        run: |
+          semgrep scan \
+            --config p/python \
+            --config p/security-audit \
+            --config .semgrep/ \
+            --metrics=off \
+            --sarif --output semgrep.sarif \
+            host-python phone-app
+      - name: Upload SARIF to the Security tab
+        # always(): publish findings even though the scan step above is marked
+        # continue-on-error (and even once it is later made blocking).
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

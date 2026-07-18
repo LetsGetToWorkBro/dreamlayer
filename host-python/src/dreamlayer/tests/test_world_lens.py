@@ -200,6 +200,61 @@ def test_plugin_network_capability_is_veil_aware():
     assert "network" in live._plugin_capabilities()
 
 
+class TestPersonGuardLayers:
+    """The optional Presidio (text) + detector (visual) layers that harden the
+    'never identify a stranger' defence. Injectable, fail-safe: absent both deps
+    they are no-ops; present, they can only ADD a deferral."""
+
+    def teardown_method(self):
+        from dreamlayer.object_lens import person_guard
+        person_guard._analyzer_override = None
+        person_guard._detector_override = None
+        person_guard.reset_caches()
+
+    def test_text_layer_is_a_noop_when_presidio_absent(self):
+        from dreamlayer.object_lens import person_guard
+        person_guard.reset_caches()
+        person_guard._analyzer_cache = person_guard._NONE   # simulate unavailable
+        assert person_guard.label_is_a_person("Maya") is False   # no crash, no defer
+
+    def test_text_layer_defers_a_lone_given_name_via_presidio(self):
+        from dreamlayer.object_lens import person_guard
+        # a fake Presidio analyzer flagging PERSON — the shape rule can't catch a
+        # single lowercase-context given name, but NER can.
+        person_guard._analyzer_override = lambda t: (
+            [("PERSON", 0.9)] if "maya" in t.lower() else [])
+        assert person_guard.label_is_a_person("Maya") is True
+        assert person_guard.label_is_a_person("mug") is False
+
+    def test_visual_layer_defers_only_a_DOMINANT_person(self):
+        from dreamlayer.object_lens import person_guard
+        person_guard._detector_override = lambda f: [("person", 0.95, 0.6)]   # big box
+        assert person_guard.frame_is_dominated_by_a_person(object()) is True
+        person_guard._detector_override = lambda f: [("person", 0.95, 0.02)]  # bystander
+        assert person_guard.frame_is_dominated_by_a_person(object()) is False
+        person_guard._detector_override = lambda f: []                         # no person
+        assert person_guard.frame_is_dominated_by_a_person(object()) is False
+
+    def test_visual_layer_defers_even_when_the_vlm_says_object(self):
+        # a VLM mislabels a person "statue"; the visual detector is ground truth.
+        from dreamlayer.object_lens import person_guard
+        person_guard._detector_override = lambda f: [("person", 0.95, 0.6)]
+        host = WorldLensHost(_FakeBrain(
+            backend=_FakeBackend(describe_reply='{"label":"statue","confidence":0.9}')))
+        assert host.look(_noise_frame()) is None            # REVERT-FAILING
+
+    def test_both_layers_absent_leaves_object_recognition_intact(self):
+        # the fallback (this env): both optional layers unavailable → a real
+        # object still recognises normally, nothing over-deferred.
+        from dreamlayer.object_lens import person_guard
+        person_guard._analyzer_cache = person_guard._NONE
+        person_guard._detector_cache = person_guard._NONE
+        host = WorldLensHost(_FakeBrain(
+            backend=_FakeBackend(describe_reply='{"label":"mug","confidence":0.8}')))
+        panel = host.look(_noise_frame())
+        assert panel is not None and panel.sighting.label == "mug"
+
+
 def test_remote_vision_backend_is_gated_and_counted():
     # A REMOTE (off-box) vision backend receiving the wearer's photo IS cloud
     # egress: count it and block it while incognito, don't ship it silently

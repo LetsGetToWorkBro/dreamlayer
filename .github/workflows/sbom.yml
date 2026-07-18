@@ -1,0 +1,79 @@
+name: sbom
+
+# Software Bill of Materials for the two shipped, dependency-rich surfaces: the
+# Python Brain (host-python/) and the phone app (phone-app/). Each run produces a
+# CycloneDX SBOM enumerating every resolved dependency + version, uploaded as a
+# workflow artifact (and regenerated on every published release).
+#
+# INFORMATIONAL: this workflow never fails a build and never gates a merge — it is
+# an evidence generator, not a policy check. The policy checks live elsewhere
+# (dep-audit.yml / pip-audit for Python, rust-audit.yml for the Rust core); this
+# just records *what shipped*.
+#
+# It pairs with DreamLayer's existing provenance posture. The product already
+# signs the *content* it generates (on-glass Ed25519 provenance signatures — see
+# host-python signer.py and the "cryptography -> Ed25519 provenance signatures"
+# starter capability baked into the .dmg/.exe builds). These SBOMs extend that
+# same "prove where it came from" stance from generated media down to the
+# software supply chain: an auditor can pin exactly which dependency versions
+# went into a given release. Signing of the release binaries themselves is the
+# complementary sign-release.yml.
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - "host-python/pyproject.toml"
+      - "host-python/uv.lock"
+      - "phone-app/package.json"
+      - "phone-app/package-lock.json"
+      - ".github/workflows/sbom.yml"
+  workflow_dispatch:
+
+jobs:
+  python-sbom:
+    runs-on: ubuntu-latest
+    # CycloneDX SBOM for the Python Brain. Syft parses host-python/'s
+    # pyproject.toml + uv.lock statically, so no dependency install is needed.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Generate CycloneDX SBOM (host-python)
+        uses: anchore/sbom-action@v0
+        with:
+          path: host-python/
+          format: cyclonedx-json
+          output-file: sbom-host-python.cyclonedx.json
+          # we do the upload explicitly below, so disable the action's own upload
+          upload-artifact: false
+
+      - name: Upload host-python SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-host-python
+          path: sbom-host-python.cyclonedx.json
+
+  npm-sbom:
+    runs-on: ubuntu-latest
+    # CycloneDX SBOM for the phone app. Syft reads phone-app/package-lock.json
+    # (the fully-resolved npm tree) statically — no `npm ci` required.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Generate CycloneDX SBOM (phone-app)
+        uses: anchore/sbom-action@v0
+        with:
+          path: phone-app/
+          format: cyclonedx-json
+          output-file: sbom-phone-app.cyclonedx.json
+          upload-artifact: false
+
+      - name: Upload phone-app SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-phone-app
+          path: sbom-phone-app.cyclonedx.json
