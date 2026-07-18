@@ -15,6 +15,15 @@ def export_all(out_dir: str) -> list[str]:
         img.save(p)
         paths.append(p)
         card_images.append((name, img))
+    # Prune renders of cards that no longer exist: this dir is the canonical
+    # ALL_SAMPLES output, and a leftover PNG from a renamed/removed card keeps
+    # masquerading as current renderer output forever (a stale wallet_recall
+    # from an old renderer shipped a clipped frame to the website this way).
+    # Loud, never silent — each pruned file is printed.
+    for f in sorted(os.listdir(out_dir)):
+        if f.endswith(".png") and f[:-4] not in ALL_SAMPLES:
+            os.remove(os.path.join(out_dir, f))
+            print("pruned stale sample", os.path.join(out_dir, f))
     # Generate contact sheet
     sheet_dir = os.path.dirname(out_dir)  # assets/hud/
     sheet_path = os.path.join(sheet_dir, "contact_sheet.png")

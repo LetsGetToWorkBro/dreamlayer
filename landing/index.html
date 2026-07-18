@@ -2194,12 +2194,19 @@ var stepIO=new IntersectionObserver(function(entries){
 steps.forEach(function(s){ stepIO.observe(s); });
 setCard(0);
 
-/* ---------- marquee: the real HUD frames, doubled for the loop ---------- */
-var mqImgs=["ready","listening","saved_memory","object_recall","person_context_v2",
-  "juno_reply","hark","answer_ahead","fact_check","morning_brief","person_dossier",
-  "spoken_caption","truth_gauge","commitment_drift","privacy_veil","world_anchor"];
+/* ---------- marquee: the real HUD frames, doubled for the loop ----------
+   The full current card library, narrative order: wake → the World lenses
+   (Scholar, chooser, Taste, Juno, Waypath) → memory → people → speech →
+   truth → time → Ember → Synesthesia → anchor → the Veil closes the reel. */
+var mqImgs=["ready","listening","juno_reply","hark","answer_ahead",
+  "scholar_answer","glance_choice","taste","object_recall","waypath",
+  "saved_memory","proactive_memory","commitment_recall","commitment_drift",
+  "morning_brief","person_context_v2","person_dossier","spoken_caption",
+  "live_caption","fact_check","truth_gauge","deviation_alert",
+  "time_scrub_node","ember_flare","synesthesia_v2","world_anchor","privacy_veil"];
 var track=document.getElementById("mqTrack");
 if(track){
+  track.style.animationDuration=(mqImgs.length*3.75)+"s";  // constant px/sec at any length
   var html="";
   mqImgs.concat(mqImgs).forEach(function(n){
     html+='<img loading="lazy" src="assets/hud/'+n+'.png" alt="" width="256" height="256">';
