@@ -27,17 +27,20 @@ on:
       - "web/playwright.live-lens.config.ts"
       - ".github/workflows/live-lens-e2e.yml"
 
+permissions:
+  contents: read   # least-privilege floor; jobs opt into more where needed
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
       - name: Install the Brain (base deps render the page — no TLS needed)
         run: pip install -e ./host-python
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "22"
           cache: npm

@@ -26,18 +26,15 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Dependency review
         # dependency-review-action REQUIRES GitHub's Dependency graph feature
-        # (repo Settings → Security → Dependency graph). When it is off, the
-        # action hard-errors ("Dependency review is not supported on this
-        # repository") — so this step is advisory (continue-on-error) and does not
-        # block a merge on its own. The HARD dependency gate lives in dep-audit.yml
-        # (pip-audit + the license gate on the resolved tree), which needs no such
-        # feature. Once an admin enables Dependency graph, this activates as the
-        # PR-time inline gate and can be promoted to a required check.
-        continue-on-error: true
-        uses: actions/dependency-review-action@v4
+        # (repo Settings → Security → Dependency graph), now enabled — so this is a
+        # BLOCKING PR-time gate: a pull request that INTRODUCES a dependency with a
+        # moderate+ advisory or a denied (GPL/AGPL) license fails here. It
+        # complements dep-audit.yml's resolved-tree scan (pip-audit + license gate).
+        # Add "review" to branch protection's required checks to enforce it on merge.
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           # Fail the PR on a moderate-or-worse advisory in an added dependency.
           fail-on-severity: moderate
