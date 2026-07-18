@@ -61,6 +61,36 @@ def _weather_band(state) -> str:
     return "grey"
 
 
+# Per-GROUP-ID DP budgets that SURVIVE rejoin / reconnect / a second manager
+# instance. A per-manager budget reset every _bind, so an attacker who keeps
+# receiving the circle's packets could re-join in a loop, collect unlimited
+# independent noisy releases of the same slowly-changing histogram, and average
+# the Laplace noise back to zero — recovering the exact per-member values the DP
+# was added to hide (refute 2026-07-18). Keying the budget on the group_id (which
+# is fixed for the life of a circle) closes that: rejoining the same circle
+# reuses its spent budget. Entries are pruned once a group has outlived
+# GROUP_TTL_S, so this stays bounded.
+_GROUP_BUDGETS: dict = {}      # group_id -> [PrivacyAccountant, last_used_ts]
+
+
+def _reset_group_budgets() -> None:
+    """Test hook: drop all persisted per-group DP budgets."""
+    _GROUP_BUDGETS.clear()
+
+
+def _group_budget(group_id: str, now: float, total: float):
+    from ..differential_privacy import PrivacyAccountant
+    for gid in [g for g, (_, ts) in _GROUP_BUDGETS.items() if now - ts > GROUP_TTL_S]:
+        _GROUP_BUDGETS.pop(gid, None)          # expired circles free their budget
+    entry = _GROUP_BUDGETS.get(group_id)
+    if entry is None:
+        entry = [PrivacyAccountant(total), now]
+        _GROUP_BUDGETS[group_id] = entry
+    else:
+        entry[1] = now
+    return entry[0]
+
+
 # --- the only traffic: a tiny, signed, anonymous packet ---------------------
 
 @dataclass
@@ -157,7 +187,6 @@ class MeshManager:
         self._seq_out = 0
         self.members: dict[str, MeshMember] = {}
         self._aliases: dict[str, str] = {}     # member_id -> local name, on-device only
-        self._dp_acct = None                   # per-group DP ε-budget (created on bind)
 
     # -- form / join / leave --------------------------------------------------
 
@@ -180,7 +209,6 @@ class MeshManager:
         self._dissolved = False
         self._seq_out = 0
         self.members = {}
-        self._dp_acct = None       # lazily created per group (fresh ε-budget)
 
     def leave(self) -> None:
         self._dissolved = True
@@ -265,23 +293,25 @@ class MeshManager:
         refused (returns None) rather than leaking further. Optionally folds in
         the wearer's own current ``my_state`` as one member. Returns None when
         the group isn't live."""
-        if not self.live():
+        if not self.live() or epsilon <= 0:
             return None
-        from ..differential_privacy import (
-            DPAggregator, PrivacyAccountant, PrivacyBudgetExceeded)
-        if self._dp_acct is None:
-            self._dp_acct = PrivacyAccountant(MESH_DP_BUDGET)
+        from ..differential_privacy import DPAggregator, PrivacyBudgetExceeded
+        acct = _group_budget(self.group_id, self._now(), MESH_DP_BUDGET)
+        # Pre-check the WHOLE epsilon so we never burn the count's half and then
+        # fail on the histogram's — the release is all-or-nothing.
+        if not acct.can_spend(epsilon):
+            return None
         bands = [_weather_band(m.body.get("state"))
                  for m in self.active(fade) if m.kind == "weather"]
         if my_state is not None:
             bands.append(_weather_band(my_state))
-        agg = DPAggregator(self._dp_acct)
+        agg = DPAggregator(acct)
         try:
             # split ε: half for the headcount, half for the band histogram
             half = epsilon / 2.0
             headcount = agg.count(len(bands), half)
             histogram = agg.histogram(bands, WEATHER_BANDS, half)
-        except PrivacyBudgetExceeded:
+        except (PrivacyBudgetExceeded, ValueError):
             return None
         return {"members": headcount, "bands": histogram,
-                "epsilon_remaining": self._dp_acct.remaining}
+                "epsilon_remaining": acct.remaining}

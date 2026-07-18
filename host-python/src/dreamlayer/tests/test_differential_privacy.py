@@ -30,6 +30,16 @@ def test_laplace_noise_is_zero_scale_safe():
     assert laplace_noise(0.0, _rng()) == 0.0
 
 
+def test_laplace_noise_survives_boundary_draws():
+    """random() CAN return exactly 0.0 (range [0,1)); the naive ln(1-2|u|) form
+    hits ln(0) there and crashes a release. Every boundary draw must yield a
+    finite number, not raise (refute 2026-07-18)."""
+    import math
+    for draw in (0.0, 1e-18, 0.5, 1.0 - 1e-16):
+        v = laplace_noise(1.0, lambda d=draw: d)
+        assert math.isfinite(v)
+
+
 def test_laplace_mechanism_is_unbiased_and_scales_with_epsilon():
     # Averaged over many draws the noise cancels (mean ≈ the true value), and a
     # smaller epsilon => larger spread (stronger privacy, noisier).
@@ -122,6 +132,14 @@ def test_every_query_spends_budget():
 
 # --- the mesh group-summary seam ---------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _clean_group_budgets():
+    from dreamlayer.confluence import mesh
+    mesh._reset_group_budgets()
+    yield
+    mesh._reset_group_budgets()
+
+
 def _mesh_pair():
     from dreamlayer.confluence.mesh import MeshManager, InMemoryBus
     bus = InMemoryBus()
@@ -164,3 +182,31 @@ def test_group_summary_none_when_group_not_live():
     from dreamlayer.confluence.mesh import MeshManager
     m = MeshManager(now_fn=lambda: 1000.0)
     assert m.dp_group_summary() is None       # never bound → not live
+
+
+def test_budget_survives_rejoin_and_second_instance():
+    """The decisive privacy fix (refute 2026-07-18): the ε-budget is keyed on the
+    group_id, so re-joining the same circle — or a second manager instance for it
+    — CANNOT reset it and average the noise away."""
+    from dreamlayer.confluence.mesh import MeshManager, MESH_DP_BUDGET
+    a, b, bus = _mesh_pair()
+    gid = a.group_id
+    code_summaries = 0
+    while a.dp_group_summary(epsilon=1.0) is not None:
+        code_summaries += 1
+        if code_summaries > 10:
+            break
+    assert code_summaries == int(MESH_DP_BUDGET)      # exhausted at the budget
+    # re-join the SAME circle → must NOT get a fresh budget
+    a.join(gid, "irrelevant-code")
+    assert a.dp_group_summary(epsilon=1.0) is None
+    # a brand-new manager for the same group_id shares the spent budget too
+    c = MeshManager(now_fn=lambda: 1000.0, me="C")
+    c.join(gid, "irrelevant-code")
+    assert c.dp_group_summary(epsilon=1.0) is None
+
+
+def test_group_summary_rejects_nonpositive_epsilon():
+    a, b, bus = _mesh_pair()
+    assert a.dp_group_summary(epsilon=0.0) is None
+    assert a.dp_group_summary(epsilon=-1.0) is None
