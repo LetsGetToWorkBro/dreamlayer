@@ -58,6 +58,7 @@ def _mock_spy(emb, monkeypatch):
     return calls
 
 
+@pytest.mark.real_model
 class TestRealPath:
     def test_shape_is_a_real_384d_vector(self, monkeypatch):
         emb = _real_provider()
