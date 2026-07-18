@@ -774,6 +774,26 @@ def cmd_bench_perception(args) -> int:
     return 0
 
 
+# --- setup: one-time model bootstrap the NLP capabilities need ---------------
+
+def cmd_setup_models(args) -> int:
+    """Download the one spaCy model presidio + spaCy need, so `[privacy]` and
+    `[intelligence]` are functional out of the box instead of silently falling
+    back. One small model (en_core_web_sm) activates pii_redaction,
+    stranger_defense, AND nlp."""
+    from dreamlayer import nlp_setup
+    model = args.model or nlp_setup.SPACY_MODEL
+    _p(f"{ARROW} spaCy model {model} — the NLP model the privacy/intelligence extras need")
+    ok, msg = nlp_setup.download(model)
+    if ok:
+        _p(f"{OK} {msg}")
+        _p("  activates: pii_redaction · stranger_defense (privacy) · nlp (intelligence)")
+        _p("  verify with: python -m dreamlayer.capabilities")
+        return 0
+    _p(f"{BAD} {msg}")
+    return 1
+
+
 # --- parser ------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -790,6 +810,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  bench     race a perceptor inside the 350ms glance budget\n"
             "  memories  browse/export your memory (it's just a file)\n"
             "  ember     the readout of memories you're tending yourself\n"
+            "  setup     download the NLP model presidio/spaCy need (one-time)\n"
             "\nno code? build a figment in the browser: landing/lens-builder.html"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -930,6 +951,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="glance budget in ms (default: 350)")
     bp.add_argument("--json", action="store_true", help="machine-readable output")
     bp.set_defaults(func=cmd_bench_perception)
+
+    # setup — one-time model bootstrap so the model-backed NLP extras actually run
+    setup = groups.add_parser("setup", help="one-time setup: download the NLP model the extras need")
+    ssub = setup.add_subparsers(dest="cmd")
+    smodels = ssub.add_parser(
+        "models", help="download the spaCy model presidio/spaCy need (en_core_web_sm)")
+    smodels.add_argument("--model", default=None,
+                         help="spaCy model (default: en_core_web_sm; "
+                              "use en_core_web_lg for higher-accuracy NER)")
+    smodels.set_defaults(func=cmd_setup_models)
 
     return parser
 
