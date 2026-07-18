@@ -45,7 +45,12 @@ bits you run are the bits we built, from the dependencies we vetted:
   weekly and on dependency changes; `dependency-review.yml` blocks a PR that
   *introduces* a vulnerable dependency.
 - **License hygiene** — a license gate fails the build on strong-copyleft
-  (GPL/AGPL) dependencies that would compromise distribution.
+  (GPL/AGPL) dependencies in the security-critical surface it scans (crypto / PII
+  / LLM / server); LGPL (weak copyleft) is allowed, matching the PR
+  dependency-review. Known exception: the optional **vision** extra ships
+  **ultralytics (YOLO) under AGPL-3.0** — a proprietary distribution that enables
+  vision needs an Ultralytics commercial license or AGPL compliance. This is
+  acknowledged explicitly in the gate rather than silently skipped.
 - **Model integrity** — ML weights (a pickle-RCE surface no source scanner sees)
   are pinned by sha256 (`models.lock` / `model_guard`), loaded `weights_only`,
   and fetched only when the wearer's posture allows.

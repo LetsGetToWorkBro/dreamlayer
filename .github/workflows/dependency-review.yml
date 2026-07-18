@@ -32,8 +32,13 @@ jobs:
         with:
           # Fail the PR on a moderate-or-worse advisory in an added dependency.
           fail-on-severity: moderate
-          # Copyleft licenses that would compromise the product's proprietary
-          # distribution are denied; the Python license gate in dep-audit.yml
-          # enforces the same allowlist against the resolved tree.
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-3.0
+          # STRONG-copyleft (GPL/AGPL) is denied; LGPL is allowed (weak copyleft,
+          # dynamic linking), matching the dep-audit.yml resolved-tree gate exactly
+          # (they previously disagreed on LGPL). Both the deprecated short SPDX ids
+          # and the canonical -only/-or-later forms are listed, so a dep reported
+          # either way is caught.
+          deny-licenses: >-
+            GPL-2.0, GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0, GPL-3.0-only, GPL-3.0-or-later,
+            AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later
           comment-summary-in-pr: on-failure

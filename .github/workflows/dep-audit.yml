@@ -65,38 +65,67 @@ jobs:
           # always trips. Every third-party dependency is still fully scanned.
           pip-audit --skip-editable --progress-spinner=off
 
-      - name: License gate — no strong-copyleft in the shipped dependency tree
+      - name: License gate — no strong-copyleft in the security-critical surface
         run: |
           # A CVE gate says nothing about LICENSES. A dep that quietly resolves to
           # a GPL/AGPL version would obligate the proprietary app to copyleft — a
-          # supply-chain risk pip-audit can't see. This fails the build if any
-          # shipped dependency carries strong copyleft (GPL/AGPL). LGPL (weak
-          # copyleft, dynamic linking) and permissive licenses pass; the same
-          # denylist gates PRs in dependency-review.yml. CI-only tooling is
-          # excluded — it is never distributed with the product.
+          # risk pip-audit can't see. This fails the build if a strong-copyleft
+          # (GPL/AGPL) license appears in the INSTALLED surface scanned by this job
+          # (the crypto/PII/LLM/server deps installed above — NOT the whole shipped
+          # tree; the heavy vision/ML extras aren't installed here, see below).
+          # LGPL (weak copyleft, dynamic linking) is allowed, matching
+          # dependency-review.yml. Known, reviewed exceptions are acknowledged
+          # explicitly rather than hidden.
+          #
+          # KNOWN: the optional `vision` extra ships ultralytics (YOLO) under
+          # AGPL-3.0. It is not installed in this job, so it is not scanned here;
+          # its AGPL status is tracked in SECURITY.md (a proprietary distribution
+          # needs an Ultralytics commercial license or AGPL compliance).
           pip install pip-licenses
           pip-licenses --format=json > licenses.json
           python - <<'PY'
           import json, sys
-          # CI/build tooling only — not shipped in the app, so its license is moot
+          # TRUE build/CI tooling only (never distributed). Runtime deps like
+          # pluggy/packaging are intentionally NOT here — they get scanned.
           IGNORE = {"pip", "pip-audit", "pip-licenses", "setuptools", "wheel",
                     "ruff", "mypy", "pytest", "pytest-cov", "coverage",
-                    "prettytable", "wcwidth", "cyclonedx-python-lib",
-                    "packaging", "tomli", "pluggy", "iniconfig"}
-          bad = []
+                    "prettytable", "wcwidth", "cyclonedx-python-lib"}
+          # Explicitly acknowledged copyleft (reviewed, tracked) — reported, not failed.
+          ACK = {"ultralytics"}
+
+          def is_strong_copyleft(lic: str) -> bool:
+              lic = lic.lower()
+              if "lgpl" in lic or "lesser general public" in lic:
+                  return False                       # weak copyleft — allowed
+              if "with" in lic and "exception" in lic:
+                  return False                       # e.g. GPL WITH Classpath-exception
+              # a dual license "MIT OR GPL-3.0" is usable via the permissive half
+              alts = [a.strip() for a in lic.replace(" / ", " or ").split(" or ")]
+              def alt_is_copyleft(a):
+                  return ("gpl" in a or "agpl" in a or "affero" in a
+                          or "general public license" in a)
+              return all(alt_is_copyleft(a) for a in alts if a)
+
+          bad, unknown, ack = [], [], []
           for pkg in json.load(open("licenses.json")):
               name = pkg.get("Name", "")
-              lic = (pkg.get("License") or "").lower()
+              lic = (pkg.get("License") or "").strip()
               if name.lower() in IGNORE:
                   continue
-              if "lgpl" in lic:            # weak copyleft (dynamic link) — allowed
+              if not lic or lic.upper() == "UNKNOWN":
+                  unknown.append(name)               # visible, but not a hard fail
                   continue
-              if "gpl" in lic or "agpl" in lic or "affero" in lic:
-                  bad.append((name, pkg.get("License")))
+              if is_strong_copyleft(lic):
+                  (ack if name.lower() in ACK else bad).append((name, lic))
+          if ack:
+              print("Acknowledged copyleft (tracked, allowed):")
+              for n, l in ack: print(f"  {n}: {l}")
+          if unknown:
+              print(f"::warning::{len(unknown)} package(s) with UNKNOWN license "
+                    f"(review): {', '.join(sorted(unknown)[:20])}")
           if bad:
-              print("FAIL: strong-copyleft (GPL/AGPL) licenses in the shipped tree:")
-              for n, l in bad:
-                  print(f"  {n}: {l}")
+              print("FAIL: strong-copyleft (GPL/AGPL) licenses in the scanned surface:")
+              for n, l in bad: print(f"  {n}: {l}")
               sys.exit(1)
-          print("License gate: no strong-copyleft (GPL/AGPL) dependencies")
+          print("License gate: no un-acknowledged strong-copyleft (GPL/AGPL) dependencies")
           PY
