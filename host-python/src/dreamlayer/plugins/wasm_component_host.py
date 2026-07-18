@@ -25,8 +25,61 @@ wasmtime-py isn't installed, and callers fall back to the subprocess/WASI tier.
 from __future__ import annotations
 
 import logging
+import os
+import re
 
 log = logging.getLogger("dreamlayer.wasm_component_host")
+
+# The formal Component Model contract (WIT) this host implements. It is the
+# source of truth for the capability surface; `_catalog` below is its runtime
+# (core-ABI) binding, kept honest against it by `wit_interface_functions()`.
+WIT_FILENAME = "dreamlayer.wit"
+
+
+def wit_path() -> str:
+    return os.path.join(os.path.dirname(__file__), WIT_FILENAME)
+
+
+def wit_world() -> str:
+    """The WIT contract text (ships with the package)."""
+    with open(wit_path(), encoding="utf-8") as f:
+        return f.read()
+
+
+def wit_interface_functions() -> dict:
+    """Parse the WIT into ``{interface_name: {func_name}}`` with names normalised
+    to the snake_case the core-ABI catalog uses (WIT is kebab-case). A tiny,
+    dependency-free parser — enough to cross-check the runtime catalog against the
+    formal contract, not a full WIT parser."""
+    text = wit_world()
+    out: dict = {}
+    for m in re.finditer(r"interface\s+([a-z0-9\-]+)\s*\{([^}]*)\}", text):
+        iface = m.group(1).replace("-", "_")
+        funcs = {fm.group(1).replace("-", "_")
+                 for fm in re.finditer(r"([a-z0-9\-]+)\s*:\s*func", m.group(2))}
+        out[iface] = funcs
+    return out
+
+
+def wit_world_imports() -> set:
+    """The interface names the `world plugin` imports — the full grantable
+    capability surface a plugin may draw from."""
+    text = wit_world()
+    m = re.search(r"world\s+plugin\s*\{([^}]*)\}", text)
+    if not m:
+        return set()
+    return {im.group(1).replace("-", "_")
+            for im in re.finditer(r"import\s+([a-z0-9\-]+)\s*;", m.group(1))}
+
+
+def capability_function_names() -> dict:
+    """The host-function names each capability exposes, as PURE DATA (no wasmtime
+    needed). The one place the WIT contract and the runtime `_catalog` are tied
+    together: `_catalog` adds ValTypes to exactly these names, and
+    `wit_interface_functions()` must equal this — otherwise contract and binding
+    have drifted."""
+    return {"log": {"log"}, "fs": {"fs_read"},
+            "net": {"net_get"}, "cards": {"show_card"}}
 
 try:  # optional dep — extras group `plugins`
     import wasmtime  # type: ignore

@@ -38,6 +38,28 @@ GROUP_TTL_S = 8 * 3600.0         # a group is an evening, not a tracker
 QUIET_FADE_S = 12.0              # a silent member fades from the circle
 CODE_WORDS = 3                   # a group code is a touch longer than a bond's
 
+# The ε-budget a single group's shared-view queries may spend in total. Small on
+# purpose: a group "mood ring" is a glance, not an analytics endpoint, and a tight
+# budget bounds how much repeated peeks can reveal about any one member.
+MESH_DP_BUDGET = 3.0
+# The public, fixed band vocabulary the group summary is released over. A FIXED
+# category set is itself privacy-preserving: the histogram never reveals which
+# exotic values were present, only the counts in these known buckets.
+WEATHER_BANDS = ("storm", "grey", "clear")
+
+
+def _weather_band(state) -> str:
+    """Bucket a weather scalar (-1..1) into a public band label."""
+    try:
+        s = float(state)
+    except (TypeError, ValueError):
+        return "grey"
+    if s < -0.33:
+        return "storm"
+    if s > 0.33:
+        return "clear"
+    return "grey"
+
 
 # --- the only traffic: a tiny, signed, anonymous packet ---------------------
 
@@ -135,6 +157,7 @@ class MeshManager:
         self._seq_out = 0
         self.members: dict[str, MeshMember] = {}
         self._aliases: dict[str, str] = {}     # member_id -> local name, on-device only
+        self._dp_acct = None                   # per-group DP ε-budget (created on bind)
 
     # -- form / join / leave --------------------------------------------------
 
@@ -157,6 +180,7 @@ class MeshManager:
         self._dissolved = False
         self._seq_out = 0
         self.members = {}
+        self._dp_acct = None       # lazily created per group (fresh ε-budget)
 
     def leave(self) -> None:
         self._dissolved = True
@@ -225,3 +249,39 @@ class MeshManager:
         """Members heard from within the fade window — the live circle."""
         now = self._now()
         return [m for m in self.members.values() if m.fresh(now, fade)]
+
+    # -- the shared view: a DP-protected group summary -----------------------
+    def dp_group_summary(self, epsilon: float = 1.0,
+                         fade: float = QUIET_FADE_S,
+                         my_state=None) -> Optional[dict]:
+        """A differentially-private view of the circle's collective feeling: a
+        noisy headcount and a noisy histogram of weather bands.
+
+        Releasing an EXACT group aggregate to a small circle leaks each member —
+        in a group of three, a mean that jumps the instant you speak has told
+        everyone your value. This adds calibrated Laplace noise (sensitivity 1
+        per member) and spends from a fixed per-group ε-budget, so repeated peeks
+        can't average the noise away; once the budget is spent the summary is
+        refused (returns None) rather than leaking further. Optionally folds in
+        the wearer's own current ``my_state`` as one member. Returns None when
+        the group isn't live."""
+        if not self.live():
+            return None
+        from ..differential_privacy import (
+            DPAggregator, PrivacyAccountant, PrivacyBudgetExceeded)
+        if self._dp_acct is None:
+            self._dp_acct = PrivacyAccountant(MESH_DP_BUDGET)
+        bands = [_weather_band(m.body.get("state"))
+                 for m in self.active(fade) if m.kind == "weather"]
+        if my_state is not None:
+            bands.append(_weather_band(my_state))
+        agg = DPAggregator(self._dp_acct)
+        try:
+            # split ε: half for the headcount, half for the band histogram
+            half = epsilon / 2.0
+            headcount = agg.count(len(bands), half)
+            histogram = agg.histogram(bands, WEATHER_BANDS, half)
+        except PrivacyBudgetExceeded:
+            return None
+        return {"members": headcount, "bands": histogram,
+                "epsilon_remaining": self._dp_acct.remaining}
