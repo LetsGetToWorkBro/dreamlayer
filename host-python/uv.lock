@@ -663,22 +663,25 @@ wheels = [
 
 [[package]]
 name = "bokeh"
-version = "2.4.3"
+version = "3.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "contourpy" },
     { name = "jinja2" },
+    { name = "narwhals" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-vision')" },
     { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-vision')" },
     { name = "packaging" },
+    { name = "pandas" },
     { name = "pillow", version = "10.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-dreamlayer-profile-mac' or extra == 'extra-10-dreamlayer-vision'" },
     { name = "pillow", version = "11.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-dreamlayer-dream' or extra == 'extra-10-dreamlayer-hardware' or extra == 'extra-10-dreamlayer-profile-halo' or (extra != 'extra-10-dreamlayer-profile-mac' and extra != 'extra-10-dreamlayer-vision')" },
     { name = "pyyaml" },
-    { name = "tornado" },
-    { name = "typing-extensions" },
+    { name = "tornado", marker = "sys_platform != 'emscripten' or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-dream' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-hardware' and extra == 'extra-10-dreamlayer-vision') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-profile-mac') or (extra == 'extra-10-dreamlayer-profile-halo' and extra == 'extra-10-dreamlayer-vision')" },
+    { name = "xyzservices" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/01/c7622f3f8c6440f4a66ed58bfe5a2a499c2cc8551e00a298ceb94ccc3c70/bokeh-2.4.3.tar.gz", hash = "sha256:ef33801161af379665ab7a34684f2209861e3aefd5c803a21fbbb99d94874b03", size = 17722836, upload-time = "2022-05-18T19:00:19.343Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/31/7ee0c4dfd0255631b0624ce01be178704f91f763f02a1879368eb109befd/bokeh-3.8.2.tar.gz", hash = "sha256:8e7dcacc21d53905581b54328ad2705954f72f2997f99fc332c1de8da53aa3cc", size = 6529251, upload-time = "2026-01-06T00:20:06.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/06/706a9c43436cd0c3e2f4b94e93ae837e74965e59565c596b727974a74169/bokeh-2.4.3-py3-none-any.whl", hash = "sha256:104d2f0a4ca7774ee4b11e545aa34ff76bf3e2ad6de0d33944361981b65da420", size = 18508622, upload-time = "2022-05-18T19:00:14.625Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/a8/877f306720bc114c612579c5af36bcb359026b83d051226945499b306b1a/bokeh-3.8.2-py3-none-any.whl", hash = "sha256:5e2c0d84f75acb25d60efb9e4d2f434a791c4639b47d685534194c4e07bd0111", size = 7207131, upload-time = "2026-01-06T00:20:04.917Z" },
 ]
 
 [[package]]
@@ -3293,7 +3296,7 @@ wheels = [
 
 [[package]]
 name = "human-learn"
-version = "0.3.5"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bokeh" },
@@ -3302,9 +3305,9 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "shapely" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/07/53/7cef1c74465d406fe7af9a9bb5116d349273114613325e014e6feae3372f/human-learn-0.3.5.tar.gz", hash = "sha256:511d45bc0258c2b8d3520200683f229c77923911ddfdcc877993e88d1331c790", size = 111115, upload-time = "2024-01-02T12:42:16.847Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/c8/3e77bd551dc85aa81dab6399884401f0e64ca829b3204368b7ee878fb40d/human-learn-0.3.1.tar.gz", hash = "sha256:89147558b929a1a2c072f749f505327a3ecb2b0c5779a7c170cc640c1a9120c0", size = 108718, upload-time = "2021-05-04T11:51:10.006Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/ca/e993e78bb6dec4de29adb56b2962c8ee9791c99e35758b07296d76b94221/human_learn-0.3.5-py2.py3-none-any.whl", hash = "sha256:3814406da7f54852efcb688f8f22a536d019ed156612a02a4c268ec6c3d142a4", size = 116467, upload-time = "2024-01-02T12:42:14.746Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/67/f1b7e83c1ff0555c772bb786d2a6a6b2dd2ba7b77a5b809a5ff54f939f06/human_learn-0.3.1-py2.py3-none-any.whl", hash = "sha256:bc1eba02706a400bc352a97dff512898a45a5893f5c02aa9b17314f406277066", size = 116448, upload-time = "2021-05-04T11:51:08.368Z" },
 ]
 
 [[package]]
@@ -11253,6 +11256,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/6d/56ed2b6b200f26fb474f3fd387d95d0601efcd5bb33430c90c68924bdd77/xxhash-3.8.1-pp311-pypy311_pp73-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4b512261801b1e5fde7b6ebf2fef7977339c620cbbca88a0040ad9ad134f4d02", size = 38202, upload-time = "2026-07-06T10:49:50.59Z" },
     { url = "https://files.pythonhosted.org/packages/0d/a3/56864d895d1161a9f17502088e9c1fb7c06bde2c2efdde620d22bb7a9c43/xxhash-3.8.1-pp311-pypy311_pp73-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:49aa8692507835dcc1e8ad8021f20c74c2dc13d83b5112e87877faa2a0035b20", size = 34448, upload-time = "2026-07-06T10:49:53.242Z" },
     { url = "https://files.pythonhosted.org/packages/6b/57/5c6e0908a47f61dca96d01c8ee6fce01ed1050611eb779083ba8758fed81/xxhash-3.8.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:345b07b78e2bf583d71682aa34ae5b5fab575f7a1cb31e10263ebbc6f89f8c42", size = 32869, upload-time = "2026-07-06T10:49:55.972Z" },
+]
+
+[[package]]
+name = "xyzservices"
+version = "2026.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/08/3cb9f67a8d48021aca2a02292cc26eecd71d949ae70ad66420a8730cc302/xyzservices-2026.3.0.tar.gz", hash = "sha256:d226866a5d8e9fef337034d8da37a8298f0a1d9d1489b4018e69579eb321fea4", size = 1135736, upload-time = "2026-03-30T14:42:25.596Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/a9/d23012099dc88ec69a29c6407b41d89681cb674c2043cd5b467c7e299c08/xyzservices-2026.3.0-py3-none-any.whl", hash = "sha256:503183d4b322bfebc3c50cdd21192aa3e81e36c5efbf9133d54ae82143e0576b", size = 94101, upload-time = "2026-03-30T14:42:24.608Z" },
 ]
 
 [[package]]
