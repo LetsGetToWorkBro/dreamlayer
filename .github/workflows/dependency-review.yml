@@ -1,0 +1,53 @@
+name: dependency-review
+
+# Supply-chain gate at the PR seam, complementary to dep-audit.yml (pip-audit,
+# which scans *resolved installed* versions weekly + on dep changes). This runs
+# GitHub's dependency-review-action on the PR diff itself: it blocks a pull
+# request that INTRODUCES a dependency with a known advisory or an incompatible
+# license before it ever merges, and posts the findings inline on the PR. The
+# two together cover both "a new CVE landed on a dep we already ship" (pip-audit
+# cron) and "this PR adds a bad dep" (here).
+
+on:
+  pull_request:
+    paths:
+      - "host-python/pyproject.toml"
+      - "host-python/uv.lock"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+
+permissions:
+  contents: read
+  pull-requests: write   # so the action can comment its summary on the PR
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dependency review
+        # dependency-review-action REQUIRES GitHub's Dependency graph feature
+        # (repo Settings → Security → Dependency graph). When it is off, the
+        # action hard-errors ("Dependency review is not supported on this
+        # repository") — so this step is advisory (continue-on-error) and does not
+        # block a merge on its own. The HARD dependency gate lives in dep-audit.yml
+        # (pip-audit + the license gate on the resolved tree), which needs no such
+        # feature. Once an admin enables Dependency graph, this activates as the
+        # PR-time inline gate and can be promoted to a required check.
+        continue-on-error: true
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail the PR on a moderate-or-worse advisory in an added dependency.
+          fail-on-severity: moderate
+          # STRONG-copyleft (GPL/AGPL) is denied; LGPL is allowed (weak copyleft,
+          # dynamic linking), matching the dep-audit.yml resolved-tree gate exactly
+          # (they previously disagreed on LGPL). Both the deprecated short SPDX ids
+          # and the canonical -only/-or-later forms are listed, so a dep reported
+          # either way is caught.
+          deny-licenses: >-
+            GPL-2.0, GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0, GPL-3.0-only, GPL-3.0-or-later,
+            AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later
+          comment-summary-in-pr: on-failure

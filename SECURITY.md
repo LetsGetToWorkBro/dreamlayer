@@ -28,6 +28,37 @@ Privacy Veil is down, leaks raw media that should have been structured
 meaning, bypasses pairing/token auth on the Brain, or lets a plugin exceed
 its capability grant.
 
+## Supply-chain integrity
+
+Getting the code right is only half of it — you also have to trust that the
+bits you run are the bits we built, from the dependencies we vetted:
+
+- **Release signing** — the macOS `.dmg` is codesigned + notarized and the
+  Windows installer is Authenticode-signed; release artifacts are additionally
+  signed (`sign-release.yml`) and an SBOM is published (`sbom.yml`).
+- **Build provenance (SLSA)** — every `.dmg`/installer carries a signed
+  `actions/attest-build-provenance` statement of *where* it was built (this repo,
+  this workflow, this commit). Verify with
+  `gh attestation verify <artifact> -R <owner>/<repo>` — signing proves *who*
+  signed, provenance proves the build's *origin*.
+- **Dependency CVEs** — `pip-audit` (`dep-audit.yml`) scans resolved versions
+  weekly and on dependency changes; `dependency-review.yml` blocks a PR that
+  *introduces* a vulnerable dependency.
+- **License hygiene** — a license gate fails the build on strong-copyleft
+  (GPL/AGPL) dependencies in the security-critical surface it scans (crypto / PII
+  / LLM / server); LGPL (weak copyleft) is allowed, matching the PR
+  dependency-review. Known exception: the optional **vision** extra ships
+  **ultralytics (YOLO) under AGPL-3.0** — a proprietary distribution that enables
+  vision needs an Ultralytics commercial license or AGPL compliance. This is
+  acknowledged explicitly in the gate rather than silently skipped.
+- **Model integrity** — ML weights (a pickle-RCE surface no source scanner sees)
+  are pinned by sha256 (`models.lock` / `model_guard`), loaded `weights_only`,
+  and fetched only when the wearer's posture allows.
+
+Tracked hardening (follow-up): pinning third-party GitHub Actions by commit SHA
+rather than tag (OpenSSF Scorecard `Pinned-Dependencies`) — our own reusable
+steps and the release-critical path are the priority.
+
 ## Not in scope
 
 - Denial of service against your own local Brain

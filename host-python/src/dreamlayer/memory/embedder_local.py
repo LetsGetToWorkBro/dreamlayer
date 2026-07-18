@@ -50,7 +50,24 @@ class LocalEmbeddingProvider(EmbeddingProvider):
         if not _HAS_ST:
             log.warning("[embedder_local] sentence-transformers not installed; using mock")
             return None
+        # Honour the wearer's posture even when this provider is used outside the
+        # Brain server (A1 model-fetch gate). `local_files_only` is the RELIABLE
+        # lever: HF_HUB_OFFLINE is read into an import-time constant, so if
+        # sentence-transformers was imported before the posture was set the env
+        # flag is frozen and ineffective — but local_files_only is honoured
+        # per-call, so offline → load from cache only, never a silent CDN reach
+        # (refute 2026-07-18). We still set the env for libs that re-read it.
+        fetch_ok = True
         try:
+            from .. import model_guard
+            fetch_ok = model_guard.posture_allows_fetch(self._config)
+            model_guard.apply_offline_posture(self._config)
+        except Exception:                            # pragma: no cover - defensive
+            pass
+        try:
+            self._model = SentenceTransformer(self._model_name,
+                                              local_files_only=not fetch_ok)
+        except TypeError:      # older sentence-transformers without the kwarg
             self._model = SentenceTransformer(self._model_name)
         except Exception as exc:  # model download / load failure
             log.error("[embedder_local] model load failed: %s; using mock", exc)
