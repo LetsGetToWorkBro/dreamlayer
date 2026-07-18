@@ -62,6 +62,19 @@ class CapabilityError(RuntimeError):
     """A plugin imports a host power its manifest never declared."""
 
 
+class ResourceLimitError(RuntimeError):
+    """A plugin exceeded its fuel / memory / wall-clock budget."""
+
+
+# Untrusted guest bytecode MUST run bounded. Defaults are generous for a real
+# card/logic plugin yet trap a `(loop br 0)` in well under the timeout: fuel
+# caps executed instructions, StoreLimits caps linear-memory growth, and the
+# epoch watchdog caps wall-clock even for a guest that avoids burning fuel.
+DEFAULT_FUEL = 1_000_000_000
+DEFAULT_MEMORY_BYTES = 64 * 1024 * 1024
+DEFAULT_TIMEOUT_S = 2.0
+
+
 class WasmCapabilityHost:
     """Instantiate a WASM plugin with only its declared capabilities linked.
 
@@ -76,20 +89,35 @@ class WasmCapabilityHost:
         function with no impl gets a safe no-op/zero stub.
     """
 
-    def __init__(self, wasm: bytes, granted, impls=None):
+    def __init__(self, wasm: bytes, granted, impls=None, *,
+                 fuel: int = DEFAULT_FUEL,
+                 memory_bytes: int = DEFAULT_MEMORY_BYTES,
+                 timeout_s: float = DEFAULT_TIMEOUT_S):
         if not _HAS_WASMTIME:
             raise RuntimeError("wasmtime not installed")
         self.granted = set(granted or [])
         self.impls = impls or {}
-        self.engine = wasmtime.Engine()
+        self._timeout_s = timeout_s
+        # Bound the untrusted guest: without this a `(loop br 0)` hangs the host
+        # thread forever, and an unbounded memory.grow OOMs the box (refute
+        # 2026-07-18: the in-process host set NO fuel/epoch/memory limits).
+        config = wasmtime.Config()
+        config.consume_fuel = True          # fuel is charged per instruction
+        config.epoch_interruption = True    # lets the watchdog trap wall-clock
+        self.engine = wasmtime.Engine(config)
         self.store = wasmtime.Store(self.engine)
+        if hasattr(self.store, "set_fuel"):
+            self.store.set_fuel(fuel)       # wasmtime-py >= 14
+        else:                               # pragma: no cover - old wasmtime
+            self.store.add_fuel(fuel)
+        self.store.set_limits(memory_size=memory_bytes)   # StoreLimits: memory cap
         self.module = wasmtime.Module(self.engine, wasm)
         self._inst = None
         self.calls: list = []            # audit: which host funcs the guest hit
 
     @classmethod
-    def from_wat(cls, wat: str, granted, impls=None):
-        return cls(wasmtime.wat2wasm(wat), granted, impls)
+    def from_wat(cls, wat: str, granted, impls=None, **limits):
+        return cls(wasmtime.wat2wasm(wat), granted, impls, **limits)
 
     # -- the enforcement ------------------------------------------------------
     def _granted_funcs(self) -> dict:
@@ -152,4 +180,30 @@ class WasmCapabilityHost:
         fn = self._inst.exports(self.store).get(export)
         if fn is None:
             raise KeyError(f"no export {export!r}")
-        return fn(self.store, *args)
+        # Wall-clock backstop: arm the epoch deadline and a daemon watchdog that
+        # ticks it once the budget elapses, so a guest that somehow avoids
+        # burning fuel (or a host call that stalls) still cannot run unbounded.
+        import threading
+        self.store.set_epoch_deadline(1)
+        tripped = threading.Event()
+
+        def _tick():
+            tripped.set()
+            try:
+                self.engine.increment_epoch()
+            except Exception:               # pragma: no cover
+                pass
+
+        timer = threading.Timer(self._timeout_s, _tick)
+        timer.daemon = True
+        timer.start()
+        try:
+            return fn(self.store, *args)
+        except Exception as exc:            # fuel/epoch/memory trap, or a guest trap
+            msg = str(exc).lower()
+            if tripped.is_set() or "fuel" in msg or "epoch" in msg or "interrupt" in msg:
+                raise ResourceLimitError(
+                    f"plugin exceeded its resource budget: {exc}") from exc
+            raise
+        finally:
+            timer.cancel()
