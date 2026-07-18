@@ -28,6 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Dependency review
+        # dependency-review-action REQUIRES GitHub's Dependency graph feature
+        # (repo Settings → Security → Dependency graph). When it is off, the
+        # action hard-errors ("Dependency review is not supported on this
+        # repository") — so this step is advisory (continue-on-error) and does not
+        # block a merge on its own. The HARD dependency gate lives in dep-audit.yml
+        # (pip-audit + the license gate on the resolved tree), which needs no such
+        # feature. Once an admin enables Dependency graph, this activates as the
+        # PR-time inline gate and can be promoted to a required check.
+        continue-on-error: true
         uses: actions/dependency-review-action@v4
         with:
           # Fail the PR on a moderate-or-worse advisory in an added dependency.
