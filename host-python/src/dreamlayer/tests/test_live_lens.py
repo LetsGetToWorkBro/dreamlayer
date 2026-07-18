@@ -154,6 +154,20 @@ class TestLook:
                  if p.is_file() and p.suffix not in allowed}
         assert after == before                            # no frame residue
 
+    def test_look_leaves_no_ledger_trace_while_incognito(self, tmp_path, monkeypatch):
+        # The one thing a look persists is the "saw X" observation in the activity
+        # ledger. When the wearer has signalled privacy (incognito / lan_only),
+        # that on-disk trace is suppressed — the look still WORKS on-device, it
+        # just leaves nothing behind (refute 2026-07-18: recorded in every posture).
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path, network_mode="lan_only")   # incognito_now() → True
+        assert brain.incognito_now() is True
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("houseplant", 0.87))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "houseplant"   # look still works
+        # REVERT-FAILING: no durable record of what the camera saw while veiled
+        assert not any(i["kind"] == "look" for i in brain.activity.recent())
+
 
 # --- the page: public but inert ---------------------------------------------
 
@@ -172,6 +186,23 @@ class TestPage:
         # the credential rides the URL fragment of the panel's link — the HTML
         # itself must be inert no matter who fetches it.
         assert TOKEN not in render_live()
+
+    def test_hud_renders_as_text_not_html(self):
+        # The classifier label + ask answer (arbitrary model/memory output) reach
+        # the HUD via textContent — as TEXT. A textContent->innerHTML regression
+        # would be token-stealing XSS (the token lives in sessionStorage). Pin it.
+        page = render_live()
+        assert "hud.textContent" in page
+        assert "hud.innerHTML" not in page
+
+    def test_nonce_stamps_the_inline_script_and_style(self):
+        # with a nonce, the sole inline <script>/<style> carry it (so a strict
+        # CSP can allow them while blocking injected script); without, bare tags.
+        page = render_live("abc123")
+        assert '<script nonce="abc123">' in page
+        assert '<style nonce="abc123">' in page
+        bare = render_live()
+        assert "<script>" in bare and "nonce=" not in bare
 
 
 # --- the HTTP surface: gate, caps, link ------------------------------------
@@ -213,6 +244,27 @@ class TestHttpSurface:
             assert status == 200
             out = json.loads(body)
             assert out["ok"] is True and out["label"] == "book"
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_live_page_carries_a_strict_nonce_csp(self, tmp_path):
+        # Defence-in-depth: the served page must carry a CSP whose script-src is
+        # nonce-based (NOT 'unsafe-inline'), and the nonce must match the page's
+        # inline <script>/<style> — so injected <script>/<img onerror> can't run.
+        import re
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(base + "/dreamlayer/live", timeout=10) as r:
+                csp = r.headers.get("Content-Security-Policy")
+                page = r.read().decode("utf-8")
+            assert csp, "no Content-Security-Policy header"
+            script_dir = next(p for p in csp.split(";") if "script-src" in p)
+            assert "'nonce-" in script_dir and "'unsafe-inline'" not in script_dir
+            nonce = re.search(r"script-src 'nonce-([^']+)'", csp).group(1)
+            assert f'<script nonce="{nonce}">' in page      # header nonce == tag nonce
+            assert f'<style nonce="{nonce}">' in page
         finally:
             server.shutdown(); server.server_close()
 
@@ -308,3 +360,39 @@ class TestTls:
         ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
         ips = {str(i) for i in ext.value.get_values_for_type(x509.IPAddress)}
         assert "127.0.0.1" in ips
+
+    def test_key_and_dir_get_the_owner_only_acl(self, tmp_path, monkeypatch):
+        # The TLS private key is a secret-at-rest: 0o600 is INERT on NTFS, so the
+        # key (and its dir) must get the owner-only Windows ACL, exactly like
+        # brain_config. Cross-platform: record the ACL calls the mint makes.
+        pytest.importorskip("cryptography")
+        from dreamlayer.ai_brain.server import store, tls
+        hardened: list = []
+        monkeypatch.setattr(store, "_harden_windows_acl", lambda p: hardened.append(p))
+        cert_p, key_p = tls.ensure_self_signed(tmp_path)
+        # REVERT-FAILING: both the tls dir AND the private key are hardened
+        assert str(key_p.parent) in hardened      # the tls/ dir (children inherit)
+        assert str(key_p) in hardened             # the private key file itself
+        # reuse re-tightens too — a key restored with a wide ACL is fixed on start
+        hardened.clear()
+        tls.ensure_self_signed(tmp_path)          # second call reuses the cert
+        assert str(key_p) in hardened
+
+    def test_mismatched_key_is_reminted_not_crashed(self, tmp_path):
+        # A key that doesn't match the cert (e.g. a crash between the two writes)
+        # must re-mint HERE, not surface as an uncaught SSLError at wrap_socket
+        # that takes the whole Brain down. Reverted, ensure_self_signed returns
+        # the bad pair and make_ssl_context raises.
+        pytest.importorskip("cryptography")
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from dreamlayer.ai_brain.server.tls import ensure_self_signed, make_ssl_context
+        cert_p, key_p = ensure_self_signed(tmp_path)
+        good_cert = cert_p.read_bytes()
+        # overwrite the key with an UNRELATED (valid PEM, wrong) key → mismatch
+        key_p.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption()))
+        cert_p2, key_p2 = ensure_self_signed(tmp_path)     # must detect + re-mint
+        assert cert_p2.read_bytes() != good_cert           # a fresh, matched pair
+        assert make_ssl_context(cert_p2, key_p2) is not None   # loads, no SSLError

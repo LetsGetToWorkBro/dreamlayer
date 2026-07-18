@@ -36,8 +36,9 @@ log = logging.getLogger("dreamlayer.vision_recognizer")
 EXTRACT_PROMPT = (
     "Look at this image for an object assistant. Reply with ONE JSON object and "
     "nothing else:\n"
-    '{"label": "<1-3 word name of the single main object; use \\"person\\" if a '
-    'human is the main subject>", "confidence": <0-1>, "attributes": {'
+    '{"label": "<1-3 word lowercase name of the single main object; if a human '
+    'being is the main subject use exactly \\"person\\" and NEVER a personal '
+    'name, even for someone famous>", "confidence": <0-1>, "attributes": {'
     '"amount": <number on a visible price/banknote, else omit>, '
     '"currency": "<ISO code like EUR/JPY/USD if a price is shown, else omit>", '
     '"title": "<book or product title if clearly legible, else omit>", '
@@ -50,6 +51,10 @@ EXTRACT_PROMPT = (
 
 _CODE_FENCE = re.compile(r"```(?:json)?|```", re.IGNORECASE)
 _CURRENCY_RE = re.compile(r"^[A-Za-z]{2,4}$")
+# An email address, or a phone-number-like run of 7-15 digits with common
+# separators — contact-detail PII that must never ride onto a panel via an
+# object's free-text attribute (refute 2026-07-18).
+_PII_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w{2,}|(?:\+?\d[\s().-]?){7,15}")
 
 
 def frame_to_b64(frame) -> Optional[str]:
@@ -81,20 +86,36 @@ def frame_to_b64(frame) -> Optional[str]:
         return None
 
 
+# A real (downscaled) phone photo is a few megapixels; anything past this is a
+# decompression bomb — a tiny solid-colour JPEG that decodes to hundreds of MB —
+# or a mistake. The 16 MiB body cap bounds the COMPRESSED bytes, not the decoded
+# pixels, so this is the pixel-layer bound (refute 2026-07-18: a 379 KiB payload
+# decoded to a 300 MB ndarray; 64 concurrent looks → OOM).
+MAX_FRAME_PIXELS = 50 * 1024 * 1024        # 50 MP — above any real photo, below a bomb
+
+
 def b64_to_frame(image_b64):
     """Decode a base64 image into an ndarray for the pixel/heuristic path.
 
     Returns the base64 string unchanged when Pillow is absent or the bytes don't
     decode — the VLM path reads that string directly, and the heuristic fallback
-    simply declines rather than crashing. None for empty input."""
+    simply declines rather than crashing. None for empty input OR an image whose
+    pixel count exceeds MAX_FRAME_PIXELS (a decompression bomb — declined before
+    the pixels are ever materialised, so the look returns blind instead of OOMing)."""
     if not image_b64:
         return None
     try:
         from PIL import Image  # type: ignore
         import numpy as np
         raw = base64.b64decode(image_b64)
-        img = Image.open(io.BytesIO(raw)).convert("RGB")
-        return np.asarray(img)
+        img = Image.open(io.BytesIO(raw))          # lazy — no pixels materialised yet
+        w, h = img.size
+        if w * h > MAX_FRAME_PIXELS:
+            log.warning("[vision_recognizer] frame %dx%d exceeds %d MP — refused "
+                        "(decompression bomb guard)", w, h,
+                        MAX_FRAME_PIXELS // (1024 * 1024))
+            return None                            # never call .convert()/asarray on it
+        return np.asarray(img.convert("RGB"))
     except Exception as exc:
         log.debug("[vision_recognizer] b64 decode failed: %s", exc)
         return image_b64
@@ -123,7 +144,16 @@ def _clean_attrs(raw) -> dict:
     for key in ("title", "isbn", "brand", "text"):
         v = raw.get(key)
         if isinstance(v, str) and v.strip():
-            out[key] = v.strip()[:120]
+            val = v.strip()[:120]
+            # Drop free-text carrying obvious PII (an email or a phone-number-like
+            # digit run) — an object's brand/title/salient-text is never a
+            # contact detail, so a nametag/lanyard caption reading "Maya Chen —
+            # 555-123-4567" must not ride onto the panel via an object attribute
+            # (refute 2026-07-18). ISBN is legitimately a digit run, so it skips
+            # the phone check.
+            if key != "isbn" and _PII_RE.search(val):
+                continue
+            out[key] = val
     return out
 
 
