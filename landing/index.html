@@ -476,6 +476,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   border-radius:50%;animation:ringbreathe var(--breath) ease-in-out infinite}
 .scope.alert .breath-ring{border-color:rgba(224,107,82,.4)}
 .scope .tick{position:absolute;top:4%;left:calc(50% - 1px);width:2px;height:3.5%;background:var(--h-teal)}
+.scope-glass{position:absolute;inset:0;z-index:1;width:100%;height:100%;border-radius:50%;display:block}
 @keyframes ringbreathe{0%,100%{transform:scale(1);opacity:.30}50%{transform:scale(1.18);opacity:.08}}
 .lens-world{position:absolute;inset:0;z-index:0;border-radius:50%;overflow:hidden;pointer-events:none;
   background:#0a1216 center/cover no-repeat;filter:brightness(.6) saturate(1.0);
@@ -1178,53 +1179,9 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
             <div class="lens-world" data-w="scope" aria-hidden="true"></div>
             <span class="breath-ring"></span>
             <span class="tick"></span>
-
-            <div class="hud-card" data-card="0">
-              <div class="h-pane"></div>
-              <div class="h-glyph"></div>
-              <div class="h-eyebrow">Juno</div>
-              <div class="h-title">Snake plant</div>
-              <div class="h-cap">water every 2 weeks</div>
-              <div class="h-ghost">last done · Tuesday</div>
-              <div class="h-dot"></div>
-            </div>
-
-            <div class="hud-card" data-card="1">
-              <div class="h-pane"></div>
-              <div class="h-iris">M</div>
-              <div class="h-eyebrow">Introduction</div>
-              <div class="h-title">“Hi, I’m Maya.”</div>
-              <div class="h-cap">Maya · kept</div>
-              <div class="h-ghost">she introduced herself · never strangers</div>
-              <div class="h-dot"></div>
-            </div>
-
-            <div class="hud-card" data-card="2">
-              <div class="h-pane"></div>
-              <div class="h-eyebrow">Lucid Recall</div>
-              <div class="h-title">North rack<br>4th &amp; Alder</div>
-              <div class="h-cap">your bike</div>
-              <div class="h-ghost">seen 8:12 AM · confidence high</div>
-              <div class="h-dot"></div>
-            </div>
-
-            <div class="hud-card coral" data-card="3">
-              <div class="h-rail"></div>
-              <div class="h-eyebrow">Drift detected</div>
-              <div class="h-title">Send the lease</div>
-              <div class="h-cap">→ Marcus</div>
-              <div class="h-ghost">Friday before noon</div>
-              <div class="h-dot"></div>
-            </div>
-
-            <div class="hud-card" data-card="4">
-              <div class="h-pane"></div>
-              <div class="h-eyebrow">Rosetta · ES → EN</div>
-              <div class="h-title">“Grilled octopus,<br>house lemon.”</div>
-              <div class="h-cap">read back in yours</div>
-              <div class="h-ghost">live · on device</div>
-              <div class="h-dot"></div>
-            </div>
+            <!-- The flagship lens now runs the true renderer (halo-sim.js): each
+                 scroll step plays that lens's real intro animation, not a fade. -->
+            <canvas class="scope-glass" id="scopeGlass" aria-hidden="true"></canvas>
           </div>
         </div>
       </div>
@@ -2223,11 +2180,11 @@ document.querySelectorAll(".arrive").forEach(function(el){ io.observe(el); });
 
 /* ---------- sticky story ---------- */
 var scope=document.getElementById("scope");
-var cards=[].slice.call(document.querySelectorAll("#scope .hud-card"));
 var steps=[].slice.call(document.querySelectorAll(".step"));
 function setCard(i){
-  cards.forEach(function(c,j){ c.classList.toggle("active",j===i); });
-  scope.classList.toggle("alert",i===3);
+  scope.classList.toggle("alert",i===3);           // coral breath-ring on the Keep step
+  window.__scopeI=i;                               // remembered for a late-mounting glass
+  if(window.__scopeShow) window.__scopeShow(i);    // play that lens's true intro
 }
 var stepIO=new IntersectionObserver(function(entries){
   entries.forEach(function(e){
@@ -2588,18 +2545,16 @@ window.__applyVeil=applyVeil;
 
 /* ---------- mobile: give each story step its own inline circle ---------- */
 (function(){
-  var scopeEl=document.getElementById("scope");
-  if(!scopeEl) return;
+  if(!document.getElementById("scope")) return;
   document.querySelectorAll(".step").forEach(function(step){
     var i=+step.dataset.step;
-    var mini=scopeEl.cloneNode(true);
-    mini.removeAttribute("id");
-    mini.classList.add("mini");
-    if(i===3) mini.classList.add("alert");
-    mini.querySelectorAll(".hud-card").forEach(function(c){
-      if(+c.dataset.card===i) c.classList.add("active");
-      else c.remove();
-    });
+    var mini=document.createElement("div");
+    mini.className="scope mini"+(i===3?" alert":"");
+    mini.setAttribute("aria-hidden","true");
+    var lw=document.createElement("div"); lw.className="lens-world"; lw.setAttribute("data-w","scope"); mini.appendChild(lw);
+    var br=document.createElement("span"); br.className="breath-ring"; mini.appendChild(br);
+    var cv=document.createElement("canvas"); cv.className="scope-glass";
+    cv.setAttribute("data-lens",String(i)); cv.setAttribute("aria-hidden","true"); mini.appendChild(cv);
     var wrap=document.createElement("div");
     wrap.className="step-hud"; wrap.setAttribute("aria-hidden","true");
     wrap.appendChild(mini);
@@ -2674,6 +2629,35 @@ window.__applyVeil=applyVeil;
         [4600, function(){ h.sim.card=null; h.sim.people=[]; h.sim._faceOf={}; }],
       ]; }
     });
+
+    /* ---- the flagship scope + mobile minis: the true renderer, per step.
+       Each scroll step plays that lens's real intro (fly-in / bloom / drift),
+       so the homepage's centerpiece IS the product renderer. ---- */
+    var LENS=[
+      ["object",  {eyebrow:"JUNO",             title:"Snake plant",                 cap:"water every 2 weeks", ghost:"last done · Tuesday"}],
+      ["intro",   {eyebrow:"INTRODUCTION",     title:"“Hi, I’m Maya.”", initial:"M",cap:"Maya · kept",        ghost:"introduced herself · kept"}],
+      ["waypath", {eyebrow:"LUCID RECALL",     title:"North rack 4th & Alder",      cap:"your bike",           ghost:"seen 8:12 AM · high"}],
+      ["keep",    {eyebrow:"DRIFT DETECTED",   title:"Send the lease",              cap:"→ Marcus",            ghost:"Friday before noon"}],
+      ["rosetta", {eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}]
+    ];
+    function mountScope(canvas){
+      var sim=new Halo.Sim(), g=new Halo.Glass(canvas, sim); g.bgAlpha=0.5; g._cur=-1;
+      if(!reduced) g.start();
+      return function(i){ if(i===g._cur||!LENS[i]) return; g._cur=i;
+        g.show(LENS[i][0], LENS[i][1], reduced); if(reduced) g.render(); };
+    }
+    var sg=document.getElementById("scopeGlass");
+    if(sg){ window.__scopeShow=mountScope(sg);
+      window.__scopeShow(window.__scopeI!=null?window.__scopeI:0); }
+    var minis=[].slice.call(document.querySelectorAll(".step-hud canvas.scope-glass"));
+    if(minis.length){
+      var mIO=new IntersectionObserver(function(es){ es.forEach(function(e){
+        if(!e.isIntersecting) return;
+        if(!e.target.__show) e.target.__show=mountScope(e.target);
+        e.target.__show(+e.target.dataset.lens);
+      });},{threshold:0.4});
+      minis.forEach(function(c){ mIO.observe(c); });
+    }
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot); else boot();
 })();
