@@ -25,10 +25,10 @@ DEFAULT_PORT = 7777
 AGENT_LABEL = "vision.dreamlayer.brain"
 
 # Opt-in "Check for updates" (CLICK ONLY — never polled in the background). The
-# releases live in a dedicated public repo; a click compares the running
-# version to the latest published tag. The network fetch is an injectable seam
-# so tests run fully offline (see check_for_update).
-RELEASES_REPO = "LetsGetToWorkBro/dreamlayer-releases"
+# dmg and exe are published to this repo's Releases, so a click compares the
+# running version to the latest published tag here. The network fetch is an
+# injectable seam so tests run fully offline (see check_for_update).
+RELEASES_REPO = "LetsGetToWorkBro/dreamlayer"
 RELEASES_API = f"https://api.github.com/repos/{RELEASES_REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{RELEASES_REPO}/releases/latest"
 

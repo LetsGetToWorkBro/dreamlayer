@@ -396,9 +396,9 @@ def test_check_for_update_prerelease_and_nonsemver_dont_false_current():
 
 
 def test_check_for_update_targets_the_releases_repo():
-    assert menubar.RELEASES_REPO == "LetsGetToWorkBro/dreamlayer-releases"
+    assert menubar.RELEASES_REPO == "LetsGetToWorkBro/dreamlayer"
     assert menubar.RELEASES_API.endswith(
-        "/repos/LetsGetToWorkBro/dreamlayer-releases/releases/latest")
+        "/repos/LetsGetToWorkBro/dreamlayer/releases/latest")
 
 
 def test_install_launch_agent_pins_dir_even_when_directory_is_none(tmp_path, monkeypatch):
