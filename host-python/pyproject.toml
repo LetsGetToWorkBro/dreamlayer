@@ -173,6 +173,7 @@ markers = [
     "hardware: needs a real Halo device / hardware deps (deselected in CI)",
     "benchmark: latency-budget test via pytest-benchmark (deselected in CI)",
     "real_model: needs heavy ML deps installed (MiniLM/CLIP/moondream); deselected in the default job, run by the real-models workflow",
+    "allow_egress: opts a test OUT of the autouse no-cloud-egress audit hook (rare; for a test that must reach a public host). Loopback/RFC-1918 LAN never needs this.",
 ]
 
 [tool.mutmut]
