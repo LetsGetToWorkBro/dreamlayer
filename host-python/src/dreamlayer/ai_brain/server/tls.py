@@ -76,12 +76,31 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
 
     d = Path(cfg_dir).expanduser() / "tls"
     d.mkdir(parents=True, exist_ok=True)
+    # Harden the tls dir owner-only BEFORE the key is written, so the private key
+    # is born private by inheritance — 0o600 alone is INERT on NTFS, exactly the
+    # secret-at-rest gap store.py's config path already closed. Mirrors the
+    # brain_config treatment (refute 2026-07-18: the new tls.py repeated the
+    # original 0o600-only mistake for the TLS private key).
+    from .store import _harden_state_dir
+    _harden_state_dir(d)
     cert_p, key_p = d / CERT_NAME, d / KEY_NAME
     lan = _lan_ip()
 
     if cert_p.exists() and key_p.exists():
         try:
             cert = x509.load_pem_x509_certificate(cert_p.read_bytes())
+            # Validate the KEY loads AND matches the cert. A truncated key or a
+            # key/cert mismatch (e.g. a crash BETWEEN the key write and the cert
+            # write on a prior run) must re-mint HERE, not surface as an uncaught
+            # ssl.SSLError at wrap_socket — which runs before serve_forever and
+            # would take the WHOLE Brain down (refute 2026-07-18).
+            key_obj = serialization.load_pem_private_key(
+                key_p.read_bytes(), password=None)
+            spki = serialization.PublicFormat.SubjectPublicKeyInfo
+            der = serialization.Encoding.DER
+            if (key_obj.public_key().public_bytes(der, spki)
+                    != cert.public_key().public_bytes(der, spki)):
+                raise ValueError("tls key does not match cert")
             now = datetime.datetime.now(datetime.timezone.utc)
             # not_valid_after_utc arrived in cryptography 42; older versions
             # expose the naive not_valid_after — normalize so reuse works on
@@ -91,9 +110,10 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
                 expiry = cert.not_valid_after.replace(
                     tzinfo=datetime.timezone.utc)
             if lan in _san_ips(cert) and expiry > now:
+                _tighten_key(key_p)           # re-assert owner-only on reuse
                 return cert_p, key_p          # still names this LAN IP — reuse
         except Exception:
-            pass                              # unreadable — re-mint below
+            pass                              # unreadable/mismatched — re-mint below
 
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "DreamLayer Brain")])
@@ -125,10 +145,24 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption()))
-    key_p.chmod(0o600)                        # belt + braces on reuse
+    _tighten_key(key_p)                       # 0o600 + owner-only Windows ACL
     cert_p.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     log.info("[tls] minted self-signed cert for %s", [str(s) for s in sans])
     return cert_p, key_p
+
+
+def _tighten_key(key_p: Path) -> None:
+    """Re-assert owner-only on the TLS private key: chmod 0o600 (POSIX) AND the
+    Windows owner-only ACL (0o600 is INERT on NTFS — it toggles only the
+    read-only bit and sets no ACL). Runs on BOTH the mint and reuse paths, so a
+    key restored/copied with a wider mode or ACL is tightened on every start
+    (refute 2026-07-18: the reuse path returned the key without re-tightening)."""
+    try:
+        key_p.chmod(0o600)
+    except OSError:
+        pass
+    from .store import _harden_windows_acl
+    _harden_windows_acl(str(key_p))
 
 
 def make_ssl_context(cert_path: str | Path, key_path: str | Path) -> ssl.SSLContext:

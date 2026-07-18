@@ -95,13 +95,31 @@ def main(argv=None) -> int:
                   "(pip install 'dreamlayer[verify]') — serving http only.")
         else:
             tls_port = args.tls_port or (args.port + 1)
-            tls_server = make_brain_server(brain, host=args.host,
-                                           port=tls_port, tls_port=tls_port)
-            tls_server.socket = make_ssl_context(*pair).wrap_socket(
-                tls_server.socket, server_side=True)
-            import threading
-            threading.Thread(target=tls_server.serve_forever,
-                             daemon=True).start()
+            try:
+                # Build the SSL context FIRST — a corrupt/mismatched cert or key
+                # raises here. Wrapped so it degrades to http-only rather than
+                # crashing the whole Brain (this runs before serve_forever, so an
+                # uncaught SSLError took camera AND panel AND asks down; refute
+                # 2026-07-18). ensure_self_signed now re-mints a mismatched key,
+                # so this catch is the belt to that suspenders.
+                ctx = make_ssl_context(*pair)
+                tls_server = make_brain_server(brain, host=args.host,
+                                               port=tls_port, tls_port=tls_port)
+                # do_handshake_on_connect=False: DON'T run the TLS handshake in
+                # the single accept-loop thread (where a stalled ClientHello from
+                # an unauthenticated LAN peer would pin ALL new camera connections
+                # with no wall-clock cap; refute 2026-07-18). Deferring it moves
+                # the handshake into the worker thread, under the same per-recv
+                # timeout + header watchdog + bounded semaphore as every request.
+                tls_server.socket = ctx.wrap_socket(
+                    tls_server.socket, server_side=True,
+                    do_handshake_on_connect=False)
+                import threading
+                threading.Thread(target=tls_server.serve_forever,
+                                 daemon=True).start()
+            except Exception as exc:            # noqa: BLE001
+                print(f"  ⚠ --tls setup failed ({exc}) — serving http only.")
+                tls_server, tls_port = None, 0
 
     # the tls_port kwarg rides only when --tls actually started a listener, so
     # the bare-launch call shape stays exactly as it always was (pinned by

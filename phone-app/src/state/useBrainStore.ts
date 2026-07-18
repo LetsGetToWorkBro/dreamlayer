@@ -519,6 +519,13 @@ export const useBrainStore = create<BrainState>((set, get) => ({
         sources: ["memory", "plant"], confidence: 0.86,
       };
     }
+    // The Veil is the wearer's capture switch — a look ships a full photo, so it
+    // must NOT leave the phone past a closed Veil (capture paused / incognito, or
+    // the glasses raised the Veil via PRIVACY_VEIL telemetry). The Brain gates on
+    // its OWN incognito posture, but that's a different signal from the phone /
+    // glasses Veil, so the phone must enforce its own — the "enforce, don't trust
+    // upstream" rule feedLens/emitLens already follow (refute 2026-07-18).
+    if (veilClosed(get().capturePaused)) return empty("The Veil is up — looking is paused.", true);
     const m = get().macMini;
     if (!m.connected || !m.url) return empty("Pair your Brain to look through it.");
     try {
@@ -532,7 +539,12 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       const j = await r.json();
       if (!j?.ok) return empty(j?.reason ?? "Couldn't make it out.", !!j?.veiled);
       const p = j.panel ?? j.card ?? {};
-      const rows: LookRow[] = Array.isArray(p.rows) ? p.rows : [];
+      // Defend the row ELEMENTS, not just the array shape: a malformed Brain
+      // response {rows:[null]} would otherwise crash the panel render on r.label
+      // (refute 2026-07-18). Keep only real objects.
+      const rows: LookRow[] = Array.isArray(p.rows)
+        ? p.rows.filter((r: unknown): r is LookRow => !!r && typeof r === "object")
+        : [];
       return {
         ok: true, lens: j.lens ?? "object",
         title: p.primary ?? p.title ?? "",

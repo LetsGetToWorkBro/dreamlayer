@@ -124,6 +124,114 @@ def test_look_defers_a_person_to_the_social_lens():
     assert host.look_sighting(ObjectSighting(label="a man", confidence=0.9)) is None
 
 
+def test_named_stranger_is_deferred_not_identified():
+    # THE contract: never identify a stranger. The person-token denylist catches
+    # CATEGORIES ("a man") but not IDENTITIES — a VLM that returns a proper NAME
+    # (celebrity recognition, or a crafted nametag/caption) must still defer
+    # (refute 2026-07-18: "Maya Chen" was named straight onto the glass).
+    from dreamlayer.object_lens.recognizer import (
+        _names_a_person, _looks_like_a_personal_name)
+    assert _looks_like_a_personal_name("Maya Chen") is True
+    assert _names_a_person("Taylor Swift") is True
+    assert _names_a_person("John Smith") is True
+    # objects (lowercase category nouns) still pass — the open-vocab path holds
+    assert _names_a_person("espresso machine") is False
+    assert _names_a_person("almond milk") is False
+    assert _looks_like_a_personal_name("mug") is False
+    # end-to-end: a VLM naming a person yields NO panel (REVERT-FAILING)
+    reply = '{"label":"Maya Chen","confidence":0.96}'
+    host = WorldLensHost(_FakeBrain(backend=_FakeBackend(describe_reply=reply)))
+    assert host.look(_noise_frame()) is None
+
+
+def test_clean_attrs_strips_contact_pii():
+    # an object's brand/text must not smuggle a name + contact detail onto the
+    # panel (the lanyard/nametag scenario) (refute 2026-07-18).
+    from dreamlayer.object_lens.vision_recognizer import _clean_attrs
+    out = _clean_attrs({"brand": "Maya Chen 555-123-4567", "text": "reach me@x.com",
+                        "title": "The Pragmatic Programmer", "isbn": "9780135957059"})
+    assert "brand" not in out                            # phone number → dropped
+    assert "text" not in out                             # email → dropped
+    assert out["title"] == "The Pragmatic Programmer"    # clean free text kept
+    assert out["isbn"] == "9780135957059"                # ISBN digits are not "PII"
+
+
+def test_b64_to_frame_refuses_a_decompression_bomb(monkeypatch):
+    # A tiny solid-colour image can declare huge dimensions and decode to
+    # hundreds of MB. Reject on the pixel count BEFORE materialising the array
+    # (refute 2026-07-18). Cap lowered so a normal image trips the guard without
+    # allocating a real bomb in-test — the LOGIC is what's pinned.
+    pytest.importorskip("PIL")
+    import io as _io, base64 as _b64
+    from PIL import Image
+    import dreamlayer.object_lens.vision_recognizer as vr
+    buf = _io.BytesIO(); Image.new("RGB", (64, 64), (10, 20, 30)).save(buf, "PNG")
+    b64 = _b64.b64encode(buf.getvalue()).decode()
+    monkeypatch.setattr(vr, "MAX_FRAME_PIXELS", 100)     # 10x10 ceiling
+    assert vr.b64_to_frame(b64) is None                  # 64x64 = 4096 > cap → refused
+    monkeypatch.setattr(vr, "MAX_FRAME_PIXELS", 1_000_000)
+    assert getattr(vr.b64_to_frame(b64), "shape", None) == (64, 64, 3)   # under cap: fine
+
+
+def test_untrusted_installed_plugins_require_a_sandbox():
+    # The world lens is REMOTELY reachable and runs UNTRUSTED installed plugins —
+    # on a host with no kernel sandbox they must FAIL CLOSED, not run as a plain
+    # subprocess with full OS authority (refute 2026-07-18).
+    calls = {}
+
+    class _SpyStore:
+        def load_installed(self, host, isolate="untrusted", require_sandbox=None):
+            calls["require_sandbox"] = require_sandbox
+            return []
+
+    brain = _FakeBrain()
+    brain.plugins = _SpyStore()
+    WorldLensHost(brain)                                 # __init__ loads installed plugins
+    assert calls.get("require_sandbox") is True          # REVERT-FAILING
+
+
+def test_plugin_network_capability_is_veil_aware():
+    # incognito ⇒ no `network` egress capability handed to a plugin (fail-closed),
+    # mirroring the orchestrator's hardened grant (refute 2026-07-18: the
+    # world-lens grant was blind to the veil).
+    veiled = WorldLensHost(_FakeBrain(incognito=True, caps=("object_lens", "network")))
+    assert "network" not in veiled._plugin_capabilities()
+    live = WorldLensHost(_FakeBrain(incognito=False, caps=("object_lens", "network")))
+    assert "network" in live._plugin_capabilities()
+
+
+def test_remote_vision_backend_is_gated_and_counted():
+    # A REMOTE (off-box) vision backend receiving the wearer's photo IS cloud
+    # egress: count it and block it while incognito, don't ship it silently
+    # (refute 2026-07-18: the look path never read no_cloud or bumped cloud_calls).
+    from dreamlayer.ai_brain.server.world_lens import _BrainVisionRouter
+
+    class _Cfg:
+        ollama_url = "http://8.8.8.8:11434"              # PUBLIC host → egress
+
+    class _B:
+        def __init__(self):
+            self._backend = _FakeBackend(vision_reply="x")
+            self.config = _Cfg()
+            self.cloud_calls = 0
+            self._incog = False
+
+        def incognito_now(self):
+            return self._incog
+
+        def bump_cloud_calls(self):
+            self.cloud_calls += 1
+
+    b = _B()
+    router = _BrainVisionRouter(b)
+    frame = (_noise_frame() * 255).astype("uint8")
+    router.explain(frame, "mug")
+    assert b.cloud_calls == 1                            # remote egress accounted
+    b._incog = True
+    assert router.explain(frame, "mug") is None          # veiled → no remote vision
+    assert b.cloud_calls == 1                            # and not counted again
+
+
 def test_veiled_look_is_blind():
     host = WorldLensHost(_FakeBrain(incognito=True))
     assert host.veiled() is True
