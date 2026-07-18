@@ -189,12 +189,18 @@ class VectorStore:
         # Over-fetch so stale rows (a memory purged from the DB but not yet
         # evicted here) can't starve the result below top_k — we refill from
         # the wider candidate set, keeping "results are always correct" true
-        # even if a caller forgot to evict().
+        # even if a caller forgot to evict(). Bound via the `k = ?` constraint
+        # form (not `LIMIT ?`): a vec0 knn query requires ONE of the two, and
+        # only `k = ?` reliably pushes down to the virtual table on every
+        # SQLite build — `LIMIT ?` needs a SQLite new enough to push LIMIT
+        # into a virtual table, which older builds (e.g. 3.34.1) cannot do,
+        # silently degrading search() to the linear scan instead (#429).
+        where += " AND k = ?"
         params.append(max(top_k * 4, 16))
         with self.db._lock:
             cur = self.db.conn.execute(
                 f"SELECT memory_id, distance FROM memory_vec WHERE {where} "
-                "ORDER BY distance LIMIT ?", params)
+                "ORDER BY distance", params)
             rows = cur.fetchall()
         out = []
         for mid, dist in rows:
