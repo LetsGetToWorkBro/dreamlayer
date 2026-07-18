@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "note": "sha256 pins for the on-device ML weights DreamLayer loads from public CDNs. Each entry names the trusted source, the loader, and the preferred (non-pickle) format. 'files' maps a path relative to the model's cache dir to its sha256; an empty 'files' means UNPINNED — the integrity infrastructure is in place but the hash has not been captured yet, so model_guard.verify_path() warns (or hard-fails under DL_MODELS_STRICT). Pins are filled by a trusted bootstrap: download once on a clean, connected box, run `dreamlayer models pin`, and commit the result. Until then the offline-posture gate (HF_HUB_OFFLINE) and safe_torch_load(weights_only=True) still protect every load. NEVER edit a sha256 by hand.",
+  "models": {
+    "all-MiniLM-L6-v2": {
+      "source": "huggingface:sentence-transformers/all-MiniLM-L6-v2",
+      "loader": "sentence-transformers",
+      "prefer": "safetensors",
+      "files": {}
+    },
+    "minishlab/potion-base-8M": {
+      "source": "huggingface:minishlab/potion-base-8M",
+      "loader": "model2vec",
+      "prefer": "safetensors",
+      "files": {}
+    },
+    "faster-whisper-base.en": {
+      "source": "huggingface:Systran/faster-whisper-base.en",
+      "loader": "faster-whisper",
+      "prefer": "ctranslate2",
+      "files": {}
+    },
+    "speechbrain/spkrec-ecapa-voxceleb": {
+      "source": "huggingface:speechbrain/spkrec-ecapa-voxceleb",
+      "loader": "speechbrain",
+      "prefer": "safetensors",
+      "files": {}
+    },
+    "ViT-B-32/openai": {
+      "source": "open_clip:ViT-B-32 (pretrained=openai)",
+      "loader": "open_clip",
+      "prefer": "safetensors",
+      "files": {}
+    },
+    "yolov8n.pt": {
+      "source": "ultralytics:yolov8n.pt",
+      "loader": "ultralytics",
+      "prefer": "pytorch",
+      "note": "pickle format — load only via model_guard.safe_torch_load / ultralytics with a verified file",
+      "files": {}
+    },
+    "yolo11n.pt": {
+      "source": "ultralytics:yolo11n.pt",
+      "loader": "ultralytics",
+      "prefer": "pytorch",
+      "note": "person_guard nano detector; pickle format",
+      "files": {}
+    },
+    "en_core_web_sm": {
+      "source": "spacy:en_core_web_sm",
+      "loader": "spacy",
+      "prefer": "spacy-package",
+      "files": {}
+    }
+  }
+}

@@ -29,7 +29,9 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write   # so a tag build can attach the installer to a Release
+  contents: write     # so a tag build can attach the installer to a Release
+  id-token: write     # OIDC token the provenance signer exchanges (SLSA)
+  attestations: write # write the build-provenance attestation for the installer
 
 jobs:
   build:
@@ -125,6 +127,15 @@ jobs:
             Sort-Object FullName -Descending | Select-Object -First 1
           & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p "$env:PFX_PASS" `
             /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 DreamLayer-Setup.exe
+
+      # SLSA build provenance: a signed, verifiable statement that this installer
+      # came out of THIS repo's CI (this workflow, this commit), not a developer
+      # box. Authenticode proves who signed; provenance proves the build origin.
+      # Verify with `gh attestation verify DreamLayer-Setup.exe -R <owner>/<repo>`.
+      - name: Attest build provenance (installer)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: DreamLayer-Setup.exe
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7

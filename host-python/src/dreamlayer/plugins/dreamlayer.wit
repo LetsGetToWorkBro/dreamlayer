@@ -1,0 +1,52 @@
+// dreamlayer.wit — the formal WebAssembly Component Model contract for a
+// capability-enforced plugin.
+//
+// wasm_component_host.py runs a plugin in-process under wasmtime with ZERO
+// ambient authority: the guest can only call host functions the host explicitly
+// links, and only the functions of the capabilities its manifest declares. This
+// file is the SOURCE OF TRUTH for that surface, written as a Component Model
+// `world` so the contract is a real, tool-checkable interface rather than an
+// ad-hoc ptr/len convention.
+//
+// Binding status: the host currently implements this world via the core-module
+// ptr/len ABI (`_catalog` in wasm_component_host.py) — a plugin exports/imports
+// core wasm functions and the host validates imports against the declared
+// capabilities. Migrating to true Component Model instantiation (wasmtime's
+// component API + `wit-bindgen` guest bindings) is a toolchain follow-up; until
+// then `wit_interface_functions()` cross-checks the runtime catalog against this
+// contract so the two can never silently drift.
+
+package dreamlayer:host@0.1.0;
+
+/// Write a UTF-8 line to the host log. The `log` capability — the minimum a
+/// plugin needs to speak to the host at all.
+interface log {
+    /// (ptr, len) into guest linear memory in the core-ABI binding.
+    log: func(ptr: u32, len: u32);
+}
+
+/// Read a byte from the plugin's granted package sandbox. The `fs` capability.
+interface fs {
+    fs-read: func(offset: u32) -> u32;
+}
+
+/// A single mediated fetch handle; the host decides what a request-id means and
+/// whether it is allowed. The `net` capability.
+interface net {
+    net-get: func(req-id: u32) -> u32;
+}
+
+/// Surface a card to the wearer. The `cards` capability.
+interface cards {
+    show-card: func(ptr: u32, len: u32);
+}
+
+/// The world a DreamLayer plugin targets. A plugin may import ONLY the
+/// interfaces its manifest declares in `requires:[...]`; the host links exactly
+/// those and refuses to instantiate a module that imports an undeclared power.
+world plugin {
+    import log;
+    import fs;
+    import net;
+    import cards;
+}

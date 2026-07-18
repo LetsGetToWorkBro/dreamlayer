@@ -55,9 +55,49 @@ jobs:
         # hardware/benchmark tests need a device or run only on demand.
         # --cov-fail-under is set 5 points below the measured total (90%) so
         # coverage can only rot LOUDLY — a drop fails the build.
+        #
+        # Every test in this run executes under the autouse no-cloud-egress
+        # audit hook (tests/conftest.py): a process-wide socket.connect tripwire
+        # that RAISES on any connection to a public host. So a green run is also
+        # a standing proof that the whole suite reaches nothing but loopback/LAN
+        # — the privacy claim, checked at the OS boundary, not by a self-counter.
         run: >
-          pytest --tb=short -m "not hardware and not benchmark and not real_model"
+          pytest --tb=short -m "not hardware and not benchmark and not real_model and not allow_egress"
           --cov=dreamlayer --cov-report=term-missing --cov-fail-under=85
+
+      - name: No-egress proof — run network-sensitive tests in an empty netns
+        # Belt-and-suspenders to the in-process audit hook: run the actual
+        # network-touching tests where the box has NO route off-device, so even a
+        # deleted hook can't make egress succeed. `unshare -rn` maps our uid to
+        # root in a fresh user+network namespace and we bring loopback up
+        # (localhost-binding tests need it), but there is no default route, so any
+        # public send fails at the kernel — and it actually EXECUTES the tests
+        # (the prior version only self-tested unshare, refute 2026-07-18).
+        #
+        # This requires UNPRIVILEGED user namespaces. GitHub-hosted runners forbid
+        # them ("write failed /proc/self/uid_map: Operation not permitted"), so we
+        # PROBE first and skip cleanly there — the in-process audit hook already
+        # proved zero egress in the main pytest step above; this leg is the extra
+        # OS-boundary check for self-hosted runners that permit userns. It is
+        # therefore never allowed to fail the build for lack of the capability;
+        # only a real egress inside the netns fails it.
+        run: |
+          if ! command -v unshare >/dev/null; then
+            echo "unshare unavailable; relying on the in-process audit hook"; exit 0
+          fi
+          if ! unshare -rn true 2>/dev/null; then
+            echo "unprivileged user namespaces not permitted on this runner "\
+                 "(GitHub-hosted); the in-process audit hook stands alone"; exit 0
+          fi
+          unshare -rn bash -c '
+            ip link set lo up 2>/dev/null || true
+            pytest --tb=short -p no:cacheprovider \
+              src/dreamlayer/tests/test_no_egress.py \
+              src/dreamlayer/tests/test_activity_receipt.py \
+              src/dreamlayer/tests/test_capture_pipeline.py \
+              src/dreamlayer/tests/test_ai_brain_server.py \
+              src/dreamlayer/tests/test_primary_api_brain.py
+          '
 
   test-windows:
     # The Windows Brain is a shipping target (the tray app), so Windows
@@ -90,7 +130,7 @@ jobs:
 
       - name: Run pytest (appliance + ai_brain + indexer suites)
         run: >
-          pytest --tb=short -m "not hardware and not benchmark and not real_model"
+          pytest --tb=short -m "not hardware and not benchmark and not real_model and not allow_egress"
           src/dreamlayer/tests/test_windows_appliance.py
           src/dreamlayer/tests/test_windows_panel_window.py
           src/dreamlayer/tests/test_windows_sources.py

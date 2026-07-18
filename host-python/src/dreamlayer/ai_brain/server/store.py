@@ -6,10 +6,12 @@ inspect, back up, or hand-edit.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -620,40 +622,310 @@ class QueryHistory:
         _restore_jsonl(self.path, items)
 
 
+def _receipt_core(rec: dict) -> dict:
+    """The signed core of an activity record — the fields a receipt attests."""
+    return {"seq": rec["seq"], "ts": rec["ts"], "kind": rec["kind"],
+            "text": rec["text"], "prev": rec["prev"]}
+
+
+def _receipt_hash(core: dict) -> str:
+    """sha256 of a record's canonical core — the chain link the next record binds."""
+    data = json.dumps(core, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(data).hexdigest()
+
+
 class ActivityLog:
     """Everything the Brain did — folders, files, searches, cloud/incognito
-    toggles, pairing — as a single newest-first feed for the panel."""
+    toggles, pairing — as a single newest-first feed for the panel.
 
-    def __init__(self, cfg_dir: Path | str):
+    On a camera-and-mic device the ledger IS the privacy promise, so it is
+    tamper-evident: when a `signer` (Ed25519) is supplied, each record carries a
+    monotonic `seq`, the `prev` sha256 of the previous record's core (a hash
+    chain), and a `sig` over that core. A third party handed only the PUBLIC key
+    can then `verify()` that no record was modified, reordered, or dropped from
+    the middle by anyone without the private key — "trust us we were incognito"
+    becomes a checkable receipt (`/dreamlayer/receipt`). The signer is optional
+    and additive: with none, or on an existing unsigned log, it behaves exactly
+    as before and `recent()` is unchanged (refute 2026-07-18: the ledger was a
+    freely-rewritable text file with clear()/prune()/restore() and no signature).
+    """
+
+    def __init__(self, cfg_dir: Path | str, signer=None):
         self.path = Path(cfg_dir) / ACTIVITY_FILE
+        self._head_path = self.path.with_name(self.path.name + ".head")
+        self._signer = signer
+        self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
+        self._next_seq = 0
+        self._loaded = False
+        # The threaded Brain server calls add() from multiple request threads;
+        # the signed chain has shared mutable state (_head_hash/_next_seq) and
+        # writes a head anchor, so a bare append would race two records onto the
+        # same seq and collide the anchor temp-file. Serialize the mutators.
+        # Re-entrant so prune/restore can call _rechain while holding it.
+        self._lock = threading.RLock()
+
+    # -- the signed head anchor (defeats tail truncation) ---------------------
+    # A hash chain alone protects edits/reorders/mid-deletions, but NOTHING
+    # anchors its LENGTH: a valid prefix of a valid chain is itself a valid chain,
+    # so an attacker can chop the most-recent (incriminating) records and verify()
+    # would still pass (refute 2026-07-18). This separate, key-SIGNED checkpoint
+    # attests the current high-water mark {last_seq, head, count}; verify() checks
+    # the file's tail against it, so a truncation an attacker can't re-sign is
+    # caught. The owner (with the key) re-signs it on every add/prune/restore.
+    def _write_head(self) -> None:
+        if self._signer is None:
+            return
+        core = {"last_seq": self._next_seq - 1, "head": self._head_hash,
+                "count": self._next_seq}
+        doc = {**core, "sig": self._signer.sign(core)}
+        self._head_path.parent.mkdir(parents=True, exist_ok=True)
+        # a UNIQUE temp per write: a fixed ".head.tmp" collided when two threads
+        # wrote concurrently (one's os.replace moved it out from under the other).
+        fd, tmp = tempfile.mkstemp(dir=str(self._head_path.parent),
+                                   prefix=self._head_path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps(doc))
+            os.replace(tmp, self._head_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    def _read_head(self) -> Optional[dict]:
+        """The verified head anchor, or None (absent / unverifiable / no signer)."""
+        if self._signer is None or not self._head_path.exists():
+            return None
+        try:
+            doc = json.loads(self._head_path.read_text())
+            core = {"last_seq": doc["last_seq"], "head": doc["head"],
+                    "count": doc["count"]}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            return None
+        if not self._signer.verify(core, doc.get("sig", "")):
+            return None                        # a forged/edited anchor is no anchor
+        return core
+
+    # -- the chain head (lazy: from the SIGNED anchor, not attacker file state) --
+    def _load_head(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+        head = self._read_head()
+        if head is not None:
+            # trust the signed checkpoint, so a record an attacker APPENDED (with a
+            # bogus seq/prev to poison the next add) cannot redirect our chain.
+            self._next_seq = head["last_seq"] + 1
+            self._head_hash = head["head"]
+            return
+        recs = self._read_all()                # legacy / no anchor yet
+        for rec in recs:
+            if "seq" in rec and "prev" in rec:
+                self._next_seq = rec["seq"] + 1
+                try:
+                    self._head_hash = _receipt_hash(_receipt_core(rec))
+                except (KeyError, TypeError):
+                    self._head_hash = ""
 
     def add(self, kind: str, text: str, ts: Optional[float] = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        rec = {"ts": ts if ts is not None else time.time(),
-               "kind": kind, "text": text}
-        with self.path.open("a") as f:
-            f.write(json.dumps(rec) + "\n")
+        ts = ts if ts is not None else time.time()
+        rec: dict = {"ts": ts, "kind": kind, "text": text}
+        # The signed-chain critical section (seq/head advance + anchor write) must
+        # be atomic across the threaded server, or two adds collide on a seq and
+        # corrupt the chain. The unsigned path holds the lock too (cheap) so a
+        # concurrent append can't interleave a half-written line.
+        with self._lock:
+            if self._signer is not None:
+                self._load_head()
+                rec["seq"] = self._next_seq
+                rec["prev"] = self._head_hash
+                core = _receipt_core(rec)
+                rec["sig"] = self._signer.sign(core)
+                self._head_hash = _receipt_hash(core)
+                self._next_seq += 1
+            with self.path.open("a") as f:
+                f.write(json.dumps(rec) + "\n")
+            self._write_head()                 # advance the signed high-water mark
 
-    def recent(self, n: int = 40) -> list[dict]:
+    def _read_all(self) -> list[dict]:
+        """All records, oldest-first (file order)."""
         if not self.path.exists():
             return []
         out = []
-        for line in self.path.read_text().splitlines()[-n:]:
+        for line in self.path.read_text().splitlines():
             try:
                 out.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-        return list(reversed(out))
+        return out
+
+    def recent(self, n: int = 40) -> list[dict]:
+        return list(reversed(self._read_all()[-n:]))
+
+    # -- verification ---------------------------------------------------------
+    def verify(self) -> dict:
+        """Walk the chain and report integrity. ``ok`` is True when every SIGNED
+        record verifies against the public key AND its prev-link is intact.
+        Unsigned/legacy records are reported (``unsigned``), never flagged as
+        tampered. Fail-safe: with no signer or no cryptography, ``ok`` is False
+        and ``reason`` explains why it is unverifiable, never a misleading True."""
+        recs = self._read_all()
+        signer = self._signer
+        pub = getattr(signer, "public_key_hex", "") if signer else ""
+        if signer is None or not getattr(signer, "available", False) or not pub:
+            return {"ok": False, "records": len(recs), "signed": 0, "unsigned": len(recs),
+                    "first_broken": None, "pubkey": pub,
+                    "reason": "no Ed25519 receipt key (install the 'privacy' extra)"}
+        expected_prev: Optional[str] = ""
+        signed = unsigned = 0
+        first_broken = None
+        last_seq_seen = -1
+        running_head = ""
+        for i, rec in enumerate(recs):
+            if "sig" not in rec or "seq" not in rec or "prev" not in rec:
+                unsigned += 1
+                expected_prev = None           # chain continuity is unknown past a gap
+                continue
+            try:
+                core = _receipt_core(rec)
+            except KeyError:
+                first_broken = first_broken if first_broken is not None else i
+                continue
+            link_ok = expected_prev is None or rec["prev"] == expected_prev
+            sig_ok = signer.verify(core, rec["sig"])
+            if not (link_ok and sig_ok):
+                first_broken = first_broken if first_broken is not None else rec.get("seq", i)
+            else:
+                signed += 1
+                last_seq_seen = rec["seq"]
+            expected_prev = _receipt_hash(core)
+            running_head = expected_prev
+        ok = first_broken is None and unsigned == 0 and signed == len(recs)
+        out = {"ok": ok, "records": len(recs), "signed": signed, "unsigned": unsigned,
+               "first_broken": first_broken, "pubkey": pub}
+        # Tail-truncation check against the signed head anchor. An attacker who
+        # chops recent records can't re-sign the checkpoint, so a stale
+        # last_seq/count/head betrays the cut.
+        head = self._read_head()
+        if head is not None:
+            if head["last_seq"] > last_seq_seen or head["count"] > signed \
+                    or (ok and running_head != head["head"]):
+                out["ok"] = False
+                out["truncated"] = True
+                if out["first_broken"] is None:
+                    out["first_broken"] = last_seq_seen + 1     # first missing seq
+                out["reason"] = (f"tail truncated: anchor attests {head['count']} "
+                                 f"records up to seq {head['last_seq']}, file has "
+                                 f"{signed} up to seq {last_seq_seen}")
+        elif signed > 0:
+            # a signed log with NO valid anchor: the anchor was deleted (or a
+            # pre-anchor legacy log). Fail-safe — report it rather than pass.
+            out["ok"] = False
+            out["reason"] = "signed log has no valid head anchor (deleted or legacy)"
+        return out
+
+    def receipt(self, n: int = 2000) -> dict:
+        """A portable, third-party-verifiable proof of what the Brain did: the
+        records (with their seq/prev/sig), the public key to check them against,
+        and this Brain's own verify() result."""
+        recs = self._read_all()[-n:]
+        return {"pubkey": getattr(self._signer, "public_key_hex", "") if self._signer else "",
+                "algorithm": "ed25519-sha256-chain",
+                "records": recs,
+                # the signed high-water mark, so a third party given only the last
+                # `n` records can still detect a truncated tail (records may start
+                # mid-chain, but head.last_seq/count attest the true length).
+                "head": self._read_head(),
+                "verification": self.verify()}
+
+    # -- owner edits: re-chain the survivors so the receipt stays consistent ---
+    def _rechain(self, recs: list[dict]) -> None:
+        """Rewrite the log, re-numbering + re-signing `recs` from a fresh genesis.
+        A legitimate owner edit (prune/restore) with the key in hand re-attests
+        the surviving records; an attacker WITHOUT the key cannot, so their edit
+        fails verify()."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        prev, seq = "", 0
+        with self.path.open("w") as f:
+            for src in recs:
+                rec = {"ts": src.get("ts", time.time()),
+                       "kind": src.get("kind", ""), "text": src.get("text", "")}
+                if self._signer is not None:
+                    rec["seq"] = seq
+                    rec["prev"] = prev
+                    core = _receipt_core(rec)
+                    rec["sig"] = self._signer.sign(core)
+                    prev = _receipt_hash(core)
+                    seq += 1
+                f.write(json.dumps(rec) + "\n")
+        self._head_hash, self._next_seq, self._loaded = prev, seq, True
+        self._write_head()                     # re-attest the new (owner-signed) head
 
     def clear(self) -> None:
-        if self.path.exists():
-            self.path.unlink()
+        with self._lock:
+            if self.path.exists():
+                self.path.unlink()
+            if self._head_path.exists():
+                self._head_path.unlink()       # drop the anchor with the log
+            self._head_hash, self._next_seq, self._loaded = "", 0, True
 
     def prune(self, days: int) -> int:
-        return _prune_jsonl(self.path, days)
+        if self._signer is None:
+            return _prune_jsonl(self.path, days)
+        with self._lock:
+            if days <= 0 or not self.path.exists():
+                return 0
+            cutoff = time.time() - days * 86400
+            recs = self._read_all()
+            kept = [r for r in recs if r.get("ts", 0) >= cutoff]
+            removed = len(recs) - len(kept)
+            if removed:
+                self._rechain(kept)
+            return removed
 
     def restore(self, items) -> None:
-        _restore_jsonl(self.path, items)
+        if self._signer is None:
+            _restore_jsonl(self.path, items)
+            return
+        with self._lock:
+            # `items` arrives newest-first (as recent()/state export produce it).
+            self._rechain(list(reversed(list(items or []))))
+
+
+def activity_receipt_signer(cfg_dir: Path | str):
+    """Load-or-create the persistent Ed25519 seed that signs the activity receipt.
+
+    The seed is the root of trust for the tamper-evident privacy ledger, so it is
+    held by the secret_store (OS keychain / enclave when available, an owner-only
+    file otherwise) rather than as a bare plaintext file. The file backend uses
+    the same ``receipt.key`` path and format existing installs already have, and
+    get_or_create() reads through every backend first, so upgrading to a keychain
+    keeps the same public key and every past receipt still verifies. Returns a
+    sign_crypto.Signer, or None when the `cryptography` extra is absent (the
+    ledger then stays plain, fail-safe)."""
+    try:
+        from ...reality_compiler.sign_crypto import Signer
+    except Exception:
+        return None
+    if not getattr(Signer, "available", False):
+        return None
+    from ...secret_store import SecretStore
+    # prefer_keyring=False: the receipt seed must be STABLE across every reboot
+    # (a changed key orphans all past receipts), but a headless Brain has no
+    # interactively-unlocked OS keychain — a keychain locked at boot would report
+    # available then miss, and the store would mint a new seed. So the seed's
+    # durable home is the owner-only file (0o600 + ACL) or a registered enclave,
+    # not the keychain. The keychain backend stays available for interactive
+    # secrets that opt in with the default prefer_keyring=True.
+    store = SecretStore(cfg_dir, prefer_keyring=False)
+    key = store.get_or_create("receipt", lambda: os.urandom(32))
+    if len(key) < 32:                                # corrupt/short existing seed
+        key = os.urandom(32)
+        store.set("receipt", key)                    # set() cascades; never crashes
+    return Signer(key)
 
 
 def _restore_jsonl(path: Path, items) -> None:

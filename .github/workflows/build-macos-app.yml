@@ -30,7 +30,9 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write   # so a tag build can attach the .dmg to a Release
+  contents: write     # so a tag build can attach the .dmg to a Release
+  id-token: write     # OIDC token the provenance signer exchanges (SLSA)
+  attestations: write # write the build-provenance attestation for the .dmg
 
 jobs:
   build:
@@ -153,6 +155,16 @@ jobs:
             --wait
           xcrun stapler staple "DreamLayer.dmg"
           spctl -a -t open --context context:primary-signature -v "DreamLayer.dmg" || true
+
+      # SLSA build provenance: a signed, verifiable statement of WHERE this .dmg
+      # was built (this repo, this workflow, this commit) and that it came out of
+      # CI, not someone's laptop. Codesigning proves who signed; provenance
+      # proves the build's origin — the two are complementary. Verify with
+      # `gh attestation verify DreamLayer.dmg -R <owner>/<repo>`.
+      - name: Attest build provenance (.dmg)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: DreamLayer.dmg
 
       - name: Upload .dmg artifact
         uses: actions/upload-artifact@v7

@@ -146,7 +146,8 @@ class TestLook:
         brain = _brain(tmp_path, cloud_provider="openai",
                        cloud_api_key="sk-x", cloud_model="gpt-4o-mini")
         monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
-        allowed = {".json", ".jsonl", ".db", ".db-journal", ".db-wal", ".db-shm"}
+        allowed = {".json", ".jsonl", ".db", ".db-journal", ".db-wal", ".db-shm",
+                   ".head", ".key"}   # receipt anchor + signing seed are state
         before = {p for p in Path(tmp_path).rglob("*")
                   if p.is_file() and p.suffix not in allowed}
         out = look(brain, _jpeg())

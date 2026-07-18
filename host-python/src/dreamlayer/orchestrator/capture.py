@@ -36,7 +36,7 @@ class CapturePipeline:
     no transcript — same graceful-degradation contract as every seam."""
 
     def __init__(self, orch, vad=None, asr=None, speaker=None, wake=None,
-                 speaker_resolver=None, tagger=None,
+                 speaker_resolver=None, tagger=None, enrolled_speakers=None,
                  sample_rate: int = SAMPLE_RATE,
                  silence_hang_ms: float = SILENCE_HANG_MS,
                  max_segment_ms: float = MAX_SEGMENT_MS,
@@ -54,6 +54,15 @@ class CapturePipeline:
         # Speaker embeddings identify; the ledger wants a label, so keep them
         # separate rather than mislabelling a caption with a raw vector.
         self.speaker_resolver = speaker_resolver
+        # Optional explicit allowlist of enrolled speaker labels. When given,
+        # voice_guard requires a resolved label to be a member before a voiceprint
+        # is retained (self always passes); None → the resolver's own name-vs-
+        # placeholder verdict decides. Either way a stranger's print is discarded.
+        # Materialised to a list so it is safe to consult more than once (a
+        # generator would be exhausted on first use, silently treating everyone as
+        # a stranger thereafter).
+        self._enrolled_speakers = (list(enrolled_speakers)
+                                   if enrolled_speakers is not None else None)
         self.wake = wake
         self.last_speaker_embedding = None
         self.sample_rate = sample_rate
@@ -144,12 +153,25 @@ class CapturePipeline:
             return None
 
         label = ""
-        if self.speaker is not None:
+        # voice_guard: an ECAPA embedding is a biometric. Compute one only when
+        # identification is actually possible (should_attempt_voiceprint: a
+        # resolver exists AND, if an explicit registry is supplied, it is
+        # non-empty); then RETAIN it only for an enrolled speaker. A bystander —
+        # the resolver returned no identity or a diarization placeholder — has
+        # their voiceprint discarded, never banked. NOTE the resolver is a trusted
+        # component: it must only COMPARE against already-enrolled voiceprints and
+        # must NOT auto-enroll / persist an unmatched speaker's embedding, since it
+        # receives the raw vector here. Mirrors person_guard: detecting is fine,
+        # identifying & storing a stranger is not.
+        from . import voice_guard
+        self.last_speaker_embedding = None
+        if self.speaker is not None and voice_guard.should_attempt_voiceprint(
+                self.speaker_resolver is not None, self._enrolled_speakers):
             try:
                 emb = self.speaker.embed(segment)
-                self.last_speaker_embedding = emb
-                if self.speaker_resolver is not None:
-                    label = self.speaker_resolver(emb) or ""
+                label = self.speaker_resolver(emb) or ""
+                if voice_guard.retain_voiceprint(label, self._enrolled_speakers):
+                    self.last_speaker_embedding = emb
             except Exception as exc:
                 if self._health() is not None:
                     self._health().record_failure("asr", exc)

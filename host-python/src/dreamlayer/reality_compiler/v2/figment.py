@@ -220,11 +220,16 @@ class GlyphSpec:
 
     @staticmethod
     def from_dict(d: dict) -> "GlyphSpec":
-        return GlyphSpec(
-            [(float(p[0]), float(p[1])) for p in d.get("points", [])],
-            d.get("color", "accent_attention"),
-            d.get("width", "md"),
-        )
+        pts = d.get("points", [])
+        if not isinstance(pts, (list, tuple)):
+            raise ValueError("glyph 'points' must be a list of [x, y] pairs")
+        out: list[tuple[float, float]] = []
+        for p in pts:
+            if not isinstance(p, (list, tuple)) or len(p) < 2:
+                raise ValueError(f"glyph point must be [x, y], got {p!r}")
+            out.append((float(p[0]), float(p[1])))
+        return GlyphSpec(out, d.get("color", "accent_attention"),
+                         d.get("width", "md"))
 
 
 @dataclass
@@ -351,11 +356,15 @@ class Scene:
     @staticmethod
     def from_dict(d: dict) -> "Scene":
         rng = d.get("duration_range")
+        if rng is not None:
+            if not isinstance(rng, (list, tuple)) or len(rng) < 2:
+                raise ValueError(f"duration_range must be [lo, hi], got {rng!r}")
+            rng = (float(rng[0]), float(rng[1]))
         return Scene(
             id=d["id"],
             lines=[TextLine.from_dict(x) for x in d.get("lines", [])],
             duration_sec=d.get("duration_sec"),
-            duration_range=(rng[0], rng[1]) if rng else None,
+            duration_range=rng,
             tick=d.get("tick"),
             on_timeout=[Transition.from_dict(t) for t in d.get("on_timeout", [])],
             on={k: Transition.from_dict(v) for k, v in d.get("on", {}).items()},
@@ -414,19 +423,37 @@ class Figment:
 
     @staticmethod
     def from_dict(d: dict) -> "Figment":
-        f = Figment(
-            name=d["name"],
-            initial=d["initial"],
-            id=d["id"],
-            version=d.get("version", 2),
-            battery_below=d.get("battery_below"),
-            meta=d.get("meta", {}),
-        )
-        for sid, sd in d.get("scenes", {}).items():
-            f.scenes[sid] = Scene.from_dict(sd)
-        for name, cd in d.get("counters", {}).items():
-            f.counters[name] = CounterDecl.from_dict(cd)
-        return f
+        """Decode an UNTRUSTED dict into a Figment. This is the hardened boundary
+        for figment bytes arriving over HTTP import, BLE transport, and peer CRDT
+        sync: ANY structural malformation raises a single, catchable
+        :class:`FigmentError` — never a bare IndexError/AttributeError/TypeError
+        that would escape a caller's ``except`` and crash the surface (refute
+        2026-07-18: ``duration_range:[5]`` / ``points:[[1]]`` raised an uncaught
+        IndexError that slipped the CRDT-sync except tuple)."""
+        if not isinstance(d, dict):
+            raise FigmentError(f"figment must be an object, got {type(d).__name__}")
+        try:
+            f = Figment(
+                name=d["name"],
+                initial=d["initial"],
+                id=d["id"],
+                version=d.get("version", 2),
+                battery_below=d.get("battery_below"),
+                meta=d.get("meta", {}),
+            )
+            scenes = d.get("scenes", {})
+            counters = d.get("counters", {})
+            if not isinstance(scenes, dict) or not isinstance(counters, dict):
+                raise ValueError("'scenes' and 'counters' must be objects")
+            for sid, sd in scenes.items():
+                f.scenes[sid] = Scene.from_dict(sd)
+            for name, cd in counters.items():
+                f.counters[name] = CounterDecl.from_dict(cd)
+            return f
+        except FigmentError:
+            raise
+        except (KeyError, TypeError, ValueError, IndexError, AttributeError) as e:
+            raise FigmentError(f"malformed figment: {e}") from e
 
     def canonical_json(self) -> str:
         """Stable byte-for-byte form — the thing that gets signed."""
