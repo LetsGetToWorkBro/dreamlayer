@@ -58,6 +58,45 @@ def test_public_connect_is_blocked():
         s.close()
 
 
+def test_public_udp_sendto_is_blocked():
+    """An UNCONNECTED UDP socket egresses via sendto WITHOUT calling connect
+    (QUIC/DNS-over-UDP/exfil). The hook watches sendto too (refute 2026-07-18)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with pytest.raises(EgressError):
+            s.sendto(b"x", ("8.8.8.8", 53))
+    finally:
+        s.close()
+
+
+def test_public_udp_sendmsg_is_blocked():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with pytest.raises(EgressError):
+            s.sendmsg([b"x"], [], 0, ("1.1.1.1", 53))
+    finally:
+        s.close()
+
+
+def test_loopback_udp_sendto_is_allowed():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.sendto(b"x", ("127.0.0.1", 9))   # discard port; must NOT raise
+    finally:
+        s.close()
+
+
+def test_allowlist_covers_the_servers_lan_definition():
+    """H6: the harness allowlist must be a SUPERSET of the server's _LOCAL_NETS,
+    so anything the product treats as 'not egress' is likewise allowed here."""
+    from dreamlayer.ai_brain.server.backends import _LOCAL_NETS
+    from dreamlayer.tests.conftest import _ALLOWED_NETS
+    for net in _LOCAL_NETS:
+        # every server-LAN network is contained in some harness-allowed network
+        probe = net.network_address
+        assert any(probe in a for a in _ALLOWED_NETS), f"{net} not covered"
+
+
 def test_loopback_connect_is_allowed():
     """A real localhost round-trip must pass the guard untouched."""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

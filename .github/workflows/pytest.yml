@@ -62,31 +62,32 @@ jobs:
         # a standing proof that the whole suite reaches nothing but loopback/LAN
         # — the privacy claim, checked at the OS boundary, not by a self-counter.
         run: >
-          pytest --tb=short -m "not hardware and not benchmark and not real_model"
+          pytest --tb=short -m "not hardware and not benchmark and not real_model and not allow_egress"
           --cov=dreamlayer --cov-report=term-missing --cov-fail-under=85
 
-      - name: No-egress proof — OS boundary (empty network namespace)
-        # Belt-and-suspenders to the in-process audit hook: prove that even if
-        # someone deleted the hook, this box has no route off-device. `unshare
-        # -rn` maps our uid to root in a fresh user+network namespace (no sudo
-        # needed on GitHub-hosted ubuntu runners); an empty netns has only a
-        # down loopback and no default route, so a connect to a public host MUST
-        # fail at the kernel. The hook localizes WHICH test leaked; this proves
-        # the environment itself cannot leak. Non-fatal only if unshare is
-        # unavailable (some hardened runners) — then the hook still stands.
+      - name: No-egress proof — run network-sensitive tests in an empty netns
+        # Belt-and-suspenders to the in-process audit hook: run the actual
+        # network-touching tests where the box has NO route off-device, so even a
+        # deleted hook can't make egress succeed. `unshare -rn` maps our uid to
+        # root in a fresh user+network namespace (no sudo on GitHub ubuntu
+        # runners); we bring loopback up (localhost-binding tests need it) but
+        # there is no default route, so any public send fails at the kernel. This
+        # actually EXECUTES the suite (the prior version only self-tested unshare
+        # and never wrapped a single test — refute 2026-07-18). Non-fatal only if
+        # unshare is unavailable — then the in-process hook still stands.
         run: |
           if ! command -v unshare >/dev/null; then
             echo "unshare unavailable; relying on the in-process audit hook"; exit 0
           fi
-          unshare -rn python - <<'PY'
-          import socket, sys
-          s = socket.socket(); s.settimeout(3)
-          try:
-              s.connect(("1.1.1.1", 443))
-          except OSError as e:
-              print("egress correctly denied at the OS boundary:", e); sys.exit(0)
-          print("FAIL: a public connection SUCCEEDED in an empty netns"); sys.exit(1)
-          PY
+          unshare -rn bash -c '
+            ip link set lo up 2>/dev/null || true
+            pytest --tb=short -p no:cacheprovider \
+              src/dreamlayer/tests/test_no_egress.py \
+              src/dreamlayer/tests/test_activity_receipt.py \
+              src/dreamlayer/tests/test_capture_pipeline.py \
+              src/dreamlayer/tests/test_ai_brain_server.py \
+              src/dreamlayer/tests/test_primary_api_brain.py
+          '
 
   test-windows:
     # The Windows Brain is a shipping target (the tray app), so Windows
@@ -119,7 +120,7 @@ jobs:
 
       - name: Run pytest (appliance + ai_brain + indexer suites)
         run: >
-          pytest --tb=short -m "not hardware and not benchmark and not real_model"
+          pytest --tb=short -m "not hardware and not benchmark and not real_model and not allow_egress"
           src/dreamlayer/tests/test_windows_appliance.py
           src/dreamlayer/tests/test_windows_panel_window.py
           src/dreamlayer/tests/test_windows_sources.py
