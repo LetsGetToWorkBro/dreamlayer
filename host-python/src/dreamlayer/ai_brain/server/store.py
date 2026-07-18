@@ -651,17 +651,58 @@ class ActivityLog:
 
     def __init__(self, cfg_dir: Path | str, signer=None):
         self.path = Path(cfg_dir) / ACTIVITY_FILE
+        self._head_path = self.path.with_name(self.path.name + ".head")
         self._signer = signer
         self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
         self._next_seq = 0
         self._loaded = False
 
-    # -- the chain head (lazy: reconstructed from the file once) --------------
+    # -- the signed head anchor (defeats tail truncation) ---------------------
+    # A hash chain alone protects edits/reorders/mid-deletions, but NOTHING
+    # anchors its LENGTH: a valid prefix of a valid chain is itself a valid chain,
+    # so an attacker can chop the most-recent (incriminating) records and verify()
+    # would still pass (refute 2026-07-18). This separate, key-SIGNED checkpoint
+    # attests the current high-water mark {last_seq, head, count}; verify() checks
+    # the file's tail against it, so a truncation an attacker can't re-sign is
+    # caught. The owner (with the key) re-signs it on every add/prune/restore.
+    def _write_head(self) -> None:
+        if self._signer is None:
+            return
+        core = {"last_seq": self._next_seq - 1, "head": self._head_hash,
+                "count": self._next_seq}
+        doc = {**core, "sig": self._signer.sign(core)}
+        self._head_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._head_path.with_name(self._head_path.name + ".tmp")
+        tmp.write_text(json.dumps(doc))
+        os.replace(tmp, self._head_path)
+
+    def _read_head(self) -> Optional[dict]:
+        """The verified head anchor, or None (absent / unverifiable / no signer)."""
+        if self._signer is None or not self._head_path.exists():
+            return None
+        try:
+            doc = json.loads(self._head_path.read_text())
+            core = {"last_seq": doc["last_seq"], "head": doc["head"],
+                    "count": doc["count"]}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            return None
+        if not self._signer.verify(core, doc.get("sig", "")):
+            return None                        # a forged/edited anchor is no anchor
+        return core
+
+    # -- the chain head (lazy: from the SIGNED anchor, not attacker file state) --
     def _load_head(self) -> None:
         if self._loaded:
             return
         self._loaded = True
-        recs = self._read_all()
+        head = self._read_head()
+        if head is not None:
+            # trust the signed checkpoint, so a record an attacker APPENDED (with a
+            # bogus seq/prev to poison the next add) cannot redirect our chain.
+            self._next_seq = head["last_seq"] + 1
+            self._head_hash = head["head"]
+            return
+        recs = self._read_all()                # legacy / no anchor yet
         for rec in recs:
             if "seq" in rec and "prev" in rec:
                 self._next_seq = rec["seq"] + 1
@@ -684,6 +725,7 @@ class ActivityLog:
             self._next_seq += 1
         with self.path.open("a") as f:
             f.write(json.dumps(rec) + "\n")
+        self._write_head()                     # advance the signed high-water mark
 
     def _read_all(self) -> list[dict]:
         """All records, oldest-first (file order)."""
@@ -714,9 +756,11 @@ class ActivityLog:
             return {"ok": False, "records": len(recs), "signed": 0, "unsigned": len(recs),
                     "first_broken": None, "pubkey": pub,
                     "reason": "no Ed25519 receipt key (install the 'privacy' extra)"}
-        expected_prev = ""
+        expected_prev: Optional[str] = ""
         signed = unsigned = 0
         first_broken = None
+        last_seq_seen = -1
+        running_head = ""
         for i, rec in enumerate(recs):
             if "sig" not in rec or "seq" not in rec or "prev" not in rec:
                 unsigned += 1
@@ -733,10 +777,32 @@ class ActivityLog:
                 first_broken = first_broken if first_broken is not None else rec.get("seq", i)
             else:
                 signed += 1
+                last_seq_seen = rec["seq"]
             expected_prev = _receipt_hash(core)
+            running_head = expected_prev
         ok = first_broken is None and unsigned == 0 and signed == len(recs)
-        return {"ok": ok, "records": len(recs), "signed": signed, "unsigned": unsigned,
-                "first_broken": first_broken, "pubkey": pub}
+        out = {"ok": ok, "records": len(recs), "signed": signed, "unsigned": unsigned,
+               "first_broken": first_broken, "pubkey": pub}
+        # Tail-truncation check against the signed head anchor. An attacker who
+        # chops recent records can't re-sign the checkpoint, so a stale
+        # last_seq/count/head betrays the cut.
+        head = self._read_head()
+        if head is not None:
+            if head["last_seq"] > last_seq_seen or head["count"] > signed \
+                    or (ok and running_head != head["head"]):
+                out["ok"] = False
+                out["truncated"] = True
+                if out["first_broken"] is None:
+                    out["first_broken"] = last_seq_seen + 1     # first missing seq
+                out["reason"] = (f"tail truncated: anchor attests {head['count']} "
+                                 f"records up to seq {head['last_seq']}, file has "
+                                 f"{signed} up to seq {last_seq_seen}")
+        elif signed > 0:
+            # a signed log with NO valid anchor: the anchor was deleted (or a
+            # pre-anchor legacy log). Fail-safe — report it rather than pass.
+            out["ok"] = False
+            out["reason"] = "signed log has no valid head anchor (deleted or legacy)"
+        return out
 
     def receipt(self, n: int = 2000) -> dict:
         """A portable, third-party-verifiable proof of what the Brain did: the
@@ -745,7 +811,12 @@ class ActivityLog:
         recs = self._read_all()[-n:]
         return {"pubkey": getattr(self._signer, "public_key_hex", "") if self._signer else "",
                 "algorithm": "ed25519-sha256-chain",
-                "records": recs, "verification": self.verify()}
+                "records": recs,
+                # the signed high-water mark, so a third party given only the last
+                # `n` records can still detect a truncated tail (records may start
+                # mid-chain, but head.last_seq/count attest the true length).
+                "head": self._read_head(),
+                "verification": self.verify()}
 
     # -- owner edits: re-chain the survivors so the receipt stays consistent ---
     def _rechain(self, recs: list[dict]) -> None:
@@ -768,10 +839,13 @@ class ActivityLog:
                     seq += 1
                 f.write(json.dumps(rec) + "\n")
         self._head_hash, self._next_seq, self._loaded = prev, seq, True
+        self._write_head()                     # re-attest the new (owner-signed) head
 
     def clear(self) -> None:
         if self.path.exists():
             self.path.unlink()
+        if self._head_path.exists():
+            self._head_path.unlink()           # drop the anchor with the log
         self._head_hash, self._next_seq, self._loaded = "", 0, True
 
     def prune(self, days: int) -> int:

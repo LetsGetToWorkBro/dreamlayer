@@ -90,6 +90,59 @@ def test_deleting_a_middle_record_breaks_the_chain(tmp_path):
     assert v["first_broken"] is not None    # the prev-link no longer matches
 
 
+def test_tail_truncation_is_detected(tmp_path):
+    """The critical one (refute 2026-07-18): a hash chain has no length anchor, so
+    chopping the most-recent (incriminating) records leaves a still-valid prefix.
+    The signed head anchor attests the true high-water mark, so a truncation the
+    attacker can't re-sign is caught."""
+    log, _ = _log(tmp_path)
+    for i in range(5):
+        log.add("cloud", f"event {i}", ts=float(i))
+    assert log.verify()["ok"] is True
+    # attacker chops the last two records (e.g. "sent N bytes to cloud")
+    lines = log.path.read_text().splitlines()
+    log.path.write_text("\n".join(lines[:3]) + "\n")
+
+    v = log.verify()
+    assert v["ok"] is False
+    assert v.get("truncated") is True
+    assert v["first_broken"] == 3          # first missing seq
+
+
+def test_truncate_then_continue_is_still_detected(tmp_path):
+    """The seamless-continuation attack: chop the tail, then keep logging. The new
+    record chains onto the anchor's head (the deleted record), so the broken link
+    still betrays the cut."""
+    log, _ = _log(tmp_path)
+    for i in range(5):
+        log.add("k", f"e{i}", ts=float(i))
+    lines = log.path.read_text().splitlines()
+    log.path.write_text("\n".join(lines[:3]) + "\n")     # truncate to seq 0..2
+    reopened = ActivityLog(tmp_path, signer=activity_receipt_signer(tmp_path))
+    reopened.add("k", "post-truncation", ts=99.0)
+    assert reopened.verify()["ok"] is False
+
+
+def test_deleting_the_head_anchor_is_flagged(tmp_path):
+    """A signed log whose head anchor was deleted is unverifiable, not 'clean' —
+    an attacker can't hide a truncation by also removing the anchor."""
+    log, _ = _log(tmp_path)
+    log.add("k", "one", ts=1.0)
+    (tmp_path / "brain_activity.jsonl.head").unlink()
+    v = log.verify()
+    assert v["ok"] is False
+    assert "anchor" in v.get("reason", "")
+
+
+def test_receipt_carries_the_signed_head(tmp_path):
+    log, _ = _log(tmp_path)
+    for i in range(3):
+        log.add("k", f"e{i}", ts=float(i))
+    r = log.receipt()
+    assert r["head"] is not None
+    assert r["head"]["last_seq"] == 2 and r["head"]["count"] == 3
+
+
 def test_reordering_records_is_detected(tmp_path):
     log, _ = _log(tmp_path)
     log.add("k", "first", ts=1.0)
