@@ -86,6 +86,12 @@ class MLXBackend:
         # back to its vision tier.
         return ""
 
+    def describe(self, prompt, image_b64) -> str:
+        # same posture as .vision: the MLX *text* backend does not read images —
+        # the World Lens recognizer's own classifier ladder (mlx-vlm) does. Return
+        # "" so the recognizer falls back to its dependency-free heuristic.
+        return ""
+
     def embed(self, text: str) -> list:
         # embeddings run through the embedder ladder (Local/Static/Hashing);
         # the MLX text backend does not serve them.
