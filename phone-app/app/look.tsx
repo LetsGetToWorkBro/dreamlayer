@@ -128,12 +128,19 @@ function LiveLook() {
       play(res.ok ? "success" : "warn");
       // expo-camera ALWAYS writes the JPEG to the app cache; we only ever use the
       // in-memory base64, so delete the on-disk copy — a captured frame must not
-      // linger in the cache after the look (refute 2026-07-18). Best-effort:
-      // fire-and-forget, cleanup failure must never affect the result.
+      // linger in the cache after the look (refute 2026-07-18). Best-effort, and
+      // fully isolated: the .catch swallows the ASYNC rejection, and this inner
+      // try/catch swallows a SYNCHRONOUS throw (native module absent / wrong API
+      // surface) so cleanup can never fall through to the outer catch and
+      // overwrite the successful panel we just set (refute 2026-07-18).
       if (photo?.uri) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const FileSystem = require("expo-file-system/legacy");
-        FileSystem.deleteAsync(photo.uri, { idempotent: true }).catch(() => {});
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const FileSystem = require("expo-file-system/legacy");
+          FileSystem.deleteAsync(photo.uri, { idempotent: true }).catch(() => {});
+        } catch {
+          /* cleanup is best-effort; a successful look must still report success */
+        }
       }
     } catch {
       setPanel({ ok: false, rows: [], sources: [], reason: t("look.captureFailed") });

@@ -144,6 +144,28 @@ def test_named_stranger_is_deferred_not_identified():
     assert host.look(_noise_frame()) is None
 
 
+def test_all_caps_and_mixed_case_names_defer_like_title_case():
+    # A nametag/badge is normally ALL-CAPS ("MAYA CHEN"); a Title-Case-ONLY shape
+    # rule matched neither token and let the identity walk onto the glass in the
+    # default, no-Presidio config (refute 2026-07-18). Case is not an escape hatch.
+    from dreamlayer.object_lens.recognizer import (
+        _names_a_person, _looks_like_a_personal_name)
+    assert _looks_like_a_personal_name("MAYA CHEN") is True     # all-caps badge
+    assert _names_a_person("MAYA CHEN") is True
+    assert _names_a_person("TAYLOR SWIFT") is True
+    assert _names_a_person("John SMITH") is True                # mixed per-token
+    # lowercase category-noun OBJECTS still pass — open-vocab recognition holds
+    assert _names_a_person("almond milk") is False
+    assert _names_a_person("espresso machine") is False
+    assert _looks_like_a_personal_name("usb cable") is False
+    # a single mixed-case brand word does not trip the 2-token threshold
+    assert _looks_like_a_personal_name("ThinkPad") is False
+    # end-to-end image route: an ALL-CAPS name yields NO panel (REVERT-FAILING)
+    host = WorldLensHost(_FakeBrain(backend=_FakeBackend(
+        describe_reply='{"label":"MAYA CHEN","confidence":0.97}')))
+    assert host.look(_noise_frame()) is None
+
+
 def test_clean_attrs_strips_contact_pii():
     # an object's brand/text must not smuggle a name + contact detail onto the
     # panel (the lanyard/nametag scenario) (refute 2026-07-18).
@@ -253,6 +275,23 @@ class TestPersonGuardLayers:
             backend=_FakeBackend(describe_reply='{"label":"mug","confidence":0.8}')))
         panel = host.look(_noise_frame())
         assert panel is not None and panel.sighting.label == "mug"
+
+    def test_label_route_applies_the_same_layered_person_defence(self):
+        # The /brain/look LABEL route (look_sighting) is a sibling call-site that
+        # previously ran ONLY the deterministic check, so a lone given name that
+        # only Presidio catches was panelled straight through (refute 2026-07-18).
+        # It must route through the SAME primitive as the image route.
+        from dreamlayer.object_lens import person_guard
+        person_guard._analyzer_override = lambda t: (
+            [("PERSON", 0.9)] if "maya" in t.lower() else [])
+        host = WorldLensHost(_FakeBrain())
+        # "Maya" is a single Title-Case token: the deterministic guard returns
+        # False, only the Presidio layer defers it. REVERT-FAILING for the
+        # look_sighting wiring.
+        assert person_guard.defers_person("Maya") is True
+        assert host.look_sighting(ObjectSighting(label="Maya", confidence=0.9)) is None
+        # an object is not a person — the guard lets it through, recognition holds
+        assert person_guard.defers_person("mug") is False
 
 
 def test_remote_vision_backend_is_gated_and_counted():

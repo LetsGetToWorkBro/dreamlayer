@@ -74,21 +74,43 @@ jobs:
           set -euo pipefail
           mkdir -p signing && cd signing
 
-          # Pull just the installable binaries off the release. `|| true` so an
-          # absent pattern (e.g. a macOS-only release with no .exe) is not fatal.
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern "*.dmg" --pattern "*.exe" --pattern "*.zip" || true
+          # Enumerate the signable assets that ACTUALLY exist on the release, from
+          # its metadata, BEFORE downloading. This is what lets us tell "the
+          # release genuinely has none" (fine → exit 0) apart from "the download
+          # failed" (a real error). The old code used `gh release download … ||
+          # true`, which swallowed an auth/network/rate-limit failure: on a
+          # release that DID carry a .dmg/.exe/.zip, the array came back empty and
+          # the job went GREEN having produced zero signatures (refute 2026-07-18,
+          # false CI assurance). A metadata failure here is fatal (set -e on the
+          # command substitution), not silently treated as "nothing to sign".
+          assets_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
+          mapfile -t want < <(printf '%s' "$assets_json" \
+            | jq -r '.assets[].name | select(test("\\.(dmg|exe|zip)$"))')
 
-          shopt -s nullglob
-          assets=( *.dmg *.exe *.zip )
-          if [ ${#assets[@]} -eq 0 ]; then
+          if [ "${#want[@]}" -eq 0 ]; then
             echo "No signable assets (.dmg/.exe/.zip) on release $TAG — nothing to sign."
             exit 0
           fi
+          echo "Signable assets on $TAG: ${want[*]}"
+
+          # Download exactly those assets. NO `|| true`: a failure here is real and
+          # must fail the job rather than green a run that signed nothing.
+          for name in "${want[@]}"; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name"
+          done
+
+          # Belt-and-suspenders: refuse to report success unless every expected
+          # asset is on disk to be signed.
+          for name in "${want[@]}"; do
+            if [ ! -f "$name" ]; then
+              echo "::error::expected release asset '$name' did not download — refusing to green a run that signed nothing."
+              exit 1
+            fi
+          done
 
           # Keyless sign-blob: --yes accepts the ephemeral-key/Rekor prompt; the
           # bundle sidecar holds signature + cert + transparency proof.
-          for asset in "${assets[@]}"; do
+          for asset in "${want[@]}"; do
             echo "::group::cosign sign-blob $asset"
             cosign sign-blob --yes "$asset" --bundle "${asset}.cosign.bundle"
             echo "::endgroup::"
@@ -96,4 +118,4 @@ jobs:
 
           # Attach the sidecars to the same Release. --clobber makes a re-run
           # (or a manual dispatch over an already-signed release) idempotent.
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber *.cosign.bundle
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber ./*.cosign.bundle
