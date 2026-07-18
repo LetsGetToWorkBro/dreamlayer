@@ -794,6 +794,61 @@ def cmd_setup_models(args) -> int:
     return 1
 
 
+def cmd_models_verify(args) -> int:
+    """Check on-disk ML weights against the models.lock sha256 pins — the
+    supply-chain integrity gate for the Brain's models (RCE-carrying pickle
+    weights ship straight past every source scanner)."""
+    from dreamlayer import model_guard
+    lock = model_guard.load_lock()
+    models = model_guard.known_models(lock)
+    if not models:
+        _p(f"{BAD} no models.lock found (or it is empty)")
+        return 1
+    root = args.root
+    if root is None:
+        _p(f"{ARROW} {len(models)} model(s) declared in models.lock:")
+        pinned = 0
+        for mid, entry in models.items():
+            has = bool((entry.get("files") if isinstance(entry, dict) else None)
+                       or (isinstance(entry, dict) and entry.get("sha256")))
+            pinned += 1 if has else 0
+            _p(f"  {'✓ pinned ' if has else '· unpinned'}  {mid}  ({entry.get('source', '?')})")
+        _p(f"  {pinned}/{len(models)} pinned. Pass --root <dir> to verify downloaded weights.")
+        return 0
+    results = model_guard.verify_all(root, lock)
+    failures = [r for r in results if r["ok"] is False]
+    if getattr(args, "json", False):
+        import json as _json
+        _p(_json.dumps(results, indent=2))
+    else:
+        for r in results:
+            state = ("FAIL" if r["ok"] is False else
+                     "ok" if r["ok"] else "unpinned")
+            line = f"  [{state}] {r['model']}"
+            if r["error"]:
+                line += f" — {r['error']}"
+            _p(line)
+    if failures:
+        _p(f"{BAD} {len(failures)} model(s) FAILED integrity verification")
+        return 1
+    _p(f"{OK} no integrity failures")
+    return 0
+
+
+def cmd_models_pin(args) -> int:
+    """Hash a downloaded model file so its sha256 can be pinned in models.lock.
+    Run this once on a clean, trusted box after `setup models`."""
+    from dreamlayer import model_guard
+    try:
+        digest = model_guard.sha256_file(args.path)
+    except OSError as exc:
+        _p(f"{BAD} cannot read {args.path}: {exc}")
+        return 1
+    _p(f"{OK} sha256({args.path}) = {digest}")
+    _p("  paste into models.lock under the model's \"files\" as {\"<relpath>\": \"<sha256>\"}")
+    return 0
+
+
 # --- parser ------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -961,6 +1016,18 @@ def build_parser() -> argparse.ArgumentParser:
                          help="spaCy model (default: en_core_web_sm; "
                               "use en_core_web_lg for higher-accuracy NER)")
     smodels.set_defaults(func=cmd_setup_models)
+
+    # models — ML-weight supply-chain integrity (model_guard / models.lock)
+    models = groups.add_parser("models", help="verify / pin ML-weight integrity (models.lock)")
+    msub = models.add_subparsers(dest="cmd")
+    mverify = msub.add_parser("verify", help="check on-disk model weights against the models.lock sha256 pins")
+    mverify.add_argument("--root", default=None,
+                         help="models root dir (each pinned model in a <root>/<model_id> subdir)")
+    mverify.add_argument("--json", action="store_true", help="machine-readable output")
+    mverify.set_defaults(func=cmd_models_verify)
+    mpin = msub.add_parser("pin", help="compute the sha256 of a downloaded model file (to paste into models.lock)")
+    mpin.add_argument("path", help="a model weight file to hash")
+    mpin.set_defaults(func=cmd_models_pin)
 
     return parser
 

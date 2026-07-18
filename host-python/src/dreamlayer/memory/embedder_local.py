@@ -50,6 +50,14 @@ class LocalEmbeddingProvider(EmbeddingProvider):
         if not _HAS_ST:
             log.warning("[embedder_local] sentence-transformers not installed; using mock")
             return None
+        # Honour the wearer's posture even when this provider is used outside the
+        # Brain server: offline/incognito → HF_HUB_OFFLINE so the first load can
+        # only come from cache, never a silent CDN reach (A1 model-fetch gate).
+        try:
+            from .. import model_guard
+            model_guard.apply_offline_posture(self._config)
+        except Exception:                            # pragma: no cover - defensive
+            pass
         try:
             self._model = SentenceTransformer(self._model_name)
         except Exception as exc:  # model download / load failure

@@ -83,6 +83,7 @@ dreamlayer = [
     "ai_brain/server/assets/*.webp",
     "ai_brain/server/assets/*.png",
     "ai_brain/server/assets/*.woff2",
+    "models.lock",                    # model_guard sha256 pins (ship with the wheel)
     "py.typed",                       # PEP 561: ship inline types to SDK consumers
 ]
 

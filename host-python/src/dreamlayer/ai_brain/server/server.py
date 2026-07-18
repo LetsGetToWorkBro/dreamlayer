@@ -196,6 +196,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # (audit 2026-07-17). Touch the counter only via ``bump_cloud_calls``.
         self._egress_lock = threading.Lock()
         self.config = BrainConfig.load(self.cfg_dir)
+        # Model supply-chain gate: when the wearer's posture is offline/incognito/
+        # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
+        # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
+        # HuggingFace-stack loader at once; re-applied on posture change via
+        # _apply_model_posture(). Fail-safe: never raises, never blocks a load.
+        self._apply_model_posture()
         self.history = QueryHistory(self.cfg_dir)
         self.activity = ActivityLog(
             self.cfg_dir, signer=activity_receipt_signer(self.cfg_dir))
@@ -504,6 +510,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 setattr(self.config, k, updates[k])
         self._wire_model()
         self.save()
+        # A posture change (network_mode / quiet_hours) re-arms the model fetch
+        # gate: flip to lan_only and HF_HUB_OFFLINE goes on before the next load.
+        if {"network_mode", "quiet_hours"} & set(updates):
+            self._apply_model_posture()
         # turning a sync on (or changing its filter) → pull immediately
         try:
             if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
@@ -526,6 +536,16 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
         from .store import in_quiet_hours
         return self.config.lan_only or in_quiet_hours(self.config.quiet_hours)
+
+    def _apply_model_posture(self) -> None:
+        """Set the process-wide HF offline flags to match the wearer's posture,
+        so ML loaders can't reach a CDN while offline/incognito. Fail-safe:
+        model_guard is optional and this never raises into the caller."""
+        try:
+            from ... import model_guard
+            model_guard.apply_offline_posture(self)
+        except Exception as exc:                    # pragma: no cover - defensive
+            log.debug("[brain] model posture gate skipped: %s", exc)
 
     def missing_folders(self) -> list:
         return [f for f in self.config.folders
