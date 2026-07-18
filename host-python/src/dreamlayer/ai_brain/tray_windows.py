@@ -249,7 +249,11 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         return _authed_api(port, auth, path, method, body)
 
     def refresh(icon):
-        st = fetch_status(port, _token())
+        # Route the passive poll through the auth-aware fetch_status: a 401/403
+        # invalidates the cache so the NEXT tick re-reads a rotated token from
+        # config and the dot self-heals — no user action needed (same contract
+        # as the macOS menu bar; fetch_status is the shared helper).
+        st = fetch_status(port, _token(), auth=auth)
         state["summary"] = status_summary(st)
         state["incognito"] = bool((st or {}).get("incognito"))
         icon.icon = _dot_image(dot_color(state["summary"]))

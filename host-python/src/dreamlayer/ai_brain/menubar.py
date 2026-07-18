@@ -319,14 +319,38 @@ def uninstall_launch_agent(label: str = AGENT_LABEL) -> bool:
 # Live status fetch (used by the GUI)
 # ---------------------------------------------------------------------------
 
-def fetch_status(port: int = DEFAULT_PORT, token: str = "") -> dict | None:
+def fetch_status(port: int = DEFAULT_PORT, token: str = "",
+                 auth: "_TokenCache | None" = None, opener=None) -> dict | None:
+    """Poll ``/dreamlayer/status`` over loopback for the status dot.
+
+    Failure returns ``None`` → a grey/offline dot, so a genuine outage still
+    degrades cleanly. But this passive poll is the ONLY thing driving the dot on
+    the 15s refresh tick, and ``_authed_api`` (the invalidating path) is reached
+    only from user actions (Sync now / Incognito). So without touching the cache
+    HERE, a mid-session token ROTATION strands the dot grey forever: the tick
+    keeps re-sending the stale cached token and nothing ever invalidates it.
+
+    When an ``auth`` cache is supplied, a 401/403 invalidates it (see
+    ``_TokenCache.invalidate``) so the NEXT tick re-reads the rotated token from
+    brain_config.json and the dot self-heals — no user action, no restart. The
+    clear happens ONCE per failed poll (not a spin): a still-wrong token simply
+    clears again on its next failed response while the 15s tick retries.
+    ``opener`` is an injectable seam for tests."""
     url = f"http://127.0.0.1:{port}/dreamlayer/status"
-    headers = {"X-DreamLayer-Token": token} if token else {}
-    try:
+    tok = token or (auth.get() if auth is not None else "")
+    headers = {"X-DreamLayer-Token": tok} if tok else {}
+    if opener is None:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers=headers)
+    try:
         with opener.open(req, timeout=3) as r:
             return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # Auth failure on the PASSIVE path: invalidate so the next tick re-reads
+        # the rotated token. Still return None → grey dot for this one tick.
+        if exc.code in (401, 403) and auth is not None:
+            auth.invalidate()
+        return None
     except Exception:
         return None
 
@@ -486,7 +510,10 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             return _authed_api(port, auth, path, method, body)
 
         def refresh(self, _):
-            st = fetch_status(port, _token())       # fetch ONCE per tick (was twice)
+            # Route the passive poll through the auth-aware fetch_status: a
+            # 401/403 invalidates the cache so the NEXT tick re-reads a rotated
+            # token from config and the dot self-heals — no user action needed.
+            st = fetch_status(port, _token(), auth=auth)  # fetch ONCE per tick
             s = status_summary(st)
             self.title = s["icon"]
             # Show every status line — Status/Model/Cloud/Indexed (+Phone) — not

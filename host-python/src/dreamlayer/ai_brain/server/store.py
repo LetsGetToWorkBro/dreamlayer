@@ -477,13 +477,6 @@ class BrainConfig:
         d.mkdir(parents=True, exist_ok=True)
         _reap_stale_tmps(d)   # sweep crash-orphaned unique temps (age-gated)
         target = d / CONFIG_FILE
-        # Whether we're creating the config for the first time. The owner-only
-        # Windows ACL is set once, on create, and persists across the atomic
-        # in-place replaces below — so this gates _harden_windows_acl to skip
-        # the icacls subprocess + token lookup on every UNCHANGED re-save (a
-        # folder-add / config-patch / pairing all re-save, and that per-save
-        # Windows latency is what item 3 removes). Captured before the replace.
-        newly_created = not target.exists()
         # This file holds the pairing token AND the provider API keys
         # (cloud_api_key/api_key) in clear, so it must never be group/world
         # readable. write_text lands at the umask default (0o644 on POSIX),
@@ -516,11 +509,18 @@ class BrainConfig:
             os.chmod(target, 0o600)         # re-assert after the atomic swap
         except OSError:
             pass
-        if newly_created:
-            # Windows ACL; no-op on POSIX. Only on create — the owner-only DACL
-            # persists across in-place replaces, so re-shelling icacls on every
-            # unchanged save would be pure latency (item 3).
-            _harden_windows_acl(str(target))
+        # Windows ACL; no-op on POSIX. Re-applied on EVERY save, unconditionally:
+        # save() writes a fresh tempfile.mkstemp temp and os.replace()s it onto
+        # target (MoveFileExW on Windows), which makes the temp BECOME the target
+        # — and that temp carries only the directory-INHERITED ACL, not the
+        # explicit owner-only DACL. So os.replace/MoveFileEx DISCARDS the
+        # destination DACL every save; the owner-only ACL must be re-applied each
+        # time or the very next save (e.g. pairing writing the token) leaves the
+        # config at its inherited-profile baseline. Config saves are infrequent
+        # (pairing, folder add/remove, incognito toggle, config patches), not a
+        # hot path, so the per-save icacls + token lookup is acceptable
+        # (refute 2026-07-17: a create-only gate silently un-hardened the file).
+        _harden_windows_acl(str(target))
 
     def public(self) -> dict:
         """Config for the panel — never leaks the token or any provider key."""

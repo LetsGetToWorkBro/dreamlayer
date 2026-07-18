@@ -14,14 +14,52 @@ Use it for visual regression: render, then assert against a committed golden
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Extension surfaces the real load path always grants (see
 # ``plugins/validate.py`` ``smoke_load``): a plugin may reach
 # object_lens/glance/cards without a per-device capability grant. The preview
 # mirrors that set so a declared-capabilities preview matches the smoke-load
 # contract exactly.
+#
+# NOTE (drift): ``plugins/validate.py`` ``smoke_load`` hard-codes this same
+# trio as an inline literal ``{"object_lens", "glance", "cards"}``. The two are
+# kept in sync by hand — they can't share this constant without a circular
+# import (validate imports the SDK surface). If you change the set here, change
+# it there too.
 _ALWAYS_AVAILABLE = frozenset({"object_lens", "glance", "cards"})
+
+
+def _as_caps(requires) -> frozenset:
+    """Normalize a plugin's declared ``requires`` into a clean frozenset of
+    capability strings, defensively.
+
+    ``.requires`` / ``manifest.requires`` is author-supplied and can arrive in
+    shapes that would corrupt a naive ``frozenset(requires)``:
+
+      * ``None`` (no requires declared) → ``frozenset()`` — a naive
+        ``frozenset(None)`` raises ``TypeError`` and crashes the preview.
+      * a bare ``str`` (e.g. ``"network"``) → ``frozenset({"network"})`` — a
+        naive ``frozenset("network")`` splats to per-character garbage caps
+        ``{'n', 'e', 't', ...}`` that match no real gate.
+      * a ``tuple``/``list``/``set``/``frozenset`` → its string elements.
+      * anything else → ``frozenset()`` (ignored, logged at debug).
+
+    This only ever *narrows* what was declared — it never invents a capability
+    — so ``_resolve``'s security property (``declared | _ALWAYS_AVAILABLE``,
+    never ``KNOWN_CAPABILITIES``, never an escalation) is preserved."""
+    if requires is None:
+        return frozenset()
+    if isinstance(requires, str):
+        return frozenset({requires})
+    if isinstance(requires, (tuple, list, set, frozenset)):
+        return frozenset(c for c in requires if isinstance(c, str))
+    logger.debug("ignoring malformed plugin 'requires' of type %s: %r",
+                 type(requires).__name__, requires)
+    return frozenset()
 
 
 def _resolve(plugin):
@@ -44,11 +82,11 @@ def _resolve(plugin):
     from ..plugins.store import load_plugin_object
     if isinstance(plugin, PluginPackage):
         obj = load_plugin_object(plugin)
-        declared = plugin.manifest.requires
+        declared = _as_caps(plugin.manifest.requires)
     else:
         obj = plugin() if callable(plugin) and not hasattr(plugin, "register") else plugin
-        declared = getattr(obj, "requires", ())
-    return obj, frozenset(declared) | _ALWAYS_AVAILABLE
+        declared = _as_caps(getattr(obj, "requires", ()))
+    return obj, declared | _ALWAYS_AVAILABLE
 
 
 def registered_card_types(plugin) -> list:

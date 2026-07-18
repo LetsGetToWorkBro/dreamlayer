@@ -26,6 +26,23 @@ person names — which are carved out in ``_GUARD_GENERIC``. Person-name FIELDS
 (``user_name``, ``contact_name``, ``display_name``, ``nickname``, ``username``,
 ``full_name``) are NOT carved out and still trip, as do ``reply``/``transcript``/
 ``email``/``token``/``secret``/``password``/``embedding``/``api_key`` etc.
+
+Recognition is by logging METHOD NAME (``debug``/``info``/``warning``/``warn``/
+``error``/``exception``/``critical``/``fatal``/``log``) on ANY receiver, NOT by
+the receiver's name. Keying on the (distinctive) method name rather than a fixed
+set of receiver names is what lets the guard catch not just ``log.info(...)`` but
+the inline ``logging.getLogger(__name__).info(...)`` idiom that already ships in
+the tree (menubar/simulator), and aliased loggers (``LOG``/``root``/``audit``/
+``self.log2`` …) — all of which the old receiver-name set silently missed, letting
+a real leak through. ``log(level, msg, …)`` carries the level first, so its
+message is the SECOND positional arg (handled by the ``msg_idx`` offset).
+
+Residual limits — the honest scope of a static, name-based guard: there is NO
+dataflow analysis. A sensitive value copied into a benign-named local
+(``s = reply; log.info(s)``) or returned from a non-sensitively-named call
+(``log.info(fetch())``) is not tracked and will not trip. The guard reasons only
+about the identifiers written at the call site, catching the interpolation idioms
+that actually occur here — not every conceivable laundering path.
 """
 from __future__ import annotations
 
@@ -35,13 +52,13 @@ from pathlib import Path
 import dreamlayer
 from dreamlayer.logging_setup import _SENSITIVE_ROOTS, _is_sensitive
 
-# The logging emit methods (Logger + the ``logging`` module helpers). ``log``
+# The logging emit methods (Logger + the ``logging`` module helpers). Recognition
+# keys on THESE method names — they are distinctive enough to identify a logging
+# call on any receiver, so no receiver-name allowlist is needed (that allowlist
+# was the completeness gap: it missed inline getLogger + aliased loggers). ``log``
 # alone takes a leading level arg, so its message is the SECOND positional.
 _LOG_METHODS = {"debug", "info", "warning", "warn", "error", "exception",
                 "critical", "fatal", "log"}
-# Receiver names we treat as a logger: the module convention is
-# ``log = logging.getLogger(...)``; also ``logger``/``logging`` and self-attrs.
-_LOG_RECEIVERS = {"log", "logger", "logging", "_log", "_logger"}
 
 # Generic CODE identifiers that match a sensitive root only by loose substring
 # (chiefly the "name" root: __name__/filename/hostname/classname…) and never
@@ -81,18 +98,19 @@ def _sensitive_identifiers(node: ast.AST) -> set[str]:
 
 
 def _is_log_call(call: ast.Call) -> str | None:
-    """The method name if ``call`` is a ``log``/``logger``/``logging`` emit, else
-    None. Matches ``log.info(...)``, ``self.logger.error(...)``, ``logging.warning``."""
+    """The method name if ``call`` is a logging emit, else None. Recognition is by
+    METHOD NAME on ANY receiver — a bare/aliased logger (``log``/``LOG``/``logger``/
+    ``root``/``audit`` …), a ``self``-attr (``self.logger``/``self.log2``), or an
+    inline ``logging.getLogger(...)``/``getLogger(...)`` Call chain. Keying on the
+    (distinctive) method name rather than the receiver's name is what closes the
+    inline-getLogger / aliased-logger gap the old ``_LOG_RECEIVERS`` set left open;
+    the message argument is still checked for sensitive interpolation downstream, so
+    the rare non-logging ``.info``/``.log`` (e.g. rerun's ``rr.log``) only matters if
+    it interpolates a sensitive-named value, which it does not in this tree."""
     f = call.func
-    if not isinstance(f, ast.Attribute) or f.attr not in _LOG_METHODS:
-        return None
-    recv = f.value
-    names: set[str] = set()
-    if isinstance(recv, ast.Name):
-        names.add(recv.id)
-    elif isinstance(recv, ast.Attribute):
-        names.add(recv.attr)           # self.logger -> "logger"
-    return f.attr if names & _LOG_RECEIVERS else None
+    if isinstance(f, ast.Attribute) and f.attr in _LOG_METHODS:
+        return f.attr
+    return None
 
 
 def _interpolated_leaks(msg: ast.expr, fmt_args: list[ast.expr]) -> set[str]:
@@ -189,6 +207,36 @@ def test_scanner_catches_percent_format_and_format_call():
            'def f(transcript):\n    log.error("t={}".format(transcript))\n')
     assert _scan_source(binop, "a.py"), "%-format PII leak not caught"
     assert _scan_source(fmt, "b.py"), ".format() PII leak not caught"
+
+
+def test_scanner_catches_inline_getlogger_leak():
+    # THE gap this fix closes: the receiver is an inline getLogger() Call, so the
+    # old receiver-name recognition never fired and this leak shipped. This idiom
+    # already exists in the tree (menubar.py/simulator). Now caught by method name.
+    inline = ('import logging\n'
+              'def f(email):\n'
+              '    logging.getLogger("x").info(f"{email}")\n')
+    bare = ('from logging import getLogger\n'
+            'def f(transcript):\n'
+            '    getLogger("x").warning("t=%s", transcript)\n')
+    assert _scan_source(inline, "inline.py"), "inline getLogger leak not caught"
+    assert _scan_source(bare, "bare.py"), "bare getLogger leak not caught"
+
+
+def test_scanner_catches_aliased_logger_leak():
+    # Aliased / non-conventional receiver NAMES the old _LOG_RECEIVERS set missed
+    # (case-sensitive "log"/"logger"/… only): LOG, root, audit, self.log2. Now
+    # caught because recognition keys on the method name, not the receiver name.
+    cases = [
+        'def f(reply):\n    LOG.error(f"reply={reply}")',
+        'def f(email):\n    root.info("to=%s", email)',
+        'def f(transcript):\n    audit.warning(f"t={transcript}")',
+        'def f(self, user_name):\n    self.log2.info(f"user={user_name}")',
+        # log(level, msg, ...) on an aliased logger: message is the SECOND arg
+        'import logging\ndef f(email):\n    LOG.log(logging.INFO, f"to={email}")',
+    ]
+    for body in cases:
+        assert _scan_source(body + "\n", "aliased.py"), f"aliased leak not caught: {body!r}"
 
 
 def test_scanner_ignores_benign_interpolation():

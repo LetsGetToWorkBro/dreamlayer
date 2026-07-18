@@ -32,15 +32,17 @@ A later refute pass (audit 2026-07-17) confirmed two gaps the first pass left:
      usable Content-Length) was returned as b"" — silently accepted as empty, so
      /upload wrote a 0-byte file and answered ok. Fix: reject → 411, no artifact.
 
-A follow-up (audit 2026-07-17) split the read and send deadlines:
-
-  8. settimeout() sets ONE deadline governing both recv and send, so the 30 s
-     anti-slowloris READ bound also severed the SEND path — a client legitimately
-     but slowly draining a LARGE response (a /backup export, a big memory dump
-     over a slow/mobile link) was cut at 30 s mid-download. Fix: once the request
-     is fully read, end_headers() raises the socket timeout to a generous but
-     finite SEND_TIMEOUT_S just before the body is written; handle_one_request()
-     restores the tight read bound per request so no slowloris-on-read reopens.
+A later revert (audit 2026-07-18) undid a short-lived split of the read and send
+deadlines. A change had raised the socket timeout to a flat SEND_TIMEOUT_S=300 s
+on the write path so a slow LARGE-response drain wouldn't be cut at the 30 s read
+bound — but that armed a 10x slow-read DoS: a client that triggers a large
+response and STOPS READING pins a worker (blocked in sendall(), holding a
+semaphore slot) for ~300 s, so ~64 non-reading clients exhaust the pool for that
+long. The rationale was self-undercut — the only large responses (/backup,
+assets) are _from_localhost()-only and drain sub-second over loopback/LAN, while
+remote (phone) endpoints return small JSON — so a single 30 s bound governs both
+recv and send. test_no_flat_send_timeout_bump below guards against reintroducing
+it.
 """
 from __future__ import annotations
 
@@ -574,49 +576,53 @@ def test_empty_body_post_without_transfer_encoding_still_ok(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 8. send-side timeout is separated from the read timeout → a slow legitimate
-#    drain of a LARGE response isn't severed at the 30 s anti-slowloris bound
+# 8. NO flat multi-minute send-timeout bump (revert guard) → a client that
+#    triggers a large response and then STOPS READING pins a worker (blocked in
+#    sendall(), holding a semaphore slot) for at most the 30 s socket bound, not
+#    a 300 s SEND window — the slow-read pool-exhaustion DoS stays disarmed
 # ---------------------------------------------------------------------------
 
-def test_send_timeout_constant_is_generous_and_finite():
-    # The send bound is a distinct, named constant: strictly larger than the
-    # per-recv read bound (so a slow large-response drain isn't cut at 30 s) yet
-    # finite (a slow drain must still not hang a worker forever).
-    assert srv.SEND_TIMEOUT_S > srv.SOCKET_TIMEOUT_S
-    assert 0 < srv.SEND_TIMEOUT_S < float("inf")
+def test_no_send_timeout_bump_symbols():
+    # The send-timeout bump was reverted (audit 2026-07-18). A flat
+    # SEND_TIMEOUT_S=300 s on the write path was a 10x slow-read DoS: a
+    # non-reading client pinned a worker + a semaphore slot for ~300 s, so ~64 of
+    # them exhausted the pool for that long — and it bought nothing real (the only
+    # large responses, /backup + assets, are loopback/LAN-only and drain fast).
+    # Its machinery must be gone; reintroduce either symbol and this breaks.
+    assert not hasattr(srv, "SEND_TIMEOUT_S")
+    assert not hasattr(srv, "_extend_send_timeout")
 
 
-def test_large_response_raises_send_timeout_above_read_bound(tmp_path, monkeypatch):
-    # settimeout() governs BOTH recv and send, so the 30 s read bound would also
-    # sever the SEND path — a client slowly draining a big /backup export could be
-    # cut at 30 s mid-download. The fix raises the socket timeout to the generous
-    # SEND bound once the request is fully read, just before the body is written.
-    # Assert that at that moment the connection's timeout has been raised above
-    # SOCKET_TIMEOUT_S (and up to SEND_TIMEOUT_S), and that the full large body
-    # still arrives. Reverted (one settimeout governing both, never re-raised for
-    # the send phase): _extend_send_timeout is never invoked, `seen` stays empty
-    # and the assertion breaks.
-    seen = []
-    orig_extend = srv._extend_send_timeout
-
-    def spy(conn):
-        orig_extend(conn)                                # perform the real bump
-        seen.append(conn.gettimeout())                  # capture it at write time
-
-    monkeypatch.setattr(srv, "_extend_send_timeout", spy)
-
+def test_response_write_keeps_the_30s_socket_bound(tmp_path):
+    # Behavioural guard: while a LARGE response is being written the connection's
+    # socket timeout must still be the bounded SOCKET_TIMEOUT_S — end_headers()
+    # must NOT raise it to a generous multi-minute send window. Capture the
+    # timeout the handler's socket carries at body-write time (just after
+    # end_headers) and assert it is the tight 30 s bound. On revert (end_headers
+    # bumps to SEND_TIMEOUT_S) `seen[0]` is 300 s and the assertion breaks.
     brain = Brain(tmp_path)
     payload = "x" * (2 * 1024 * 1024)                    # a ~2 MiB export body
     brain.export_backup = lambda: {"blob": payload}      # /backup is local-only + gated
     server, host, port = _serve(brain)
+
+    seen = []
+    handler_cls = server.RequestHandlerClass
+    orig_end_headers = handler_cls.end_headers
+
+    def spy_end_headers(self):
+        orig_end_headers(self)
+        seen.append(self.connection.gettimeout())        # socket timeout at write time
+
+    handler_cls.end_headers = spy_end_headers
     try:
         status, body = _get(f"http://{host}:{port}/dreamlayer/backup", timeout=15)
         assert status == 200
         assert len(body) >= len(payload)                 # the whole large body arrived
-        assert seen                                      # the bump ran during the write
-        # at body-write time the socket timeout was the generous SEND bound,
-        # strictly above the anti-slowloris read bound
-        assert seen[0] == srv.SEND_TIMEOUT_S
-        assert seen[0] > srv.SOCKET_TIMEOUT_S
+        assert seen                                      # end_headers ran
+        # the write phase used the tight anti-slowloris bound, not a generous
+        # multi-minute send window
+        assert seen[0] == srv.SOCKET_TIMEOUT_S
+        assert seen[0] <= 60.0
     finally:
+        handler_cls.end_headers = orig_end_headers
         server.shutdown(); server.server_close()

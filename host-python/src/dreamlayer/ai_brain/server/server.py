@@ -66,17 +66,9 @@ TOKEN_HEADER = "X-DreamLayer-Token"
 # constants so they are tunable in one place and assertable from tests.
 MAX_JSON_BODY = 16 * 1024 * 1024        # 16 MiB — cap for JSON bodies (_body/_raw)
 MAX_UPLOAD_BODY = 64 * 1024 * 1024      # 64 MiB — larger cap for file uploads
-SOCKET_TIMEOUT_S = 30.0                 # per-connection PER-RECV read timeout (anti-slowloris)
+SOCKET_TIMEOUT_S = 30.0                 # per-connection socket timeout — bounds BOTH recv and send
 MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
-# settimeout() governs BOTH recv and send, so the 30 s read bound above would
-# ALSO sever the SEND path — a client legitimately but slowly draining a LARGE
-# response (a /backup export, a big memory dump over a slow/mobile link) would be
-# cut at 30 s mid-download. Once a request is fully read the write phase gets this
-# more generous (but still finite — no hang) SEND bound instead; the tight read
-# bound is restored per request so no slowloris-on-read hole is reintroduced
-# (audit 2026-07-17, slow-large-response drain).
-SEND_TIMEOUT_S = 300.0                  # per-connection send-phase timeout (slow large-response drain)
 
 
 class _RequestTooLarge(Exception):
@@ -109,25 +101,6 @@ class _RequestTimeout(Exception):
     indefinitely, pinning a worker thread and a semaphore slot. This
     total-duration bound is what actually reclaims them. Mapped to HTTP 408
     (audit 2026-07-17, refute-remediation finding 1)."""
-
-
-def _extend_send_timeout(conn) -> None:
-    """Raise a connection's socket timeout from the tight per-recv READ bound
-    (SOCKET_TIMEOUT_S) to the generous SEND bound (SEND_TIMEOUT_S).
-
-    Called once the request is fully read and just before the response body is
-    written. ``socket.settimeout`` sets a single deadline that governs BOTH recv
-    and send, so the 30 s anti-slowloris read bound would otherwise also cut a
-    client that is legitimately but slowly draining a LARGE response. Bumping the
-    deadline for the write phase lets a slow drain finish while staying finite
-    (no hang); the read bound is restored at the top of the next request in
-    ``handle_one_request`` so no slowloris-on-read hole is reintroduced on a
-    keep-alive connection. Best-effort — a socket already torn down just raises,
-    and the write that follows fails exactly as it would have anyway."""
-    try:
-        conn.settimeout(SEND_TIMEOUT_S)
-    except OSError:
-        pass
 
 
 def authorize(token: str, provided, from_localhost: bool) -> bool:
@@ -1559,42 +1532,26 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                    lockout_s=300.0)
 
     class Handler(BaseHTTPRequestHandler):
-        # Per-connection read timeout: StreamRequestHandler.setup() applies this
-        # via self.connection.settimeout(), so a slowloris client that opens a
-        # socket and dribbles (or never finishes) its request can no longer pin
-        # a worker thread forever — the read raises socket.timeout and the
-        # worker is reclaimed (audit 2026-07-17, anti-slowloris). settimeout()
-        # bounds BOTH recv and send, so end_headers() raises it to the generous
-        # SEND_TIMEOUT_S for the write phase (a slow legitimate large-response
-        # drain) and handle_one_request() restores this read bound per request.
+        # Per-connection socket timeout: StreamRequestHandler.setup() applies
+        # this via self.connection.settimeout(), so a slowloris client that opens
+        # a socket and dribbles (or never finishes) its request can no longer pin
+        # a worker thread forever — the read raises socket.timeout and the worker
+        # is reclaimed (audit 2026-07-17, anti-slowloris). settimeout() bounds
+        # BOTH recv and send, and a single 30 s bound is deliberately kept for
+        # both. A more generous SEND window buys nothing real: the only large
+        # responses (a /backup export, static assets) are _from_localhost()-only
+        # and drain sub-second over loopback/LAN, while the genuinely remote
+        # (phone) endpoints return small JSON — no real workload needs >30 s to
+        # write. But a flat multi-minute send bound WOULD arm a slow-read DoS: a
+        # client that triggers a large response and then STOPS READING pins a
+        # worker thread blocked in sendall() — holding a semaphore slot — for the
+        # whole window, so ~64 non-reading clients exhaust the pool for that long.
+        # Bounding send at 30 s too caps that pin at 30 s (audit 2026-07-18,
+        # reverted the send-timeout bump — slow-read pool-exhaustion DoS).
         timeout = SOCKET_TIMEOUT_S
 
         def log_message(self, *a):
             pass
-
-        def handle_one_request(self):
-            # Restore the tight anti-slowloris READ timeout at the start of every
-            # request. A prior response on this (keep-alive) connection may have
-            # raised the socket's timeout to the generous SEND bound for a slow
-            # drain; reading the next request line/headers/body must use the
-            # per-recv read bound again, or a slowloris-on-read hole reopens on
-            # the second and later requests of a persistent connection.
-            try:
-                self.connection.settimeout(SOCKET_TIMEOUT_S)
-            except OSError:
-                pass
-            super().handle_one_request()
-
-        def end_headers(self):
-            # The request is fully read by now — POST bodies are consumed in the
-            # handler (via _body/_raw) before it writes a response, and GETs have
-            # none — so raising the socket timeout here cannot weaken the read
-            # deadline. Do it just before the body is written so a client slowly
-            # draining a LARGE response (a /backup export, a big memory dump over
-            # a slow link) isn't severed at the 30 s read timeout. Restored to the
-            # read bound at the top of the next request (handle_one_request).
-            super().end_headers()
-            _extend_send_timeout(self.connection)
 
         # -- helpers ----------------------------------------------------
         def _json(self, code, obj):

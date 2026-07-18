@@ -173,6 +173,55 @@ def test_preview_grants_only_declared_capabilities_not_everything():
     assert seen["caps"] == frozenset({"network", "object_lens", "glance", "cards"})
 
 
+def test_resolve_hardens_malformed_requires():
+    """``_resolve`` must survive the ugly shapes a plugin's ``.requires`` can
+    take — ``None`` (crashed ``frozenset(None)``) and a bare ``str`` (splatted
+    ``frozenset("network")`` → per-character garbage caps) — without crashing
+    or granting bogus caps, while still returning exactly
+    ``declared | _ALWAYS_AVAILABLE`` (never an escalation).
+
+    The returned caps ARE the PluginContext capabilities the preview hands to a
+    plugin's ``register()`` (see ``registered_card_types``/``contributions``),
+    so this pins the context grant directly."""
+    from dreamlayer.sdk import make_plugin
+    from dreamlayer.sdk.preview import _resolve, _as_caps, _ALWAYS_AVAILABLE
+    from dreamlayer.plugins.base import SimplePlugin
+
+    def _plugin_with_requires(requires):
+        # bypass make_plugin's tuple() coercion to plant a raw .requires value
+        p = SimplePlugin(name="raw", register_fn=lambda ctx: None)
+        p.requires = requires
+        return p
+
+    # 1. requires=None → no crash; caps are exactly the always-open set
+    _obj, caps = _resolve(_plugin_with_requires(None))
+    assert caps == _ALWAYS_AVAILABLE
+
+    # 2. requires="network" (a bare STRING) → the single capability "network",
+    #    NOT the splatted characters {'n','e','t','w','o','r','k'}
+    _obj, caps = _resolve(_plugin_with_requires("network"))
+    assert "network" in caps
+    assert caps == frozenset({"network"}) | _ALWAYS_AVAILABLE
+    for ch in ("n", "e", "t", "w", "o", "r", "k"):
+        assert ch not in caps
+
+    # 3. a normal tuple still works
+    _obj, caps = _resolve(make_plugin("mem", lambda ctx: None, requires=("memory",)))
+    assert caps == frozenset({"memory"}) | _ALWAYS_AVAILABLE
+
+    # 4. an unknown shape (e.g. an int) → nothing declared, no crash
+    _obj, caps = _resolve(_plugin_with_requires(12345))
+    assert caps == _ALWAYS_AVAILABLE
+
+    # helper unit checks: coercion never invents a cap, never splats a string
+    assert _as_caps(None) == frozenset()
+    assert _as_caps("network") == frozenset({"network"})
+    assert _as_caps(("a", "b")) == frozenset({"a", "b"})
+    assert _as_caps(["a"]) == frozenset({"a"})
+    assert _as_caps(frozenset({"a"})) == frozenset({"a"})
+    assert _as_caps(object()) == frozenset()
+
+
 def test_package_from_dir_builds_a_valid_package(tmp_path):
     # the helper the CLI and every scaffold test use
     (tmp_path / "plugin.py").write_text(SDK_ONLY_SRC, encoding="utf-8")

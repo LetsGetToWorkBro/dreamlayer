@@ -98,6 +98,63 @@ def test_tray_recovers_from_a_rotated_pairing_token(tmp_path):
     assert auth.get() == "new"
 
 
+def test_tray_passive_refresh_self_heals_from_a_rotated_token_no_user_action(
+        tmp_path):
+    # THE PASSIVE-PATH GAP (Windows twin): the tray dot is driven by fetch_status
+    # on the loop()/sleep(15) tick, NOT by _authed_api (which only runs on
+    # Sync/Incognito). Before this fix fetch_status swallowed every error and
+    # NEVER touched the token cache, so after a mid-session rotation the passive
+    # tick re-sent the stale cached token forever → the dot stayed grey until the
+    # user clicked something. The fix routes the tray's passive poll through the
+    # auth-aware fetch_status, which invalidates the cache on a 401/403 so the
+    # next tick re-reads the rotated token and the dot recovers on its own.
+    import urllib.error
+    from dreamlayer.ai_brain.server.store import BrainConfig
+    cfg = tmp_path / "cfg"; cfg.mkdir()
+    BrainConfig(token="old").save(cfg)
+    auth = tray_windows._TokenCache(str(cfg), BrainConfig.load)
+    assert auth.get() == "old"                       # cached the initial token
+
+    # the panel rotates the token: config now holds "new", cache still "old"
+    BrainConfig(token="new").save(cfg)
+    assert auth.get() == "old"                        # stale cache hands out old
+
+    class _Resp:
+        def __init__(self, data): self._data = data
+        def read(self): return self._data
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    green = (b'{"model":"ollama","cloud":true,"cloud_ready":true,'
+             b'"stats":{"files":1}}')
+
+    class _RotatingOpener:
+        def __init__(self): self.tokens_seen = []
+        def open(self, req, timeout=None):
+            tok = req.headers.get("X-dreamlayer-token")   # urllib capitalizes
+            self.tokens_seen.append(tok)
+            if tok == "new":
+                return _Resp(green)
+            raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+
+    opener = _RotatingOpener()
+    # tick 1 — the PASSIVE poll authenticates with the stale token and 403s. It
+    # returns None (grey dot this tick) AND invalidates the cache. No user action.
+    st = tray_windows.fetch_status(7777, auth.get(), auth=auth, opener=opener)
+    assert st is None                                 # grey dot preserved
+
+    # the 403 invalidated the cache → the next read picks up the rotated token …
+    assert auth.get() == "new"
+
+    # tick 2 — the very next passive poll carries "new" and recovers a GREEN dot,
+    # with NO user action taken. The reverted fetch_status (never invalidating)
+    # would keep sending "old", stay 403, and fail this assertion.
+    st2 = tray_windows.fetch_status(7777, auth.get(), auth=auth, opener=opener)
+    assert st2 is not None
+    assert tray_windows.dot_color(menubar.status_summary(st2)) == "#1F8A3D"  # green
+    assert opener.tokens_seen == ["old", "new"]
+
+
 # -- start-at-login: the Run-entry command (pure) -------------------------------
 
 def test_build_login_entry_source_mirrors_the_launch_agent():
