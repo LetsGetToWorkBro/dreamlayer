@@ -71,7 +71,10 @@ class DreamRemOps(OpsHost):
                 # so the nightly sweep is not purge-blind to an alternate vector
                 # store (Chroma/Lance/VectorStore): expired warm vectors leave it
                 # too, mirroring Retriever.purge_memory (memory/retention.py).
-                vector_store=getattr(self.retriever, "vector_store", None))
+                vector_store=getattr(self.retriever, "vector_store", None),
+                # persist the bias after the sweep discards an expired memory's
+                # consolidation fingerprint, so the forget survives a reload.
+                bias_dir=self.nightwatch.vault_dir)
             self.last_retention = sweep.sweep()
             sweep.purge_hot(self.ring)
             # Stasis composting rides the same night: freeze-frames past

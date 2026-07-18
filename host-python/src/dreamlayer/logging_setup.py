@@ -103,6 +103,13 @@ _SENSITIVE_KEYS = {
     "passphrase", "text", "caption", "captions", "email", "phone",
     "address", "prompt", "content", "message_body", "credential",
     "credentials", "auth", "authorization", "session", "cookie",
+    # ``cue`` is a memory cue — the ember/tending pipeline builds it from a
+    # memory's own summary, so it carries a person's name or the summary's lead
+    # words verbatim (the SAME content that rides as the sensitive ``summary``
+    # key). A KEY, not a substring root, so ``cue``/``memory_cue`` (exact +
+    # ``_cue`` suffix) redact without a loose "cue" catching ``rescue`` (refute
+    # 2026-07-18: a burn log interpolated ``cue`` and the taxonomy was blind to it).
+    "cue", "cues",
 }
 
 

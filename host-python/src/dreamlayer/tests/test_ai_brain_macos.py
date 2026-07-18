@@ -75,6 +75,19 @@ class TestMail:
         docs = mail_documents(str(tmp_path))
         assert docs and "240" in docs[0][1] and "Invoice" in docs[0][0]
 
+    def test_parse_emlx_survives_a_bogus_charset(self):
+        # A crafted, attacker-declared charset the codec registry doesn't know
+        # must NOT raise LookupError (errors='ignore' can't rescue a bad codec
+        # NAME — the lookup fails first). Reverted, one such email raises and
+        # blacks out the whole mail index; fixed, the decode falls back to utf-8.
+        rfc = (b"From: a@b.com\r\nSubject: Hi\r\n"
+               b"Content-Type: text/plain; charset=\"does-not-exist\"\r\n\r\n"
+               b"hello there\r\n")
+        emlx = f"{len(rfc)}\n".encode() + rfc
+        m = parse_emlx(emlx)                       # must not raise
+        assert m["subject"] == "Hi"
+        assert "hello there" in m["body"]
+
 
 # ---------------------------------------------------------------------------
 # Sending — the approve gate

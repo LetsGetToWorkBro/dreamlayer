@@ -290,6 +290,46 @@ def test_slowloris_connection_is_timed_out(tmp_path, monkeypatch):
         server.shutdown(); server.server_close()
 
 
+def test_slow_header_slowloris_is_reclaimed_pre_auth(tmp_path, monkeypatch):
+    # The pre-auth slow-HEADER slowloris (refute 2026-07-18): the request line +
+    # headers are read by the stdlib BEFORE do_*/auth, governed only by the
+    # per-recv socket timeout — which a client defeats by dribbling a byte just
+    # under it, pinning a worker AND its bounded-semaphore slot indefinitely,
+    # unauthenticated. Here the per-recv timeout is set LONG (20 s) and the new
+    # header wall-clock cap SHORT (1 s): a connection that sends a partial header
+    # block and then stalls must be reclaimed by the ~1 s watchdog — NOT the 20 s
+    # per-recv timeout — and its semaphore slot returned. Reverted (no header
+    # watchdog), the worker holds its slot until the 20 s per-recv timeout, so
+    # the client sees EOF only after >5 s and the slot stays taken meanwhile.
+    monkeypatch.setattr(srv, "SOCKET_TIMEOUT_S", 20.0)
+    monkeypatch.setattr(srv, "MAX_REQUEST_HEADER_SECONDS", 1.0)
+    server, host, port = _serve(Brain(tmp_path))
+    try:
+        slots = server._slots
+        assert slots._value == srv.MAX_CONCURRENT_REQUESTS
+        s = socket.create_connection((host, port), timeout=10)
+        # a partial header block with NO terminating blank line, then stall
+        s.sendall(b"GET /dreamlayer/status HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Pad: ")
+        s.settimeout(10)
+        start = time.time()
+        try:
+            chunk = s.recv(4096)          # watchdog shuts the socket → clean EOF
+        except socket.timeout:
+            chunk = b""
+        elapsed = time.time() - start
+        s.close()
+        assert chunk == b""               # connection reclaimed, no response served
+        assert elapsed < 5.0              # by the 1 s header cap, not the 20 s per-recv
+        # the worker released its bounded-semaphore slot — the DoS is closed, not
+        # just the socket. Poll briefly: release runs in the worker's finally.
+        deadline = time.time() + 3.0
+        while slots._value != srv.MAX_CONCURRENT_REQUESTS and time.time() < deadline:
+            time.sleep(0.02)
+        assert slots._value == srv.MAX_CONCURRENT_REQUESTS
+    finally:
+        server.shutdown(); server.server_close()
+
+
 # ---------------------------------------------------------------------------
 # 4. bounded concurrency → no thread-exhaustion
 # ---------------------------------------------------------------------------

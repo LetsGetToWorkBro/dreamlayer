@@ -20,6 +20,17 @@ describe("isPrivateLanHost — the range table", () => {
     "192.169.0.1", "11.0.0.1", "999.1.1.1",
     "example.com", "brain.example.com", "local.evil.com",
     "2600:1901::1", "",
+    // IP literals in disguise: a native resolver decodes these to PUBLIC hosts,
+    // so the classifier must NOT wave them through as "dotless LAN name" or a
+    // decimal-parsed private range (refute 2026-07-18).
+    "134744072",            // 32-bit decimal for 8.8.8.8 (dotless, all digits)
+    "3627734734",           // 32-bit decimal for a public IP
+    "2130706433",           // 32-bit decimal for 127.0.0.1 — non-canonical, refuse
+    "0x8080808",            // hex integer literal
+    "0xdeadbeef",           // hex integer literal
+    "010.0.0.1",            // leading-zero octet → octal 8.0.0.1 to inet_aton
+    "0177.0.0.1",           // leading-zero octet → octal 127 (loopback) ambiguity
+    "192.168.010.1",        // leading-zero octet inside an otherwise-private quad
   ];
   it.each(yes)("allows %s", (h) => expect(isPrivateLanHost(h)).toBe(true));
   it.each(no)("refuses %s", (h) => expect(isPrivateLanHost(h)).toBe(false));
@@ -40,6 +51,13 @@ describe("cleartextAllowed — the URL gate", () => {
   it("is not fooled by userinfo spoofing the host", () => {
     expect(cleartextAllowed("http://192.168.1.20@evil.com/")).toBe(false);
     expect(cleartextAllowed("http://evil.com@192.168.1.20:7777")).toBe(true);
+  });
+  it("refuses integer/octal IP literals that decode to public hosts", () => {
+    expect(cleartextAllowed("http://134744072:7777")).toBe(false);      // = 8.8.8.8
+    expect(cleartextAllowed("http://0x8080808/x")).toBe(false);         // hex public
+    expect(cleartextAllowed("http://010.0.0.1:7777")).toBe(false);      // octal octet
+    // userinfo strip must not leave a public integer host looking private
+    expect(cleartextAllowed("http://evil.com@134744072:7777")).toBe(false);
   });
   it("refuses anything unparseable or non-http(s)", () => {
     expect(cleartextAllowed("")).toBe(false);

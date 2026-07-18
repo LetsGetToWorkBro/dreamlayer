@@ -7,7 +7,14 @@
  * (http://<lan-ip>:7777 with an X-DreamLayer-Token header — see
  * src/state/useBrainStore.ts). Android 9+ blocks all cleartext HTTP by
  * default, which would break QR pairing, status polling, and every ask
- * round-trip on Android while iOS (which permits local cleartext) works.
+ * round-trip on Android; this plugin is the Android half of the fix.
+ *
+ * iOS needs the SAME unblock — App Transport Security also refuses cleartext
+ * http:// (including to private/`.local`/IP-literal hosts) unless told
+ * otherwise. That half lives in app.json (ios.infoPlist): NSAllowsLocalNetworking
+ * exempts local resources from ATS without opening arbitrary cleartext, and
+ * NSLocalNetworkUsageDescription covers the iOS 14+ local-network permission
+ * for the direct LAN connection. Guarded by src/__tests__/ios_ats_lan.test.ts.
  *
  * WHY IT IS SHAPED THIS WAY
  * The honest goal is "cleartext to private-range/LAN addresses only."

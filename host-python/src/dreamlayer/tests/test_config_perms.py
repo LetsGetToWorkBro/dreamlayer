@@ -245,22 +245,24 @@ def test_save_hardens_acl_on_every_save(tmp_path, monkeypatch):
     # 2026-07-17). On POSIX the hardener is a no-op, but this is the exact wiring
     # that runs (and matters) on the Windows leg.
     cfg = tmp_path / "cfg"
+    d = str(cfg)
     target = str(cfg / store.CONFIG_FILE)
     calls: list[str] = []
     monkeypatch.setattr(store, "_harden_windows_acl", lambda p: calls.append(p))
 
-    # first save creates the file → hardener runs with the FINAL target path
+    # every save hardens the DIRECTORY first (so the temp/target are born private
+    # by inheritance), then the FINAL target file after the atomic swap.
     BrainConfig(token="tok").save(cfg)
-    assert calls == [target]
+    assert calls == [d, target]
 
-    # a second save overwrites the existing target → hardener runs AGAIN, because
-    # os.replace discarded the owner-only DACL and it must be re-applied
+    # a second save re-hardens BOTH again, because os.replace discarded the file
+    # DACL and the dir harden is re-asserted every save too.
     BrainConfig(token="tok2", api_key="k").save(cfg)
-    assert calls == [target, target]
+    assert calls == [d, target, d, target]
 
     # a third save — pin that it's genuinely every save, not merely twice
     BrainConfig(token="tok3").save(cfg)
-    assert calls == [target, target, target]
+    assert calls == [d, target] * 3
 
 
 @posix_only
@@ -324,3 +326,40 @@ def test_windows_config_acl_is_owner_only(tmp_path):
     # the owner-only ACL must be RE-APPLIED, so the DACL STILL holds after it.
     BrainConfig(token="tok2", cloud_api_key="ck2", api_key="ak2").save(cfg)
     assert_owner_only()
+
+
+def test_owner_only_icacls_argv_is_inheritance_stripped_and_narrow():
+    # Cross-platform guard on the exact DACL shape (the nt-only test can't run on
+    # Linux CI): inheritance stripped, Full control to EXACTLY current-user +
+    # SYSTEM + Administrators, NO broad principal. A revert that drops
+    # /inheritance:r, reorders/breaks the grant, or adds a broad principal
+    # (Everyone S-1-1-0, Users) fails HERE, on every platform.
+    argv = store._owner_only_icacls_argv("C:\\state\\brain_config.json",
+                                         "S-1-5-21-TEST-1001")
+    assert argv is not None
+    assert argv[0] == "icacls"
+    assert argv[1] == "C:\\state\\brain_config.json"
+    assert "/inheritance:r" in argv
+    grants = {a for a in argv if a.startswith("*")}
+    assert grants == {"*S-1-5-18:F", "*S-1-5-32-544:F", "*S-1-5-21-TEST-1001:F"}
+    joined = " ".join(argv)
+    for broad in ("S-1-1-0", "*S-1-1-0", ":(OI)", "Everyone", "Users", "BU"):
+        assert broad not in joined, f"{broad!r} unexpectedly in argv: {argv}"
+
+
+def test_owner_only_icacls_argv_fails_closed_on_missing_sid():
+    # No user SID → return None so the caller SKIPS hardening entirely (leaving
+    # the — separately hardened — dir-inherited baseline). It must NEVER fall
+    # back to a broad grant. A revert that emitted an argv on a missing SID fails.
+    assert store._owner_only_icacls_argv("C:\\x", None) is None
+    assert store._owner_only_icacls_argv("C:\\x", "") is None
+
+
+@posix_only
+def test_state_dir_is_owner_only_on_posix(tmp_path):
+    # On POSIX the state dir must be chmod 0o700 so a $DREAMLAYER_DIR placed under
+    # a world-readable parent (e.g. a shared /tmp) doesn't leak the secrets via
+    # the directory's mode.
+    cfg = tmp_path / "cfg"
+    BrainConfig(token="tok").save(cfg)
+    assert (cfg.stat().st_mode & 0o777) == 0o700
