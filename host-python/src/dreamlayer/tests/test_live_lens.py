@@ -3,8 +3,10 @@
 The load-bearing claims, each pinned here:
   * the HUD budget is the REAL canonical unit (MAX_LINES x MAX_TEXT_LEN utf-8
     bytes from reality_compiler.v2.figment), enforced on every card;
-  * a look runs the LOCAL vision ladder only — zero cloud egress in every
-    posture, and the decoded frame never touches disk;
+  * a look is ONE unified pipeline (live.world_look) shared with the phone
+    app's /brain/look: the full World lens + plugin providers outside the
+    wearer's egress shield, an honest LOCAL-ONLY classifier look (zero egress,
+    no trace) inside it — and the decoded frame never touches disk;
   * the page is public but inert (never embeds the token — the credential
     rides the link's URL fragment, handed out local-only like pairing);
   * the look route sits behind the same token gate + 413-before-read body cap
@@ -396,3 +398,129 @@ class TestTls:
         cert_p2, key_p2 = ensure_self_signed(tmp_path)     # must detect + re-mint
         assert cert_p2.read_bytes() != good_cert           # a fresh, matched pair
         assert make_ssl_context(cert_p2, key_p2) is not None   # loads, no SSLError
+
+
+# --- One Lens: the browser tap and the app shutter are one pipeline ---------
+
+class TestOneLens:
+    """live.world_look — the single look behind /dreamlayer/live/look AND
+    /dreamlayer/brain/look, so the two surfaces are literally one thing."""
+
+    PRICE = ('{"label":"price tag","confidence":0.9,'
+             '"attributes":{"amount":20,"currency":"EUR"}}')
+
+    def _world_brain(self, tmp_path, describe_reply, **cfg):
+        """A real Brain whose vision backend + one plugin provider are stubbed
+        at the same seams the product uses (backend.describe / the object-lens
+        provider registry)."""
+        from dreamlayer.plugins.currency import CurrencyProvider
+        brain = _brain(tmp_path, **cfg)
+
+        class _B:
+            def describe(self, prompt, image_b64):
+                return describe_reply
+            def vision(self, label, image_b64, want):
+                return ""
+        brain._backend = _B()
+        wl = brain.world_lens()
+        assert wl is not None
+        wl.object_lens.registry.register(
+            CurrencyProvider(home="USD", rates_fetch=lambda a, b: 1.10))
+        return brain
+
+    def test_browser_look_returns_plugin_rows_on_the_glass(self, tmp_path):
+        pytest.importorskip("PIL")
+        brain = self._world_brain(tmp_path, self.PRICE)
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "price tag"
+        # the Currency connector's row made it onto the glass lines
+        assert any("$22.00" in ln for ln in out["lines"])
+        assert "currency" in out["sources"]
+        # and into the panel richer surfaces render
+        assert any("$22.00" in r["label"] for r in out["panel"]["rows"])
+        # every line honors the canonical budget
+        assert len(out["lines"]) <= MAX_LINES
+        assert all(len(ln.encode("utf-8")) <= MAX_TEXT_LEN for ln in out["lines"])
+        # the look is on the ledger (shield is down)
+        assert any(i["kind"] == "look" for i in brain.activity.recent())
+
+    def test_shield_up_look_is_local_only(self, tmp_path, monkeypatch):
+        pytest.importorskip("PIL")
+        # lan_only raises the egress shield: the World lens must not even be
+        # consulted — the classifier answers, nothing egresses, nothing is
+        # written, and the response says local_only.
+        brain = self._world_brain(tmp_path, self.PRICE, network_mode="lan_only")
+        assert brain.incognito_now() is True
+        def _boom():
+            raise AssertionError("world lens consulted under the shield")
+        monkeypatch.setattr(brain, "world_lens", _boom)
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "mug"
+        assert out["local_only"] is True
+        assert out["panel"]["rows"] == []               # shape parity, no providers
+        assert brain.config.cloud_calls == 0
+        assert not any(i["kind"] == "look" for i in brain.activity.recent())
+
+    def test_both_routes_share_one_formatter(self, tmp_path):
+        pytest.importorskip("PIL")
+        # The browser route (JPEG body) and the app route (base64 JSON) must
+        # return the SAME glass lines for the same photo — one pipeline.
+        import base64 as b64mod
+        brain = self._world_brain(tmp_path, self.PRICE)
+        server, base = _serve(brain)
+        try:
+            frame = _jpeg()
+            hdr = {"X-DreamLayer-Token": TOKEN}
+            status, body = _req(base + "/dreamlayer/live/look", data=frame,
+                                headers=hdr)
+            assert status == 200
+            browser = json.loads(body)
+            status, body = _req(
+                base + "/dreamlayer/brain/look",
+                data=json.dumps(
+                    {"image": b64mod.b64encode(frame).decode()}).encode(),
+                headers={**hdr, "Content-Type": "application/json"})
+            assert status == 200
+            app = json.loads(body)
+            assert browser["ok"] and app["ok"]
+            assert browser["label"] == app["label"] == "price tag"
+            assert browser["lines"] == app["lines"]      # literally the same glass
+            assert app["lens"] == "object"
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_panel_lines_budget_and_layout(self):
+        card = {"primary": "price tag",
+                "rows": [{"label": "$22.00", "detail": "€20.00 · 1 EUR = 1.100 USD"},
+                         {"label": "seen before", "detail": "3× · last at home"},
+                         {"label": "x" * 60},
+                         {"label": "overflow row"}],
+                "footer": "90% · currency, memory"}
+        lines = live.panel_lines(card)
+        assert lines[0] == "price tag"
+        assert len(lines) <= MAX_LINES
+        assert all(len(ln.encode("utf-8")) <= MAX_TEXT_LEN for ln in lines)
+        assert any(ln.startswith("$22.00") for ln in lines)
+        assert lines[-1].startswith("90%")               # provenance survives
+
+    def test_describe_remote_endpoint_is_gated_and_counted(self, tmp_path):
+        # The recognizer's describe path ships the frame to ollama_url; a
+        # REMOTE url is egress — blocked under the shield, counted otherwise
+        # (the same contract the audit pinned for the AI explainer).
+        from dreamlayer.ai_brain.server.world_lens import WorldLensHost
+        calls = []
+
+        class _B:
+            def describe(self, prompt, image_b64):
+                calls.append(1)
+                return ""
+        brain = _brain(tmp_path, ollama_url="http://203.0.113.9:11434")
+        brain._backend = _B()
+        wl = WorldLensHost(brain)
+        wl._describe("p", "img")                          # shield down → allowed
+        assert calls and brain.config.cloud_calls == 1    # …but on the ledger
+        brain.config.network_mode = "lan_only"            # shield up
+        calls.clear()
+        assert wl._describe("p", "img") == ""             # blocked
+        assert not calls and brain.config.cloud_calls == 1

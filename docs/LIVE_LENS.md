@@ -15,9 +15,11 @@ system:
 | Layer | What runs |
 |---|---|
 | Answers | The real Brain — `/dreamlayer/brain/ask`, with recall, tiers, and cloud escalation exactly as configured |
-| Vision | The real ladder (`object_lens.classify_backends.default_classifier`): YOLO / moondream / CLIP when installed, the pixel-reading heuristic always |
-| Display budget | The canonical unit all four interpreters share — `MAX_LINES` (5) × `MAX_TEXT_LEN` (24 UTF-8 bytes), from `reality_compiler.v2.figment` |
-| Privacy posture | The veil toggle sends `no_cloud` on every ask — the same contract the glasses' incognito enforces. Looks are **local-only by construction**: the frame is decoded in memory, classified in-process, never written to disk, never sent to any cloud, in every posture |
+| Looks | **One unified pipeline** (`live.world_look`) shared with the phone app's `/dreamlayer/brain/look` — a tap here and a shutter there run the same code and return the same glass lines |
+| Vision | The full World lens: the VLM-backed structured recognizer when a vision model is configured (a price tag comes back with its amount + currency), with the real classifier ladder (YOLO / moondream / CLIP / the pixel-reading heuristic) as its always-on rung |
+| Plugins | Your installed connectors light up on a look — the Currency converter turns €20 into your home currency on the glass, Open Library rates the book spine — through the same capability-gated, sandboxed store path the glasses will use. A provider sees the extracted label/fields, **never the pixels** |
+| Display budget | The canonical unit all four interpreters share — `MAX_LINES` (5) × `MAX_TEXT_LEN` (24 UTF-8 bytes), from `reality_compiler.v2.figment` — applied by one formatter (`live.panel_lines`) for every surface |
+| Privacy posture | The veil toggle sends `no_cloud` on every ask — the same contract the glasses' incognito enforces. Under the Brain's egress shield (LAN-only / quiet hours) a look is **local-only**: the in-process classifier answers, plugins and any remote vision are not consulted, and no ledger trace is written. In every posture the frame is decoded in memory and never written to disk |
 | Security | The same token gate, CSRF origin check, body-size caps (a frame over 4 MiB is refused before it is read), and brute-force lockout as the rest of the Brain's surface |
 
 ## What is honestly not 1:1 (the physical ceiling)

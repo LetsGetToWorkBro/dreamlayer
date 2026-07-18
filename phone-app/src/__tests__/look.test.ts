@@ -89,3 +89,38 @@ describe("useBrainStore.look", () => {
     expect(res.rows.length).toBeGreaterThan(0);
   });
 });
+
+describe("useBrainStore.look — One Lens parity", () => {
+  const CONNECTED2 = { connected: true, url: "http://mac.local", token: "t" };
+
+  it("carries the glass lines and provenance from the unified pipeline", async () => {
+    useBrainStore.setState({ macMini: CONNECTED2, demoMode: false, capturePaused: false } as never);
+    const fn = jest.fn().mockResolvedValue({ json: async () => ({
+      ok: true, lens: "object", label: "price tag",
+      sources: ["currency"],
+      lines: ["price tag", "$22.00 · €20.00 · 1 EUR…", "90% · currency"],
+      panel: { primary: "price tag", rows: [{ label: "$22.00", detail: "€20.00" }], confidence: 0.9 },
+    }), status: 200 });
+    (global as unknown as { fetch: unknown }).fetch = fn;
+    const res = await useBrainStore.getState().look("b64");
+    expect(res.ok).toBe(true);
+    expect(res.lines).toHaveLength(3);
+    expect(res.lines?.[0]).toBe("price tag");     // the exact glass bytes
+    expect(res.sources).toEqual(["currency"]);    // provenance from the pipeline
+    expect(res.localOnly).toBe(false);
+  });
+
+  it("shows the local-only posture when the Brain's shield is up", async () => {
+    useBrainStore.setState({ macMini: CONNECTED2, demoMode: false, capturePaused: false } as never);
+    const fn = jest.fn().mockResolvedValue({ json: async () => ({
+      ok: true, label: "mug", local_only: true,
+      lines: ["mug · 90%"],
+      panel: { primary: "mug", rows: [], footer: "90% · on-device" },
+    }), status: 200 });
+    (global as unknown as { fetch: unknown }).fetch = fn;
+    const res = await useBrainStore.getState().look("b64");
+    expect(res.ok).toBe(true);
+    expect(res.localOnly).toBe(true);
+    expect(res.rows).toEqual([]);                 // shape parity, no providers
+  });
+});

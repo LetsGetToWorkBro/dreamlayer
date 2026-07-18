@@ -58,6 +58,11 @@ export type LookPanel = {
   confidence?: number;
   reason?: string;     // honest "couldn't see" / "incognito" copy when ok is false
   veiled?: boolean;
+  // the exact budget-clamped lines the glass would draw (one shared server-side
+  // formatter serves this AND the browser Live Lens — every surface shows the
+  // same look), plus whether the Brain's egress shield kept it local-only.
+  lines?: string[];
+  localOnly?: boolean;
 };
 export type BriefSection = { title: string; items: string[] };
 export type LongBrief = {
@@ -517,6 +522,7 @@ export const useBrainStore = create<BrainState>((set, get) => ({
           { label: "needs water", kind: "action", source: "plant" },
         ],
         sources: ["memory", "plant"], confidence: 0.86,
+        lines: ["Snake plant", "seen before · 3× · home", "needs water", "86% · memory, plant"],
       };
     }
     // The Veil is the wearer's capture switch — a look ships a full photo, so it
@@ -539,6 +545,9 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       const j = await r.json();
       if (!j?.ok) return empty(j?.reason ?? "Couldn't make it out.", !!j?.veiled);
       const p = j.panel ?? j.card ?? {};
+      const lines: string[] = Array.isArray(j.lines)
+        ? j.lines.filter((ln: unknown): ln is string => typeof ln === "string")
+        : [];
       // Defend the row ELEMENTS, not just the array shape: a malformed Brain
       // response {rows:[null]} would otherwise crash the panel render on r.label
       // (refute 2026-07-18). Keep only real objects.
@@ -550,8 +559,12 @@ export const useBrainStore = create<BrainState>((set, get) => ({
         title: p.primary ?? p.title ?? "",
         subtitle: p.detail ?? p.subtitle ?? "",
         rows,
-        sources: Array.isArray(p.sources) ? p.sources : (p.footer ? [String(p.footer)] : []),
+        sources: Array.isArray(j.sources) && j.sources.length
+          ? j.sources
+          : (Array.isArray(p.sources) ? p.sources : (p.footer ? [String(p.footer)] : [])),
         confidence: typeof p.confidence === "number" ? p.confidence : undefined,
+        lines,
+        localOnly: j.local_only === true,
       };
     } catch {
       return empty("Couldn't reach your Brain — try again when it's back.");
