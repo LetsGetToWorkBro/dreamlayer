@@ -32,6 +32,13 @@ on:
       - ".github/workflows/sbom.yml"
   workflow_dispatch:
 
+# Least privilege: both jobs only read the checkout and upload a workflow
+# artifact (which uses the Actions runtime token, not GITHUB_TOKEN's contents
+# scope). Set explicitly so an SBOM run never inherits a read-write default token
+# (refute 2026-07-18: this workflow shipped with no permissions block).
+permissions:
+  contents: read
+
 jobs:
   python-sbom:
     runs-on: ubuntu-latest

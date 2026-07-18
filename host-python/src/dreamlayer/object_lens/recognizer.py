@@ -62,16 +62,22 @@ _PERSON_SUFFIX = ("man", "men", "woman", "women", "boy", "girl",
 
 _WORD_RE = re.compile(r"[a-z]+")
 
-# A proper-name SHAPE the person-token denylist can't see: a Title-Case
-# alphabetic word (Maya, Chen, Taylor). Legit object labels are lowercase
-# category nouns ("almond milk", "espresso machine"), so a run of these signals a
-# proper NAME, not an object.
-_NAME_TOKEN_RE = re.compile(r"^[A-Z][a-z]+$")
+# A proper-name SHAPE the person-token denylist can't see: a name-shaped word —
+# Title-Case (Maya, Chen, Taylor) OR ALL-CAPS (MAYA, CHEN). All-caps is the
+# COMMON nametag/badge/lanyard rendering, and a Title-Case-ONLY rule let it walk
+# straight onto the glass ("MAYA CHEN" matched neither token → identified in the
+# default, no-Presidio config — refute 2026-07-18). Legit object labels are
+# lowercase category nouns ("almond milk", "espresso machine"), so a run of these
+# still signals a proper NAME, not an object; a rare all-caps object label
+# ("DUCT TAPE") over-defers to the Social Lens, which is the privacy-safe
+# direction. Mixed-case brands ("McDonald", "ThinkPad") are NOT name tokens, so a
+# lone brand word does not trip the 2-token threshold.
+_NAME_TOKEN_RE = re.compile(r"^[A-Z]([a-z]+|[A-Z]+)$")
 
 
 def _looks_like_a_personal_name(label: str) -> bool:
-    """True when the label has 2+ Title-Case alphabetic words — a personal-name
-    shape (``Maya Chen``, ``Taylor Swift``, ``John Smith``).
+    """True when the label has 2+ name-shaped words — a personal-name shape in
+    Title-Case (``Maya Chen``) OR all-caps (``MAYA CHEN``, the nametag case).
 
     The person-token denylist catches CATEGORIES of humans ("a man", "the woman")
     but not IDENTITIES: a VLM that names a person — celebrity recognition, or a
@@ -149,7 +155,7 @@ class ObjectRecognizer:
         # as an object). The two optional layers are fail-safe — a missing dep or
         # any error is a no-op, so they can only ADD a deferral (person_guard.py).
         from . import person_guard
-        if _names_a_person(label) or person_guard.label_is_a_person(label):
+        if person_guard.defers_person(label):     # denylist + name-shape + Presidio
             return None                       # a person → defer to Social Lens
         if confidence < self.min_confidence:
             return None

@@ -35,15 +35,21 @@ useDefault = true
 [allowlist]
 description = "Known test fixtures and example placeholders — not real secrets."
 
-# --- by path: the test trees + example env file --------------------------------
+# --- by path: ONLY the two specific fixture trees this repo actually audited ----
+# A gitleaks `paths` entry suppresses EVERY finding in a matching file, by path,
+# regardless of value — so a broad glob is a blanket hole, not a fixture pin. The
+# original list carried `(^|/)tests?/`, `__tests__/`, `test_*.py`, `*.test.*`,
+# which exempted EVERY test path anywhere in the repo (a real key dropped in
+# `deploy/tests/prod.env` or `web/test/` sailed through — refute 2026-07-18). We
+# now scope to the two exact trees where the known fixtures live and that were
+# grepped (below); everything else is defended by the value/stopword pins, which
+# fire regardless of location. `.env.example` is intentionally NOT path-exempt —
+# it holds placeholders that never trip, and a real value pasted there SHOULD
+# fail. Anything genuinely fixture-shaped outside these two trees gets a value
+# pin, never a new path glob.
 paths = [
-  '''host-python/src/dreamlayer/tests/''',   # Python test fixtures live here
-  '''phone-app/src/__tests__/''',            # phone-app Jest tests
-  '''(^|/)tests?/''',                        # any other tests/ or test/ dir
-  '''(^|/)__tests__/''',                     # any other __tests__/ dir
-  '''(^|/)test_[^/]*\.py$''',                # pytest modules anywhere
-  '''\.test\.(ts|tsx|js|jsx)$''',            # *.test.ts style unit tests
-  '''(^|/)\.env\.example$''',                # documented placeholder env
+  '''^host-python/src/dreamlayer/tests/''',   # Python test fixtures live here
+  '''^phone-app/src/__tests__/''',            # phone-app Jest test fixtures
 ]
 
 # --- by value: the exact fixture strings (matched against the detected secret) --

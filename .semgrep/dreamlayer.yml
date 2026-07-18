@@ -17,12 +17,23 @@ rules:
   # pii-in-log-message — the "no PII in the log MESSAGE string" contract, as a
   # reusable rule. logging_setup.JsonLineFormatter redacts values passed via
   # extra={...} but emits record.getMessage() VERBATIM, so interpolating a
-  # sensitive-named value INTO the message string bypasses redaction. The
-  # shipped tree is guarded by tests/test_logging_discipline.py's AST scan;
-  # this mirrors that guard so it also covers new/ancillary Python that the
-  # test's `dreamlayer/`-only walk does not reach. Recognition keys on the
-  # logging METHOD NAME on ANY receiver (bare/aliased logger, self-attr, or an
-  # inline logging.getLogger(...)) — exactly like the test.
+  # sensitive-named value INTO the message string bypasses redaction.
+  #
+  # AUTHORITATIVE vs BEST-EFFORT (refute 2026-07-18): the shipped `dreamlayer/`
+  # package is *guaranteed* clean by tests/test_logging_discipline.py's AST scan
+  # — that is the enforcement. This rule is a BEST-EFFORT net that extends the
+  # same idea to ancillary Python the test's `dreamlayer/`-only walk never
+  # reaches. Two honest limits follow from a regex-based SAST rule: (a) it keys
+  # on the interpolated VALUE's identifier, so `log.info(f"email={v}")` with an
+  # innocuous local, or a renamed variable, can slip past — the AST test does not
+  # have this hole within `dreamlayer/`; (b) the $VAL regex below APPROXIMATES
+  # logging_setup._is_sensitive (its substring ROOTS + its exact/`_<key>`-suffix
+  # KEYS), it is not byte-identical. It is tuned to fire on the guard's own
+  # canonical leaks (`reply={juno_text}`, `name=%s % user_name`) and to NOT fire
+  # on the words the guard deliberately excludes (`rescue`, `queryset`,
+  # `context`, `session_id`) — verified against _is_sensitive. Recognition keys
+  # on the logging METHOD NAME on ANY receiver (bare/aliased logger, self-attr,
+  # or an inline logging.getLogger(...)).
   - id: pii-in-log-message
     languages: [python]
     severity: WARNING
@@ -53,10 +64,13 @@ rules:
       - metavariable-regex:
           metavariable: $METH
           regex: ^(debug|info|warning|warn|error|exception|critical|fatal|log)$
-      # ...whose interpolated value's identifier matches a sensitive root
+      # ...whose interpolated value's identifier is sensitive. Mirrors
+      # logging_setup._is_sensitive: a substring ROOT (name/email/token/… — safe
+      # as substrings) OR an exact/`_<key>`-suffix KEY (text/content/prompt/cue/…
+      # — anchored so `rescue`/`queryset`/`context`/`session_id` do NOT trip).
       - metavariable-regex:
           metavariable: $VAL
-          regex: (?i).*(summary|transcript|email|token|secret|password|api_?key|cue|reply|query|answer|caption|address|phone).*
+          regex: (?i).*(name|email|phone|address|token|secret|password|passphrase|credential|apikey|transcript|embedding|contact|summary|caption|passcode|ssn).*|.*(^|_)(text|content|prompt|reply|query|answer|cue|key|auth|authorization|session|cookie|message_body)$
 
   # --------------------------------------------------------------------------
   # eval-exec — arbitrary code execution. Never on untrusted input; flagged

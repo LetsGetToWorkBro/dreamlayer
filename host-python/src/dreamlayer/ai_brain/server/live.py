@@ -160,6 +160,18 @@ def _local_look(brain, arr) -> dict:
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
                 "lines": wrap_hud_lines("nothing I recognize yet")}
     label, conf = hit
+    # Never identify a person on the glass. The Live Lens is its OWN hot path: it
+    # renders the classifier label directly and does not pass through
+    # ObjectRecognizer.recognize()/world_lens, so it must apply the same layered
+    # person defence here — else a YOLO "person" (COCO class 0) or a VLM-emitted
+    # name walks straight onto the HUD and into the activity ledger (refute
+    # 2026-07-18, a sibling call-site the object-lens guard never reached). The
+    # frame is in hand, so the optional visual layer runs too. Defer BEFORE the
+    # ledger write so no person observation is recorded either.
+    from ...object_lens import person_guard
+    if person_guard.defers_person(label, frame=arr):
+        return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
+                "lines": wrap_hud_lines("a person — the Social Lens handles people")}
     if not brain.incognito_now():             # incognito ⇒ leave no on-disk trace
         brain.activity.add("look", f"Live Lens saw {label} ({conf:.0%})")
     return {"ok": True, "label": label, "confidence": round(float(conf), 4),

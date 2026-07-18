@@ -170,6 +170,29 @@ class TestLook:
         # REVERT-FAILING: no durable record of what the camera saw while veiled
         assert not any(i["kind"] == "look" for i in brain.activity.recent())
 
+    def test_look_never_identifies_a_person_on_the_hud(self, tmp_path, monkeypatch):
+        # The Live Lens renders the classifier label DIRECTLY — it never passes
+        # through the object-lens person defence — so it must apply the same
+        # "never identify a stranger" guard itself. Otherwise a YOLO "person"
+        # (COCO class 0) or a VLM-read NAME walks onto the HUD and into the ledger
+        # (refute 2026-07-18, a sibling call-site the object-lens guard never
+        # reached). Deferral must happen BEFORE the ledger write, too.
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        # (a) the classifier returns the COCO "person" class → not on the glass,
+        #     and nothing recorded in the activity ledger.
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("person", 0.95))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == ""
+        assert not any(i["kind"] == "look" for i in brain.activity.recent())
+        # (b) an ALL-CAPS name read off a nametag defers too — exercises BOTH the
+        #     case-insensitive name shape AND the Live Lens wiring (REVERT-FAILING).
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("MAYA CHEN", 0.96))
+        assert look(brain, _jpeg())["label"] == ""
+        # (c) a real OBJECT still renders normally — the guard only defers people.
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("houseplant", 0.88))
+        assert look(brain, _jpeg())["label"] == "houseplant"
+
 
 # --- the page: public but inert ---------------------------------------------
 

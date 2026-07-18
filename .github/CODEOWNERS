@@ -1,0 +1,24 @@
+# Code owners for DreamLayer's security-critical, self-guarding files.
+#
+# gitleaks scans the config from a PR's own head and honours inline
+# `# gitleaks:allow`, so a contributor could weaken the secret-scan gate in the
+# same PR that introduces a secret (refute 2026-07-18). The scanners, their
+# allowlists, and the privacy guardrails are exactly the files whose weakening
+# must be a deliberate, reviewed act — so they route to a human owner here.
+# This is advisory until branch protection enables "Require review from Code
+# Owners" for these paths; enabling it is the recommended companion setting.
+
+# Secret-scan gate + its allowlist
+/.gitleaks.toml            @LetsGetToWorkBro
+# SAST rules + custom privacy rules
+/.semgrep/                 @LetsGetToWorkBro
+# Supply-chain / dependency policy
+/reality-core/deny.toml    @LetsGetToWorkBro
+# All CI workflows (the gates themselves)
+/.github/workflows/        @LetsGetToWorkBro
+# This ownership file
+/.github/CODEOWNERS        @LetsGetToWorkBro
+
+# The runtime privacy guardrails — the "never identify a stranger" defence.
+/host-python/src/dreamlayer/object_lens/person_guard.py   @LetsGetToWorkBro
+/host-python/src/dreamlayer/object_lens/recognizer.py     @LetsGetToWorkBro

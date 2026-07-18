@@ -265,8 +265,13 @@ class WorldLensHost:
         the veil and the person-defence, exactly like a recognised look."""
         if not self.privacy.allow_capture():
             return None
-        from ...object_lens.recognizer import _names_a_person
-        if _names_a_person(sighting.label):
+        from ...object_lens import person_guard
+        # Same layered person defence the image route applies (denylist +
+        # name-shape + optional Presidio) — the label route reached build_panel
+        # through here and previously ran only the deterministic check, so a
+        # lone given name Presidio would catch slipped onto the glass (refute
+        # 2026-07-18). No frame on this route, so the visual layer is N/A.
+        if person_guard.defers_person(sighting.label):
             return None                     # a person → Social Lens, never here
         facets = {facet} if facet else None
         return self.object_lens.registry.build_panel(sighting, facets=facets)
