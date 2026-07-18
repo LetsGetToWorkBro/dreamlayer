@@ -796,40 +796,28 @@ class ActivityLog:
 
 
 def activity_receipt_signer(cfg_dir: Path | str):
-    """Load-or-create the persistent Ed25519 key that signs the activity receipt,
-    stored owner-only beside the Brain's other keys. Returns a sign_crypto.Signer,
-    or None when the `cryptography` extra is absent (the ledger then stays plain,
-    fail-safe). This is the one place the key is read; a future secret-store
-    backend (OS keychain / enclave) can replace the file here without touching
-    the ledger."""
+    """Load-or-create the persistent Ed25519 seed that signs the activity receipt.
+
+    The seed is the root of trust for the tamper-evident privacy ledger, so it is
+    held by the secret_store (OS keychain / enclave when available, an owner-only
+    file otherwise) rather than as a bare plaintext file. The file backend uses
+    the same ``receipt.key`` path and format existing installs already have, and
+    get_or_create() reads through every backend first, so upgrading to a keychain
+    keeps the same public key and every past receipt still verifies. Returns a
+    sign_crypto.Signer, or None when the `cryptography` extra is absent (the
+    ledger then stays plain, fail-safe)."""
     try:
         from ...reality_compiler.sign_crypto import Signer
     except Exception:
         return None
     if not getattr(Signer, "available", False):
         return None
-    p = Path(cfg_dir) / "receipt.key"
-    key = None
-    if p.exists():
-        try:
-            key = bytes.fromhex(p.read_text().strip())
-        except (ValueError, OSError):
-            key = None
-    if key is None or len(key) < 32:
+    from ...secret_store import SecretStore
+    store = SecretStore(cfg_dir)
+    key = store.get_or_create("receipt", lambda: os.urandom(32))
+    if len(key) < 32:                                # corrupt/short existing seed
         key = os.urandom(32)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_text(key.hex())
-        try:
-            os.chmod(tmp, 0o600)                      # secret-at-rest: owner only
-        except OSError:
-            pass
-        os.replace(tmp, p)
-        try:
-            os.chmod(p, 0o600)
-        except OSError:
-            pass
-        _harden_windows_acl(str(p))                  # 0o600 is inert on NTFS
+        store.set("receipt", key)
     return Signer(key)
 
 
