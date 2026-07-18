@@ -36,7 +36,21 @@ def test_commitment_multi_person_sofia():
     assert card["eyebrow"] == "You promised Sofia"
     assert card["primary"] == "Book the van"
 
-def test_low_conf_scene_returns_low_confidence_card():
+def test_low_conf_scene_returns_low_confidence_card(monkeypatch):
+    # Pin default_embedder()'s ladder to the offline hashing/lexical tier
+    # explicitly. With sentence-transformers installed (issue #449), the
+    # ladder in dreamlayer.memory.embeddings.default_embedder() (read via
+    # Orchestrator.__init__) picks the real MiniLM model instead, which finds
+    # a genuinely better match for "where is my bag" and returns
+    # ObjectRecallCard -- an environment effect, not a regression in the
+    # LowConfidenceCard contract this scenario exercises. Mirrors
+    # test_embedder_static.py::TestLadderWiring.test_hashing_when_neither_present,
+    # the precedent for forcing the ladder down to HashingEmbeddingProvider.
+    from dreamlayer.memory.embedder_local import LocalEmbeddingProvider
+    from dreamlayer.memory.embedder_static import StaticEmbeddingProvider
+    monkeypatch.setattr(LocalEmbeddingProvider, "available", False)
+    monkeypatch.setattr(StaticEmbeddingProvider, "available", False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     _, card = scenarios.low_confidence_recall()
     assert card["type"] in ("LowConfidenceCard",)
 
