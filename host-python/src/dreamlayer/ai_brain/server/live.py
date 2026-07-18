@@ -110,7 +110,14 @@ def look(brain, data: bytes) -> dict:
     """One Look: decode the posted frame, run the LOCAL vision ladder, answer
     as a budget-clamped HUD card. This path performs zero network egress by
     construction — the ladder is in-process, and nothing here consults the
-    cloud tier — so a look is safe in every privacy posture."""
+    cloud tier — so classifying a frame is safe in every privacy posture.
+
+    The one thing a look WOULD persist is the observation itself ("saw X") in
+    the activity ledger. When the Brain is in a privacy posture (incognito /
+    quiet-hours) that on-disk record is suppressed — the wearer signalled
+    "minimise footprint", so a look still WORKS on-device but leaves no durable
+    trace of what the camera saw (refute 2026-07-18: the record was written in
+    every posture, an unguarded end-run around the wearer's privacy signal)."""
     arr = decode_frame(data)
     if arr is None:
         return {"ok": False,
@@ -124,18 +131,28 @@ def look(brain, data: bytes) -> dict:
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
                 "lines": wrap_hud_lines("nothing I recognize yet")}
     label, conf = hit
-    brain.activity.add("look", f"Live Lens saw {label} ({conf:.0%})")
+    if not brain.incognito_now():             # incognito ⇒ leave no on-disk trace
+        brain.activity.add("look", f"Live Lens saw {label} ({conf:.0%})")
     return {"ok": True, "label": label, "confidence": round(float(conf), 4),
             "tier": "laptop",
             "lines": wrap_hud_lines(f"{label} · {conf:.0%}")}
 
 
-def render_live() -> str:
+def render_live(nonce: str = "") -> str:
     """The Live Lens page. Served PUBLIC (like the builder) because it holds no
     secrets: the token arrives in the URL fragment from the panel's link/QR and
-    is kept in sessionStorage client-side, never embedded here."""
+    is kept in sessionStorage client-side, never embedded here.
+
+    ``nonce`` stamps the sole inline <style> and <script> so a strict
+    Content-Security-Policy (script-src 'nonce-…', no 'unsafe-inline') can serve
+    THIS page's inline code while blocking any injected <script>/<img onerror>
+    from executing — the defence-in-depth backstop the page lacked entirely
+    (refute 2026-07-18). Empty nonce ⇒ bare tags (the CSP-less test/dev shape)."""
     boot = {"maxLines": MAX_LINES, "maxTextLen": MAX_TEXT_LEN}
-    return _PAGE.replace("__BOOT__", json.dumps(boot))
+    attr = f' nonce="{nonce}"' if nonce else ""
+    return (_PAGE
+            .replace("__BOOT__", json.dumps(boot))
+            .replace("__NONCE__", attr))
 
 
 # One inline page, zero external fetches (the CSP-of-necessity for a LAN
@@ -148,7 +165,7 @@ _PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>DreamLayer &middot; Live Lens</title>
-<style>
+<style__NONCE__>
   :root{
     --phos:#7DFFA8; --phos-dim:#3F8F5C; --amber:#FFC46B; --bg:#050807;
     --lens: min(78vmin, 560px);
@@ -229,7 +246,7 @@ _PAGE = """<!doctype html>
   <button id="send" aria-label="Send">ask</button>
 </div>
 <div id="privacy">camera &rarr; your Brain on your LAN &middot; looks never touch the cloud</div>
-<script>
+<script__NONCE__>
 "use strict";
 const BOOT = __BOOT__;
 

@@ -1822,10 +1822,26 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             PUBLIC like the builder, but stricter: this HTML embeds NO token in
             any case; the credential rides the URL fragment of the link/QR the
             panel hands out (see _get_live_link), so the page itself is inert."""
+            import secrets
             from .live import render_live
-            body = render_live().encode("utf-8")
+            # Per-response nonce for the sole inline <style>/<script>, so a strict
+            # CSP can permit THIS page's own inline code while blocking any
+            # injected <script>/<img onerror> from executing — the token lives in
+            # the page's sessionStorage, so an innerHTML regression here would be
+            # token theft; the CSP is the backstop the page had none of (refute
+            # 2026-07-18). default-src 'none' + connect-src 'self' also pins the
+            # "zero external fetches" claim: no off-origin load can slip in.
+            nonce = secrets.token_urlsafe(16)
+            body = render_live(nonce).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'none'; "
+                f"script-src 'nonce-{nonce}'; "
+                f"style-src 'nonce-{nonce}'; "
+                "img-src 'self' data: blob:; media-src 'self' blob:; "
+                "connect-src 'self'; base-uri 'none'; form-action 'none'")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
