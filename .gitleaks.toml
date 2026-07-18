@@ -19,6 +19,13 @@
 # Fixtures were found by grepping host-python/src/dreamlayer/tests and
 # phone-app/src (2026-07-18). Add a value here only when it is provably a test
 # constant; never allowlist a prefix that a real secret would also match.
+#
+# One documentation constant is pinned too: the NORMATIVE test vector in
+# docs/GHOSTMODE_PROTOCOL.md §7.4 publishes a fixed 256-bit `group_key` (like an
+# RFC test vector) so any implementation can reproduce the MAC bit-for-bit. It is
+# public by design — the protocol's security does not rest on that value being
+# secret — but its entropy trips the built-in generic-api-key rule, so the exact
+# literal is pinned below.
 
 title = "DreamLayer gitleaks config"
 
@@ -63,6 +70,10 @@ regexes = [
 # markers it is a test constant. None of these is a bare `sk-`/`token`/`secret`
 # prefix, so a real key sitting beside a fixture is unaffected.
 stopwords = [
+  # normative GhostMode protocol test-vector group_key (docs/GHOSTMODE_PROTOCOL.md
+  # §7.4) — a published deterministic constant, not a live secret. Pinned in full
+  # (64 hex chars) so nothing but this exact value is exempted.
+  "7e98870b287be188f0707eee57bbc1cb5032a1898cf6502d99a055546315fd9e",
   "rune-birch",
   "sk-test-fake-key",
   "sk-super-secret-123",
