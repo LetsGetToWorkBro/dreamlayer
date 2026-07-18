@@ -344,25 +344,36 @@ def test_server_has_bounded_worker_semaphore(tmp_path):
         errs = []
 
         def hit():
-            # A synthetic 24-way connect burst can trip the listen backlog
-            # (request_queue_size) on a loaded CI box → a transient
-            # ECONNRESET/ECONNREFUSED on a few connects. That never reaches the
-            # accept loop, so it can't leak a slot — retry the CONNECT rather
-            # than fail the leak check on a backlog artifact. A real HTTP error
-            # (non-200) is recorded immediately, never retried; a genuine
-            # slot-leak deadlock would surface as a timeout after the retries.
-            for attempt in range(4):
+            # _BrainServer sets no request_queue_size, so it inherits
+            # socketserver's default backlog of 5. The accept loop is
+            # single-threaded, so a synthetic 24-way connect burst on a
+            # CPU-starved CI runner can overflow that backlog faster than
+            # the loop drains it, and the OS resets the extras — the client
+            # sees ConnectionResetError/ConnectionRefusedError (errno
+            # 104/111). That reset never reaches the accept loop, so it
+            # can't leak a semaphore slot — retry those two specifically,
+            # within a short deadline, rather than fail the leak check on a
+            # backlog artifact. A reset here means "backlog was momentarily
+            # full, come back," which is exactly what a real client does.
+            # Any OTHER exception is recorded immediately, never retried —
+            # a genuine slot-leak deadlock must still surface as a timeout,
+            # not be swallowed by this retry.
+            deadline = time.monotonic() + 2.0
+            while True:
                 try:
                     st, _ = _post(f"http://{host}:{port}/dreamlayer/brain/ask",
                                   {"query": "x"})
                     if st != 200:
                         errs.append(st)
                     return
-                except Exception as exc:                 # noqa: BLE001
-                    if attempt == 3:
+                except (ConnectionResetError, ConnectionRefusedError) as exc:
+                    if time.monotonic() >= deadline:
                         errs.append(str(exc))
-                    else:
-                        time.sleep(0.05 * (attempt + 1))
+                        return
+                    time.sleep(0.05)
+                except Exception as exc:                 # noqa: BLE001
+                    errs.append(str(exc))
+                    return
 
         threads = [threading.Thread(target=hit) for _ in range(24)]
         for t in threads:
