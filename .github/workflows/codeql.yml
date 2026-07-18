@@ -36,12 +36,18 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
         with:
-          language: ${{ matrix.language }}
+          # NOTE: the init input is `languages` (plural). Passing the singular
+          # `language` is silently ignored, which makes CodeQL AUTO-DETECT every
+          # language in the repo — including Ruby/Rust, whose extractors then hard-
+          # fail ("could not process any code", exit 32). Pinning `languages` to the
+          # one matrix language keeps each job to Python OR JS/TS only.
+          languages: ${{ matrix.language }}
+          # build-mode: none — Python and JS/TS are interpreted, so there is no
+          # build to run (and autobuild is neither needed nor supported for them).
+          build-mode: none
           # security-extended adds the higher-signal security queries on top of
           # the default set (more coverage, still curated for low false positives).
           queries: security-extended
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
         with:
