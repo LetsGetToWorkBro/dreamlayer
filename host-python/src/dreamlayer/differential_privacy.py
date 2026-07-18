@@ -44,12 +44,21 @@ def _system_rng() -> Callable[[], float]:
 
 def laplace_noise(scale: float, rand: Callable[[], float]) -> float:
     """A Laplace(0, scale) sample via inverse-CDF of a uniform draw. scale =
-    sensitivity/epsilon. rand() must return a uniform in [0, 1)."""
+    sensitivity/epsilon. rand() returns a uniform in [0, 1).
+
+    `random()` CAN return exactly 0.0 (its range is [0, 1)), and the naive form
+    ``ln(1 - 2|u|)`` with ``u = rand() - 0.5`` hits ``ln(0)`` there — a
+    ValueError that would crash a release (refute 2026-07-18). Clamp the draw
+    into the OPEN interval (0, 1) so the log is always finite; the clamp bound is
+    far below the noise scale, so it changes the distribution immeasurably while
+    removing the crash."""
     if scale <= 0:
         return 0.0
-    u = rand() - 0.5                         # (-0.5, 0.5)
-    # 1 - 2|u| ∈ (0, 1], so the log is always finite (rand()<1 → |u|<0.5)
-    return -scale * math.copysign(1.0, u) * math.log(1.0 - 2.0 * abs(u))
+    u = min(max(rand(), 1e-12), 1.0 - 1e-12)   # (0, 1) open — never 0 or 1
+    # inverse-CDF of Laplace(0, scale): both branches take log of a value in (0,1]
+    if u < 0.5:
+        return scale * math.log(2.0 * u)
+    return -scale * math.log(2.0 * (1.0 - u))
 
 
 class LaplaceMechanism:
