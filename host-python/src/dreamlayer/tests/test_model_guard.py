@@ -171,6 +171,30 @@ def test_require_fetch_allowed_blocks_when_offline():
     model_guard.require_fetch_allowed("connected", "all-MiniLM-L6-v2")   # no raise
 
 
+def test_require_fetch_allowed_uses_live_process_decision(monkeypatch):
+    """A loader with no posture in hand (ultralytics) must respect the live
+    offline session set by apply_offline_posture."""
+    for k in ("HF_HUB_OFFLINE", "_DL_ORIG_HF_HUB_OFFLINE"):
+        monkeypatch.delenv(k, raising=False)
+    model_guard.apply_offline_posture("lan_only")        # go offline
+    with pytest.raises(ModelFetchBlocked):
+        model_guard.require_fetch_allowed(model_id="yolo11n.pt")   # no posture arg
+    model_guard.apply_offline_posture("connected")       # back online
+    model_guard.require_fetch_allowed(model_id="yolo11n.pt")       # no raise
+
+
+def test_apply_offline_posture_restores_operator_zero(monkeypatch):
+    """An operator's explicit HF_HUB_OFFLINE=0 (I want online) must be RESTORED
+    after an offline→online cycle, not left stuck at our '1' (refute 2026-07-18)."""
+    import os
+    monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+    monkeypatch.delenv("_DL_ORIG_HF_HUB_OFFLINE", raising=False)
+    model_guard.apply_offline_posture("lan_only")        # we override to "1"
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+    model_guard.apply_offline_posture("connected")       # restore their "0"
+    assert os.environ["HF_HUB_OFFLINE"] == "0"
+
+
 # --- no-pickle-RCE torch load ------------------------------------------------
 
 def test_safe_torch_load_forces_weights_only(monkeypatch):
@@ -201,6 +225,39 @@ def test_safe_torch_load_degrades_on_old_torch(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     assert model_guard.safe_torch_load("x.pt") == "loaded-legacy"
     assert len(calls) == 2 and "weights_only" not in calls[1]   # retried without it
+
+
+def test_safe_torch_load_does_not_disarm_on_an_unrelated_typeerror(monkeypatch):
+    """A TypeError NOT about weights_only (e.g. a modern torch choking on a
+    crafted checkpoint) must propagate — retrying without weights_only would
+    strip the RCE guard (refute 2026-07-18)."""
+    def _fake_load(path, **kw):
+        raise TypeError("something else entirely")
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.load = _fake_load
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    with pytest.raises(TypeError):
+        model_guard.safe_torch_load("x.pt")
+
+
+def test_verify_tree_rejects_a_path_escape(tmp_path):
+    (tmp_path / "safe.bin").write_bytes(b"ok")
+    lock_files = {"../escape.bin": "0" * 64}
+    with pytest.raises(ModelIntegrityError):
+        model_guard.verify_tree(tmp_path, lock_files)
+
+
+def test_verify_all_never_raises_on_missing_or_malformed(tmp_path):
+    """Missing pinned file, unreadable file, and a non-dict lock entry are all
+    collected, never propagated (refute 2026-07-18: FileNotFoundError leaked)."""
+    lock = {"models": {
+        "missing": {"sha256": "0" * 64},          # file absent under root
+        "weird": ["not", "a", "dict"],            # malformed entry
+    }}
+    results = {r["model"]: r for r in model_guard.verify_all(tmp_path, lock)}
+    assert results["missing"]["ok"] is False and results["missing"]["error"]
+    assert results["weird"]["pinned"] is False
 
 
 def test_prefer_safetensors():

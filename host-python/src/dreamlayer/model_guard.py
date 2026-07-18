@@ -12,12 +12,16 @@ found zero offline flags, zero checksums, zero `weights_only` guards anywhere).
 Three layered controls, all dependency-light and fail-safe:
 
 1. **Offline-by-default posture gate.** HuggingFace, transformers,
-   sentence-transformers, faster-whisper, speechbrain, open_clip and diart ALL
-   honor the env flags ``HF_HUB_OFFLINE`` / ``TRANSFORMERS_OFFLINE``.
-   :func:`apply_offline_posture` sets them process-wide from the wearer's posture,
-   so when the wearer is incognito / LAN-only, **nothing** fetches — one call
-   gates every hub loader at once, with no per-site wiring. First-run bootstrap
-   (``dreamlayer setup models``) is the one sanctioned fetch window.
+   sentence-transformers, faster-whisper, speechbrain, open_clip and diart honor
+   the env flags ``HF_HUB_OFFLINE`` / ``TRANSFORMERS_OFFLINE``.
+   :func:`apply_offline_posture` sets them process-wide from the wearer's posture.
+   Because those libs read the flag into an import-time constant, the flag is set
+   as early as ``import dreamlayer`` when ``DL_MODELS_OFFLINE`` is exported, and a
+   loader additionally passes ``local_files_only`` per-call (the reliable lever
+   for a runtime posture change). Loaders that do NOT honor those env flags —
+   ultralytics and ``torch.hub``, which fetch from their own CDNs — must call
+   :func:`require_fetch_allowed` to refuse a download while offline. First-run
+   bootstrap (``dreamlayer setup models``) is the one sanctioned fetch window.
 
 2. **Pinned integrity.** ``models.lock`` is a sha256 manifest of the trusted
    weight files. :func:`verify_path` / :func:`verify_tree` check on-disk bytes
@@ -109,8 +113,13 @@ def _strict_default() -> bool:
 
 def verify_file(path: Path | str, expected_sha256: str) -> bool:
     """True iff *path* hashes to *expected_sha256*. Raises ModelIntegrityError on
-    a mismatch (a present-but-wrong file is tampering, never a soft miss)."""
-    actual = sha256_file(path)
+    a mismatch (a present-but-wrong file is tampering) OR when a pinned file is
+    missing/unreadable — so a caller only ever has to catch ModelIntegrityError,
+    never a bare OSError (refute 2026-07-18: verify_all leaked FileNotFoundError)."""
+    try:
+        actual = sha256_file(path)
+    except OSError as exc:
+        raise ModelIntegrityError(f"cannot read pinned model file {path}: {exc}") from exc
     if actual.lower() != str(expected_sha256).lower():
         raise ModelIntegrityError(
             f"integrity check FAILED for {path}: expected {expected_sha256}, got {actual}")
@@ -120,11 +129,15 @@ def verify_file(path: Path | str, expected_sha256: str) -> bool:
 def verify_tree(root: Path | str, files: dict) -> bool:
     """Verify a set of ``{relpath: sha256}`` under *root*. A pinned file that is
     missing is a failure; an empty pin set means 'unpinned' and returns False."""
-    root = Path(root)
+    root = Path(root).resolve()
     if not files:
         return False
     for rel, expected in files.items():
-        fp = root / rel
+        fp = (root / rel).resolve()
+        # containment: models.lock is the trust anchor this feature introduces, so
+        # a relpath of '../..' or an absolute path must not escape the model dir.
+        if fp != root and not fp.is_relative_to(root):
+            raise ModelIntegrityError(f"pinned model path escapes its root: {rel!r}")
         if not fp.exists():
             raise ModelIntegrityError(f"pinned model file missing: {fp}")
         verify_file(fp, expected)
@@ -200,30 +213,46 @@ def offline_env(allow_fetch: bool) -> dict:
     return {} if allow_fetch else dict(_OFFLINE_ENV)
 
 
+# The live process-wide fetch decision, updated by apply_offline_posture, so a
+# loader can consult it via require_fetch_allowed() with no posture in hand.
+_FETCH_ALLOWED = True
+# Marker prefix recording the operator's ORIGINAL value of a flag before we
+# overrode it, so going back online restores it EXACTLY (a "\0" value means the
+# flag was originally unset). Stored in the env (not a module global) so it is
+# naturally scoped and test-isolated via monkeypatch.
+_ORIG_PREFIX = "_DL_ORIG_"
+_UNSET = "__DL_UNSET__"     # a value no operator would set a flag to (not "\0" — env vars can't hold NUL)
+
+
 def apply_offline_posture(posture=None, *, allow_fetch: Optional[bool] = None) -> dict:
     """Set (or clear) the process-wide offline flags to match posture.
 
     When fetch is forbidden, ``HF_HUB_OFFLINE`` &co are set to "1" so every
-    hub-backed loader in the process refuses to reach a CDN. When it is allowed
-    we REMOVE only the flags we ourselves set (never clobber an operator's
-    explicit export). Returns the applied env dict. Idempotent; safe to call on
-    every posture change."""
+    hub-backed loader in the process refuses to reach a CDN. When it is allowed we
+    restore each flag to the operator's EXACT original value (including an explicit
+    ``=0`` or an unset), never leaving our "1" stuck (refute 2026-07-18: a non-"1"
+    operator export was overwritten to "1" and never restored). Returns the
+    applied env dict. Idempotent; safe to call on every posture change."""
+    global _FETCH_ALLOWED
     fetch = allow_fetch if allow_fetch is not None else posture_allows_fetch(posture)
-    applied = offline_env(fetch)
+    _FETCH_ALLOWED = fetch
     if fetch:
         for k in _OFFLINE_ENV:
-            # only clear a flag WE set; respect an operator's own export
-            if os.environ.get(k) == _OFFLINE_ENV[k] and os.environ.get("_DL_SET_" + k) == "1":
-                os.environ.pop(k, None)
-                os.environ.pop("_DL_SET_" + k, None)
+            marker = _ORIG_PREFIX + k
+            if marker in os.environ:
+                orig = os.environ.pop(marker)
+                if orig == _UNSET:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = orig       # restore the operator's exact value
     else:
-        for k, v in applied.items():
-            if k not in os.environ:
-                os.environ["_DL_SET_" + k] = "1"   # remember it was ours to clear
+        for k, v in _OFFLINE_ENV.items():
+            marker = _ORIG_PREFIX + k
+            if marker not in os.environ:        # remember the original ONCE
+                os.environ[marker] = os.environ.get(k, _UNSET)
             os.environ[k] = v
-    if not fetch:
         log.info("[model_guard] offline posture: model downloads disabled (HF_HUB_OFFLINE=1)")
-    return applied
+    return offline_env(fetch)
 
 
 @contextlib.contextmanager
@@ -244,10 +273,13 @@ def offline_guard(posture=None, *, allow_fetch: Optional[bool] = None):
 
 
 def require_fetch_allowed(posture=None, model_id: str = "model") -> None:
-    """Raise ModelFetchBlocked when posture forbids a download. For a loader that
-    would otherwise silently reach a CDN on first use while the wearer is
-    offline."""
-    if not posture_allows_fetch(posture):
+    """Raise ModelFetchBlocked when a download is forbidden. For a loader (e.g.
+    ultralytics/torch.hub, which don't honour HF_HUB_OFFLINE) that would otherwise
+    silently reach a CDN on first use while the wearer is offline. With no posture
+    supplied it consults the LIVE process decision set by apply_offline_posture,
+    so a loader with no posture in hand still respects an offline session."""
+    allowed = _FETCH_ALLOWED if posture is None else posture_allows_fetch(posture)
+    if not allowed:
         raise ModelFetchBlocked(
             f"refusing to download {model_id!r}: the wearer's posture is offline/"
             f"incognito/LAN-only. Fetch models once via 'dreamlayer setup models' "
@@ -267,8 +299,14 @@ def safe_torch_load(path: Path | str, **kw):
     kw.setdefault("weights_only", True)
     try:
         return torch.load(path, **kw)
-    except TypeError:
-        # torch too old for weights_only — warn rather than silently trust pickle
+    except TypeError as exc:
+        # ONLY treat the "unexpected keyword 'weights_only'" TypeError as the
+        # old-torch signal. Any OTHER TypeError (e.g. one raised while a modern
+        # torch processes a crafted checkpoint) must propagate — retrying without
+        # weights_only would disarm the RCE guard we exist to hold (refute
+        # 2026-07-18).
+        if "weights_only" not in str(exc):
+            raise
         kw.pop("weights_only", None)
         log.warning("[model_guard] torch too old for weights_only=True; loading %s "
                     "as a trusted pickle — upgrade torch to close the RCE path", path)
@@ -288,7 +326,8 @@ def verify_all(root: Path | str, lock: Optional[dict] = None) -> list[dict]:
     collects failures so the CLI can report them all at once."""
     out = []
     for model_id, entry in known_models(lock).items():
-        files = entry.get("files") if isinstance(entry, dict) else None
+        entry = entry if isinstance(entry, dict) else {}     # a malformed lock entry
+        files = entry.get("files")
         rec = {"model": model_id, "pinned": bool(files or entry.get("sha256")),
                "ok": None, "error": None}
         if not rec["pinned"]:
@@ -296,7 +335,7 @@ def verify_all(root: Path | str, lock: Optional[dict] = None) -> list[dict]:
             continue
         try:
             rec["ok"] = verify_path(model_id, Path(root) / model_id, lock=lock, strict=False)
-        except ModelIntegrityError as exc:
+        except (ModelIntegrityError, OSError) as exc:        # missing/unreadable file too
             rec["ok"] = False
             rec["error"] = str(exc)
         out.append(rec)
