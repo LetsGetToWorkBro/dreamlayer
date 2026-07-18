@@ -63,8 +63,11 @@ def _get_analyzer():
     if _analyzer_cache is not None:
         return _analyzer_cache
     try:
-        from presidio_analyzer import AnalyzerEngine
-        engine = AnalyzerEngine()
+        from .. import nlp_setup
+        engine = nlp_setup.analyzer_engine()       # pinned to en_core_web_sm, fail-safe
+        if engine is None:
+            _analyzer_cache = _NONE
+            return None
 
         def _analyze(text: str):
             res = engine.analyze(text=text, language="en", entities=["PERSON"])

@@ -142,6 +142,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("nlp", "NER + dependency parse for commitments", "intelligence",
         ("spacy",), "intelligence",
         "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py",
+        note="`dreamlayer setup models` downloads the spaCy model this needs",
         gain="baseline pulls names/promises with regex that breaks on real sentences; this parses them properly", impact=5),
     Cap("online_learning", "Per-user adaptation in real time", "intelligence",
         ("river",), "intelligence",
@@ -193,7 +194,8 @@ CAPABILITIES: Tuple[Cap, ...] = (
     # --- privacy ------------------------------------------------------------------------
     Cap("pii_redaction", "ML PII scrubbing before any write", "privacy",
         ("presidio_analyzer",), "privacy", "memory/pii_presidio.py",
-        note="regex fallback is always on",
+        note="regex fallback is always on; `dreamlayer setup models` downloads the "
+             "spaCy model that activates the presidio path",
         gain="baseline scrubs emails/phones by regex; this catches names, addresses, cards in context", impact=4),
     Cap("asym_signing", "Ed25519 provenance signatures", "privacy",
         ("cryptography",), "privacy", "reality_compiler/sign_crypto.py",
@@ -205,7 +207,8 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline cancel-all is hand-rolled asyncio; this makes the Veil-stop guarantee structural", impact=2),
     Cap("stranger_defense", "Never identify a stranger (name NER)", "privacy",
         ("presidio_analyzer",), "privacy", "object_lens/person_guard.py",
-        note="deterministic name-shape + person-word guard is ALWAYS on; the "
+        note="deterministic name-shape + person-word guard is ALWAYS on; "
+             "`dreamlayer setup models` activates the presidio NER layer; the "
              "visual person-detect backstop rides the vision pack (ultralytics)",
         gain="baseline defers a person by name-shape and a person-word list; this "
              "adds Presidio NER for a lone or odd-cased given name the shape rule "
