@@ -1,14 +1,17 @@
 """live.py — the Live Lens: any phone's browser becomes the glasses.
 
 Open one URL (QR from the panel), grant the camera, and the loop is real end
-to end: your camera frame goes to YOUR Brain on YOUR LAN, the real vision
-ladder (object_lens.classify_backends.default_classifier — YOLO/moondream/CLIP
-when installed, the pixel-reading heuristic always) labels it, and the answer
-comes back as a HUD card that honors the SAME display budget the glasses
-prove: MAX_LINES x MAX_TEXT_LEN utf-8 bytes (reality_compiler.v2.figment — the
-canonical unit shared by all four interpreters). Asks ride the existing
-/dreamlayer/brain/ask route, so recall, tiers, and the wearer's no-cloud
-posture are the production paths, not simulations.
+to end: your camera frame goes to YOUR Brain on YOUR LAN and a look runs the
+SAME pipeline the glasses will — the World lens (``Brain.world_lens()``: the
+VLM-backed structured recognizer with the classifier ladder as its offline
+rung, the Object Lens, and your installed plugin providers), so a price tag
+comes back converted and a book spine comes back rated, exactly like the
+phone app's Look and the future on-glass glance. One formatter
+(:func:`panel_lines`) clamps every surface's answer to the display budget the
+glasses prove: MAX_LINES x MAX_TEXT_LEN utf-8 bytes (reality_compiler.v2
+.figment — the canonical unit shared by all four interpreters). Asks ride the
+existing /dreamlayer/brain/ask route, so recall, tiers, and the wearer's
+no-cloud posture are the production paths, not simulations.
 
 What this deliberately is NOT (the honest ceiling): a phone screen is opaque
 and hand-held — it cannot reproduce the see-through waveguide, the head-mounted
@@ -17,7 +20,11 @@ the real SYSTEM without the physical glass, and the page says so.
 
 Privacy invariants (tested):
   * Frames are decoded in memory and never written to disk.
-  * Vision is local-only — a look can never cause cloud egress.
+  * The wearer's egress shield (incognito: LAN-only / quiet hours) makes a
+    look LOCAL-ONLY: the in-process classifier ladder answers, the plugin
+    pipeline and any remote vision are not consulted, and no ledger trace is
+    written. Outside the shield, pixels still never ride to a plugin — a
+    provider row is built from the extracted label/fields only.
   * The page HTML carries no token; the credential rides the URL FRAGMENT
     (#t=...) of the link/QR the panel hands out local-only, so it never
     appears in request lines or server logs. Same trust model as pairing:
@@ -106,22 +113,44 @@ def decode_frame(data: bytes):
         return None
 
 
-def look(brain, data: bytes) -> dict:
-    """One Look: decode the posted frame, run the LOCAL vision ladder, answer
-    as a budget-clamped HUD card. This path performs zero network egress by
-    construction — the ladder is in-process, and nothing here consults the
-    cloud tier — so classifying a frame is safe in every privacy posture.
+def _clip_bytes(s: str, max_bytes: int = MAX_TEXT_LEN) -> str:
+    """Clip one atomic line to the glass's byte budget with an ellipsis mark."""
+    if len(s.encode("utf-8")) <= max_bytes:
+        return s
+    while s and len((s + "…").encode("utf-8")) > max_bytes:
+        s = s[:-1]
+    return s + "…"
 
-    The one thing a look WOULD persist is the observation itself ("saw X") in
-    the activity ledger. When the Brain is in a privacy posture (incognito /
-    quiet-hours) that on-disk record is suppressed — the wearer signalled
-    "minimise footprint", so a look still WORKS on-device but leaves no durable
-    trace of what the camera saw (refute 2026-07-18: the record was written in
-    every posture, an unguarded end-run around the wearer's privacy signal)."""
-    arr = decode_frame(data)
-    if arr is None:
-        return {"ok": False,
-                "reason": "not an image I can decode (the Brain needs Pillow)"}
+
+def panel_lines(card: dict) -> list[str]:
+    """A World-lens panel card → the exact lines the glass would draw, inside
+    the canonical budget (MAX_LINES x MAX_TEXT_LEN bytes). This is THE shared
+    formatter: the browser HUD and the phone app's on-glass preview both render
+    these bytes, so every surface shows literally the same look.
+
+    Layout mirrors the on-glass ObjectPanelCard: title, then provider rows
+    (each an atomic line — a row never word-wraps across lines), then the
+    provenance footer (confidence · sources)."""
+    lines: list[str] = []
+    title = str(card.get("primary") or card.get("label") or "").strip()
+    if title:
+        lines.append(_clip_bytes(title))
+    for r in (card.get("rows") or [])[:MAX_LINES - 2]:
+        label = str(r.get("label") or "").strip()
+        extra = str(r.get("value") or r.get("detail") or "").strip()
+        text = " · ".join(p for p in (label, extra) if p)
+        if text:
+            lines.append(_clip_bytes(text))
+    footer = str(card.get("footer") or "").strip()
+    if footer and len(lines) < MAX_LINES:
+        lines.append(_clip_bytes(footer))
+    return lines[:MAX_LINES]
+
+
+def _local_look(brain, arr) -> dict:
+    """The egress-shielded rung: the in-process classifier ladder only. Runs
+    while the wearer's shield is up (incognito) — nothing leaves, nothing is
+    written — and as the honest floor when the World lens can't serve."""
     try:
         hit = _classifier()(arr)
     except Exception as exc:                      # a backend blew up mid-frame
@@ -136,6 +165,72 @@ def look(brain, data: bytes) -> dict:
     return {"ok": True, "label": label, "confidence": round(float(conf), 4),
             "tier": "laptop",
             "lines": wrap_hud_lines(f"{label} · {conf:.0%}")}
+
+
+def _with_min_panel(out: dict) -> dict:
+    """Give a classifier-only result the panel SHAPE (title + provenance, no
+    rows) so every surface renders one thing — the phone's panel view and the
+    browser's lines stay in lockstep even on the local rung."""
+    if out.get("ok") and out.get("label"):
+        conf = float(out.get("confidence") or 0.0)
+        out["panel"] = {"type": "ObjectPanelCard", "primary": out["label"],
+                        "label": out["label"], "confidence": conf, "rows": [],
+                        "sources": [], "footer": f"{conf:.0%} · on-device"}
+    return out
+
+
+def world_look(brain, arr) -> dict:
+    """One unified Look — the single pipeline behind BOTH the browser's tap and
+    the phone app's shutter, so the two surfaces are one thing.
+
+    Outside the egress shield the full World lens runs: structured recognition
+    (VLM when configured, the classifier ladder as its built-in rung), the
+    Object Lens, and the wearer's installed plugin providers — a price converts,
+    a book rates — returned as the panel PLUS the budget-clamped glass lines
+    from :func:`panel_lines`. Inside the shield (incognito: LAN-only /
+    quiet-hours) the look stays LOCAL-ONLY via :func:`_local_look` — it still
+    works, consults nothing remote, and leaves no trace. A person in frame is
+    never panelled in any posture (the recognizer defers to the Social Lens);
+    the surface just hears "nothing I recognize"."""
+    if arr is None:
+        return {"ok": False,
+                "reason": "not an image I can decode (the Brain needs Pillow)"}
+    if brain.incognito_now():
+        out = _local_look(brain, arr)
+        out["local_only"] = True                # the shield is up — say so
+        return _with_min_panel(out)
+    wl = None
+    try:
+        wl = brain.world_lens()
+    except Exception as exc:
+        log.warning("[live] world lens unavailable: %s", exc)
+    panel = None
+    if wl is not None:
+        try:
+            panel = wl.look(arr)
+        except Exception as exc:                # a look never dies on a provider
+            log.warning("[live] world look failed: %s", exc)
+    if panel is None:
+        return _with_min_panel(_local_look(brain, arr))   # the honest floor
+    card = panel.to_hud_card()
+    label = str(card.get("label") or card.get("primary") or "")
+    conf = float(card.get("confidence") or 0.0)
+    # provenance: the providers that actually contributed rows (the card keeps
+    # them only inside its footer string, so read them off the rows themselves)
+    sources = sorted({str(r.get("source") or "").split(" ")[0]
+                      for r in (card.get("rows") or []) if r.get("source")})
+    brain.activity.add("look", f"Lens saw {label} ({conf:.0%})")
+    return {"ok": True, "label": label, "confidence": round(conf, 4),
+            "tier": "laptop", "sources": sources,
+            "panel": card, "lines": panel_lines(card)}
+
+
+def look(brain, data: bytes) -> dict:
+    """One browser Look: decode the posted frame in memory, run the unified
+    pipeline (:func:`world_look`). Frames never touch disk; the wearer's
+    egress shield makes the look local-only; a plugin row is built from the
+    extracted label/fields, never the pixels."""
+    return world_look(brain, decode_frame(data))
 
 
 def render_live(nonce: str = "") -> str:
@@ -245,7 +340,7 @@ _PAGE = """<!doctype html>
           title="Voice uses your phone's speech service, not the Brain's on-device ASR">&#127908;</button>
   <button id="send" aria-label="Send">ask</button>
 </div>
-<div id="privacy">camera &rarr; your Brain on your LAN &middot; looks never touch the cloud</div>
+<div id="privacy">camera &rarr; your Brain on your LAN &middot; frames are never stored &middot; plugin rows see the label, never the pixels</div>
 <script__NONCE__>
 "use strict";
 const BOOT = __BOOT__;

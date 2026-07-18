@@ -60,8 +60,19 @@ export function LensPanel({ panel }: { panel: LookPanel }) {
   }
   const pct = typeof panel.confidence === "number" ? Math.round(panel.confidence * 100) : null;
   const prov = panel.sources.filter(Boolean).join(", ");
+  const lines = panel.lines ?? [];
   return (
     <Card>
+      {lines.length > 0 && (
+        <View style={s.glass}>
+          <Text style={[typography.caption, s.glassEyebrow]}>
+            {t("look.onGlass")}{panel.localOnly ? ` · ${t("look.localOnly")}` : ""}
+          </Text>
+          {lines.map((ln, i) => (
+            <Text key={i} style={[typography.mono, s.glassLine]}>{ln}</Text>
+          ))}
+        </View>
+      )}
       {!!panel.title && (
         <Text style={[typography.title, { color: colors.textPrimary }]}>{panel.title}</Text>
       )}
@@ -188,4 +199,19 @@ const s = StyleSheet.create({
   row: { marginTop: space.sm, gap: 2 },
   rowHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   tier: { color: colors.textSecondary ?? "#8aa", marginTop: space.md },
+  /* the on-glass preview: the exact budget-clamped lines the glass would draw,
+     on a dark disc-like well — one shared server formatter feeds this and the
+     browser Live Lens, so every surface shows the same look */
+  glass: {
+    backgroundColor: "#050807",
+    borderRadius: radius.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    marginBottom: space.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(125,255,168,0.35)",
+  },
+  glassEyebrow: { color: "#3F8F5C", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 },
+  glassLine: { color: "#7DFFA8", lineHeight: 20 },
 });
