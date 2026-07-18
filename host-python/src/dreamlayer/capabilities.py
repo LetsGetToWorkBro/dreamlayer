@@ -203,6 +203,14 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("anyio",), "privacy", "orchestrator/concurrency_anyio.py",
         note="asyncio fallback is always on",
         gain="baseline cancel-all is hand-rolled asyncio; this makes the Veil-stop guarantee structural", impact=2),
+    Cap("stranger_defense", "Never identify a stranger (name NER)", "privacy",
+        ("presidio_analyzer",), "privacy", "object_lens/person_guard.py",
+        note="deterministic name-shape + person-word guard is ALWAYS on; the "
+             "visual person-detect backstop rides the vision pack (ultralytics)",
+        gain="baseline defers a person by name-shape and a person-word list; this "
+             "adds Presidio NER for a lone or odd-cased given name the shape rule "
+             "misses, and (with the vision pack) a YOLO backstop for a human the "
+             "VLM mislabels as an object", impact=3),
 
     # --- platform ----------------------------------------------------------------------
     Cap("plugin_entrypoints", "Plugins distributed as pip packages", "platform",
