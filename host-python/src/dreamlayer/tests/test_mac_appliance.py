@@ -6,6 +6,10 @@ injectable poster.
 """
 from __future__ import annotations
 
+import urllib.error
+
+import pytest
+
 from dreamlayer.ai_brain.server.store import BrainConfig
 from dreamlayer.ai_brain.server.backends import pull_model
 from dreamlayer.ai_brain import menubar
@@ -64,6 +68,113 @@ def test_status_summary_green_yellow_incognito_offline():
 
     off = menubar.status_summary(None)
     assert off["icon"] == "⚪" and "offline" in off["title"].lower()
+
+
+# -- stale-token recovery: a mid-session rotation is picked up, no restart ------
+
+def test_menu_bar_recovers_from_a_rotated_pairing_token(tmp_path):
+    # The menu bar caches the pairing token and, before this fix, re-read it from
+    # config ONLY while empty (the grey-dot startup-race fix). So once a NON-empty
+    # token was cached it was never re-read for the process lifetime: a mid-session
+    # token ROTATION (the panel "rotate" action mints a new token into
+    # brain_config.json) stranded the UI on the OLD token → every loopback call
+    # 401s → a permanent grey dot until restart. The fix: an _api 401/403 clears
+    # the cache so the next _token() re-reads the fresh token.
+    cfg = tmp_path / "cfg"; cfg.mkdir()
+    BrainConfig(token="old").save(cfg)
+
+    auth = menubar._TokenCache(str(cfg), BrainConfig.load)
+    assert auth.get() == "old"                       # cached the initial token
+
+    # the panel rotates the token: a NEW token is persisted to brain_config.json …
+    BrainConfig(token="new").save(cfg)
+    # … but a non-empty cache still hands out the stale token (the bug's setup):
+    assert auth.get() == "old"
+
+    # an _api call authenticating with the stale token comes back 401
+    class _Opener401:
+        def open(self, req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized",
+                                         {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        menubar._authed_api(7777, auth, "/dreamlayer/config", "POST",
+                            b"{}", opener=_Opener401())
+
+    # the 401 INVALIDATED the cache → the next read recovers the rotated token
+    # WITHOUT a restart. The reverted "re-read only while empty" logic (no
+    # invalidate on auth failure) would stay stuck on "old" and fail here.
+    assert auth.get() == "new"
+
+
+class _Resp:
+    """A minimal urlopen()-style response for the injected opener below."""
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def read(self):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class _RotatingOpener:
+    """401s while the request still carries the stale "old" token; serves a
+    healthy /status once the request carries the rotated "new" token. Proves the
+    PASSIVE poll re-reads the fresh token after invalidation, with no server."""
+    GREEN = (b'{"model":"ollama","cloud":true,"cloud_ready":true,'
+             b'"stats":{"files":1}}')
+
+    def __init__(self):
+        self.tokens_seen = []
+
+    def open(self, req, timeout=None):
+        import urllib.error
+        tok = req.headers.get("X-dreamlayer-token")   # urllib capitalizes keys
+        self.tokens_seen.append(tok)
+        if tok == "new":
+            return _Resp(self.GREEN)
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+
+def test_passive_refresh_self_heals_from_a_rotated_token_no_user_action(tmp_path):
+    # THE PASSIVE-PATH GAP: the status dot is driven by fetch_status on the 15s
+    # refresh tick, NOT by _authed_api (which only runs on Sync/Incognito). Before
+    # this fix fetch_status swallowed every error and NEVER touched the token
+    # cache, so after a mid-session rotation the passive tick re-sent the stale
+    # cached token forever → the dot went grey and STAYED grey until the user
+    # clicked something. The fix: fetch_status invalidates the cache on a 401/403
+    # so the NEXT tick re-reads the rotated token and the dot recovers on its own.
+    cfg = tmp_path / "cfg"; cfg.mkdir()
+    BrainConfig(token="old").save(cfg)
+    auth = menubar._TokenCache(str(cfg), BrainConfig.load)
+    assert auth.get() == "old"                       # cached the initial token
+
+    # the panel rotates the token: config now holds "new", cache still "old"
+    BrainConfig(token="new").save(cfg)
+    assert auth.get() == "old"                        # stale cache hands out old
+
+    opener = _RotatingOpener()
+    # tick 1 — the PASSIVE poll authenticates with the stale cached token and
+    # 401s. It returns None (grey dot this tick, honest for a genuine outage)
+    # AND, crucially, invalidates the cache. No _authed_api / user action here.
+    st = menubar.fetch_status(7777, auth.get(), auth=auth, opener=opener)
+    assert st is None                                 # grey dot preserved
+
+    # the 401 invalidated the cache → the next read picks up the rotated token …
+    assert auth.get() == "new"
+
+    # tick 2 — the very next passive poll now carries "new" and recovers a GREEN
+    # dot, with NO user action taken. The reverted fetch_status (never
+    # invalidating) would keep sending "old", stay 401, and fail this assertion.
+    st2 = menubar.fetch_status(7777, auth.get(), auth=auth, opener=opener)
+    assert st2 is not None
+    assert menubar.status_summary(st2)["icon"] == "\U0001F7E2"   # green — healed
+    assert opener.tokens_seen == ["old", "new"]
 
 
 # -- launch-at-login plist ----------------------------------------------------

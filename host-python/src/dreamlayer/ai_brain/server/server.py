@@ -66,7 +66,7 @@ TOKEN_HEADER = "X-DreamLayer-Token"
 # constants so they are tunable in one place and assertable from tests.
 MAX_JSON_BODY = 16 * 1024 * 1024        # 16 MiB — cap for JSON bodies (_body/_raw)
 MAX_UPLOAD_BODY = 64 * 1024 * 1024      # 64 MiB — larger cap for file uploads
-SOCKET_TIMEOUT_S = 30.0                 # per-connection PER-RECV read timeout (anti-slowloris)
+SOCKET_TIMEOUT_S = 30.0                 # per-connection socket timeout — bounds BOTH recv and send
 MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 
@@ -1532,11 +1532,22 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                    lockout_s=300.0)
 
     class Handler(BaseHTTPRequestHandler):
-        # Per-connection read timeout: StreamRequestHandler.setup() applies this
-        # via self.connection.settimeout(), so a slowloris client that opens a
-        # socket and dribbles (or never finishes) its request can no longer pin
-        # a worker thread forever — the read raises socket.timeout and the
-        # worker is reclaimed (audit 2026-07-17, anti-slowloris).
+        # Per-connection socket timeout: StreamRequestHandler.setup() applies
+        # this via self.connection.settimeout(), so a slowloris client that opens
+        # a socket and dribbles (or never finishes) its request can no longer pin
+        # a worker thread forever — the read raises socket.timeout and the worker
+        # is reclaimed (audit 2026-07-17, anti-slowloris). settimeout() bounds
+        # BOTH recv and send, and a single 30 s bound is deliberately kept for
+        # both. A more generous SEND window buys nothing real: the only large
+        # responses (a /backup export, static assets) are _from_localhost()-only
+        # and drain sub-second over loopback/LAN, while the genuinely remote
+        # (phone) endpoints return small JSON — no real workload needs >30 s to
+        # write. But a flat multi-minute send bound WOULD arm a slow-read DoS: a
+        # client that triggers a large response and then STOPS READING pins a
+        # worker thread blocked in sendall() — holding a semaphore slot — for the
+        # whole window, so ~64 non-reading clients exhaust the pool for that long.
+        # Bounding send at 30 s too caps that pin at 30 s (audit 2026-07-18,
+        # reverted the send-timeout bump — slow-read pool-exhaustion DoS).
         timeout = SOCKET_TIMEOUT_S
 
         def log_message(self, *a):

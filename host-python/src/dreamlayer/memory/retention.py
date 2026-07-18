@@ -20,9 +20,12 @@ bias store), it keeps.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+
+log = logging.getLogger("dreamlayer.retention")
 
 # memory kinds that are COLD — identity-grade, never swept
 COLD_KINDS = frozenset({"person", "promise", "task", "taught", "place"})
@@ -59,12 +62,19 @@ class RetentionSweep:
     positive bias is the dreamer's vote to keep a memory past its window."""
 
     def __init__(self, db, policy: RetentionPolicy | None = None,
-                 bias=None, now_fn=None, ann=None) -> None:
+                 bias=None, now_fn=None, ann=None, vector_store=None) -> None:
         self.db = db
         self.policy = policy or RetentionPolicy()
         self.bias = bias
         self._now = now_fn or time.time
         self.ann = ann          # evict expired vectors too, if an index is wired
+        # an ALTERNATE vector store (Chroma/Lance/VectorStore) indexes the same
+        # MemoryDB in its OWN table/collection — not the ann index, and not among
+        # the tables db.purge_memory deletes. Without evicting it here the sweep
+        # is purge-blind: an expired warm memory leaves a fully recallable
+        # embedding behind the moment such a store is wired (mirrors
+        # Retriever.purge_memory, retrieval.py).
+        self.vector_store = vector_store
 
     def sweep(self) -> RetentionReport:
         report = RetentionReport()
@@ -95,6 +105,15 @@ class RetentionSweep:
                 # save=False: defer persistence to the single flush() below, so
                 # a large sweep rewrites the index file once, not once per row
                 self.ann.remove(m["id"], save=False)
+            if self.vector_store is not None:
+                # best-effort: a store error must not abort the whole night's
+                # sweep — it strands one vector, not the retention pass. Mirrors
+                # the ann.remove treatment above.
+                try:
+                    self.vector_store.evict(m["id"])
+                except Exception as exc:   # noqa: BLE001 — forget path stays best-effort
+                    log.warning("[retention] vector_store.evict(%s) failed: %s",
+                                m["id"], exc)
             report.expired.append(m["id"])
         if self.ann is not None and hasattr(self.ann, "flush"):
             # the sweep is a natural quiet point: persist any batched adds so

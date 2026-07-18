@@ -463,6 +463,51 @@ class TestVectorStoreForgetBeforeSearch:
 # ===========================================================================
 # Real-backend variants (skipped in CI; run when the optional dep is present).
 # ===========================================================================
+# ===========================================================================
+# Finding 6 (ChromaStore): evict must survive a TRANSIENT _get_col() open
+# failure. A PersistentClient that momentarily fails to open returns None from
+# _get_col, and the pre-fix evict called it exactly once — one None skipped the
+# single-vector delete, stranding the forgotten vector's bytes on disk (a
+# forget-completeness gap). The fix retries the open a couple of times before
+# giving up, so a transient failure still lands the delete.
+# ===========================================================================
+class TestChromaEvictRetriesTransientOpen:
+    def test_get_col_failing_once_then_succeeding_still_deletes(self, monkeypatch, tmp_path):
+        fake, disk = _make_fake_chroma()
+        monkeypatch.setattr(chroma_store, "_HAS_CHROMA", True)
+        monkeypatch.setattr(chroma_store, "chromadb", fake, raising=False)
+        path = str(tmp_path / "chroma")
+        emb = MockEmbeddingProvider()
+        db = MemoryDB(":memory:")
+        keep = db.add_memory("scene", "keys on the counter",
+                             embedding=emb.embed("keys on the counter"), confidence=0.6)
+        drop = db.add_memory("scene", "the spare key under the mat",
+                             embedding=emb.embed("the spare key under the mat"), confidence=0.6)
+        store = ChromaStore(db, embedder=emb, path=path, collection="mem")
+        store.search("keys", top_k=2)                       # persist both vectors
+        assert {str(keep), str(drop)} <= set(disk[path]["mem"].items)
+
+        # A _get_col that returns None on its FIRST call (a transient
+        # PersistentClient-open failure) then succeeds on the retry.
+        real_get_col = store._get_col
+        calls = {"n": 0}
+
+        def flaky_get_col():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None                                 # transient open failure
+            return real_get_col()
+
+        monkeypatch.setattr(store, "_get_col", flaky_get_col)
+        store.evict(drop)
+
+        # REVERT-FAILING: pre-fix evict called _get_col ONCE, got None, and
+        # skipped the delete — the retry is what makes the delete happen.
+        assert calls["n"] >= 2                              # the retry engaged
+        assert str(drop) not in disk[path]["mem"].items    # forgotten vector gone
+        assert str(keep) in disk[path]["mem"].items        # kept vector survives
+
+
 class TestRealLancePath:
     def setup_method(self):
         pytest.importorskip("lancedb")

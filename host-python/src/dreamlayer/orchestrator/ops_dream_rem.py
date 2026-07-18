@@ -65,8 +65,13 @@ class DreamRemOps(OpsHost):
             policy = RetentionPolicy(
                 hot_hours=getattr(self.config, "retention_hot_hours", 24.0),
                 warm_days=getattr(self.config, "retention_warm_days", 90.0))
-            sweep = RetentionSweep(self.db, policy, bias=self.rem_bias,
-                                   ann=self.retriever.ann)
+            sweep = RetentionSweep(
+                self.db, policy, bias=self.rem_bias,
+                ann=self.retriever.ann,
+                # so the nightly sweep is not purge-blind to an alternate vector
+                # store (Chroma/Lance/VectorStore): expired warm vectors leave it
+                # too, mirroring Retriever.purge_memory (memory/retention.py).
+                vector_store=getattr(self.retriever, "vector_store", None))
             self.last_retention = sweep.sweep()
             sweep.purge_hot(self.ring)
             # Stasis composting rides the same night: freeze-frames past
