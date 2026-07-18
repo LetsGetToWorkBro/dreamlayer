@@ -885,8 +885,19 @@
     var s = (t - base) / (dur || 0.7); s = s < 0 ? 0 : s > 1 ? 1 : s;
     return s * s * (3 - 2 * s);
   };
-  Glass.prototype._ta = function (s, x, y, tok, hex, a) {   // alpha-aware text
-    this.text(s, x, y, tok, rgba(hex, a < 0 ? 0 : a > 1 ? 1 : a));
+  // the circle's inner width at height y — text must fit inside this chord or the
+  // round clip shaves its ends (iOS monospace runs wider than desktop, so a line
+  // that fit in QA can overflow on a phone; measure + shrink defends every font).
+  Glass.prototype._chord = function (y) {
+    var d = Math.abs(y - CX); return d >= CX ? 0 : 2 * Math.sqrt(CX * CX - d * d);
+  };
+  Glass.prototype._ta = function (s, x, y, tok, hex, a, pad) {   // alpha + shrink-to-fit
+    var c = this.ctx, px = FONTPX[tok] || 20; s = String(s);
+    c.textAlign = "center"; c.textBaseline = "middle"; c.font = this.font(tok);
+    var maxW = this._chord(y) - (pad == null ? 26 : pad), w = c.measureText(s).width;
+    if (w > maxW && maxW > 0) { px = Math.max(8, Math.floor(px * maxW / w));
+      c.font = "600 " + px + "px ui-monospace, 'SF Mono', Menlo, monospace"; }
+    c.fillStyle = rgba(hex, a < 0 ? 0 : a > 1 ? 1 : a); c.fillText(s, x, y);
   };
   Glass.prototype._eyebrow = function (label, hex, u) {     // eyebrow + hairline rule
     var c = this.ctx; this._ta(label, CX, 66, "sm", hex, u);
