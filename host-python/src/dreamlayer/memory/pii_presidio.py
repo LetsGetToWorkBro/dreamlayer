@@ -13,8 +13,8 @@ import re
 log = logging.getLogger("dreamlayer.pii_presidio")
 
 try:
-    from presidio_analyzer import AnalyzerEngine  # type: ignore
-    from presidio_anonymizer import AnonymizerEngine  # type: ignore
+    import presidio_analyzer  # type: ignore  # noqa: F401 — availability probe; the
+    from presidio_anonymizer import AnonymizerEngine  # type: ignore  # engine is built via nlp_setup
     _HAS_PRESIDIO = True
 except BaseException:  # ImportError, or a broken native dep (pyo3 PanicException)
     _HAS_PRESIDIO = False
@@ -31,12 +31,19 @@ class PiiRedactor:
         self._analyzer = None
         self._anon = None
         if _HAS_PRESIDIO:
-            try:
-                self._analyzer = AnalyzerEngine()
-                self._anon = AnonymizerEngine()
-            except Exception as exc:
-                log.warning("[pii] presidio init failed: %s; regex fallback", exc)
-                self._analyzer = None
+            # Build the analyzer through nlp_setup so it uses the small
+            # en_core_web_sm model `dreamlayer setup models` installs, not
+            # presidio's ~560 MB default. Fail-safe: a missing model → None →
+            # the regex fallback below (no behaviour change vs. before when the
+            # model isn't present; the win is that ONE small download activates it).
+            from .. import nlp_setup
+            self._analyzer = nlp_setup.analyzer_engine()
+            if self._analyzer is not None:
+                try:
+                    self._anon = AnonymizerEngine()
+                except Exception as exc:
+                    log.warning("[pii] presidio anonymizer init failed: %s; regex fallback", exc)
+                    self._analyzer = None
 
     def redact(self, text: str) -> str:
         if self._analyzer is not None:
