@@ -36,7 +36,7 @@ class CapturePipeline:
     no transcript — same graceful-degradation contract as every seam."""
 
     def __init__(self, orch, vad=None, asr=None, speaker=None, wake=None,
-                 speaker_resolver=None, tagger=None,
+                 speaker_resolver=None, tagger=None, enrolled_speakers=None,
                  sample_rate: int = SAMPLE_RATE,
                  silence_hang_ms: float = SILENCE_HANG_MS,
                  max_segment_ms: float = MAX_SEGMENT_MS,
@@ -54,6 +54,11 @@ class CapturePipeline:
         # Speaker embeddings identify; the ledger wants a label, so keep them
         # separate rather than mislabelling a caption with a raw vector.
         self.speaker_resolver = speaker_resolver
+        # Optional explicit allowlist of enrolled speaker labels. When given,
+        # voice_guard requires a resolved label to be a member before a voiceprint
+        # is retained (self always passes); None → the resolver's own name-vs-
+        # placeholder verdict decides. Either way a stranger's print is discarded.
+        self._enrolled_speakers = enrolled_speakers
         self.wake = wake
         self.last_speaker_embedding = None
         self.sample_rate = sample_rate
@@ -144,12 +149,21 @@ class CapturePipeline:
             return None
 
         label = ""
-        if self.speaker is not None:
+        # voice_guard: an ECAPA embedding is a biometric. Compute one only when
+        # identification is actually possible (a resolver exists to match it
+        # against enrolled voiceprints); then RETAIN it only for an enrolled
+        # speaker. A bystander/stranger — the resolver returned no identity or a
+        # diarization placeholder — has their voiceprint discarded, never banked.
+        # Mirrors person_guard: detect/transiently-embed is fine, identifying &
+        # storing a stranger is not.
+        self.last_speaker_embedding = None
+        if self.speaker is not None and self.speaker_resolver is not None:
             try:
                 emb = self.speaker.embed(segment)
-                self.last_speaker_embedding = emb
-                if self.speaker_resolver is not None:
-                    label = self.speaker_resolver(emb) or ""
+                label = self.speaker_resolver(emb) or ""
+                from . import voice_guard
+                if voice_guard.retain_voiceprint(label, self._enrolled_speakers):
+                    self.last_speaker_embedding = emb
             except Exception as exc:
                 if self._health() is not None:
                     self._health().record_failure("asr", exc)
