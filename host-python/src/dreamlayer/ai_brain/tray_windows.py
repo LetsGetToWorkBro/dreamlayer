@@ -22,11 +22,10 @@ from __future__ import annotations
 import json
 import sys
 import threading
-import urllib.request
 from pathlib import Path
 
-from .menubar import (DEFAULT_PORT, check_for_update, fetch_status,
-                      status_summary)
+from .menubar import (DEFAULT_PORT, _authed_api, _TokenCache, check_for_update,
+                      fetch_status, status_summary)
 
 # the Run-key value name — the reversible unit --uninstall-login deletes
 RUN_VALUE = "DreamLayer"
@@ -232,32 +231,29 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
     from .server.store import BrainConfig
     cfg_dir = directory or os.environ.get(
         "DREAMLAYER_DIR", str(Path.home() / ".dreamlayer"))
-    auth = {"token": BrainConfig.load(cfg_dir).token}
+    auth = _TokenCache(cfg_dir, BrainConfig.load)
 
     def _token():
-        # Re-read from config if the first read was empty. On a slow first run
-        # the server mints/persists the token just after the UI started, and a
-        # cached empty token would leave the dot permanently grey (authorize
-        # needs the exact token even from loopback).
-        if not auth["token"]:
-            auth["token"] = BrainConfig.load(cfg_dir).token
-        return auth["token"]
+        # Re-read from config if the cache is empty. On a slow first run the
+        # server mints/persists the token just after the UI started, and a cached
+        # empty token would leave the dot permanently grey (authorize needs the
+        # exact token even from loopback). An auth failure in _api() also clears
+        # the cache, so this re-reads a ROTATED token without a restart.
+        return auth.get()
 
     state: dict = {"summary": status_summary(None), "incognito": False}
 
     def _api(path, method="GET", body=b"{}"):
-        url = f"http://127.0.0.1:{port}{path}"
-        headers = {"X-DreamLayer-Token": _token(),
-                   "Content-Type": "application/json"}
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        req = urllib.request.Request(url, headers=headers,
-                                     data=(body if method == "POST" else None),
-                                     method=method)
-        with opener.open(req, timeout=6) as r:
-            return json.loads(r.read().decode("utf-8"))
+        # _authed_api carries the cached token and, on a 401/403, invalidates the
+        # cache so the next _token() re-reads a rotated token from config.
+        return _authed_api(port, auth, path, method, body)
 
     def refresh(icon):
-        st = fetch_status(port, _token())
+        # Route the passive poll through the auth-aware fetch_status: a 401/403
+        # invalidates the cache so the NEXT tick re-reads a rotated token from
+        # config and the dot self-heals — no user action needed (same contract
+        # as the macOS menu bar; fetch_status is the shared helper).
+        st = fetch_status(port, _token(), auth=auth)
         state["summary"] = status_summary(st)
         state["incognito"] = bool((st or {}).get("incognito"))
         icon.icon = _dot_image(dot_color(state["summary"]))

@@ -169,7 +169,15 @@ class JsonLineFormatter(logging.Formatter):
     """One compact JSON object per record; extras (logger.info(msg, extra={…}))
     ride alongside the standard fields. Values under known-sensitive keys are
     redacted (replaced with a ``<redacted:hash>`` marker) before serialisation
-    so PII/secrets never reach the log line."""
+    so PII/secrets never reach the log line.
+
+    Contract: the ``extra={...}`` path is the ONLY redaction seam. The rendered
+    message (``record.getMessage()``) is emitted verbatim, so callers MUST NOT
+    interpolate sensitive values (names, transcripts, replies, tokens) into the
+    message string — pass them via ``extra=`` instead. This is now CI-enforced:
+    ``tests/test_logging_discipline.py`` AST-scans the shipped source and fails
+    the build if any logging call interpolates a value whose identifier matches
+    one of the sensitive roots below, so the discipline can't silently rot."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -182,6 +190,8 @@ class JsonLineFormatter(logging.Formatter):
             # seam: callers MUST pass sensitive values (names, transcripts,
             # replies, tokens) via ``extra=`` — never interpolate them into the
             # message string — so ``_is_sensitive``/``_sanitize`` can scrub them.
+            # This "no PII in the message" rule is CI-enforced by
+            # tests/test_logging_discipline.py (AST scan of every call site).
             "msg": record.getMessage(),
         }
         cid = _CID.get()
