@@ -12,6 +12,7 @@ Serves the control panel and the API the phone and the panel both call:
     POST /dreamlayer/rc/feed        {text} → stream text into the live lens slot
     POST /dreamlayer/rc/emit        {tag, text} → lens emit → Brain → slot (ask)
     POST /dreamlayer/brain/explain  {label, image?, want?} → Answer
+    POST /dreamlayer/brain/look     {image?|label, attrs?, lens?} → World-lens panel
     GET  /dreamlayer/history        recent questions
 
 All /dreamlayer/* calls require the pairing token (when one is set); the
@@ -365,6 +366,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             label = "?"
         if report.ok:
             self.activity.add("plugin", f"Installed plugin {label}")
+            self._invalidate_world_lens()   # a new connector can join a look
         return {"ok": report.ok, "errors": report.errors,
                 "warnings": report.warnings, "state": self.plugins_state()}
 
@@ -372,6 +374,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         ok = self.plugins.remove(name)
         if ok:
             self.activity.add("plugin", f"Removed plugin {name}")
+            self._invalidate_world_lens()   # its provider should leave a look too
         return {"ok": ok, "state": self.plugins_state()}
 
     def reindex(self) -> dict:
@@ -465,6 +468,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             self._backend = None
             self.index.synthesizer = None
             self.index.embedder = None
+        # the World lens closes over this backend; a rewire means the next look
+        # rebuilds against the new vision tier.
+        self._world_lens = None
 
     def save(self) -> None:
         self.config.save(self.cfg_dir)
@@ -615,6 +621,28 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
 
     def explain(self, label: str, image_b64, want: str) -> Optional[Answer]:
         return vision_answer(self._backend, label, image_b64, want)
+
+    def world_lens(self):
+        """The on-glass World lenses (Object Lens / Juno + TasteLens) run inside
+        this Brain — the pre-hardware stand-in a phone photo looks through
+        (ai_brain/server/world_lens.py). Built once and cached (loading installed
+        plugins isn't free); invalidated when a plugin or the model changes so a
+        fresh look picks up the new set. Returns None if it can't be built."""
+        wl = getattr(self, "_world_lens", None)
+        if wl is None:
+            try:
+                from .world_lens import build_world_lens
+                wl = build_world_lens(self)
+            except Exception:
+                log.warning("world lens unavailable", exc_info=True)
+                wl = None
+            self._world_lens = wl
+        return wl
+
+    def _invalidate_world_lens(self) -> None:
+        """Drop the cached World lens so the next look rebuilds it — call after a
+        plugin install/remove or a model rewire changes what a look can do."""
+        self._world_lens = None
 
     def summarize(self, text: str, max_chars: int = 220) -> str:
         """One-glance summary of a long email. Uses the local model when there
@@ -2464,6 +2492,60 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                 b.get("want", "quick"))
             self._json(200, _answer_json(ans))
 
+        def _post_brain_look(self, path, qs):
+            """Look at a photo → a World-lens panel — the on-glass experience run
+            in the Brain so a phone photo stands in for the glasses.
+
+            Body: {image? (base64), label?, attrs?, lens? ("object"|"taste"),
+            facet?, confidence?, budget?}. Two object modes: pass an `image` to
+            recognise it (the Brain's vision reads structured fields, heuristic
+            fallback offline), OR pass a `label` (+ optional `attrs`) to build the
+            panel directly — the deterministic path the phone/tests use with no
+            model. Returns {ok, panel|card} or an honest {ok:false, reason}."""
+            from ...object_lens.schema import ObjectSighting
+            from ...object_lens.vision_recognizer import b64_to_frame
+            b = self._body()
+            wl = brain.world_lens()
+            if wl is None:
+                self._json(200, {"ok": False, "reason": "vision lens unavailable"})
+                return
+            if wl.veiled():
+                self._json(200, {"ok": False, "veiled": True,
+                                 "reason": "Incognito — Juno isn't looking."})
+                return
+            lens = str(b.get("lens", "object") or "object")
+            facet = b.get("facet") or None
+            if lens == "taste":
+                ranking = wl.taste(b64_to_frame(b.get("image")),
+                                   budget=b.get("budget"))
+                if ranking is None or ranking.unavailable:
+                    self._json(200, {"ok": False,
+                                     "reason": "couldn't read a shelf here"})
+                    return
+                from ...hud import cards
+                self._json(200, {"ok": True, "lens": "taste",
+                                 "card": cards.taste(ranking, unavailable=False)})
+                return
+            # object lens (Juno)
+            label = str(b.get("label", "") or "").strip()
+            if label:
+                attrs = b.get("attrs")
+                try:
+                    conf = float(b.get("confidence", 0.9))
+                except (TypeError, ValueError):
+                    conf = 0.9
+                sighting = ObjectSighting(
+                    label=label, confidence=max(0.0, min(1.0, conf)),
+                    attributes=attrs if isinstance(attrs, dict) else {})
+                panel = wl.look_sighting(sighting, facet=facet)
+            else:
+                panel = wl.look(b64_to_frame(b.get("image")), facet=facet)
+            if panel is None:
+                self._json(200, {"ok": False, "reason": "couldn't make it out"})
+                return
+            self._json(200, {"ok": True, "lens": "object",
+                             "panel": panel.to_hud_card()})
+
         def _post_reindex(self, path, qs):
             """Re-index all watched folders."""
             stats = brain.reindex()
@@ -2619,6 +2701,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/model/pull": _post_model_pull,
             "/dreamlayer/people": _post_people,
             "/dreamlayer/brain/explain": _post_brain_explain,
+            "/dreamlayer/brain/look": _post_brain_look,
             "/dreamlayer/reindex": _post_reindex,
             "/dreamlayer/token/rotate": _post_token_rotate,
             "/dreamlayer/clear": _post_clear,

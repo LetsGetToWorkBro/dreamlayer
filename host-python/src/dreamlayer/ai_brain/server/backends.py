@@ -335,6 +335,15 @@ class OllamaBackend:
         imgs = [image_b64] if image_b64 else None
         return self._gen(self.config.ollama_vision_model, prompt, images=imgs)
 
+    def describe(self, prompt: str, image_b64: Optional[str]) -> str:
+        """Run the vision model against an arbitrary prompt — the low-level seam
+        the World Lens's structured recognizer uses to ask "what is this and
+        what does it read" and get back fields (a price, a title, an ISBN), not
+        just the fixed sentence :meth:`vision` produces. Same model, same wire;
+        the caller owns the prompt and parses the reply."""
+        imgs = [image_b64] if image_b64 else None
+        return self._gen(self.config.ollama_vision_model, prompt, images=imgs)
+
     def embed(self, text: str) -> list:
         out = self._post(self.config.ollama_url.rstrip("/") + "/api/embeddings",
                          {"model": self.config.ollama_embed_model, "prompt": text})
