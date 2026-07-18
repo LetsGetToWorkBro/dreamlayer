@@ -1,0 +1,27 @@
+{
+  "manifest": {
+    "name": "open-library",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "DreamLayer Team",
+    "official": true,
+    "description": "Look at a book, get the story behind it \u2014 author, year, subjects and where it sits in the canon, from the Open Library open dataset. No account, no key.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openlibrary.py",
+    "requires": [
+      "network"
+    ],
+    "api": "2",
+    "checksum": "sha256:f9e76e46f656a0659ac6cd6fb166249c2b165aea15b79d0216b118cec5894973",
+    "signature": "",
+    "forwho": "For readers, browsers, and anyone who picks a book up and wonders about it.",
+    "long": [
+      "Gives TasteLens something to rank a shelf of books on. Look at a cover and it pulls the title, author, first-published year, and subjects.",
+      "Straight from the Open Library community dataset \u2014 free, no API key, no account.",
+      "Your reading stays on your device. The only thing that leaves is the title, so it can look the book up."
+    ],
+    "pricing": {
+      "model": "free"
+    }
+  },
+  "source": "from dreamlayer.plugins.openlibrary import openlibrary_plugin\n\ndef plugin():\n    # first-party TasteLens connector, bundled with the app; enabling it\n    # registers the Open Library shop provider (books). Uses urllib -> network.\n    return openlibrary_plugin()\n"
+}

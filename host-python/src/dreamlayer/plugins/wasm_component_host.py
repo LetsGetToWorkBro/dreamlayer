@@ -15,7 +15,8 @@ capability X" error — before anything runs. This closes manifest-vs-reality
 drift at the hardest layer: a forged plugin that calls a power it never declared
 fails to load at all.
 
-Lazy dependency (extras group ``plugins``): ``available()`` is False when
+Lazy dependency (wasmtime-py, in the ``platform`` extra; surfaced as the
+``wasm_plugins`` capability): ``available()`` is False when
 wasmtime-py isn't installed, and callers fall back to the subprocess/WASI tier.
 
     host = WasmCapabilityHost(wasm_bytes, granted=["log"], impls={"log": fn})
@@ -113,7 +114,7 @@ def capability_function_names() -> dict:
     return {"log": {"log"}, "fs": {"fs_read"},
             "net": {"net_get"}, "cards": {"show_card"}}
 
-try:  # optional dep — extras group `plugins`
+try:  # optional dep — wasmtime-py, in the `platform` extra (capability: wasm_plugins)
     import wasmtime  # type: ignore
     _HAS_WASMTIME = True
 except Exception:
