@@ -133,6 +133,11 @@ def _interpolated_leaks(msg: ast.expr, fmt_args: list[ast.expr]) -> set[str]:
             hits |= _sensitive_identifiers(a)
         for kw in msg.keywords:
             hits |= _sensitive_identifiers(kw.value)
+    # bare value as the WHOLE message:  log.error(reply) / log.info(obj.transcript)
+    # getMessage() renders str(msg), so a sensitive-named bare Name/Attribute leaks
+    # just as an f-string would (refute 2026-07-18: this idiom was uninspected).
+    if isinstance(msg, (ast.Name, ast.Attribute)):
+        hits |= _sensitive_identifiers(msg)
     # %-lazy args:  log.info("name=%s", user_name)  -> getMessage() renders it
     for a in fmt_args:
         hits |= _sensitive_identifiers(a)
@@ -148,14 +153,22 @@ def _scan_source(src: str, filename: str) -> list[str]:
         if not isinstance(call, ast.Call):
             continue
         method = _is_log_call(call)
-        if not method or not call.args:
+        if not method:
             continue
         # ``log(level, msg, *args)`` puts the message second; everything else first.
         msg_idx = 1 if method == "log" else 0
-        if msg_idx >= len(call.args):
-            continue
-        msg = call.args[msg_idx]
-        fmt_args = call.args[msg_idx + 1:]
+        if len(call.args) > msg_idx:
+            msg = call.args[msg_idx]
+            fmt_args = call.args[msg_idx + 1:]
+        else:
+            # the message can also arrive as the ``msg=`` keyword — e.g.
+            # log.info(msg=f"{email}") — which leaves call.args empty and would
+            # otherwise slip the scan entirely (refute 2026-07-18).
+            kw_msg = next((kw.value for kw in call.keywords if kw.arg == "msg"), None)
+            if kw_msg is None:
+                continue
+            msg = kw_msg
+            fmt_args = []
         leaks = _interpolated_leaks(msg, fmt_args)
         if leaks:
             line = getattr(msg, "lineno", call.lineno)
@@ -237,6 +250,29 @@ def test_scanner_catches_aliased_logger_leak():
     ]
     for body in cases:
         assert _scan_source(body + "\n", "aliased.py"), f"aliased leak not caught: {body!r}"
+
+
+def test_scanner_catches_bare_message_and_msg_keyword_leak():
+    # Two idioms a refute pass (2026-07-18) found uninspected: a bare sensitive
+    # value AS the whole message (getMessage() renders str(msg)), and the message
+    # passed as the ``msg=`` keyword (which left call.args empty and slipped the
+    # scan entirely). Both now trip.
+    bare_name = ('def f(reply):\n    log.error(reply)\n')
+    bare_attr = ('def f(rec):\n    log.info(rec.transcript)\n')
+    msg_kw = ('def f(email):\n    log.info(msg=f"to={email}")\n')
+    assert _scan_source(bare_name, "a.py"), "bare-Name message leak not caught"
+    assert _scan_source(bare_attr, "b.py"), "bare-Attribute message leak not caught"
+    assert _scan_source(msg_kw, "c.py"), "msg= keyword leak not caught"
+
+
+def test_scanner_catches_cue_leak():
+    # ``cue`` is memory content (a person's name / the summary's lead) — the exact
+    # value the ember-burn log leaked before it was removed. The taxonomy now
+    # knows it, so the guard catches any future interpolation, at %-arg or bare.
+    lazy = ('def f(cue):\n    log.info("ember burn cue=%s", cue)\n')
+    bare = ('def f(cue):\n    log.info(cue)\n')
+    assert _scan_source(lazy, "a.py"), "cue %-arg leak not caught"
+    assert _scan_source(bare, "b.py"), "bare cue leak not caught"
 
 
 def test_scanner_ignores_benign_interpolation():

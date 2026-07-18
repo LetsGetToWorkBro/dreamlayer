@@ -157,6 +157,20 @@ describe("relay service forwards to the Brain", () => {
     expect(calls.length).toBe(1);
   });
 
+  it("refuses a NON-ask tag that carries a captured payload past the Veil", async () => {
+    // The emitLens gate keys on PAYLOAD, not just tag==="ask": a caller that
+    // attaches captured text to some other tag must not stream it past a closed
+    // Veil either (refute 2026-07-18). Reverted (tag-only gate) the fetch fires.
+    (global as any).fetch = jest.fn();
+    useBrainStore.setState({ capturePaused: true });
+    expect(await brain().emitLens("translate", "an overheard secret")).toBeNull();
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    // but an empty-payload non-ask tag still passes — it carries no content
+    mockBrain({ ok: true, tag: "look", text: "Monstera" });
+    expect(await brain().emitLens("look", "")).not.toBeNull();
+    expect(calls.length).toBe(1);
+  });
+
   it("fail-closed before hydration: capture is suppressed until the store hydrates", async () => {
     // Cold start: `hydrated` is false and capturePaused defaults false, so a
     // session the wearer left incognito/veiled last launch would otherwise relay

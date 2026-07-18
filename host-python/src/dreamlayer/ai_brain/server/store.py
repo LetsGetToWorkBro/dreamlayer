@@ -196,32 +196,70 @@ def _harden_windows_acl(path: str) -> None:
         sid = _current_user_sid()
     except Exception as exc:             # ctypes/token lookup is fragile; degrade
         log.warning("owner-only ACL: SID lookup failed for %s (%s); leaving the "
-                    "inherited ACL baseline (still not world-readable)", path, exc)
+                    "inherited ACL baseline (the state dir is hardened too)",
+                    path, exc)
         return
-    if not sid:
+    argv = _owner_only_icacls_argv(path, sid)
+    if argv is None:
         log.warning("owner-only ACL: could not resolve the current-user SID for "
-                    "%s; leaving the inherited ACL baseline (still not "
-                    "world-readable)", path)
+                    "%s; leaving the inherited ACL baseline (the state dir is "
+                    "hardened too)", path)
         return
-
-    # Locale/domain-independent well-known SIDs kept alongside the user so that
-    # stripping inheritance doesn't evict the OS/AV/backup readers (or the app).
-    local_system = "S-1-5-18"
-    administrators = "S-1-5-32-544"
     try:
         subprocess.run(
-            # icacls accepts *<SID> for a grantee, so these stay locale/domain
-            # independent even though inheritance dropped the resolved-name ACEs.
-            ["icacls", path, "/inheritance:r", "/grant:r",
-             "*" + local_system + ":F",
-             "*" + administrators + ":F",
-             "*" + sid + ":F"],
-            check=True,
-            capture_output=True,
+            argv, check=True, capture_output=True,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except Exception as exc:
         log.warning("owner-only ACL hardening failed for %s: %s", path, exc)
+
+
+def _owner_only_icacls_argv(path: str, user_sid: Optional[str]) -> Optional[list]:
+    """The icacls invocation that strips inheritance and grants Full control to
+    exactly current-user + LocalSystem + Administrators — the owner-only DACL.
+
+    Returns None when the user SID is missing/empty: the caller MUST then skip
+    hardening (leaving the file at its — now dir-hardened — inherited baseline)
+    and never fall back to a broad grant. LocalSystem (S-1-5-18) and
+    Administrators (S-1-5-32-544) are locale/domain-independent well-known SIDs,
+    kept alongside the user so stripping inheritance doesn't evict OS/AV/backup
+    readers (or the app). icacls accepts ``*<SID>`` for a grantee, so the grant
+    stays locale/domain-independent even after the resolved-name ACEs are
+    dropped. Extracted as a pure builder so a cross-platform test can pin the
+    exact grant shape (inheritance stripped, no broad principal, fail-closed on a
+    missing SID) without a Windows box."""
+    if not user_sid:
+        return None
+    return ["icacls", path, "/inheritance:r", "/grant:r",
+            "*S-1-5-18:F",        # LocalSystem
+            "*S-1-5-32-544:F",    # Administrators
+            "*" + user_sid + ":F"]
+
+
+def _harden_state_dir(d) -> None:
+    """Make the Brain's state DIRECTORY owner-only, so every file created inside
+    it — brain_config.json and its mkstemp temp, plus the history/activity logs —
+    is born private BY INHERITANCE.
+
+    The per-file _harden_windows_acl runs only AFTER the config is written and
+    atomically swapped in, and it is SKIPPED entirely when the current-user SID
+    can't be resolved. That left two gaps a refute pass found (2026-07-18): (1) a
+    per-save window where the mkstemp temp / post-replace target carry only the
+    directory-INHERITED ACL until icacls runs, and (2) on SID-lookup failure the
+    file is left at that inherited baseline forever. Both are safe ONLY if the
+    directory itself is owner-only — which, under a broad $DREAMLAYER_DIR (e.g.
+    C:\\ProgramData\\Dreamlayer, whose default ACL grants BUILTIN\\Users read),
+    it is NOT unless hardened here. icacls applies (OI)(CI) inheritance by
+    default, so children inherit the owner-only grant; POSIX chmod 0o700 does the
+    same. The docstring's old promise that the inherited baseline is "already not
+    world-readable" is only TRUE once this runs. Best-effort, like the file
+    harden — never crash a save on ACL plumbing."""
+    try:
+        os.chmod(d, 0o700)          # POSIX owner-only dir; inert (read-only bit) on NTFS
+    except OSError:
+        pass
+    # Windows dir ACL: (OI)(CI) so children inherit owner-only; a no-op on POSIX.
+    _harden_windows_acl(str(d))
 
 
 def _is_allowed_root(path: str) -> bool:
@@ -475,6 +513,11 @@ class BrainConfig:
         # contention, matching the JSON stores.
         d = Path(cfg_dir)
         d.mkdir(parents=True, exist_ok=True)
+        # Harden the DIRECTORY first, so the mkstemp temp and the swapped-in
+        # target are born owner-only by inheritance — closing the pre-icacls
+        # write window and the fail-to-inherited gap when the per-file SID lookup
+        # is skipped (refute 2026-07-18). Must precede _reap_stale_tmps/mkstemp.
+        _harden_state_dir(d)
         _reap_stale_tmps(d)   # sweep crash-orphaned unique temps (age-gated)
         target = d / CONFIG_FILE
         # This file holds the pairing token AND the provider API keys

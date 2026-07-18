@@ -161,6 +161,22 @@ def _group_messages(rows) -> list[tuple[str, str]]:
 # Mail (.emlx)
 # ---------------------------------------------------------------------------
 
+def _safe_decode(raw: bytes, charset: Optional[str]) -> str:
+    """Decode `raw` with the email's declared charset, tolerating a bogus one.
+
+    ``bytes.decode`` raises ``LookupError`` when the codec NAME is unknown — and
+    ``errors='ignore'`` does NOT save it, because the codec lookup fails before a
+    single byte is decoded. A message's charset is attacker-declared, so a
+    crafted ``Content-Type: text/plain; charset="does-not-exist"`` would raise
+    ``LookupError`` (not ``OSError``) and escape every source-level guard,
+    silently blacking out the whole mail index / message feed on one email
+    (refute 2026-07-18). Fall back to utf-8 on an unknown codec."""
+    try:
+        return raw.decode(charset or "utf-8", "ignore")
+    except LookupError:
+        return raw.decode("utf-8", "ignore")
+
+
 def parse_emlx(raw: bytes) -> dict:
     """Parse one Apple Mail .emlx: a byte-count line, then an RFC-822 message."""
     nl = raw.find(b"\n")
@@ -173,12 +189,11 @@ def parse_emlx(raw: bytes) -> dict:
                 # decode=True yields bytes|None for a leaf part; the email
                 # stub's return union is broader, so pin it to bytes.
                 raw = cast(bytes, part.get_payload(decode=True) or b"")
-                text = raw.decode(part.get_content_charset() or "utf-8",
-                                  "ignore")
+                text = _safe_decode(raw, part.get_content_charset())
                 break
     else:
         raw = cast(bytes, msg.get_payload(decode=True) or b"")
-        text = raw.decode(msg.get_content_charset() or "utf-8", "ignore")
+        text = _safe_decode(raw, msg.get_content_charset())
     return {"from": msg.get("From", ""), "subject": msg.get("Subject", ""),
             "date": msg.get("Date", ""), "body": text.strip()}
 
