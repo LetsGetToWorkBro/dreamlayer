@@ -13,6 +13,7 @@
     "assets": "npm run assets:render && npm run assets:build",
     "artifact": "vite build --mode artifact && node scripts/build-artifact.mjs",
     "shoot": "playwright test e2e/screenshots.spec.ts",
+    "test:live-lens": "playwright test -c playwright.live-lens.config.ts",
     "test": "node --test test/*.test.ts"
   },
   "devDependencies": {

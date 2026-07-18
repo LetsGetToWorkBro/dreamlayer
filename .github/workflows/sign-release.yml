@@ -1,0 +1,99 @@
+name: sign-release
+
+# Keyless (Sigstore/cosign) signatures for the published release binaries.
+#
+# ADDITIVE by design: this workflow REACTS to a Release once it is published. It
+# does NOT touch build-macos-app.yml / build-windows-app.yml — those keep doing
+# the platform-native signing (Apple Developer ID + notarization, Authenticode).
+# This adds a second, platform-independent, publicly-verifiable signature over
+# the exact bytes of each downloadable asset, so anyone can prove an asset is the
+# genuine artifact this repo's CI produced — no shared secret, no long-lived key.
+#
+# How keyless works: cosign requests a short-lived certificate from Sigstore's
+# Fulcio CA, bound to this workflow's GitHub OIDC identity (that is why the job
+# needs `id-token: write`), signs the blob, and logs the signature to the Rekor
+# transparency log. The `.cosign.bundle` sidecar carries the signature +
+# certificate + transparency-log proof, so verification needs no keys at all.
+#
+# INFORMATIONAL / non-gating for CI: it runs only on a published release (or a
+# manual dispatch), never on normal pushes/PRs.
+#
+# ---------------------------------------------------------------------------
+# VERIFYING A DOWNLOAD (what a user runs). For each asset you downloaded next to
+# its `<asset>.cosign.bundle`:
+#
+#   cosign verify-blob \
+#     --bundle DreamLayer.dmg.cosign.bundle \
+#     --certificate-identity-regexp \
+#       "^https://github.com/<OWNER>/<REPO>/\.github/workflows/sign-release\.yml@refs/tags/" \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     DreamLayer.dmg
+#
+# A `Verified OK` means the file is byte-identical to what this repo's release
+# workflow signed. (Replace <OWNER>/<REPO> with this repository's slug.)
+# ---------------------------------------------------------------------------
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose assets to sign (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  id-token: write   # keyless OIDC signing — mint the short-lived Fulcio cert
+  contents: write   # attach the .cosign.bundle sidecars back onto the Release
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Resolve the release tag
+        id: rel
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign release assets and upload the cosign bundles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing && cd signing
+
+          # Pull just the installable binaries off the release. `|| true` so an
+          # absent pattern (e.g. a macOS-only release with no .exe) is not fatal.
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.dmg" --pattern "*.exe" --pattern "*.zip" || true
+
+          shopt -s nullglob
+          assets=( *.dmg *.exe *.zip )
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "No signable assets (.dmg/.exe/.zip) on release $TAG — nothing to sign."
+            exit 0
+          fi
+
+          # Keyless sign-blob: --yes accepts the ephemeral-key/Rekor prompt; the
+          # bundle sidecar holds signature + cert + transparency proof.
+          for asset in "${assets[@]}"; do
+            echo "::group::cosign sign-blob $asset"
+            cosign sign-blob --yes "$asset" --bundle "${asset}.cosign.bundle"
+            echo "::endgroup::"
+          done
+
+          # Attach the sidecars to the same Release. --clobber makes a re-run
+          # (or a manual dispatch over an already-signed release) idempotent.
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber *.cosign.bundle

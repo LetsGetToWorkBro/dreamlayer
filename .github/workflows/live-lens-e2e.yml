@@ -1,0 +1,52 @@
+# Live Lens browser E2E — the one surface the Python unit tests can't reach.
+#
+# The Live Lens is a Brain-served camera page; a unit test can confirm the HTTP
+# response but not that a real browser RUNS it. This boots the Python Brain over
+# http on 127.0.0.1 (a browser secure-context, so getUserMedia works without
+# TLS) and drives /dreamlayer/live in Chromium with a FAKE camera, asserting the
+# page's inline script runs under the strict nonce CSP (a CSP regression that
+# blocked the inline <script> surfaces here as a console violation), the Veil
+# toggle flips, and the camera stream attaches. Enforcing: it guards exactly the
+# server+page code that renders the lens.
+name: live-lens-e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "host-python/src/dreamlayer/ai_brain/server/live.py"
+      - "host-python/src/dreamlayer/ai_brain/server/server.py"
+      - "web/e2e/live-lens.spec.ts"
+      - "web/playwright.live-lens.config.ts"
+      - ".github/workflows/live-lens-e2e.yml"
+  pull_request:
+    paths:
+      - "host-python/src/dreamlayer/ai_brain/server/live.py"
+      - "host-python/src/dreamlayer/ai_brain/server/server.py"
+      - "web/e2e/live-lens.spec.ts"
+      - "web/playwright.live-lens.config.ts"
+      - ".github/workflows/live-lens-e2e.yml"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install the Brain (base deps render the page — no TLS needed)
+        run: pip install -e ./host-python
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web deps + Chromium
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Live Lens E2E (fake camera, real browser, real Brain)
+        working-directory: web
+        run: npx playwright test -c playwright.live-lens.config.ts

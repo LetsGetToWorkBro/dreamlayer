@@ -1,0 +1,86 @@
+# gitleaks configuration for DreamLayer — consumed by .github/workflows/gitleaks.yml.
+#
+# We EXTEND the full built-in gitleaks rule set (useDefault = true) so every
+# default secret detector (AWS keys, private keys, OpenAI `sk-...` keys, generic
+# high-entropy api-key/token/secret/password assignments, ...) stays active. The
+# only thing this file adds is an ALLOWLIST for the repo's KNOWN, deliberately-fake
+# test fixtures, so the scan is clean today WITHOUT weakening detection of a real
+# secret.
+#
+# The allowlist is intentionally two-layered so a real leak still trips even if it
+# lands in a test file:
+#   1. `paths`     — the test trees (host-python .../tests, phone-app __tests__,
+#                    any tests/ or *.test.* file, .env.example). Fixtures live here.
+#   2. `regexes` / `stopwords` — the SPECIFIC fixture VALUES (the fake `sk-...`
+#                    keys, the `rune-birch` pairing token, the `S-1-5-...` Windows
+#                    SIDs). Pinned by value, NOT by a broad `sk-`/`token` prefix,
+#                    so a genuine key that merely lives near a fixture still fires.
+#
+# Fixtures were found by grepping host-python/src/dreamlayer/tests and
+# phone-app/src (2026-07-18). Add a value here only when it is provably a test
+# constant; never allowlist a prefix that a real secret would also match.
+#
+# One documentation constant is pinned too: the NORMATIVE test vector in
+# docs/GHOSTMODE_PROTOCOL.md §7.4 publishes a fixed 256-bit `group_key` (like an
+# RFC test vector) so any implementation can reproduce the MAC bit-for-bit. It is
+# public by design — the protocol's security does not rest on that value being
+# secret — but its entropy trips the built-in generic-api-key rule, so the exact
+# literal is pinned below.
+
+title = "DreamLayer gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known test fixtures and example placeholders — not real secrets."
+
+# --- by path: the test trees + example env file --------------------------------
+paths = [
+  '''host-python/src/dreamlayer/tests/''',   # Python test fixtures live here
+  '''phone-app/src/__tests__/''',            # phone-app Jest tests
+  '''(^|/)tests?/''',                        # any other tests/ or test/ dir
+  '''(^|/)__tests__/''',                     # any other __tests__/ dir
+  '''(^|/)test_[^/]*\.py$''',                # pytest modules anywhere
+  '''\.test\.(ts|tsx|js|jsx)$''',            # *.test.ts style unit tests
+  '''(^|/)\.env\.example$''',                # documented placeholder env
+]
+
+# --- by value: the exact fixture strings (matched against the detected secret) --
+# Pinned to the literal fake values grepped from the tests, so real secrets that
+# do not match these patterns are still reported.
+regexes = [
+  # pairing tokens used across the pairing/appliance tests
+  '''^rune(-birch(-secret)?)?$''',
+  '''^PAIRSECRET-tok$''',
+  '''^s3cr3t-pairing-[0-9a-f]+$''',
+  '''^persisted-secret$''',
+  # fake provider / cloud API keys (never real `sk-` keys — enumerated in full)
+  '''^sk-(x|test|test-fake-key|ant|abc|hidden|secret|primary-provider|super-secret-123|cloud-xyz|CLOUDKEY|from-process)$''',
+  '''^account-token-123$''',
+  '''^supersecret$''',
+  '''^e2e-token$''',
+  # trivial single-word placeholders passed as token=/api_key= in tests
+  '''^(t|tok|tok2|old|new|wrong|right|k|ck|ck2|ak|ak2|s|m|persisted-secret)$''',
+  # well-known + test Windows SIDs asserted by test_config_perms.py
+  '''^S-1-5-(18|32-544|21-TEST-[0-9]+)$''',
+]
+
+# Substring safety net: if a detected secret CONTAINS one of these fixture
+# markers it is a test constant. None of these is a bare `sk-`/`token`/`secret`
+# prefix, so a real key sitting beside a fixture is unaffected.
+stopwords = [
+  # normative GhostMode protocol test-vector group_key (docs/GHOSTMODE_PROTOCOL.md
+  # §7.4) — a published deterministic constant, not a live secret. Pinned in full
+  # (64 hex chars) so nothing but this exact value is exempted.
+  "7e98870b287be188f0707eee57bbc1cb5032a1898cf6502d99a055546315fd9e",
+  "rune-birch",
+  "sk-test-fake-key",
+  "sk-super-secret-123",
+  "sk-cloud-xyz",
+  "sk-cloudkey",
+  "account-token-123",
+  "s3cr3t-pairing",
+  "persisted-secret",
+  "x-dreamlayer-token",
+]

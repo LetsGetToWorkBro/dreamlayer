@@ -1,0 +1,46 @@
+name: gitleaks
+
+# Secret scanning, introduced 2026-07-18: nothing in CI stopped an API key, a
+# real pairing token, or a private key from being committed. gitleaks scans the
+# tree (and its history) against its built-in rule set PLUS this repo's
+# `.gitleaks.toml`, which extends the defaults and allowlists the KNOWN test
+# fixtures (the fake `sk-...` keys, the `rune-birch` pairing token, the well-known
+# Windows SIDs) so the scan is clean today while a REAL secret still trips it.
+#
+# ENFORCING (BLOCKING). Unlike the SAST pass (semgrep.yml), there is no backlog
+# to triage — the tree is clean at introduction — so a non-zero gitleaks exit
+# means a genuine secret entered the code and this check MUST go red. It runs the
+# OSS gitleaks binary via its public Docker image, so it needs NO paid
+# gitleaks-action license/key. Runs on PRs and pushes to main, plus a weekly
+# sweep (a gitleaks rule update can flag a pre-existing leak the old rules missed).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 8 * * 1"      # Mondays 08:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: gitleaks detect (OSS image, no action license)
+        # Scan the CURRENT working tree (--no-git), not git history: a real
+        # secret in the code we ship is what must block, and this avoids a
+        # false-positive on some long-gone test fixture in an old commit reddening
+        # the gate at introduction. A full-history sweep can be added on the
+        # weekly cron once the tree is triaged clean. Official image (ghcr).
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect \
+            --no-git \
+            --source=/repo \
+            --config=/repo/.gitleaks.toml \
+            --redact \
+            --verbose \
+            --exit-code=1

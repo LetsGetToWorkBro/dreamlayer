@@ -1,0 +1,57 @@
+name: scorecard
+
+# OpenSSF Scorecard, introduced 2026-07-18: a repository-posture / supply-chain
+# scorer. It grades the things a security-conscious project should get right —
+# branch protection, pinned-by-SHA actions, least-privilege workflow token
+# permissions, dependency-update automation, signed releases, and the presence
+# of exactly the kind of scanning workflows added alongside it (dep-audit,
+# semgrep, gitleaks). Its output is the public CONTRIBUTOR TRUST SIGNAL: the
+# score (and badge) a prospective contributor or a downstream consumer reads to
+# judge, at a glance, whether this project takes security seriously.
+#
+# INFORMATIONAL — it SCORES posture, it never blocks a merge (there is no PR
+# trigger and nothing here fails the build on a low score). `publish_results`
+# streams the score to the OpenSSF public dashboard so the badge and the trust
+# signal stay current, and the SARIF is uploaded to the Security tab as advisory
+# code-scanning findings. Scoring only makes sense on the canonical repo, so a
+# scheduled/`push` run is gated to this owner; forks can still run it on demand
+# via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"      # Mondays 09:00 UTC
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege at the top; the job widens only what Scorecard needs.
+permissions: read-all
+
+jobs:
+  scorecard:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    # a public score is meaningful only for the canonical repo, not a fork
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'LetsGetToWorkBro'
+    permissions:
+      security-events: write  # upload-sarif -> code-scanning alerts
+      id-token: write         # OIDC token for publish_results (transparency log)
+      contents: read          # checkout
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run OpenSSF Scorecard
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # post the score to the public OpenSSF dashboard / badge — this IS the
+          # contributor trust signal; the run is worthless as a private artifact.
+          publish_results: true
+      - name: Upload SARIF to the Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: scorecard
