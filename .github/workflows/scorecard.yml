@@ -43,7 +43,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Run OpenSSF Scorecard
-        uses: ossf/scorecard-action@v2
+        # Full semver, NOT a bare @v2 — ossf/scorecard-action does not publish a
+        # moving major tag (unlike actions/*), so @v2 fails action resolution and
+        # reddened every push-to-main run (2026-07-18). Pin to a real release.
+        uses: ossf/scorecard-action@v2.4.0
         with:
           results_file: results.sarif
           results_format: sarif
