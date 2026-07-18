@@ -136,6 +136,54 @@ def test_backends_order_is_enclave_then_file(tmp_path):
     assert kinds[0] == "mem" and kinds[-1] == "file"
 
 
+# --- resilience: a raising backend must never be fatal -----------------------
+
+class _RaisingBackend(SecretBackend):
+    kind = "raising"
+    available = True
+
+    def get(self, name):
+        raise RuntimeError("flaky TPM plug")
+
+    def set(self, name, value):
+        raise RuntimeError("flaky TPM plug")
+
+    def delete(self, name):
+        raise RuntimeError("flaky TPM plug")
+
+
+def test_a_raising_enclave_is_skipped_not_fatal(tmp_path):
+    """A platform enclave that throws (flaky TPM) must be skipped so the file
+    backend still answers — get()/set() must not crash server startup."""
+    register_secret_backend(_RaisingBackend())
+    store = SecretStore(tmp_path, prefer_keyring=False)
+    key = store.get_or_create("receipt")             # must not raise
+    assert len(key) == 32
+    # stable across a re-read (persisted to the file, the durable backstop)
+    assert SecretStore(tmp_path, prefer_keyring=False).get("receipt") == key
+
+
+def test_set_cascades_past_a_raising_backend(tmp_path):
+    register_secret_backend(_RaisingBackend())
+    store = SecretStore(tmp_path, prefer_keyring=False)
+    store.set("k", b"\x07" * 32)                      # lands in the file, no crash
+    assert (tmp_path / "k.key").exists()
+    assert store.get("k") == b"\x07" * 32
+
+
+def test_file_write_leaves_no_world_readable_temp(tmp_path):
+    """mkstemp(O_EXCL, 0o600) means the secret is never on disk world-readable and
+    a crashed write leaves no 0o644 leftover (refute 2026-07-18)."""
+    be = HardenedFileBackend(tmp_path)
+    be.set("receipt", os.urandom(32))
+    if os.name == "posix":
+        assert stat.S_IMODE((tmp_path / "receipt.key").stat().st_mode) == 0o600
+        assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o700       # dir hardened
+        # any lingering temp (there shouldn't be one) is never world-readable
+        for f in tmp_path.glob("*.tmp"):
+            assert stat.S_IMODE(f.stat().st_mode) & 0o077 == 0
+
+
 # --- keyring probe is fail-safe ----------------------------------------------
 
 def test_keyring_backend_probe_is_fail_safe():

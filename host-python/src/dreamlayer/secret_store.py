@@ -34,8 +34,9 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 log = logging.getLogger("dreamlayer.secret_store")
 
@@ -99,19 +100,35 @@ class HardenedFileBackend(SecretBackend):
 
     def set(self, name: str, value: bytes) -> None:
         p = self._path(name)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_text(value.hex())
+        self._harden_dir(p.parent)
+        # mkstemp opens O_CREAT|O_EXCL at 0o600, so the secret is NEVER on disk
+        # world-readable — the previous write_text-then-chmod left a 0o644 window
+        # (and a 0o644 leftover on a crash), the exact flaw the config path already
+        # fixed with mkstemp (refute 2026-07-18).
+        fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=p.name + ".", suffix=".tmp")
         try:
-            os.chmod(tmp, 0o600)                       # secret-at-rest: owner only
-        except OSError:
-            pass
-        os.replace(tmp, p)
+            with os.fdopen(fd, "w") as f:
+                f.write(value.hex())
+            os.replace(tmp, p)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
         try:
             os.chmod(p, 0o600)
         except OSError:
             pass
         self._harden_windows(str(p))                  # 0o600 is inert on NTFS
+
+    def _harden_dir(self, d: Path) -> None:
+        d.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(d, 0o700)                         # owner-only dir on first boot
+        except OSError:
+            pass
+        self._harden_windows(str(d))
 
     def delete(self, name: str) -> None:
         try:
@@ -136,8 +153,10 @@ class KeyringBackend(SecretBackend):
 
     def __init__(self, service: str = DEFAULT_SERVICE):
         self._service = service
-        self._keyring = None
+        self._keyring: Any = None
         self.available = self._probe()
+
+    _PROBE_NAME = "__dreamlayer_probe__"
 
     def _probe(self) -> bool:
         try:
@@ -149,10 +168,26 @@ class KeyringBackend(SecretBackend):
             active = keyring.get_keyring()
         except Exception:
             return False
-        # A null/fail backend "works" but stores nothing — treat as unavailable so
-        # we don't silently drop secrets into a black hole instead of the file.
-        cls_path = f"{type(active).__module__}.{type(active).__name__}".lower()
-        if isinstance(active, _fail.Keyring) or "null" in cls_path or "fail" in cls_path:
+        if isinstance(active, _fail.Keyring):
+            return False
+        # FUNCTIONAL round-trip, not just a class check: a real keychain that is
+        # LOCKED, a Secret Service with no DBus session, or the null backend all
+        # report a plausible class but silently drop on use. If we trusted the
+        # class we'd mint a new secret into a black hole and lose the old one —
+        # so a locked/nonfunctional keyring must report UNAVAILABLE, letting the
+        # store fall back to the durable file (refute 2026-07-18). (This also
+        # replaces the old "fail"/"null" substring guard, which wrongly disabled
+        # legitimate backends whose module path happened to contain those words.)
+        try:
+            keyring.set_password(self._service, self._PROBE_NAME, "1")
+            ok = keyring.get_password(self._service, self._PROBE_NAME) == "1"
+            try:
+                keyring.delete_password(self._service, self._PROBE_NAME)
+            except Exception:
+                pass
+        except Exception:
+            return False
+        if not ok:
             return False
         self._keyring = keyring
         return True
@@ -216,41 +251,65 @@ class SecretStore:
         return self._file
 
     def get(self, name: str) -> Optional[bytes]:
+        # Each backend read is guarded: a platform enclave that raises (a flaky
+        # TPM plug) must be SKIPPED, never crash server startup — the file backend
+        # always answers last (refute 2026-07-18: get() was unguarded).
         for b in self._backends:
             if not getattr(b, "available", False):
                 continue
-            val = b.get(name)
+            try:
+                val = b.get(name)
+            except Exception as exc:
+                log.warning("[secret_store] %s get failed: %s", getattr(b, "kind", "?"), exc)
+                continue
             if val:
                 return val
         return None
 
     def set(self, name: str, value: bytes) -> None:
-        self._preferred().set(name, value)
+        """Write to the highest-priority backend that accepts it, cascading down
+        on error. The file backend is always available and last, so set() cannot
+        fail on a locked keychain / read-only enclave — it just lands one tier
+        lower (refute 2026-07-18: set() was a bare _preferred().set that crashed)."""
+        last_exc: Optional[Exception] = None
+        for b in self._backends:
+            if not getattr(b, "available", False):
+                continue
+            try:
+                b.set(name, value)
+                return
+            except Exception as exc:
+                last_exc = exc
+                log.warning("[secret_store] %s set failed: %s; trying next backend",
+                            getattr(b, "kind", "?"), exc)
+        if last_exc is not None:
+            raise last_exc
 
     def delete(self, name: str) -> None:
         for b in self._backends:
             if getattr(b, "available", False):
-                b.delete(name)
+                try:
+                    b.delete(name)
+                except Exception as exc:
+                    log.warning("[secret_store] %s delete failed: %s",
+                                getattr(b, "kind", "?"), exc)
 
     def get_or_create(self, name: str,
                       factory: Callable[[], bytes] = lambda: os.urandom(32)) -> bytes:
         """Return the secret, minting one only if NO backend already holds it.
 
-        Reading through every backend first is what keeps a pre-existing on-disk
-        key authoritative after the keychain arrives — the receipt public key
-        stays stable, so every past receipt still verifies. A freshly minted
-        secret goes to the strongest available backend."""
+        Reading through every backend first keeps a pre-existing key authoritative
+        after a higher backend arrives — the receipt public key stays stable, so
+        every past receipt still verifies. On a mint, set() cascades to a durable
+        backend (never crashes on a locked keychain); then we RE-READ so two
+        concurrent first-boot processes converge on the persisted winner rather
+        than each returning its own key (refute 2026-07-18)."""
         existing = self.get(name)
         if existing:
             return existing
         value = factory()
-        try:
-            self._preferred().set(name, value)
-        except Exception as exc:                       # keychain locked mid-create
-            log.warning("[secret_store] preferred backend store failed (%s); "
-                        "falling back to owner-only file", exc)
-            self._file.set(name, value)
-        return value
+        self.set(name, value)                          # cascades; file is the backstop
+        return self.get(name) or value                 # converge on the stored winner
 
 
 def secret_store(cfg_dir: Path | str, **kw) -> SecretStore:

@@ -887,11 +887,18 @@ def activity_receipt_signer(cfg_dir: Path | str):
     if not getattr(Signer, "available", False):
         return None
     from ...secret_store import SecretStore
-    store = SecretStore(cfg_dir)
+    # prefer_keyring=False: the receipt seed must be STABLE across every reboot
+    # (a changed key orphans all past receipts), but a headless Brain has no
+    # interactively-unlocked OS keychain — a keychain locked at boot would report
+    # available then miss, and the store would mint a new seed. So the seed's
+    # durable home is the owner-only file (0o600 + ACL) or a registered enclave,
+    # not the keychain. The keychain backend stays available for interactive
+    # secrets that opt in with the default prefer_keyring=True.
+    store = SecretStore(cfg_dir, prefer_keyring=False)
     key = store.get_or_create("receipt", lambda: os.urandom(32))
     if len(key) < 32:                                # corrupt/short existing seed
         key = os.urandom(32)
-        store.set("receipt", key)
+        store.set("receipt", key)                    # set() cascades; never crashes
     return Signer(key)
 
 
