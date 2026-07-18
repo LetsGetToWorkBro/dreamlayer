@@ -13,7 +13,11 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "NSLocalNetworkUsageDescription": "DreamLayer connects to your Mac mini Brain over your own local network, so your data stays between your devices instead of going through the cloud.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
