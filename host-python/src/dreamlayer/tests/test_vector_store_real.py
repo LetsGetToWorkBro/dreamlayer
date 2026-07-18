@@ -12,14 +12,17 @@ answered. Covered: the 0.5*sim + 0.5*conf blend (exact scores), kind= filtering,
 the empty-DB early return ([]), the over-fetch/refill that keeps a stale (purged
 but not evicted) row from starving the result below top_k, and the dead-row skip.
 
-Needs sqlite-vec (importorskip). It ALSO needs a SQLite new enough to push a
-``LIMIT`` into a vec0 knn query: _search_indexed issues
-``... embedding MATCH ? ORDER BY distance LIMIT ?``, and on an old SQLite that
-cannot pass LIMIT down to the virtual table sqlite-vec raises "A LIMIT or
-'k = ?' constraint is required on vec0 knn queries", which the store catches and
-degrades to linear. So the whole indexed path is unexercisable there — this
-module probes that capability once and skips cleanly when it is missing, rather
-than let every test red-fail on a silent degrade the environment forces.
+Needs sqlite-vec (importorskip). _search_indexed issues the ``k = ?`` form
+(``... embedding MATCH ? AND k = ? ORDER BY distance``), not ``LIMIT ?`` —
+the LIMIT form needs a SQLite new enough to push LIMIT down into a virtual
+table, which older builds (e.g. 3.34.1) cannot do, and sqlite-vec's own error
+for that shape ("A LIMIT or 'k = ?' constraint is required on vec0 knn
+queries") makes the alternative explicit (#429). ``k = ?`` is a constraint
+sqlite-vec evaluates itself rather than relying on the query planner's LIMIT
+pushdown, so it runs the real indexed path on every SQLite this project
+supports, 3.34.1 included — this module still probes the capability once and
+skips cleanly on the rare box where sqlite-vec itself is unusable, rather than
+let every test red-fail on a forced degrade.
 
 The default MockEmbeddingProvider is a deterministic 32-d bag-of-word-hashes, so
 rankings and blended scores are stable across runs; vectors match on shared whole
@@ -37,13 +40,15 @@ pytest.importorskip("sqlite_vec")
 import sqlite_vec  # noqa: E402  (after importorskip)
 
 
-def _vec0_limit_pushdown_works() -> bool:
-    """True when this box's SQLite can serve a vec0 knn query with a bound
-    ``LIMIT ?`` — the exact shape _search_indexed relies on. Old SQLite builds
-    (no LIMIT-pushdown into virtual tables) raise, forcing the store's silent
-    linear degrade; there is nothing real to assert there, so we skip. Probes
-    the SAME sqlite3 module the store uses (MemoryDB opens ``import sqlite3``),
-    so a shim swapping in a newer SQLite is honoured identically."""
+def _vec0_knn_query_works() -> bool:
+    """True when this box's SQLite/sqlite-vec pair can serve a vec0 knn query
+    using the ``k = ?`` constraint form — the exact shape _search_indexed
+    issues. Probes the SAME sqlite3 module the store uses (MemoryDB opens
+    ``import sqlite3``), so a shim swapping in a different SQLite is honoured
+    identically. Unlike the old ``LIMIT ?`` form, ``k = ?`` does not depend on
+    the query planner pushing LIMIT into the virtual table, so this should
+    succeed on essentially every sqlite-vec-capable SQLite — including 3.34.1
+    (#429) — and only fails where sqlite-vec itself can't load/run at all."""
     try:
         conn = sqlite3.connect(":memory:")
         conn.enable_load_extension(True)
@@ -55,8 +60,8 @@ def _vec0_limit_pushdown_works() -> bool:
         conn.execute("INSERT INTO t(id, embedding) VALUES (?, ?)",
                      (1, sqlite_vec.serialize_float32([1.0, 0.0])))
         conn.execute(
-            "SELECT id, distance FROM t WHERE embedding MATCH ? "
-            "ORDER BY distance LIMIT ?",
+            "SELECT id, distance FROM t WHERE embedding MATCH ? AND k = ? "
+            "ORDER BY distance",
             (sqlite_vec.serialize_float32([1.0, 0.0]), 4)).fetchall()
         conn.close()
         return True
@@ -64,11 +69,11 @@ def _vec0_limit_pushdown_works() -> bool:
         return False
 
 
-if not _vec0_limit_pushdown_works():
+if not _vec0_knn_query_works():
     pytest.skip(
-        f"sqlite-vec indexed path unavailable: SQLite {sqlite3.sqlite_version} "
-        "cannot push LIMIT into a vec0 knn query (needs a newer SQLite); "
-        "VectorStore.search() degrades to linear here — nothing real to assert.",
+        f"sqlite-vec indexed path unavailable on SQLite {sqlite3.sqlite_version} "
+        "(k = ? knn query failed); VectorStore.search() degrades to linear "
+        "here — nothing real to assert.",
         allow_module_level=True)
 
 
