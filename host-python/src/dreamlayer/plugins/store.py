@@ -224,6 +224,16 @@ class PluginStore:
         loaded at all rather than run without the kernel boundary the deployment
         demanded.
 
+        Isolation tiers, weakest→strongest: bare subprocess < subprocess + a
+        kernel sandbox (bwrap/nsjail, os_sandbox.py) < the WASI subprocess tier
+        (wasm_host.py) < the in-process Component-Model host (wasm_component_host.py,
+        capability ``wasm_plugins``), which gives a WASM *guest* zero ambient
+        authority and links only its declared capabilities. That strongest tier
+        binds the WIT contract (plugins/dreamlayer.wit) and applies to WASM-guest
+        packages; today's plugins ship Python module code, so this loader routes
+        them through the subprocess/WASI tiers above — the component host is the
+        forward path a `.wasm`-guest package format targets.
+
         Returns the in-process LoadResult; the isolated hosts are stored on
         `self.isolated` (call .stop() to reclaim)."""
         import os as _os

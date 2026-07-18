@@ -13,6 +13,9 @@ on:
     paths: ["landing/**", "registry/**", ".github/workflows/deploy-landing.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: read   # least-privilege floor; jobs opt into more where needed
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -20,14 +23,14 @@ jobs:
       contents: read
       deployments: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       # Publish the plugin registry with the site: the phone app and web store
       # install by fetching dreamlayer.app/registry/packages/<name>-<ver>.json
       # (raw.githubusercontent 404s while the repo is private).
       - name: Bundle plugin registry into the site
         run: cp -r registry landing/registry
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
