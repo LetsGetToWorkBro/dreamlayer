@@ -52,6 +52,28 @@ def test_explicit_enrolled_set_is_authoritative():
     assert voice_guard.defers_speaker("Mallory", enrolled) is True
 
 
+@pytest.mark.parametrize("label", [
+    # diarization families a resolver emits for an UNIDENTIFIED speaker that the
+    # first denylist missed (refute 2026-07-18) — all must be strangers now.
+    "guest2", "guest 2", "guest_2", "person3", "person 3", "unknown2",
+    "unknown-2", "unknown 2", "Speaker A", "speakerA", "spk_A", "participant1",
+    "participant 2", "caller", "anon", "anonymous", "user0", "user_2", "cluster0",
+    "segment1", "talker3", "someone else", "p1", "u0", "them​", "  THEM  ",
+])
+def test_hardened_placeholders_are_strangers(label):
+    assert voice_guard.is_enrolled_label(label) is False
+    assert voice_guard.retain_voiceprint(label) is False
+
+
+def test_registry_is_authoritative_over_the_heuristic():
+    """An enrolled speaker registered under a placeholder-SHAPED id must still be
+    retained — the registry wins over the denylist (refute 2026-07-18: the
+    heuristic short-circuited before the registry check and dropped them)."""
+    for sid in ("S1", "Voice2", "guest", "Speaker0", "p1"):
+        assert voice_guard.retain_voiceprint(sid, [sid]) is True
+        assert voice_guard.retain_voiceprint(sid, ["someone-else"]) is False
+
+
 def test_guard_embedding_keeps_enrolled_drops_stranger():
     vec = [0.1, 0.2, 0.3]
     assert voice_guard.guard_embedding(vec, "Priya") == vec

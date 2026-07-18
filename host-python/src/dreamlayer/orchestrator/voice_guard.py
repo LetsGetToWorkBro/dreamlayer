@@ -25,6 +25,7 @@ biometrics. Fail-safe throughout — when in doubt, DON'T retain.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Iterable, Optional
 
 # The wearer themself — always an enrolled, consenting identity (their own device,
@@ -36,15 +37,46 @@ SELF_LABELS = frozenset({"me", "self", "wearer", "owner", "i"})
 # enrolled someone", so they are strangers for retention purposes.
 PLACEHOLDER_LABELS = frozenset({
     "", "them", "they", "other", "others", "unknown", "unk", "stranger",
-    "guest", "someone", "person", "speaker", "voice", "n/a", "none", "?",
+    "strangers", "guest", "guests", "someone", "somebody", "person", "people",
+    "speaker", "voice", "talker", "caller", "party", "member", "participant",
+    "anon", "anonymous", "user", "cluster", "segment", "diarized", "n/a", "na",
+    "none", "null", "?", "-", "--",
 })
 
-# "speaker0", "spk_3", "voice-2", "s1" … — enumerated diarization slots, not names.
-_PLACEHOLDER_RE = re.compile(r"^(?:speaker|spk|voice|s)[\s_\-]?\d+$", re.IGNORECASE)
+# Enumerated diarization slots — "speaker0", "spk_3", "voice-2", "guest 2",
+# "unknown_2", "person 3", "Speaker A", "participant1", "p1", "s5" … — a
+# placeholder PREFIX, any separator, then a number OR a single trailing letter
+# (or nothing). A denylist can never be exhaustive (that is what the explicit
+# `enrolled` allowlist is for); this catches the realistic families a resolver
+# emits for an UNIDENTIFIED speaker, so the no-registry fallback isn't porous.
+_PLACEHOLDER_PREFIXES = (
+    "speaker", "spk", "spkr", "voice", "vox", "talker", "cluster", "segment",
+    "seg", "diariz[a-z]*", "user", "usr", "person", "guest", "member",
+    "participant", "caller", "party", "unknown", "unk", "anon", "anonymous",
+    "stranger", "other", "others", "someone", "somebody", "id", "uid",
+    "s", "p", "d", "u", "v", "c", "m", "g", "n",
+)
+_PLACEHOLDER_RE = re.compile(
+    r"^(?:" + "|".join(_PLACEHOLDER_PREFIXES) + r")[\s_\-.:#/]*(?:\d+|[a-z])?$",
+    re.IGNORECASE)
 
 
 def _norm(label: Optional[str]) -> str:
-    return (label or "").strip().lower()
+    """Normalise a label for comparison: NFKC (folds fullwidth/compatibility
+    homoglyphs), strip zero-width joiners a resolver or attacker might smuggle in,
+    then lower + trim."""
+    s = unicodedata.normalize("NFKC", label or "")
+    s = s.replace("​", "").replace("‌", "").replace("‍", "").replace("﻿", "")
+    return s.strip().lower()
+
+
+def _is_placeholder(norm: str) -> bool:
+    if (not norm) or (norm in PLACEHOLDER_LABELS) or _PLACEHOLDER_RE.match(norm):
+        return True
+    # multi-word placeholders ("someone else", "guest of honor", "speaker two"):
+    # if the LEADING token is itself a placeholder, the whole label is one.
+    first = norm.split(maxsplit=1)[0] if norm.split() else ""
+    return first in PLACEHOLDER_LABELS or bool(_PLACEHOLDER_RE.match(first))
 
 
 def is_self(label: Optional[str]) -> bool:
@@ -55,24 +87,26 @@ def is_self(label: Optional[str]) -> bool:
 
 def is_enrolled_label(label: Optional[str], enrolled: Optional[Iterable[str]] = None) -> bool:
     """True when *label* denotes an ENROLLED speaker — the wearer, or an identity
-    the resolver could actually name.
+    we are entitled to keep a voiceprint for.
 
-    A resolver returns a real name ONLY when the voice matched a registered
-    voiceprint above threshold; an unmatched voice comes back empty or as a
-    diarization placeholder. So a non-empty, non-placeholder label already means
-    "matched an enrolled speaker". When an explicit *enrolled* set is supplied,
-    the label must additionally be a member of it (self always passes) — a
-    stricter check for callers that hold the registry. Fail-safe: anything not
-    positively enrolled is treated as a stranger.
+    When an explicit *enrolled* registry is supplied it is AUTHORITATIVE: the
+    label must be a member (self always passes), and the placeholder heuristic is
+    NOT consulted — so an enrolled speaker registered under a short id like "S1"
+    or "Voice2" is still retained (the heuristic must never override the registry
+    the caller actually holds). With NO registry we fall back to a placeholder
+    denylist: a resolver returns a real name only when a voice matched a
+    registered voiceprint, and an unmatched voice comes back empty or as a
+    diarization placeholder — so a non-empty, non-placeholder label is treated as
+    a match. That fallback is best-effort (a denylist can't be exhaustive); pass
+    an `enrolled` allowlist for a strict guarantee. Fail-safe: not positively
+    enrolled → stranger.
     """
     norm = _norm(label)
     if norm in SELF_LABELS:
         return True
-    if not norm or norm in PLACEHOLDER_LABELS or _PLACEHOLDER_RE.match(norm):
-        return False
-    if enrolled is not None:
+    if enrolled is not None:                     # registry is authoritative
         return norm in {_norm(e) for e in enrolled}
-    return True
+    return not _is_placeholder(norm)
 
 
 def defers_speaker(label: Optional[str], enrolled: Optional[Iterable[str]] = None) -> bool:
