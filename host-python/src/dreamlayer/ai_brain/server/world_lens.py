@@ -135,6 +135,25 @@ class WorldLensHost:
         backend = getattr(self.brain, "_backend", None)
         if backend is None or not hasattr(backend, "describe"):
             return ""
+        # Same remote-vision gate as _BrainVisionRouter.explain: a REMOTE
+        # ollama_url receiving the wearer's photo IS egress — blocked while the
+        # egress shield is up, counted otherwise. The recognizer's describe path
+        # ships the same pixels as explain and must ride the same gate, or the
+        # look's "frames stay with your Brain" claim quietly breaks the moment
+        # someone points ollama_url off-box.
+        from .backends import is_local_endpoint
+        cfg = getattr(self.brain, "config", None)
+        url = getattr(cfg, "ollama_url", "") if cfg is not None else ""
+        if url and not is_local_endpoint(url):
+            try:
+                if self.brain.incognito_now():
+                    return ""                # nothing leaves → no remote vision
+            except Exception:
+                return ""                    # unreadable posture → fail closed
+            try:
+                self.brain.bump_cloud_calls()
+            except Exception:
+                pass
         try:
             return backend.describe(prompt, image_b64) or ""
         except Exception as exc:

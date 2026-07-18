@@ -2301,10 +2301,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _post_live_look(self, path, qs):
             """One Live Lens look: a JPEG frame in, a budget-clamped HUD card
-            out. The frame is decoded in memory and classified by the LOCAL
-            vision ladder only — this route performs zero cloud egress in every
-            posture (live.look guarantees it; test_live_lens pins it). The
-            frame cap rides the same 413-before-read machinery as every body."""
+            out — the SAME unified pipeline as /brain/look (live.world_look).
+            The frame is decoded in memory and never persisted; under the
+            wearer's egress shield the look is local-only (classifier ladder,
+            zero egress, no trace — test_live_lens pins it), and outside it the
+            plugin providers see extracted fields, never pixels. The frame cap
+            rides the same 413-before-read machinery as every body."""
             from . import live as live_mod
             data = self._raw(live_mod.MAX_FRAME_BYTES)
             self._json(200, live_mod.look(brain, data))
@@ -2513,14 +2515,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             in the Brain so a phone photo stands in for the glasses.
 
             Body: {image? (base64), label?, attrs?, lens? ("object"|"taste"),
-            facet?, confidence?, budget?}. Two object modes: pass an `image` to
-            recognise it (the Brain's vision reads structured fields, heuristic
-            fallback offline), OR pass a `label` (+ optional `attrs`) to build the
-            panel directly — the deterministic path the phone/tests use with no
-            model. Returns {ok, panel|card} or an honest {ok:false, reason}."""
+            facet?, confidence?, budget?}. The image mode rides live.world_look —
+            THE unified pipeline shared with the browser's Live Lens — so both
+            surfaces are one thing: full plugin panel outside the egress shield,
+            an honest local-only look inside it, and the same budget-clamped
+            glass `lines` from the one formatter. The `label`/taste modes
+            exercise plugin providers directly and stay veiled under the shield.
+            Returns {ok, panel|card, lines?} or an honest {ok:false, reason}."""
             from ...object_lens.schema import ObjectSighting
             from ...object_lens.vision_recognizer import b64_to_frame
+            from . import live as live_mod
             b = self._body()
+            lens = str(b.get("lens", "object") or "object")
+            facet = b.get("facet") or None
+            label = str(b.get("label", "") or "").strip()
+            if lens == "object" and not label and not facet:
+                out = live_mod.world_look(brain, b64_to_frame(b.get("image")))
+                out["lens"] = "object"
+                self._json(200, out)
+                return
             wl = brain.world_lens()
             if wl is None:
                 self._json(200, {"ok": False, "reason": "vision lens unavailable"})
@@ -2529,8 +2542,6 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"ok": False, "veiled": True,
                                  "reason": "Incognito — Juno isn't looking."})
                 return
-            lens = str(b.get("lens", "object") or "object")
-            facet = b.get("facet") or None
             if lens == "taste":
                 ranking = wl.taste(b64_to_frame(b.get("image")),
                                    budget=b.get("budget"))
@@ -2542,8 +2553,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"ok": True, "lens": "taste",
                                  "card": cards.taste(ranking, unavailable=False)})
                 return
-            # object lens (Juno)
-            label = str(b.get("label", "") or "").strip()
+            # object lens (Juno) — deterministic label mode / an explicit facet
             if label:
                 attrs = b.get("attrs")
                 try:
@@ -2559,8 +2569,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if panel is None:
                 self._json(200, {"ok": False, "reason": "couldn't make it out"})
                 return
-            self._json(200, {"ok": True, "lens": "object",
-                             "panel": panel.to_hud_card()})
+            card = panel.to_hud_card()
+            self._json(200, {"ok": True, "lens": "object", "panel": card,
+                             "lines": live_mod.panel_lines(card)})
 
         def _post_reindex(self, path, qs):
             """Re-index all watched folders."""
