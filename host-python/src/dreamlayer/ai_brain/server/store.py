@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -656,6 +657,12 @@ class ActivityLog:
         self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
         self._next_seq = 0
         self._loaded = False
+        # The threaded Brain server calls add() from multiple request threads;
+        # the signed chain has shared mutable state (_head_hash/_next_seq) and
+        # writes a head anchor, so a bare append would race two records onto the
+        # same seq and collide the anchor temp-file. Serialize the mutators.
+        # Re-entrant so prune/restore can call _rechain while holding it.
+        self._lock = threading.RLock()
 
     # -- the signed head anchor (defeats tail truncation) ---------------------
     # A hash chain alone protects edits/reorders/mid-deletions, but NOTHING
@@ -672,9 +679,20 @@ class ActivityLog:
                 "count": self._next_seq}
         doc = {**core, "sig": self._signer.sign(core)}
         self._head_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._head_path.with_name(self._head_path.name + ".tmp")
-        tmp.write_text(json.dumps(doc))
-        os.replace(tmp, self._head_path)
+        # a UNIQUE temp per write: a fixed ".head.tmp" collided when two threads
+        # wrote concurrently (one's os.replace moved it out from under the other).
+        fd, tmp = tempfile.mkstemp(dir=str(self._head_path.parent),
+                                   prefix=self._head_path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps(doc))
+            os.replace(tmp, self._head_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def _read_head(self) -> Optional[dict]:
         """The verified head anchor, or None (absent / unverifiable / no signer)."""
@@ -715,17 +733,22 @@ class ActivityLog:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         ts = ts if ts is not None else time.time()
         rec: dict = {"ts": ts, "kind": kind, "text": text}
-        if self._signer is not None:
-            self._load_head()
-            rec["seq"] = self._next_seq
-            rec["prev"] = self._head_hash
-            core = _receipt_core(rec)
-            rec["sig"] = self._signer.sign(core)
-            self._head_hash = _receipt_hash(core)
-            self._next_seq += 1
-        with self.path.open("a") as f:
-            f.write(json.dumps(rec) + "\n")
-        self._write_head()                     # advance the signed high-water mark
+        # The signed-chain critical section (seq/head advance + anchor write) must
+        # be atomic across the threaded server, or two adds collide on a seq and
+        # corrupt the chain. The unsigned path holds the lock too (cheap) so a
+        # concurrent append can't interleave a half-written line.
+        with self._lock:
+            if self._signer is not None:
+                self._load_head()
+                rec["seq"] = self._next_seq
+                rec["prev"] = self._head_hash
+                core = _receipt_core(rec)
+                rec["sig"] = self._signer.sign(core)
+                self._head_hash = _receipt_hash(core)
+                self._next_seq += 1
+            with self.path.open("a") as f:
+                f.write(json.dumps(rec) + "\n")
+            self._write_head()                 # advance the signed high-water mark
 
     def _read_all(self) -> list[dict]:
         """All records, oldest-first (file order)."""
@@ -842,31 +865,34 @@ class ActivityLog:
         self._write_head()                     # re-attest the new (owner-signed) head
 
     def clear(self) -> None:
-        if self.path.exists():
-            self.path.unlink()
-        if self._head_path.exists():
-            self._head_path.unlink()           # drop the anchor with the log
-        self._head_hash, self._next_seq, self._loaded = "", 0, True
+        with self._lock:
+            if self.path.exists():
+                self.path.unlink()
+            if self._head_path.exists():
+                self._head_path.unlink()       # drop the anchor with the log
+            self._head_hash, self._next_seq, self._loaded = "", 0, True
 
     def prune(self, days: int) -> int:
         if self._signer is None:
             return _prune_jsonl(self.path, days)
-        if days <= 0 or not self.path.exists():
-            return 0
-        cutoff = time.time() - days * 86400
-        recs = self._read_all()
-        kept = [r for r in recs if r.get("ts", 0) >= cutoff]
-        removed = len(recs) - len(kept)
-        if removed:
-            self._rechain(kept)
-        return removed
+        with self._lock:
+            if days <= 0 or not self.path.exists():
+                return 0
+            cutoff = time.time() - days * 86400
+            recs = self._read_all()
+            kept = [r for r in recs if r.get("ts", 0) >= cutoff]
+            removed = len(recs) - len(kept)
+            if removed:
+                self._rechain(kept)
+            return removed
 
     def restore(self, items) -> None:
         if self._signer is None:
             _restore_jsonl(self.path, items)
             return
-        # `items` arrives newest-first (as recent()/state export produce it).
-        self._rechain(list(reversed(list(items or []))))
+        with self._lock:
+            # `items` arrives newest-first (as recent()/state export produce it).
+            self._rechain(list(reversed(list(items or []))))
 
 
 def activity_receipt_signer(cfg_dir: Path | str):

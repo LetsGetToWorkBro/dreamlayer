@@ -134,6 +134,33 @@ def test_deleting_the_head_anchor_is_flagged(tmp_path):
     assert "anchor" in v.get("reason", "")
 
 
+def test_concurrent_adds_keep_the_chain_valid(tmp_path):
+    """The threaded Brain calls add() from many request threads. The signed-chain
+    critical section + anchor write must be atomic, or two adds race a seq / the
+    anchor temp-file collides (refute: a real FileNotFoundError under load)."""
+    import threading
+    log, _ = _log(tmp_path)
+    errors = []
+
+    def worker(n):
+        try:
+            for i in range(10):
+                log.add("k", f"t{n}-{i}", ts=float(n * 100 + i))
+        except Exception as exc:            # e.g. the anchor temp-file collision
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, f"add() raced under concurrency: {errors[:3]}"
+    v = log.verify()
+    assert v["ok"] is True and v["records"] == 80 and v["signed"] == 80
+    seqs = sorted(r["seq"] for r in log._read_all())
+    assert seqs == list(range(80))          # no duplicate/skipped seq
+
+
 def test_receipt_carries_the_signed_head(tmp_path):
     log, _ = _log(tmp_path)
     for i in range(3):
