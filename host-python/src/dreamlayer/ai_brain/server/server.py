@@ -44,7 +44,8 @@ import time
 log = logging.getLogger("dreamlayer.ai_brain.server")
 
 from ..schema import Answer
-from .store import BrainConfig, QueryHistory, ActivityLog, replace_atomic
+from .store import (BrainConfig, QueryHistory, ActivityLog, replace_atomic,
+                    activity_receipt_signer)
 from .index import FileIndex
 from .backends import OllamaBackend, make_synthesizer, vision_answer, probe_ollama
 from .panel import render_panel
@@ -196,7 +197,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         self._egress_lock = threading.Lock()
         self.config = BrainConfig.load(self.cfg_dir)
         self.history = QueryHistory(self.cfg_dir)
-        self.activity = ActivityLog(self.cfg_dir)
+        self.activity = ActivityLog(
+            self.cfg_dir, signer=activity_receipt_signer(self.cfg_dir))
         self.index = FileIndex(self.config)
         # Platform sources: macOS reads Messages/Mail/Calendar.app; Windows
         # reads Thunderbird mbox + .ics feeds (windows_sources). Each module
@@ -1976,6 +1978,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Newest-first activity feed (questions + actions)."""
             self._json(200, {"items": _activity_feed(brain, 40)})
 
+        def _get_receipt(self, path, qs):
+            """A verifiable privacy receipt: the tamper-evident activity records
+            (seq/prev/sig), the Ed25519 public key to check them against, and
+            this Brain's own verify() result — so a wearer or a bystander can
+            independently confirm what the Brain did was not altered."""
+            self._json(200, brain.activity.receipt())
+
         def _get_calendar(self, path, qs):
             """Upcoming agenda events."""
             self._json(200, {"items": brain.calendar()})
@@ -2163,6 +2172,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
+            "/dreamlayer/receipt": _get_receipt,
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,

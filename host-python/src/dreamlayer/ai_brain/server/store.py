@@ -6,6 +6,7 @@ inspect, back up, or hand-edit.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -620,40 +621,216 @@ class QueryHistory:
         _restore_jsonl(self.path, items)
 
 
+def _receipt_core(rec: dict) -> dict:
+    """The signed core of an activity record — the fields a receipt attests."""
+    return {"seq": rec["seq"], "ts": rec["ts"], "kind": rec["kind"],
+            "text": rec["text"], "prev": rec["prev"]}
+
+
+def _receipt_hash(core: dict) -> str:
+    """sha256 of a record's canonical core — the chain link the next record binds."""
+    data = json.dumps(core, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(data).hexdigest()
+
+
 class ActivityLog:
     """Everything the Brain did — folders, files, searches, cloud/incognito
-    toggles, pairing — as a single newest-first feed for the panel."""
+    toggles, pairing — as a single newest-first feed for the panel.
 
-    def __init__(self, cfg_dir: Path | str):
+    On a camera-and-mic device the ledger IS the privacy promise, so it is
+    tamper-evident: when a `signer` (Ed25519) is supplied, each record carries a
+    monotonic `seq`, the `prev` sha256 of the previous record's core (a hash
+    chain), and a `sig` over that core. A third party handed only the PUBLIC key
+    can then `verify()` that no record was modified, reordered, or dropped from
+    the middle by anyone without the private key — "trust us we were incognito"
+    becomes a checkable receipt (`/dreamlayer/receipt`). The signer is optional
+    and additive: with none, or on an existing unsigned log, it behaves exactly
+    as before and `recent()` is unchanged (refute 2026-07-18: the ledger was a
+    freely-rewritable text file with clear()/prune()/restore() and no signature).
+    """
+
+    def __init__(self, cfg_dir: Path | str, signer=None):
         self.path = Path(cfg_dir) / ACTIVITY_FILE
+        self._signer = signer
+        self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
+        self._next_seq = 0
+        self._loaded = False
+
+    # -- the chain head (lazy: reconstructed from the file once) --------------
+    def _load_head(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+        recs = self._read_all()
+        for rec in recs:
+            if "seq" in rec and "prev" in rec:
+                self._next_seq = rec["seq"] + 1
+                try:
+                    self._head_hash = _receipt_hash(_receipt_core(rec))
+                except (KeyError, TypeError):
+                    self._head_hash = ""
 
     def add(self, kind: str, text: str, ts: Optional[float] = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        rec = {"ts": ts if ts is not None else time.time(),
-               "kind": kind, "text": text}
+        ts = ts if ts is not None else time.time()
+        rec: dict = {"ts": ts, "kind": kind, "text": text}
+        if self._signer is not None:
+            self._load_head()
+            rec["seq"] = self._next_seq
+            rec["prev"] = self._head_hash
+            core = _receipt_core(rec)
+            rec["sig"] = self._signer.sign(core)
+            self._head_hash = _receipt_hash(core)
+            self._next_seq += 1
         with self.path.open("a") as f:
             f.write(json.dumps(rec) + "\n")
 
-    def recent(self, n: int = 40) -> list[dict]:
+    def _read_all(self) -> list[dict]:
+        """All records, oldest-first (file order)."""
         if not self.path.exists():
             return []
         out = []
-        for line in self.path.read_text().splitlines()[-n:]:
+        for line in self.path.read_text().splitlines():
             try:
                 out.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-        return list(reversed(out))
+        return out
+
+    def recent(self, n: int = 40) -> list[dict]:
+        return list(reversed(self._read_all()[-n:]))
+
+    # -- verification ---------------------------------------------------------
+    def verify(self) -> dict:
+        """Walk the chain and report integrity. ``ok`` is True when every SIGNED
+        record verifies against the public key AND its prev-link is intact.
+        Unsigned/legacy records are reported (``unsigned``), never flagged as
+        tampered. Fail-safe: with no signer or no cryptography, ``ok`` is False
+        and ``reason`` explains why it is unverifiable, never a misleading True."""
+        recs = self._read_all()
+        signer = self._signer
+        pub = getattr(signer, "public_key_hex", "") if signer else ""
+        if signer is None or not getattr(signer, "available", False) or not pub:
+            return {"ok": False, "records": len(recs), "signed": 0, "unsigned": len(recs),
+                    "first_broken": None, "pubkey": pub,
+                    "reason": "no Ed25519 receipt key (install the 'privacy' extra)"}
+        expected_prev = ""
+        signed = unsigned = 0
+        first_broken = None
+        for i, rec in enumerate(recs):
+            if "sig" not in rec or "seq" not in rec or "prev" not in rec:
+                unsigned += 1
+                expected_prev = None           # chain continuity is unknown past a gap
+                continue
+            try:
+                core = _receipt_core(rec)
+            except KeyError:
+                first_broken = first_broken if first_broken is not None else i
+                continue
+            link_ok = expected_prev is None or rec["prev"] == expected_prev
+            sig_ok = signer.verify(core, rec["sig"])
+            if not (link_ok and sig_ok):
+                first_broken = first_broken if first_broken is not None else rec.get("seq", i)
+            else:
+                signed += 1
+            expected_prev = _receipt_hash(core)
+        ok = first_broken is None and unsigned == 0 and signed == len(recs)
+        return {"ok": ok, "records": len(recs), "signed": signed, "unsigned": unsigned,
+                "first_broken": first_broken, "pubkey": pub}
+
+    def receipt(self, n: int = 2000) -> dict:
+        """A portable, third-party-verifiable proof of what the Brain did: the
+        records (with their seq/prev/sig), the public key to check them against,
+        and this Brain's own verify() result."""
+        recs = self._read_all()[-n:]
+        return {"pubkey": getattr(self._signer, "public_key_hex", "") if self._signer else "",
+                "algorithm": "ed25519-sha256-chain",
+                "records": recs, "verification": self.verify()}
+
+    # -- owner edits: re-chain the survivors so the receipt stays consistent ---
+    def _rechain(self, recs: list[dict]) -> None:
+        """Rewrite the log, re-numbering + re-signing `recs` from a fresh genesis.
+        A legitimate owner edit (prune/restore) with the key in hand re-attests
+        the surviving records; an attacker WITHOUT the key cannot, so their edit
+        fails verify()."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        prev, seq = "", 0
+        with self.path.open("w") as f:
+            for src in recs:
+                rec = {"ts": src.get("ts", time.time()),
+                       "kind": src.get("kind", ""), "text": src.get("text", "")}
+                if self._signer is not None:
+                    rec["seq"] = seq
+                    rec["prev"] = prev
+                    core = _receipt_core(rec)
+                    rec["sig"] = self._signer.sign(core)
+                    prev = _receipt_hash(core)
+                    seq += 1
+                f.write(json.dumps(rec) + "\n")
+        self._head_hash, self._next_seq, self._loaded = prev, seq, True
 
     def clear(self) -> None:
         if self.path.exists():
             self.path.unlink()
+        self._head_hash, self._next_seq, self._loaded = "", 0, True
 
     def prune(self, days: int) -> int:
-        return _prune_jsonl(self.path, days)
+        if self._signer is None:
+            return _prune_jsonl(self.path, days)
+        if days <= 0 or not self.path.exists():
+            return 0
+        cutoff = time.time() - days * 86400
+        recs = self._read_all()
+        kept = [r for r in recs if r.get("ts", 0) >= cutoff]
+        removed = len(recs) - len(kept)
+        if removed:
+            self._rechain(kept)
+        return removed
 
     def restore(self, items) -> None:
-        _restore_jsonl(self.path, items)
+        if self._signer is None:
+            _restore_jsonl(self.path, items)
+            return
+        # `items` arrives newest-first (as recent()/state export produce it).
+        self._rechain(list(reversed(list(items or []))))
+
+
+def activity_receipt_signer(cfg_dir: Path | str):
+    """Load-or-create the persistent Ed25519 key that signs the activity receipt,
+    stored owner-only beside the Brain's other keys. Returns a sign_crypto.Signer,
+    or None when the `cryptography` extra is absent (the ledger then stays plain,
+    fail-safe). This is the one place the key is read; a future secret-store
+    backend (OS keychain / enclave) can replace the file here without touching
+    the ledger."""
+    try:
+        from ...reality_compiler.sign_crypto import Signer
+    except Exception:
+        return None
+    if not getattr(Signer, "available", False):
+        return None
+    p = Path(cfg_dir) / "receipt.key"
+    key = None
+    if p.exists():
+        try:
+            key = bytes.fromhex(p.read_text().strip())
+        except (ValueError, OSError):
+            key = None
+    if key is None or len(key) < 32:
+        key = os.urandom(32)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(key.hex())
+        try:
+            os.chmod(tmp, 0o600)                      # secret-at-rest: owner only
+        except OSError:
+            pass
+        os.replace(tmp, p)
+        try:
+            os.chmod(p, 0o600)
+        except OSError:
+            pass
+        _harden_windows_acl(str(p))                  # 0o600 is inert on NTFS
+    return Signer(key)
 
 
 def _restore_jsonl(path: Path, items) -> None:
