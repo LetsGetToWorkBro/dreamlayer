@@ -68,6 +68,7 @@ MAX_JSON_BODY = 16 * 1024 * 1024        # 16 MiB — cap for JSON bodies (_body/
 MAX_UPLOAD_BODY = 64 * 1024 * 1024      # 64 MiB — larger cap for file uploads
 SOCKET_TIMEOUT_S = 30.0                 # per-connection socket timeout — bounds BOTH recv and send
 MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
+MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + headers (anti slow-header slowloris)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 
 
@@ -1548,7 +1549,55 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         # whole window, so ~64 non-reading clients exhaust the pool for that long.
         # Bounding send at 30 s too caps that pin at 30 s (audit 2026-07-18,
         # reverted the send-timeout bump — slow-read pool-exhaustion DoS).
+        #
+        # But `timeout` is only a PER-RECV bound. The request line + headers are
+        # read by the stdlib (readline + parse_request) BEFORE do_*/auth runs, so
+        # a slowloris that dribbles one header byte just under the 30 s per-recv
+        # window resets that clock forever — pinning a worker AND a bounded
+        # semaphore slot entirely PRE-AUTH. A refute pass (2026-07-18) showed ~64
+        # such connections lock the whole server out at near-zero bandwidth; the
+        # bounded semaphore turns it into a clean deterministic lockout. The body
+        # read already defends this with a MAX_REQUEST_BODY_SECONDS wall-clock
+        # cap (_read_capped); handle_one_request below arms the same total-time
+        # guard around the pre-dispatch header phase.
         timeout = SOCKET_TIMEOUT_S
+
+        def handle_one_request(self):
+            # Wall-clock bound on the request line + headers, disarmed the instant
+            # parsing completes (before the handler's own — legitimately long —
+            # work and the separately-bounded response write). A Timer fires from
+            # another thread and shuts the socket down, unblocking the dribbling
+            # recv so the worker (and its semaphore slot) is reclaimed.
+            watchdog = threading.Timer(MAX_REQUEST_HEADER_SECONDS,
+                                       self._abort_slow_request)
+            watchdog.daemon = True
+            self._header_watchdog = watchdog
+            watchdog.start()
+            try:
+                super().handle_one_request()
+            finally:
+                watchdog.cancel()
+                self._header_watchdog = None
+
+        def parse_request(self):
+            ok = super().parse_request()
+            # Request line + headers are fully read now — disarm the header
+            # watchdog so it can't fire during dispatch/handler work or the body
+            # read (which carries its own MAX_REQUEST_BODY_SECONDS deadline).
+            wd = getattr(self, "_header_watchdog", None)
+            if wd is not None:
+                wd.cancel()
+                self._header_watchdog = None
+            return ok
+
+        def _abort_slow_request(self):
+            # Runs on the Timer thread: force the blocked header read to return by
+            # shutting the connection down. Best-effort — the socket may already be
+            # torn down, or the request may have just completed.
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
         def log_message(self, *a):
             pass

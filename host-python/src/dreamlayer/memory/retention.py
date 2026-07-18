@@ -62,10 +62,15 @@ class RetentionSweep:
     positive bias is the dreamer's vote to keep a memory past its window."""
 
     def __init__(self, db, policy: RetentionPolicy | None = None,
-                 bias=None, now_fn=None, ann=None, vector_store=None) -> None:
+                 bias=None, now_fn=None, ann=None, vector_store=None,
+                 bias_dir=None) -> None:
         self.db = db
         self.policy = policy or RetentionPolicy()
         self.bias = bias
+        # where to persist the REM bias after discarding an expired memory's
+        # consolidation fingerprint. None = don't persist (the in-memory discard
+        # still happens; callers that own the vault pass its dir).
+        self.bias_dir = bias_dir
         self._now = now_fn or time.time
         self.ann = ann          # evict expired vectors too, if an index is wired
         # an ALTERNATE vector store (Chroma/Lance/VectorStore) indexes the same
@@ -79,6 +84,7 @@ class RetentionSweep:
     def sweep(self) -> RetentionReport:
         report = RetentionReport()
         cutoff = self._now() - self.policy.warm_days * 86400.0
+        bias_dirty = False
         for m in self.db.memories():
             report.swept += 1
             kind = m.get("kind") or ""
@@ -96,29 +102,60 @@ class RetentionSweep:
             ts = _created_ts(m)
             if ts is None or ts >= cutoff:
                 continue                      # inside the warm window
-            if self.bias is not None and \
-                    self.bias.boost_for(kind, m.get("summary") or "") > 0:
+            summary = m.get("summary") or ""
+            if self.bias is not None and self.bias.boost_for(kind, summary) > 0:
                 report.kept_promoted += 1     # the nights kept voting for it
                 continue
-            self.db.purge_memory(m["id"])
+            # The row deletion is the core; if IT raises, leave the memory for
+            # the next sweep rather than aborting tonight's whole pass on one bad
+            # row (refute 2026-07-18: ann.remove was unguarded, so a single
+            # raising row aborted the sweep — the live index is exactly the store
+            # most likely to raise, yet was the LEAST protected).
+            try:
+                self.db.purge_memory(m["id"])
+            except Exception as exc:   # noqa: BLE001
+                log.warning("[retention] purge_memory(%s) failed: %s", m["id"], exc)
+                continue
+            # The row is gone; the rest is best-effort sidecar cleanup, each
+            # guarded so a single store hiccup strands one artifact, never the
+            # whole night's sweep.
             if self.ann is not None:
                 # save=False: defer persistence to the single flush() below, so
                 # a large sweep rewrites the index file once, not once per row
-                self.ann.remove(m["id"], save=False)
+                try:
+                    self.ann.remove(m["id"], save=False)
+                except Exception as exc:   # noqa: BLE001
+                    log.warning("[retention] ann.remove(%s) failed: %s", m["id"], exc)
             if self.vector_store is not None:
-                # best-effort: a store error must not abort the whole night's
-                # sweep — it strands one vector, not the retention pass. Mirrors
-                # the ann.remove treatment above.
+                # an alternate store (Chroma/Lance/VectorStore) indexes the same
+                # rows in its OWN table — evict there too or it's purge-blind.
                 try:
                     self.vector_store.evict(m["id"])
-                except Exception as exc:   # noqa: BLE001 — forget path stays best-effort
+                except Exception as exc:   # noqa: BLE001
                     log.warning("[retention] vector_store.evict(%s) failed: %s",
+                                m["id"], exc)
+            if self.bias is not None and hasattr(self.bias, "discard"):
+                # discard the REM consolidation fingerprint too — else an expired
+                # memory's content-hash rank-opinion survives in the bias vault,
+                # the same sidecar residue Retriever.purge_memory clears
+                # (retrieval.py). Keyed by kind+summary, read before the row went.
+                try:
+                    if self.bias.discard(kind, summary):
+                        bias_dirty = True
+                except Exception as exc:   # noqa: BLE001
+                    log.warning("[retention] bias.discard(%s) failed: %s",
                                 m["id"], exc)
             report.expired.append(m["id"])
         if self.ann is not None and hasattr(self.ann, "flush"):
             # the sweep is a natural quiet point: persist any batched adds so
             # the crash window for recent vectors stays one sweep wide
             self.ann.flush()
+        if bias_dirty and self.bias_dir is not None and hasattr(self.bias, "save"):
+            # persist the fingerprint discards so the forget survives a reload
+            try:
+                self.bias.save(self.bias_dir)
+            except Exception as exc:   # noqa: BLE001
+                log.warning("[retention] bias.save failed: %s", exc)
         return report
 
     def purge_hot(self, ring) -> int:

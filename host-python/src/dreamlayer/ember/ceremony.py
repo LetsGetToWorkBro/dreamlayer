@@ -65,9 +65,13 @@ def burn(store: EmberStore, engram_id: int, *, consent: bool,
         raise ValueError(f"engram {engram_id} has not graduated")
 
     # An irreversible privacy action — log it so a partial burn is diagnosable
-    # (audit 2026-07-14: this emitted zero log lines).
+    # (audit 2026-07-14: this emitted zero log lines). The engram id + rep count
+    # are enough to diagnose a partial burn; the cue is NOT logged — it carries
+    # the memory's own words (a person's name, the summary's lead) verbatim, so
+    # emitting it into the message body would leak PII the redactor can't reach
+    # (refute 2026-07-18: `cue` was interpolated at %r and shipped un-redacted).
     log = logging.getLogger("dreamlayer.ember")
-    log.info("ember burn: engram=%s cue=%r reps=%s", e.id, e.cue, e.state.reps)
+    log.info("ember burn: engram=%s reps=%s", e.id, e.state.reps)
 
     purged = 0
     if e.source_memory_id and retriever is not None:

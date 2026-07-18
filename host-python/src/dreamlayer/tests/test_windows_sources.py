@@ -58,6 +58,27 @@ class TestParseMbox:
         assert ws.parse_mbox(b"no separators at all") == []
 
 
+class TestSourceParsersAreCrashSafe:
+    def test_body_text_survives_a_bogus_charset(self):
+        # An attacker-declared charset the codec registry doesn't know must NOT
+        # raise LookupError (errors='ignore' can't rescue a bad codec NAME). One
+        # such email otherwise blacks out the whole mail feed (refute 2026-07-18).
+        import email
+        msg = email.message_from_bytes(
+            b"Content-Type: text/plain; charset=\"cp-does-not-exist\"\r\n\r\n"
+            b"hello there\r\n")
+        assert "hello there" in ws._body_text(msg)      # must not raise
+
+    def test_parse_ics_dt_tolerates_mktime_overflow(self, monkeypatch):
+        # time.mktime raises OverflowError/OSError for an out-of-range date on
+        # stricter platforms (Windows more than glibc). The parser must return
+        # None, not let it escape read_calendar_events (refute 2026-07-18).
+        def boom(*_a):
+            raise OverflowError("mktime out of range")
+        monkeypatch.setattr(ws.time, "mktime", boom)
+        assert ws._parse_ics_dt("20260101", "") is None   # must not raise
+
+
 class TestMailDocuments:
     def test_reads_thunderbird_profile(self, tmp_path):
         prof = tmp_path / "Profiles" / "abc.default" / "Mail" / "Local Folders"

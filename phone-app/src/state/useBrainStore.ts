@@ -507,9 +507,11 @@ export const useBrainStore = create<BrainState>((set, get) => ({
 
   emitLens: async (tag, text = "") => {
     if (get().demoMode) return { text: "", tier: "device", sources: [] };
-    // only "ask" carries captured speech; refuse it while the Veil is closed.
-    // Other tags are inert lens control signals with no captured payload.
-    if (tag === "ask" && veilClosed(get().capturePaused)) return null;
+    // "ask" carries captured speech; refuse it while the Veil is closed. Key the
+    // gate on the PAYLOAD, not just the tag string — a future caller that attaches
+    // text to some other tag must not be able to stream captured content past a
+    // closed Veil either (refute 2026-07-18: the tag-only gate was latent-unsafe).
+    if (veilClosed(get().capturePaused) && (tag === "ask" || !!text)) return null;
     const m = get().macMini;
     if (!m.connected || !m.url || !tag) return null;
     try {

@@ -143,6 +143,14 @@ export function isPrivateLanHost(host: string): boolean {
 
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
   if (v4) {
+    // Reject any octet with a leading zero: JS Number("010") is decimal 10, but
+    // a C inet_aton-style native resolver reads it as OCTAL 8 — the classifier
+    // and the resolver would then disagree about which host was contacted (e.g.
+    // 010.0.0.1 "private 10.x" here but 8.0.0.1 PUBLIC to the resolver). A legit
+    // pairing QR never emits leading-zero octets, so refuse the ambiguous form
+    // (refute 2026-07-18).
+    if ([v4[1], v4[2], v4[3], v4[4]].some((o) => !!o && o.length > 1 && o[0] === "0"))
+      return false;
     const [a, b, c, d] = [Number(v4[1]), Number(v4[2]), Number(v4[3]), Number(v4[4])];
     if ([a, b, c, d].some((n) => n > 255)) return false;
     if (a === 10 || a === 127) return true;                    // 10/8, loopback
@@ -158,6 +166,14 @@ export function isPrivateLanHost(host: string): boolean {
     if (h.startsWith("fc") || h.startsWith("fd")) return true;
     return /^fe[89ab]/.test(h);
   }
+  // A dotless label that is a bare integer or 0x-hex is an IP LITERAL in
+  // disguise, not a LAN search-domain name: a native resolver decodes
+  // 134744072 -> 8.8.8.8 and 0x8080808 -> a public IP. Left as-is these fall
+  // into the "dotless ⇒ LAN name" branch below and a poisoned QR/persisted URL
+  // smuggles a PUBLIC host past the range test (refute 2026-07-18). Refuse them;
+  // a genuine hostname label like "mac" or "deadbeef" (has non-numeric chars a
+  // resolver won't read as an integer) still passes.
+  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/.test(h)) return false;
   // a bare single-label hostname (http://mac:7777) never resolves via public
   // DNS — it's a LAN name by construction
   return !h.includes(".");

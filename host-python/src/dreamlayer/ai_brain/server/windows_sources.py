@@ -52,6 +52,22 @@ def _thunderbird_root() -> Path:
 # Mail (Thunderbird mbox) — pure parsing
 # ---------------------------------------------------------------------------
 
+def _safe_decode(raw: bytes, charset) -> str:
+    """Decode `raw` with the email's declared charset, tolerating a bogus one.
+
+    ``bytes.decode`` raises ``LookupError`` when the codec NAME is unknown — and
+    ``errors='ignore'`` does NOT save it, because the codec lookup fails before a
+    single byte is decoded. A message's charset is attacker-declared, so a
+    crafted ``Content-Type: text/plain; charset="does-not-exist"`` would raise
+    ``LookupError`` (not ``OSError``) and escape every source-level guard,
+    silently blacking out the whole mail feed on one email (refute 2026-07-18).
+    Fall back to utf-8 on an unknown codec."""
+    try:
+        return raw.decode(charset or "utf-8", "ignore")
+    except LookupError:
+        return raw.decode("utf-8", "ignore")
+
+
 def _body_text(msg) -> str:
     """The text/plain body of an email.message.Message (same walk as the
     macOS parse_emlx)."""
@@ -60,12 +76,11 @@ def _body_text(msg) -> str:
         for part in msg.walk():
             if part.get_content_type() == "text/plain":
                 raw = cast(bytes, part.get_payload(decode=True) or b"")
-                text = raw.decode(part.get_content_charset() or "utf-8",
-                                  "ignore")
+                text = _safe_decode(raw, part.get_content_charset())
                 break
     else:
         raw = cast(bytes, msg.get_payload(decode=True) or b"")
-        text = raw.decode(msg.get_content_charset() or "utf-8", "ignore")
+        text = _safe_decode(raw, msg.get_content_charset())
     return text.strip()
 
 
@@ -227,7 +242,11 @@ def _parse_ics_dt(value: str, params: str) -> float | None:
             from calendar import timegm
             return float(timegm(time.strptime(v, "%Y%m%dT%H%M%SZ")))
         return time.mktime(time.strptime(v, "%Y%m%dT%H%M%S"))
-    except ValueError:
+    except (ValueError, OverflowError, OSError):
+        # ValueError: malformed. OverflowError/OSError: time.mktime on an
+        # out-of-range date (e.g. DTSTART:00010101 passes the \d{8} regex but is
+        # unrepresentable — Windows mktime is stricter than glibc). A crafted
+        # feed must yield None, not escape read_calendar_events (refute 2026-07-18).
         return None
 
 
