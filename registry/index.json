@@ -1,6 +1,6 @@
 {
   "schema": "1",
-  "updated": "2026-07-10",
+  "updated": "2026-07-18",
   "note": "The DreamLayer plugin registry. Community-contributed plugins, validated by CI before they land. The website, phone app, and Mac panel all read this file. First-party plugins are published by the DreamLayer team (author \"DreamLayer Team\", official=true). Every plugin declares an api version and a pricing model (all free today; the paid seam is reserved). Each plugin ships its own detail copy (long, forwho) and a screenshot URL; social numbers (downloads/rating/comments) come from the social API when configured.",
   "plugins": [
     {
@@ -198,6 +198,74 @@
         "No sticks, no pads. Nod down for a kick, flick left for a snare, right for a hat, up for a crash. Each one fires a General MIDI drum on channel 10.",
         "Velocity follows how hard you move, so it feels dynamic instead of robotic.",
         "Pairs with Face Synth for a hands-free one-person band."
+      ],
+      "downloads": 0,
+      "rating": 0,
+      "ratings_count": 0,
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
+    },
+    {
+      "name": "open-library",
+      "version": "0.1.0",
+      "author": "DreamLayer Team",
+      "official": true,
+      "description": "Look at a book, get the story behind it \u2014 author, year, subjects and where it sits in the canon, from the Open Library open dataset. No account, no key.",
+      "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/openlibrary.py",
+      "url": "registry/packages/open-library-0.1.0.json",
+      "checksum": "sha256:f9e76e46f656a0659ac6cd6fb166249c2b165aea15b79d0216b118cec5894973",
+      "requires": [
+        "network"
+      ],
+      "tags": [
+        "books",
+        "reading",
+        "connector",
+        "tastelens"
+      ],
+      "forwho": "For readers, browsers, and anyone who picks a book up and wonders about it.",
+      "long": [
+        "Gives TasteLens something to rank a shelf of books on. Look at a cover and it pulls the title, author, first-published year, and subjects.",
+        "Straight from the Open Library community dataset \u2014 free, no API key, no account.",
+        "Your reading stays on your device. The only thing that leaves is the title, so it can look the book up."
+      ],
+      "downloads": 0,
+      "rating": 0,
+      "ratings_count": 0,
+      "comments_count": 0,
+      "api": "2",
+      "pricing": {
+        "model": "free"
+      }
+    },
+    {
+      "name": "vinyl-oracle",
+      "version": "0.1.0",
+      "author": "DreamLayer Team",
+      "official": true,
+      "description": "Point at a record sleeve and get the pressing, the year, and what the crate is worth \u2014 matched against Discogs. Bring your own token; the crate follows you across sessions.",
+      "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/vinyl_oracle.py",
+      "url": "registry/packages/vinyl-oracle-0.1.0.json",
+      "checksum": "sha256:36b570c6bfe77844c5b7ef332febeaea24dcf8d3635fc6492be56651e152a80b",
+      "requires": [
+        "object_lens",
+        "network"
+      ],
+      "tags": [
+        "music",
+        "vinyl",
+        "connector",
+        "worldlens",
+        "discogs"
+      ],
+      "forwho": "For crate-diggers, collectors, and anyone holding a record they can't quite place.",
+      "long": [
+        "Look at a record sleeve and the Vinyl Oracle names the pressing, the release year, and the going rate.",
+        "Matched live against the Discogs database. Add your own Discogs personal-access token once and it's remembered across sessions.",
+        "Only the record's identifying text leaves the device to do the lookup \u2014 the crate itself stays yours."
       ],
       "downloads": 0,
       "rating": 0,

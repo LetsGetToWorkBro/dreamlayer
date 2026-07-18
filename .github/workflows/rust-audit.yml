@@ -49,10 +49,10 @@ jobs:
     # Advisories + licenses + bans + sources, per reality-core/deny.toml.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: cargo-deny (advisories, licenses, bans, sources)
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           manifest-path: reality-core/Cargo.toml
           command: check
@@ -66,7 +66,7 @@ jobs:
     # RustSec scanner and gives a second, independent read on the same tree.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Ensure a Cargo.lock exists
         # reality-core/Cargo.lock is committed, so this is normally a no-op; the

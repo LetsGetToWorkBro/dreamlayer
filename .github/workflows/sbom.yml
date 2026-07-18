@@ -46,10 +46,10 @@ jobs:
     # pyproject.toml + uv.lock statically, so no dependency install is needed.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Generate CycloneDX SBOM (host-python)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: host-python/
           format: cyclonedx-json
@@ -58,7 +58,7 @@ jobs:
           upload-artifact: false
 
       - name: Upload host-python SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom-host-python
           path: sbom-host-python.cyclonedx.json
@@ -69,10 +69,10 @@ jobs:
     # (the fully-resolved npm tree) statically — no `npm ci` required.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Generate CycloneDX SBOM (phone-app)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: phone-app/
           format: cyclonedx-json
@@ -80,7 +80,7 @@ jobs:
           upload-artifact: false
 
       - name: Upload phone-app SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom-phone-app
           path: sbom-phone-app.cyclonedx.json

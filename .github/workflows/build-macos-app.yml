@@ -38,9 +38,9 @@ jobs:
   build:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
 
@@ -162,12 +162,12 @@ jobs:
       # proves the build's origin — the two are complementary. Verify with
       # `gh attestation verify DreamLayer.dmg -R <owner>/<repo>`.
       - name: Attest build provenance (.dmg)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: DreamLayer.dmg
 
       - name: Upload .dmg artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: DreamLayer-dmg
           path: DreamLayer.dmg
@@ -183,7 +183,7 @@ jobs:
 
       - name: Publish the Release (this repo)
         if: github.ref_type == 'tag' || inputs.publish
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ steps.rel.outputs.tag }}
           name: DreamLayer ${{ steps.rel.outputs.tag }}

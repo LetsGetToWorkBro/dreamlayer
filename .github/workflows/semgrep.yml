@@ -47,8 +47,8 @@ jobs:
       contents: read          # checkout
       security-events: write  # upload-sarif -> code-scanning alerts
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
       - name: Install Semgrep
@@ -74,7 +74,7 @@ jobs:
         # always(): publish findings even though the scan step above is marked
         # continue-on-error (and even once it is later made blocking).
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
         with:
           sarif_file: semgrep.sarif
           category: semgrep

@@ -23,11 +23,14 @@ on:
   pull_request:
     paths: ["halo-lua/**", ".github/workflows/lua.yml"]
 
+permissions:
+  contents: read   # least-privilege floor; jobs opt into more where needed
+
 jobs:
   luacheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install luacheck
         run: sudo apt-get update && sudo apt-get install -y lua-check
       - name: Lint the device Lua

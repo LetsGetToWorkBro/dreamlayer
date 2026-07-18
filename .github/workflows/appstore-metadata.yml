@@ -30,6 +30,9 @@ concurrency:
   group: appstore-metadata
   cancel-in-progress: false
 
+permissions:
+  contents: read   # least-privilege floor; jobs opt into more where needed
+
 jobs:
   deliver:
     runs-on: ubuntu-latest
@@ -37,7 +40,7 @@ jobs:
       run:
         working-directory: phone-app
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Check secrets present
         id: gate
@@ -51,12 +54,12 @@ jobs:
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         if: steps.gate.outputs.ok == 'true'
         with:
           node-version: "22"
 
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@003a5c4d8d6321bd302e38f6f0ec593f77f06600 # v1
         if: steps.gate.outputs.ok == 'true'
         with:
           ruby-version: "3.3"

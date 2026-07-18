@@ -1,0 +1,28 @@
+{
+  "manifest": {
+    "name": "vinyl-oracle",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "DreamLayer Team",
+    "official": true,
+    "description": "Point at a record sleeve and get the pressing, the year, and what the crate is worth \u2014 matched against Discogs. Bring your own token; the crate follows you across sessions.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/vinyl_oracle.py",
+    "requires": [
+      "object_lens",
+      "network"
+    ],
+    "api": "2",
+    "checksum": "sha256:36b570c6bfe77844c5b7ef332febeaea24dcf8d3635fc6492be56651e152a80b",
+    "signature": "",
+    "forwho": "For crate-diggers, collectors, and anyone holding a record they can't quite place.",
+    "long": [
+      "Look at a record sleeve and the Vinyl Oracle names the pressing, the release year, and the going rate.",
+      "Matched live against the Discogs database. Add your own Discogs personal-access token once and it's remembered across sessions.",
+      "Only the record's identifying text leaves the device to do the lookup \u2014 the crate itself stays yours."
+    ],
+    "pricing": {
+      "model": "free"
+    }
+  },
+  "source": "from dreamlayer.plugins.vinyl_oracle import vinyl_oracle_plugin\n\ndef plugin():\n    # first-party WorldLens connector, bundled with the app; enabling it\n    # registers the Vinyl Oracle object provider. Identifies a record you look\n    # at (object_lens) and looks it up on Discogs (urllib -> network).\n    return vinyl_oracle_plugin()\n"
+}

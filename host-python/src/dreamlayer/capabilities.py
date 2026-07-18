@@ -242,6 +242,19 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("mlx",), "platform", "rem/nightly_mlx.py", kind="darwin",
         gain="baseline model never adapts; this fine-tunes it overnight on your own memories", impact=4),
 
+    # --- on-device speech (one ONNX engine behind the voice seams) ---------------
+    Cap("onnx_speech", "Unified on-device speech engine (ASR + VAD + speaker + KWS)", "voice",
+        ("sherpa_onnx",), "voice", "orchestrator/sherpa_backend.py",
+        gain="baseline wires each voice seam to a separate model; this is one fast ONNX engine covering transcription, voice detection, speaker id and keyword spotting on-device", impact=4),
+
+    # --- plugin isolation + cross-device sync ------------------------------------
+    Cap("wasm_plugins", "In-process capability-enforced WASM plugin host", "platform",
+        ("wasmtime",), "platform", "plugins/wasm_component_host.py",
+        gain="baseline isolates an untrusted plugin in a subprocess; this runs a WASM guest in-process with ZERO ambient authority — it can only call the host functions its declared capabilities link", impact=4),
+    Cap("crdt_sync", "Conflict-free repertoire sync across your devices", "sync",
+        ("loro",), "sync", "reality_compiler/v2/vault_sync.py",
+        gain="baseline keeps your Figments and memory on one device; this syncs them peer-to-peer across your devices — no server, no conflicts (a loro CRDT)", impact=3),
+
     # --- external runtimes (spoken to over HTTP; nothing to pip-import) -----------------
     Cap("ollama_local", "Local chat/vision/embeddings via Ollama", "services",
         (), None, "ai_brain/server/backends.py, ai_brain/gemma_backend.py",
@@ -365,8 +378,8 @@ PACKS: Tuple[Pack, ...] = (
          "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
-         "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins.",
-         ("infra", "llm", "platform"), "~200 MB", 2),
+         "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
+         ("infra", "llm", "platform", "sync"), "~200 MB", 2),
 )
 
 _PACK_BY_KEY = {p.key: p for p in PACKS}
