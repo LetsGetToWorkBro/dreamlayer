@@ -299,9 +299,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # in-process on Windows/Mac — where no kernel sandbox (bwrap/nsjail)
         # exists, so an unpinned plugin would fail closed and never execute.
         # Keyless: trust rides the reviewed source hash, not a signing secret.
+        from ...plugins import registry_client as _regc
         self.plugins = PluginStore(self.cfg_dir / "plugins",
                                    host_capabilities=self.plugin_capabilities(),
-                                   first_party=load_first_party_pins())
+                                   first_party=load_first_party_pins(),
+                                   # pinned registry fetcher for the in-app store's
+                                   # 1-click install (name → pinned package URL);
+                                   # only called on install, so no egress at boot.
+                                   fetch_fn=_regc.fetch_package)
         # Juno's profile of you (name, interests, people, remembered prefs).
         # Built on the glasses hub from the conversation stream, then *pushed*
         # here so the phone can read it — the hub->Brain bridge. Just a mirror;
@@ -419,6 +424,54 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         if report.ok:
             self.activity.add("plugin", f"Installed plugin {label}")
             self._invalidate_world_lens()   # a new connector can join a look
+        return {"ok": report.ok, "errors": report.errors,
+                "warnings": report.warnings, "state": self.plugins_state()}
+
+    def store_catalogue(self) -> dict:
+        """The in-app plugin store: fetch the pinned registry catalogue and
+        return it (each entry flagged with whether it's already installed). This
+        is EGRESS to the registry, so it honors the wearer's posture — refused in
+        Incognito / LAN-only. No wearer data leaves; only the catalogue comes
+        back (fast-follow 2026-07-19)."""
+        if self.incognito_now():
+            return {"error": "the plugin store needs the network — you're in "
+                             "Incognito or LAN-only right now"}
+        from ...plugins import registry_client
+        from ...plugins.store import RegistryIndex
+        try:
+            raw = registry_client.fetch_index()
+        except Exception as e:                       # network / parse failure
+            return {"error": f"couldn't reach the plugin store: {e}"}
+        self.plugins.index = RegistryIndex.from_dict(raw)
+        installed = set(self.plugins.installed())
+        items = []
+        for ent in self.plugins.index.entries:
+            d = ent.to_dict()
+            d["installed"] = ent.name in installed
+            items.append(d)
+        self.activity.add("plugin", "Browsed the plugin store")
+        return {"plugins": items, "updated": str(raw.get("updated", ""))}
+
+    def store_install(self, name: str) -> dict:
+        """One-click install from the store: fetch the pinned package for `name`,
+        verify the registry checksum, run the capability/sandbox gate, and write
+        only if it passes — all via the existing PluginStore.install(). Posture
+        gated like the catalogue."""
+        name = (name or "").strip()
+        if not name:
+            return {"ok": False, "errors": ["no plugin name"]}
+        if self.incognito_now():
+            return {"ok": False, "errors": ["the plugin store needs the network — "
+                                            "you're in Incognito or LAN-only right now"]}
+        # ensure the index is loaded so install() can verify the checksum against it
+        if self.plugins.index.get(name) is None:
+            cat = self.store_catalogue()
+            if cat.get("error"):
+                return {"ok": False, "errors": [cat["error"]]}
+        report = self.plugins.install(name)
+        if report.ok:
+            self.activity.add("plugin", f"Installed {name} from the store")
+            self._invalidate_world_lens()
         return {"ok": report.ok, "errors": report.errors,
                 "warnings": report.warnings, "state": self.plugins_state()}
 
@@ -2243,6 +2296,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Installed plugin state."""
             self._json(200, brain.plugins_state())
 
+        def _get_plugins_store(self, path, qs):
+            """The in-app plugin store catalogue (fetched from the pinned
+            registry; posture-gated)."""
+            self._json(200, brain.store_catalogue())
+
         def _get_rc_repertoire(self, path, qs):
             """The Reality Compiler Repertoire: kept figments the phone lists."""
             self._json(200, brain.rc_repertoire())
@@ -2402,6 +2460,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/saga": _get_saga,
             "/dreamlayer/ember": _get_ember,
             "/dreamlayer/plugins": _get_plugins,
+            "/dreamlayer/plugins/store": _get_plugins_store,
             "/dreamlayer/rc/repertoire": _get_rc_repertoire,
             "/dreamlayer/social/people": _get_social_people,
             "/dreamlayer/memories": _get_memories,
@@ -2548,6 +2607,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _post_plugins_install(self, path, qs):
             """Install a plugin from the posted descriptor."""
             self._json(200, brain.install_plugin(self._body()))
+
+        def _post_plugins_store_install(self, path, qs):
+            """One-click install a store plugin by name (pinned fetch → the same
+            checksum + capability/sandbox gate as a pasted package)."""
+            self._json(200, brain.store_install(self._body().get("name", "")))
 
         def _post_plugins_remove(self, path, qs):
             """Remove an installed plugin by name."""
@@ -2729,6 +2793,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if not self._from_localhost():
                 self._json(403, {"error": "local-only"}); return
             self._json(200, _pull_model_async(brain, self._body().get("model", "")))
+
+        def _post_report(self, path, qs):
+            """Assemble an in-app bug report (the wearer's words + sanitized,
+            PII-free diagnostics) and a prefilled GitHub-issue link. Local-only
+            and nothing is sent automatically — the panel shows the text and the
+            wearer chooses to open the issue or copy it."""
+            if not self._from_localhost():
+                self._json(403, {"error": "reporting is local-only"}); return
+            b = self._body()
+            self._json(200, _build_bug_report(
+                brain, b.get("summary", ""), b.get("detail", ""),
+                bool(b.get("include_diag", True))))
 
         def _post_people(self, path, qs):
             """Introduce/update or remove a person ({name, note, tags[, remove]})."""
@@ -2936,9 +3012,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/config": _post_config,
             "/dreamlayer/capabilities": _post_capabilities,
             "/dreamlayer/packs": _post_packs,
+            "/dreamlayer/report": _post_report,
             "/dreamlayer/upload": _post_upload,
             "/dreamlayer/brain/ask": _post_brain_ask,
             "/dreamlayer/plugins/install": _post_plugins_install,
+            "/dreamlayer/plugins/store/install": _post_plugins_store_install,
             "/dreamlayer/plugins/remove": _post_plugins_remove,
             "/dreamlayer/rc/rehearse": _post_rc_rehearse,
             "/dreamlayer/rc/keep": _post_rc_keep,
@@ -3124,6 +3202,75 @@ def _version() -> str:
         # the package should always import from within itself; fall back only
         # for that narrow case rather than masking any other error.
         return "0.0.0"
+
+
+# --- in-app bug reporting ----------------------------------------------------
+# A "Report a problem" flow inside the app: assemble the wearer's description
+# plus a STRICTLY SANITIZED diagnostic summary (version, OS, capability counts,
+# seam failure counts — NO folder paths, queries, URLs, keys, or any PII) and a
+# prefilled GitHub-issue link. Nothing is sent automatically: the wearer reviews
+# the assembled text and chooses to open the issue or copy it (audit 2026-07-19).
+_REPORT_REPO = "LetsGetToWorkBro/dreamlayer"
+
+
+def _report_diagnostics(brain: Brain) -> str:
+    """A privacy-safe, PII-free diagnostic block for a bug report. Only coarse
+    counts and product versions — never a path, query, endpoint, key, or the
+    wearer's data."""
+    import platform as _pf
+    try:
+        from ...capabilities import summary as _cap_summary
+        caps = _cap_summary()
+    except Exception:
+        caps = {}
+    try:
+        files = int(brain.index.stats().get("files", 0))
+    except Exception:
+        files = 0
+    up = int(time.time() - getattr(brain, "_started_ts", time.time()))
+    uptime = f"{up // 3600}h" if up >= 3600 else f"{max(up, 0) // 60}m"
+    try:
+        seams = brain.health.snapshot() or {}
+    except Exception:
+        seams = {}
+    bad = [f"{n}({(s or {}).get('failures', 0)})"
+           for n, s in sorted(seams.items()) if (s or {}).get("failures", 0)]
+    lines = [
+        f"DreamLayer {_version()} · {_pf.system()} {_pf.machine()} · "
+        f"Python {_pf.python_version()}",
+        f"model: {brain.config.model} · index: {files} files · uptime: {uptime}",
+    ]
+    if caps:
+        lines.append("capabilities: " + " · ".join(
+            f"{caps[k]} {k}" for k in ("active", "off", "missing") if caps.get(k)))
+    if bad:
+        lines.append("seams with failures: " + ", ".join(bad))
+    return "\n".join(lines)
+
+
+def _build_bug_report(brain: Brain, summary: str, detail: str,
+                      include_diag: bool = True) -> dict:
+    """Assemble {title, body, github_url} for an in-app bug report. The body
+    carries the wearer's words plus the sanitized diagnostics; github_url is a
+    prefilled new-issue link (truncated to stay under browser/GitHub URL limits,
+    while `body` keeps the full text for the copy-to-clipboard action)."""
+    import urllib.parse as _up
+    summary = (summary or "").strip()[:120] or "App issue"
+    detail = (detail or "").strip()
+    body = detail or "_(what happened, and what you expected)_"
+    if include_diag:
+        body += ("\n\n---\n**Diagnostics** (no personal data):\n```\n"
+                 + _report_diagnostics(brain) + "\n```")
+    body += "\n\n_Reported from the DreamLayer app._"
+
+    def _url(b: str) -> str:
+        q = _up.urlencode({"title": summary, "body": b, "labels": "bug"})
+        return f"https://github.com/{_REPORT_REPO}/issues/new?{q}"
+
+    url = _url(body)
+    if len(url) > 6000:            # some browsers cap the address bar; keep headroom
+        url = _url(body[:1400] + "\n\n…(truncated — use “Copy report” for the full text)")
+    return {"title": summary, "body": body, "github_url": url}
 
 
 def _answer_json(ans: Optional[Answer]) -> dict:

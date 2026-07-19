@@ -175,6 +175,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   button.ghost:active{background:#6E6E6E;color:#fff}
   button.sm{padding:6px 12px;font-size:12.5px}
   button.danger{color:var(--error);background:linear-gradient(180deg,#F6F6F6,#D2D2D2)}
+  a.btn{display:inline-block;text-decoration:none;background:linear-gradient(180deg,#49E8BC,#17AE85);
+    color:#00251C;border:1px solid var(--frame);border-radius:7px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.2);padding:9px 16px;font:14px var(--chi);cursor:pointer}
+  a.btn:hover{filter:brightness(1.04)}
+  .reportbox{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .reportbox input[type=text],.reportbox textarea{width:100%;margin:4px 0;box-sizing:border-box}
+  .reportbox .repprev{width:100%;box-sizing:border-box;font:11px ui-monospace,Menlo,monospace;
+    color:var(--muted);resize:vertical}
   pre{overflow-x:auto}
 
   /* system status */
@@ -576,7 +584,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <div style="flex:1"><div class="conn-t">DreamLayer&nbsp;Cloud <span id="planBadge" style="color:var(--amber)">· coming soon</span></div>
         <div class="conn-s">An optional hosted tier — everything below is <i>added</i>; the local app
           never loses a feature and always stays free and open.</div></div>
-      <button class="ghost" id="notifyBtn" onclick="joinWaitlist()">Notify me</button></div>
+      <button class="ghost" id="notifyBtn" onclick="showNotify()">Notify me</button></div>
+    <div id="notifyForm" style="display:none;margin-top:10px">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="email" id="notifyEmail" autocomplete="email" placeholder="you@example.com"
+               onkeydown="if(event.key==='Enter')joinWaitlist()" style="min-width:220px">
+        <button class="sm" id="notifySubmit" onclick="joinWaitlist()">Notify me</button></div>
+      <div id="notifyStatus" class="conn-s" style="margin-top:6px">We'll email you once, when Cloud opens — nothing else, ever.</div>
+    </div>
     <div id="planRows"></div>
   </section>
 
@@ -713,10 +728,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Extend</div><h2>Plugins</h2>
     <p class="lead">Community plugins your Brain runs. Every one is validated —
       integrity, a capability scan, and a smoke test — before it's installed.
-      <a href="https://dreamlayer.app/plugins.html" target="_blank">Browse the store ↗</a>
-      &nbsp;·&nbsp; No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
+      No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
     <div class="conn-s" style="margin:0 0 8px">This Brain can grant:
       <span id="plugCaps">…</span></div>
+    <div class="row" style="margin:0 0 8px"><button onclick="openStore()">🛍 Browse the store</button>
+      <span id="storeStatus" class="conn-s" style="margin:0"></span></div>
+    <div id="storeGrid" class="xgrid" style="margin:0 0 10px"></div>
     <ul id="plugins" class="feed"></ul>
     <div class="conn" style="border-bottom:0"><div style="flex:1"><div class="conn-t">Sideload a package</div>
       <div class="conn-s">Paste a plugin package (JSON: manifest + source) to install it directly. It passes the same gate.</div>
@@ -760,6 +777,15 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <section>
     <div class="eyebrow">Ops</div><h2>Health &amp; schedule</h2>
     <div id="health" class="mstat" style="margin-top:0"></div>
+    <div class="reportbox">
+      <div class="conn-t">Report a problem</div>
+      <div class="conn-s" style="margin:2px 0 8px">Something broken or confusing? Tell us. A short diagnostic summary — version, OS, capability status — is attached so we can fix it; <b>no personal data, files, or queries</b>. Nothing is sent until you choose to.</div>
+      <input type="text" id="repSummary" maxlength="120" placeholder="One-line summary (e.g. “Live Lens QR won’t open the camera”)">
+      <textarea id="repDetail" rows="3" placeholder="What happened, and what you expected…"></textarea>
+      <label class="tog" style="margin:4px 0"><input type="checkbox" id="repDiag" checked> Include diagnostics (no personal data)</label>
+      <div class="row"><button onclick="prepReport()">Prepare report</button></div>
+      <div id="repOut" style="margin-top:8px"></div>
+    </div>
     <div class="conn" style="margin-top:6px"><div><div class="conn-t">Quiet hours</div>
       <div class="conn-s">Auto-incognito during this window — cloud off, capture paused. Blank to disable.</div></div>
       <input type="text" id="quiet" placeholder="22:00-07:00" style="max-width:140px"></div>
@@ -1024,23 +1050,41 @@ function renderPlan(plan){
   const rows=$("planRows"); if(!rows||!plan)return;
   const onCloud=plan.plan==="cloud";
   if(onCloud){$("planBadge").textContent="· active";$("planBadge").style.color="var(--success)";
-    const b=$("notifyBtn"); if(b)b.style.display="none";}
+    const b=$("notifyBtn"); if(b)b.style.display="none";
+    const f=$("notifyForm"); if(f)f.style.display="none";}   // already on Cloud — no waitlist
   rows.innerHTML=(plan.cloud_caps||[]).map(c=>`
     <div class="conn" style="padding:8px 0">
       <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${c.active?"var(--success)":"var(--ghost)"}"></span>
       <div class="conn-s" style="flex:1">${esc(c.info)}</div>
       <span class="sstate">${c.active?"active":"with Cloud"}</span></div>`).join("");
 }
+function showNotify(){const f=$("notifyForm");if(f)f.style.display="";
+  const b=$("notifyBtn");if(b)b.style.display="none";
+  const e=$("notifyEmail");if(e)e.focus();}
+function validEmail(s){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);}
 async function joinWaitlist(){
-  const email=prompt("DreamLayer Cloud waitlist — we'll email you once, when it opens.\n\nYour email:");
-  if(!email)return;
+  const email=($("notifyEmail").value||"").trim();
+  const st=$("notifyStatus"), btn=$("notifySubmit");
+  if(!validEmail(email)){st.style.color="var(--amber)";st.textContent="That doesn't look like an email address.";$("notifyEmail").focus();return;}
+  btn.disabled=true;const orig=btn.textContent;btn.textContent="Joining…";
+  st.style.color="var(--muted)";st.textContent="";
   try{
     const r=await fetch(CLOUD_WAITLIST,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({email:email})});
-    const d=await r.json();
-    if(r.ok&&d.joined){toast(d.already?"You're already on the list":"You're on the list — #"+d.count);}
-    else toast(d.error||"That email didn't look right");
-  }catch(e){toast("Couldn't reach the waitlist — try again later");}
+    const d=await r.json().catch(()=>({}));
+    if(r.ok&&d.joined){
+      $("notifyForm").innerHTML=`<div class="conn-s" style="color:var(--success)">✓ `+
+        (d.already?"You're already on the list — we'll email you when Cloud opens."
+                  :"You're on the list"+(d.count?" — #"+esc(String(d.count)):"")+". We'll email you once, when Cloud opens.")+
+        `</div>`;
+    }else{
+      st.style.color="var(--amber)";st.textContent=(d&&d.error)?d.error:"That email didn't look right.";
+      btn.disabled=false;btn.textContent=orig;
+    }
+  }catch(e){
+    st.style.color="var(--amber)";st.textContent="Couldn't reach the waitlist — check your connection and try again.";
+    btn.disabled=false;btn.textContent=orig;
+  }
 }
 
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);
@@ -1153,8 +1197,9 @@ async function toggleCal(name,on){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_names:sel})});
   toast("Calendars updated");loadAgenda();loadCalendars();}
 async function saveCalSync(){const on=$("calSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_sync:on})});
-  toast(on?"Calendar sync on":"Calendar sync off");loadCalendars();loadAgenda();}
+  if(on){$("calStatus").textContent="Syncing your calendar…";toast("Syncing your calendar…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Calendar synced":"Calendar sync off");loadCalendars();loadAgenda();}
 async function syncCalNow(){$("calStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/calendar/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} event(s)`);loadAgenda();loadCalendars();loadHistory();}
@@ -1201,8 +1246,9 @@ async function loadContactsSync(){let r;try{r=await api("/dreamlayer/contacts");
   $("conSync").checked=!!r.sync;
   $("conStatus").textContent=r.last_sync?`${r.count||0} contact(s) · synced ${fmtWhen(r.last_sync)}`:(r.sync?"Syncing…":"Contacts sync is off");}
 async function saveConSync(){const on=$("conSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({contacts_sync:on})});
-  toast(on?"Contacts sync on":"Contacts sync off");loadContactsSync();loadPeople();}
+  if(on){$("conStatus").textContent="Syncing your contacts…";toast("Syncing your contacts…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({contacts_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Contacts synced":"Contacts sync off");loadContactsSync();loadPeople();}
 async function syncConNow(){$("conStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/contacts/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} contact(s)`);loadPeople();loadContactsSync();loadHistory();}
@@ -1227,8 +1273,9 @@ async function toggleRemList(){const boxes=[...$("remList").querySelectorAll("in
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminder_lists:sel})});
   toast("Lists updated");loadReminders();}
 async function saveRemSync(){const on=$("remSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminders_sync:on})});
-  toast(on?"Reminders sync on":"Reminders sync off");loadReminders();}
+  if(on){$("remStatus").textContent="Syncing your reminders…";toast("Syncing your reminders…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminders_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Reminders synced":"Reminders sync off");loadReminders();}
 async function syncRemNow(){$("remStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/reminders/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} reminder(s)`);loadReminders();loadHistory();}
@@ -1836,6 +1883,24 @@ async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e
   $("health").innerHTML=html;
 }
 
+/* report a problem — assemble a sanitized report + a prefilled GitHub issue.
+   Nothing is sent automatically: the wearer reviews it, then opens or copies. */
+let _repbody="";
+function copyReport(){if(navigator.clipboard&&_repbody){navigator.clipboard.writeText(_repbody).then(()=>toast("Report copied"));}}
+async function prepReport(){
+  const s=$("repSummary").value.trim(), d=$("repDetail").value.trim();
+  if(!s&&!d){toast("Add a short description first");return;}
+  let r;try{r=await api("/dreamlayer/report",{method:"POST",
+    body:JSON.stringify({summary:s,detail:d,include_diag:$("repDiag").checked})});}catch(e){r=null;}
+  if(!r||!r.github_url){$("repOut").textContent="Couldn't prepare the report — try again.";return;}
+  _repbody=r.body;
+  $("repOut").innerHTML=`<textarea class="repprev" readonly rows="8">${esc(r.body)}</textarea>`+
+    `<div class="row" style="margin-top:8px"><a class="btn" href="${esc(r.github_url)}" target="_blank" rel="noopener">Open a GitHub issue ↗</a>`+
+    `<button class="ghost" onclick="copyReport()">Copy report</button></div>`+
+    `<div class="conn-s" style="margin-top:6px">Review it first — then open the issue (needs a GitHub account) or paste it into an email. Nothing left your Mac until you do.</div>`;
+  toast("Report ready to review");
+}
+
 /* drag & drop — files only */
 const drop=$("drop");
 ["dragover","dragenter"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("hot")}));
@@ -1900,6 +1965,46 @@ async function installPlugin(){const raw=$("plugPkg").value.trim();if(!raw){retu
   const r=await api("/dreamlayer/plugins/install",{method:"POST",body:JSON.stringify(body)});
   if(r.ok){$("plugPkg").value="";const w=(r.warnings||[]).length?" — note: "+(r.warnings||[]).join("; "):"";$("plugStatus").textContent=w;toast("Installed");loadPlugins();}
   else{$("plugStatus").textContent=(r.errors||["failed"]).join("; ");}}
+
+/* in-app plugin store — browse the pinned registry + 1-click install (no web
+   page, no terminal). The Brain fetches the catalogue and installs by name
+   through the same checksum + capability/sandbox gate as a pasted package. */
+let _storeOpen=false;
+function storeCard(p){
+  const rc=Math.max(0,Math.min(5,Math.round(p.rating||0)));
+  const stars="★".repeat(rc)+"☆".repeat(5-rc);
+  const meta=(p.official?'<span style="color:var(--memory)">✓ Official</span> · ':'')+
+    `${(p.rating||0).toFixed(1)} ${stars} · ${p.downloads||0} installs`;
+  const cta=p.installed
+    ?'<span class="sstate" style="color:var(--success)">✓ installed</span>'
+    :`<button class="sm" onclick="installFromStore(${esc(JSON.stringify(p.name))},this)">Install</button>`;
+  return `<div class="x" style="cursor:default"><div class="x-t">${esc(p.name)} <span class="conn-s">v${esc(p.version||"")}</span></div>`+
+    `<div class="x-b">${esc(p.description||"")}</div>`+
+    `<div class="conn-s" style="margin:8px 0 0">${meta}</div>`+
+    `<div class="row" style="margin-top:8px">${cta}</div></div>`;
+}
+function renderStore(items){$("storeGrid").innerHTML=items.length?items.map(storeCard).join(""):'<div class="conn-s">Nothing in the store yet.</div>';}
+async function openStore(){
+  const grid=$("storeGrid"), st=$("storeStatus");
+  if(_storeOpen){_storeOpen=false;grid.innerHTML="";st.textContent="";return;}   // toggle closed
+  st.textContent="Loading the store…";
+  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){r=null;}
+  if(!r||r.error){st.textContent=(r&&r.error)?r.error:"Couldn't reach the store.";return;}
+  _storeOpen=true;renderStore(r.plugins||[]);
+  st.textContent=`${(r.plugins||[]).length} plugins — tap Install to add one`;
+}
+async function refreshStore(){if(!_storeOpen)return;
+  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){return;}
+  if(r&&r.plugins)renderStore(r.plugins);}
+async function installFromStore(name,btn){
+  if(btn){btn.disabled=true;btn.textContent="Installing…";}
+  let r;try{r=await api("/dreamlayer/plugins/store/install",{method:"POST",body:JSON.stringify({name})});}catch(e){r=null;}
+  if(r&&r.ok){toast("Installed "+name);loadPlugins();refreshStore();}
+  else{const e=(r&&r.errors&&r.errors.length)?r.errors.join("; "):"install failed";
+    toast("Install failed");$("storeStatus").textContent=e;
+    if(btn){btn.disabled=false;btn.textContent="Install";}}
+}
+window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
 
 load();
