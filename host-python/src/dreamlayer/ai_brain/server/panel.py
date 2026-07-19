@@ -175,6 +175,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   button.ghost:active{background:#6E6E6E;color:#fff}
   button.sm{padding:6px 12px;font-size:12.5px}
   button.danger{color:var(--error);background:linear-gradient(180deg,#F6F6F6,#D2D2D2)}
+  a.btn{display:inline-block;text-decoration:none;background:linear-gradient(180deg,#49E8BC,#17AE85);
+    color:#00251C;border:1px solid var(--frame);border-radius:7px;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.2);padding:9px 16px;font:14px var(--chi);cursor:pointer}
+  a.btn:hover{filter:brightness(1.04)}
+  .reportbox{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .reportbox input[type=text],.reportbox textarea{width:100%;margin:4px 0;box-sizing:border-box}
+  .reportbox .repprev{width:100%;box-sizing:border-box;font:11px ui-monospace,Menlo,monospace;
+    color:var(--muted);resize:vertical}
   pre{overflow-x:auto}
 
   /* system status */
@@ -760,6 +768,15 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <section>
     <div class="eyebrow">Ops</div><h2>Health &amp; schedule</h2>
     <div id="health" class="mstat" style="margin-top:0"></div>
+    <div class="reportbox">
+      <div class="conn-t">Report a problem</div>
+      <div class="conn-s" style="margin:2px 0 8px">Something broken or confusing? Tell us. A short diagnostic summary — version, OS, capability status — is attached so we can fix it; <b>no personal data, files, or queries</b>. Nothing is sent until you choose to.</div>
+      <input type="text" id="repSummary" maxlength="120" placeholder="One-line summary (e.g. “Live Lens QR won’t open the camera”)">
+      <textarea id="repDetail" rows="3" placeholder="What happened, and what you expected…"></textarea>
+      <label class="tog" style="margin:4px 0"><input type="checkbox" id="repDiag" checked> Include diagnostics (no personal data)</label>
+      <div class="row"><button onclick="prepReport()">Prepare report</button></div>
+      <div id="repOut" style="margin-top:8px"></div>
+    </div>
     <div class="conn" style="margin-top:6px"><div><div class="conn-t">Quiet hours</div>
       <div class="conn-s">Auto-incognito during this window — cloud off, capture paused. Blank to disable.</div></div>
       <input type="text" id="quiet" placeholder="22:00-07:00" style="max-width:140px"></div>
@@ -1834,6 +1851,24 @@ async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e
         `<span class="st ${bad?'off-t':'ok-t'}">${detail}</span></div>`;}
   }
   $("health").innerHTML=html;
+}
+
+/* report a problem — assemble a sanitized report + a prefilled GitHub issue.
+   Nothing is sent automatically: the wearer reviews it, then opens or copies. */
+let _repbody="";
+function copyReport(){if(navigator.clipboard&&_repbody){navigator.clipboard.writeText(_repbody).then(()=>toast("Report copied"));}}
+async function prepReport(){
+  const s=$("repSummary").value.trim(), d=$("repDetail").value.trim();
+  if(!s&&!d){toast("Add a short description first");return;}
+  let r;try{r=await api("/dreamlayer/report",{method:"POST",
+    body:JSON.stringify({summary:s,detail:d,include_diag:$("repDiag").checked})});}catch(e){r=null;}
+  if(!r||!r.github_url){$("repOut").textContent="Couldn't prepare the report — try again.";return;}
+  _repbody=r.body;
+  $("repOut").innerHTML=`<textarea class="repprev" readonly rows="8">${esc(r.body)}</textarea>`+
+    `<div class="row" style="margin-top:8px"><a class="btn" href="${esc(r.github_url)}" target="_blank" rel="noopener">Open a GitHub issue ↗</a>`+
+    `<button class="ghost" onclick="copyReport()">Copy report</button></div>`+
+    `<div class="conn-s" style="margin-top:6px">Review it first — then open the issue (needs a GitHub account) or paste it into an email. Nothing left your Mac until you do.</div>`;
+  toast("Report ready to review");
 }
 
 /* drag & drop — files only */

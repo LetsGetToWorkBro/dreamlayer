@@ -2730,6 +2730,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(403, {"error": "local-only"}); return
             self._json(200, _pull_model_async(brain, self._body().get("model", "")))
 
+        def _post_report(self, path, qs):
+            """Assemble an in-app bug report (the wearer's words + sanitized,
+            PII-free diagnostics) and a prefilled GitHub-issue link. Local-only
+            and nothing is sent automatically — the panel shows the text and the
+            wearer chooses to open the issue or copy it."""
+            if not self._from_localhost():
+                self._json(403, {"error": "reporting is local-only"}); return
+            b = self._body()
+            self._json(200, _build_bug_report(
+                brain, b.get("summary", ""), b.get("detail", ""),
+                bool(b.get("include_diag", True))))
+
         def _post_people(self, path, qs):
             """Introduce/update or remove a person ({name, note, tags[, remove]})."""
             b = self._body()
@@ -2936,6 +2948,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/config": _post_config,
             "/dreamlayer/capabilities": _post_capabilities,
             "/dreamlayer/packs": _post_packs,
+            "/dreamlayer/report": _post_report,
             "/dreamlayer/upload": _post_upload,
             "/dreamlayer/brain/ask": _post_brain_ask,
             "/dreamlayer/plugins/install": _post_plugins_install,
@@ -3124,6 +3137,75 @@ def _version() -> str:
         # the package should always import from within itself; fall back only
         # for that narrow case rather than masking any other error.
         return "0.0.0"
+
+
+# --- in-app bug reporting ----------------------------------------------------
+# A "Report a problem" flow inside the app: assemble the wearer's description
+# plus a STRICTLY SANITIZED diagnostic summary (version, OS, capability counts,
+# seam failure counts — NO folder paths, queries, URLs, keys, or any PII) and a
+# prefilled GitHub-issue link. Nothing is sent automatically: the wearer reviews
+# the assembled text and chooses to open the issue or copy it (audit 2026-07-19).
+_REPORT_REPO = "LetsGetToWorkBro/dreamlayer"
+
+
+def _report_diagnostics(brain: Brain) -> str:
+    """A privacy-safe, PII-free diagnostic block for a bug report. Only coarse
+    counts and product versions — never a path, query, endpoint, key, or the
+    wearer's data."""
+    import platform as _pf
+    try:
+        from ...capabilities import summary as _cap_summary
+        caps = _cap_summary()
+    except Exception:
+        caps = {}
+    try:
+        files = int(brain.index.stats().get("files", 0))
+    except Exception:
+        files = 0
+    up = int(time.time() - getattr(brain, "_started_ts", time.time()))
+    uptime = f"{up // 3600}h" if up >= 3600 else f"{max(up, 0) // 60}m"
+    try:
+        seams = brain.health.snapshot() or {}
+    except Exception:
+        seams = {}
+    bad = [f"{n}({(s or {}).get('failures', 0)})"
+           for n, s in sorted(seams.items()) if (s or {}).get("failures", 0)]
+    lines = [
+        f"DreamLayer {_version()} · {_pf.system()} {_pf.machine()} · "
+        f"Python {_pf.python_version()}",
+        f"model: {brain.config.model} · index: {files} files · uptime: {uptime}",
+    ]
+    if caps:
+        lines.append("capabilities: " + " · ".join(
+            f"{caps[k]} {k}" for k in ("active", "off", "missing") if caps.get(k)))
+    if bad:
+        lines.append("seams with failures: " + ", ".join(bad))
+    return "\n".join(lines)
+
+
+def _build_bug_report(brain: Brain, summary: str, detail: str,
+                      include_diag: bool = True) -> dict:
+    """Assemble {title, body, github_url} for an in-app bug report. The body
+    carries the wearer's words plus the sanitized diagnostics; github_url is a
+    prefilled new-issue link (truncated to stay under browser/GitHub URL limits,
+    while `body` keeps the full text for the copy-to-clipboard action)."""
+    import urllib.parse as _up
+    summary = (summary or "").strip()[:120] or "App issue"
+    detail = (detail or "").strip()
+    body = detail or "_(what happened, and what you expected)_"
+    if include_diag:
+        body += ("\n\n---\n**Diagnostics** (no personal data):\n```\n"
+                 + _report_diagnostics(brain) + "\n```")
+    body += "\n\n_Reported from the DreamLayer app._"
+
+    def _url(b: str) -> str:
+        q = _up.urlencode({"title": summary, "body": b, "labels": "bug"})
+        return f"https://github.com/{_REPORT_REPO}/issues/new?{q}"
+
+    url = _url(body)
+    if len(url) > 6000:            # some browsers cap the address bar; keep headroom
+        url = _url(body[:1400] + "\n\n…(truncated — use “Copy report” for the full text)")
+    return {"title": summary, "body": body, "github_url": url}
 
 
 def _answer_json(ans: Optional[Answer]) -> dict:
