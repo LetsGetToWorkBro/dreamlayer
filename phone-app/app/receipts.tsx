@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, StyleSheet } from "react-native";
 
 import { useReceiptStore } from "../src/state/useReceiptStore";
 import { ReceiptRecord } from "../src/crypto/receiptVerify";
@@ -7,6 +7,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
+import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { colors } from "../src/ui/theme/colors";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
@@ -74,25 +75,19 @@ function Verdict() {
   }
 
   return (
-    <Card style={{ borderLeftWidth: 3, borderLeftColor: tone, marginBottom: space.md }}>
+    <Card title="Verification" active accent={tone} style={{ marginBottom: space.md }}>
       <Text style={[typography.title, { color: tone }]}>{head}</Text>
       <Text style={[typography.body, { color: colors.textSecondary, marginTop: space.xs }]}>{sub}</Text>
       {pubkey ? (
-        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm, fontFamily: "monospace" }]}>
+        <Text style={[typography.mono, { fontSize: 12, color: colors.textSecondary, marginTop: space.sm }]}>
           key {fingerprint(pubkey)}
           {firstSeen ? "  · pinned to this phone" : ""}
         </Text>
       ) : null}
       {showRepin ? (
-        <Pressable
-          onPress={() => repin()}
-          style={({ pressed }) => [st.repin, { opacity: pressed ? 0.6 : 1 }]}
-          accessibilityRole="button"
-        >
-          <Text style={[typography.caption, { color: colors.accentError, fontWeight: "600" }]}>
-            I reinstalled the Brain — trust the new key
-          </Text>
-        </Pressable>
+        <View style={{ marginTop: space.md }}>
+          <PrimaryButton accent="attention" label="I reinstalled — trust the new key" onPress={() => repin()} />
+        </View>
       ) : null}
     </Card>
   );
@@ -100,19 +95,14 @@ function Verdict() {
 
 function Entry({ rec, broken }: { rec: ReceiptRecord; broken: boolean }) {
   return (
-    <Card
-      style={{
-        marginBottom: space.sm,
-        ...(broken ? { borderLeftWidth: 3, borderLeftColor: colors.accentError } : {}),
-      }}
-    >
+    <Card active={broken} accent={colors.accentError} style={{ marginBottom: space.sm }}>
       <View style={st.row}>
         <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]} numberOfLines={2}>
           {rec.text || rec.kind}
         </Text>
         <Text style={[typography.caption, { color: colors.textSecondary }]}>{clockTime(rec.ts)}</Text>
       </View>
-      <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.xs, fontFamily: "monospace" }]}>
+      <Text style={[typography.mono, { fontSize: 11, color: colors.textSecondary, marginTop: space.xs }]}>
         {rec.kind} · seq {rec.seq} · #{(rec.prev || "genesis").slice(0, 10)}
       </Text>
     </Card>
@@ -138,18 +128,7 @@ export default function Receipts() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.xxxl }}>
           <Verdict />
-          <Pressable
-            onPress={reverify}
-            disabled={loading}
-            style={({ pressed }) => [st.btn, { opacity: pressed || loading ? 0.6 : 1 }]}
-            accessibilityRole="button"
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.surfaceElevated} />
-            ) : (
-              <Text style={[typography.body, { color: colors.surfaceElevated, fontWeight: "600" }]}>Re-verify</Text>
-            )}
-          </Pressable>
+          <PrimaryButton label={loading ? "Verifying…" : "Re-verify"} onPress={() => { if (!loading) reverify(); }} />
 
           {error ? (
             <Text style={[typography.caption, { color: colors.accentError, marginTop: space.md }]}>
@@ -178,20 +157,4 @@ export default function Receipts() {
 
 const st = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.sm },
-  repin: {
-    marginTop: space.md,
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: colors.accentError,
-    borderRadius: 8,
-    paddingVertical: space.xs,
-    paddingHorizontal: space.sm,
-  },
-  btn: {
-    backgroundColor: colors.accentMemory,
-    borderRadius: 10,
-    paddingVertical: space.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 });
