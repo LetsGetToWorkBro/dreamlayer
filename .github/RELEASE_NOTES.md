@@ -1,6 +1,6 @@
-0.4.0 made your phone a stand-in for the glasses. 0.5.0 is the fast-follow that makes the apps themselves nicer to live with: Juno moved into your menu bar, the Learn section came alive, setup lost its rough edges, and the app grew its first community-contributed language. Smaller stories than last release, but you'll feel these every day.
+A same-day patch to 0.5.0, and it's all about the plugin store. If you downloaded 0.5.0 this morning, this is worth the re-download; if you're new, start here.
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_home.png" alt="The Brain panel, Home, Platinum" />
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/plugins.png" alt="The plugin store, front and center" />
 
 ## Install (macOS 12+)
 
@@ -12,20 +12,15 @@ Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin pro
 
 Same two first-launch clicks as before: SmartScreen "More info, Run anyway" because this build isn't code signed yet, and the firewall "allow on private networks" so the phone can reach the panel on `:7777`. Uninstalling leaves `~/.dreamlayer` alone.
 
-## What's new since 0.4.0
+## What's new since 0.5.0
 
-- Juno IS the status light now. The menu bar on the Mac and the tray on Windows show Juno herself, tinted by what the Brain is doing — and below 24 pixels she becomes the light rather than wearing one. Glance at the corner of your screen and you know the Brain's mood. The panel's browser favicon plays along.
-- The Learn section came alive. It now covers all 29 lenses, and clicking one plays the lens's actual on-glass animation — Juno's sparkle fly-in, the introduction bloom, a promise drifting toward the rim of sight. This is not a video of the product; it's the product. The exact rendering engine dreamlayer.app runs now ships inside the app, with a test that fails the build if the two ever drift apart.
-- Setup lost its rough edges. The browser Live Lens handles its own TLS setup, pulling a model through Ollama shows real progress instead of a spinner of faith, capability packs install in one click, and the Juno desk accessory can be dragged wherever you like her.
-- The app talks back. Found something broken? File it from inside the panel — it lands as a GitHub issue I'll actually read. The plugin store got quicker to browse, sync shows its progress, and the Cloud waitlist is one field inline instead of a prompt box.
-- Hindi shipped. The phone app speaks its tenth language, and it's the first one contributed by someone who isn't me — aastha-m22 translated the whole catalog, caught a tricky "temple" (the one on your head, not the building), and iterated through three rounds of review to a clean merge. CONTRIBUTORS.md now exists because it finally has a reason to. (Phone app, so it's not in this download — but it's the same repo, and it's the milestone that matters.)
-- Two community-diagnosed engine fixes closed out for good: the vector search now uses the `k = ?` form that every SQLite build serves (no more silent linear-scan on older systems), and the one flaky CI test got its race fixed rather than muted. Both found, diagnosed, and fixed by Peter Z.
-
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/motion/object_recall.gif" alt="The real HUD renderer, animating" />
+- The store is the page now. Open Plugins and the full catalogue is just there — every plugin with its real on-glass screenshot, the official badge, and a one-click Install. No "browse" click, no second web page, nothing external. Same gate as always: integrity check, capability scan, and a smoke test before anything runs.
+- Every plugin wears its shot. The last two listings without screenshots (Open Library and Vinyl Oracle) got theirs — rendered through the actual device renderer with the plugin's real fields, and captioned with exactly what leaves your machine ("only the title leaves", "only artist + title leave"). No concept art in the store, ever.
+- Fixed: plugin thumbnails were broken boxes in 0.4.0 and 0.5.0. This morning's security hardening (correctly) blocks the panel from loading remote images — which quietly took the store thumbnails with it. Rather than punch a hole in that policy, the screenshots now ship inside the app and load from your own machine. The security stays; the pictures come back; the panel still fetches nothing from anyone.
 
 ## Good to know
 
-- Still a pre-hardware build. The Brain, panel, phone pairing, plugins, lenses, and simulator are real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does. Until then, the browser lens and the app's Look run the same code the glasses will.
+- Still a pre-hardware build. The Brain, panel, phone pairing, plugins, lenses, and simulator are real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does.
 - "Check for updates" in the menu points at this repo's releases page, only when you click it, never in the background.
 - The full source for the dmg and the exe is this repository. Don't trust me, build it yourself: `.github/workflows/build-macos-app.yml` and `.github/workflows/build-windows-app.yml` are the recipes. Release assets carry Sigstore cosign bundles, so you can verify the bytes came from this repo's CI.
-- Found something broken? There's a button for that in the panel now. Want to write a plugin? `examples/hello-lens`, and the open issues are the menu.
+- Found something broken? There's a button for that in the panel. Want to write a plugin? `examples/hello-lens`, and the open issues are the menu.
