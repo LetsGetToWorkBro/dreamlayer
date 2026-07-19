@@ -73,6 +73,46 @@ bits you run are the bits we built, from the dependencies we vetted:
   are pinned by sha256 (`models.lock` / `model_guard`), loaded `weights_only`,
   and fetched only when the wearer's posture allows.
 
+## Local Brain server hardening (audit 2026-07-19)
+
+A pre-release adversarial pass over the desktop Brain's request surface landed
+these mitigations, each with a revert-failing regression test
+(`test_release_audit_2026_07_19.py`):
+
+- **DNS-rebinding defense** — `do_GET`/`do_POST` now validate the `Host` header
+  against an allowlist (IP literals, `localhost`, mDNS `.local`, this machine's
+  hostname — the set the TLS cert SANs name and the panel/phone actually dial)
+  before any routing, answering a rebound host `421` *before* the panel token is
+  served. This is the read-side companion to the existing same-origin write
+  (CSRF) guard: a page on an attacker domain rebound to `127.0.0.1` could
+  otherwise read the token as its own origin.
+- **Panel Content-Security-Policy** — the token-bearing panel/builder pages now
+  ship a CSP that pins `connect-src`/`img-src`/`default-src` to `self` (plus the
+  one real off-origin, the cloud waitlist). Inline event handlers still work, but
+  an injected script can no longer exfiltrate the token off-origin. (A stored
+  panel XSS via a calendar name that was missing its `esc()` wrapper was fixed in
+  the same pass.)
+- **Upload write confinement** — `/upload` refuses a `name` that isn't a bare
+  basename (an absolute or `..`-bearing name would escape the watched folder),
+  confirms the resolved destination stays inside it, and denies any write that
+  would land on an auto-run / secret / Brain-state location (LaunchAgents,
+  autostart, shell rc, `~/.ssh`, …) — closing a "drop a file in a watched folder"
+  → code-execution/persistence escalation. The same denylist gates add-folder.
+- **Model-endpoint SSRF block** — a model `base_url` in link-local /
+  cloud-metadata space (`169.254.169.254`, `fd00:ec2::254`, `fe80::/10`) is
+  refused at the request chokepoint and kept out of the stored config, so a Brain
+  running on a cloud instance can't be turned into an IMDS credential proxy.
+- **Receipt-ledger rollback/wipe evidence** — the tamper-evident activity ledger
+  now records its committed length in an external, keychain-backed watermark that
+  a state-dir snapshot-restore or wipe can't revert alongside `activity.jsonl` /
+  `.head`. `verify()` flags a ledger shorter than the mark (a rollback), and a
+  full wipe no longer reads as a clean empty ledger.
+- **Windows secret-dir ACL, fail-closed** — when the current-user SID can't be
+  resolved (a domain box), directory/secret hardening no longer *skips* (leaving
+  the inherited, possibly `Users`-readable baseline) but applies a
+  SID-independent owner-only DACL via the OWNER RIGHTS / CREATOR OWNER well-known
+  SIDs — the owner can never be locked out, other regular users are evicted.
+
 Tracked hardening (follow-up): pinning third-party GitHub Actions by commit SHA
 rather than tag (OpenSSF Scorecard `Pinned-Dependencies`) — our own reusable
 steps and the release-critical path are the priority.

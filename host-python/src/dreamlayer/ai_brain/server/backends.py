@@ -110,6 +110,41 @@ def is_local_endpoint(base_url: str) -> bool:
     return any(ip in net for net in _LOCAL_NETS)
 
 
+# Addresses that are NEVER a legitimate model endpoint and are the classic SSRF
+# pivot: link-local auto-config space, where every major cloud's instance
+# metadata service (IMDS) lives — 169.254.169.254 on AWS/GCP/Azure/DO/Oracle,
+# fd00:ec2::254 for AWS IPv6. A model base_url resolving here is refused OUTRIGHT
+# at the request chokepoint (_provider_chat) and kept out of the stored config,
+# so a token holder / rebound page / CSRF cannot turn the Brain into an IMDS
+# credential-theft proxy when it runs on a cloud instance (audit 2026-07-19).
+_BLOCKED_NETS = tuple(__import__("ipaddress").ip_network(n) for n in (
+    "169.254.0.0/16", "fe80::/10"))
+_BLOCKED_HOSTS = frozenset({"169.254.169.254", "fd00:ec2::254",
+                            "::ffff:169.254.169.254"})
+
+
+def is_blocked_endpoint(base_url: str) -> bool:
+    """True when `base_url`'s host is link-local / cloud-metadata space — an
+    endpoint the Brain must never fetch. Only IP-literal hosts are judged here
+    (a hostname like ``metadata.google.internal`` is already egress via
+    is_local_endpoint=False and DNS-resolved by the OS); this stops the direct
+    IP-literal IMDS pivot. Unparseable / non-IP hosts return False."""
+    import ipaddress
+    try:
+        host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if host in _BLOCKED_HOSTS:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(ip in net for net in _BLOCKED_NETS)
+
+
 def _build_request(provider: str, base_url: str, model: str, key: str, prompt: str):
     """Return (wire, url, body_dict, headers) for a provider/endpoint tuple.
 
@@ -356,6 +391,11 @@ def _provider_chat(provider: str, base_url: str, model: str, key: str,
     """Ask any provider/endpoint, dispatched on wire format. Injectable
     http_post short-circuits to a test double (posts {model, prompt} to the
     base URL and reads {text})."""
+    # SSRF guard: never reach a link-local / cloud-metadata endpoint, whichever
+    # tier configured it. Refused before the injectable http_post too, so a test
+    # double can't be pointed at IMDS either (audit 2026-07-19).
+    if is_blocked_endpoint(base_url):
+        raise ValueError("endpoint refused: link-local / cloud-metadata address")
     if http_post is not None:
         out = http_post(base_url, {"model": model, "prompt": prompt})
         return (out or {}).get("text", "").strip()

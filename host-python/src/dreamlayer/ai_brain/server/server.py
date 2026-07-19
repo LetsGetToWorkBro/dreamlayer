@@ -45,7 +45,7 @@ log = logging.getLogger("dreamlayer.ai_brain.server")
 
 from ..schema import Answer
 from .store import (BrainConfig, QueryHistory, ActivityLog, replace_atomic,
-                    activity_receipt_signer)
+                    activity_receipt_signer, activity_receipt_watermark)
 from .index import FileIndex
 from .backends import OllamaBackend, make_synthesizer, vision_answer, probe_ollama
 from .panel import render_panel
@@ -72,6 +72,29 @@ SOCKET_TIMEOUT_S = 30.0                 # per-connection socket timeout — boun
 MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
 MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + headers (anti slow-header slowloris)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
+
+# Content-Security-Policy for the token-bearing panel/builder pages. The panel is
+# built on inline event handlers (onclick=/onchange=), so — unlike the Live page,
+# which nonces its one inline block and can forbid inline entirely — it must keep
+# 'unsafe-inline' for scripts/styles. What the policy still buys is the backstop
+# the panel had NONE of: even if an injected node's handler runs, connect-src and
+# img-src are pinned to 'self' (+ the one real off-origin the panel talks to, the
+# cloud waitlist), so the panel TOKEN cannot be silently exfiltrated by fetch/XHR/
+# WebSocket or an image beacon to an attacker origin. default-src 'self' blocks
+# external script/frames, object-src 'none' kills plugin vectors, base-uri 'none'
+# blocks a <base> hijack of every relative fetch, and frame-ancestors 'none'
+# stops the panel being framed for clickjacking. This is the read-side companion
+# to the same-origin write guard and the DNS-rebind Host allowlist.
+PANEL_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "media-src 'self' blob:; "
+    "font-src 'self' data:; "
+    "connect-src 'self' https://api.dreamlayer.app; "
+    "object-src 'none'; base-uri 'none'; form-action 'self'; "
+    "frame-ancestors 'none'")
 
 
 class _RequestTooLarge(Exception):
@@ -182,6 +205,19 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
     def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None,
                  calendar_reader_fn=None, calendar_list_fn=None):
         self.cfg_dir = Path(cfg_dir)
+        # Harden the state dir owner-only ONCE, up front — before any config,
+        # history, activity, or receipt-key file is created inside it — so every
+        # secret-bearing file is born private BY INHERITANCE rather than at the
+        # process umask (world-readable on a shared box). Previously only
+        # store.save() hardened the dir, so a tokenless loopback run's
+        # brain_history/activity.jsonl could be created world-readable before the
+        # first save ever ran (audit 2026-07-19). Best-effort; never crashes ctor.
+        try:
+            from .store import _harden_state_dir
+            self.cfg_dir.mkdir(parents=True, exist_ok=True)
+            _harden_state_dir(self.cfg_dir)
+        except OSError:
+            pass
         # Serializes the cfg_dir JSON stores (agenda/people/contacts/reminders):
         # the server is threaded, so concurrent authed POSTs could otherwise
         # interleave a read-modify-write and lose or corrupt data (audit
@@ -204,7 +240,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         self._apply_model_posture()
         self.history = QueryHistory(self.cfg_dir)
         self.activity = ActivityLog(
-            self.cfg_dir, signer=activity_receipt_signer(self.cfg_dir))
+            self.cfg_dir, signer=activity_receipt_signer(self.cfg_dir),
+            watermark=activity_receipt_watermark(self.cfg_dir))
         self.index = FileIndex(self.config)
         # Platform sources: macOS reads Messages/Mail/Calendar.app; Windows
         # reads Thunderbird mbox + .ics feeds (windows_sources). Each module
@@ -502,6 +539,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             self.config.cloud_calls += n
 
     def apply_config(self, updates: dict) -> None:
+        # Capture the prior model-endpoint URLs so a patch that points one at
+        # link-local / cloud-metadata space is rejected by reverting to the prior
+        # value — the SSRF endpoint never persists (audit 2026-07-19).
+        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url")
+        _prev_urls = {k: getattr(self.config, k, "") for k in _url_fields}
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
                   "email_enabled", "summarize_emails", "cloud_enabled",
@@ -515,6 +557,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                   "contacts_sync", "reminders_sync", "reminder_lists"):
             if k in updates:
                 setattr(self.config, k, updates[k])
+        from .backends import is_blocked_endpoint
+        for uk in _url_fields:
+            if uk in updates and is_blocked_endpoint(getattr(self.config, uk, "") or ""):
+                setattr(self.config, uk, _prev_urls[uk])   # reject: keep the prior endpoint
+                log.warning("[brain] refused a link-local/metadata %s endpoint", uk)
         self._wire_model()
         self.save()
         # A posture change (network_mode / quiet_hours) re-arms the model fetch
@@ -1705,6 +1752,53 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             return self.client_address[0] in ("127.0.0.1", "::1",
                                               "::ffff:127.0.0.1")
 
+        def _host_allowed(self) -> bool:
+            """DNS-rebinding defense (the read side of the same-origin policy the
+            _same_origin_write CSRF guard enforces for writes).
+
+            A page on an attacker domain whose DNS is rebound to 127.0.0.1 can
+            fetch the Brain *as its own origin*: the socket peer is loopback, so
+            _from_localhost() trusts it and _get_root() hands the panel token to
+            that page's JavaScript — token theft with a single visit, no CORS to
+            stop it (the browser thinks it's talking to the attacker's own site).
+            A browser CANNOT forge the Host header, though, so a rebound request
+            still carries the attacker's hostname. Refuse any Host whose name is
+            not an IP literal, ``localhost``, an mDNS ``.local`` name, or this
+            machine's own hostname — exactly the set the TLS cert SANs name and
+            the panel (127.0.0.1/localhost) and phone (LAN IP or ``host.local``)
+            actually dial. IP literals and ``.local`` names are not remotely
+            rebindable, so this shuts the rebind path without touching the real
+            loopback/LAN/mDNS callers. A request with NO Host (an HTTP/1.0 CLI or
+            the phone's native networking) is not a browser and cannot be a
+            rebind vector, so it is allowed."""
+            import ipaddress
+            raw = self.headers.get("Host")
+            if not raw:
+                return True                    # non-browser client; browsers always send Host
+            host = raw.strip()
+            if host.startswith("["):           # bracketed IPv6, optional :port
+                hostname = host[1:host.index("]")] if "]" in host else host[1:]
+            elif host.count(":") == 1:         # host:port (IPv4 / name)
+                hostname = host.rsplit(":", 1)[0]
+            else:                              # bare host or bare (unbracketed) IPv6
+                hostname = host
+            hostname = hostname.strip().lower()
+            if not hostname:
+                return False
+            if hostname == "localhost" or hostname.endswith(".local"):
+                return True
+            try:
+                ipaddress.ip_address(hostname)
+                return True                    # any IP literal — never DNS-rebindable
+            except ValueError:
+                pass
+            try:
+                if hostname == (socket.gethostname() or "").strip().lower():
+                    return True
+            except OSError:
+                pass
+            return False
+
         def _same_origin_write(self) -> bool:
             """CSRF guard for state-changing (POST) requests.
 
@@ -1825,6 +1919,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", PANEL_CSP)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -1842,6 +1937,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", PANEL_CSP)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -2225,6 +2321,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         # -- routing ----------------------------------------------------
         def do_GET(self):
+            # DNS-rebind guard first — BEFORE the public routes, because _get_root
+            # is a public route that injects the panel token for any loopback peer.
+            if not self._host_allowed():
+                self._json(421, {"error": "host not allowed"}); return
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
             qs = urllib.parse.parse_qs(parsed.query)
@@ -2782,6 +2882,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         ]
 
         def do_POST(self):
+            # DNS-rebind guard first (mirrors do_GET): a rebound page must not
+            # reach a mutating handler even on a tokenless loopback Brain.
+            if not self._host_allowed():
+                self._json(421, {"error": "host not allowed"}); return
             parsed = urllib.parse.urlparse(self.path)
             path, qs = parsed.path, urllib.parse.parse_qs(parsed.query)
             # CSRF guard first: a forged cross-origin write must be refused even
@@ -2873,7 +2977,33 @@ def _write_upload(brain: Brain, folder: str, name: str, data: bytes) -> bool:
     target = str(Path(folder).expanduser())
     if target not in brain.config.folders:
         return False
-    dest = Path(target) / name
+    # `name` is attacker-influenced. Path(target) / name silently ESCAPES the
+    # watched folder when name is absolute (pathlib drops the left side:
+    # Path("/w") / "/home/u/.bashrc" == Path("/home/u/.bashrc")) or contains
+    # ".."/separators — an arbitrary-write-anywhere primitive. Force a bare
+    # basename, then confirm the fully-resolved destination is genuinely inside
+    # the watched folder (defeats a symlink planted at target/name too), and
+    # never let it land on an auto-run / secret / Brain-state file even within a
+    # watched dir — that is the RCE/persistence escalation (audit 2026-07-19).
+    from .store import _is_write_denied
+    raw = str(name)
+    base = Path(raw).name
+    # A legitimate upload name is ALWAYS a bare filename (the panel/phone send the
+    # File object's basename). A name that isn't already its own basename —
+    # absolute, or carrying "/", "\\", ".." or a trailing slash — is an attack or
+    # a bug; refuse it outright rather than silently relocate it.
+    if not base or base in (".", "..") or base != raw:
+        return False
+    try:
+        troot = Path(target).resolve()
+        dest = troot / base
+        rdest = dest.resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    if rdest.parent != troot and troot not in rdest.parents:
+        return False
+    if _is_write_denied(str(rdest)):
+        return False
     try:
         dest.write_bytes(data)
         return True

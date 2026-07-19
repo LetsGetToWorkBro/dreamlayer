@@ -197,16 +197,19 @@ def _harden_windows_acl(path: str) -> None:
     try:
         sid = _current_user_sid()
     except Exception as exc:             # ctypes/token lookup is fragile; degrade
-        log.warning("owner-only ACL: SID lookup failed for %s (%s); leaving the "
-                    "inherited ACL baseline (the state dir is hardened too)",
-                    path, exc)
-        return
+        sid = None
+        log.warning("owner-only ACL: SID lookup failed for %s (%s); applying the "
+                    "SID-independent owner-only DACL (OWNER RIGHTS)", path, exc)
     argv = _owner_only_icacls_argv(path, sid)
     if argv is None:
-        log.warning("owner-only ACL: could not resolve the current-user SID for "
-                    "%s; leaving the inherited ACL baseline (the state dir is "
-                    "hardened too)", path)
-        return
+        # SID unresolvable → do NOT leave the inherited (possibly Users-readable)
+        # baseline (the old fail-OPEN). Fall back to a SID-INDEPENDENT owner-only
+        # grant: OWNER RIGHTS (S-1-3-4) + CREATOR OWNER (S-1-3-0) keep the app
+        # (which OWNS the files it creates) in, while /inheritance:r evicts
+        # Users/Everyone — fail-CLOSED for confidentiality with no lockout risk,
+        # since the owner always retains WRITE_DAC even if the grant misbehaves
+        # (audit 2026-07-19).
+        argv = _owner_only_icacls_argv_sidless(path)
     try:
         subprocess.run(
             argv, check=True, capture_output=True,
@@ -236,6 +239,33 @@ def _owner_only_icacls_argv(path: str, user_sid: Optional[str]) -> Optional[list
             "*S-1-5-18:F",        # LocalSystem
             "*S-1-5-32-544:F",    # Administrators
             "*" + user_sid + ":F"]
+
+
+def _owner_only_icacls_argv_sidless(path: str) -> list:
+    """SID-INDEPENDENT owner-only DACL, used when the current-user SID can't be
+    resolved (a domain box, a fragile ctypes token lookup).
+
+    Instead of the OLD fail-OPEN (skip hardening, leave the inherited baseline
+    that may grant BUILTIN\\Users read), grant Full control to LocalSystem,
+    Administrators, and the OWNER via two WELL-KNOWN, SID-independent principals:
+
+      * ``S-1-3-4`` OWNER RIGHTS   — full control for whoever currently owns the
+        object (the app owns the files it creates), so access never depends on
+        resolving that user's SID;
+      * ``S-1-3-0`` CREATOR OWNER  — an inheritable placeholder replaced, on each
+        child created under a hardened dir, with the CREATOR's SID, so files born
+        inside inherit an owner grant too.
+
+    ``/inheritance:r`` still strips the inherited Users/Everyone ACEs, so no other
+    regular user can read the secrets — fail-CLOSED for confidentiality — while
+    the owner can never be locked out (OWNER RIGHTS plus the owner's implicit
+    WRITE_DAC). Extracted as a pure builder so a cross-platform test pins the
+    grant shape without a Windows box (audit 2026-07-19)."""
+    return ["icacls", path, "/inheritance:r", "/grant:r",
+            "*S-1-5-18:F",        # LocalSystem
+            "*S-1-5-32-544:F",    # Administrators
+            "*S-1-3-4:F",         # OWNER RIGHTS — the current owner, SID-independent
+            "*S-1-3-0:F"]         # CREATOR OWNER — inherited by children as their creator
 
 
 def _harden_state_dir(d) -> None:
@@ -341,6 +371,72 @@ def _is_index_denied(path: str) -> bool:
         root = home / name
         if p == root or root in p.parents:
             return True
+    return False
+
+
+# Locations whose mere presence makes code run at login / shell start. Writing a
+# file into one turns a benign "drop a file in a watched folder" into code
+# execution or boot persistence — so every network-reachable WRITE is refused
+# here, on TOP of _is_allowed_root's home-tree confinement (audit 2026-07-19).
+# Relative to $HOME unless noted; matched after full path resolution so a symlink
+# or `..` can't smuggle a target past the check.
+_AUTORUN_DIRS = (
+    "Library/LaunchAgents", "Library/LaunchDaemons",          # macOS agents/daemons
+    ".config/autostart", ".config/systemd", ".local/share/systemd",
+    ".config/environment.d",                                  # Linux XDG autostart / user units
+    "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",  # Windows Startup
+)
+_AUTORUN_SYSTEM_DIRS = ("/Library/LaunchAgents", "/Library/LaunchDaemons")
+_AUTORUN_FILES = (
+    ".bashrc", ".bash_profile", ".bash_login", ".bash_aliases", ".profile",
+    ".zshrc", ".zprofile", ".zshenv", ".zlogin", ".xprofile", ".xinitrc",
+    ".config/fish/config.fish",
+)
+
+
+def _is_write_denied(path: str) -> bool:
+    """True if a network-reachable WRITE to `path` must be refused because the
+    destination would execute code at login/shell start, is a secret-at-rest
+    (~/.ssh, ~/.aws, ~/.gnupg), or is the Brain's OWN state (token + API keys).
+
+    _is_allowed_root already confines writes to the home tree; this closes the
+    residual privilege escalation of materializing a LaunchAgent / autostart
+    .desktop / shell rc / authorized_keys INSIDE that tree (audit 2026-07-19).
+    The path is fully resolved first, so a symlink placed in a watched folder or
+    a `..`/absolute `name` cannot smuggle a denied target past the check; an
+    unresolvable path is denied (default-deny)."""
+    try:
+        p = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return True
+    # Brain state dir (token + provider keys) + secret dotdirs — reuse the index
+    # denylist so the two never drift.
+    if _is_index_denied(str(p)):
+        return True
+    for sysdir in _AUTORUN_SYSTEM_DIRS:
+        try:
+            sp = Path(sysdir).resolve()
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if p == sp or sp in p.parents:
+            return True
+    try:
+        home = Path.home().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    for rel in _AUTORUN_DIRS:
+        try:
+            root = (home / rel).resolve()
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if p == root or root in p.parents:
+            return True
+    for rel in _AUTORUN_FILES:
+        try:
+            if p == (home / rel).resolve():
+                return True
+        except (OSError, RuntimeError, ValueError):
+            continue
     return False
 
 
@@ -456,6 +552,12 @@ class BrainConfig:
         # _write_upload, the index — see the same string they always did.
         if not _is_allowed_root(path):
             return False
+        # Also refuse an auto-run / secret / Brain-state directory as a watched
+        # folder: watching one makes it an upload target, and it holds nothing the
+        # index should ingest anyway (audit 2026-07-19). _is_allowed_root confines
+        # to home; this removes the sensitive sub-trees inside it.
+        if _is_write_denied(path):
+            return False
         p = str(Path(path).expanduser())
         if p not in self.folders:
             self.folders.append(p)
@@ -473,8 +575,11 @@ class BrainConfig:
         """Drop any watched folder that isn't allow-listed. Called on load and
         after a restore, so a hand-edited/pre-remediation config file or a
         crafted backup cannot reintroduce a path the add-folder gate would have
-        refused (refute-remediation 2026-07)."""
-        self.folders = [f for f in self.folders if _is_allowed_root(f)]
+        refused (refute-remediation 2026-07). The auto-run/secret denylist is
+        applied here too, so a legacy config that watched one before the
+        2026-07-19 gate landed is dropped on the next load."""
+        self.folders = [f for f in self.folders
+                        if _is_allowed_root(f) and not _is_write_denied(f)]
 
     # -- persistence -----------------------------------------------------
 
@@ -650,10 +755,13 @@ class ActivityLog:
     freely-rewritable text file with clear()/prune()/restore() and no signature).
     """
 
-    def __init__(self, cfg_dir: Path | str, signer=None):
+    def __init__(self, cfg_dir: Path | str, signer=None, watermark=None):
         self.path = Path(cfg_dir) / ACTIVITY_FILE
         self._head_path = self.path.with_name(self.path.name + ".head")
         self._signer = signer
+        # External rollback/wipe watermark (see _ReceiptWatermark). None → the
+        # in-file .head anchor is the only length check (unchanged behavior).
+        self._watermark = watermark
         self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
         self._next_seq = 0
         self._loaded = False
@@ -693,6 +801,16 @@ class ActivityLog:
             except OSError:
                 pass
             raise
+        # Advance the external rollback watermark to the just-committed count.
+        # Only reached on a successful anchor write, and only through the app's
+        # own code path — an attacker editing the files out-of-band never runs
+        # this, so a later verify() sees the mark ahead of the file (audit
+        # 2026-07-19). Best-effort inside _ReceiptWatermark; a legit prune lowers
+        # _next_seq and therefore the mark, so it stays consistent. Tagged with
+        # the signing pubkey so a later reinstall's stale mark can't false-alarm.
+        if self._watermark is not None:
+            self._watermark.set(self._next_seq,
+                                getattr(self._signer, "public_key_hex", ""))
 
     def _read_head(self) -> Optional[dict]:
         """The verified head anchor, or None (absent / unverifiable / no signer)."""
@@ -844,6 +962,25 @@ class ActivityLog:
             # pre-anchor legacy log). Fail-safe — report it rather than pass.
             out["ok"] = False
             out["reason"] = "signed log has no valid head anchor (deleted or legacy)"
+        # Rollback / wipe detection via the EXTERNAL watermark. Everything above
+        # reads only the two state-dir files, so a whole-state snapshot-restore
+        # (older validly-signed activity.jsonl + .head) OR a full wipe of both is
+        # self-consistent and passes — the classic rollback the in-file anchor
+        # can't see because it's rolled back too. The watermark lives off the
+        # state dir (the keychain), records the last committed count, and only the
+        # app advances it — so a file now SHORTER than the mark is an out-of-band
+        # rollback/wipe (a wipe is just the mark > 0 with signed == 0). A missing
+        # mark (None) means no verdict, never a false tamper (audit 2026-07-19).
+        if self._watermark is not None:
+            mark = self._watermark.get(pub)
+            if mark is not None and mark > signed:
+                out["ok"] = False
+                out["rolled_back"] = True
+                if out.get("first_broken") is None:
+                    out["first_broken"] = signed
+                out.setdefault("reason",
+                               f"ledger rolled back or wiped: watermark attests "
+                               f"{mark} committed records, file has {signed}")
         return out
 
     def receipt(self, n: int = 2000) -> dict:
@@ -946,6 +1083,80 @@ def activity_receipt_signer(cfg_dir: Path | str):
         key = os.urandom(32)
         store.set("receipt", key)                    # set() cascades; never crashes
     return Signer(key)
+
+
+class _ReceiptWatermark:
+    """The receipt ledger's committed length, persisted OUTSIDE the ledger files
+    so a rollback/wipe of the state dir cannot revert it alongside the data.
+
+    The .head anchor defeats a tail-truncation an attacker CAN'T re-sign — but it
+    is itself a file in the state dir, so restoring an OLDER validly-signed
+    {activity.jsonl, .head} snapshot, or deleting BOTH, is self-consistent and
+    slips past verify()'s in-file checks (refute 2026-07-19). This records the
+    count as of the last LEGITIMATE write (add/prune/restore, which the app makes
+    through the key), in the secret store — the OS keychain on the shipped app,
+    which a state-dir snapshot-restore does NOT touch. An out-of-band rollback or
+    wipe the app never committed leaves it stale, so verify() sees the file now
+    holds fewer records than the mark attests and flags it. Best-effort: any
+    backend miss returns None → no detection, NEVER a false tamper; a legit prune
+    lowers the mark (it goes through _write_head), so it never false-positives."""
+    _NAME = "receipt_hw"
+
+    def __init__(self, store_or_factory):
+        # Accept a ready SecretStore-like object (tests) OR a zero-arg factory
+        # (production), building the store LAZILY on first use so merely
+        # constructing a Brain never probes the OS keychain — only an actual
+        # add()/verify() does (keeps the test suite and cold start fast).
+        self._sf = store_or_factory
+        self._store = None
+
+    def _get_store(self):
+        if self._store is None:
+            self._store = self._sf() if callable(self._sf) else self._sf
+        return self._store
+
+    def get(self, pub: str) -> Optional[int]:
+        # Return the committed count ONLY when the stored mark belongs to the
+        # CURRENT signing key. The watermark deliberately outlives the state dir
+        # (keychain), so after a legitimate reinstall — cfg dir gone, a fresh seed
+        # minted, empty ledger — a stale mark from the OLD key must NOT read as a
+        # rollback. A key change is caught by the client's key-pin instead; this
+        # server check targets the same-key rollback/truncation the client can't
+        # see. Best-effort: any miss/parse error → None (no verdict).
+        try:
+            raw = self._get_store().get(self._NAME)
+            if not raw:
+                return None
+            doc = json.loads(raw.decode())
+            if doc.get("pub") != pub:
+                return None
+            return int(doc["count"])
+        except Exception:
+            return None
+
+    def set(self, count: int, pub: str) -> None:
+        try:
+            self._get_store().set(
+                self._NAME,
+                json.dumps({"pub": pub, "count": int(count)}).encode())
+        except Exception:
+            pass
+
+
+def activity_receipt_watermark(cfg_dir: Path | str):
+    """A keychain-first rollback watermark for the receipt ledger, or None when
+    crypto/secret-store is unavailable (the ledger then relies on the in-file
+    anchor alone, fail-safe). prefer_keyring=True — UNLIKE the seed (which must be
+    STABLE and so pins to the durable file), a watermark miss is harmless (it
+    degrades to no-detection, never a wrong verdict), so it prefers the keychain
+    precisely because that lives OFF the state dir the attacker rolls back."""
+    try:
+        from ...secret_store import SecretStore
+    except Exception:
+        return None
+    # Pass a factory (not a live store) so the keychain is probed lazily on first
+    # add()/verify(), never at Brain construction.
+    return _ReceiptWatermark(lambda: SecretStore(cfg_dir, prefer_keyring=True))
 
 
 def _restore_jsonl(path: Path, items) -> None:
