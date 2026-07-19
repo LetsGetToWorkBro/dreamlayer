@@ -584,7 +584,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       <div style="flex:1"><div class="conn-t">DreamLayer&nbsp;Cloud <span id="planBadge" style="color:var(--amber)">· coming soon</span></div>
         <div class="conn-s">An optional hosted tier — everything below is <i>added</i>; the local app
           never loses a feature and always stays free and open.</div></div>
-      <button class="ghost" id="notifyBtn" onclick="joinWaitlist()">Notify me</button></div>
+      <button class="ghost" id="notifyBtn" onclick="showNotify()">Notify me</button></div>
+    <div id="notifyForm" style="display:none;margin-top:10px">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="email" id="notifyEmail" autocomplete="email" placeholder="you@example.com"
+               onkeydown="if(event.key==='Enter')joinWaitlist()" style="min-width:220px">
+        <button class="sm" id="notifySubmit" onclick="joinWaitlist()">Notify me</button></div>
+      <div id="notifyStatus" class="conn-s" style="margin-top:6px">We'll email you once, when Cloud opens — nothing else, ever.</div>
+    </div>
     <div id="planRows"></div>
   </section>
 
@@ -1043,23 +1050,41 @@ function renderPlan(plan){
   const rows=$("planRows"); if(!rows||!plan)return;
   const onCloud=plan.plan==="cloud";
   if(onCloud){$("planBadge").textContent="· active";$("planBadge").style.color="var(--success)";
-    const b=$("notifyBtn"); if(b)b.style.display="none";}
+    const b=$("notifyBtn"); if(b)b.style.display="none";
+    const f=$("notifyForm"); if(f)f.style.display="none";}   // already on Cloud — no waitlist
   rows.innerHTML=(plan.cloud_caps||[]).map(c=>`
     <div class="conn" style="padding:8px 0">
       <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${c.active?"var(--success)":"var(--ghost)"}"></span>
       <div class="conn-s" style="flex:1">${esc(c.info)}</div>
       <span class="sstate">${c.active?"active":"with Cloud"}</span></div>`).join("");
 }
+function showNotify(){const f=$("notifyForm");if(f)f.style.display="";
+  const b=$("notifyBtn");if(b)b.style.display="none";
+  const e=$("notifyEmail");if(e)e.focus();}
+function validEmail(s){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);}
 async function joinWaitlist(){
-  const email=prompt("DreamLayer Cloud waitlist — we'll email you once, when it opens.\n\nYour email:");
-  if(!email)return;
+  const email=($("notifyEmail").value||"").trim();
+  const st=$("notifyStatus"), btn=$("notifySubmit");
+  if(!validEmail(email)){st.style.color="var(--amber)";st.textContent="That doesn't look like an email address.";$("notifyEmail").focus();return;}
+  btn.disabled=true;const orig=btn.textContent;btn.textContent="Joining…";
+  st.style.color="var(--muted)";st.textContent="";
   try{
     const r=await fetch(CLOUD_WAITLIST,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({email:email})});
-    const d=await r.json();
-    if(r.ok&&d.joined){toast(d.already?"You're already on the list":"You're on the list — #"+d.count);}
-    else toast(d.error||"That email didn't look right");
-  }catch(e){toast("Couldn't reach the waitlist — try again later");}
+    const d=await r.json().catch(()=>({}));
+    if(r.ok&&d.joined){
+      $("notifyForm").innerHTML=`<div class="conn-s" style="color:var(--success)">✓ `+
+        (d.already?"You're already on the list — we'll email you when Cloud opens."
+                  :"You're on the list"+(d.count?" — #"+esc(String(d.count)):"")+". We'll email you once, when Cloud opens.")+
+        `</div>`;
+    }else{
+      st.style.color="var(--amber)";st.textContent=(d&&d.error)?d.error:"That email didn't look right.";
+      btn.disabled=false;btn.textContent=orig;
+    }
+  }catch(e){
+    st.style.color="var(--amber)";st.textContent="Couldn't reach the waitlist — check your connection and try again.";
+    btn.disabled=false;btn.textContent=orig;
+  }
 }
 
 let toastT; function toast(m){const t=$("toast");t.innerHTML='<span class="dot"></span>'+esc(m);

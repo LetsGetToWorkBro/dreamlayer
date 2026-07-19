@@ -185,3 +185,13 @@ class TestOpenAICompatPresets:
             # so the dropdown pre-fills exactly what backends would build.
             entry = f'{key}:{{base:"{base_url}",model:"{p["model"]}",key:true}}'
             assert html.count(entry) == 2
+
+    def test_cloud_waitlist_uses_an_inline_field_not_a_browser_prompt(self):
+        # the "Notify me" waitlist join is a polished inline email field with
+        # validation, not a clunky window.prompt() dialog (fast-follow 2026-07-19).
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        assert 'id="notifyEmail"' in html and 'type="email"' in html
+        assert "showNotify" in html and "validEmail" in html
+        # the waitlist flow no longer prompt()s for the email
+        assert 'prompt("DreamLayer Cloud waitlist' not in html
