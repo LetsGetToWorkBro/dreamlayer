@@ -92,7 +92,7 @@ _WINDOWS_COPY: tuple[tuple[str, str], ...] = (
 _PAGE = r"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
+<link rel="icon" id="favJuno" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
 <style>
   /* ============================================================
      DreamLayer Brain — Mac OS 8.1 "Platinum" control panel.
@@ -1336,9 +1336,13 @@ async function syncRemNow(){$("remStatus").textContent="Syncing…";
 function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
   `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}
 /* the live chip: pixel Juno wearing the same traffic-light dot as the
-   menu bar / tray — one face for the connection story everywhere */
+   menu bar / tray — one face for the connection story everywhere. The
+   favicon takes the full-body TINT variant: at tab size a badge is a
+   speck, but a whole-color Juno reads from across the dock. */
 function liveChip(state,text){const j=$("liveJuno");
   if(j)j.src="/panel-assets/juno_status_"+state+".png";
+  const f=document.getElementById("favJuno");
+  if(f)f.href="/panel-assets/juno_status_tint_"+state+".png";
   const t=$("livetext");if(t)t.textContent=text;}
 async function refreshStatus(){
   let s; try{s=await api("/dreamlayer/status");}catch(e){liveChip("offline","Brain offline");return;}

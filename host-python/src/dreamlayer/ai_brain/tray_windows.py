@@ -198,19 +198,40 @@ def read_login_entry(value_name: str = RUN_VALUE) -> str | None:
 # The tray app (pystray; Windows only)
 # ---------------------------------------------------------------------------
 
-_TRAY_SPRITE = Path(__file__).resolve().parent / "server" / "assets" / "juno_tray.png"
+_ASSETS_DIR = Path(__file__).resolve().parent / "server" / "assets"
+_MENU_SPRITE = _ASSETS_DIR / "juno_menu.png"     # mono pixel Juno, tinted live
+_TRAY_SPRITE = _ASSETS_DIR / "juno_tray.png"     # full-color Juno (badge fallback)
+_INK = (6, 19, 22)
 
 
 def _dot_image(color: str, size: int = 64):
-    """Pixel Juno wearing the status dot — the same face the Mac menu bar and
-    the panel's live chip use, so every surface tells the connection story the
-    same way (the tested dot_color contract is untouched; this is only
-    rendering). The badge is drawn here in the status color; if the sprite
-    isn't in this install, the old ring-and-core mark draws instead — the art
-    degrades, it never fails."""
+    """Pixel Juno tinted head-to-wing in the status color — the same treatment
+    the Mac menu bar wears (the tested dot_color contract is untouched; this is
+    only rendering). At tray size (~16px) a corner badge shrinks to a few
+    pixels, but a whole-body tint reads at a glance — below ~24px she IS the
+    light. The tint is applied here from the mono sprite so dot_color stays the
+    single color authority. Fallbacks, in order: the full-color Juno wearing a
+    badge dot, then the old ring-and-core mark — the art degrades, never fails."""
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
+    try:
+        mono = Image.open(_MENU_SPRITE).convert("RGBA")
+        c = tuple(int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+        px = mono.load()
+        for y in range(mono.height):
+            for x in range(mono.width):
+                r, g, b, a = px[x, y]
+                if a == 0:
+                    continue
+                lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                px[x, y] = tuple(round(_INK[i] + (c[i] - _INK[i]) * lum)
+                                 for i in range(3)) + (a,)
+        art = mono.resize((size, size), Image.NEAREST)  # 32 -> 64 stays crisp
+        img.paste(art, (0, 0), art)
+        return img
+    except Exception:
+        pass
     try:
         art = Image.open(_TRAY_SPRITE).convert("RGBA")
         art = art.resize((size, size), Image.NEAREST)   # 128 -> 64 stays crisp
@@ -218,7 +239,7 @@ def _dot_image(color: str, size: int = 64):
         r = size * 11 // 64                             # the site set's badge: 11px dot at 32
         x1 = y1 = size - 1
         x0, y0 = x1 - 2 * r, y1 - 2 * r
-        d.ellipse((x0 - 2, y0 - 2, x1 + 2, y1 + 2), fill=(6, 19, 22, 255))
+        d.ellipse((x0 - 2, y0 - 2, x1 + 2, y1 + 2), fill=_INK + (255,))
         d.ellipse((x0, y0, x1, y1), fill=color)
         g = max(2, size // 16)                          # single top-lit glint pixel
         d.rectangle((x0 + g + g // 2, y0 + g + g // 2,
