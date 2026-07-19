@@ -13,6 +13,7 @@ import json
 from dreamlayer.plugins import PluginContext, PluginRegistry, PluginPackage, validate
 from dreamlayer.plugins.pokemon_price import (
     build_query, parse_card, best_price, lookup,
+    normalize_condition, adjust_for_condition,
     PokemonPriceProvider, pokemon_price_plugin,
 )
 from dreamlayer.object_lens.schema import ObjectSighting
@@ -164,6 +165,82 @@ def test_plugin_persists_and_restores_the_api_key():
     reg2.load(plug2)
     reg2.start_all()
     assert plug2.provider.api_key == "key-xyz"
+
+
+# -- condition, grail, haul, freshness (the card-show workflow) ---------------
+
+def test_normalize_condition_folds_aliases():
+    assert normalize_condition("Near Mint") == "nm"
+    assert normalize_condition("lightly played") == "lp"
+    assert normalize_condition("HP") == "hp"
+    assert normalize_condition("") == "nm" and normalize_condition("???") == "nm"
+
+
+def test_adjust_for_condition_discounts_off_near_mint():
+    assert adjust_for_condition(100.0, "nm") == 100.0
+    assert adjust_for_condition(100.0, "lp") == 85.0
+    assert adjust_for_condition(100.0, "dmg") == 40.0
+
+
+def test_parse_card_captures_the_as_of_date():
+    got = parse_card({"name": "Pikachu",
+                      "tcgplayer": {"updatedAt": "2026/07/15",
+                                    "prices": {"normal": {"market": 3.0}}}})
+    assert got["updated"] == "2026/07/15"
+
+
+def test_provider_adjusts_the_price_for_condition():
+    body = json.dumps({"data": [{"name": "Charizard",
+        "tcgplayer": {"prices": {"holofoil": {"market": 300.0}}}}]})
+    p = PokemonPriceProvider(fetch_fn=lambda u: body)
+    rows = p.build(_sighting(name="Charizard", condition="LP"))     # per-card condition
+    d = rows[0].detail
+    assert "≈$255 LP" in d and "NM $300" in d                       # 300 * 0.85 = 255
+
+
+def test_provider_flags_a_grail_over_the_threshold():
+    body = json.dumps({"data": [{"name": "Charizard",
+        "tcgplayer": {"prices": {"holofoil": {"market": 310.0}}}}]})
+    p = PokemonPriceProvider(fetch_fn=lambda u: body, grail_threshold=100.0)
+    rows = p.build(_sighting(name="Charizard"))
+    assert "🔥" in rows[0].label and "GRAIL" in rows[0].detail
+    # a cheap card doesn't trip it
+    cheap = json.dumps({"data": [{"name": "Rattata",
+        "tcgplayer": {"prices": {"normal": {"market": 0.25}}}}]})
+    p2 = PokemonPriceProvider(fetch_fn=lambda u: cheap, grail_threshold=100.0)
+    assert "🔥" not in p2.build(_sighting(name="Rattata"))[0].label
+
+
+def test_provider_keeps_a_running_haul_tally():
+    cards = {
+        "Charizard": {"name": "Charizard", "tcgplayer": {"prices": {"holofoil": {"market": 300.0}}}},
+        "Blastoise": {"name": "Blastoise", "tcgplayer": {"prices": {"holofoil": {"market": 100.0}}}},
+    }
+    def fetch(url):
+        who = "Charizard" if "Charizard" in url else "Blastoise"
+        return json.dumps({"data": [cards[who]]})
+    p = PokemonPriceProvider(fetch_fn=fetch, grail_threshold=1e9)   # no grail noise
+    p.build(_sighting(name="Charizard"))                            # 1 card → no tally row yet
+    rows = p.build(_sighting(name="Blastoise"))                     # 2 cards → tally appears
+    haul = [r for r in rows if r.label == "haul"]
+    assert haul and haul[0].value == "$400" and "2 cards" in haul[0].detail
+    assert p.session_total() == (2, 400.0)
+
+
+def test_plugin_persists_condition_and_grail_threshold():
+    ctx = PluginContext(capabilities=frozenset({"object_lens", "network"}))
+    plug = pokemon_price_plugin(fetch_fn=lambda u: "{}")
+    reg = PluginRegistry(ctx)
+    reg.load(plug)
+    plug.set_condition("mp")
+    plug.set_grail_threshold(250.0)
+    # a fresh instance on the same context restores both on start()
+    plug2 = pokemon_price_plugin(fetch_fn=lambda u: "{}")
+    reg2 = PluginRegistry(ctx)
+    reg2.load(plug2)
+    reg2.start_all()
+    assert plug2.provider.condition == "mp"
+    assert plug2.provider.grail_threshold == 250.0
 
 
 def test_packaged_passes_the_validation_gate():

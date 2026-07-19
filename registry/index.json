@@ -283,7 +283,7 @@
       "version": "0.1.0",
       "author": "DreamLayer Team",
       "official": true,
-      "description": "Point at a Pok\u00e9mon card and see what it's worth \u2014 set, number, rarity, and the live market price with a low\u2013high band, matched against the Pok\u00e9mon TCG API. Bring your own free key for heavy use; the price desk follows you across sessions.",
+      "description": "Point at a Pok\u00e9mon card and see what it's worth \u2014 condition-adjusted market price with a low\u2013high band and an as-of date, matched against the Pok\u00e9mon TCG API. Flags your grails and tallies your haul as you scan a table. Bring your own free key for heavy use.",
       "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/pokemon_price.py",
       "url": "registry/packages/pokemon-price-0.1.0.json",
       "checksum": "sha256:1e031ea79d87533651d4fba067c8db38ce229f811857a947513c5998963105df",
@@ -296,11 +296,13 @@
         "pokemon",
         "tcg",
         "connector",
-        "worldlens"
+        "worldlens",
+        "featured"
       ],
       "forwho": "For collectors, sorters, and anyone holding a card they can't quite value.",
       "long": [
-        "Look at a Pok\u00e9mon card and the panel names the printing and tells you the going rate \u2014 the market price with a low\u2013high band.",
+        "Look at a Pok\u00e9mon card and the panel names the printing and tells you the going rate \u2014 the market price with a low\u2013high band and the date it's from.",
+        "Built for the card-show table: dial in the card's condition (NM/LP/MP/HP/DMG) and the price adjusts the way a vendor would, and a running haul tally sums the singles as you scan them.",
         "Matched live against the Pok\u00e9mon TCG API (pokemontcg.io). Add your own free API key once for heavy use and it's remembered across sessions.",
         "Only the card's printed name leaves the device to do the lookup \u2014 the card, and that it's yours, stays yours."
       ],

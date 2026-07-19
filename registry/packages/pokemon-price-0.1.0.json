@@ -5,7 +5,7 @@
     "entry": "plugin:plugin",
     "author": "DreamLayer Team",
     "official": true,
-    "description": "Point at a Pokémon card and see what it's worth — set, number, rarity, and the live market price with a low–high band, matched against the Pokémon TCG API. Bring your own free key for heavy use; the price desk follows you across sessions.",
+    "description": "Point at a Pokémon card and see what it's worth — condition-adjusted market price with a low–high band and an as-of date, matched against the Pokémon TCG API. Flags your grails and tallies your haul as you scan a table. Bring your own free key for heavy use.",
     "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/pokemon_price.py",
     "requires": [
       "object_lens",
@@ -16,7 +16,8 @@
     "signature": "",
     "forwho": "For collectors, sorters, and anyone holding a card they can't quite value.",
     "long": [
-      "Look at a Pokémon card and the panel names the printing and tells you the going rate — the market price with a low–high band.",
+      "Look at a Pokémon card and the panel names the printing and tells you the going rate — the market price with a low–high band and the date it's from.",
+      "Built for the card-show table: dial in the card's condition (NM/LP/MP/HP/DMG) and the price adjusts the way a vendor would, and a running haul tally sums the singles as you scan them.",
       "Matched live against the Pokémon TCG API (pokemontcg.io). Add your own free API key once for heavy use and it's remembered across sessions.",
       "Only the card's printed name leaves the device to do the lookup — the card, and that it's yours, stays yours."
     ],
