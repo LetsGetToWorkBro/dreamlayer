@@ -314,6 +314,35 @@ API & device seams: [`docs/INTEGRATION.md`](docs/INTEGRATION.md) ·
 Product spec: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) ·
 Lenses: [`docs/LENSES.md`](docs/LENSES.md)
 
+## Contributors
+
+[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors)
+
+DreamLayer is built in the open, and it's better for the people who give their
+time to it. Thanks goes to these wonderful people
+([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/aastha-m22"><img src="https://avatars.githubusercontent.com/u/177316461?v=4?s=100" width="100px;" alt="aastha-m22"/><br /><sub><b>aastha-m22</b></sub></a><br /><a href="#translation-aastha-m22" title="Translation">🌍</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the
+[all-contributors](https://github.com/all-contributors/all-contributors)
+specification. Contributions of any kind — code, translations, docs, bug
+reports — are welcome and recognized here.
+
 ## License
 
 DreamLayer is open source under the [Apache License 2.0](LICENSE) — the
