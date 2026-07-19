@@ -1548,7 +1548,8 @@ def _capability_payload(brain: Brain) -> dict:
     made durable, since the bundled .app has no env of its own to edit."""
     import os
     import sys
-    from ...capabilities import PROFILES, packs_report, report, summary
+    from ...capabilities import (PROFILES, packs_report, report, summary,
+                                 pack_installer_available)
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
@@ -1561,9 +1562,13 @@ def _capability_payload(brain: Brain) -> dict:
             "profiles": {k: list(v) for k, v in PROFILES.items()},
             "disabled": list(brain.config.disabled_caps),
             "packs": packs,
-            # py2app sets sys.frozen — the panel words install hints accordingly
-            # (a sealed, signed bundle can't pip-install into itself)
-            "frozen": bool(getattr(sys, "frozen", False))}
+            # py2app/PyInstaller set sys.frozen. The bundle can't pip-install into
+            # ITSELF, but it CAN install packs into the writable sidecar when it
+            # carries pip — pack_installable says which, so the panel offers the
+            # one-click 'Install pack' whenever it will actually work and only
+            # falls back to 'runs on a source install' when it truly can't.
+            "frozen": bool(getattr(sys, "frozen", False)),
+            "pack_installable": pack_installer_available()}
 
 
 # --- pack installer ----------------------------------------------------------
@@ -1593,16 +1598,50 @@ def _run_pip(reqs: list) -> tuple:
 _PACK_RUNNER = _run_pip
 
 
+def _run_pip_target(reqs: list, target: str) -> tuple:
+    """Frozen-app pack runner: install into a WRITABLE sidecar via in-process pip
+    ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
+    out to, and must not — can not — install into itself). pip runs inside THIS
+    interpreter, so it resolves wheels for the bundled Python's own version and
+    platform. Returns (ok, detail). Absent pip → a clear failure, never a crash —
+    the panel then still shows the honest source-install note (audit 2026-07-19)."""
+    try:
+        from pip._internal.cli.main import main as pip_main
+    except Exception as exc:                     # pip not bundled in this build
+        return False, f"this build can't add packs (pip unavailable: {exc})"
+    argv = ["install", "--target", str(target), "--upgrade", "--no-input",
+            "--disable-pip-version-check", "--no-warn-script-location", *reqs]
+    try:
+        code = pip_main(argv)
+    except SystemExit as e:                       # pip can raise SystemExit
+        code = e.code if isinstance(e.code, int) else 1
+    except Exception as exc:                       # noqa: BLE001 — never crash the job thread
+        return False, str(exc)[-400:]
+    if code == 0:
+        import importlib
+        importlib.invalidate_caches()             # so find_spec sees the new packages now
+        return True, "installed"
+    return False, f"pip exited {code}"
+
+
+_PACK_RUNNER_FROZEN = _run_pip_target
+
+
 def _install_pack(brain: Brain, pack_key: str) -> dict:
-    """Validate and launch a pack install. Returns the job dict (or an error)."""
+    """Validate and launch a pack install. Returns the job dict (or an error).
+
+    In a SOURCE run, packs pip-install into the environment. In the FROZEN app
+    they install into the writable sidecar (<cfg>/site-packages, added to
+    sys.path at startup) via pip --target — so the one-click 'Install pack' works
+    in the bundled app too, instead of demanding a source install (audit
+    2026-07-19). If the frozen build carries no pip, the job fails honestly and
+    the panel keeps the source-install wording."""
     import sys
-    from ...capabilities import pack_requirements
-    if getattr(sys, "frozen", False):
-        return {"error": "this bundled app can't install into itself — "
-                         "packs install on a source-run Brain"}
+    from ...capabilities import pack_requirements, pack_site_dir
     reqs = pack_requirements(pack_key)
     if not reqs:
         return {"error": f"unknown pack: {pack_key}"}
+    frozen = bool(getattr(sys, "frozen", False))
     with _PACK_LOCK:
         if any(j.get("state") == "installing" for j in _PACK_JOBS.values()):
             return {"error": "another pack is already installing"}
@@ -1610,10 +1649,13 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
         _PACK_JOBS[pack_key] = job
 
     def work():
-        ok, detail = _PACK_RUNNER(reqs)
+        if frozen:
+            ok, detail = _PACK_RUNNER_FROZEN(reqs, str(pack_site_dir(brain.cfg_dir)))
+        else:
+            ok, detail = _PACK_RUNNER(reqs)
         job["state"] = "done" if ok else "failed"
-        job["detail"] = ("installed — restart the Brain to light it up"
-                         if ok else detail[-400:])
+        job["detail"] = ("installed — reload the panel; restart the Brain if a "
+                         "capability stays dark" if ok else (detail or "failed")[-400:])
         job["ts"] = time.time()
         brain.activity.add("config", f"Pack {pack_key} install "
                            + ("finished" if ok else "failed"))
@@ -1621,6 +1663,53 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
     threading.Thread(target=work, daemon=True).start()
     brain.activity.add("config", f"Pack {pack_key} install started")
     return job
+
+
+# --- Ollama model pull (background + progress) --------------------------------
+# A multi-GB pull (llama3.2-vision ≈ 8 GB) over one blocking request times the
+# browser out long before it finishes and shows no progress — so the "Pull"
+# button looks broken. Mirror the pack installer: kick a background thread that
+# STREAMS Ollama's pull progress into a job the panel polls, so the request
+# returns instantly and the panel shows a moving %.
+_PULL_JOBS: dict = {}                    # model name -> {"state","percent","detail","ts"}
+_PULL_LOCK = threading.Lock()
+
+
+def _pull_model_async(brain: Brain, name: str) -> dict:
+    """Start (or return the in-flight) background pull for `name`. Returns the
+    job dict immediately — never blocks on the download."""
+    name = (name or "").strip()
+    if not name:
+        return {"error": "no model name"}
+    with _PULL_LOCK:
+        cur = _PULL_JOBS.get(name)
+        if cur and cur.get("state") == "pulling":
+            return dict(cur)             # already pulling — don't start a second
+        job = {"state": "pulling", "percent": 0, "detail": "starting…", "ts": time.time()}
+        _PULL_JOBS[name] = job
+
+    def prog(pct, detail):
+        if pct is not None:
+            job["percent"] = pct
+        if detail:
+            job["detail"] = detail
+        job["ts"] = time.time()
+
+    def work():
+        from .backends import pull_model_stream
+        res = pull_model_stream(brain.config, name, on_progress=prog)
+        ok = bool(res.get("ok"))
+        job["state"] = "done" if ok else "failed"
+        job["detail"] = "pulled" if ok else (res.get("status") or "failed")[:200]
+        if ok:
+            job["percent"] = 100
+        job["ts"] = time.time()
+        brain.activity.add("config", f"Model {name} pull "
+                           + ("finished" if ok else "failed"))
+
+    threading.Thread(target=work, daemon=True).start()
+    brain.activity.add("config", f"Model {name} pull started")
+    return dict(job)
 
 
 def make_brain_server(brain: Brain, host: str = "127.0.0.1",
@@ -2199,8 +2288,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "summarize_emails": brain.config.summarize_emails})
 
         def _get_model_status(self, path, qs):
-            """Probe the configured Ollama endpoint."""
-            self._json(200, probe_ollama(brain.config))
+            """Probe the configured Ollama endpoint, plus any in-flight pull
+            progress so the panel can render a live % and stop polling when a
+            pull finishes."""
+            out = probe_ollama(brain.config)
+            with _PULL_LOCK:
+                out["pulls"] = {k: {"state": v.get("state"),
+                                    "percent": v.get("percent", 0),
+                                    "detail": v.get("detail", "")}
+                                for k, v in _PULL_JOBS.items()}
+            self._json(200, out)
 
         def _get_api_discover(self, path, qs):
             """One-click discovery: which local agent servers are running right
@@ -2625,10 +2722,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, brain.set_profile(self._body()))
 
         def _post_model_pull(self, path, qs):
-            """One-click Ollama pull — local-only (a long job on the box)."""
+            """Start a one-click Ollama pull — local-only. Returns immediately
+            with the job (state=pulling); the panel polls /model/status for the
+            live %. A multi-GB pull no longer blocks the request until it
+            finishes (which timed the browser out with no progress)."""
             if not self._from_localhost():
                 self._json(403, {"error": "local-only"}); return
-            self._json(200, brain.pull_model(self._body().get("model", "")))
+            self._json(200, _pull_model_async(brain, self._body().get("model", "")))
 
         def _post_people(self, path, qs):
             """Introduce/update or remove a person ({name, note, tags[, remove]})."""

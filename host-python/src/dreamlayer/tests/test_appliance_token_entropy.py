@@ -61,7 +61,7 @@ def test_frozen_appliance_mints_128bit_token(tmp_path, monkeypatch):
         def serve_forever(self):
             raise _Stop()
 
-    def _fake_make(brain, host, port):
+    def _fake_make(brain, host, port, tls_port=None):
         captured["token"] = brain.config.token
         captured["host"] = host
         return _FakeServer()
@@ -71,6 +71,10 @@ def test_frozen_appliance_mints_128bit_token(tmp_path, monkeypatch):
     # still runs, so the token's length reflects the byte count the code chose.
     monkeypatch.setattr(srv, "Brain", _FakeBrain)
     monkeypatch.setattr(srv, "make_brain_server", _fake_make)
+    # the appliance now auto-starts the Live Lens https sibling; stub it out so
+    # this token test stays about the token, not TLS.
+    import dreamlayer.ai_brain.server.tls as _tlsmod
+    monkeypatch.setattr(_tlsmod, "start_tls_sibling", lambda *a, **k: (None, 0))
 
     with pytest.raises(_Stop):
         app_main._serve(str(tmp_path), 7777)

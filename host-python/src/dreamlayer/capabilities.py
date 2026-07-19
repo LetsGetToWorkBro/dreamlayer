@@ -34,6 +34,7 @@ import os
 import sys
 from dataclasses import dataclass
 from importlib.util import find_spec
+from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
 # --- deployment profiles: which extras each target installs -------------------
@@ -440,6 +441,49 @@ def extras_requirements(extra: str) -> list[str]:
         return list(deps.get(extra, ()))
     except Exception:
         return []
+
+
+def pack_site_dir(cfg_dir) -> Path:
+    """The writable sidecar where the bundled (frozen) app installs pack wheels —
+    ``<cfg_dir>/site-packages``. A code-signed .app/.exe is SEALED (installing
+    into itself would break its signature + notarization), so packs land here and
+    are added to ``sys.path`` at startup instead. A source install has a normal
+    writable environment and doesn't use this."""
+    return Path(cfg_dir).expanduser() / "site-packages"
+
+
+def enable_pack_site(cfg_dir) -> Path:
+    """Put the pack sidecar on ``sys.path`` so packs installed there are
+    importable. Called once at startup (before the Brain builds) and idempotent.
+    Adding it even when empty means a later install into the SAME dir becomes
+    visible to find_spec after importlib.invalidate_caches() — so a pack can
+    light up without a restart. Returns the sidecar path."""
+    import site
+    d = pack_site_dir(cfg_dir)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return d
+    sd = str(d)
+    if sd not in sys.path:
+        site.addsitedir(sd)                    # honors any .pth and inserts on sys.path
+        if sd not in sys.path:                 # addsitedir is a no-op if already known to site
+            sys.path.insert(0, sd)
+    return d
+
+
+def pack_installer_available() -> bool:
+    """True when this process can actually INSTALL a pack — either a normal
+    (non-frozen) environment, or a frozen bundle that still carries an importable
+    ``pip`` (installs go into the sidecar via pip --target). Drives the panel:
+    only show a one-click 'Install pack' when it will really work; otherwise the
+    honest 'runs on a source install'."""
+    if not bool(getattr(sys, "frozen", False)):
+        return True
+    try:
+        return find_spec("pip") is not None
+    except BaseException:
+        return False
 
 
 def pack_requirements(pack_key: str) -> list[str]:

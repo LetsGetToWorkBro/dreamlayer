@@ -108,8 +108,22 @@ def _serve(cfg_dir: str, port: int, status: dict | None = None) -> None:
     brain.start_watching()                         # reindex watched folders on change
     brain.start_brief_scheduler()                  # morning brief at brief_hour
     brain.start_calendar_sync()                    # calendar → agenda (per-platform source)
+    # Auto-start the https sibling the Live Lens camera needs. This appliance
+    # binds 0.0.0.0 (the phone must reach it), and a phone browser opens its
+    # camera only on a SECURE context — so http-only made scanning the Live Lens
+    # QR appear to "do nothing" (the page loaded, the camera never started). The
+    # bundled app ships `cryptography`, so this normally succeeds; if it ever
+    # can't, it degrades to http-only rather than failing to launch.
+    tls_port = 0
     try:
-        server = make_brain_server(brain, host="0.0.0.0", port=port)
+        from dreamlayer.ai_brain.server.tls import start_tls_sibling
+        _tls_server, tls_port = start_tls_sibling(brain, "0.0.0.0", cfg_dir, port)
+    except Exception as exc:                        # noqa: BLE001 — never block launch
+        logging.getLogger("dreamlayer.appliance").warning(
+            "Live Lens https listener not started (%s); serving http only.", exc)
+    try:
+        server = make_brain_server(brain, host="0.0.0.0", port=port,
+                                   tls_port=tls_port or None)
     except Exception as exc:                        # bind failed (port in use, …)
         logging.getLogger("dreamlayer.appliance").error(
             "Brain server failed to start on port %s: %s", port, exc)
@@ -118,6 +132,7 @@ def _serve(cfg_dir: str, port: int, status: dict | None = None) -> None:
         return
     if status is not None:
         status["bound"] = True
+        status["tls_port"] = tls_port
     server.serve_forever()
 
 
@@ -193,6 +208,15 @@ def main() -> int:
     cfg_dir = _cfg_dir(argv)
     port = int(_flag(argv, "--port") or os.environ.get("DREAMLAYER_PORT", "7777"))
     Path(cfg_dir).mkdir(parents=True, exist_ok=True)
+
+    # Put the pack sidecar (<cfg>/site-packages) on sys.path BEFORE the server
+    # builds, so a capability pack the wearer installed one-click into the sealed
+    # bundle (which can't modify itself) is importable this run.
+    try:
+        from dreamlayer.capabilities import enable_pack_site
+        enable_pack_site(cfg_dir)
+    except Exception:                              # never block launch on this
+        pass
 
     # Single-instance guard: take an exclusive OS lock BEFORE starting a server.
     # Without it a 2nd launch hits the busy port :7777, its _serve daemon thread

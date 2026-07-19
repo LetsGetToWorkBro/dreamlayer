@@ -19,23 +19,34 @@ and pywebview are the Windows shell. The installer
 (installer.iss) wraps dist/DreamLayer into a per-user setup exe.
 """
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (collect_data_files, collect_submodules,
+                                     collect_all)
 
 datas = collect_data_files("dreamlayer")     # panel assets (webp/png/woff2), py.typed
 
+# pip (+ its vendored data) is bundled so the sealed installer can add optional
+# capability PACKS into its writable sidecar (%USERPROFILE%\.dreamlayer\
+# site-packages) via pip --target — one-click, no source install. collect_all
+# grabs pip's submodules, data (its CA bundle), and any binaries; if a build ever
+# omits it the panel degrades to the honest "runs on a source install".
+pip_datas, pip_binaries, pip_hidden = collect_all("pip")
+datas += pip_datas
+
 hiddenimports = (
     collect_submodules("dreamlayer")
+    + pip_hidden
     + [
         "pystray._win32",                    # pystray picks its backend dynamically
         "zeroconf", "ifaddr", "cryptography",
         "webview",                           # pywebview (WebView2) panel window
+        "setuptools", "wheel",               # pip's build helpers for --target installs
     ]
 )
 
 a = Analysis(
     ["..\\app_main.py"],
     pathex=[],
-    binaries=[],
+    binaries=pip_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
