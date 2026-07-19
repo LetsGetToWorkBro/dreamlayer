@@ -137,8 +137,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .live{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--muted);
         font:12.5px var(--chi);background:var(--surf);border:1px solid var(--frame);
         box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);padding:4px 11px}
-  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--success);
-        animation:pulse 2.4s var(--ease) infinite}
+  .live img.dot{width:16px;height:16px;display:block;image-rendering:pixelated}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,138,61,.5)}70%{box-shadow:0 0 0 7px rgba(31,138,61,0)}100%{box-shadow:0 0 0 0 rgba(31,138,61,0)}}
   h1{font-weight:700;letter-spacing:-.025em;font-size:2.1rem;margin:6px 0 2px;font-family:var(--sg)}
   .sub{color:var(--muted);margin:0 0 20px}
@@ -441,7 +440,8 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <div class="content">
   <div class="head-cine" aria-hidden="true"></div>
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
-    <span class="live"><span class="dot"></span><span id="livetext">Brain online</span></span></div>
+    <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
+      width="16" height="16" alt=""><span id="livetext">connecting…</span></span></div>
   <h1 id="pageTitle">Home</h1>
   <p class="sub" id="pageSub">This Mac mini is the brain — your files, your memory, your reach.</p>
 
@@ -1114,8 +1114,8 @@ async function loadCloudView(){
 }
 async function load(){
   loadMemFile(); loadCloudView();
-  let c; try{c=await api("/dreamlayer/config");}catch(e){$("livetext").textContent="offline";return;}
-  if(c.error){$("livetext").textContent="token needed";return;}
+  let c; try{c=await api("/dreamlayer/config");}catch(e){liveChip("offline","Brain offline");return;}
+  if(c.error){liveChip("offline","token needed");return;}
   const incog=c.config.network_mode==="lan_only";
   const fl=$("folders"),dt=$("dropTarget");fl.innerHTML="";dt.innerHTML="";
   const folders=c.config.folders||[];
@@ -1282,9 +1282,16 @@ async function syncRemNow(){$("remStatus").textContent="Syncing…";
 
 function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
   `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}
+/* the live chip: pixel Juno wearing the same traffic-light dot as the
+   menu bar / tray — one face for the connection story everywhere */
+function liveChip(state,text){const j=$("liveJuno");
+  if(j)j.src="/panel-assets/juno_status_"+state+".png";
+  const t=$("livetext");if(t)t.textContent=text;}
 async function refreshStatus(){
-  let s; try{s=await api("/dreamlayer/status");}catch(e){return;}
-  if(s.error)return;
+  let s; try{s=await api("/dreamlayer/status");}catch(e){liveChip("offline","Brain offline");return;}
+  if(s.error){liveChip("offline","Brain offline");return;}
+  liveChip(s.incognito?"incognito":(s.cloud&&!s.cloud_ready)?"cloud":"online",
+           s.incognito?"Incognito":(s.cloud&&!s.cloud_ready)?"Cloud not configured":"Brain online");
   const phone = s.phone_ago==null ? ["Not paired yet","off"]
     : s.phone_ago<120 ? [`Connected · seen ${s.phone_ago}s ago`,"ok"]
     : [`Paired · last seen ${Math.floor(s.phone_ago/60)}m ago`,"warn"];

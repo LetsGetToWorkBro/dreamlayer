@@ -160,6 +160,27 @@ def check_for_update(current: str | None = None, fetch_fn=None,
             "current": cur, "latest": latest, "url": url}
 
 
+# menu-bar sprites, keyed by the status_summary icon (same semantics as the
+# Windows tray's DOT_COLORS): pixel Juno wearing the traffic-light dot. They
+# ship in the package's server/assets, so the panel chip serves the same art.
+_ASSETS = Path(__file__).resolve().parent / "server" / "assets"
+STATUS_ICONS = {
+    "\U0001F7E2": "juno_status_online.png",
+    "\U0001F7E1": "juno_status_cloud.png",
+    "\U0001F576": "juno_status_incognito.png",
+    "⚪": "juno_status_offline.png",
+}
+
+
+def status_icon_path(summary: dict | None) -> str:
+    """Path of the menu-bar sprite for a status_summary() view. Unknown or
+    absent → the offline sprite (never a fake green), mirroring the tray's
+    dot_color contract. Pure — just the path; callers decide what to do if
+    the file isn't in this install."""
+    name = STATUS_ICONS.get((summary or {}).get("icon", ""), STATUS_ICONS["⚪"])
+    return str(_ASSETS / name)
+
+
 def launch_agent_plist(program_args: list[str], label: str = AGENT_LABEL,
                        working_dir: str | None = None,
                        env: dict | None = None,
@@ -498,7 +519,14 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
 
     class App(rumps.App):
         def __init__(self):
-            super().__init__("⚪", quit_button="Quit DreamLayer")
+            # pixel Juno wears the status dot in the menu bar; if the sprite
+            # isn't in this install, the emoji traffic light still works
+            icon0 = status_icon_path(None)
+            if os.path.exists(icon0):
+                super().__init__("DreamLayer", icon=icon0, template=False,
+                                 quit_button="Quit DreamLayer")
+            else:
+                super().__init__("⚪", quit_button="Quit DreamLayer")
             self.menu = ["Open panel", "Sync now", "Incognito", None,
                          "Check for Updates", None, "Status"]
             self.refresh(None)
@@ -515,7 +543,11 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # token from config and the dot self-heals — no user action needed.
             st = fetch_status(port, _token(), auth=auth)  # fetch ONCE per tick
             s = status_summary(st)
-            self.title = s["icon"]
+            p = status_icon_path(s)
+            if os.path.exists(p):
+                self.icon = p
+            else:
+                self.title = s["icon"]
             # Show every status line — Status/Model/Cloud/Indexed (+Phone) — not
             # just lines[0]; the summary already builds them all.
             self.menu["Status"].title = "   ".join(s["lines"])

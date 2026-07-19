@@ -70,6 +70,19 @@ def test_status_summary_green_yellow_incognito_offline():
     assert off["icon"] == "⚪" and "offline" in off["title"].lower()
 
 
+def test_status_icon_paths_ship_and_never_fake_green():
+    import os
+
+    # every traffic-light state maps to a sprite that actually ships
+    for icon, name in menubar.STATUS_ICONS.items():
+        p = menubar.status_icon_path({"icon": icon})
+        assert p.endswith(name) and os.path.exists(p)
+
+    # unknown/absent → the offline sprite, mirroring dot_color's honesty rule
+    assert menubar.status_icon_path(None).endswith("juno_status_offline.png")
+    assert menubar.status_icon_path({"icon": "??"}).endswith("juno_status_offline.png")
+
+
 # -- stale-token recovery: a mid-session rotation is picked up, no restart ------
 
 def test_menu_bar_recovers_from_a_rotated_pairing_token(tmp_path):
