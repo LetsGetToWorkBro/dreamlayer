@@ -161,14 +161,17 @@ def check_for_update(current: str | None = None, fetch_fn=None,
 
 
 # menu-bar sprites, keyed by the status_summary icon (same semantics as the
-# Windows tray's DOT_COLORS): pixel Juno wearing the traffic-light dot. They
-# ship in the package's server/assets, so the panel chip serves the same art.
+# Windows tray's DOT_COLORS): pixel Juno tinted head-to-wing in the status
+# color. At menu-bar size (16–22px) a corner badge shrinks to a few pixels,
+# but a whole-body tint reads peripherally — below ~24px she IS the light.
+# The badge variants (juno_status_*.png) stay in server/assets for larger
+# surfaces like the panel chip, where text sits beside her.
 _ASSETS = Path(__file__).resolve().parent / "server" / "assets"
 STATUS_ICONS = {
-    "\U0001F7E2": "juno_status_online.png",
-    "\U0001F7E1": "juno_status_cloud.png",
-    "\U0001F576": "juno_status_incognito.png",
-    "⚪": "juno_status_offline.png",
+    "\U0001F7E2": "juno_status_tint_online.png",
+    "\U0001F7E1": "juno_status_tint_cloud.png",
+    "\U0001F576": "juno_status_tint_incognito.png",
+    "⚪": "juno_status_tint_offline.png",
 }
 
 
