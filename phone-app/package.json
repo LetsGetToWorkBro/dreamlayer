@@ -19,7 +19,7 @@
   "dependencies": {
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@noble/ed25519": "^2.3.0",
-    "@noble/hashes": "^1.8.0",
+    "@noble/hashes": "^2.2.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.6",
     "expo-asset": "~57.0.5",
