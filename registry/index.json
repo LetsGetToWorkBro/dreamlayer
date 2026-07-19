@@ -239,7 +239,8 @@
       "api": "2",
       "pricing": {
         "model": "free"
-      }
+      },
+      "screenshot": "https://dreamlayer.app/plugin-shots/open-library.png"
     },
     {
       "name": "vinyl-oracle",
@@ -274,7 +275,8 @@
       "api": "2",
       "pricing": {
         "model": "free"
-      }
+      },
+      "screenshot": "https://dreamlayer.app/plugin-shots/vinyl-oracle.png"
     }
   ]
 }
