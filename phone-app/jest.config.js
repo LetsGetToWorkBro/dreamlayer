@@ -26,7 +26,14 @@ module.exports = {
       },
       transform: {
         "^.+\\.tsx?$": ["ts-jest", { tsconfig: { jsx: "react", esModuleInterop: true } }],
+        // @noble/ed25519 ships ESM-only (type:module, no CJS entry); transpile
+        // it to CJS so the node/ts-jest logic project can require() it. Every
+        // other node_module stays ignored (default) and loads as-is.
+        "^.+\\.js$": ["ts-jest", {
+          tsconfig: { allowJs: true, esModuleInterop: true, module: "commonjs", target: "es2020" },
+        }],
       },
+      transformIgnorePatterns: ["node_modules/(?!@noble/ed25519)"],
     },
     {
       displayName: "component",

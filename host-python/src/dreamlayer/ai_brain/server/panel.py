@@ -721,6 +721,22 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </section>
 
   <section>
+    <div class="eyebrow">Proof</div><h2>Privacy receipt</h2>
+    <p class="lead">A signed, tamper-evident record of what the Brain did — each entry sealed to
+      the one before it and signed by this device's key. Verify it right here, offline; export a
+      copy anyone can check with just the public key.</p>
+    <div class="conn" id="recBanner" style="align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div class="conn-t" id="recHead">Loading the ledger…</div>
+        <div class="conn-s" id="recSub">&nbsp;</div>
+      </div>
+      <button class="sm" id="recVerify" onclick="verifyReceipt()">Verify receipt</button>
+      <button class="sm ghost" id="recExport" onclick="exportReceipt()">Export</button>
+    </div>
+    <ul id="receipts" class="feed"></ul>
+  </section>
+
+  <section>
     <div class="eyebrow">Log</div><h2>Activity</h2>
     <ul id="history" class="feed"></ul>
   </section>
@@ -805,6 +821,7 @@ const PAGES=[
   {id:"mind",label:"Intelligence",sub:"Choose your AI, point it at your files, and tune how it thinks.",match:["Wire the cloud","Folders it reads","Ask your stuff","Model"]},
   {id:"reach",label:"Connections",sub:"Pair your phone and glasses, and decide how far the Brain reaches.",match:["Reach","On your glasses"]},
   {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, and the controls that keep it yours.",match:["Privacy controls"]},
+  {id:"receipts",label:"Receipts",sub:"A signed, tamper-evident record of what the Brain did — verify it yourself.",match:["Privacy receipt"]},
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
   {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
@@ -823,6 +840,7 @@ const ICONS={
   mind:_sv+'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>',
   reach:_sv+'<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
   privacy:_sv+'<path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>',
+  receipts:_sv+'<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.5 13l1.5 1.5L14.5 11"/></svg>',
   plugins:_sv+'<rect x="3" y="3" width="8" height="8" rx="1.4"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
   caps:_sv+'<circle cx="8" cy="12" r="5"/><path d="M8 7h8a5 5 0 0 1 0 10H8"/></svg>',
   learn:_sv+'<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M18 3v18"/></svg>',
@@ -1043,7 +1061,7 @@ async function load(){
   if(c.config.email_enabled) loadMessages();
   renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
-  loadContactsSync(); loadReminders(); loadCaps();
+  loadContactsSync(); loadReminders(); loadCaps(); loadReceipt();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
@@ -1483,6 +1501,145 @@ async function loadHistory(){const h=await api("/dreamlayer/history");
       `</div><span class="tag ${esc(x.kind)}">${esc(tag)}</span></li>`;}).join("")
     ||'<li class="empty">Nothing yet — add a folder, ask a question, pair your phone.</li>';
 }
+
+/* ---- Privacy receipt: fetch, render, and VERIFY the signed ledger --------
+   GET /dreamlayer/receipt returns the hash-chained, Ed25519-signed activity
+   ledger + the public key. We verify it HERE, offline: the SHA-256 chain (each
+   entry seals the one before it) always, and the signature when this browser's
+   WebCrypto exposes Ed25519 (WKWebView 17+/WebView2/Chromium 137+). The canonical
+   bytes must reproduce Python's json.dumps(sort_keys=True, separators=(',',':'),
+   ensure_ascii=True) EXACTLY — canonCore() below does, and a known-answer self
+   test guards it: if it ever drifts we degrade to chain-only rather than raise a
+   false tamper alarm. Signature is over the 5-field core {seq,ts,kind,text,prev}. */
+let RECEIPT=null, ED25519=null;
+
+function _pyStr(s){s=(s==null)?"":String(s);let o='"';
+  for(const ch of s){const cp=ch.codePointAt(0);
+    if(ch==='"')o+='\\"';else if(ch==='\\')o+='\\\\';
+    else if(cp===8)o+='\\b';else if(cp===9)o+='\\t';else if(cp===10)o+='\\n';
+    else if(cp===12)o+='\\f';else if(cp===13)o+='\\r';
+    else if(cp<0x20)o+='\\u'+cp.toString(16).padStart(4,'0');
+    else if(cp<0x80)o+=ch;
+    else if(cp>0xFFFF){const c=cp-0x10000;
+      o+='\\u'+(0xD800+(c>>10)).toString(16).padStart(4,'0')
+        +'\\u'+(0xDC00+(c&0x3FF)).toString(16).padStart(4,'0');}
+    else o+='\\u'+cp.toString(16).padStart(4,'0');}
+  return o+'"';}
+// ts is a float from time.time(); Python renders an integer-valued float as "N.0"
+function _pyFloat(v){v=Number(v);return Number.isInteger(v)?v.toFixed(1):String(v);}
+function canonCore(r){return '{"kind":'+_pyStr(r.kind)+',"prev":'+_pyStr(r.prev||"")
+  +',"seq":'+String(r.seq)+',"text":'+_pyStr(r.text)+',"ts":'+_pyFloat(r.ts)+'}';}
+// canonical form of the head-anchor core {last_seq,head,count} (sorted keys)
+function _canonHead(h){return '{"count":'+String(h.count)+',"head":'+_pyStr(h.head)+',"last_seq":'+String(h.last_seq)+'}';}
+
+const _enc=new TextEncoder();
+async function _sha256hex(bytes){const h=await crypto.subtle.digest("SHA-256",bytes);
+  return Array.prototype.map.call(new Uint8Array(h),b=>b.toString(16).padStart(2,'0')).join('');}
+function _hexToBytes(h){h=h||"";const a=new Uint8Array(Math.floor(h.length/2));
+  for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16);return a;}
+async function _probeEd25519(){if(ED25519!==null)return ED25519;
+  try{await crypto.subtle.importKey("raw",new Uint8Array(32),{name:"Ed25519"},false,["verify"]);
+    ED25519=true;}catch(e){ED25519=false;}return ED25519;}
+async function _edVerify(pubHex,sigHex,bytes){
+  try{const k=await crypto.subtle.importKey("raw",_hexToBytes(pubHex),{name:"Ed25519"},false,["verify"]);
+    return await crypto.subtle.verify({name:"Ed25519"},k,_hexToBytes(sigHex),bytes);}
+  catch(e){return false;}}
+// known-answer: matches the Python vector in test_receipt_verify_vectors.py
+function _canonSelfTest(){
+  const r={seq:2,ts:1700000000.0,kind:"plugin",text:"emoji 🎉 and quote \" and backslash \\",prev:"deadbeef"};
+  return canonCore(r)==='{"kind":"plugin","prev":"deadbeef","seq":2,"text":"emoji \\ud83c\\udf89 and quote \\" and backslash \\\\","ts":1700000000.0}';}
+
+function _recRow(rec,broken){
+  const t=new Date((Number(rec.ts)||0)*1000).toLocaleTimeString();
+  const bs=broken?'border-left:3px solid var(--attention);padding-left:8px':'';
+  return `<li style="${bs}"><div style="flex:1;min-width:0">
+    <div class="q">${esc(rec.text||rec.kind)}</div>
+    <div class="a" style="font-family:monospace;font-size:11px">seq ${esc(String(rec.seq))} · #${esc((rec.prev||'genesis').slice(0,10))}</div></div>
+    <span class="tag ${esc(rec.kind)}">${esc(rec.kind)}</span>
+    <span class="conn-s" style="margin:0 0 0 8px">${esc(t)}</span></li>`;}
+function _renderRecs(badSet){const recs=(RECEIPT&&RECEIPT.records)||[];
+  $("receipts").innerHTML = recs.length
+    ? recs.map((x,i)=>[x,i]).reverse().map(([x,i])=>_recRow(x,badSet&&badSet.has(i))).join("")
+    : '<li class="empty">Nothing recorded yet.</li>';}
+
+async function loadReceipt(){let r;try{r=await api("/dreamlayer/receipt");}catch(e){return;}
+  RECEIPT=r; _renderRecs(null);
+  const n=(r.records||[]).length;
+  $("recHead").textContent = n?`${n} sealed ${n===1?'entry':'entries'} · not verified yet`:"No activity recorded yet";
+  $("recSub").innerHTML = r.pubkey
+    ? `Signed by this device · <span style="font-family:monospace">key ${esc(r.pubkey.slice(0,8))}…${esc(r.pubkey.slice(-4))}</span>`
+    : "Unsigned — install the privacy extra so the Brain signs the ledger.";
+  $("recVerify").disabled = !n;}
+
+async function verifyReceipt(){
+  let r=RECEIPT; if(!r){await loadReceipt(); r=RECEIPT;} if(!r)return;
+  const recs=r.records||[]; if(!recs.length)return;
+  const canonOK=_canonSelfTest();
+  const sigSupported=(await _probeEd25519()) && !!r.pubkey && canonOK;
+  let chainOK=true, seqOK=true, sigOK=true, firstBroken=-1;
+  // anchor at recs[0].prev, not "" — the endpoint returns only the last N, so
+  // the window may legitimately start mid-chain; verify links within it.
+  let prev=recs[0].prev||"";
+  const base=recs[0].seq;
+  for(let i=0;i<recs.length;i++){const rec=recs[i]; const bytes=_enc.encode(canonCore(rec));
+    if(i>0 && (rec.prev||"")!==prev){chainOK=false; if(firstBroken<0)firstBroken=i;}
+    if(rec.seq!==base+i)seqOK=false;
+    if(sigSupported && !(await _edVerify(r.pubkey,rec.sig||"",bytes))){sigOK=false; if(firstBroken<0)firstBroken=i;}
+    prev=await _sha256hex(bytes);}
+  // signed head anchor — independent tail-length attestation (defeats truncation)
+  let attested=null, tailShort=false, unattested=false, headVerified=false;
+  const h=r.head;
+  if(sigSupported && h && h.sig){
+    const hOK=await _edVerify(r.pubkey, h.sig, _enc.encode(_canonHead(h)));
+    if(!hOK){chainOK=false; if(firstBroken<0)firstBroken=recs.length-1;}
+    else{headVerified=true; attested=h.count; const lastSeq=recs[recs.length-1].seq;
+      if(h.last_seq===lastSeq){ if(h.head!==prev){chainOK=false; if(firstBroken<0)firstBroken=recs.length-1;} }
+      else if(h.last_seq<lastSeq){unattested=true;}
+      else{tailShort=true;}}}
+  const banner=$("recBanner"), hEl=$("recHead"), sub=$("recSub");
+  const signedLedger=!!r.pubkey;
+  const hardTamper = !chainOK || !seqOK || (sigSupported && !sigOK) || unattested;
+  // a signed ledger is complete only when a valid head anchor ties the shown
+  // tail to the signed length; an unsigned ledger has nothing to attest
+  const tailComplete = !signedLedger || (sigSupported && headVerified && !tailShort);
+  const fullyVerified = signedLedger && sigSupported && !hardTamper && tailComplete;
+  banner.style.borderLeft = fullyVerified?"3px solid var(--success)":(hardTamper?"3px solid var(--attention)":"3px solid var(--amber)");
+  if(fullyVerified){
+    hEl.textContent="Verified · signed by this device, unaltered";
+    sub.textContent=`${recs.length}${attested&&attested>recs.length?` of ${attested}`:''} entries · chain intact · signature valid`;
+    _renderRecs(null);
+  }else if(hardTamper){
+    hEl.textContent = unattested ? "Tampering detected · unattested entries" : `Tampering detected · entry ${firstBroken+1}`;
+    sub.textContent = unattested
+      ? "The ledger carries entries beyond its signed length — records were appended without the Brain's key."
+      : !chainOK
+        ? "A hash-chain link (or the signed length anchor) is broken — an entry was altered or removed after signing."
+        : (!seqOK ? "A sequence number is missing — an entry was deleted."
+                  : "A signature failed — a record was changed after it was signed.");
+    const bad=new Set(); for(let i=Math.max(firstBroken,0);i<recs.length;i++)bad.add(i);
+    _renderRecs(bad);
+  }else if(!signedLedger){
+    hEl.textContent="Unsigned ledger";
+    sub.textContent="The chain is internally consistent, but this Brain isn't signing receipts (no privacy extra).";
+    _renderRecs(null);
+  }else if(!sigSupported){
+    hEl.textContent="Chain intact · signature not checked here";
+    sub.textContent="Every entry seals the one before it, but this browser can't run Ed25519 — export and verify the signature (and completeness) elsewhere.";
+    _renderRecs(null);
+  }else if(tailShort){
+    hEl.textContent="Recent entries may be missing";
+    sub.textContent=`The signed length is ${attested}, but only ${recs.length} were returned. The shown entries are authentic — re-verify; if it persists, the tail was truncated.`;
+    _renderRecs(null);
+  }else{
+    hEl.textContent="Can't confirm completeness";
+    sub.textContent="The shown entries are authentic, but the signed length anchor is missing — re-verify; if it persists, treat with suspicion.";
+    _renderRecs(null);}}
+
+async function exportReceipt(){let r=RECEIPT; if(!r){try{r=await api("/dreamlayer/receipt");}catch(e){return;}}
+  const blob=new Blob([JSON.stringify(r,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="dreamlayer-receipt.json"; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(a.href); toast("Exported receipt.json");}
 
 /* cloud provider — presets mirror backends.PROVIDER_PRESETS */
 const CPROV={

@@ -191,6 +191,7 @@ export default function Layout() {
       <Tabs.Screen name="brief" options={{ href: null }} />
       <Tabs.Screen name="plugins" options={{ href: null }} />
       <Tabs.Screen name="capabilities" options={{ href: null }} />
+      <Tabs.Screen name="receipts" options={{ href: null }} />
       <Tabs.Screen name="vitals" options={{ href: null }} />
       <Tabs.Screen name="cloud" options={{ href: null }} />
       <Tabs.Screen name="brain-tiers" options={{ href: null }} />
