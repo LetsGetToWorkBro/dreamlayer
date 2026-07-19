@@ -41,9 +41,27 @@ bits you run are the bits we built, from the dependencies we vetted:
   this workflow, this commit). Verify with
   `gh attestation verify <artifact> -R <owner>/<repo>` — signing proves *who*
   signed, provenance proves the build's *origin*.
-- **Dependency CVEs** — `pip-audit` (`dep-audit.yml`) scans resolved versions
-  weekly and on dependency changes; `dependency-review.yml` blocks a PR that
-  *introduces* a vulnerable dependency.
+- **Dependency CVEs** — `pip-audit` (`dep-audit.yml`) scans resolved versions on
+  dependency changes; `dependency-review.yml` blocks a PR that *introduces* a
+  vulnerable dependency; Dependabot security updates open a fix PR automatically
+  when a patched release lands.
+- **Triaged advisories (audit 2026-07-19)** — a full OSV sweep of the committed
+  lockfiles (`uv.lock`, `package-lock.json`, `Cargo.lock`) found the open
+  advisories are all in *optional* extras or *build* tooling — none in the core
+  Brain runtime, and none with a clean upstream fix to bump to today:
+  - `chromadb` (optional `memory` vector-store extra) — GHSA-f4j7-r4q5-qw2c; no
+    fixed release exists yet (the latest version is still affected). The vector
+    store is optional and off by default, with built-in `sqlite-vec` / `lancedb`
+    alternatives. Monitored for an upstream patch.
+  - `Pillow` — the DoS advisories are fixed in 12.x, but the glasses SDK
+    `brilliant-msg` caps `pillow<12` and the `vision` extra (moondream /
+    ultralytics) caps `pillow<11`, so the lock holds the newest allowed
+    (11.3.0 / 10.4.0). Untrusted image decoding is separately hardened (figment
+    decoder fuzzing + WASM resource limits). Unblocks when `brilliant-msg`
+    admits pillow 12.
+  - `diskcache`, `datasette` (optional infra / transitive) and `uuid` (the Expo
+    *build* toolchain, not shipped in the app) — moderate, local/info-only or
+    dev-only, with no clean release fix.
 - **License hygiene** — a license gate fails the build on strong-copyleft
   (GPL/AGPL) dependencies in the security-critical surface it scans (crypto / PII
   / LLM / server); LGPL (weak copyleft) is allowed, matching the PR

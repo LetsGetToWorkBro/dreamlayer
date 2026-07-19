@@ -1,0 +1,14 @@
+{
+  "_doc": "Content-hash pins for the reviewed FIRST-PARTY plugin catalogue. Each value is the sha256 of the installed package source (identical to the registry package 'checksum'). NOTE ON SCOPE: these installed sources are thin first-party connectors that re-export reviewed module code shipped INSIDE the Brain's own package, e.g. 'from dreamlayer.plugins.openlibrary import openlibrary_plugin'. So the pin guarantees the INSTALLED package (which lives in the user-writable plugins dir) was not swapped or tampered; the delegated module is part of the Brain's own trusted code base and shares its integrity (editing it requires write access to the Brain's package, which is already a full compromise). This is the RUNTIME half of the curated-registry trust model keys.json describes: a first-party plugin earns in-process execution because its installed bytes match a hash we reviewed here — NOT because of a self-declared 'official' flag (attacker-settable) and NOT via a private signing key (none to custody, none to leak). A look-alike that borrows a first-party name but ships different code hashes differently, misses the pin, and stays in the isolation jail. Regenerate whenever a first-party plugin's source changes (the drift test test_first_party_pins.py fails loudly if this file and the registry checksums disagree).",
+  "publisher": "DreamLayer First-Party",
+  "plugins": {
+    "air-drums": "sha256:0ea4e9983337f9e43f9806d952c550646c5eb1cf8aeabb8c5f8f991893a9c47c",
+    "currency-converter": "sha256:0c36ad8bf1aed59b378f9cd6c71dc0744fd0c0a30be09fdaf0e35ac4f469052d",
+    "face-synth": "sha256:a411568a7bf21d2d839758f0c66648c1ddb1a54395fd2d927cec917ab00c0141",
+    "filler-word-counter": "sha256:72b6f0b4ad695be0b49f4390c115e237fa9442c3bf7fd1b1a0e4d5055d7b633d",
+    "hud-reactions": "sha256:46358ee481b67a1bd9433b34275fb7094ea97928f789b1f781e04b57c51f6edf",
+    "open-food-facts": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
+    "open-library": "sha256:f9e76e46f656a0659ac6cd6fb166249c2b165aea15b79d0216b118cec5894973",
+    "vinyl-oracle": "sha256:36b570c6bfe77844c5b7ef332febeaea24dcf8d3635fc6492be56651e152a80b"
+  }
+}

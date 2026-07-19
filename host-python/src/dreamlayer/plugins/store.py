@@ -19,8 +19,34 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Callable, Optional
 
-from .package import PluginPackage, PluginManifest
+from .package import PluginPackage, PluginManifest, sha256_of
 from .validate import validate, ValidationReport
+
+# The reviewed first-party catalogue is trusted in-process by CONTENT-HASH pin,
+# not by a signing key. This is the label a hash-pinned first-party plugin loads
+# under (mirrors validate.py's `report.publisher` for the signed path).
+_FIRST_PARTY_PUBLISHER = "DreamLayer First-Party"
+
+
+def load_first_party_pins() -> dict:
+    """The shipped content-hash pins for the reviewed first-party catalogue
+    (``plugins/first_party.json``): plugin name → ``"sha256:…"`` of its exact
+    reviewed source. This is the runtime half of the curated-registry trust
+    model — a first-party plugin loads in-process because its installed bytes
+    match a hash we reviewed and shipped, with no private key to custody and no
+    per-build secret to leak. Ships inside the package so a frozen Brain has it.
+
+    Fail-safe: any problem (file absent, unreadable, malformed) returns ``{}`` so
+    NOTHING is treated as first-party and every installed plugin routes to the
+    isolation jail — the pin can only ever *grant* trust, never withhold the
+    default-deny."""
+    try:
+        raw = json.loads((Path(__file__).with_name("first_party.json")).read_text())
+        pins = raw.get("plugins", {})
+        return {k: v for k, v in pins.items()
+                if isinstance(k, str) and isinstance(v, str) and v.startswith("sha256:")}
+    except Exception:
+        return {}
 
 
 @dataclass
@@ -123,7 +149,8 @@ class PluginStore:
     def __init__(self, install_dir, index: Optional[RegistryIndex] = None,
                  fetch_fn: Optional[Callable[[str], str]] = None,
                  host_capabilities=frozenset(),
-                 trusted_keys: Optional[dict] = None):
+                 trusted_keys: Optional[dict] = None,
+                 first_party: Optional[dict] = None):
         self.dir = Path(install_dir)
         self.index = index or RegistryIndex()
         self._fetch = fetch_fn
@@ -132,6 +159,14 @@ class PluginStore:
         # any SIGNED package must be signed by a registered key; unsigned
         # packages stay curated-registry-trust (warning, not refusal).
         self.trusted_keys = trusted_keys
+        # plugin name -> "sha256:…" content pin for the reviewed first-party
+        # catalogue. A pinned plugin loads in-process cross-platform without a
+        # kernel sandbox — the keyless half of the curated-registry trust model.
+        # Default is EMPTY (no first-party trust) so a bare store is hermetic and
+        # the grant is explicit at the wiring site: the Brain passes
+        # first_party=load_first_party_pins() (server.py). Pass a dict to trust a
+        # custom catalogue.
+        self.first_party = dict(first_party or {})
 
     # -- what's installed ----------------------------------------------------
 
@@ -194,6 +229,35 @@ class PluginStore:
             return True
         return False
 
+    # -- trust: reviewed first-party by content pin --------------------------
+
+    def _first_party_publisher(self, package: PluginPackage) -> str:
+        """The first-party publisher label if this package is a reviewed
+        first-party plugin pinned by content hash, else "".
+
+        The pin is checked against the sha256 of the ACTUAL installed source
+        bytes (recomputed here), never the manifest's self-declared ``checksum``
+        or ``official`` flag — both of which an attacker controls. So a
+        look-alike that borrows a first-party *name* but ships different code
+        hashes differently, misses the pin, and stays in the jail; and a genuine
+        first-party plugin whose installed bytes were tampered with after
+        install also misses the pin and is refused in-process trust.
+
+        Scope (honest): the pinned source is a thin first-party connector that
+        re-exports reviewed module code from the Brain's OWN package (its TCB),
+        so the pin protects the installed package's integrity while the delegated
+        module shares the Brain's integrity (editing it needs write access to the
+        Brain's package = already a full compromise). These connectors load
+        IN-PROCESS on the remotely-reachable world lens, so their human review is
+        load-bearing — a request-controlled-URL bug in one is an in-process
+        SSRF from the Brain host."""
+        if not self.first_party:
+            return ""
+        want = self.first_party.get(package.manifest.name)
+        if want and sha256_of(package.source) == want:
+            return _FIRST_PARTY_PUBLISHER
+        return ""
+
     # -- load installed into a running host ----------------------------------
 
     def load_installed(self, orchestrator, isolate: str = "untrusted",
@@ -206,10 +270,17 @@ class PluginStore:
         subprocess host in plugins/isolation.py) instead of the host; only their
         pure-data providers cross the jail. This is the secure default for
         user-installed third-party code — it never gets ambient authority on the
-        host just for being installed. Only packages signed by a REGISTERED
-        publisher (a key in trusted_keys) load in-process; a self-signature
-        alone does not earn host authority. (First-party bundled plugins don't come through here; they
-        load in-process via Orchestrator.load_plugins as reviewed code.)
+        host just for being installed. Two things earn in-process host authority,
+        both anchored in what WE reviewed (never the package's own claims): a
+        package signed by a REGISTERED publisher (a key in trusted_keys), or a
+        reviewed FIRST-PARTY plugin whose installed source matches a content-hash
+        pin in plugins/first_party.json. A self-signature alone earns nothing.
+        The first-party pin is what lets the bundled connector plugins run
+        in-process on Windows/Mac, where no kernel sandbox (bwrap/nsjail) exists;
+        it is keyless, so there is no signing secret to custody or leak. (The
+        on-glass Orchestrator.load_plugins path also loads reviewed first-party
+        code in-process; this store path is what the remotely-reachable world
+        lens uses, and it now trusts the same catalogue by pin.)
         isolate="trusted": everything runs in-process — the curated deployment
         where every installed package has been read and vouched for.
 
@@ -260,7 +331,16 @@ class PluginStore:
             # proves the author signed their own code; only an allowlisted key
             # proves *we* chose to trust it. trusted_keys=None therefore means
             # "trust nothing in-process" — everything unreviewed goes to the jail.
-            trusted_inproc = bool(report.publisher)
+            # In-process host authority is earned two ways, both anchored in
+            # something WE reviewed, never the package's own claims:
+            #   1. report.publisher — a valid signature by a key in trusted_keys
+            #      (registered third-party / owner-custodied signing).
+            #   2. a first-party content-hash pin — the installed source bytes
+            #      match plugins/first_party.json, the reviewed catalogue. This
+            #      is what lets the bundled connector plugins run in-process on
+            #      Windows/Mac, where no kernel sandbox (bwrap/nsjail) exists.
+            # Everything else is untrusted and routes to the isolation jail.
+            trusted_inproc = bool(report.publisher) or bool(self._first_party_publisher(package))
             if isolate == "untrusted" and not trusted_inproc:
                 # unreviewed / not-registered → an isolation tier, not the host. Prefer
                 # the WASM jail when a runtime is configured (no ambient

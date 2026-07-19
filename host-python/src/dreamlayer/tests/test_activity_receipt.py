@@ -170,6 +170,22 @@ def test_receipt_carries_the_signed_head(tmp_path):
     assert r["head"]["last_seq"] == 2 and r["head"]["count"] == 3
 
 
+def test_receipt_head_carries_a_verifiable_signature(tmp_path):
+    """The receipt's head anchor ships its OWN signature so the panel/phone can
+    verify the length attestation independently (not just trust our server-side
+    check). A third party with only the pubkey can confirm it."""
+    log, _ = _log(tmp_path)
+    for i in range(3):
+        log.add("k", f"e{i}", ts=float(i))
+    r = log.receipt()
+    head = r["head"]
+    assert head is not None and "sig" in head and head["sig"]
+    core = {"last_seq": head["last_seq"], "head": head["head"], "count": head["count"]}
+    assert verify_detached(core, head["sig"], r["pubkey"]) is True
+    # tampering with the attested length invalidates the anchor signature
+    assert verify_detached({**core, "count": core["count"] + 1}, head["sig"], r["pubkey"]) is False
+
+
 def test_reordering_records_is_detected(tmp_path):
     log, _ = _log(tmp_path)
     log.add("k", "first", ts=1.0)

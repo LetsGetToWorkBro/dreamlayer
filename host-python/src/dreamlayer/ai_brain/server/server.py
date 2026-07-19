@@ -256,8 +256,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # the user installs. Every package is validated (integrity + capability
         # scan + smoke test) before it's written; the panel and phone manage them.
         from ...plugins import PluginStore
+        from ...plugins.store import load_first_party_pins
+        # first_party = the reviewed first-party catalogue's content-hash pins
+        # (plugins/first_party.json). It lets the bundled connector plugins run
+        # in-process on Windows/Mac — where no kernel sandbox (bwrap/nsjail)
+        # exists, so an unpinned plugin would fail closed and never execute.
+        # Keyless: trust rides the reviewed source hash, not a signing secret.
         self.plugins = PluginStore(self.cfg_dir / "plugins",
-                                   host_capabilities=self.plugin_capabilities())
+                                   host_capabilities=self.plugin_capabilities(),
+                                   first_party=load_first_party_pins())
         # Juno's profile of you (name, interests, people, remembered prefs).
         # Built on the glasses hub from the conversation stream, then *pushed*
         # here so the phone can read it — the hub->Brain bridge. Just a mirror;

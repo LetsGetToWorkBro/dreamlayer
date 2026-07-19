@@ -3,8 +3,15 @@ name: dependency-audit
 # Supply-chain gate (audit 2026-07-14): the repo had NO automated CVE scanning,
 # while ~50 optional deps (including security-critical `cryptography`) were
 # declared as unpinned names. pip-audit flags known-vulnerable resolved
-# versions. Runs on PRs touching deps and weekly, so a newly-disclosed CVE
-# surfaces even with no code change.
+# versions, and the license gate below fails strong-copyleft in the shipped
+# surface. Runs on PRs that change the dependency set.
+#
+# The weekly cron was dropped (2026-07-18) to stop double-paying for CVE
+# scanning: Dependabot security alerts already scan the EXISTING pinned deps
+# continuously and open a fix PR when a new advisory lands, and
+# dependency-review guards the PR-time dependency diff — so the
+# newly-disclosed-CVE-against-unchanged-code case stays covered without a
+# redundant scheduled scan here.
 
 on:
   push:
@@ -16,8 +23,6 @@ on:
     paths:
       - "host-python/pyproject.toml"
       - "host-python/uv.lock"
-  schedule:
-    - cron: "0 6 * * 1"      # Mondays 06:00 UTC
 
 permissions:
   contents: read   # least-privilege floor; jobs opt into more where needed
@@ -29,8 +34,8 @@ jobs:
     # network, HTTP server) was scanned clean at introduction, so a red check
     # here means a newly-resolved dependency version carries a known advisory.
     # It only runs on PRs that change the dependency set (see `on.pull_request.
-    # paths`) plus a weekly cron, so it blocks exactly the changes that can
-    # introduce a vulnerable version.
+    # paths`), so it blocks exactly the changes that can introduce a vulnerable
+    # version; Dependabot covers advisories that land against unchanged deps.
     defaults:
       run:
         working-directory: host-python

@@ -81,3 +81,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # All 70 action use-sites are SHA-pinned (#468); without a group each
+      # pinned-SHA refresh opens its OWN PR — a steady flood across 26 workflows.
+      # Collapse them into ONE reviewable PR per weekly run.
+      actions-deps:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
