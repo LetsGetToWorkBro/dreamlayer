@@ -53,6 +53,16 @@ updates:
       # the SDK validates against (~6.0 for SDK 57); TS 7 broke typecheck
       # (#334, #348). Moves with SDK migrations, not bot bumps.
       - dependency-name: "typescript"
+      # @noble crypto: the receipt-verification code targets the v1 API
+      # (ed.etc.sha512Sync, ed.getPublicKey→hex, sha256/sha512 from
+      # @noble/hashes/*). The v2 majors reshaped both surfaces (#473/#475 were
+      # CI-red and closed); a major moves only with a deliberate code migration,
+      # so ONLY semver-major is ignored — minor/patch (incl. security fixes)
+      # still flow automatically.
+      - dependency-name: "@noble/ed25519"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@noble/hashes"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
 
   - package-ecosystem: "npm"

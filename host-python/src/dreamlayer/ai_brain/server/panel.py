@@ -1093,7 +1093,7 @@ async function loadCalendars(){let r;try{r=await api("/dreamlayer/calendars");}c
   $("calList").innerHTML=cals.map(c=>{
     const on=_calSel.length===0||_calSel.includes(c);
     return `<label class="tog" style="display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer">`+
-      `<input type="checkbox" ${on?"checked":""} onchange="toggleCal(${JSON.stringify(c)},this.checked)" style="accent-color:var(--memory)"> ${esc(c)}</label>`;}).join("");
+      `<input type="checkbox" ${on?"checked":""} onchange="toggleCal(${esc(JSON.stringify(c))},this.checked)" style="accent-color:var(--memory)"> ${esc(c)}</label>`;}).join("");
   const ls=r.last_sync?("Last synced "+fmtWhen(r.last_sync)):(r.sync?"Syncing…":"Sync is off");
   $("calStatus").textContent=ls;}
 async function toggleCal(name,on){
