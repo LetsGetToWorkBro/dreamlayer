@@ -218,17 +218,38 @@ def test_pack_install_rejects_unknown_and_concurrent(tmp_path):
         lb.stop()
 
 
-def test_pack_install_refused_when_frozen(tmp_path, monkeypatch):
+def test_pack_install_frozen_uses_the_writable_sidecar(tmp_path, monkeypatch):
+    # NEW contract (audit 2026-07-19): a bundled app can't pip-install into its
+    # SEALED self, but it CAN install a pack into the writable sidecar via
+    # pip --target — so the one-click install is ACCEPTED (not a 400 refusal) and
+    # lands in <cfg>/site-packages. We stub the frozen runner so no real pip runs.
     import sys
+    import dreamlayer.ai_brain.server.server as srv
     monkeypatch.setattr(sys, "frozen", "macosx_app", raising=False)
+    captured = {}
+
+    def _frozen_runner(reqs, target):
+        captured["target"] = target
+        return True, "ok"
+
+    monkeypatch.setattr(srv, "_PACK_RUNNER_FROZEN", _frozen_runner)
+    srv._PACK_JOBS.clear()
     lb = _Live(tmp_path)
     try:
+        # accepted (the old contract returned 400 "can't install into itself");
+        # _post_packs returns the refreshed capability payload on success.
         status, body = _req(lb.url + "/dreamlayer/packs", {"pack": "recall"}, lb.h)
-        assert status == 400 and "can't install into itself" in body["error"]
-        # and the report tells the panel it's a bundled app
-        _, rep = _req(lb.url + "/dreamlayer/capabilities", headers=lb.h)
-        assert rep["frozen"] is True
+        assert status == 200
+        assert body["frozen"] is True
+        assert body["pack_installable"] is True                      # pip present → one-click works
+        import time
+        for _ in range(20):
+            if "target" in captured:
+                break
+            time.sleep(0.05)
+        assert captured.get("target", "").endswith("site-packages")  # installed into the sidecar
     finally:
+        srv._PACK_JOBS.clear()
         lb.stop()
 
 

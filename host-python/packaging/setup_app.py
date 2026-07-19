@@ -33,8 +33,14 @@ OPTIONS = {
     # (LAN discovery of the Brain; Ed25519 signing). Both carry native code,
     # so — like PIL/numpy — they must live in `packages` (unzipped, signable),
     # never `includes`. ifaddr is zeroconf's pure-python companion.
+    # pip (+ setuptools/wheel) is bundled so the sealed app can install optional
+    # capability PACKS into its writable sidecar (~/.dreamlayer/site-packages) via
+    # pip --target — a one-click upgrade without a source install. As a `package`
+    # (unzipped) so pip's vendored data (its CA bundle, wheels) is reachable at
+    # runtime; if a build ever omits it, the panel degrades to "source install".
     "packages": ["dreamlayer", "rumps", "PIL", "numpy",
-                 "zeroconf", "ifaddr", "cryptography"],
+                 "zeroconf", "ifaddr", "cryptography",
+                 "pip", "setuptools", "wheel"],
     # transitive imports py2app's static analysis tends to miss
     "includes": ["pydantic", "pydantic_core", "openai", "httpx", "httpcore",
                  "certifi", "WebKit"],   # WebKit → the native panel window

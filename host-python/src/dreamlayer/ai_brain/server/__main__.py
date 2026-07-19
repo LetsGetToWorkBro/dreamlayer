@@ -52,8 +52,14 @@ def main(argv=None) -> int:
     # everything else works over plain http exactly as before. The cert is
     # self-signed, minted once into <dir>/tls/ (needs the `cryptography`
     # package; absent → a clear message and http-only, never a crash).
+    # https is served AUTOMATICALLY on a sibling port whenever the bind is
+    # network-reachable (a phone can only reach it there, and its browser opens
+    # the Live Lens camera only on a secure context). --tls forces it even on a
+    # loopback bind; --no-tls turns it off. Absent cryptography → http only.
     ap.add_argument("--tls", action="store_true",
-                    help="also serve https for the Live Lens camera")
+                    help="force https on a loopback bind too (auto on for LAN binds)")
+    ap.add_argument("--no-tls", action="store_true",
+                    help="never start the https Live Lens listener")
     ap.add_argument("--tls-port", type=int, default=0,
                     help="https port (default: --port + 1)")
     args = ap.parse_args(argv)
@@ -62,6 +68,14 @@ def main(argv=None) -> int:
     # a no-op formatting change otherwise, so default output is unchanged.
     from ...logging_setup import configure_logging
     configure_logging()
+
+    # Put the pack sidecar (<dir>/site-packages) on sys.path so any packs a
+    # bundled app one-click-installed there are importable this run.
+    try:
+        from ...capabilities import enable_pack_site
+        enable_pack_site(args.dir)
+    except Exception:                              # never block startup on this
+        pass
 
     brain = Brain(args.dir)
     if args.token:
@@ -82,44 +96,23 @@ def main(argv=None) -> int:
     brain.start_brief_scheduler()     # deliver the morning brief at brief_hour
     brain.start_calendar_sync()       # pull macOS Calendar.app into the agenda
 
-    # --tls: mint/reuse the appliance cert and start the sibling https
-    # listener the Live Lens camera needs. The http server is told the https
-    # port so the panel's Live Lens link can advertise the secure URL.
+    # Start the sibling https listener the Live Lens camera needs. AUTO on for a
+    # network-reachable (non-loopback) bind — a phone can only reach the Brain
+    # there, and its browser opens the camera only on a secure context — so the
+    # Live Lens "just works" without the wearer knowing to pass a flag. --tls
+    # forces it on a loopback bind too; --no-tls turns it off. Degrades to
+    # http-only (never crashes) when cryptography is absent. The http server is
+    # told the https port so the panel's Live Lens link advertises the secure URL.
     tls_server = None
     tls_port = 0
-    if args.tls:
-        from .tls import ensure_self_signed, make_ssl_context
-        pair = ensure_self_signed(args.dir)
-        if pair is None:
-            print("  ⚠ --tls needs the `cryptography` package "
+    want_tls = (args.tls or not _is_loopback_host(args.host)) and not args.no_tls
+    if want_tls:
+        from .tls import start_tls_sibling
+        tls_server, tls_port = start_tls_sibling(
+            brain, args.host, args.dir, args.port, args.tls_port)
+        if tls_server is None:
+            print("  ⚠ https (Live Lens camera) needs the `cryptography` package "
                   "(pip install 'dreamlayer[verify]') — serving http only.")
-        else:
-            tls_port = args.tls_port or (args.port + 1)
-            try:
-                # Build the SSL context FIRST — a corrupt/mismatched cert or key
-                # raises here. Wrapped so it degrades to http-only rather than
-                # crashing the whole Brain (this runs before serve_forever, so an
-                # uncaught SSLError took camera AND panel AND asks down; refute
-                # 2026-07-18). ensure_self_signed now re-mints a mismatched key,
-                # so this catch is the belt to that suspenders.
-                ctx = make_ssl_context(*pair)
-                tls_server = make_brain_server(brain, host=args.host,
-                                               port=tls_port, tls_port=tls_port)
-                # do_handshake_on_connect=False: DON'T run the TLS handshake in
-                # the single accept-loop thread (where a stalled ClientHello from
-                # an unauthenticated LAN peer would pin ALL new camera connections
-                # with no wall-clock cap; refute 2026-07-18). Deferring it moves
-                # the handshake into the worker thread, under the same per-recv
-                # timeout + header watchdog + bounded semaphore as every request.
-                tls_server.socket = ctx.wrap_socket(
-                    tls_server.socket, server_side=True,
-                    do_handshake_on_connect=False)
-                import threading
-                threading.Thread(target=tls_server.serve_forever,
-                                 daemon=True).start()
-            except Exception as exc:            # noqa: BLE001
-                print(f"  ⚠ --tls setup failed ({exc}) — serving http only.")
-                tls_server, tls_port = None, 0
 
     # the tls_port kwarg rides only when --tls actually started a listener, so
     # the bare-launch call shape stays exactly as it always was (pinned by

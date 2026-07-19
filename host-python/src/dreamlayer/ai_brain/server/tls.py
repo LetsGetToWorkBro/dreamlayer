@@ -171,3 +171,40 @@ def make_ssl_context(cert_path: str | Path, key_path: str | Path) -> ssl.SSLCont
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(str(cert_path), str(key_path))
     return ctx
+
+
+def start_tls_sibling(brain, host: str, cfg_dir, http_port: int,
+                      tls_port: int = 0):
+    """Mint/reuse this Brain's self-signed cert and start the sibling HTTPS
+    listener the Live Lens camera needs.
+
+    A phone browser opens its camera only on a SECURE context (https, or
+    localhost) — over plain http the Live Lens page loads but the camera never
+    starts, which reads to the wearer as "the QR does nothing". This starts an
+    https listener on a sibling port so the panel can hand out the secure link.
+
+    Returns ``(tls_server, tls_port)``, or ``(None, 0)`` when ``cryptography`` is
+    absent or setup fails — the caller then degrades to http-only, never crashes.
+    The listener runs on a daemon thread; keep the returned server to shut it
+    down. do_handshake_on_connect=False keeps a stalled ClientHello out of the
+    single accept-loop thread — the worker runs the handshake under the same
+    per-recv timeout + header watchdog + bounded semaphore as every request
+    (refute 2026-07-18), so an unauthenticated LAN peer can't pin new camera
+    connections."""
+    import threading
+    pair = ensure_self_signed(cfg_dir)
+    if pair is None:                              # no cryptography → http only
+        return None, 0
+    tport = tls_port or (http_port + 1)
+    try:
+        from .server import make_brain_server
+        ctx = make_ssl_context(*pair)
+        tls_server = make_brain_server(brain, host=host, port=tport,
+                                       tls_port=tport)
+        tls_server.socket = ctx.wrap_socket(
+            tls_server.socket, server_side=True, do_handshake_on_connect=False)
+        threading.Thread(target=tls_server.serve_forever, daemon=True).start()
+        return tls_server, tport
+    except Exception as exc:                      # noqa: BLE001 — degrade, don't crash
+        log.warning("[tls] sibling https listener failed to start: %s", exc)
+        return None, 0

@@ -232,6 +232,11 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .mrow .lbl{min-width:64px;color:var(--muted)} .mrow .nm{font:12px ui-monospace,Menlo,monospace;color:var(--text)}
   .mrow .st{margin-left:auto;font-size:.82rem}
   .ok-t{color:var(--success)} .warn-t{color:var(--amber)} .off-t{color:var(--ghost)}
+  .pbar{display:flex;align-items:center;gap:8px;margin:8px 0 0;font-size:.82rem}
+  .pbar-l{min-width:120px;font:12px ui-monospace,Menlo,monospace;color:var(--text)}
+  .pbar-t{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+  .pbar-f{height:100%;background:var(--memory);transition:width .4s ease}
+  .pbar-p{min-width:34px;text-align:right;color:var(--muted)}
   .steps{margin:10px 0 0;padding:0;counter-reset:s}
   .steps li{list-style:none;display:flex;gap:10px;padding:6px 0;color:var(--muted);font-size:.9rem;border:0}
   .steps li:before{counter-increment:s;content:counter(s);flex:none;width:20px;height:20px;
@@ -259,6 +264,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
   .qrbox svg{display:block;width:200px;height:200px;max-width:100%}
+  .qrbox.live svg{width:236px;height:236px}   /* the Live Lens URL is longer → denser → render bigger to stay scannable */
+  ol.steps{margin:10px 0 4px;padding-left:20px;color:var(--muted);font-size:12.5px;line-height:1.5}
+  ol.steps li{margin:4px 0}
+  ol.steps b{color:var(--text)}
+  .paircode .warn{margin:10px 0 4px;padding:8px 10px;border-left:2px solid var(--amber);
+       background:rgba(255,176,32,.07);color:var(--muted);font-size:12.5px;line-height:1.5}
 
   /* activity feed */
   .feed li{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
@@ -378,17 +389,22 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     animation:pagein .3s var(--ease) both}
   @keyframes pagein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   /* Juno — the desk accessory, exactly as she appears on dreamlayer.app:
-     a tiny Platinum window in the corner, pixel sprite inside, watching. */
-  .juno-hero{position:fixed;right:16px;bottom:16px;width:150px;z-index:15;pointer-events:none;
+     a tiny Platinum window in the corner, pixel sprite inside, watching.
+     Draggable by her title bar and collapsible; both persist in localStorage. */
+  .juno-hero{position:fixed;right:16px;bottom:16px;width:150px;z-index:15;
     background:var(--plat);border:1px solid var(--frame);
-    box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.3);
-    padding:17px 8px 8px;text-align:center}
-  .juno-hero::after{content:"Juno";position:absolute;top:2px;left:50%;transform:translateX(-50%);
-    font:11px var(--chi);color:#1A1A1A;background:var(--plat);padding:0 7px}
-  .juno-hero::before{content:"";position:absolute;top:6px;left:6px;right:6px;height:8px;
-    background:var(--stripes)}
-  .juno-hero .jscreen{background:#0E1416;padding:9px 6px 7px}
-  .juno-hero img{width:92px;height:auto;image-rendering:pixelated;
+    box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.3);padding:0;text-align:center}
+  .juno-hero .jbar{display:flex;align-items:center;height:19px;padding:0 3px 0 6px;
+    cursor:move;background:var(--plat);background-image:var(--stripes);
+    border-bottom:1px solid var(--frame);touch-action:none;user-select:none}
+  .juno-hero .jttl{font:11px var(--chi);color:#1A1A1A;background:var(--plat);
+    padding:0 6px;margin-right:auto}
+  .juno-hero .jtog{width:16px;height:14px;line-height:1;font:13px var(--chi);
+    background:var(--plat);border:1px solid var(--frame);color:#1A1A1A;
+    cursor:pointer;padding:0;flex:none}
+  .juno-hero .jscreen{background:#0E1416;padding:9px 6px 7px;margin:8px}
+  .juno-hero.collapsed .jscreen{display:none}
+  .juno-hero img{width:92px;height:auto;image-rendering:pixelated;pointer-events:none;
     filter:drop-shadow(0 0 12px rgba(44,199,154,.28));
     animation:jhFloat 10s ease-in-out infinite;will-change:transform}
   .juno-hero .jcap{display:block;margin-top:5px;font:10.5px var(--chi);color:#A8B8C0;line-height:1.4}
@@ -781,10 +797,40 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <div class="modal pd"><div id="pdinner"></div></div>
 </div>
 <div id="toast"></div>
-<div class="juno-hero" data-juno data-juno-state="idle" aria-hidden="true">
-  <div class="jscreen"><img src="/panel-assets/juno_da.webp" alt="" width="96" height="96">
+<div class="juno-hero" id="junoHero" data-juno data-juno-state="idle">
+  <div class="jbar" id="junoBar"><span class="jttl">Juno</span>
+    <button class="jtog" id="junoTog" type="button" title="Collapse" aria-label="Collapse Juno">–</button></div>
+  <div class="jscreen"><img src="/panel-assets/juno_da.webp" alt="" width="96" height="96" draggable="false">
   <span class="jcap">the brain is listening.</span></div>
 </div>
+<script>
+/* Juno: drag by her title bar, collapse with the toggle — both persist. */
+(function(){
+  var hero=document.getElementById("junoHero"); if(!hero) return;
+  var bar=document.getElementById("junoBar"), tog=document.getElementById("junoTog");
+  var LP="juno.pos", LC="juno.collapsed";
+  function clamp(x,y){var w=hero.offsetWidth,h=hero.offsetHeight;
+    return [Math.max(4,Math.min(x,innerWidth-w-4)),Math.max(4,Math.min(y,innerHeight-h-4))];}
+  function place(x,y){var c=clamp(x,y);hero.style.left=c[0]+"px";hero.style.top=c[1]+"px";
+    hero.style.right="auto";hero.style.bottom="auto";}
+  try{var p=JSON.parse(localStorage.getItem(LP)||"null");
+    if(p&&typeof p.x==="number")place(p.x,p.y);}catch(e){}
+  function setCollapsed(c){hero.classList.toggle("collapsed",c);
+    tog.textContent=c?"+":"–";tog.title=c?"Expand":"Collapse";
+    tog.setAttribute("aria-label",(c?"Expand":"Collapse")+" Juno");}
+  setCollapsed(localStorage.getItem(LC)==="1");
+  var drag=null;
+  bar.addEventListener("pointerdown",function(e){if(e.target===tog)return;
+    drag={dx:e.clientX-hero.offsetLeft,dy:e.clientY-hero.offsetTop};
+    try{bar.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault();});
+  bar.addEventListener("pointermove",function(e){if(drag)place(e.clientX-drag.dx,e.clientY-drag.dy);});
+  function endDrag(){if(!drag)return;drag=null;
+    try{localStorage.setItem(LP,JSON.stringify({x:hero.offsetLeft,y:hero.offsetTop}));}catch(e){}}
+  bar.addEventListener("pointerup",endDrag); bar.addEventListener("pointercancel",endDrag);
+  tog.addEventListener("click",function(){var c=!hero.classList.contains("collapsed");
+    setCollapsed(c);try{localStorage.setItem(LC,c?"1":"0");}catch(e){}});
+})();
+</script>
 <script>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
@@ -868,6 +914,7 @@ function showPage(id){curPage=id;
 const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
               unsupported:"var(--ghost)",external:"var(--memory)"};
 let CAPFROZEN=false;
+let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a frozen build carrying pip)
 function capRight(it){
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
@@ -875,14 +922,15 @@ function capRight(it){
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
-    if(CAPFROZEN) return `<span class="sstate">not in this build — runs on a source install</span>`;
+    if(CAPFROZEN&&!CAPINSTALL) return `<span class="sstate">not in this build — runs on a source install</span>`;
+    if(CAPFROZEN) return `<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
     return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap('${esc(cmd)}')">Copy</button>`;
   }
   if(it.state==="external") return `<span class="sstate">${esc(it.note||"external service")}</span>`;
   return `<span class="sstate">macOS only</span>`;
 }
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
-  if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; renderCaps(r); renderPacks(r.packs);
+  if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
   if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
 function renderCaps(r){
   const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
@@ -911,7 +959,7 @@ function packCard(p){
   else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
   else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack('${p.key}')">Retry</button>`;
   else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
-  else if(CAPFROZEN) cta=`<span class="sstate">runs on a source-install Brain</span>`;
+  else if(!CAPINSTALL) cta=`<span class="sstate">runs on a source-install Brain</span>`;
   else cta=`<button class="sm" onclick="installPack('${p.key}')">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
   const stars="●".repeat(p.impact)+"○".repeat(5-p.impact);
   return `<div class="x" style="cursor:default">
@@ -1425,26 +1473,43 @@ async function checkModel(){
     return;
   }
   const rows=[["Chat",r.want.chat,r.have.chat],["Vision",r.want.vision,r.have.vision],["Embed",r.want.embed,r.have.embed]];
+  const pulls=r.pulls||{};
   let miss=[];
   let body=rows.map(([lbl,nm,have])=>{
     if(!nm)return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm off-t">not set</span><span class="st off-t">optional</span></div>`;
-    if(!have)miss.push(nm);
-    return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm">${esc(nm)}</span>`+
-      `<span class="st ${have?'ok-t':'warn-t'}">${have?'✓ ready':'not pulled'}</span></div>`;}).join("");
+    const job=pulls[nm]; let st;
+    if(have){st='<span class="st ok-t">✓ ready</span>';}
+    else if(job&&job.state==="pulling"){st=`<span class="st warn-t">pulling ${job.percent||0}%</span>`;}   // in flight — no Pull button
+    else if(job&&job.state==="failed"){st='<span class="st warn-t">pull failed</span>';miss.push(nm);}
+    else{st='<span class="st warn-t">not pulled</span>';miss.push(nm);}
+    return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm">${esc(nm)}</span>${st}</div>`;}).join("");
+  // live progress bars for any in-flight pull
+  const pulling=Object.keys(pulls).filter(nm=>pulls[nm].state==="pulling");
+  const prog=pulling.map(nm=>{const p=pulls[nm].percent||0;
+    return `<div class="pbar"><div class="pbar-l">${esc(nm)}</div>`+
+      `<div class="pbar-t"><div class="pbar-f" style="width:${p}%"></div></div>`+
+      `<div class="pbar-p">${p}%</div></div>`;}).join("");
+  // surface the most recent failure (if any) so a stuck/failed pull isn't silent
+  const failed=Object.keys(pulls).filter(nm=>pulls[nm].state==="failed");
+  const failNote=failed.length?`<div class="conn-s" style="margin-top:8px;color:var(--amber)">Couldn't pull ${esc(failed[0])}: ${esc(pulls[failed[0]].detail||"error")}</div>`:'';
   let pull = miss.length?`<div class="lead" style="margin:12px 0 0">One-click pull the missing model${miss.length>1?'s':''}:</div>`+
       `<div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">`+
       miss.map(nm=>`<button class="sm" onclick='pullModel(${esc(JSON.stringify(nm))})'>⬇ Pull ${esc(nm)}</button>`).join("")+
-      `</div><div id="pullOut" class="conn-s" style="margin-top:8px"></div>`:'';
+      `</div>`:'';
   el.innerHTML='<div class="mstat"><div class="head"><span class="sdot ok"></span>'+
     `<b>Ollama reachable</b></div><div class="lead" style="margin:0 0 8px">at <code>${esc(r.url)}</code></div>`+
-    body+pull+'<div style="margin-top:12px"><button class="sm ghost" onclick="checkModel()">Check again</button></div></div>';
+    body+prog+failNote+pull+'<div style="margin-top:12px"><button class="sm ghost" onclick="checkModel()">Check again</button></div></div>';
+  // keep polling while any pull is in flight — the % moves and the row flips to
+  // "✓ ready" on its own when the download finishes (no client-side timeout).
+  if(pulling.length)setTimeout(checkModel,1500);
 }
-async function pullModel(name){const o=$("pullOut");
-  if(o)o.textContent=`Pulling ${name}… this can take a few minutes.`;
+async function pullModel(name){
   toast(`Pulling ${name}…`);
-  let r;try{r=await api("/dreamlayer/model/pull",{method:"POST",body:JSON.stringify({model:name})});}catch(e){r={ok:false,status:"request failed"};}
-  if(o)o.textContent=r.ok?`✓ ${name} pulled.`:`Couldn't pull ${name}: ${r.status||"error"}`;
-  toast(r.ok?`${name} ready`:`Pull failed`);checkModel();}
+  // fire-and-forget: the server pulls in the background and reports % via
+  // /model/status, so this returns instantly instead of blocking for minutes.
+  try{await api("/dreamlayer/model/pull",{method:"POST",body:JSON.stringify({model:name})});}catch(e){}
+  checkModel();   // renders the job + starts the progress-poll loop
+}
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
     ollama_url:$("ourl").value,ollama_chat_model:$("ochat").value,
@@ -1482,15 +1547,31 @@ async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode
 }
 function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.clipboard.writeText(c).then(()=>toast("Copied"));}
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
+let _liveurl="";
+function copyLiveLink(){if(navigator.clipboard&&_liveurl){navigator.clipboard.writeText(_liveurl).then(()=>toast("Live Lens link copied"));}}
 async function liveLink(){const out=$("liveout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
   let r;try{r=await api("/dreamlayer/live/link");}catch(e){r=null;}
   if(!r||!r.url){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
     'The Live Lens link is offered only from the Brain itself. Open <b>http://localhost:7777/</b> on this machine '+
     'and try again — the link still points the phone at this Brain\'s LAN address.</div></div>';return;}
-  const qr=r.qr?`<div class="qrbox">${r.qr}</div><div class="conn-s" style="margin:6px 0 10px">Scan with the phone's camera — the link carries the pairing token, so treat it like the pairing code.</div>`:"";
-  out.innerHTML=`<div class="paircode">${qr}<div class="foot"><span class="url">${esc(r.url)}</span></div>`+
-    `<div class="conn-s" style="margin-top:8px">${esc(r.note||"")}</div></div>`;
-  toast("Live Lens link ready");
+  _liveurl=r.url;
+  const secure=!!r.https;
+  // Adaptive setup steps: on https (the default now) the only friction is the
+  // self-signed cert prompt, so walk the wearer through it; on http the camera
+  // can't start at all, so say that plainly instead of showing a dead QR.
+  const steps=secure
+    ? '<ol class="steps"><li>Point your phone\'s camera at the code and tap the link it shows.</li>'+
+      '<li>Your phone will warn the certificate isn\'t trusted — that\'s expected: it\'s <b>this Brain\'s own</b> certificate on your network, not a stranger\'s. Tap <b>Advanced → Proceed</b> (on iPhone: <b>Show Details → visit this website</b>).</li>'+
+      '<li>Tap <b>Allow</b> when it asks to use the camera — the HUD opens.</li></ol>'
+    : '<div class="warn">The live camera needs a secure <b>https</b> link, which this Brain can\'t serve right now '+
+      '(it turns on automatically once the <code>cryptography</code> package is available — update the app, or run the Brain with <code>--tls</code>). '+
+      'The link below still works for <b>asking</b>; only the live camera needs https.</div>';
+  const qr=r.qr?`<div class="qrbox${secure?" live":""}">${r.qr}</div>`:"";
+  out.innerHTML=`<div class="paircode">${qr}${steps}`+
+    `<div class="foot"><span class="url">${esc(r.url)}</span>`+
+    `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
+    `<div class="conn-s" style="margin-top:6px">This link carries your pairing token — treat it like a password and send it only to your own phone.</div></div>`;
+  toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
 }
 async function loadHistory(){const h=await api("/dreamlayer/history");
   $("history").innerHTML=(h.items||[]).map(x=>{

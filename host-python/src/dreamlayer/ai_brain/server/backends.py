@@ -221,6 +221,64 @@ def _urllib_get(url: str, timeout: float = 4.0) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _urllib_post_stream(url: str, payload: dict, timeout: float, on_line) -> None:
+    """POST and read a newline-delimited JSON stream (Ollama's /api/pull with
+    stream:true), invoking ``on_line(obj)`` per parsed object. Used to surface
+    live pull progress instead of blocking on one giant response."""
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=timeout) as resp:
+        for raw in resp:                       # http.client yields one line per chunk
+            line = raw.decode("utf-8", "replace").strip()
+            if not line:
+                continue
+            try:
+                on_line(json.loads(line))
+            except ValueError:
+                continue                       # a partial/non-JSON keep-alive line
+
+
+def pull_model_stream(config, name: str, on_progress=None, streamer=None) -> dict:
+    """Pull an Ollama model, reporting live progress via ``on_progress(percent,
+    detail)`` as it streams — so a multi-GB pull shows a moving bar instead of a
+    single request that blocks for minutes and times the browser out. Returns
+    {ok, status, model}. ``streamer`` is injectable for tests."""
+    name = (name or "").strip()
+    if not name:
+        return {"ok": False, "status": "no model name", "model": ""}
+    url = (getattr(config, "ollama_url", "") or "http://127.0.0.1:11434").rstrip("/")
+    result = {"ok": False, "status": "", "model": name}
+
+    def handle(obj):
+        if not isinstance(obj, dict):
+            return
+        err = obj.get("error")
+        if err:
+            result["status"] = str(err)[:200]
+            return
+        st = obj.get("status", "")
+        if st:
+            result["status"] = st
+        if st and "success" in str(st).lower():
+            result["ok"] = True
+        total, done = obj.get("total"), obj.get("completed")
+        pct = None
+        if isinstance(total, (int, float)) and total > 0 and isinstance(done, (int, float)):
+            pct = max(0, min(100, round(100.0 * done / total)))
+        if on_progress is not None:
+            on_progress(pct, st or "")
+
+    stream = streamer or (lambda u, p, t, cb: _urllib_post_stream(u, p, t, cb))
+    try:
+        stream(url + "/api/pull", {"name": name, "stream": True}, 3600.0, handle)
+    except Exception as e:                     # unreachable Ollama, mid-stream drop
+        result["status"] = f"could not reach Ollama: {e}"
+        return result
+    return result
+
+
 # Well-known local agent servers, by default port. Discovery probes each for a
 # model list; a hit means the agent is running and can be connected in one tap
 # with nothing to type. Every probe is a LOCALHOST address, so a discovered
