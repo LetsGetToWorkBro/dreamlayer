@@ -721,10 +721,12 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Extend</div><h2>Plugins</h2>
     <p class="lead">Community plugins your Brain runs. Every one is validated —
       integrity, a capability scan, and a smoke test — before it's installed.
-      <a href="https://dreamlayer.app/plugins.html" target="_blank">Browse the store ↗</a>
-      &nbsp;·&nbsp; No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
+      No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
     <div class="conn-s" style="margin:0 0 8px">This Brain can grant:
       <span id="plugCaps">…</span></div>
+    <div class="row" style="margin:0 0 8px"><button onclick="openStore()">🛍 Browse the store</button>
+      <span id="storeStatus" class="conn-s" style="margin:0"></span></div>
+    <div id="storeGrid" class="xgrid" style="margin:0 0 10px"></div>
     <ul id="plugins" class="feed"></ul>
     <div class="conn" style="border-bottom:0"><div style="flex:1"><div class="conn-t">Sideload a package</div>
       <div class="conn-s">Paste a plugin package (JSON: manifest + source) to install it directly. It passes the same gate.</div>
@@ -1935,6 +1937,46 @@ async function installPlugin(){const raw=$("plugPkg").value.trim();if(!raw){retu
   const r=await api("/dreamlayer/plugins/install",{method:"POST",body:JSON.stringify(body)});
   if(r.ok){$("plugPkg").value="";const w=(r.warnings||[]).length?" — note: "+(r.warnings||[]).join("; "):"";$("plugStatus").textContent=w;toast("Installed");loadPlugins();}
   else{$("plugStatus").textContent=(r.errors||["failed"]).join("; ");}}
+
+/* in-app plugin store — browse the pinned registry + 1-click install (no web
+   page, no terminal). The Brain fetches the catalogue and installs by name
+   through the same checksum + capability/sandbox gate as a pasted package. */
+let _storeOpen=false;
+function storeCard(p){
+  const rc=Math.max(0,Math.min(5,Math.round(p.rating||0)));
+  const stars="★".repeat(rc)+"☆".repeat(5-rc);
+  const meta=(p.official?'<span style="color:var(--memory)">✓ Official</span> · ':'')+
+    `${(p.rating||0).toFixed(1)} ${stars} · ${p.downloads||0} installs`;
+  const cta=p.installed
+    ?'<span class="sstate" style="color:var(--success)">✓ installed</span>'
+    :`<button class="sm" onclick="installFromStore(${esc(JSON.stringify(p.name))},this)">Install</button>`;
+  return `<div class="x" style="cursor:default"><div class="x-t">${esc(p.name)} <span class="conn-s">v${esc(p.version||"")}</span></div>`+
+    `<div class="x-b">${esc(p.description||"")}</div>`+
+    `<div class="conn-s" style="margin:8px 0 0">${meta}</div>`+
+    `<div class="row" style="margin-top:8px">${cta}</div></div>`;
+}
+function renderStore(items){$("storeGrid").innerHTML=items.length?items.map(storeCard).join(""):'<div class="conn-s">Nothing in the store yet.</div>';}
+async function openStore(){
+  const grid=$("storeGrid"), st=$("storeStatus");
+  if(_storeOpen){_storeOpen=false;grid.innerHTML="";st.textContent="";return;}   // toggle closed
+  st.textContent="Loading the store…";
+  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){r=null;}
+  if(!r||r.error){st.textContent=(r&&r.error)?r.error:"Couldn't reach the store.";return;}
+  _storeOpen=true;renderStore(r.plugins||[]);
+  st.textContent=`${(r.plugins||[]).length} plugins — tap Install to add one`;
+}
+async function refreshStore(){if(!_storeOpen)return;
+  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){return;}
+  if(r&&r.plugins)renderStore(r.plugins);}
+async function installFromStore(name,btn){
+  if(btn){btn.disabled=true;btn.textContent="Installing…";}
+  let r;try{r=await api("/dreamlayer/plugins/store/install",{method:"POST",body:JSON.stringify({name})});}catch(e){r=null;}
+  if(r&&r.ok){toast("Installed "+name);loadPlugins();refreshStore();}
+  else{const e=(r&&r.errors&&r.errors.length)?r.errors.join("; "):"install failed";
+    toast("Install failed");$("storeStatus").textContent=e;
+    if(btn){btn.disabled=false;btn.textContent="Install";}}
+}
+window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
 
 load();
