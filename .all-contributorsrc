@@ -1,0 +1,25 @@
+{
+  "projectName": "dreamlayer",
+  "projectOwner": "LetsGetToWorkBro",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "commitConvention": "angular",
+  "contributorsPerLine": 7,
+  "linkToUsage": true,
+  "contributors": [
+    {
+      "login": "aastha-m22",
+      "name": "aastha-m22",
+      "avatar_url": "https://avatars.githubusercontent.com/u/177316461?v=4",
+      "profile": "https://github.com/aastha-m22",
+      "contributions": [
+        "translation"
+      ]
+    }
+  ]
+}
