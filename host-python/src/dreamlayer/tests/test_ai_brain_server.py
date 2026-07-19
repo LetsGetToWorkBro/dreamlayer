@@ -261,6 +261,34 @@ class TestServer:
         finally:
             lb.stop()
 
+    def test_plugin_shots_bundled_same_origin(self, tmp_path):
+        """The panel CSP pins img-src to 'self', so plugin screenshots must be
+        bundled and served same-origin (a remote thumbnail would be blocked
+        AND an egress). Every curated shot ships as plugshot_<name>.png,
+        byte-identical to the website's copy, and the panel renders through
+        the plugShot helper — never a remote URL."""
+        import dreamlayer.ai_brain.server as server_mod
+        assets = Path(server_mod.__file__).resolve().parent / "assets"
+        names = ["air-drums", "currency-converter", "face-synth",
+                 "filler-word-counter", "hud-reactions", "open-food-facts"]
+        for n in names:
+            assert (assets / f"plugshot_{n}.png").is_file(), f"missing shot {n}"
+        site = Path(server_mod.__file__).resolve().parents[4].parent \
+            / "landing" / "plugin-shots"
+        if site.is_dir():
+            for n in names:
+                assert (assets / f"plugshot_{n}.png").read_bytes() == \
+                    (site / f"{n}.png").read_bytes(), f"shot drifted: {n}"
+        lb = LiveBrain(tmp_path)
+        try:
+            status, body = _get(lb.url + "/")
+            assert status == 200
+            assert "plugShot" in body and "/panel-assets/plugshot_" in body
+            # the raw remote-screenshot src is gone from both render sites
+            assert 'src="\'+esc(p.screenshot)' not in body
+        finally:
+            lb.stop()
+
     def test_juno_script_and_assets_serve(self, tmp_path):
         lb = LiveBrain(tmp_path)
         try:

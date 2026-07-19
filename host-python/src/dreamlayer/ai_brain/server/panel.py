@@ -199,6 +199,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   /* connections + switches — the toggle is a Platinum slide switch */
   .conn{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:16px 0;border-top:1px solid var(--line)}
   .conn .cthumb{width:96px;height:51px;flex:none;object-fit:cover;border:1px solid var(--frame);border-radius:5px;background:#0B1012}
+  .x .sthumb{display:block;width:100%;height:88px;object-fit:cover;border:1px solid var(--frame);background:#0B1012;margin:0 0 8px}
   .conn:first-of-type{border-top:0;padding-top:4px}
   .conn-t{font-size:1rem;font-weight:600} .conn-s{font-size:.85rem;color:var(--muted);margin-top:3px;max-width:46ch}
   .sw{position:relative;display:inline-block;width:46px;height:24px;flex:none;cursor:pointer}
@@ -736,7 +737,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
       No code? <a href="/dreamlayer/build">Build a lens →</a> (deploys straight to this Brain)</p>
     <div class="conn-s" style="margin:0 0 8px">This Brain can grant:
       <span id="plugCaps">…</span></div>
-    <div class="row" style="margin:0 0 8px"><button onclick="openStore()">🛍 Browse the store</button>
+    <div class="row" style="margin:0 0 8px"><button onclick="openStore()">🛍 Refresh the store</button>
       <span id="storeStatus" class="conn-s" style="margin:0"></span></div>
     <div id="storeGrid" class="xgrid" style="margin:0 0 10px"></div>
     <ul id="plugins" class="feed"></ul>
@@ -871,6 +872,11 @@ const api=(p,o={})=>fetch(p,Object.assign({headers:H},o)).then(r=>r.json());
 // quotes included: esc() output also lands inside single-quoted onclick
 // attributes (Remove buttons), where a stray ' would open an attribute break
 const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* plugin screenshots are served same-origin from the bundled assets — the
+   CSP pins img-src to 'self' (a remote thumbnail would be both blocked and
+   an egress), so the curated shots ship inside the app. onerror hides the
+   tile for a future plugin whose shot isn't bundled yet. */
+const plugShot=n=>"/panel-assets/plugshot_"+encodeURIComponent(n)+".png";
 const $=id=>document.getElementById(id);
 let modelSel="keyword", ollamaOK=null, browsePath="";
 
@@ -2001,13 +2007,13 @@ async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch
   if(!(r.installed||[]).length){ul.innerHTML='<li class="conn-s" style="margin:0">No plugins installed yet — browse the store.</li>';return;}
   ul.innerHTML=(r.installed||[]).map(p=>{
     const perms=(p.requires||[]).length?(p.requires||[]).map(x=>"needs "+esc(x)).join(" · "):"no special access";
-    return '<li class="conn">'+(p.screenshot?'<img class="cthumb" src="'+esc(p.screenshot)+'" alt="'+esc(p.name)+' on the glass" onclick="openPluginDetail(\''+esc(p.name)+'\')" style="cursor:pointer">':'')+'<div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
+    return '<li class="conn">'+(p.screenshot?'<img class="cthumb" src="'+plugShot(p.name)+'" alt="'+esc(p.name)+' on the glass" onclick="openPluginDetail(\''+esc(p.name)+'\')" style="cursor:pointer" onerror="this.remove()">':'')+'<div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
       '<div class="conn-s">'+perms+' · <span style="color:var(--memory)">See what it does →</span></div></div>'+
       '<button class="sm ghost" onclick="removePlugin(\''+esc(p.name)+'\')">Remove</button></li>';
   }).join("");}
 function openPluginDetail(name){const p=pluginsById[name];if(!p)return;
   const long=((p.long&&p.long.length)?p.long:[p.description||""]).map(t=>'<p>'+esc(t)+'</p>').join("");
-  const shot=p.screenshot?'<img class="shot" src="'+esc(p.screenshot)+'" alt="'+esc(p.name)+' preview">':"";
+  const shot=p.screenshot?'<img class="shot" src="'+plugShot(p.name)+'" alt="'+esc(p.name)+' preview" onerror="this.remove()">':"";
   const perms=(p.requires||[]).length
     ?(p.requires||[]).map(x=>'<div class="permr"><b>'+esc(x)+'</b><span>'+esc(CAP_HELP[x]||"a capability it requested")+'</span></div>').join("")
     :'<div class="permr"><span>No special access — it only extends the layer’s own surfaces.</span></div>';
@@ -2042,20 +2048,22 @@ function storeCard(p){
   const cta=p.installed
     ?'<span class="sstate" style="color:var(--success)">✓ installed</span>'
     :`<button class="sm" onclick="installFromStore(${esc(JSON.stringify(p.name))},this)">Install</button>`;
-  return `<div class="x" style="cursor:default"><div class="x-t">${esc(p.name)} <span class="conn-s">v${esc(p.version||"")}</span></div>`+
+  const thumb=p.screenshot?`<img class="sthumb" src="${plugShot(p.name)}" alt="${esc(p.name)} on the glass" onerror="this.remove()">`:"";
+  return `<div class="x" style="cursor:default">${thumb}<div class="x-t">${esc(p.name)} <span class="conn-s">v${esc(p.version||"")}</span></div>`+
     `<div class="x-b">${esc(p.description||"")}</div>`+
     `<div class="conn-s" style="margin:8px 0 0">${meta}</div>`+
     `<div class="row" style="margin-top:8px">${cta}</div></div>`;
 }
 function renderStore(items){$("storeGrid").innerHTML=items.length?items.map(storeCard).join(""):'<div class="conn-s">Nothing in the store yet.</div>';}
 async function openStore(){
-  const grid=$("storeGrid"), st=$("storeStatus");
-  if(_storeOpen){_storeOpen=false;grid.innerHTML="";st.textContent="";return;}   // toggle closed
+  const st=$("storeStatus");
+  // the store IS the page: always render the full pinned catalogue with
+  // 1-click installs — no second page, no extra click. The button refreshes.
   st.textContent="Loading the store…";
   let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){r=null;}
   if(!r||r.error){st.textContent=(r&&r.error)?r.error:"Couldn't reach the store.";return;}
   _storeOpen=true;renderStore(r.plugins||[]);
-  st.textContent=`${(r.plugins||[]).length} plugins — tap Install to add one`;
+  st.textContent=`${(r.plugins||[]).length} plugins, every one through the gate — tap Install`;
 }
 async function refreshStore(){if(!_storeOpen)return;
   let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){return;}
@@ -2072,7 +2080,7 @@ window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
 
 load();
-loadPlugins();
+loadPlugins();openStore();
 renderExplainers();
 buildNav();
 setInterval(refreshStatus,4000);
