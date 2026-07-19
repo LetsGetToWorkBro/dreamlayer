@@ -214,6 +214,53 @@ class TestServer:
         finally:
             lb.stop()
 
+    def test_learn_catalog_is_current_and_true(self, tmp_path):
+        """The Learn section runs the TRUE renderer: halo-sim.js is served as a
+        panel asset (byte-identical to the site's copy), every `img` fallback
+        in EXPLAINERS is a bundled file, and every `live` type is one the sim
+        actually renders. A renamed/removed asset or a typo'd renderer type
+        fails here, not in a user's modal."""
+        import re
+        import dreamlayer.ai_brain.server as server_mod
+        assets = Path(server_mod.__file__).resolve().parent / "assets"
+        sim = assets / "halo-sim.js"
+        assert sim.is_file(), "halo-sim.js must ship inside the panel assets"
+        # lockstep with the website's engine (repo checkouts only; the
+        # installed package has no landing/ tree to compare against)
+        site = Path(server_mod.__file__).resolve().parents[4].parent \
+            / "landing" / "assets" / "sim" / "halo-sim.js"
+        if site.is_file():
+            assert sim.read_bytes() == site.read_bytes(), \
+                "panel halo-sim.js drifted from landing/assets/sim/halo-sim.js"
+        lb = LiveBrain(tmp_path)
+        try:
+            status, body = _get(lb.url + "/")
+            assert status == 200
+            assert '/panel-assets/halo-sim.js' in body
+            # the sim script itself serves with a JS content-type
+            req = urllib.request.Request(lb.url + "/panel-assets/halo-sim.js")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=5) as r:
+                assert r.status == 200
+                assert "javascript" in (r.headers.get("Content-Type") or "")
+                assert b"Glass" in r.read()
+            # every PNG fallback named in the catalog is really bundled
+            block = body.split("const EXPLAINERS=[", 1)[1].split("];", 1)[0]
+            imgs = re.findall(r'img:"([a-z0-9_.]+)"', block)
+            assert len(imgs) >= 10
+            for name in imgs:
+                assert (assets / name).is_file(), f"missing panel asset {name}"
+            # every live type is one the sim renders
+            known = {"ready", "veil", "answer", "recall", "fact", "brief",
+                     "toast", "object", "intro", "waypath", "keep", "rosetta"}
+            lives = re.findall(r'live:\["([a-z_]+)"', block)
+            assert len(lives) >= 10
+            assert set(lives) <= known, f"unknown sim type: {set(lives) - known}"
+            # the catalog covers the current library, not the 8-card past
+            assert len(imgs) + len(lives) >= 25
+        finally:
+            lb.stop()
+
     def test_juno_script_and_assets_serve(self, tmp_path):
         lb = LiveBrain(tmp_path)
         try:

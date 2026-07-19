@@ -2152,6 +2152,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(404, {"error": "not found"}); return
             ctype = {"webp": "image/webp", "png": "image/png",
                      "jpg": "image/jpeg", "svg": "image/svg+xml",
+                     "js": "text/javascript",
                      "woff2": "font/woff2"}.get(
                          name.rsplit(".", 1)[-1].lower(),
                          "application/octet-stream")

@@ -344,6 +344,11 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     border:2px solid var(--frame);border-radius:0;overflow:hidden;
     box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35)}
   .xcard img{display:block;width:100%;background:#0E1416;border-bottom:1px solid var(--frame)}
+  /* the live stage: the TRUE renderer (halo-sim.js) plays the lens on a round
+     glass, exactly as dreamlayer.app and the device draw it */
+  .xstage{display:flex;justify-content:center;background:#0E1416;
+    border-bottom:1px solid var(--frame);padding:26px 0}
+  .xstage canvas{width:288px;height:288px}
   .xcard .xbody{padding:18px 20px;background:var(--surf)}
   .xcard .xbody h3{margin:2px 0 8px;font-size:1.3rem;letter-spacing:-.02em}
   .xcard .xbody p{margin:0;color:var(--muted);line-height:1.6}
@@ -803,6 +808,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 
 <div class="xmodal" id="xmodal" onclick="if(event.target===this)closeX()">
   <div class="xcard">
+    <div class="xstage" id="xstage" style="display:none"><canvas id="xglass"></canvas></div>
     <img id="ximg" alt="" src="">
     <div class="xbody"><div class="eyebrow" id="xkick"></div><h3 id="xtitle"></h3><p id="xtext"></p></div>
     <button class="ghost xclose" onclick="closeX()">Done</button>
@@ -857,6 +863,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     setCollapsed(c);try{localStorage.setItem(LC,c?"1":"0");}catch(e){}});
 })();
 </script>
+<script src="/panel-assets/halo-sim.js"></script>
 <script>
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
@@ -867,22 +874,68 @@ const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'
 const $=id=>document.getElementById(id);
 let modelSel="keyword", ollamaOK=null, browsePath="";
 
-/* feature explainers — each pairs a real HUD card image with what it does */
+/* the current lens catalog — every feature pairs its explainer with the TRUE
+   renderer. `live` entries replay the real on-glass animation via halo-sim.js,
+   the exact engine dreamlayer.app and the simulator run (fly-ins, blooms,
+   drifts — the product's own intros, not a re-creation). `img` entries show
+   the true rendered frame for cards whose animation lives on-device. */
 const EXPLAINERS=[
-  {t:"Juno",img:"juno_reply.png",b:"Ask anything out loud. Juno answers on the glass in a line or two — drawn from your own memory first, the web only when it must."},
-  {t:"Morning brief",img:"morning_brief.png",b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
-  {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
-  {t:"Face recall",img:"person_dossier.png",b:"Glance at someone you've met and their name, how you know them, and your last note surface — privately, only to you."},
-  {t:"Object recall",img:"object_recall.png",b:"“Where are my keys?” The card shows where you last saw the thing, as a place you can walk back to."},
+  {t:"Juno",live:["ready"],b:"The face of the layer. Say “Hey Juno” to wake your assistant; when the glass is idle she flies in, settles, and listens for what matters. Every card below is her handiwork."},
+  {t:"Ask anything",live:["answer",{primary:"In Documents — Friday",sub:"“where's the lease?”"}],b:"Ask out loud and the answer lands on the glass in a line or two — drawn from your own memory first, the web only when you've allowed it."},
+  {t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
+  {t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
+  {t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
+  {t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
+  {t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
+  {t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
+  {t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
+  {t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
+  {t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
+  {t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
+  {t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
+  {t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
+  {t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
   {t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
+  {t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
+  {t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
+  {t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
+  {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
   {t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
-  {t:"Privacy veil",img:"privacy_veil.png",b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
+  {t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
+  {t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
+  {t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
+  {t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
+  {t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
+  {t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
+  {t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
+  {t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
 ];
 function renderExplainers(){const g=$("xgrid");if(!g)return;
   g.innerHTML=EXPLAINERS.map((x,i)=>`<button class="xchip" onclick="openX(${i})"><span class="xdot"></span>${esc(x.t)}</button>`).join("");}
-function openX(i){const x=EXPLAINERS[i];$("ximg").src="/panel-assets/"+x.img;$("xkick").textContent="How it works";
+/* one Glass instance, created on first live open; the TRUE renderer draws the
+   lens exactly as the device would (reduced-motion gets the settled frame) */
+let XG=null;
+const XSTILL=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function xglass(){if(!XG&&window.Halo)XG=new Halo.Glass($("xglass"),new Halo.Sim());return XG;}
+function openX(i){const x=EXPLAINERS[i];
+  const g=x.live?xglass():null;
+  $("xstage").style.display=g?"flex":"none";
+  $("ximg").style.display=g?"none":"block";
+  if(g){
+    g.resize();
+    const ty=x.live[0],data=x.live[1];
+    g.sim.card=null;g.sim.figment=null;g.sim.incognito=false;
+    if(ty==="veil")g.sim.incognito=true;
+    else if(ty==="ready")g._wasReady=XSTILL;      // false replays the fly-in
+    else g.show(ty,data||{},XSTILL);
+    if(XSTILL){g.sim.step(0);g.render();}
+    else{g._on=true;g.start();}
+  } else {
+    $("ximg").src="/panel-assets/"+(x.img||"");
+  }
+  $("xkick").textContent="How it works";
   $("xtitle").textContent=x.t;$("xtext").textContent=x.b;$("xmodal").classList.add("on");}
-function closeX(){$("xmodal").classList.remove("on");}
+function closeX(){$("xmodal").classList.remove("on");if(XG)XG.stop();}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeX();});
 
 /* sidebar navigation — group the sections into app-style views. Each section
