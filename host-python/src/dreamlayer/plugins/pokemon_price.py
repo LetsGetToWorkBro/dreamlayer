@@ -7,9 +7,11 @@ sighting with a `name` (and, when it can, a `number`/`set`); this provider
 resolves it against the **Pokémon TCG API** (pokemontcg.io) and folds the price
 facts into the panel.
 
-Built with a card-show vendor's workflow in mind (thanks to the original
-Halo-card-value idea): a vendor eyeballs a card's **condition**, then checks
-recent sales to gauge the price *right now*. So this connector:
+Concept credit: **WatsonMLDev's pokemon-cost-scraper**
+(https://github.com/WatsonMLDev/pokemon-cost-scraper) — the idea of pricing a
+card straight from the Halo, and the card-show vendor's workflow this connector
+is built around: a vendor eyeballs a card's **condition**, then checks recent
+sales to gauge the price *right now*. So this connector:
 
   * adjusts the market figure for **condition** (NM/LP/MP/HP/DMG — per-card via
     the sighting, or a default you set once), the way a grader knocks a raw

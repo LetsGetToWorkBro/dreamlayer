@@ -304,7 +304,8 @@
         "Look at a Pok\u00e9mon card and the panel names the printing and tells you the going rate \u2014 the market price with a low\u2013high band and the date it's from.",
         "Built for the card-show table: dial in the card's condition (NM/LP/MP/HP/DMG) and the price adjusts the way a vendor would, and a running haul tally sums the singles as you scan them.",
         "Matched live against the Pok\u00e9mon TCG API (pokemontcg.io). Add your own free API key once for heavy use and it's remembered across sessions.",
-        "Only the card's printed name leaves the device to do the lookup \u2014 the card, and that it's yours, stays yours."
+        "Only the card's printed name leaves the device to do the lookup \u2014 the card, and that it's yours, stays yours.",
+        "Concept credit: WatsonMLDev's pokemon-cost-scraper \u2014 the original Halo card-value idea and the vendor workflow this lens is built around."
       ],
       "downloads": 0,
       "rating": 0,
