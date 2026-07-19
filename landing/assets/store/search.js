@@ -52,10 +52,13 @@
   // one. Curated, tiny, and cheap to grow alongside the catalogue: when a new
   // plugin family lands, add its aliases here (a test pins the shape).
   var CONCEPTS = {
-    crypto: ["currency", "money", "price", "exchange"],
-    bitcoin: ["currency", "money", "price", "exchange"],
+    // "price" left out of the money-family expansions: a plugin can be *named*
+    // price (pokemon-price), and an inferred money query must not outrank the
+    // currency converter through that name.
+    crypto: ["currency", "money", "exchange"],
+    bitcoin: ["currency", "money", "exchange"],
     forex: ["currency", "exchange", "rates", "travel"],
-    money: ["currency", "price", "shopping"],
+    money: ["currency", "shopping"],
     price: ["currency", "shopping", "money"],
     prices: ["currency", "shopping", "money"],
     exchange: ["currency", "rates", "converter"],
@@ -88,6 +91,10 @@
     scan: ["barcode", "shelf", "food", "shopping"],
     barcode: ["food", "shopping", "scan"],
     translate: ["currency", "converter", "foreign"],
+    card: ["pokemon", "tcg", "collecting"],
+    cards: ["pokemon", "tcg", "collecting"],
+    collectible: ["pokemon", "tcg", "collecting", "vinyl"],
+    collectibles: ["pokemon", "tcg", "collecting", "vinyl"],
     workout: ["reps", "gym", "fitness", "coaching"],
     gym: ["reps", "fitness", "workout", "coaching"],
     fitness: ["reps", "gym", "workout", "coaching"],
