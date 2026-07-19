@@ -9,6 +9,7 @@
     "hud-reactions": "sha256:46358ee481b67a1bd9433b34275fb7094ea97928f789b1f781e04b57c51f6edf",
     "open-food-facts": "sha256:2983eb56c240a88ba12f0a7a723f4aaa42250ba10302aed3c668a6c4bf065923",
     "open-library": "sha256:f9e76e46f656a0659ac6cd6fb166249c2b165aea15b79d0216b118cec5894973",
+    "pokemon-price": "sha256:1e031ea79d87533651d4fba067c8db38ce229f811857a947513c5998963105df",
     "vinyl-oracle": "sha256:36b570c6bfe77844c5b7ef332febeaea24dcf8d3635fc6492be56651e152a80b"
   }
 }
