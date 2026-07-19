@@ -1172,8 +1172,9 @@ async function toggleCal(name,on){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_names:sel})});
   toast("Calendars updated");loadAgenda();loadCalendars();}
 async function saveCalSync(){const on=$("calSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_sync:on})});
-  toast(on?"Calendar sync on":"Calendar sync off");loadCalendars();loadAgenda();}
+  if(on){$("calStatus").textContent="Syncing your calendar…";toast("Syncing your calendar…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({calendar_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Calendar synced":"Calendar sync off");loadCalendars();loadAgenda();}
 async function syncCalNow(){$("calStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/calendar/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} event(s)`);loadAgenda();loadCalendars();loadHistory();}
@@ -1220,8 +1221,9 @@ async function loadContactsSync(){let r;try{r=await api("/dreamlayer/contacts");
   $("conSync").checked=!!r.sync;
   $("conStatus").textContent=r.last_sync?`${r.count||0} contact(s) · synced ${fmtWhen(r.last_sync)}`:(r.sync?"Syncing…":"Contacts sync is off");}
 async function saveConSync(){const on=$("conSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({contacts_sync:on})});
-  toast(on?"Contacts sync on":"Contacts sync off");loadContactsSync();loadPeople();}
+  if(on){$("conStatus").textContent="Syncing your contacts…";toast("Syncing your contacts…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({contacts_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Contacts synced":"Contacts sync off");loadContactsSync();loadPeople();}
 async function syncConNow(){$("conStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/contacts/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} contact(s)`);loadPeople();loadContactsSync();loadHistory();}
@@ -1246,8 +1248,9 @@ async function toggleRemList(){const boxes=[...$("remList").querySelectorAll("in
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminder_lists:sel})});
   toast("Lists updated");loadReminders();}
 async function saveRemSync(){const on=$("remSync").checked;
-  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminders_sync:on})});
-  toast(on?"Reminders sync on":"Reminders sync off");loadReminders();}
+  if(on){$("remStatus").textContent="Syncing your reminders…";toast("Syncing your reminders…");}
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({reminders_sync:on})});   // the sync runs server-side during this call
+  toast(on?"Reminders synced":"Reminders sync off");loadReminders();}
 async function syncRemNow(){$("remStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/reminders/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} reminder(s)`);loadReminders();loadHistory();}
