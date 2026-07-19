@@ -271,7 +271,7 @@ class TestServer:
         assets = Path(server_mod.__file__).resolve().parent / "assets"
         names = ["air-drums", "currency-converter", "face-synth",
                  "filler-word-counter", "hud-reactions", "open-food-facts",
-                 "open-library", "vinyl-oracle"]
+                 "open-library", "pokemon-price", "vinyl-oracle"]
         for n in names:
             assert (assets / f"plugshot_{n}.png").is_file(), f"missing shot {n}"
         site = Path(server_mod.__file__).resolve().parents[4].parent \
