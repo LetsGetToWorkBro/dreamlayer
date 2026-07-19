@@ -40,6 +40,7 @@ const GROUPS: { section: string; rows: Row[] }[] = [
       { route: "/cloud", labelKey: "settings.cloudLink" },
       { route: "/vitals", labelKey: "settings.vitalsLink" },
       { route: "/plugins", labelKey: "settings.pluginsLink" },
+      { route: "/receipts", labelKey: "settings.receiptsLink" },
     ],
   },
 ];

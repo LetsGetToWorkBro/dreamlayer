@@ -708,6 +708,21 @@ class ActivityLog:
             return None                        # a forged/edited anchor is no anchor
         return core
 
+    def _signed_head(self) -> Optional[dict]:
+        """The head anchor WITH its signature, so a third party (the panel, the
+        phone) can verify the length attestation itself instead of trusting our
+        server-side check. Returns {last_seq, head, count, sig} or None. The core
+        the sig covers is {last_seq, head, count} — canonicalized the same way as
+        a record core (sorted keys, compact separators)."""
+        core = self._read_head()
+        if core is None:
+            return None
+        try:
+            sig = json.loads(self._head_path.read_text()).get("sig", "")
+        except (OSError, json.JSONDecodeError):
+            return None
+        return {**core, "sig": sig}
+
     # -- the chain head (lazy: from the SIGNED anchor, not attacker file state) --
     def _load_head(self) -> None:
         if self._loaded:
@@ -731,7 +746,11 @@ class ActivityLog:
 
     def add(self, kind: str, text: str, ts: Optional[float] = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        ts = ts if ts is not None else time.time()
+        # ALWAYS store ts as a float. Python's json.dumps renders a float as
+        # "N.0" but an int as "N"; the signed core and every client canonicalizer
+        # assume a float, so an int ts would make a legitimate receipt fail
+        # client verification. Coercing here keeps the wire form unambiguous.
+        ts = float(ts) if ts is not None else time.time()
         rec: dict = {"ts": ts, "kind": kind, "text": text}
         # The signed-chain critical section (seq/head advance + anchor write) must
         # be atomic across the threaded server, or two adds collide on a seq and
@@ -837,8 +856,9 @@ class ActivityLog:
                 "records": recs,
                 # the signed high-water mark, so a third party given only the last
                 # `n` records can still detect a truncated tail (records may start
-                # mid-chain, but head.last_seq/count attest the true length).
-                "head": self._read_head(),
+                # mid-chain, but head.last_seq/count attest the true length). Carries
+                # its OWN signature so the client verifies the anchor itself.
+                "head": self._signed_head(),
                 "verification": self.verify()}
 
     # -- owner edits: re-chain the survivors so the receipt stays consistent ---
@@ -851,7 +871,7 @@ class ActivityLog:
         prev, seq = "", 0
         with self.path.open("w") as f:
             for src in recs:
-                rec = {"ts": src.get("ts", time.time()),
+                rec = {"ts": float(src.get("ts", time.time())),  # float — see add()
                        "kind": src.get("kind", ""), "text": src.get("text", "")}
                 if self._signer is not None:
                     rec["seq"] = seq
