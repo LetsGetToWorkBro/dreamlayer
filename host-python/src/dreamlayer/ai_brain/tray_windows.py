@@ -198,16 +198,34 @@ def read_login_entry(value_name: str = RUN_VALUE) -> str | None:
 # The tray app (pystray; Windows only)
 # ---------------------------------------------------------------------------
 
+_TRAY_SPRITE = Path(__file__).resolve().parent / "server" / "assets" / "juno_tray.png"
+
+
 def _dot_image(color: str, size: int = 64):
-    """The DreamLayer ring mark in the status color — the same ring-and-core
-    the site's favicon and the phone's menu bar draw, so the tray wears the
-    brand shape while the color keeps carrying the traffic-light meaning
-    (the tested dot_color contract is untouched; this is only rendering).
-    Windows scales the 64px image down to tray size; the ring stroke and
-    core are sized to stay legible at 16px, like icon_small.png."""
+    """Pixel Juno wearing the status dot — the same face the Mac menu bar and
+    the panel's live chip use, so every surface tells the connection story the
+    same way (the tested dot_color contract is untouched; this is only
+    rendering). The badge is drawn here in the status color; if the sprite
+    isn't in this install, the old ring-and-core mark draws instead — the art
+    degrades, it never fails."""
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
+    try:
+        art = Image.open(_TRAY_SPRITE).convert("RGBA")
+        art = art.resize((size, size), Image.NEAREST)   # 128 -> 64 stays crisp
+        img.paste(art, (0, 0), art)
+        r = size * 11 // 64                             # the site set's badge: 11px dot at 32
+        x1 = y1 = size - 1
+        x0, y0 = x1 - 2 * r, y1 - 2 * r
+        d.ellipse((x0 - 2, y0 - 2, x1 + 2, y1 + 2), fill=(6, 19, 22, 255))
+        d.ellipse((x0, y0, x1, y1), fill=color)
+        g = max(2, size // 16)                          # single top-lit glint pixel
+        d.rectangle((x0 + g + g // 2, y0 + g + g // 2,
+                     x0 + 2 * g + g // 2, y0 + 2 * g + g // 2), fill=(255, 255, 255, 165))
+        return img
+    except Exception:
+        pass
     pad = size // 8
     stroke = max(2, size // 6)
     # a whisper of dark halo behind the ring so it reads on light taskbars
