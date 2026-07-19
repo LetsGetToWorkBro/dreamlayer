@@ -1,0 +1,28 @@
+{
+  "manifest": {
+    "name": "pokemon-price",
+    "version": "0.1.0",
+    "entry": "plugin:plugin",
+    "author": "DreamLayer Team",
+    "official": true,
+    "description": "Point at a Pokémon card and see what it's worth — set, number, rarity, and the live market price with a low–high band, matched against the Pokémon TCG API. Bring your own free key for heavy use; the price desk follows you across sessions.",
+    "homepage": "https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/host-python/src/dreamlayer/plugins/pokemon_price.py",
+    "requires": [
+      "object_lens",
+      "network"
+    ],
+    "api": "2",
+    "checksum": "sha256:1e031ea79d87533651d4fba067c8db38ce229f811857a947513c5998963105df",
+    "signature": "",
+    "forwho": "For collectors, sorters, and anyone holding a card they can't quite value.",
+    "long": [
+      "Look at a Pokémon card and the panel names the printing and tells you the going rate — the market price with a low–high band.",
+      "Matched live against the Pokémon TCG API (pokemontcg.io). Add your own free API key once for heavy use and it's remembered across sessions.",
+      "Only the card's printed name leaves the device to do the lookup — the card, and that it's yours, stays yours."
+    ],
+    "pricing": {
+      "model": "free"
+    }
+  },
+  "source": "from dreamlayer.plugins.pokemon_price import pokemon_price_plugin\n\n\ndef plugin():\n    # first-party WorldLens connector, bundled with the app; enabling it\n    # registers the Pokémon Price object provider. Identifies a trading card\n    # you look at (object_lens) and prices it against the Pokémon TCG API\n    # (pokemontcg.io, urllib -> network).\n    return pokemon_price_plugin()\n"
+}

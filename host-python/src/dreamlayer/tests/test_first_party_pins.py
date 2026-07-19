@@ -71,7 +71,7 @@ def test_pins_match_every_official_registry_source():
 @_needs_registry
 def test_load_first_party_pins_ships_the_catalogue():
     pins = load_first_party_pins()
-    assert len(pins) == 8
+    assert len(pins) == 9
     assert all(v.startswith("sha256:") for v in pins.values())
 
 
@@ -148,5 +148,5 @@ def test_lookalike_first_party_name_fails_closed(tmp_path, monkeypatch):
 def test_brain_wires_the_first_party_pins(tmp_path):
     from dreamlayer.ai_brain.server import Brain
     b = Brain(tmp_path)
-    assert len(b.plugins.first_party) == 8
+    assert len(b.plugins.first_party) == 9
     assert all(v.startswith("sha256:") for v in b.plugins.first_party.values())
