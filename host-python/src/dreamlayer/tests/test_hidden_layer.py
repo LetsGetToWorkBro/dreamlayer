@@ -175,9 +175,9 @@ class TestSpriteLockstep:
         return rows[:32]
 
     def test_juno_color_rows_identical_in_all_three_renderers(self):
-        lua = (REPO / "halo-lua/display/renderer.lua").read_text()
-        py = (REPO / "host-python/src/dreamlayer/hud/renderer.py").read_text()
-        js = (REPO / "landing/assets/sim/halo-sim.js").read_text()
+        lua = (REPO / "halo-lua/display/renderer.lua").read_text(encoding="utf-8")
+        py = (REPO / "host-python/src/dreamlayer/hud/renderer.py").read_text(encoding="utf-8")
+        js = (REPO / "landing/assets/sim/halo-sim.js").read_text(encoding="utf-8")
         r_lua = self._rows(lua, "local JUNO_COLOR_ROWS = {")
         r_py = self._rows(py, "_JUNO_COLOR_ROWS = (")
         r_js = self._rows(js, "var JUNO_COLOR_ROWS = [")
@@ -185,9 +185,9 @@ class TestSpriteLockstep:
         assert r_lua == r_py == r_js
 
     def test_juno_color_palette_identical_in_all_three_renderers(self):
-        lua = (REPO / "halo-lua/display/renderer.lua").read_text()
-        py = (REPO / "host-python/src/dreamlayer/hud/renderer.py").read_text()
-        js = (REPO / "landing/assets/sim/halo-sim.js").read_text()
+        lua = (REPO / "halo-lua/display/renderer.lua").read_text(encoding="utf-8")
+        py = (REPO / "host-python/src/dreamlayer/hud/renderer.py").read_text(encoding="utf-8")
+        js = (REPO / "landing/assets/sim/halo-sim.js").read_text(encoding="utf-8")
         p_lua = re.findall(r"0x([0-9A-F]{6})",
                            lua.split("local JUNO_COLOR_PAL", 1)[1][:200])
         p_py = re.findall(r'"#([0-9A-F]{6})"',

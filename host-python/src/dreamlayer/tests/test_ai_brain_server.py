@@ -263,7 +263,7 @@ class TestServer:
             # true-colors renderers in the sim engine
             assert "dl_prism" in body and "openPrism" in body
             assert "/dreamlayer/discoveries" in body
-            sim_src = sim.read_text()
+            sim_src = sim.read_text(encoding="utf-8")
             assert "_prism" in sim_src and "junocolors" in sim_src
             # discoveries: refused when unknown, kept when real, persistent
             try:

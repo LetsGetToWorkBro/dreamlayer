@@ -325,41 +325,6 @@ local function juno_color_spans()
   return _juno_color_spans
 end
 
--- JunoColorsCard: the hidden flourish. Host-driven and stateless like any
--- card — the orchestrator sends it on the discovery gesture and reverts to
--- ReadyCard eight seconds later. Same run-drawing budget class as the teal
--- sprite; colour costs no extra rects.
-local function draw_juno_colors(enter_t)
-  if not HAS_FRAME then return end
-  local px = 3
-  local ox, oy = CX - 16 * px, CY - 20 - 16 * px + 20
-  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
-    for _, s in ipairs(juno_color_spans()) do
-      frame.display.rect(ox + s[2] * px, (CY - 16 * px - 8) + s[1] * px, s[3] * px, px,
-                         JUNO_COLOR_PAL[s[4]], true)
-    end
-  end
-  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
-    -- eight orbiting twinkles on their own phases (the sim mirrors this
-    -- exact formula); slow sinusoids only — nothing strobes
-    local ts = (enter_t or 0) * 0.001
-    for i = 0, 7 do
-      local ang = i * math.pi / 4 + 0.4 + ts * 0.25
-      local r = 58 + (i % 3) * 10
-      local tw = 0.5 + 0.5 * math.sin(ts * 2.4 + i * 2.1)
-      local x = CX + r * math.cos(ang)
-      local y = (CY - 8) + r * math.sin(ang)
-      local sz = math.floor(1 + 2.4 * tw + 0.5)
-      local col = JUNO_COLOR_PAL[2 + (i % 6)]
-      frame.display.line(math.floor(x - sz), math.floor(y), math.floor(x + sz), math.floor(y), col)
-      frame.display.line(math.floor(x), math.floor(y - sz), math.floor(x), math.floor(y + sz), col)
-    end
-    -- late-bind the primitives text (the file-level `text` helper is
-    -- declared below this point; require() is cached, so this is free)
-    require("display.primitives").text_center(CX, CY + 66, "her true colors", "sm", P.text_ghost)
-  end
-end
-
 local _juno_spans  -- horizontal runs {y, x, w, level}, built once
 local function juno_spans()
   if _juno_spans then return _juno_spans end
@@ -456,6 +421,42 @@ end
 local function layer_ok(enter_t, stagger_ms)
   return enter_t >= (stagger_ms / A.ENTER_DURATION_MS)
 end
+
+-- JunoColorsCard: the hidden flourish. Host-driven and stateless like any
+-- card — the orchestrator sends it on the discovery gesture and reverts to
+-- ReadyCard eight seconds later. Same run-drawing budget class as the teal
+-- sprite; colour costs no extra rects.
+local function draw_juno_colors(enter_t)
+  if not HAS_FRAME then return end
+  local px = 3
+  local ox, oy = CX - 16 * px, CY - 20 - 16 * px + 20
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    for _, s in ipairs(juno_color_spans()) do
+      frame.display.rect(ox + s[2] * px, (CY - 16 * px - 8) + s[1] * px, s[3] * px, px,
+                         JUNO_COLOR_PAL[s[4]], true)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    -- eight orbiting twinkles on their own phases (the sim mirrors this
+    -- exact formula); slow sinusoids only — nothing strobes
+    local ts = (enter_t or 0) * 0.001
+    for i = 0, 7 do
+      local ang = i * math.pi / 4 + 0.4 + ts * 0.25
+      local r = 58 + (i % 3) * 10
+      local tw = 0.5 + 0.5 * math.sin(ts * 2.4 + i * 2.1)
+      local x = CX + r * math.cos(ang)
+      local y = (CY - 8) + r * math.sin(ang)
+      local sz = math.floor(1 + 2.4 * tw + 0.5)
+      local col = JUNO_COLOR_PAL[2 + (i % 6)]
+      frame.display.line(math.floor(x - sz), math.floor(y), math.floor(x + sz), math.floor(y), col)
+      frame.display.line(math.floor(x), math.floor(y - sz), math.floor(x), math.floor(y + sz), col)
+    end
+    -- late-bind the primitives text (the file-level `text` helper is
+    -- declared below this point; require() is cached, so this is free)
+    require("display.primitives").text_center(CX, CY + 66, "her true colors", "sm", P.text_ghost)
+  end
+end
+
 
 local function draw_ready(sc, enter_t, exit_t)
   local r  = floor(8  * sc)
