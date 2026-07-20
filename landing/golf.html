@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer · Figment Golf</title>
 <meta name="description" content="Figment Golf: express a behavior on your glasses in the fewest bytes. Every solution is verified against the real interpreter and the byte score is authoritative — pure skill, no popularity gaming." />
 <meta property="og:title" content="DreamLayer · Figment Golf" />
@@ -164,6 +165,40 @@
   .board .offline{color:#8A6516;font-size:12.5px;padding:16px 14px}
 </style>
 <link rel="stylesheet" href="assets/platinum/platinum.css">
+<style>
+  /* ===== Midnight Platinum — dark overrides for this page's own colors.
+     platinum.css flips the system vars under html.midnight; below remaps
+     Figment Golf's hardcoded paper/white/selection paint. Construction
+     (hard bevels, 1px frames, offset shadows) is unchanged. ===== */
+  html.midnight .col.left{background:#33363A}
+  html.midnight .eyebrow{border-bottom-color:rgba(84,214,178,.4)}
+  html.midnight .chal{background:#313438;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.45)}
+  html.midnight .chal:hover{background:#383B3F}
+  html.midnight .chal.on{background:#7B87FF;color:#10122E;
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.3),inset -1px -1px 0 rgba(0,0,0,.35),
+    2px 2px 0 rgba(0,0,0,.5)}
+  html.midnight .chal.on b{color:#10122E}
+  html.midnight .chal.on span{color:#23264A}
+  html.midnight .chal.on .ico,html.midnight .chal.on .par{color:#082A20}
+  html.midnight .brief,html.midnight .verify{background:#313438;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.45)}
+  html.midnight .score .delta.under{background:#15332A}
+  html.midnight .score .delta.over{background:#3A2521}
+  html.midnight ul.checks li{border-top-color:#3A3D41}
+  html.midnight .board h3 .ic{color:#D9A94E}
+  html.midnight .board .offline{color:#D9A94E}
+  html.midnight .hswin .mbody{background:#2A2D31}
+  html.midnight .hswin th{border-right-color:#45484D}
+  html.midnight .hswin td{border-bottom-color:#35383C;border-right-color:#303337}
+  html.midnight .hswin tbody tr:nth-child(even){background:#2F3237}
+  html.midnight .hswin td.fig a{border-bottom-color:rgba(84,214,178,.4)}
+  html.midnight .hswin tr.you td{background:#1D352C}
+  html.midnight .hswin tr.first td{background:#7B87FF;color:#10122E;
+    border-bottom-color:#5A64C9;border-right-color:rgba(16,18,46,.28)}
+  html.midnight .hswin tr.first td.fig a{color:#10122E;border-bottom-color:rgba(16,18,46,.5)}
+  html.midnight .ic-silver{color:#9AA6AD}
+</style>
 </head>
 <body>
 

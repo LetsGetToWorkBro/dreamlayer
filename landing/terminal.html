@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer · Terminal</title>
 <meta name="description" content="DreamShell — the layer's command line. Draft a lens, read the safety proof, check your Brain, repaint the desktop — or type `dream` and help Juno keep a memory." />
 <meta property="og:title" content="DreamLayer · Terminal" />
@@ -102,6 +103,12 @@
     pre.out,.inrow{font-size:12.5px}
     .screen{height:min(62vh,520px)}
   }
+
+  /* ===== Midnight Platinum — dark overrides for this page's own colors.
+     The phosphor screen is already dark by design; only the helper-strip
+     key buttons carry hardcoded platinum-light paint. ===== */
+  html.midnight .kbtn{background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+  html.midnight .kbtn:active{background:#1F2124;color:#fff}
 </style>
 </head>
 <body class="deskpic desk-dusk">

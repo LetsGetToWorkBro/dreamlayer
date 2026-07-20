@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer — Privacy Policy</title>
 <meta name="description" content="How DreamLayer handles your data: on-device by default, opt-in cloud, no accounts, no tracking. The DreamLayer privacy policy.">
 <meta name="robots" content="index, follow, max-image-preview:large">
@@ -76,6 +77,16 @@
   }
 </style>
 <link rel="stylesheet" href="assets/platinum/platinum.css">
+<style>
+  /* ===== Midnight Platinum — dark overrides for this page's own colors.
+     The shared chrome (platinum.css) flips the system vars under
+     html.midnight; below fixes only Privacy.txt's hardcoded paper inks. ===== */
+  html.midnight .card{background:#313438;
+    box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.45)}
+  html.midnight .eyebrow{border-bottom-color:rgba(84,214,178,.4)}
+  html.midnight .doc a{text-decoration-color:rgba(84,214,178,.45)}
+  html.midnight .doc hr{border-top-color:#1E2023;border-bottom-color:#4A4D52}
+</style>
 </head>
 <body>
 <a class="skip" href="#content">Skip to the policy</a>

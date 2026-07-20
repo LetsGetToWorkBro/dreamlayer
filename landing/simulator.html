@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer · Halo Simulator</title>
 <meta name="description" content="Run the whole DreamLayer stack in your browser — talk to Juno, set a timer that counts down on the glass, introduce someone and be recognised. No app, no glasses.">
 <link rel="canonical" href="https://dreamlayer.app/simulator.html">
@@ -252,6 +253,25 @@
   /* the desk-accessory Juno must not cover the sim's type-to-talk column
      at laptop widths (1280×800) — park her bottom-right instead */
   .mw.sub.da{left:auto;right:14px}
+
+  /* ===== Midnight Platinum — dark overrides for the sim's own colors.
+     platinum.css flips the system vars under html.midnight; below remaps
+     only this page's hardcoded platinum-light paint. The monitor's dark
+     screen (world haze, lens, glow) is the product's display — untouched. ===== */
+  html.midnight .scenebtn{background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .scenebtn:hover{background:linear-gradient(180deg,#5E6166,#3E4145)}
+  html.midnight .scenebtn:active{background:#1F2124}
+  html.midnight .scenebtn .ttl{color:#ECEDEE}
+  html.midnight .say input{background:#212427}
+  html.midnight .say .mic{background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+  html.midnight .say .mic:active{background:#1F2124;color:#fff}
+  html.midnight .say .mic.on{background:#B3402E;color:#fff}
+  html.midnight .chip{color:#ECEDEE;background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .chip:active{background:#1F2124;color:#fff}
+  html.midnight .chip.on{background:linear-gradient(180deg,#2A2D30,#33363A)}
+  html.midnight .chip.danger.on{background:#B3402E;color:#fff}
+  html.midnight .log{background:#212427}
+  html.midnight .log .you::before,html.midnight .log .juno::before{color:#8F979C}
 </style>
 </head>
 <body>
