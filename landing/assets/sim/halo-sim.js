@@ -688,6 +688,48 @@
     this.cv = canvas; this.ctx = canvas.getContext("2d"); this.sim = sim;
     this._t0 = now(); this._last = now(); this._raf = 0; this._on = true;
     this._sparks = []; this._junoIn = null; this._wasReady = false;  // fly-in state
+    // ---- the hidden layer (undocumented on purpose; a secret is a gift
+    // you find). Seven quick taps on the glass knock light into a prism —
+    // the lost lens (halo-lua/display/prism.lua has drawn it on-device
+    // since Cinema v2; no menu ever listed it). Three taps on Juno while
+    // she's settled and she shows her true colors for a few seconds —
+    // full colour is a simulator/app flourish only; the glasses' display
+    // budget stays phosphor. Finding prism is remembered (dl_prism), so
+    // surfaces that list lenses may then admit it exists. ----
+    this._taps = []; this._junoTaps = [];
+    var self = this;
+    canvas.addEventListener("click", function (e) {
+      var r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var x = (e.clientX - r.left) / r.width * SIZE;
+      var y = (e.clientY - r.top) / r.height * SIZE;
+      var ts = now();
+      var isReady = !self.sim.incognito && !(self.sim.figment && !self.sim.figment.ended) && !self.sim.card;
+      if (isReady && x > CX - 42 && x < CX + 42 && y > 64 && y < 160) {
+        self._junoTaps.push(ts);
+        self._junoTaps = self._junoTaps.filter(function (t0) { return ts - t0 < 2.5; });
+        if (self._junoTaps.length >= 3) {
+          self._junoTaps = [];
+          self.show("junocolors", {});
+          setTimeout(function () {
+            if (self.sim.card && self.sim.card.type === "junocolors") self.sim.card = null;
+          }, 8000);
+          try { root.dispatchEvent(new CustomEvent("halo-discovery", { detail: { id: "junocolors" } })); } catch (err) {}
+        }
+        return;
+      }
+      self._taps.push(ts);
+      self._taps = self._taps.filter(function (t0) { return ts - t0 < 3.5; });
+      if (self._taps.length >= 7) {
+        self._taps = [];
+        self.show("prism", { intensity: 62, symmetry: 6, hue_rate: 1 });
+        setTimeout(function () {
+          if (self.sim.card && self.sim.card.type === "prism") self.sim.card = null;
+        }, 12000);
+        try { root.localStorage && root.localStorage.setItem("dl_prism", "found"); } catch (err) {}
+        try { root.dispatchEvent(new CustomEvent("halo-discovery", { detail: { id: "prism" } })); } catch (err) {}
+      }
+    });
     this.resize();
   }
   // Juno's arrival sparkles: spawned along her flight, aged + drawn each frame.
@@ -761,6 +803,8 @@
     else if (sim.card && sim.card.type === "waypath") this._waypath(sim.card, t);
     else if (sim.card && sim.card.type === "keep") this._keep(sim.card, t);
     else if (sim.card && sim.card.type === "rosetta") this._rosetta(sim.card, t);
+    else if (sim.card && sim.card.type === "prism") this._prism(sim.card, t);
+    else if (sim.card && sim.card.type === "junocolors") this._junoColors(sim.card, t);
     else this._ready(t);
     this._drawSparks();          // arrival sparkles overlay the glass, then fade
     c.restore();
@@ -982,6 +1026,196 @@
     if (card.ghost) this._ta(this._clip(card.ghost, 26), CX, 202 + dy, "xs", C.ghost, u * 0.9);
   };
 
+  // Prism, the lost lens — a faithful port of halo-lua/display/prism.lua:
+  // radial arms mirrored into `symmetry` sectors, colours cycling through
+  // the same RAINBOW ring, two thin counter-rotating 8-segment halo rings
+  // with 35% gaps, breathing rotation (slow sinusoid, never a fixed spin),
+  // per-arm shimmer, and a bloom-open spring on entry. reduce → a still
+  // symmetric bloom, fully drawn. Aesthetic wonder, never neurostimulation:
+  // rates are slow and capped, exactly like the device renderer.
+  var PRISM_RAINBOW = ["#E0435A", "#E0A043", "#43E06B", "#439AE0", "#7A6BE0", "#E043C7"];
+  Glass.prototype._prism = function (card, t) {
+    // the Lumen-2 mandala, mirrored 1:1 from halo-lua/display/prism.lua:
+    // fronds with chevron branches, a nested counter-rotating polygon
+    // lattice, orbiting petals, a breathing central eye, and the two halo
+    // rings. Same budget-shaping (arms yield as symmetry climbs; branches
+    // only at <=8 sectors) and the same slow, never-strobing rates.
+    var c = this.ctx, u = this._u(card, t, 0.6);
+    var reduce = !!card.reduce;
+    var inten = card.intensity == null ? 0.6 : Math.max(0, Math.min(1, card.intensity / 100));
+    var sym = Math.max(2, Math.min(12, card.symmetry || 6));
+    var hueRate = Math.max(0.1, Math.min(4, card.hue_rate || 1));
+    var ms = t * 1000;
+    var breath = reduce ? 1 : 1 + 0.5 * Math.sin(2 * Math.PI * ms / 5200);
+    var spin = reduce ? 0 : (ms * 0.00004 * hueRate * breath) % (Math.PI * 2);
+    var tsec = reduce ? 0 : t;
+    var hueShift = reduce ? 0 : Math.floor(tsec * 0.8 * hueRate);
+    var col = function (i) { return PRISM_RAINBOW[((i % 6) + 6) % 6]; };
+    var arms = 3 + Math.round(inten * 3);
+    arms = Math.max(2, Math.min(arms, Math.floor(24 / sym)));
+    var branches = sym <= 8;
+    var R_IN = 18;
+    var reach = (R_IN + (118 - R_IN) * (0.5 + 0.5 * inten)) * u;
+    var sector = Math.PI * 2 / sym;
+    function px(r, ang) { return [CX + r * Math.cos(ang), CX + r * Math.sin(ang)]; }
+    function line(a, b, colr, alpha, w) {
+      c.strokeStyle = rgba(colr, alpha); c.lineWidth = w || 1.6;
+      c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    }
+    // L1 · fronds
+    for (var s2 = 0; s2 < sym; s2++) {
+      var base = s2 * sector + spin;
+      for (var a2 = 1; a2 <= arms; a2++) {
+        var frac = a2 / (arms + 1);
+        var ang = base + frac * sector;
+        var r1 = R_IN + (reach - R_IN) * (0.4 + 0.6 * frac);
+        var p0 = px(R_IN + frac * 6, ang), p1 = px(r1, ang);
+        line(p0, p1, col(a2 - 1 + hueShift), 0.85 * u);
+        if (branches) {
+          for (var bi = 0; bi < 2; bi++) {
+            var bp = bi ? 0.8 : 0.55;
+            var br = R_IN + (r1 - R_IN) * bp;
+            var bx = px(br, ang);
+            var blen = (r1 - R_IN) * 0.22 * breath;
+            line(bx, px(br + blen, ang - 0.38), col(a2 + hueShift), 0.7 * u);
+            line(bx, px(br + blen, ang + 0.38), col(a2 + hueShift), 0.7 * u);
+          }
+        }
+        var shim = reduce ? 1 : 0.78 + 0.22 * Math.sin(tsec * 2.1 + s2 * 1.7 + a2 * 2.3);
+        c.fillStyle = rgba(col(a2 - 1 + hueShift), 0.9 * u);
+        c.beginPath(); c.arc(p1[0], p1[1], 1.4 + 1.2 * shim, 0, Math.PI * 2); c.fill();
+      }
+    }
+    // L2 · nested polygon lattice, three counter-rotating rings, webbed
+    var ringR = [reach * 0.38, reach * 0.62, reach * 0.86];
+    var ringSpin = [spin * 0.7, -spin * 0.9, spin * 0.5 + 0.4];
+    var verts = [];
+    for (var k = 0; k < 3; k++) {
+      verts[k] = [];
+      for (var v = 0; v < sym; v++) {
+        verts[k].push(px(ringR[k], ringSpin[k] + v * sector + k * sector * 0.5));
+      }
+    }
+    for (k = 0; k < 3; k++) {
+      for (v = 0; v < sym; v++) {
+        line(verts[k][v], verts[k][(v + 1) % sym], col(k + 2 + hueShift), 0.55 * u, 1.1);
+      }
+    }
+    for (v = 0; v < sym; v++) line(verts[1][v], verts[2][v], col(1 + hueShift), 0.4 * u, 1);
+    // L3 · orbiting petals
+    var petals = Math.min(sym * 2, 16);
+    for (v = 0; v < petals; v++) {
+      var ph = reduce ? 0 : tsec * 0.6 + v * 1.7;
+      var orb = reach * (0.5 + 0.24 * Math.sin(ph));
+      var pang = -spin * 1.2 + v * (Math.PI / sym);
+      var pp = px(orb, pang);
+      var pr = (1.5 + 1.5 * (0.5 + 0.5 * Math.sin(ph * 1.3)) * breath) * u;
+      c.fillStyle = rgba(col(v + hueShift), 0.85 * u);
+      c.beginPath(); c.arc(pp[0], pp[1], pr, 0, Math.PI * 2); c.fill();
+    }
+    // L4 · the eye
+    for (var i2 = 0; i2 < 3; i2++) {
+      var er = (R_IN - 2) * u * (0.4 + 0.3 * i2)
+               * (1 + (reduce ? 0 : 0.12 * Math.sin(tsec * 1.1 + i2)));
+      if (er > 1) {
+        c.strokeStyle = rgba(col(i2 + hueShift), 0.8 * u); c.lineWidth = 1.4;
+        c.beginPath(); c.arc(CX, CX, er, 0, Math.PI * 2); c.stroke();
+      }
+    }
+    var tri = [];
+    for (v = 0; v < 3; v++) tri.push(px(R_IN * 0.9 * u, -spin * 0.6 + v * (Math.PI * 2 / 3)));
+    for (v = 0; v < 3; v++) line(tri[v], tri[(v + 1) % 3], col(3 + hueShift), 0.75 * u, 1.2);
+    // halo rings hold the edge
+    this._prismRing(60 * u, -spin * 1.4, 0.45 * u);
+    this._prismRing(86 * u, spin * 0.8 + 0.3, 0.28 * u);
+    this._ta("PRISM", CX, 216, "xs", C.ghost, 0.8 * u);
+  };
+  Glass.prototype._prismRing = function (r, phase, alpha) {
+    if (r <= 0) return;
+    var c = this.ctx, segs = 8, span = Math.PI * 2 / segs, gap = span * 0.35;
+    c.strokeStyle = rgba(C.text, alpha); c.lineWidth = 1;
+    for (var s = 0; s < segs; s++) {
+      c.beginPath();
+      c.arc(CX, CX, r, phase + s * span, phase + s * span + (span - gap));
+      c.stroke();
+    }
+  };
+  // Her true colors — the same sprite quantized from the full-colour
+  // source into seven anchors. Tri-file lockstep: here,
+  // halo-lua/display/renderer.lua and hud/renderer.py (JUNO_COLOR_ROWS).
+var JUNO_COLOR_ROWS = [
+    ".......................1........",
+    "......................3.........",
+    ".................6161114........",
+    ".................115143.........",
+    "..............1..614116.........",
+    "..221........1776412161...122...",
+    ".12222......471434411....22221..",
+    "..222221....774531111..122222...",
+    "..1222223...47541.11.12222221...",
+    "...22222331..745....32222222....",
+    "....22223222..41.1122222222.....",
+    ".....22332221244.442232222......",
+    "......1222224224452223321.......",
+    ".........1113222452211..........",
+    "........12241332455211..........",
+    ".....13232141253112233221.......",
+    "....2222224.3222.222322222......",
+    "...2222214..22221.132222222.....",
+    "....232111.122222...132222......",
+    "...........3322221..............",
+    "...........3322222..............",
+    "...........31222222.............",
+    "...........3662322221...........",
+    "...........314432222221.........",
+    "...........1441632232221........",
+    "............414464322222........",
+    "............14414113143.........",
+    ".............31415..............",
+    "...............4.5..............",
+    "...............4.5..............",
+    "...............4.1..............",
+    "...............1................",
+  ];
+  var JUNO_COLOR_PAL = ["#14121A", "#F2FEFD", "#BDDAE3", "#9AC0B0", "#F1C59C", "#C7893D", "#337C80"];
+  function drawJunoColors(c, cx, cy, px, alpha) {
+    var ox = cx - 16 * px, oy = cy - 16 * px;
+    for (var y = 0; y < JUNO_COLOR_ROWS.length; y++) {
+      var row = JUNO_COLOR_ROWS[y];
+      for (var x = 0; x < row.length;) {
+        var ch = row[x];
+        if (ch === ".") { x++; continue; }
+        var x2 = x;
+        while (x2 + 1 < row.length && row[x2 + 1] === ch) x2++;
+        c.fillStyle = rgba(JUNO_COLOR_PAL[+ch - 1], alpha == null ? 1 : alpha);
+        c.fillRect(ox + x * px, oy + y * px, (x2 - x + 1) * px, px);
+        x = x2 + 1;
+      }
+    }
+  }
+  // JunoColorsCard, the device contract: host-driven and stateless — the
+  // orchestrator sends it on the discovery gesture and reverts to ReadyCard
+  // eight seconds later. The sim mirrors that exact behavior.
+  Glass.prototype._junoColors = function (card, t) {
+    var c = this.ctx, u = this._u(card, t, 0.7);
+    var age = (card._in != null) ? (t - card._in) : 9;
+    if (age < 0.35 && !card._burst) { card._burst = 1; this._spawnSparks(CX, CX - 8, 16); }
+    drawJunoColors(c, CX, CX - 8, 3, u);
+    if (Math.random() < 0.3) this._spawnSparks(CX + (Math.random() - 0.5) * 70, CX - 8 + (Math.random() - 0.5) * 70, 1);
+    // eight orbiting twinkles, phase-blinking — mirrored on the device
+    for (var i = 0; i < 8; i++) {
+      var ang = i * Math.PI / 4 + 0.4 + t * 0.25;
+      var r = 58 + (i % 3) * 10;
+      var tw = 0.5 + 0.5 * Math.sin(t * 2.4 + i * 2.1);
+      var x = CX + r * Math.cos(ang), y = (CX - 8) + r * Math.sin(ang);
+      var sz = (1 + 2.4 * tw) * u;
+      c.strokeStyle = rgba(JUNO_COLOR_PAL[1 + (i % 6)], (0.35 + 0.6 * tw) * u);
+      c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(x - sz, y); c.lineTo(x + sz, y);
+      c.moveTo(x, y - sz); c.lineTo(x, y + sz); c.stroke();
+    }
+    this._ta("her true colors", CX, 194, "xs", C.ghost, u * 0.9);
+  };
   Glass.prototype._dotC = function (x, y, r, hex, a) {
     var c = this.ctx; c.fillStyle = rgba(hex, a); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
     c.fillStyle = rgba(hex, 0.2 * a); c.beginPath(); c.arc(x, y, r + 4, 0, Math.PI * 2); c.fill();

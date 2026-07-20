@@ -26,6 +26,7 @@ from ..ai_brain import BrainRouter
 from ..rosetta import RosettaLens
 from .state import HostState
 from ..dream_mode import DreamEngine
+from .hidden_layer import HiddenLayer
 from ..dream_mode.premonition import RecurrenceModel
 from ..rem import RetrievalBias
 from ..rem.nightly import NightWatch
@@ -598,6 +599,10 @@ class Orchestrator(
                                        rem=self.rem_bias,
                                        premonition=self.premonition)
 
+        # The hidden layer: undocumented tap-burst discoveries (prism, her
+        # true colors), riding the same button stream as everything else.
+        self.hidden = HiddenLayer(self.bridge, self.state.is_dream)
+
         # Dream Mode engine (starts stopped; activated on double_tap)
         self.dream = DreamEngine(
             bridge=bridge,
@@ -994,6 +999,12 @@ class Orchestrator(
         if name == "single_click" and self.state.is_dream() \
                 and self.tincan is not None:
             self.tap_collector.collect("single")
+            return
+        # otherwise a single tap belongs to the hidden layer's burst
+        # detector (seven quick taps wake the lost lens; three, her true
+        # colors) — evaluated only after the burst goes quiet
+        if name == "single_click":
+            self.hidden.tap()
             return
         if name == "long_press":
             self.pause() if not self.privacy.paused else self.resume()

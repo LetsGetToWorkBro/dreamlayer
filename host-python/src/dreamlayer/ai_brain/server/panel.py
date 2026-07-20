@@ -1046,7 +1046,54 @@ function renderExplainers(){const g=$("xgrid");if(!g)return;
       .filter(p=>(XCATS.some(c=>c.id===p.x.c)?p.x.c:XCATS[XCATS.length-1].id)===cat.id)
       .map(p=>`<button class="xchip" onclick="openX(${p.i})"><span class="xdot"></span>${esc(p.x.t)}</button>`).join("");
     return chips?`<div class="xcat"><div class="xcat-t">${esc(cat.t)}</div><div class="xcat-b">${esc(cat.b)}</div></div><div class="xgrid">${chips}</div>`:"";
-  }).join("");}
+  }).join("");
+  /* the lost lens: listed only once discovered (seven taps on any glass,
+     or those who type its name). Undocumented on purpose. Appended after the
+     chapters so the found chip lands at the end of the Learn grid. */
+  let _pf=window._dlFound&&window._dlFound.has("prism");
+  try{_pf=_pf||localStorage.getItem("dl_prism")==="found";}catch(e){}
+  if(_pf){const b=document.createElement("button");b.className="xchip";
+    b.innerHTML='<span class="xdot" style="background:linear-gradient(135deg,#E0435A,#E0A043,#43E06B,#439AE0,#7A6BE0,#E043C7)"></span>Prism';
+    b.onclick=openPrism;g.appendChild(b);}}
+function openPrism(){const g=xglass();
+  $("xstage").style.display=g?"flex":"none";
+  $("ximg").style.display=g?"none":"block";
+  if(g){g.resize();
+    g.sim.card=null;g.sim.figment=null;g.sim.incognito=false;
+    g.show("prism",{intensity:62,symmetry:6,hue_rate:1,reduce:XSTILL},XSTILL);
+    if(XSTILL){g.sim.step(0);g.render();}else{g._on=true;g.start();}}
+  $("xkick").textContent="THE LOST LENS";
+  $("xtitle").textContent="Prism";
+  $("xtext").textContent="A reactive kaleidoscope that has lived on the device since the beginning — sound and motion become symmetry, and the colour breathes with the room. No menu ever listed it. You found it anyway.";
+  $("xmodal").classList.add("on");}
+/* discoveries live on the Brain, not in one browser: load the set at boot,
+   and forward any glass discovery (the sim dispatches halo-discovery) so a
+   secret found here is found on every surface this Brain serves. */
+window._dlFound=new Set();
+(async()=>{try{const r=await api("/dreamlayer/discoveries");
+  (r.found||[]).forEach(n=>window._dlFound.add(n));
+  if(window._dlFound.size)renderExplainers();}catch(e){}})();
+window.addEventListener("halo-discovery",async(e)=>{
+  const n=(e.detail||{}).id;if(!n)return;
+  const had=window._dlFound.has(n);
+  window._dlFound.add(n);
+  try{await api("/dreamlayer/discoveries",{method:"POST",body:JSON.stringify({name:n})});}catch(err){}
+  renderExplainers();
+  if(!had&&n==="prism")toast("something new in Learn");});
+/* type its name on the page and the Learn grid admits it exists — but not while
+   you're typing INTO a field, so asking Juno "what's a prism?" or writing
+   "prismatic" in the bug form can't silently trip an irreversible unlock */
+let _kbuf="";
+document.addEventListener("keydown",e=>{
+  if(!e.key||e.key.length!==1)return;
+  const el=e.target;
+  if(el&&(el.tagName==="INPUT"||el.tagName==="TEXTAREA"||el.isContentEditable)){_kbuf="";return;}
+  _kbuf=(_kbuf+e.key.toLowerCase()).slice(-5);
+  if(_kbuf==="prism"){let had=window._dlFound.has("prism");
+    try{had=had||localStorage.getItem("dl_prism")==="found";localStorage.setItem("dl_prism","found");}catch(err){}
+    window._dlFound.add("prism");
+    api("/dreamlayer/discoveries",{method:"POST",body:JSON.stringify({name:"prism"})}).catch(()=>{});
+    renderExplainers();if(!had)toast("something new in Learn");}});
 /* one Glass instance, created on first live open; the TRUE renderer draws the
    lens exactly as the device would (reduced-motion gets the settled frame) */
 let XG=null;

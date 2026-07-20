@@ -115,10 +115,16 @@ class TestPrismRenderer:
         c = _counts(rt)
         assert int(c["line"]) > 0            # arms drawn
         assert int(c["pal"]) > 0             # the palette was cycled
-        # more symmetry -> more arms
+        # Lumen-2: symmetry REDISTRIBUTES the frame budget rather than
+        # multiplying it — at 12 sectors the fronds thin (fewer arms, no
+        # chevron branches) so the field stays under DRAW_CALLS_MAX. The
+        # contract is now: any symmetry draws a full field, and the extreme
+        # never out-draws the budget-shaped default.
         rt.execute('_pr.on_prism({ symmetry = 12 })')
         rt.execute("_calls = {}; _pr.draw(1000)")
-        assert int(_counts(rt)["line"]) > int(c["line"])
+        c12 = _counts(rt)
+        assert int(c12["line"]) > 0
+        assert int(c12["line"]) <= int(c["line"])
 
     def test_colour_flows_over_time(self, rt):
         rt.execute('_pr.on_prism({ active = 1, intensity = 60 })')

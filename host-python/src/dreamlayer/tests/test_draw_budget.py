@@ -98,14 +98,36 @@ def test_testimony_with_spits_within_budget():
 
 def test_prism_max_intensity_within_budget():
     h = _session()
-    h.execute('_pr.on_prism({ active = 1, intensity = 100, symmetry = 12 })')
+    # Sweep EVERY symmetry, not just 12: the peak draw count is at a MIDDLE
+    # symmetry (branches on, more arms), so pinning the leanest value (12) hid
+    # the real worst case. Bound the global peak across all symmetries × phases
+    # against the budget (refute 2026-07-20).
     worst = 0
-    for i in range(12):
-        h.display.draw_calls = 0
-        h.execute(f"frame.display.clear(0x000000); _pr.draw({i * 50}); "
-                  "frame.display.show()")
-        worst = max(worst, h.display.draw_calls)
+    for sym in range(2, 13):
+        h.execute(f'_pr.on_prism({{ active = 1, intensity = 100, symmetry = {sym} }})')
+        for i in range(12):
+            h.display.draw_calls = 0
+            h.execute(f"frame.display.clear(0x000000); _pr.draw({i * 50}); "
+                      "frame.display.show()")
+            worst = max(worst, h.display.draw_calls)
     assert 0 < worst <= _budget(h)
+
+
+def test_juno_colors_card_actually_draws_on_the_lua_renderer():
+    # refute 2026-07-20: draw_juno_colors() sat ABOVE the `local CX,CY` and
+    # `local function layer_ok` declarations, so on-device those were nil globals
+    # — `if layer_ok(...)` nil-called and `CX - …` nil-arithmetic'd, so the card
+    # crashed / drew nothing on glass. It must render within budget.
+    h = _session()
+    h.execute('__now = 0; _r.show_card({ type = "JunoColorsCard" })')
+    worst = 0
+    for at in (100, 300, 700, 1200):        # step through the enter stagger
+        h.execute(f"__now = {at}")
+        h.display.draw_calls = 0
+        h.execute("_r.tick()")              # pre-fix: LuaError (nil layer_ok / CX)
+        worst = max(worst, h.display.draw_calls)
+    assert worst > 0, "JunoColorsCard drew nothing — CX/CY/layer_ok were nil"
+    assert worst <= _budget(h)
 
 
 SAVED_CARD = '{ type = "SavedMemoryCard", primary = "House keys" }'

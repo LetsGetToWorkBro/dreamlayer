@@ -34,7 +34,8 @@ class PrismLens:
         self.active = True
         self.intensity = _clamp01(intensity)
         self.symmetry = max(2, min(12, int(symmetry)))
-        self._last_emit_intensity = self.intensity
+        self.hue_rate = 1.0            # reset, so a prior session's react()-driven
+        self._last_emit_intensity = self.intensity   # rate doesn't leak into this one
         return self.frame()
 
     def exit(self) -> dict:
