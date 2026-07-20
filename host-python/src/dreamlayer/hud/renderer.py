@@ -1605,7 +1605,17 @@ class CardRenderer:
         like every card: the orchestrator sends it on the discovery gesture
         and reverts to ReadyCard eight seconds later. Same run budget as the
         teal sprite; colour costs no extra rects."""
+        import math as _math
         draw_juno_colors(draw, CX, CY - 8, 3)
+        for i in range(8):     # the orbiting twinkles, at their entry pose
+            ang = i * _math.pi / 4 + 0.4
+            r = 58 + (i % 3) * 10
+            x = CX + r * _math.cos(ang)
+            y = (CY - 8) + r * _math.sin(ang)
+            sz = 2
+            col = _JUNO_COLOR_PAL[1 + (i % 6)]
+            draw.line([x - sz, y, x + sz, y], fill=col, width=1)
+            draw.line([x, y - sz, x, y + sz], fill=col, width=1)
         self._text(draw, CX, CY + 66, "her true colors", "xs", T.TEXT_GHOST)
 
     def _generic_rows(self, draw, card):

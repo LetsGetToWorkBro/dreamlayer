@@ -168,43 +168,121 @@ function M.draw(now_ms, opts)
   -- the whole field floats at AIR parallax depth
   local ox, oy = PX.offset("air")
 
-  -- arm count and reach scale with intensity (and the bloom unfold)
-  local arms = 3 + fl(_intensity * 3)          -- 3..6 arms per sector
+  -- ---- the Lumen-2 mandala: a full geometric kaleidoscope. Four layers
+  -- over the standing palette cycle — fronds, a nested polygon lattice,
+  -- orbiting petals, and a breathing central eye. Deliberately lavish (a
+  -- hidden wonder mode, not a battery-budget citizen), but still SAFE by
+  -- construction: every motion is a slow sinusoid or the capped spin —
+  -- nothing steps, nothing strobes, nothing approaches photosensitivity
+  -- thresholds. reduce_motion freezes all phase terms into one still,
+  -- fully-drawn mandala.
+  -- fronds per sector scale with intensity, then yield to the frame
+  -- budget as symmetry climbs: sectors × arms stays ≤ 24, and the chevron
+  -- branches only draw at ≤8 sectors — lavish at the discovery's default
+  -- (symmetry 6), lean at the geometric extremes, never over DRAW_CALLS_MAX
+  local arms = 3 + fl(_intensity * 3)          -- 3..6 fronds per sector
+  arms = math.max(2, math.min(arms, fl(24 / _symmetry)))
+  local branches = _symmetry <= 8
   local reach = R_IN + (R_OUT - R_IN) * (0.5 + 0.5 * _intensity) * bloom
-  -- breathing rotation: the spin rate itself swells and eases
-  local spin = 0
+  local spin, breath, tsec = 0, 1, 0
   if not reduce then
-    local breath = 1 + 0.5 * math.sin(2 * math.pi * now_ms / A.PRISM_BREATH_MS)
+    breath = 1 + 0.5 * math.sin(2 * math.pi * now_ms / A.PRISM_BREATH_MS)
     spin = (now_ms * A.PRISM_SPIN_RATE * _hue_rate * breath) % (2 * math.pi)
+    tsec = now_ms * 0.001
   end
   local sector = (2 * math.pi) / _symmetry
+  local function pt(r, ang)
+    return fl(CX + ox + r * math.cos(ang)), fl(CY + oy + r * math.sin(ang))
+  end
 
-  for s = 0, _symmetry - 1 do
-    local base = s * sector + spin
+  -- L1 · fronds: each arm is a stem with two chevron branches — mirrored
+  -- across every sector, the classic kaleidoscope fern
+  for s2 = 0, _symmetry - 1 do
+    local base = s2 * sector + spin
     for a = 1, arms do
-      -- each arm sits at a fixed offset in the sector, drawn in a cycling
-      -- slot so its colour flows as the palette turns
       local frac = a / (arms + 1)
       local ang = base + frac * sector
       local col = colors[((a - 1) % #colors) + 1]
-      local r0 = R_IN + frac * 6
       local r1 = R_IN + (reach - R_IN) * (0.4 + 0.6 * frac)
-      local x0 = CX + ox + r0 * math.cos(ang)
-      local y0 = CY + oy + r0 * math.sin(ang)
-      local x1 = CX + ox + r1 * math.cos(ang)
-      local y1 = CY + oy + r1 * math.sin(ang)
-      frame.display.line(fl(x0), fl(y0), fl(x1), fl(y1), col)
-      -- petal tip: shimmer on a per-arm Perlin phase (still under reduce)
+      local x0, y0 = pt(R_IN + frac * 6, ang)
+      local x1, y1 = pt(r1, ang)
+      frame.display.line(x0, y0, x1, y1, col)
+      for _, bp in ipairs(branches and { 0.55, 0.8 } or {}) do
+        local br = R_IN + (r1 - R_IN) * bp
+        local bx, by = pt(br, ang)
+        local blen = (r1 - R_IN) * 0.22 * breath
+        for _, sgn in ipairs({ -1, 1 }) do
+          local ex, ey = pt(br + blen, ang + sgn * 0.38)
+          frame.display.line(bx, by, ex, ey, colors[((a) % #colors) + 1])
+        end
+      end
       local tip = 2
       if not reduce then
-        tip = 1 + fl(math.abs(E.perlin1d(now_ms * 0.001 + s * 7.13 + a * 13.7)) + 0.5)
+        tip = 1 + fl(math.abs(E.perlin1d(tsec + s2 * 7.13 + a * 13.7)) + 0.5)
       end
       frame.display.circle(fl(x1), fl(y1), tip, colors[1], true)
     end
   end
 
-  -- two thin halo rings counter-rotate against the arms — the standing
-  -- interference between the two motions is what mesmerizes
+  -- L2 · nested polygon lattice: three counter-rotating symmetry-gons,
+  -- their vertices webbed — the interference between the three spins is
+  -- the trip
+  local ring_r = { reach * 0.38, reach * 0.62, reach * 0.86 }
+  local ring_spin = { spin * 0.7, -spin * 0.9, spin * 0.5 + 0.4 }
+  local verts = {}
+  for k = 1, 3 do
+    verts[k] = {}
+    for v = 0, _symmetry - 1 do
+      local ang = ring_spin[k] + v * sector + (k - 1) * sector * 0.5
+      local x, y = pt(ring_r[k], ang)
+      verts[k][v + 1] = { x, y }
+    end
+  end
+  for k = 1, 3 do
+    local col = colors[((k + 1) % #colors) + 1]
+    for v = 1, _symmetry do
+      local a2 = verts[k][v]
+      local b2 = verts[k][(v % _symmetry) + 1]
+      frame.display.line(a2[1], a2[2], b2[1], b2[2], col)
+    end
+  end
+  for v = 1, _symmetry do                       -- spokes: mid ring → outer ring
+    local a2, b2 = verts[2][v], verts[3][v]
+    frame.display.line(a2[1], a2[2], b2[1], b2[2], colors[2])
+  end
+
+  -- L3 · orbiting petals: paired dots riding between the lattice rings,
+  -- each on its own slow phase, pulsing size with the breath
+  for v = 0, math.min(_symmetry * 2, 16) - 1 do
+    local ph = reduce and 0 or (tsec * 0.6 + v * 1.7)
+    local orb = reach * (0.5 + 0.24 * math.sin(ph))
+    local ang = -spin * 1.2 + v * (math.pi / _symmetry)
+    local x, y = pt(orb, ang)
+    local pr = fl(1.5 + 1.5 * (0.5 + 0.5 * math.sin(ph * 1.3)) * breath)
+    frame.display.circle(x, y, pr, colors[(v % #colors) + 1], true)
+  end
+
+  -- L4 · the eye: concentric pulse at the core, and a slow inner triangle
+  for i = 0, 2 do
+    local er = fl((R_IN - 2) * bloom * (0.4 + 0.3 * i)
+                  * (1 + (reduce and 0 or 0.12 * math.sin(tsec * 1.1 + i))))
+    if er > 1 then
+      frame.display.circle(fl(CX + ox), fl(CY + oy), er,
+                           colors[(i % #colors) + 1], false)
+    end
+  end
+  local tri = {}
+  for v = 0, 2 do
+    local ang = -spin * 0.6 + v * (2 * math.pi / 3)
+    local x, y = pt(R_IN * 0.9 * bloom, ang)
+    tri[v + 1] = { x, y }
+  end
+  for v = 1, 3 do
+    local a2, b2 = tri[v], tri[(v % 3) + 1]
+    frame.display.line(a2[1], a2[2], b2[1], b2[2], colors[4])
+  end
+
+  -- the counter-rotating halo rings hold the outer edge
   if bloom > 0.5 then
     halo_ring(A.PRISM_RING_R_A * bloom, -spin * 1.4, colors[2], ox, oy)
     halo_ring(A.PRISM_RING_R_B * bloom, -spin * 0.8 + 0.3, colors[4], ox, oy)

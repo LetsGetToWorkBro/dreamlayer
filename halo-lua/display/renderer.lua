@@ -340,6 +340,20 @@ local function draw_juno_colors(enter_t)
     end
   end
   if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    -- eight orbiting twinkles on their own phases (the sim mirrors this
+    -- exact formula); slow sinusoids only — nothing strobes
+    local ts = (enter_t or 0) * 0.001
+    for i = 0, 7 do
+      local ang = i * math.pi / 4 + 0.4 + ts * 0.25
+      local r = 58 + (i % 3) * 10
+      local tw = 0.5 + 0.5 * math.sin(ts * 2.4 + i * 2.1)
+      local x = CX + r * math.cos(ang)
+      local y = (CY - 8) + r * math.sin(ang)
+      local sz = math.floor(1 + 2.4 * tw + 0.5)
+      local col = JUNO_COLOR_PAL[2 + (i % 6)]
+      frame.display.line(math.floor(x - sz), math.floor(y), math.floor(x + sz), math.floor(y), col)
+      frame.display.line(math.floor(x), math.floor(y - sz), math.floor(x), math.floor(y + sz), col)
+    end
     -- late-bind the primitives text (the file-level `text` helper is
     -- declared below this point; require() is cached, so this is free)
     require("display.primitives").text_center(CX, CY + 66, "her true colors", "sm", P.text_ghost)

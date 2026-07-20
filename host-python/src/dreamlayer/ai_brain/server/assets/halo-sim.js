@@ -1035,39 +1035,100 @@
   // rates are slow and capped, exactly like the device renderer.
   var PRISM_RAINBOW = ["#E0435A", "#E0A043", "#43E06B", "#439AE0", "#7A6BE0", "#E043C7"];
   Glass.prototype._prism = function (card, t) {
-    var c = this.ctx, u = this._u(card, t, 0.9);
+    // the Lumen-2 mandala, mirrored 1:1 from halo-lua/display/prism.lua:
+    // fronds with chevron branches, a nested counter-rotating polygon
+    // lattice, orbiting petals, a breathing central eye, and the two halo
+    // rings. Same budget-shaping (arms yield as symmetry climbs; branches
+    // only at <=8 sectors) and the same slow, never-strobing rates.
+    var c = this.ctx, u = this._u(card, t, 0.6);
     var reduce = !!card.reduce;
     var inten = card.intensity == null ? 0.6 : Math.max(0, Math.min(1, card.intensity / 100));
     var sym = Math.max(2, Math.min(12, card.symmetry || 6));
     var hueRate = Math.max(0.1, Math.min(4, card.hue_rate || 1));
-    var rot = reduce ? 0 : t * 0.22 * (1 + 0.45 * Math.sin(t * 0.35)) * (0.5 + inten);
-    var hueShift = reduce ? 0 : Math.floor(t * 0.8 * hueRate);
-    var arms = 2 + Math.round(3 * inten);
-    var R_IN = 18, R_OUT = (24 + 94 * inten) * u;
-    for (var s = 0; s < sym; s++) {
-      var base = rot + s * (Math.PI * 2 / sym);
-      for (var a2 = 0; a2 < arms; a2++) {
-        var col = PRISM_RAINBOW[(s + a2 + hueShift) % PRISM_RAINBOW.length];
-        var off = (a2 + 1) / (arms + 1) * (Math.PI / sym);
-        var shim = reduce ? 1 : 0.78 + 0.22 * Math.sin(t * 2.1 + s * 1.7 + a2 * 2.3);
-        var reach = R_IN + (R_OUT - R_IN) * shim;
-        for (var m = -1; m <= 1; m += 2) {
-          var ang = base + m * off;
-          c.strokeStyle = rgba(col, 0.8 * u); c.lineWidth = 2;
-          c.beginPath();
-          c.moveTo(CX + R_IN * Math.cos(ang), CX + R_IN * Math.sin(ang));
-          c.lineTo(CX + reach * Math.cos(ang), CX + reach * Math.sin(ang));
-          c.stroke();
-          c.fillStyle = rgba(col, 0.9 * u);
-          c.beginPath();
-          c.arc(CX + reach * Math.cos(ang), CX + reach * Math.sin(ang), 2.2, 0, Math.PI * 2);
-          c.fill();
+    var ms = t * 1000;
+    var breath = reduce ? 1 : 1 + 0.5 * Math.sin(2 * Math.PI * ms / 5200);
+    var spin = reduce ? 0 : (ms * 0.00004 * hueRate * breath * 6) % (Math.PI * 2);
+    var tsec = reduce ? 0 : t;
+    var hueShift = reduce ? 0 : Math.floor(tsec * 0.8 * hueRate);
+    var col = function (i) { return PRISM_RAINBOW[((i % 6) + 6) % 6]; };
+    var arms = 3 + Math.round(inten * 3);
+    arms = Math.max(2, Math.min(arms, Math.floor(24 / sym)));
+    var branches = sym <= 8;
+    var R_IN = 18;
+    var reach = (R_IN + (118 - R_IN) * (0.5 + 0.5 * inten)) * u;
+    var sector = Math.PI * 2 / sym;
+    function px(r, ang) { return [CX + r * Math.cos(ang), CX + r * Math.sin(ang)]; }
+    function line(a, b, colr, alpha, w) {
+      c.strokeStyle = rgba(colr, alpha); c.lineWidth = w || 1.6;
+      c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    }
+    // L1 · fronds
+    for (var s2 = 0; s2 < sym; s2++) {
+      var base = s2 * sector + spin;
+      for (var a2 = 1; a2 <= arms; a2++) {
+        var frac = a2 / (arms + 1);
+        var ang = base + frac * sector;
+        var r1 = R_IN + (reach - R_IN) * (0.4 + 0.6 * frac);
+        var p0 = px(R_IN + frac * 6, ang), p1 = px(r1, ang);
+        line(p0, p1, col(a2 - 1 + hueShift), 0.85 * u);
+        if (branches) {
+          for (var bi = 0; bi < 2; bi++) {
+            var bp = bi ? 0.8 : 0.55;
+            var br = R_IN + (r1 - R_IN) * bp;
+            var bx = px(br, ang);
+            var blen = (r1 - R_IN) * 0.22 * breath;
+            line(bx, px(br + blen, ang - 0.38), col(a2 + hueShift), 0.7 * u);
+            line(bx, px(br + blen, ang + 0.38), col(a2 + hueShift), 0.7 * u);
+          }
         }
+        var shim = reduce ? 1 : 0.78 + 0.22 * Math.sin(tsec * 2.1 + s2 * 1.7 + a2 * 2.3);
+        c.fillStyle = rgba(col(a2 - 1 + hueShift), 0.9 * u);
+        c.beginPath(); c.arc(p1[0], p1[1], 1.4 + 1.2 * shim, 0, Math.PI * 2); c.fill();
       }
     }
-    this._prismRing(84 * u, reduce ? 0 : -rot * 1.6, 0.45 * u);
-    this._prismRing(106 * u, reduce ? 0 : rot * 1.1, 0.28 * u);
-    this._ta("PRISM", CX, 214, "xs", C.ghost, 0.8 * u);
+    // L2 · nested polygon lattice, three counter-rotating rings, webbed
+    var ringR = [reach * 0.38, reach * 0.62, reach * 0.86];
+    var ringSpin = [spin * 0.7, -spin * 0.9, spin * 0.5 + 0.4];
+    var verts = [];
+    for (var k = 0; k < 3; k++) {
+      verts[k] = [];
+      for (var v = 0; v < sym; v++) {
+        verts[k].push(px(ringR[k], ringSpin[k] + v * sector + k * sector * 0.5));
+      }
+    }
+    for (k = 0; k < 3; k++) {
+      for (v = 0; v < sym; v++) {
+        line(verts[k][v], verts[k][(v + 1) % sym], col(k + 2 + hueShift), 0.55 * u, 1.1);
+      }
+    }
+    for (v = 0; v < sym; v++) line(verts[1][v], verts[2][v], col(1 + hueShift), 0.4 * u, 1);
+    // L3 · orbiting petals
+    var petals = Math.min(sym * 2, 16);
+    for (v = 0; v < petals; v++) {
+      var ph = reduce ? 0 : tsec * 0.6 + v * 1.7;
+      var orb = reach * (0.5 + 0.24 * Math.sin(ph));
+      var pang = -spin * 1.2 + v * (Math.PI / sym);
+      var pp = px(orb, pang);
+      var pr = (1.5 + 1.5 * (0.5 + 0.5 * Math.sin(ph * 1.3)) * breath) * u;
+      c.fillStyle = rgba(col(v + hueShift), 0.85 * u);
+      c.beginPath(); c.arc(pp[0], pp[1], pr, 0, Math.PI * 2); c.fill();
+    }
+    // L4 · the eye
+    for (var i2 = 0; i2 < 3; i2++) {
+      var er = (R_IN - 2) * u * (0.4 + 0.3 * i2)
+               * (1 + (reduce ? 0 : 0.12 * Math.sin(tsec * 1.1 + i2)));
+      if (er > 1) {
+        c.strokeStyle = rgba(col(i2 + hueShift), 0.8 * u); c.lineWidth = 1.4;
+        c.beginPath(); c.arc(CX, CX, er, 0, Math.PI * 2); c.stroke();
+      }
+    }
+    var tri = [];
+    for (v = 0; v < 3; v++) tri.push(px(R_IN * 0.9 * u, -spin * 0.6 + v * (Math.PI * 2 / 3)));
+    for (v = 0; v < 3; v++) line(tri[v], tri[(v + 1) % 3], col(3 + hueShift), 0.75 * u, 1.2);
+    // halo rings hold the edge
+    this._prismRing(60 * u, -spin * 1.4, 0.45 * u);
+    this._prismRing(86 * u, spin * 0.8 + 0.3, 0.28 * u);
+    this._ta("PRISM", CX, 216, "xs", C.ghost, 0.8 * u);
   };
   Glass.prototype._prismRing = function (r, phase, alpha) {
     if (r <= 0) return;
@@ -1136,9 +1197,23 @@ var JUNO_COLOR_ROWS = [
   // orchestrator sends it on the discovery gesture and reverts to ReadyCard
   // eight seconds later. The sim mirrors that exact behavior.
   Glass.prototype._junoColors = function (card, t) {
-    var u = this._u(card, t, 0.7);
-    drawJunoColors(this.ctx, CX, CX - 8, 3, u);
-    if (Math.random() < 0.1) this._spawnSparks(CX, CX - 8, 1);
+    var c = this.ctx, u = this._u(card, t, 0.7);
+    var age = (card._in != null) ? (t - card._in) : 9;
+    if (age < 0.35 && !card._burst) { card._burst = 1; this._spawnSparks(CX, CX - 8, 16); }
+    drawJunoColors(c, CX, CX - 8, 3, u);
+    if (Math.random() < 0.3) this._spawnSparks(CX + (Math.random() - 0.5) * 70, CX - 8 + (Math.random() - 0.5) * 70, 1);
+    // eight orbiting twinkles, phase-blinking — mirrored on the device
+    for (var i = 0; i < 8; i++) {
+      var ang = i * Math.PI / 4 + 0.4 + t * 0.25;
+      var r = 58 + (i % 3) * 10;
+      var tw = 0.5 + 0.5 * Math.sin(t * 2.4 + i * 2.1);
+      var x = CX + r * Math.cos(ang), y = (CX - 8) + r * Math.sin(ang);
+      var sz = (1 + 2.4 * tw) * u;
+      c.strokeStyle = rgba(JUNO_COLOR_PAL[1 + (i % 6)], (0.35 + 0.6 * tw) * u);
+      c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(x - sz, y); c.lineTo(x + sz, y);
+      c.moveTo(x, y - sz); c.lineTo(x, y + sz); c.stroke();
+    }
     this._ta("her true colors", CX, 194, "xs", C.ghost, u * 0.9);
   };
   Glass.prototype._dotC = function (x, y, r, hex, a) {
