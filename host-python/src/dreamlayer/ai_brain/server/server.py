@@ -1632,6 +1632,76 @@ def _capability_payload(brain: Brain) -> dict:
 
 _PACK_JOBS: dict = {}            # pack key -> {"state","detail","ts"}
 _PACK_LOCK = threading.Lock()
+_PIP_TIMEOUT_S = 3600.0          # hard wall on a pip install (module-level so tests can shorten it)
+
+
+# --- Live Lens short pairing code ---------------------------------------------
+# The Live Lens link carries the Brain token in its URL FRAGMENT — a scanned QR
+# delivers it, but a hand-typed URL drops it, so a phone that can't scan is
+# stuck. This vault issues a short numeric code the wearer reads off the panel
+# and types on the live page to redeem the token. It is a network-reachable
+# token handout, so it is deliberately narrow:
+#   * 8 digits (1e8 space), generated with secrets;
+#   * exactly ONE code active at a time (issuing a new one voids the old);
+#   * a short TTL (issued only when the wearer is actively pairing);
+#   * SINGLE-USE — a successful redeem consumes it;
+#   * a wrong guess never consumes it (so an attacker can't void the real one),
+#     but every attempt is brute-force locked out on the SHARED auth limiter;
+#   * a GLOBAL per-code attempt cap on top of the per-IP lockout, so an attacker
+#     rotating source IPs (an IPv6 /64) still can't out-guess one code's life.
+_LIVE_CODE_DIGITS = 8
+_LIVE_CODE_TTL_S = 300.0         # 5 minutes
+_LIVE_CODE_MAX_ATTEMPTS = 100    # total guesses against ONE code before it self-voids
+
+
+class _LiveCodeVault:
+    """One active, short-lived, single-use code → the Brain token."""
+
+    def __init__(self, now_fn=time.monotonic):
+        self._lock = threading.Lock()
+        self._now = now_fn
+        self._code: str = ""
+        self._token: str = ""
+        self._expiry: float = 0.0
+        self._attempts: int = 0
+
+    def issue(self, token: str, ttl: float = _LIVE_CODE_TTL_S) -> str:
+        import secrets
+        code = "".join(secrets.choice("0123456789") for _ in range(_LIVE_CODE_DIGITS))
+        with self._lock:
+            self._code = code
+            self._token = token
+            self._expiry = self._now() + ttl
+            self._attempts = 0
+        return code
+
+    def redeem(self, code: str):
+        """Return the token for a correct, unexpired code (and consume it), else
+        None. A wrong or expired code returns None WITHOUT consuming a live one."""
+        import hmac
+        # A wrong/odd guess must never RAISE: hmac.compare_digest() throws on a
+        # non-ASCII string, which would escape the handler as a 500 AND land
+        # *before* the caller's record_failure() — an un-throttled traceback DoS
+        # that the per-IP lockout never sees. The code is always ASCII digits, so
+        # reject anything else up front (the format is public — this leaks nothing).
+        if not isinstance(code, str) or not code or not code.isascii():
+            return None
+        with self._lock:
+            if not self._code or self._now() >= self._expiry:
+                self._code = ""; self._token = ""; self._expiry = 0.0
+                return None
+            # Global attempt cap (IP-independent): the per-IP HTTP lockout can be
+            # sidestepped by rotating source addresses, so bound total guesses
+            # against ANY one code. Over the cap → void it; the wearer regenerates.
+            self._attempts += 1
+            if self._attempts > _LIVE_CODE_MAX_ATTEMPTS:
+                self._code = ""; self._token = ""; self._expiry = 0.0
+                return None
+            if not hmac.compare_digest(code, self._code):
+                return None                       # wrong guess — leave the real code live
+            tok = self._token
+            self._code = ""; self._token = ""; self._expiry = 0.0   # single-use
+            return tok
 
 
 def _pip_env() -> dict:
@@ -1646,41 +1716,120 @@ def _pip_env() -> dict:
     return env
 
 
-def _run_pip(reqs: list) -> tuple:
-    """Default pack runner: pip install into this interpreter's environment.
-    Returns (ok, last_output_lines)."""
+def _pip_progress_parser(job: dict, total: int):
+    """Turn pip's line output into an honest, monotonic job percent.
+
+    pip narrates its work — "Collecting x", "Downloading x (12.3 MB)", "Using
+    cached x", "Installing collected packages" — so a bar can move on REAL
+    events instead of a fake ticker. The denominator grows as pip discovers
+    transitive deps (start from the pack's own requirement count), download
+    events advance 5→85, the install phase pins 90, and _install_pack sets 100
+    on success. max() keeps the bar from ever sliding backward."""
+    seen: set = set()
+    done: set = set()
+
+    def bump(p: int) -> None:
+        job["percent"] = max(int(job.get("percent") or 0), max(0, min(99, p)))
+
+    def on_line(raw: str) -> None:
+        line = raw.strip()
+        if line.startswith("Collecting "):
+            name = line.split(None, 1)[1].split("==")[0].split(">=")[0].split("[")[0]
+            seen.add(name)
+            job["detail"] = f"resolving {name}"
+            bump(5 + int(80 * len(done) / max(total, len(seen))))
+        elif line.startswith(("Downloading ", "Using cached ")) or " Downloading " in line:
+            token = line.replace("Using cached ", "Downloading ").split("Downloading ", 1)[-1]
+            done.add(token.split()[0] if token else line)
+            job["detail"] = f"downloading {len(done)} of ~{max(total, len(seen))}"
+            bump(5 + int(80 * len(done) / max(total, len(seen))))
+        elif line.startswith("Installing collected packages"):
+            job["detail"] = "installing…"
+            bump(90)
+
+    return on_line
+
+
+def _run_pip(reqs: list, on_line=None) -> tuple:
+    """Default pack runner: pip install into this interpreter's environment,
+    streaming each output line into `on_line` (progress). Returns
+    (ok, last_output_lines)."""
     import subprocess
     import sys
-    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", *reqs]
+    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
+           "--progress-bar", "off", *reqs]
+    proc = None
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                              env=_pip_env())
-        tail = (proc.stdout + proc.stderr).strip().splitlines()[-6:]
-        return proc.returncode == 0, "\n".join(tail)
-    except Exception as exc:                     # pip missing, timeout, ...
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                env=_pip_env())
+        tail: list = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            tail.append(line.rstrip())
+            if len(tail) > 6:
+                tail.pop(0)
+            if on_line:
+                try:
+                    on_line(line)
+                except Exception:               # a progress hiccup never kills pip
+                    pass
+        code = proc.wait(timeout=_PIP_TIMEOUT_S)
+        return code == 0, "\n".join(tail)
+    except Exception as exc:                     # pip missing, timeout, decode error…
         return False, str(exc)
+    finally:
+        # Never leave a detached pip running (a wait() timeout or a mid-stream
+        # exception would otherwise orphan the child AND let a retry launch a
+        # SECOND concurrent pip, since the job flips to "failed" while the first
+        # still installs). Kill it and reap so the fd/process can't leak.
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
 
 
-_PACK_RUNNER = _run_pip
+# Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
+# _install_pack's _call_runner feeds on_line only to one that declares it. The
+# permissive annotation lets tests inject a 1-arg lambda without a mypy clash.
+_PACK_RUNNER: "Callable[..., tuple]" = _run_pip
 
 
-def _run_pip_target(reqs: list, target: str) -> tuple:
+def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     """Frozen-app pack runner: install into a WRITABLE sidecar via in-process pip
     ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
     out to, and must not — can not — install into itself). pip runs inside THIS
     interpreter, so it resolves wheels for the bundled Python's own version and
-    platform. Returns (ok, detail). Absent pip → a clear failure, never a crash —
-    the panel then still shows the honest source-install note (audit 2026-07-19)."""
+    platform. Progress: in-process pip narrates through the ``pip`` logger, so a
+    temporary handler feeds `on_line` the same lines the subprocess path parses —
+    no stdout redirection games (which would be process-global and thread-unsafe).
+    Returns (ok, detail). Absent pip → a clear failure, never a crash — the panel
+    then still shows the honest source-install note (audit 2026-07-19)."""
     try:
         from pip._internal.cli.main import main as pip_main
     except Exception as exc:                     # pip not bundled in this build
         return False, f"this build can't add packs (pip unavailable: {exc})"
     argv = ["install", "--target", str(target), "--upgrade", "--no-input",
             "--no-cache-dir", "--disable-pip-version-check",
-            "--no-warn-script-location", *reqs]
+            "--no-warn-script-location", "--progress-bar", "off", *reqs]
+    import logging
     import os
+
+    class _LineHandler(logging.Handler):         # pip's narration → on_line
+        def emit(self, record):
+            try:
+                if on_line:
+                    on_line(record.getMessage())
+            except Exception:                    # progress must never break pip
+                pass
+
+    handler = _LineHandler()
+    pip_logger = logging.getLogger("pip")
     saved = {k: os.environ.pop(k, None)           # in-process pip reads these live;
              for k in ("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_CONFIG_FILE")}
+    pip_logger.addHandler(handler)
     try:
         code = pip_main(argv)
     except SystemExit as e:                       # pip can raise SystemExit
@@ -1688,6 +1837,7 @@ def _run_pip_target(reqs: list, target: str) -> tuple:
     except Exception as exc:                       # noqa: BLE001 — never crash the job thread
         return False, str(exc)[-400:]
     finally:
+        pip_logger.removeHandler(handler)
         for k, v in saved.items():                # restore the caller's environment
             if v is not None:
                 os.environ[k] = v
@@ -1698,7 +1848,7 @@ def _run_pip_target(reqs: list, target: str) -> tuple:
     return False, f"pip exited {code}"
 
 
-_PACK_RUNNER_FROZEN = _run_pip_target
+_PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
 
 
 def _install_pack(brain: Brain, pack_key: str) -> dict:
@@ -1722,15 +1872,31 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
     with _PACK_LOCK:
         if any(j.get("state") == "installing" for j in _PACK_JOBS.values()):
             return {"error": "another pack is already installing"}
-        job = {"state": "installing", "detail": f"{len(reqs)} packages", "ts": time.time()}
+        job = {"state": "installing", "percent": 0,
+               "detail": f"{len(reqs)} packages", "ts": time.time()}
         _PACK_JOBS[pack_key] = job
+
+    on_line = _pip_progress_parser(job, len(reqs))
+
+    def _call_runner(runner, *args):
+        """Injected test runners are plain `lambda reqs:` — only feed on_line
+        to a runner that declares it, so the seam stays backward-compatible."""
+        import inspect
+        try:
+            if "on_line" in inspect.signature(runner).parameters:
+                return runner(*args, on_line=on_line)
+        except (TypeError, ValueError):
+            pass
+        return runner(*args)
 
     def work():
         if frozen:
-            ok, detail = _PACK_RUNNER_FROZEN(reqs, str(pack_site_dir(brain.cfg_dir)))
+            ok, detail = _call_runner(_PACK_RUNNER_FROZEN, reqs,
+                                      str(pack_site_dir(brain.cfg_dir)))
         else:
-            ok, detail = _PACK_RUNNER(reqs)
+            ok, detail = _call_runner(_PACK_RUNNER, reqs)
         job["state"] = "done" if ok else "failed"
+        job["percent"] = 100 if ok else job.get("percent", 0)
         job["detail"] = ("installed — reload the panel; restart the Brain if a "
                          "capability stays dark" if ok else (detail or "failed")[-400:])
         job["ts"] = time.time()
@@ -1875,6 +2041,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             pass
     _auth_limiter: LockoutLimiter = _shared
 
+    # The Live Lens short pairing code lives on the Brain too, shared across both
+    # listeners for the same reason the limiter is (one active code, not one per
+    # port). A phone that can't scan the QR types this code to redeem the token.
+    _shared_vault = getattr(brain, "_shared_live_vault", None)
+    if _shared_vault is None:
+        _shared_vault = _LiveCodeVault()
+        try:
+            setattr(brain, "_shared_live_vault", _shared_vault)
+        except Exception:
+            pass
+    _live_vault: _LiveCodeVault = _shared_vault
+
     class Handler(BaseHTTPRequestHandler):
         # Per-connection socket timeout: StreamRequestHandler.setup() applies
         # this via self.connection.settimeout(), so a slowloris client that opens
@@ -1986,6 +2164,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _from_localhost(self) -> bool:
             return self.client_address[0] in ("127.0.0.1", "::1",
                                               "::ffff:127.0.0.1")
+
+        def _is_tls(self) -> bool:
+            """True when this request arrived on the TLS sibling listener (its
+            socket is wrapped by ssl.wrap_socket in tls.start_tls_sibling), so a
+            response body is encrypted on the wire. Used to keep the Live Lens
+            token off a cleartext LAN hop."""
+            import ssl
+            return isinstance(self.connection, ssl.SSLSocket)
 
         def _host_allowed(self) -> bool:
             """DNS-rebinding defense (the read side of the same-origin policy the
@@ -2246,6 +2432,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             ctype = {"webp": "image/webp", "png": "image/png",
                      "jpg": "image/jpeg", "svg": "image/svg+xml",
                      "js": "text/javascript",
+                     "mp3": "audio/mpeg",
                      "woff2": "font/woff2"}.get(
                          name.rsplit(".", 1)[-1].lower(),
                          "application/octet-stream")
@@ -2517,9 +2704,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             best = (https_url or http_url) + frag
             from .qr import to_svg
             brain.activity.add("look", "Generated a Live Lens link")
+            # A short code the wearer can type on the live page if the phone
+            # can't scan the QR — only meaningful when a token exists to hand out
+            # (a tokenless Brain is loopback-only; a LAN phone can't reach it).
+            code = _live_vault.issue(brain.config.token) if brain.config.token else ""
             self._json(200, {
                 "url": best, "http_url": http_url + frag,
                 "https": bool(https_url),
+                "code": code,
                 "note": ("scan with the phone camera — accept the one-time "
                          "certificate warning (it is this Brain's own)"
                          if https_url else
@@ -2710,6 +2902,44 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from . import live as live_mod
             data = self._raw(live_mod.MAX_FRAME_BYTES)
             self._json(200, live_mod.look(brain, data))
+
+        def _post_live_redeem(self, path, qs):
+            """Exchange the short Live Lens pairing code for the token.
+
+            PUBLIC — resolved before the auth gate, because the phone redeeming
+            has no token yet (that's the whole point). But it is the ONE
+            unauthenticated write, so it is hardened at every turn:
+              * do_POST already ran the DNS-rebind (_host_allowed) and CSRF
+                (_same_origin_write) guards, so a rebound/cross-origin page can't
+                reach here;
+              * every attempt is brute-force locked out on the SHARED auth
+                limiter keyed by client IP — a grinder locked out of the token
+                endpoint is locked out here too, and vice-versa, so 8 digits
+                behind a 10-tries/60 s → 5-min lockout is unbruteforceable inside
+                the code's own 5-min life;
+              * the vault gives one code, single-use, that a wrong guess never
+                consumes.
+            The token then rides the JSON response over the same channel the
+            page will use it on (https when the camera path is live)."""
+            # The token leaves in the RESPONSE BODY, so it must ride an encrypted
+            # hop: only a loopback caller (not sniffable) or a TLS connection may
+            # redeem. The live camera path needs https anyway (getUserMedia wants
+            # a secure context), so this costs the real flow nothing and closes a
+            # cleartext-token-over-LAN leak — the fragment path it supplements is
+            # careful to keep the token off the wire (refute 2026-07-20).
+            if not (self._from_localhost() or self._is_tls()):
+                self._json(403, {"error": "redeem the code over the secure (https) link"}); return
+            ip = self.client_address[0]
+            if not _auth_limiter.allow(ip):
+                self._json(429, {"error": "too many attempts — wait a minute"}); return
+            code = str(self._body().get("code", "")).strip()
+            tok = _live_vault.redeem(code)
+            if not tok:
+                _auth_limiter.record_failure(ip)
+                self._json(401, {"error": "wrong or expired code"}); return
+            _auth_limiter.record_success(ip)
+            brain.activity.add("pair", "Live Lens paired by code")
+            self._json(200, {"token": tok})
 
         def _post_plugins_install(self, path, qs):
             """Install a plugin from the posted descriptor."""
@@ -3171,6 +3401,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         _POST_ROUTES_PREFIX = [
             ("/dreamlayer/event/", _post_event),
         ]
+        # PUBLIC POSTs — resolved BEFORE the auth gate (the caller has no token
+        # yet). Still behind do_POST's rebind + CSRF guards. The redeem handler
+        # carries its own brute-force lockout; keep this set to that one route.
+        _POST_PUBLIC = {
+            "/dreamlayer/live/redeem": _post_live_redeem,
+        }
 
         def do_POST(self):
             # DNS-rebind guard first (mirrors do_GET): a rebound page must not
@@ -3184,14 +3420,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # any local caller). Native/CLI callers carry no Origin and pass.
             if not self._same_origin_write():
                 self._json(403, {"error": "cross-origin write refused"}); return
-            # the auth gate stays first, exactly as before the route table
-            if not self._authed():
-                self._json(401, {"error": "unauthorised"}); return
-            handler = self._POST_ROUTES.get(path)
+            # PUBLIC POSTs (only /live/redeem) resolve BEFORE the auth gate — the
+            # caller has no token yet. They still passed the rebind + CSRF guards
+            # above, and each carries its own throttle. Non-public routes fall
+            # through the auth gate exactly as before.
+            handler = self._POST_PUBLIC.get(path)
             if handler is None:
-                for prefix, h in self._POST_ROUTES_PREFIX:
-                    if path.startswith(prefix):
-                        handler = h; break
+                if not self._authed():
+                    self._json(401, {"error": "unauthorised"}); return
+                handler = self._POST_ROUTES.get(path)
+                if handler is None:
+                    for prefix, h in self._POST_ROUTES_PREFIX:
+                        if path.startswith(prefix):
+                            handler = h; break
             if handler is None:
                 self._json(404, {"error": "not found"}); return
             # The body is read lazily inside each handler (via _body/_raw), so

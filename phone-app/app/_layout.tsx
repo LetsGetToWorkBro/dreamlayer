@@ -203,6 +203,7 @@ export default function Layout() {
       <Tabs.Screen name="rehearsal" options={{ href: null }} />
       <Tabs.Screen name="ember" options={{ href: null }} />
       <Tabs.Screen name="confluence" options={{ href: null }} />
+      <Tabs.Screen name="terminal" options={{ href: null }} />
       <Tabs.Screen name="onboarding" options={{ href: null, ...noBar }} />
       <Tabs.Screen name="index" options={{ href: null, ...noBar }} />
     </Tabs>

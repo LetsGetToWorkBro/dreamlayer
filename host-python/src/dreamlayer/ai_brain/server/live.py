@@ -327,6 +327,13 @@ _PAGE = """<!doctype html>
   .notice h2{font-size:13px;letter-spacing:.14em;margin-bottom:8px}
   .notice p{color:#CDBB96;margin-top:6px}
   .notice code{color:var(--phos)}
+  .codein{display:flex;gap:8px;margin-top:8px}
+  .codein input{flex:1;min-width:0;font:18px ui-monospace,Menlo,monospace;letter-spacing:3px;
+    text-align:center;padding:8px;border:1px solid var(--phos-dim);border-radius:4px;
+    background:#05100D;color:var(--phos)}
+  .codein button{font:13px inherit;letter-spacing:.06em;padding:0 14px;border-radius:4px;
+    border:1px solid var(--phos);background:transparent;color:var(--phos);cursor:pointer}
+  .pairmsg{min-height:1.1em;color:var(--amber)}
   #privacy{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 68px);
     left:0;right:0;text-align:center;color:var(--phos-dim);font-size:10.5px;
     letter-spacing:.08em;padding:0 16px}
@@ -513,9 +520,55 @@ async function ask(){
 $("send").onclick = ask;
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 
+let _pairNotice = null;
 function needsPairing(){
-  notice("NOT PAIRED",
-    "<p>Open the panel on the Brain's computer &rarr; <b>Connections &rarr; Live Lens</b> and scan the QR &mdash; the link carries your pairing token.</p>");
+  if (_pairNotice) return;                         /* don't stack notices */
+  const n = document.createElement("div");
+  n.className = "notice";
+  n.innerHTML =
+    "<h2>CONNECT THIS PHONE</h2>"+
+    "<p>This page opened <b>without its pairing token</b>, so the Brain won't answer yet. "+
+    "The easiest way is to <b>point your phone camera at the QR</b> on the panel "+
+    "(<b>Connections &rarr; Live Lens</b>) &mdash; it carries the token for you.</p>"+
+    "<p>Can't scan? Type the short code shown next to the QR:</p>"+
+    "<div class=\\"codein\\"><input id=\\"pairCode\\" inputmode=\\"numeric\\" autocomplete=\\"one-time-code\\" "+
+      "pattern=\\"[0-9]*\\" maxlength=\\"8\\" placeholder=\\"8-digit code\\" aria-label=\\"Pairing code\\">"+
+      "<button id=\\"pairGo\\" type=\\"button\\">Connect</button></div>"+
+    "<p id=\\"pairMsg\\" class=\\"pairmsg\\"></p>";
+  n.onclick = e => { if (e.target === n) { n.remove(); _pairNotice = null; } };
+  document.body.appendChild(n);
+  _pairNotice = n;
+  const input = n.querySelector("#pairCode");
+  const go = n.querySelector("#pairGo");
+  const submit = () => redeemCode(input.value, n);
+  go.onclick = submit;
+  input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  input.focus();
+}
+
+/* Exchange the short code for the token, then we're paired — same end state as
+   scanning the QR (token in sessionStorage). */
+async function redeemCode(raw, noticeEl){
+  const code = (raw || "").replace(/\\D/g, "");
+  const msg = noticeEl.querySelector("#pairMsg");
+  if (code.length < 8) { msg.textContent = "Enter the 8-digit code from the panel."; return; }
+  msg.textContent = "connecting\\u2026";
+  try {
+    const rsp = await fetch("/dreamlayer/live/redeem",
+      {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({code})});
+    const j = await rsp.json();
+    if (rsp.ok && j.token) {
+      TOKEN = j.token;
+      sessionStorage.setItem("dl-live-token", TOKEN);
+      noticeEl.remove(); _pairNotice = null;
+      showText("connected \\u00b7 tap the lens", 3000);
+      setLink(true, 0);
+      return;
+    }
+    msg.textContent = rsp.status === 429
+      ? "too many tries \\u2014 wait a minute, then a fresh code from the panel"
+      : "wrong or expired code \\u2014 get a fresh one from the panel";
+  } catch (e) { msg.textContent = "brain unreachable"; }
 }
 
 /* ---- optional voice: honest about whose ears these are ------------------ */

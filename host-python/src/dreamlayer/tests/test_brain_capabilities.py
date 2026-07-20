@@ -260,7 +260,11 @@ def test_panel_carries_packs_ui(tmp_path):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(req, timeout=5) as r:
             html = r.read().decode()
-        for marker in ("packgrid", "installPack", "packNudge", "What this does"):
+        # "What this does" moved from the (WKWebView-swallowed) confirm dialog
+        # into the always-visible ⓘ pack bubble (2026-07-20) — same disclosure,
+        # a home that actually renders in the native window.
+        for marker in ("packgrid", "installPack", "packNudge", "packInfo",
+                       "of open-source AI onto this Mac"):
             assert marker in html, f"panel missing {marker!r}"
     finally:
         lb.stop()

@@ -271,8 +271,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:200px;height:200px;max-width:100%}
-  .qrbox.live svg{width:236px;height:236px}   /* the Live Lens URL is longer → denser → render bigger to stay scannable */
+  .qrbox svg{display:block;width:232px;height:232px;max-width:100%}
+  /* the Live Lens URL is longer → denser → render it bigger so a phone camera
+     locks on from a comfortable distance (the #1 "the QR won't scan" cause) */
+  .qrbox.live svg{width:300px;height:300px}
+  .livecode{text-align:center;margin:8px 0 4px}
+  .livecode .codebig{font:22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:4px;
+    color:var(--memory);background:var(--surf);border:1px solid var(--line);
+    display:inline-block;padding:6px 14px;margin:4px 0}
   ol.steps{margin:10px 0 4px;padding-left:20px;color:var(--muted);font-size:12.5px;line-height:1.5}
   ol.steps li{margin:4px 0}
   ol.steps b{color:var(--text)}
@@ -329,7 +335,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
      The divs remain in the markup (inert), so they are simply hidden. */
   .cine-bg,.grain,.vignette,.head-cine{display:none}
   .wrap{position:relative;z-index:2}
-  /* feature explainers — Platinum chips that open an illustrated dialog */
+  /* feature explainers — Platinum chips that open an illustrated dialog,
+     grouped under category headers so the list reads as chapters, not a wall */
+  .xcat{margin:18px 0 4px}
+  .xcat:first-child{margin-top:6px}
+  .xcat-t{font:600 13px var(--chi);letter-spacing:.4px;text-transform:uppercase;color:var(--memory);
+    display:flex;align-items:center;gap:8px}
+  .xcat-t::after{content:"";flex:1;height:1px;background:var(--line)}
+  .xcat-b{font:13px/1.5 var(--sg);color:var(--muted);margin:3px 0 8px;max-width:620px}
   .xgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
   .xchip{display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer;
     background:linear-gradient(180deg,#F6F6F6,#DEDEDE);border:1px solid var(--frame);border-radius:0;
@@ -341,6 +354,55 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .xmodal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     padding:24px;background:rgba(8,12,14,.35)}
   .xmodal.on{display:flex}
+  /* info bubble — a small Platinum dialog: what a capability/pack ACTUALLY buys
+     you, as before→after meters a person can read at a glance */
+  .imodal{position:fixed;inset:0;z-index:52;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(8,12,14,.35)}
+  .imodal.on{display:flex}
+  .ibox{width:min(480px,92vw);max-height:82vh;overflow:auto;background:var(--paper);
+    border:1px solid var(--frame);box-shadow:var(--bev-out),4px 4px 0 rgba(0,0,0,.22);padding:0}
+  .ibox .ihead{display:flex;align-items:center;gap:8px;background:var(--stripes);
+    padding:3px 6px;border-bottom:1px solid var(--frame)}
+  .ibox .ihead b{font:12px var(--chi);background:var(--plat);padding:0 8px}
+  .ibox .ibody{padding:14px 16px}
+  .ibox .ilead{font:13px/1.5 var(--sg);color:var(--text);margin:0 0 10px}
+  .irow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+  .irow:first-of-type{border-top:0}
+  .irow .it{flex:1;min-width:0;font:12.5px var(--sg);color:var(--text)}
+  .irow .it .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+  .iscore{display:flex;align-items:center;gap:6px;flex:none;font:11.5px var(--chi);color:var(--muted)}
+  .meter{width:52px;height:7px;background:var(--surf2);border:1px solid var(--line);position:relative;flex:none}
+  .meter i{position:absolute;inset:0;right:auto;background:var(--ghost)}
+  .meter.aft i{background:var(--memory)}
+  .iarrow{color:var(--memory);font-weight:700}
+  .ibtn{width:17px;height:17px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+    font:11px var(--chi);color:var(--memory);background:linear-gradient(180deg,#F6F6F6,#DEDEDE);
+    border:1px solid var(--frame);border-radius:50%;cursor:pointer;padding:0}
+  .ibtn:hover{filter:brightness(1.04)}
+  /* ---- DreamShell: a real phosphor terminal inside the panel ---- */
+  .term{background:#08100F;border:1px solid var(--frame);box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.2);
+    position:relative;overflow:hidden;height:min(64vh,560px);display:flex;flex-direction:column}
+  .term::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.14) 2px 3px);opacity:.5}
+  .term.veiled::before{content:"veil down · nothing leaves this screen";position:absolute;inset:0;z-index:4;
+    display:flex;align-items:center;justify-content:center;background:rgba(4,8,7,.94);color:#2CC79A;
+    font:12px var(--chi);letter-spacing:.1em}
+  .term .scr{flex:1;overflow-y:auto;padding:12px 13px;font:13.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    color:#2CC79A;text-shadow:0 0 6px rgba(44,199,154,.28);white-space:pre-wrap;word-break:break-word}
+  .term .scr b{color:#9FE8D4}.term .scr i{color:#7FA8A0;font-style:italic}
+  .term .scr .warn{color:#E0B54A}.term .scr .dim{color:#58686F}.term .scr .coral{color:#E06B52}
+  .term .scr a{color:#9FE8D4;text-decoration:underline}
+  .term .inp{display:flex;align-items:center;gap:0;border-top:1px solid #1A2422;padding:7px 13px;background:#0A1413}
+  .term .ps1{color:#9FE8D4;font:13.5px ui-monospace,Menlo,monospace;flex:none;white-space:pre}
+  .term .cmd{flex:1;background:transparent;border:0;outline:0;color:#2CC79A;caret-color:#2CC79A;
+    font:13.5px ui-monospace,Menlo,monospace;text-shadow:0 0 6px rgba(44,199,154,.28)}
+  .term-rain{position:absolute;inset:0;z-index:2;pointer-events:none}
+  @keyframes glitchy{0%,100%{transform:translate(0,0);filter:none}
+    20%{transform:translate(-2px,1px);filter:hue-rotate(30deg)}
+    40%{transform:translate(2px,-1px)}60%{transform:translate(-1px,-1px);filter:contrast(1.4)}
+    80%{transform:translate(1px,2px)}}
+  .term.glitch .scr{animation:glitchy .5s steps(2) 3}
+  @media (prefers-reduced-motion: reduce){.term::after{opacity:.24}.term.glitch .scr{animation:none}}
   .xcard{max-width:440px;width:100%;background:var(--plat);
     border:2px solid var(--frame);border-radius:0;overflow:hidden;
     box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35)}
@@ -462,7 +524,19 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Learn</div><h2>How it works</h2>
     <p class="lead">The glasses show cards; this Brain makes them. Tap a feature to see what it does
       and the card it draws.</p>
-    <div class="xgrid" id="xgrid"></div>
+    <div id="xgrid"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Terminal</div><h2>DreamShell</h2>
+    <p class="lead">The layer's command line. Ask your Brain in plain words, poke at what's on,
+      or type <b>help</b> — and there's more in here than there looks. Type <b>dream</b>.</p>
+    <div class="term" id="term" tabindex="0">
+      <div class="scr" id="termScr"></div>
+      <div class="inp"><span class="ps1" id="termPs1">layer&gt; </span><input class="cmd" id="termCmd"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+        aria-label="DreamShell command line"></div>
+    </div>
   </section>
 
   <section>
@@ -545,7 +619,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div id="pairout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
-      <button id="livebtn" onclick="liveLink()">Get the link</button></div>
+      <button id="livebtn" onclick="liveLink()">Refresh QR</button></div>
     <div id="liveout"></div>
   </section>
 
@@ -816,6 +890,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </div>
 </div>
 
+<div class="imodal" id="imodal" onclick="if(event.target===this)closeInfo()">
+  <div class="ibox">
+    <div class="ihead"><span class="tstripes"></span><b id="ititle"></b><span class="tstripes"></span></div>
+    <div class="ibody" id="ibody"></div>
+    <div style="padding:0 16px 14px;text-align:right"><button class="ghost sm" onclick="closeInfo()">Done</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="browser">
   <div class="modal">
     <h3>Choose a folder</h3>
@@ -837,10 +919,37 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <span class="jcap">the brain is listening.</span></div>
 </div>
 <script>
-/* Juno: drag by her title bar, collapse with the toggle — both persist. */
+/* Juno: drag by her title bar, collapse with the toggle — both persist.
+   Click HER (the screen, not the bar) and she talks — the same voice takes the
+   website and the phone play, served same-origin from the bundled assets. */
 (function(){
   var hero=document.getElementById("junoHero"); if(!hero) return;
   var bar=document.getElementById("junoBar"), tog=document.getElementById("junoTog");
+  var jscreen=hero.querySelector(".jscreen"), jcap=hero.querySelector(".jcap");
+  var REST=jcap?jcap.textContent:"";
+  var CLIPS=[["hey.","/panel-assets/juno_hey.mp3"],
+             ["hello.","/panel-assets/juno_hello.mp3"],
+             ["look.","/panel-assets/juno_look.mp3"],
+             ["watch out.","/panel-assets/juno_watchout.mp3"],
+             ["based.","/panel-assets/juno_based.mp3"],
+             ["uh… ok, then.","/panel-assets/juno_uhokthen.mp3"]];
+  var voice=null,ci=0,capT=null;
+  if(jscreen){
+    jscreen.style.cursor="pointer";
+    jscreen.setAttribute("role","button");
+    jscreen.setAttribute("aria-label","Say hi to Juno");
+    jscreen.addEventListener("click",function(){
+      var v=CLIPS[ci++%CLIPS.length];
+      try{
+        if(!voice)voice=new Audio();
+        voice.pause();voice.src=v[1];voice.volume=.85;voice.currentTime=0;
+        voice.play().catch(function(){});
+      }catch(e){}
+      if(jcap){jcap.textContent=v[0];
+        if(capT)clearTimeout(capT);
+        capT=setTimeout(function(){jcap.textContent=REST;},2600);}
+    });
+  }
   var LP="juno.pos", LC="juno.collapsed";
   function clamp(x,y){var w=hero.offsetWidth,h=hero.offsetHeight;
     return [Math.max(4,Math.min(x,innerWidth-w-4)),Math.max(4,Math.min(y,innerHeight-h-4))];}
@@ -884,40 +993,60 @@ let modelSel="keyword", ollamaOK=null, browsePath="";
    renderer. `live` entries replay the real on-glass animation via halo-sim.js,
    the exact engine dreamlayer.app and the simulator run (fly-ins, blooms,
    drifts — the product's own intros, not a re-creation). `img` entries show
-   the true rendered frame for cards whose animation lives on-device. */
+   the true rendered frame for cards whose animation lives on-device.
+   `c` files each feature under an XCATS chapter so the Learn page reads as
+   chapters with a one-line premise each, not one wall of chips. */
+const XCATS=[
+  {id:"ask",   t:"Juno & answers",      b:"Your assistant, and everything she can tell you — asked out loud, or ready before you ask."},
+  {id:"look",  t:"Looking at things",   b:"Glance at something and know it — named, remembered, ranked by your own taste. Frames are never stored."},
+  {id:"people",t:"People",              b:"Who's in front of you and what you share. Kept only for people who introduce themselves — a stranger is never looked up."},
+  {id:"keep",  t:"Finding & keeping",   b:"What you chose to keep, where things are, and the way back to both."},
+  {id:"day",   t:"Promises & your day", b:"What you said you'd do and where the day is headed — kept in sight before anything slips."},
+  {id:"aware", t:"Heads-up & truth",    b:"The layer speaks up on its own when it matters, and quietly checks what it hears."},
+  {id:"sound", t:"Language & sound",    b:"Speech, other languages, and sound itself — made readable on the glass."},
+  {id:"veil",  t:"Privacy",             b:"The whole layer answers to one command: go dark."},
+];
 const EXPLAINERS=[
-  {t:"Juno",live:["ready"],b:"The face of the layer. Say “Hey Juno” to wake your assistant; when the glass is idle she flies in, settles, and listens for what matters. Every card below is her handiwork."},
-  {t:"Ask anything",live:["answer",{primary:"In Documents — Friday",sub:"“where's the lease?”"}],b:"Ask out loud and the answer lands on the glass in a line or two — drawn from your own memory first, the web only when you've allowed it."},
-  {t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
-  {t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
-  {t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
-  {t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
-  {t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
-  {t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
-  {t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
-  {t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
-  {t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
-  {t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
-  {t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
-  {t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
-  {t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
-  {t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
-  {t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
-  {t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
-  {t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
-  {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
-  {t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
-  {t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
-  {t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
-  {t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
-  {t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
-  {t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
-  {t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
-  {t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
-  {t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
+  {c:"ask",t:"Juno",live:["ready"],b:"The face of the layer. Say “Hey Juno” to wake your assistant; when the glass is idle she flies in, settles, and listens for what matters. Every card below is her handiwork."},
+  {c:"ask",t:"Ask anything",live:["answer",{primary:"In Documents — Friday",sub:"“where's the lease?”"}],b:"Ask out loud and the answer lands on the glass in a line or two — drawn from your own memory first, the web only when you've allowed it."},
+  {c:"ask",t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
+  {c:"ask",t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
+  {c:"look",t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
+  {c:"look",t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
+  {c:"people",t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
+  {c:"people",t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
+  {c:"people",t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
+  {c:"keep",t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
+  {c:"keep",t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
+  {c:"keep",t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
+  {c:"day",t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
+  {c:"day",t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
+  {c:"day",t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
+  {c:"aware",t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
+  {c:"aware",t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
+  {c:"look",t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
+  {c:"aware",t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
+  {c:"aware",t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
+  {c:"sound",t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
+  {c:"sound",t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
+  {c:"sound",t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
+  {c:"keep",t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
+  {c:"day",t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
+  {c:"keep",t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
+  {c:"sound",t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
+  {c:"keep",t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
+  {c:"veil",t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
 ];
 function renderExplainers(){const g=$("xgrid");if(!g)return;
-  g.innerHTML=EXPLAINERS.map((x,i)=>`<button class="xchip" onclick="openX(${i})"><span class="xdot"></span>${esc(x.t)}</button>`).join("");}
+  /* chapters in XCATS order; chips keep their flat EXPLAINERS index so openX(i)
+     is untouched. A feature with an unknown category falls back to the last
+     chapter rather than vanishing. */
+  g.innerHTML=XCATS.map(cat=>{
+    const chips=EXPLAINERS.map((x,i)=>({x,i}))
+      .filter(p=>(XCATS.some(c=>c.id===p.x.c)?p.x.c:XCATS[XCATS.length-1].id)===cat.id)
+      .map(p=>`<button class="xchip" onclick="openX(${p.i})"><span class="xdot"></span>${esc(p.x.t)}</button>`).join("");
+    return chips?`<div class="xcat"><div class="xcat-t">${esc(cat.t)}</div><div class="xcat-b">${esc(cat.b)}</div></div><div class="xgrid">${chips}</div>`:"";
+  }).join("");}
 /* one Glass instance, created on first live open; the TRUE renderer draws the
    lens exactly as the device would (reduced-motion gets the settled frame) */
 let XG=null;
@@ -942,7 +1071,7 @@ function openX(i){const x=EXPLAINERS[i];
   $("xkick").textContent="How it works";
   $("xtitle").textContent=x.t;$("xtext").textContent=x.b;$("xmodal").classList.add("on");}
 function closeX(){$("xmodal").classList.remove("on");if(XG)XG.stop();}
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeX();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeX();closeInfo();}});
 
 /* sidebar navigation — group the sections into app-style views. Each section
    is matched to a page by its heading, so the layout needs no per-section markup. */
@@ -956,6 +1085,7 @@ const PAGES=[
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
   {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
+  {id:"terminal",label:"Terminal",sub:"The layer's command line. Talk to your Brain in plain words — or type dream.",match:["DreamShell"]},
   {id:"advanced",label:"Advanced",sub:"Activity, health, schedules, and maintenance.",match:["Activity","Health"]},
 ];
 let curPage="home";
@@ -975,6 +1105,7 @@ const ICONS={
   plugins:_sv+'<rect x="3" y="3" width="8" height="8" rx="1.4"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
   caps:_sv+'<circle cx="8" cy="12" r="5"/><path d="M8 7h8a5 5 0 0 1 0 10H8"/></svg>',
   learn:_sv+'<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M18 3v18"/></svg>',
+  terminal:_sv+'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>',
   advanced:_sv+'<path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>',
 };
 function buildNav(){
@@ -984,12 +1115,19 @@ function buildNav(){
     PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
   showPage(curPage);
 }
+let _liveAutoLoaded=false;
 function showPage(id){curPage=id;
   document.querySelectorAll("main>section").forEach(s=>s.classList.toggle("pon",s.dataset.page===id));
   document.querySelectorAll(".side button").forEach(b=>b.classList.toggle("on",b.dataset.p===id));
   const p=PAGES.find(x=>x.id===id);
   if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
   const c=document.querySelector(".content"); if(c)c.scrollTop=0;
+  // Open Connections → the Live Lens QR is already there, not hidden behind a
+  // button you have to find. (Once per panel session, so re-visits don't spam
+  // the activity log or re-mint the link.)
+  if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
+  // Open Terminal → boot the banner (once) and put the cursor in the prompt.
+  if(id==="terminal"&&typeof termFocus==="function"){termFocus();}
 }
 
 /* --- optional capabilities: live report + one-click on/off ---------------
@@ -1000,19 +1138,52 @@ const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
               unsupported:"var(--ghost)",external:"var(--memory)"};
 let CAPFROZEN=false;
 let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a frozen build carrying pip)
+/* --- info bubble: the exact improvement, as before→after meters --- */
+function fmtScore(v){const n=Number(v)||0;return (Math.round(n*2)/2).toString();}
+function meterPair(before,after){
+  const b=Math.max(0,Math.min(5,Number(before)||0)),a=Math.max(0,Math.min(5,Number(after)||0));
+  return `<span class="iscore"><span class="meter"><i style="width:${b/5*100}%"></i></span>${fmtScore(b)}/5`+
+    ` <span class="iarrow">→</span> <span class="meter aft"><i style="width:${a/5*100}%"></i></span>${fmtScore(a)}/5</span>`;
+}
+function openInfo(title,html){$("ititle").textContent=title;$("ibody").innerHTML=html;
+  $("imodal").classList.add("on");}
+function closeInfo(){$("imodal").classList.remove("on");}
+function capInfo(key){
+  const it=(LASTCAPS&&LASTCAPS.items||[]).find(x=>x.key===key); if(!it)return;
+  openInfo(it.key,
+    `<p class="ilead">${esc(it.title)}.</p>`+
+    (it.gain?`<p class="ilead" style="color:var(--muted)">${esc(it.gain)}.</p>`:"")+
+    `<div class="irow"><div class="it">Out of the box <span class="sub">→ with this installed</span></div>${meterPair(it.before,it.after)}</div>`);
+}
+function packInfo(key){
+  const p=(LASTCAPS&&LASTCAPS.packs||[]).find(x=>x.key===key); if(!p)return;
+  const items=(LASTCAPS.items||[]).filter(it=>p.caps.includes(it.key));
+  const rows=items.map(it=>`<div class="irow"><div class="it">${esc(it.title)}`+
+    (it.gain?`<span class="sub">${esc(it.gain)}</span>`:"")+
+    `</div>${meterPair(it.before,it.after)}</div>`).join("");
+  const avg=arr=>arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:0;
+  const b=avg(items.map(it=>Number(it.before)||0)),a=avg(items.map(it=>Number(it.after)||0));
+  openInfo(p.name,
+    `<p class="ilead">${esc(p.tagline)}</p>`+
+    `<p class="ilead" style="color:var(--muted)">Downloads ${esc(p.size)} of open-source AI onto this Mac. `+
+    `Everything runs locally — nothing about you is uploaded; models may fetch extra data on first use. `+
+    `The Brain stays usable while it installs, and every capability can be switched off afterwards.</p>`+
+    `<div class="irow"><div class="it"><b>Overall</b> <span class="sub">out of the box → with this pack</span></div>${meterPair(b,a)}</div>`+rows);
+}
 function capRight(it){
+  const info=`<button class="ibtn" title="What you gain" aria-label="What ${esc(it.key)} gains you" onclick="capInfo(${esc(JSON.stringify(it.key))})">i</button>`;
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
-    return `<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+    return info+`<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
-    if(CAPFROZEN&&!CAPINSTALL) return `<span class="sstate">not in this build — runs on a source install</span>`;
-    if(CAPFROZEN) return `<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
-    return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`;
+    if(CAPFROZEN&&!CAPINSTALL) return info+`<span class="sstate">not in this build — runs on a source install</span>`;
+    if(CAPFROZEN) return info+`<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
+    return info+`<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`;
   }
-  if(it.state==="external") return `<span class="sstate">${esc(it.note||"external service")}</span>`;
-  return `<span class="sstate">macOS only</span>`;
+  if(it.state==="external") return info+`<span class="sstate">${esc(it.note||"external service")}</span>`;
+  return info+`<span class="sstate">macOS only</span>`;
 }
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
   if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
@@ -1040,7 +1211,14 @@ const PACKSTATE={installed:"installed",partial:"partially installed",available:"
 function packCard(p){
   const job=p.install||null;
   let cta;
-  if(job&&job.state==="installing") cta=`<span class="sstate">installing… ${esc(job.detail||"")}</span>`;
+  if(job&&job.state==="installing"){
+    // a real download bar, not a static "installing…" — percent streams from pip
+    const pc=Math.max(0,Math.min(99,Number(job.percent)||0));
+    cta=`<div style="flex:1;min-width:0"><div class="pbar" style="margin:0">`+
+      `<div class="pbar-t"><div class="pbar-f" style="width:${pc}%"></div></div>`+
+      `<div class="pbar-p">${pc}%</div></div>`+
+      `<div class="conn-s" style="margin-top:3px">${esc(job.detail||"installing…")}</div></div>`;
+  }
   else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
   else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack(${esc(JSON.stringify(p.key))})">Retry</button>`;
   else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
@@ -1048,7 +1226,8 @@ function packCard(p){
   else cta=`<button class="sm" onclick="installPack(${esc(JSON.stringify(p.key))})">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
   const stars="●".repeat(p.impact)+"○".repeat(5-p.impact);
   return `<div class="x" style="cursor:default">
-    <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}</div>
+    <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}
+      <button class="ibtn" style="float:right" title="What you gain" aria-label="What the ${esc(p.name)} pack gains you" onclick="packInfo(${esc(JSON.stringify(p.key))})">i</button></div>
     <div class="x-b">${esc(p.tagline)}</div>
     <div class="conn-s" style="margin:8px 0 0">impact <span style="color:var(--memory)">${stars}</span> · download ${esc(p.size)} · ${p.caps.length} capabilities</div>
     <div class="row" style="margin-top:8px">${cta}</div></div>`;
@@ -1074,17 +1253,15 @@ function renderPackNudge(packs){
 function dismissPackNudge(){localStorage.dlPackNudgeDismissed="1";$("packNudge").style.display="none";}
 async function installPack(key){
   const p=(LASTCAPS&&LASTCAPS.packs||[]).find(x=>x.key===key); if(!p)return;
-  const warn=`Install the ${p.name} pack?\n\n${p.tagline}\n\n`+
-    `What this does: downloads about ${p.size} of open-source AI libraries onto this Mac `+
-    `(${p.caps.length} capabilities). Everything runs locally — nothing about you is uploaded, `+
-    `and models may fetch extra data on their first use. The Brain stays usable while it installs, `+
-    `and you can switch any capability off afterwards from this page.`;
-  if(!confirm(warn))return;
+  // no blocking dialog: the ⓘ bubble carries the what-and-why, the click IS the
+  // consent, and the download starts immediately with a live progress bar.
+  // (a JS confirm dialog is also a silent no-op inside the app's native
+  // WKWebView window — the old one made this button do literally nothing there.)
   let r;try{r=await api("/dreamlayer/packs",{method:"POST",body:JSON.stringify({pack:key})});}
   catch(e){toast("Brain offline");return;}
   if(r&&r.error){toast(r.error);return;}
   if(r&&r.items){LASTCAPS=r;CAPFROZEN=!!r.frozen;renderCaps(r);renderPacks(r.packs);
-    toast(p.name+" installing — this can take a while");
+    toast(p.name+" downloading…");
     schedulePackPoll();}
 }
 let packPollT=null;
@@ -1092,7 +1269,7 @@ function schedulePackPoll(){clearTimeout(packPollT);packPollT=setTimeout(async()
   let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
   if(r&&r.items){LASTCAPS=r;renderCaps(r);renderPacks(r.packs);
     if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
-},5000);}
+},1500);}   // 1.5s while installing — the bar visibly moves (matches the model pull)
 let LASTCAPS=null;
 
 async function toggleCap(key,disabled){
@@ -1684,10 +1861,16 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
       '(it turns on automatically once the <code>cryptography</code> package is available — update the app, or run the Brain with <code>--tls</code>). '+
       'The link below still works for <b>asking</b>; only the live camera needs https.</div>';
   const qr=r.qr?`<div class="qrbox${secure?" live":""}">${r.qr}</div>`:"";
-  out.innerHTML=`<div class="paircode">${qr}${steps}`+
+  // a short code the wearer can type on the phone if it can't scan — the page
+  // exchanges it for the token at /dreamlayer/live/redeem
+  const code=r.code?`<div class="livecode"><div class="conn-s">Can't scan? On the phone, open <b>${esc((r.url||"").split("#")[0])}</b> and enter this code:</div>`+
+    `<div class="codebig">${esc(r.code)}</div>`+
+    `<div class="conn-s">Good for 5 minutes, one use.</div></div>`:"";
+  out.innerHTML=`<div class="paircode">${qr}${steps}${code}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
     `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
-    `<div class="conn-s" style="margin-top:6px">This link carries your pairing token — treat it like a password and send it only to your own phone.</div></div>`;
+    `<div class="conn-s" style="margin-top:6px"><b>Scanning is the easy way</b> — the link ends in a long <code>#t=…</code> pairing token that's meant to be scanned, not typed. `+
+    `Can't scan? Use the short code above instead. Treat both like a password and send them only to your own phone.</div></div>`;
   toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
 }
 async function loadHistory(){const h=await api("/dreamlayer/history");
@@ -2078,6 +2261,171 @@ async function installFromStore(name,btn){
 }
 window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
+
+/* =================== DreamShell — the layer's command line ===================
+   A real terminal in the panel. Most commands talk to THIS Brain for real
+   (ask, status, caps, history); the rest are the layer's own character — and a
+   few things that are only here for the person who goes looking. Type dream. */
+(function(){
+  var scr=$("termScr"), cmd=$("termCmd"), ps1=$("termPs1"), term=$("term");
+  if(!scr||!cmd) return;
+  var hist=[], hi=0, mode="shell", booted=false, THEMES=["#2CC79A","#7DFFA8","#E0B54A","#E06B52","#9FE8D4"], ti=0;
+  function w(html){var d=document.createElement("div");d.innerHTML=html;scr.appendChild(d);scr.scrollTop=scr.scrollHeight;return d;}
+  function echoCmd(raw){w('<span style="color:#9FE8D4">'+(mode==="dream"?"dream&gt; ":"layer&gt; ")+'</span>'+esc(raw));}
+  var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function boot(){ if(booted) return; booted=true;
+    w('<b>DreamShell 8.1</b> — the layer\u2019s command line');
+    api("/dreamlayer/config").then(function(r){
+      var cloud=(r&&r.config&&r.config.model==="api")?"wired":"off";
+      w('brain: <b>reachable</b>   cloud: <b>'+cloud+'</b>   veil: '+(term.classList.contains("veiled")?"up":"down"));
+      w('<span class="dim">type <b>help</b> to see what you can do. type <b>dream</b> to help juno.</span>\n');
+    }).catch(function(){ w('brain: <b>reachable</b>   cloud: <b>off</b>   veil: down');
+      w('<span class="dim">type <b>help</b>. type <b>dream</b>.</span>\n'); });
+  }
+  window.termFocus=function(){ boot(); setTimeout(function(){cmd.focus();},60); };
+  term.addEventListener("click",function(e){ if(e.target!==cmd&&getSelection().isCollapsed) cmd.focus(); });
+
+  var HELP='<b>talk to your brain</b>\n'+
+    '  <b>ask</b> <i>&lt;anything&gt;</i>   ask the Brain, out loud in text\n'+
+    '  <b>status</b>            what\u2019s connected, indexed, and which tier answers\n'+
+    '  <b>caps</b>              optional powers — on, off, and missing\n'+
+    '  <b>history</b>          your recent asks and looks\n'+
+    '  <b>veil</b>              drop the privacy veil over this screen\n'+
+    '<b>the usual</b>\n'+
+    '  help · about · whoami · date · echo · theme · clear · exit\n'+
+    '<b>and</b>\n'+
+    '  <span class="dim">type <b>dream</b>. the rest you\u2019ll find.</span>';
+
+  var PAGES_GO={home:"home",day:"day",mind:"mind",reach:"reach",privacy:"privacy",
+    receipts:"receipts",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
+  var JCLIPS=[["hey.","/panel-assets/juno_hey.mp3"],["hello.","/panel-assets/juno_hello.mp3"],
+    ["look.","/panel-assets/juno_look.mp3"],["watch out.","/panel-assets/juno_watchout.mp3"],
+    ["based.","/panel-assets/juno_based.mp3"],["uh\u2026 ok, then.","/panel-assets/juno_uhokthen.mp3"]];
+  var jv=null, jci=0;
+  function junoSpeak(){ var v=JCLIPS[jci++%JCLIPS.length];
+    try{ if(!jv)jv=new Audio(); jv.pause(); jv.src=v[1]; jv.volume=.85; jv.currentTime=0; jv.play().catch(function(){}); }catch(e){}
+    return v[0]; }
+
+  function rain(){ if(reduced){ w('<span class="dim">(rain, quietly — you asked for less motion.)</span>'); return; }
+    var cv=document.createElement("canvas"); cv.className="term-rain";
+    cv.width=term.clientWidth; cv.height=term.clientHeight; term.appendChild(cv);
+    var ctx=cv.getContext("2d"), cols=Math.floor(cv.width/12), y=[];
+    for(var i=0;i<cols;i++) y[i]=Math.random()*cv.height;
+    var gl="アカサタabcdefRAMEGLASS01".split(""), t0=Date.now(), iv=setInterval(function(){
+      ctx.fillStyle="rgba(8,16,15,.15)"; ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillStyle=THEMES[ti]; ctx.font="12px monospace";
+      for(var i=0;i<cols;i++){ ctx.fillText(gl[Math.floor(Math.random()*gl.length)],i*12,y[i]);
+        y[i]=y[i]>cv.height&&Math.random()>.975?0:y[i]+12; }
+      if(Date.now()-t0>4200){ clearInterval(iv); cv.remove(); }
+    },55); }
+  function glitch(){ term.classList.remove("glitch"); void term.offsetWidth; term.classList.add("glitch");
+    setTimeout(function(){term.classList.remove("glitch");},1600); }
+
+  /* the konami unlock — the layer keeps no secrets from you, so this just says so */
+  var kseq=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"], kk=[];
+  document.addEventListener("keydown",function(e){ if(curPage!=="terminal")return;
+    kk.push(e.key); kk=kk.slice(-kseq.length);
+    if(kk.join(",")===kseq.join(",")){ kk=[]; w('<span class="warn">\u2726 CHEAT UNLOCKED \u2726</span>');
+      w('you already have infinite lives. it\u2019s <b>your</b> memory — always was.'); junoSpeak(); glitch(); } });
+
+  function shellExec(raw){ var line=raw.trim(); if(!line) return;
+    var p=line.split(/\s+/), c=p[0].toLowerCase(), rest=line.slice(p[0].length).trim();
+    if(c==="help"||c==="?"){ w(HELP); return; }
+    if(c==="clear"){ scr.innerHTML=""; return; }
+    if(c==="about"){ w('<b>DreamLayer</b> \u2014 a private memory layer for smart glasses. This Brain runs on your machine; nothing about you is uploaded. DreamShell is its command line.'); return; }
+    if(c==="whoami"){ w('a person whose memory is about to get better.'); return; }
+    if(c==="date"){ w(esc(new Date().toString())); return; }
+    if(c==="echo"){ w(esc(rest)); return; }
+    if(c==="theme"){ ti=(ti+1)%THEMES.length; scr.style.color=THEMES[ti];
+      document.querySelectorAll("#termScr, .term .cmd").forEach(function(el){el.style.color=THEMES[ti];});
+      w('<span class="dim">phosphor \u2192 '+THEMES[ti]+'</span>'); return; }
+    if(c==="veil"){ var on=term.classList.toggle("veiled");
+      w(on?'<span class="dim">veil down. nothing leaves this screen.</span>':'veil lifted.'); return; }
+    if(c==="exit"){ w('goodbye\u2026'); setTimeout(function(){showPage("home");},420); return; }
+    if(c==="ask"){ if(!rest){ w('<span class="dim">usage: <b>ask</b> where\u2019s the lease?</span>'); return; }
+      var pend=w('<i>thinking\u2026</i>');
+      api("/dreamlayer/brain/ask",{method:"POST",body:JSON.stringify({query:rest,no_cloud:term.classList.contains("veiled")})})
+        .then(function(j){ pend.innerHTML=j&&j.text?esc(j.text)+(j.tier?' <span class="dim">\u00b7 '+esc(j.tier)+'</span>':''):'<span class="dim">no answer</span>'; scr.scrollTop=scr.scrollHeight; })
+        .catch(function(){ pend.innerHTML='<span class="coral">brain unreachable</span>'; }); return; }
+    if(c==="status"||c==="brain"){ api("/dreamlayer/config").then(function(r){
+        var s=(r&&r.stats)||{}, cfg=(r&&r.config)||{};
+        w('<b>brain</b> reachable \u00b7 model <b>'+esc(cfg.model||"keyword")+'</b>\n'+
+          'memories indexed: <b>'+(s.count!=null?s.count:"\u2014")+'</b>\n'+
+          'cloud: <b>'+(cfg.model==="api"?"wired":"off")+'</b> \u00b7 veil: <b>'+(term.classList.contains("veiled")?"up":"down")+'</b>\n'+
+          '<span class="dim">everything here runs on this machine.</span>'); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="caps"||c==="capabilities"){ var render=function(r){ var s=(r&&r.summary)||{};
+        var order=["active","off","missing","unsupported","external"];
+        w(order.filter(function(k){return s[k];}).map(function(k){return '<b>'+s[k]+'</b> '+k;}).join(" \u00b7 ")||"no capability data");
+        w('<span class="dim">open <b>Capabilities</b> in the sidebar to switch more on.</span>'); };
+      if(LASTCAPS) render(LASTCAPS); else api("/dreamlayer/capabilities").then(render).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="history"){ api("/dreamlayer/history").then(function(h){ var it=(h&&h.items)||[];
+        if(!it.length){ w('<span class="dim">nothing yet.</span>'); return; }
+        w(it.slice(0,8).map(function(x){ var t=x.kind==="ask"?(x.query||""):(x.text||""); return '<b>'+esc(x.kind)+'</b> '+esc(t); }).join("\n")); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="juno"){ var line=junoSpeak(); w('<b>juno</b>: '+esc(rest?"i heard you.":"")+' <i>'+esc(line)+'</i>'); return; }
+    if(c==="matrix"||c==="rain"){ w('<span class="dim">wake up\u2026</span>'); rain(); return; }
+    if(c==="glitch"){ glitch(); w('<span class="dim">\u2014 signal recovered \u2014</span>'); return; }
+    if(c==="sudo"){ w('the layer has no root to sudo to. it\u2019s already <b>all yours</b>.'); return; }
+    if(c==="hack"){ var steps=["accessing mainframe\u2026","bypassing firewall\u2026","decrypting\u2026","0wned."];
+      var i=0,iv=setInterval(function(){ if(i<steps.length){ w('<span class="warn">'+steps[i++]+'</span>'); }
+        else{ clearInterval(iv); w('\njust kidding. there\u2019s nothing here hidden from you \u2014 it\u2019s your Brain.'); } },420); return; }
+    if(c==="moof"||c==="clarus"){ w('<b>Moof!</b> \u{1F42E} <span class="dim">the dogcow says hi. (ask a Mac historian.)</span>'); return; }
+    if(c==="42"||c==="answer"||c==="theanswer"){ w('42. but you knew that.'); return; }
+    if(c==="sosumi"){ w('beep. <span class="dim">(the lawyers kept the rest.)</span>'); return; }
+    if(c==="ls"||c==="tree"){ w('<span class="dim">.</span>\n\u251c\u2500 memories/   <span class="dim">kept, indexed, yours</span>\n\u251c\u2500 people/     <span class="dim">only those who introduced themselves</span>\n\u251c\u2500 promises/   <span class="dim">what you said you\u2019d do</span>\n\u2514\u2500 veil        <span class="dim">the off switch for all of it</span>'); return; }
+    if(PAGES_GO[c]){ w('<span class="dim">opening '+esc(c)+'\u2026</span>'); setTimeout(function(){showPage(PAGES_GO[c]);},260); return; }
+    if(c==="dream"){ startDream(); return; }
+    w('<span class="warn">?</span> unknown: <b>'+esc(c)+'</b> \u2014 try <b>help</b>');
+  }
+
+  /* ---- dream: a small adventure, ported from the site, kept on-device ---- */
+  var D=null, ROOMS={
+    desk:{name:"the desk at dusk",desc:"a platinum desk under a violet sky. paths lead <b>n</b>orth to a crystal grove, <b>e</b>ast to a shore of static, <b>w</b>est to the archive.",exits:{n:"grove",e:"shore",w:"archive"}},
+    grove:{name:"the crystal grove",desc:"teal crystals chime. north, a thin bridge disappears into mist.",exits:{s:"desk",n:"bridge"},shard:"a shard glints between two crystals."},
+    shore:{name:"the shore of static",desc:"a sea of grey noise laps at nothing. an unlit <b>lantern</b> figment sits in the sand.",exits:{w:"desk"},lanternHere:true,shard:"something is buried under the static \u2014 too dim to see."},
+    archive:{name:"the archive",desc:"shelves of memories, each labeled in chicago. it is very dark in here.",exits:{e:"desk"},dark:true,shard:"a shard rests on the third shelf."},
+    bridge:{name:"the veil bridge",desc:"juno waits at the middle of the bridge, holding out her hands.",exits:{s:"grove"}}
+  };
+  function look(){ var r=ROOMS[D.room], t='<b>'+r.name+'</b>\n'+r.desc;
+    if(r.dark&&!D.lantern) t+='\n<span class="dim">you can\u2019t make out much without a light.</span>';
+    else if(r.shard&&!D.taken[D.room]){ t+=(D.room==="shore"&&!D.lantern)?'\n'+r.shard:'\n<span class="warn">'+r.shard+'</span>'; }
+    if(D.room==="bridge") t+=D.shards===3?'\n<b>juno</b>: "you found them. <b>talk</b> to me."':'\n<b>juno</b>: "'+D.shards+' of 3. the rest are still out there."';
+    w(t); }
+  function startDream(){ mode="dream"; ps1.textContent="dream> "; D={room:"desk",shards:0,lantern:false,taken:{}};
+    w('\n<b>\u2014 d r e a m \u2014</b>\n<i>the desk at dusk. juno hovers, wings catching the last light.</i>\n<b>juno</b>: "a memory came apart \u2014 three shards, scattered where i dream. find them and meet me at the veil bridge."\n<span class="dim">verbs: n/s/e/w \u00b7 look \u00b7 take &lt;thing&gt; \u00b7 use lantern \u00b7 talk juno \u00b7 inv \u00b7 quit</span>\n');
+    look(); }
+  function dreamExec(raw){ var line=raw.trim().toLowerCase(); if(!line) return; var p=line.split(/\s+/), v=p[0];
+    var go={n:"n",north:"n",s:"s",south:"s",e:"e",east:"e",w:"w",west:"w"};
+    if(v==="go"&&p[1]) v=go[p[1]]||p[1]; if(go[v]) v=go[v];
+    if(v==="quit"){ mode="shell"; ps1.textContent="layer> "; w('<i>the dream folds shut. the desk returns.</i>\n'); return; }
+    if(v==="inv"||v==="inventory"){ w("you carry: "+(D.shards?D.shards+" shard"+(D.shards>1?"s":""):"nothing")+(D.lantern?", a lit lantern figment":"")); return; }
+    if(v==="score"){ w(D.shards+" / 3 shards"); return; }
+    if(v==="look"||v==="l"){ look(); return; }
+    if(v==="n"||v==="s"||v==="e"||v==="w"){ var r=ROOMS[D.room]; if(r.exits[v]){ D.room=r.exits[v]; look(); } else w("you can\u2019t go that way."); return; }
+    if(v==="take"){ var r2=ROOMS[D.room], what=p.slice(1).join(" ");
+      if(/lantern/.test(what)&&r2.lanternHere&&!D.lantern){ D.lantern=true; w("you pick up the lantern figment. it proves itself safe, then <b>lights</b>."); return; }
+      if(/shard/.test(what)&&r2.shard&&!D.taken[D.room]){ if(r2.dark&&!D.lantern){ w("too dark to find anything."); return; }
+        if(D.room==="shore"&&!D.lantern){ w("you dig at the static. it slips through your fingers. <span class=\"dim\">maybe with a light\u2026</span>"); return; }
+        D.taken[D.room]=true; D.shards++; w("you lift the shard. it hums like a remembered song. <b>("+D.shards+" / 3)</b>"); return; }
+      w("there\u2019s no "+esc(what||"that")+" to take here."); return; }
+    if(v==="use"&&/lantern/.test(line)){ w(D.lantern?"the lantern glows steady. dark places won\u2019t be dark.":"you don\u2019t have a lantern."); return; }
+    if(v==="talk"){ if(D.room!=="bridge"){ w('juno\u2019s voice, from somewhere: "the bridge. north of the grove."'); return; }
+      if(D.shards<3){ w('<b>juno</b>: "'+D.shards+' of 3. i\u2019ll wait. i\u2019m good at waiting."'); return; }
+      w('<b>juno</b> presses the shards together. the seams vanish.\n<b>juno</b>: "kept. not uploaded \u2014 <b>kept</b>. that\u2019s the difference."\n<i>you wake at the desk.</i>\n\n<b>\u2014 thanks for playing \u00b7 3 / 3 \u2014</b>\n'); junoSpeak();
+      mode="shell"; ps1.textContent="layer> "; return; }
+    w('<span class="dim">try: n/s/e/w \u00b7 look \u00b7 take \u00b7 use lantern \u00b7 talk juno \u00b7 inv \u00b7 quit</span>');
+  }
+
+  var COMPLETIONS=["help","ask ","status","caps","history","veil","about","whoami","date","echo ","theme","clear","exit","dream","matrix","glitch","juno ","home","plugins","receipts","caps","learn"];
+  cmd.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ var raw=cmd.value; echoCmd(raw); if(raw.trim()){ hist.push(raw); hi=hist.length; } cmd.value="";
+      (mode==="dream"?dreamExec:shellExec)(raw); }
+    else if(e.key==="ArrowUp"){ if(hi>0){ hi--; cmd.value=hist[hi]||""; } e.preventDefault(); }
+    else if(e.key==="ArrowDown"){ if(hi<hist.length){ hi++; cmd.value=hist[hi]||""; } e.preventDefault(); }
+    else if(e.key==="Tab"){ e.preventDefault(); var vv=cmd.value.toLowerCase(); if(!vv) return;
+      var m=COMPLETIONS.filter(function(x){return x.indexOf(vv)===0;});
+      if(m.length===1) cmd.value=m[0]; else if(m.length>1) w('<span class="dim">'+m.map(function(x){return x.trim();}).join("   ")+'</span>'); }
+  });
+})();
 
 load();
 loadPlugins();openStore();

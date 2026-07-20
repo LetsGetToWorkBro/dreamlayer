@@ -33,6 +33,12 @@ const GROUPS: { section: string; rows: Row[] }[] = [
     ],
   },
   {
+    section: "The layer",
+    rows: [
+      { route: "/terminal", labelKey: "settings.terminalLink" },
+    ],
+  },
+  {
     section: "Your brain",
     rows: [
       { route: "/brain-tiers", labelKey: "settings.brainTierLink" },
