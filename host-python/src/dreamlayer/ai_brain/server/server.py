@@ -168,20 +168,88 @@ PLAN_CAP_INFO: dict[str, str] = {
 }
 
 
-def lan_ip() -> str:
-    """This machine's LAN address — the one the phone can actually reach.
-
-    Uses a UDP socket to discover the outbound interface without sending
-    anything. Falls back to loopback if there's no network.
-    """
+def _route_probe_ip() -> str | None:
+    """The source IP for the default route — one address, the classic probe."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("10.255.255.255", 1))
         return s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return None
     finally:
         s.close()
+
+
+def lan_ip_candidates() -> list[str]:
+    """Every private LAN IPv4 the phone might reach, best-guess first.
+
+    The single default-route probe returns ONE address — the interface with the
+    default route — which on a VPN / full-tunnel or a multi-NIC host is often an
+    address the phone on the Wi-Fi LAN CANNOT reach (the QR then dials a dead
+    IP → the phone's old silent dark screen). This enumerates ALL of the host's
+    IPv4s (the route probe + the hostname's A records), keeps only private,
+    non-loopback, non-link-local ones, and orders them so the likeliest home-LAN
+    address wins: 192.168/x, then 172.16-31/x, then 10/x (the range VPNs and
+    container bridges most often squat). Deterministic (stable secondary sort) so
+    the chosen IP — and therefore the TLS cert reuse check — doesn't flap.
+
+    Filling the cert SANs from this list means whichever LAN IP the phone dials
+    matches the cert, which also survives a DHCP lease change and multi-homing."""
+    import ipaddress
+    found: list[str] = []
+
+    def _add(ip):
+        if ip and ip not in found:
+            found.append(ip)
+
+    _add(_route_probe_ip())
+    try:                                   # every A record the host resolves to
+        _, _, addrs = socket.gethostbyname_ex(socket.gethostname())
+        for a in addrs:
+            _add(a)
+    except OSError:
+        pass
+
+    # Only true RFC1918 LAN ranges — a phone reaches the Brain over a home/office
+    # LAN, never a documentation/TEST-NET/CGNAT block (Python's is_private is
+    # broader than RFC1918 and would let 203.0.113.x through).
+    _lan_nets = (ipaddress.ip_network("10.0.0.0/8"),
+                 ipaddress.ip_network("172.16.0.0/12"),
+                 ipaddress.ip_network("192.168.0.0/16"))
+
+    def _ok(ip: str) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        return a.version == 4 and any(a in net for net in _lan_nets)
+
+    def _rank(ip: str) -> int:
+        if ip.startswith("192.168."):
+            return 0
+        if ip.startswith("172."):
+            return 1
+        if ip.startswith("10."):
+            return 2
+        return 3
+
+    cands = [ip for ip in found if _ok(ip)]
+    cands.sort(key=lambda ip: (_rank(ip), ip))     # deterministic
+    return cands
+
+
+def lan_ip() -> str:
+    """This machine's LAN address — the one the phone can actually reach.
+
+    Prefers a reachable home-LAN address (see :func:`lan_ip_candidates`) over the
+    raw default-route probe, so a VPN/multi-NIC host no longer advertises an
+    unreachable IP. Falls back to the probe, then loopback, if nothing private
+    is enumerable.
+    """
+    cands = lan_ip_candidates()
+    if cands:
+        return cands[0]
+    return _route_probe_ip() or "127.0.0.1"
 
 
 

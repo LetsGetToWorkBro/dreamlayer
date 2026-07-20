@@ -131,6 +131,48 @@ def test_live_link_advertises_https_when_tls_port_set(tmp_path):
         server.shutdown(); server.server_close()
 
 
+def test_lan_ip_prefers_reachable_home_lan_over_vpn(monkeypatch):
+    # REVERT-FAILING (refute 2026-07-20): the single default-route probe returns
+    # the VPN/tunnel address on a full-tunnel host, so the QR advertised an IP the
+    # phone on the Wi-Fi LAN can't reach → silent dead link. lan_ip() must prefer a
+    # real home-LAN address (192.168/x) over the 10/x the probe/VPN handed back.
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "10.8.0.3")   # the VPN IP
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["127.0.1.1", "10.8.0.3", "192.168.1.24"]))
+    cands = srv.lan_ip_candidates()
+    assert cands[0] == "192.168.1.24"                # home-LAN wins the ordering
+    assert "127.0.1.1" not in cands                  # loopback filtered out
+    assert srv.lan_ip() == "192.168.1.24"            # ...and that's what the QR uses
+
+
+def test_lan_ip_candidates_are_private_only_and_deterministic(monkeypatch):
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "203.0.113.9")  # a PUBLIC ip
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["169.254.5.5", "172.16.4.4", "192.168.0.9"]))
+    cands = srv.lan_ip_candidates()
+    assert "203.0.113.9" not in cands                # public address never advertised
+    assert "169.254.5.5" not in cands                # link-local filtered out
+    assert cands == ["192.168.0.9", "172.16.4.4"]    # ranked, stable
+    assert srv.lan_ip_candidates() == cands          # deterministic across calls
+
+
+def test_tls_cert_names_every_lan_candidate(tmp_path, monkeypatch):
+    # The cert SANs must include ALL private LAN IPs, so whichever the phone dials
+    # (multi-NIC, or after a DHCP change) the cert matches — not just the one the
+    # default-route probe happened to pick.
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "192.168.1.24")
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["192.168.1.24", "10.0.0.7"]))
+    paths = tlsmod.ensure_self_signed(tmp_path)
+    if paths is None:
+        pytest.skip("cryptography not installed")
+    from cryptography import x509
+    cert = x509.load_pem_x509_certificate(paths[0].read_bytes())
+    san_ips = tlsmod._san_ips(cert)
+    assert "192.168.1.24" in san_ips and "10.0.0.7" in san_ips
+    assert "127.0.0.1" in san_ips
+
+
 def test_panel_live_setup_walks_through_the_cert_prompt():
     html = render_panel("tok")
     assert "copyLiveLink" in html                  # tap-to-copy fallback exists
