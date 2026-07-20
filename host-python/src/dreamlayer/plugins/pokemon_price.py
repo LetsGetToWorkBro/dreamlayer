@@ -88,20 +88,29 @@ def adjust_for_condition(market: float, condition: str) -> float:
     return float(market) * CONDITION_MULT.get(normalize_condition(condition), 1.0)
 
 
+def _lucene(v: str) -> str:
+    """Neutralise a value for a quoted Lucene phrase term: drop the double-quote
+    and backslash so an OCR read (or a doctored card) containing a `"` can't
+    break out of the phrase and steer which card the query resolves. Newlines
+    collapse to spaces so the term stays one clause."""
+    return v.replace("\\", "").replace('"', "").replace("\n", " ").replace("\r", " ").strip()
+
+
 def build_query(name: str, number: Optional[str] = None,
                 set_id: Optional[str] = None) -> str:
     """A pokemontcg.io card search for `name` (plus `number`/`set_id` when the
     vision read supplies them, which pins the exact printing). We ask for a
     single, newest-first result; the key is never a query param — it rides a
-    header — so nothing sensitive lands in the URL."""
+    header — so nothing sensitive lands in the URL. Each term value is
+    quote-neutralised so it can't break out of its Lucene phrase clause."""
     terms = []
-    nm = (name or "").strip()
+    nm = _lucene((name or "").strip())
     if nm:
         terms.append(f'name:"{nm}"')
-    num = ("" if number is None else str(number)).strip()
+    num = _lucene(("" if number is None else str(number)).strip())
     if num:
         terms.append(f'number:"{num}"')
-    sid = (set_id or "").strip()
+    sid = _lucene((set_id or "").strip())
     if sid:
         terms.append(f'set.id:"{sid}"')
     params = {"q": " ".join(terms), "pageSize": 1,

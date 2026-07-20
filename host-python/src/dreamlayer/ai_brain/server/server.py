@@ -1634,14 +1634,27 @@ _PACK_JOBS: dict = {}            # pack key -> {"state","detail","ts"}
 _PACK_LOCK = threading.Lock()
 
 
+def _pip_env() -> dict:
+    """A pip environment with the index-redirecting vars stripped, so an
+    inherited ``PIP_INDEX_URL`` / ``PIP_EXTRA_INDEX_URL`` / ``PIP_CONFIG_FILE``
+    (env or a dropped pip.conf) can't silently point a pack install at an
+    attacker's index. Curated packs always resolve from the default PyPI."""
+    import os
+    env = dict(os.environ)
+    for k in ("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_CONFIG_FILE"):
+        env.pop(k, None)
+    return env
+
+
 def _run_pip(reqs: list) -> tuple:
     """Default pack runner: pip install into this interpreter's environment.
     Returns (ok, last_output_lines)."""
     import subprocess
     import sys
-    cmd = [sys.executable, "-m", "pip", "install", *reqs]
+    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", *reqs]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
+                              env=_pip_env())
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-6:]
         return proc.returncode == 0, "\n".join(tail)
     except Exception as exc:                     # pip missing, timeout, ...
@@ -1663,13 +1676,21 @@ def _run_pip_target(reqs: list, target: str) -> tuple:
     except Exception as exc:                     # pip not bundled in this build
         return False, f"this build can't add packs (pip unavailable: {exc})"
     argv = ["install", "--target", str(target), "--upgrade", "--no-input",
-            "--disable-pip-version-check", "--no-warn-script-location", *reqs]
+            "--no-cache-dir", "--disable-pip-version-check",
+            "--no-warn-script-location", *reqs]
+    import os
+    saved = {k: os.environ.pop(k, None)           # in-process pip reads these live;
+             for k in ("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_CONFIG_FILE")}
     try:
         code = pip_main(argv)
     except SystemExit as e:                       # pip can raise SystemExit
         code = e.code if isinstance(e.code, int) else 1
     except Exception as exc:                       # noqa: BLE001 — never crash the job thread
         return False, str(exc)[-400:]
+    finally:
+        for k, v in saved.items():                # restore the caller's environment
+            if v is not None:
+                os.environ[k] = v
     if code == 0:
         import importlib
         importlib.invalidate_caches()             # so find_spec sees the new packages now
@@ -1694,6 +1715,9 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
     reqs = pack_requirements(pack_key)
     if not reqs:
         return {"error": f"unknown pack: {pack_key}"}
+    if brain.incognito_now():                    # pip → PyPI is egress; honor posture
+        return {"error": "installing a pack needs the network — you're in "
+                         "Incognito or LAN-only right now"}
     frozen = bool(getattr(sys, "frozen", False))
     with _PACK_LOCK:
         if any(j.get("state") == "installing" for j in _PACK_JOBS.values()):
@@ -1726,19 +1750,63 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
 # returns instantly and the panel shows a moving %.
 _PULL_JOBS: dict = {}                    # model name -> {"state","percent","detail","ts"}
 _PULL_LOCK = threading.Lock()
+_PULL_JOBS_MAX = 32
+_PULL_JOB_TTL_S = 600.0
+
+
+def _model_name_ok(name: str) -> bool:
+    """Reject a model ref that pins an explicit registry HOST, so a one-click
+    pull can only reach Ollama's DEFAULT registry — never an attacker-chosen
+    `evil.example/backdoor:latest`. Ollama refs are `[host[:port]/]ns/name[:tag]`,
+    so a host shows up as a dotted or port-bearing FIRST path segment (a bare
+    `name:tag` or `library/name` carries no host and is fine)."""
+    n = (name or "").strip()
+    if not n or any(ord(c) < 32 or c.isspace() for c in n):
+        return False
+    if "/" in n:
+        head = n.split("/", 1)[0]
+        if "." in head or ":" in head:          # host[:port] prefix → external registry
+            return False
+    return True
+
+
+def _prune_pull_jobs(now: float) -> None:
+    """Bound _PULL_JOBS: drop terminal (done/failed) jobs past their TTL and
+    cap the dict, so pulling many distinct names can't grow it (and the status
+    payload it serializes) without limit. Caller holds _PULL_LOCK."""
+    for k in [k for k, v in _PULL_JOBS.items()
+              if v.get("state") in ("done", "failed")
+              and (now - float(v.get("ts", now))) > _PULL_JOB_TTL_S]:
+        _PULL_JOBS.pop(k, None)
+    if len(_PULL_JOBS) > _PULL_JOBS_MAX:          # evict oldest non-active first
+        for k, _v in sorted(_PULL_JOBS.items(), key=lambda kv: kv[1].get("ts", 0)):
+            if len(_PULL_JOBS) <= _PULL_JOBS_MAX:
+                break
+            if _PULL_JOBS.get(k, {}).get("state") != "pulling":
+                _PULL_JOBS.pop(k, None)
 
 
 def _pull_model_async(brain: Brain, name: str) -> dict:
     """Start (or return the in-flight) background pull for `name`. Returns the
-    job dict immediately — never blocks on the download."""
+    job dict immediately — never blocks on the download. Posture-gated (no pull
+    while Incognito/LAN-only, matching the store endpoints) and host-validated
+    (the name can't repoint the pull at a non-default registry)."""
     name = (name or "").strip()
     if not name:
         return {"error": "no model name"}
+    if not _model_name_ok(name):
+        return {"error": "that model name isn't allowed — it points at a "
+                         "non-default registry host"}
+    if brain.incognito_now():
+        return {"error": "pulling a model needs the network — you're in "
+                         "Incognito or LAN-only right now"}
+    now = time.time()
     with _PULL_LOCK:
+        _prune_pull_jobs(now)
         cur = _PULL_JOBS.get(name)
         if cur and cur.get("state") == "pulling":
             return dict(cur)             # already pulling — don't start a second
-        job = {"state": "pulling", "percent": 0, "detail": "starting…", "ts": time.time()}
+        job = {"state": "pulling", "percent": 0, "detail": "starting…", "ts": now}
         _PULL_JOBS[name] = job
 
     def prog(pct, detail):
@@ -1779,8 +1847,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
     # but was never wired). Keyed by client IP, off-box attempts only (loopback
     # is the local dev/panel path); a burst of wrong tokens locks that IP out.
     from ...pairing_ratelimit import LockoutLimiter
-    _auth_limiter = LockoutLimiter(max_attempts=10, window_s=60.0,
-                                   lockout_s=300.0)
+    # ONE limiter per Brain, shared across listeners. make_brain_server is called
+    # a second time for the TLS sibling (tls.start_tls_sibling); without sharing,
+    # each port would get its own counter — a LAN attacker grinding the token
+    # would get 2× the attempts and a lockout on one port wouldn't apply to the
+    # other (audit 2026-07-20). Hang it off the Brain so both listeners agree.
+    _shared = getattr(brain, "_shared_auth_limiter", None)
+    if _shared is None:
+        _shared = LockoutLimiter(max_attempts=10, window_s=60.0, lockout_s=300.0)
+        try:
+            setattr(brain, "_shared_auth_limiter", _shared)
+        except Exception:                         # brain may forbid new attrs
+            pass
+    _auth_limiter: LockoutLimiter = _shared
 
     class Handler(BaseHTTPRequestHandler):
         # Per-connection socket timeout: StreamRequestHandler.setup() applies
@@ -2299,7 +2378,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _get_plugins_store(self, path, qs):
             """The in-app plugin store catalogue (fetched from the pinned
-            registry; posture-gated)."""
+            registry; posture-gated). This GET both egresses (to the registry)
+            and mutates Brain state (loads the index), so it takes the same CSRF
+            guard the mutating POSTs do — a page the wearer merely visits must
+            not be able to force the no-egress Brain to phone home."""
+            if not self._same_origin_write():
+                self._json(403, {"error": "cross-origin write refused"}); return
             self._json(200, brain.store_catalogue())
 
         def _get_rc_repertoire(self, path, qs):
@@ -3236,10 +3320,16 @@ def _report_diagnostics(brain: Brain) -> str:
         seams = {}
     bad = [f"{n}({(s or {}).get('failures', 0)})"
            for n, s in sorted(seams.items()) if (s or {}).get("failures", 0)]
+    # the model NAME is not PII, but a custom/api-tier value could carry a host
+    # or credential (`user@host`, `https://…`); redact rather than leak it, so
+    # the "no endpoint/key" promise holds even for an oddly-configured model.
+    _model = str(brain.config.model or "")
+    if "://" in _model or "@" in _model:
+        _model = "(custom endpoint)"
     lines = [
         f"DreamLayer {_version()} · {_pf.system()} {_pf.machine()} · "
         f"Python {_pf.python_version()}",
-        f"model: {brain.config.model} · index: {files} files · uptime: {uptime}",
+        f"model: {_model[:60]} · index: {files} files · uptime: {uptime}",
     ]
     if caps:
         lines.append("capabilities: " + " · ".join(
@@ -3268,9 +3358,15 @@ def _build_bug_report(brain: Brain, summary: str, detail: str,
         q = _up.urlencode({"title": summary, "body": b, "labels": "bug"})
         return f"https://github.com/{_REPORT_REPO}/issues/new?{q}"
 
+    # Bound the ENCODED url, not the source length: one multibyte char expands to
+    # ~9–12 percent-encoded bytes, so a source-char cap doesn't bound the url for
+    # non-ASCII input. Shrink the body until the built url fits, then keep it.
+    _tail = "\n\n…(truncated — use “Copy report” for the full text)"
     url = _url(body)
-    if len(url) > 6000:            # some browsers cap the address bar; keep headroom
-        url = _url(body[:1400] + "\n\n…(truncated — use “Copy report” for the full text)")
+    trimmed = body
+    while len(url) > 6000 and len(trimmed) > 64:
+        trimmed = trimmed[: int(len(trimmed) * 0.8)]
+        url = _url(trimmed + _tail)
     return {"title": summary, "body": body, "github_url": url}
 
 
