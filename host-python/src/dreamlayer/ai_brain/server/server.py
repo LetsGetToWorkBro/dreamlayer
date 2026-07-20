@@ -168,20 +168,74 @@ PLAN_CAP_INFO: dict[str, str] = {
 }
 
 
-def lan_ip() -> str:
-    """This machine's LAN address — the one the phone can actually reach.
-
-    Uses a UDP socket to discover the outbound interface without sending
-    anything. Falls back to loopback if there's no network.
-    """
+def _route_probe_ip() -> str | None:
+    """The source IP for the default route — one address, the classic probe."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("10.255.255.255", 1))
         return s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return None
     finally:
         s.close()
+
+
+def lan_ip_candidates() -> list[str]:
+    """Every private LAN IPv4 the phone might reach, the DEFAULT-ROUTE one first.
+
+    The default-route probe is the OS's own answer to "which interface reaches
+    off-box" — the single strongest reachability signal — so it LEADS, and is
+    never reordered below an enumerated address. The hostname's other A-records
+    follow (deduped) as alternates: they populate the cert SANs (so whichever LAN
+    IP the phone dials matches the cert, surviving multi-NIC and a DHCP lease
+    change) and are the fallback if the probe isn't a usable LAN address.
+
+    We deliberately do NOT rank by address range: an earlier version floated a
+    192.168/172 host-only/Docker/VirtualBox adapter above the real default-route
+    10.x LAN, advertising the UNREACHABLE virtual IP in the QR (refute
+    2026-07-20). Only true RFC1918 ranges are kept — a phone reaches the Brain
+    over a home/office LAN, never a documentation/TEST-NET/CGNAT block (Python's
+    is_private is broader than RFC1918 and would let 203.0.113.x through)."""
+    import ipaddress
+    found: list[str] = []
+
+    def _add(ip):
+        if ip and ip not in found:
+            found.append(ip)
+
+    _add(_route_probe_ip())                # the default route leads — never demoted
+    try:                                   # every A record the host resolves to
+        _, _, addrs = socket.gethostbyname_ex(socket.gethostname())
+        for a in addrs:
+            _add(a)
+    except OSError:
+        pass
+
+    _lan_nets = (ipaddress.ip_network("10.0.0.0/8"),
+                 ipaddress.ip_network("172.16.0.0/12"),
+                 ipaddress.ip_network("192.168.0.0/16"))
+
+    def _ok(ip: str) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        return a.version == 4 and any(a in net for net in _lan_nets)
+
+    return [ip for ip in found if _ok(ip)]     # insertion order: probe first
+
+
+def lan_ip() -> str:
+    """This machine's LAN address — the one the phone can actually reach.
+
+    The default-route interface (see :func:`lan_ip_candidates`), which is right on
+    a plain LAN and on a host with virtual/bridge adapters alike. Falls back to
+    the raw probe, then loopback, if nothing RFC1918 is enumerable.
+    """
+    cands = lan_ip_candidates()
+    if cands:
+        return cands[0]
+    return _route_probe_ip() or "127.0.0.1"
 
 
 
@@ -1562,6 +1616,32 @@ def _juno_asset(name: str) -> "Optional[tuple[bytes, str]]":
     return (fp.read_bytes(), ctype) if fp.is_file() else None
 
 
+_LIVE_ASSET_CTYPES = {
+    ".mjs": "text/javascript", ".js": "text/javascript",
+    ".wasm": "application/wasm", ".tflite": "application/octet-stream",
+}
+
+
+def _live_asset(name: str) -> "Optional[tuple[bytes, str]]":
+    """Read a Live Lens static asset (the vendored on-device detector: the
+    MediaPipe loader .mjs, its WASM runtime, and the .tflite model) from
+    ``assets/mediapipe/``. Subpaths (``wasm/…``) are allowed but confined to that
+    directory — a resolved path that escapes it (``..``) or an unknown extension
+    returns None. Binary-safe; these are non-secret, immutable, so the caller
+    caches them hard."""
+    base = (Path(__file__).resolve().parent / "assets" / "mediapipe").resolve()
+    ext = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+    ctype = _LIVE_ASSET_CTYPES.get(ext)
+    if ctype is None:
+        return None
+    try:
+        fp = (base / name).resolve()
+        fp.relative_to(base)                       # confine to the assets dir
+    except (ValueError, OSError):
+        return None                                # path escape / bad name
+    return (fp.read_bytes(), ctype) if fp.is_file() else None
+
+
 def _builder_page(token: str) -> "Optional[str]":
     """The builder HTML, rewritten to load figment.js from the Brain and told
     it's same-origin (so it hides the URL/token inputs and deploys relatively).
@@ -2423,13 +2503,26 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body = render_live(nonce).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            # 'self' + 'wasm-unsafe-eval' let the SAME-ORIGIN on-device detector
+            # load (its MediaPipe module + WASM), scoped to THIS page only (the
+            # panel keeps the stricter nonce-only policy). 'wasm-unsafe-eval'
+            # permits WASM compilation, NOT arbitrary JS eval; connect-src stays
+            # 'self' so the model/WASM (and every look) still can't leave the
+            # Brain. worker-src covers MediaPipe's internal worker. The inline
+            # page code still requires the nonce.
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'none'; "
-                f"script-src 'nonce-{nonce}'; "
+                f"script-src 'self' 'wasm-unsafe-eval' 'nonce-{nonce}'; "
                 f"style-src 'nonce-{nonce}'; "
                 "img-src 'self' data: blob:; media-src 'self' blob:; "
-                "connect-src 'self'; base-uri 'none'; form-action 'none'")
+                "connect-src 'self'; worker-src 'self' blob:; "
+                # 'none' has no frame-ancestors fallback under default-src, so name
+                # it — a camera/token page must not be framable (clickjacking).
+                "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+            # belt-and-suspenders for the 'self' in script-src: never MIME-sniff a
+            # same-origin response into an executable type.
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -2459,6 +2552,27 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _get_live_asset(self, path, qs):
+            """The Live Lens on-device detector assets (MediaPipe loader/WASM +
+            the .tflite model), served same-origin and public — they hold no
+            secrets and the page fetches them before pairing. Same-origin is
+            REQUIRED: the live page's CSP forbids any off-origin fetch, so the
+            'no external fetches' / LAN-appliance promise holds even with the
+            in-browser detector (the model + WASM never leave your Brain, and no
+            camera frame ever leaves the phone for the on-device pass)."""
+            name = path[len("/dreamlayer/live/assets/"):]
+            data = _live_asset(name)
+            if data is None:
+                self._json(404, {"error": "not found"}); return
+            body, ctype = data
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("X-Content-Type-Options", "nosniff")  # serve the declared type only
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "public, max-age=604800, immutable")
             self.end_headers()
             self.wfile.write(body)
 
@@ -2787,6 +2901,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         # prefix/dynamic public routes (ordered fallback, still pre-auth)
         _GET_PUBLIC_PREFIX = [
             ("/dreamlayer/build/juno/", _get_juno_asset),
+            ("/dreamlayer/live/assets/", _get_live_asset),
             ("/panel-assets/", _get_panel_asset),
         ]
         # exact-path routes, resolved AFTER the auth gate
@@ -2954,10 +3069,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             wearer's egress shield the look is local-only (classifier ladder,
             zero egress, no trace — test_live_lens pins it), and outside it the
             plugin providers see extracted fields, never pixels. The frame cap
-            rides the same 413-before-read machinery as every body."""
+            rides the same 413-before-read machinery as every body.
+
+            ``?ambient=1`` marks a continuous-loop frame (the live page's passive
+            "what am I looking at" cadence, several a minute): it runs the LOCAL
+            classifier only — no remote vision, no plugins, and no activity-ledger
+            trace — so the loop never floods the ledger or auto-egresses a frame.
+            A deliberate tap (no ambient flag) escalates to the full world lens."""
             from . import live as live_mod
+            ambient = qs.get("ambient", ["0"])[0] in ("1", "true")
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data))
+            self._json(200, live_mod.look(brain, data, ambient=ambient))
 
         def _post_live_redeem(self, path, qs):
             """Exchange the short Live Lens pairing code for the token.

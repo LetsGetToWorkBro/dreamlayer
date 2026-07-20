@@ -109,7 +109,70 @@ class TestHeuristicVision:
         assert sighting is not None and sighting.label == "houseplant"
 
 
-class TestRealVisionInference:
+class TestLadderWiring:
+    """The ladder must actually REACH the neural rungs it advertises."""
+
+    def test_installed_clip_is_reachable_without_caller_labels(self, monkeypatch):
+        # REVERT-FAILING (R1, refute 2026-07-20): every production call site
+        # (Live Lens, VisionSightingRecognizer, orchestrator) calls
+        # default_classifier() with NO labels. The old `ClipClassifier.available
+        # and labels` gate meant installed CLIP was silently skipped for the
+        # 4-prototype heuristic. With CLIP "installed", the ladder must now hand
+        # back a CLIP classifier pre-loaded with the broad everyday label set.
+        from dreamlayer.object_lens import classify_backends as cb
+        monkeypatch.setattr(cb.ClipClassifier, "available", True)
+        # neural rungs above CLIP stay unavailable so CLIP is the winner
+        monkeypatch.setattr(cb.YoloClassifier, "available", False)
+        monkeypatch.setattr(cb.MLXVisionClassifier, "available", False)
+        monkeypatch.setattr(cb.MoondreamClassifier, "available", False)
+        clf = cb.default_classifier()                       # NO labels, the real call
+        assert isinstance(clf, cb.ClipClassifier)
+        assert clf.labels == cb.COMMON_OBJECT_LABELS and len(clf.labels) > 20
+
+    def test_caller_labels_still_win(self, monkeypatch):
+        from dreamlayer.object_lens import classify_backends as cb
+        monkeypatch.setattr(cb.ClipClassifier, "available", True)
+        monkeypatch.setattr(cb.YoloClassifier, "available", False)
+        monkeypatch.setattr(cb.MLXVisionClassifier, "available", False)
+        monkeypatch.setattr(cb.MoondreamClassifier, "available", False)
+        clf = cb.default_classifier(labels=["snake plant", "bike lock"])
+        assert isinstance(clf, cb.ClipClassifier) and clf.labels == ["snake plant", "bike lock"]
+
+    def test_vlm_rungs_preserve_casing_so_the_person_guard_catches_names(self):
+        # REVERT-FAILING (refute 2026-07-20): the moondream/MLX rungs must NOT
+        # lowercase their label. The person-guard's name-shape check is
+        # case-sensitive (a proper name is Title-Case / ALL-CAPS), so a lowercased
+        # "maya chen" evades it and a stranger's name reaches the HUD — worse on
+        # the continuous ambient loop. MLX takes an injectable _generate, so we pin
+        # it without the Apple-only dependency.
+        from dreamlayer.object_lens.classify_backends import MLXVisionClassifier
+        from dreamlayer.object_lens.recognizer import _names_a_person
+        clf = MLXVisionClassifier(_generate=lambda *a, **k: "Maya Chen")
+        out = clf(object())
+        assert out == ("Maya Chen", clf.confidence)     # casing preserved, not "maya chen"
+        assert _names_a_person(out[0]) is True           # ...so the guard now defers it
+
+    def test_yolo_returns_the_highest_confidence_box(self):
+        # REVERT-FAILING (R6, refute 2026-07-20): YOLOv8 boxes are not
+        # confidence-sorted, so returning boxes[0] hands back an incidental
+        # background object. The subject the wearer aimed at is the MAX-confidence
+        # detection.
+        from dreamlayer.object_lens.classify_backends import YoloClassifier
+
+        class _Box:
+            def __init__(self, cls, conf):
+                self.cls, self.conf = [cls], [conf]
+
+        class _Res:
+            names = {0: "chair", 1: "coffee mug", 2: "wall"}
+            # first box is a low-confidence chair; the aimed subject (mug) scores
+            # highest but sits at index 1 — boxes[0] would have returned "chair".
+            boxes = [_Box(0, 0.31), _Box(1, 0.94), _Box(2, 0.40)]
+
+        y = YoloClassifier.__new__(YoloClassifier)          # skip real model load
+        y._model = lambda frame, verbose=False: [_Res()]
+        out = y(object())
+        assert out == ("coffee mug", 0.94)
     @pytest.mark.real_model
     def test_clip_runs_real_inference(self):
         # Runs for real in the real-models CI job (open_clip + torch installed).

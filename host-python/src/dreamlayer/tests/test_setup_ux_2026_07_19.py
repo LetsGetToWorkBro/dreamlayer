@@ -131,6 +131,51 @@ def test_live_link_advertises_https_when_tls_port_set(tmp_path):
         server.shutdown(); server.server_close()
 
 
+def test_lan_ip_prefers_default_route_over_virtual_adapters(monkeypatch):
+    # REVERT-FAILING (refute 2026-07-20): the default-route probe is the
+    # reachability signal and must LEAD. A range-ranking earlier floated a
+    # 192.168 host-only / 172.17 Docker adapter ABOVE the real default-route 10.x
+    # LAN, so the QR advertised the UNREACHABLE virtual IP. The probe wins; the
+    # virtual adapters follow only as extra cert SANs, never as the primary.
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "10.0.5.5")   # real LAN (default route)
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["10.0.5.5", "192.168.56.1", "172.17.0.1"]))
+    assert srv.lan_ip() == "10.0.5.5"                # the reachable route, not the virtual IP
+    cands = srv.lan_ip_candidates()
+    assert cands[0] == "10.0.5.5"
+    assert "192.168.56.1" in cands and "172.17.0.1" in cands   # still named in the cert
+
+
+def test_lan_ip_candidates_are_private_only_and_deterministic(monkeypatch):
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "203.0.113.9")  # a PUBLIC ip
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["169.254.5.5", "172.16.4.4", "192.168.0.9"]))
+    cands = srv.lan_ip_candidates()
+    assert "203.0.113.9" not in cands                # public probe never advertised
+    assert "169.254.5.5" not in cands                # link-local filtered out
+    # insertion order (probe first — here filtered — then the A-records as-enumerated);
+    # NOT range-ranked, so a virtual adapter can't jump the queue
+    assert cands == ["172.16.4.4", "192.168.0.9"]
+    assert srv.lan_ip_candidates() == cands          # deterministic across calls
+
+
+def test_tls_cert_names_every_lan_candidate(tmp_path, monkeypatch):
+    # The cert SANs must include ALL private LAN IPs, so whichever the phone dials
+    # (multi-NIC, or after a DHCP change) the cert matches — not just the one the
+    # default-route probe happened to pick.
+    monkeypatch.setattr(srv, "_route_probe_ip", lambda: "192.168.1.24")
+    monkeypatch.setattr(srv.socket, "gethostbyname_ex",
+                        lambda h: (h, [], ["192.168.1.24", "10.0.0.7"]))
+    paths = tlsmod.ensure_self_signed(tmp_path)
+    if paths is None:
+        pytest.skip("cryptography not installed")
+    from cryptography import x509
+    cert = x509.load_pem_x509_certificate(paths[0].read_bytes())
+    san_ips = tlsmod._san_ips(cert)
+    assert "192.168.1.24" in san_ips and "10.0.0.7" in san_ips
+    assert "127.0.0.1" in san_ips
+
+
 def test_panel_live_setup_walks_through_the_cert_prompt():
     html = render_panel("tok")
     assert "copyLiveLink" in html                  # tap-to-copy fallback exists

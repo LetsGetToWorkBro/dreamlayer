@@ -82,6 +82,30 @@ def test_vision_recognizer_falls_back_to_heuristic_when_model_declines():
     assert isinstance(out[0], str) and out[0]
 
 
+def test_no_vision_backend_skips_the_encode_and_describe_entirely():
+    # REVERT-FAILING (R4, refute 2026-07-20): on the common default install
+    # (_backend is None) describe_fn always returns "" AFTER the frame was
+    # re-encoded to base64 and a no-op model call was made — every single look.
+    # An `available` predicate returning False must short-circuit BEFORE the
+    # encode/describe, going straight to the heuristic fallback.
+    frame = _noise_frame()
+    calls = {"describe": 0}
+
+    def _describe(prompt, image_b64):
+        calls["describe"] += 1
+        return ""
+
+    rec = VisionSightingRecognizer(_describe, available=lambda: False)
+    out = rec(frame)
+    assert out is not None                              # heuristic still answers
+    assert calls["describe"] == 0                       # the VLM path never ran
+
+    # when vision IS available the describe path runs as before
+    rec2 = VisionSightingRecognizer(_describe, available=lambda: True)
+    rec2(frame)
+    assert calls["describe"] == 1
+
+
 def test_frame_b64_roundtrip():
     frame = (_noise_frame() * 255).astype("uint8")
     b64 = frame_to_b64(frame)

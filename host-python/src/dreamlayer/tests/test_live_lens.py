@@ -99,6 +99,69 @@ class TestDecodeFrame:
         arr = decode_frame(_jpeg(size=(1600, 1200)))
         assert arr is not None and max(arr.shape[:2]) <= 512
 
+    def test_oversized_canvas_is_refused_before_it_decodes(self, monkeypatch):
+        # REVERT-FAILING (SEC1, refute 2026-07-20): decode_frame must reject a
+        # frame whose declared pixel count exceeds MAX_FRAME_PIXELS from the
+        # HEADER, before thumbnail() forces a full-resolution decode. Shrink the
+        # cap so a real 64x64 frame trips it — pre-fix (no cap) it decoded anyway,
+        # which is exactly how a small PNG declaring 13000x13000 ballooned to
+        # ~650 MB of RSS on the public look route.
+        pytest.importorskip("PIL")
+        monkeypatch.setattr(live, "MAX_FRAME_PIXELS", 100)      # 64*64 = 4096 > 100
+        assert decode_frame(_jpeg(size=(64, 64))) is None
+        monkeypatch.setattr(live, "MAX_FRAME_PIXELS", 50 * 1024 * 1024)
+        assert decode_frame(_jpeg(size=(64, 64))) is not None   # under the cap: fine
+
+    def test_header_declared_bomb_never_materialises_pixels(self):
+        # A crafted PNG whose IHDR declares a 20000x20000 canvas (400 MP) with a
+        # trivial IDAT: Image.open reads the size from the header WITHOUT decoding
+        # IDAT, so the cap refuses it before a single pixel is allocated.
+        pytest.importorskip("PIL")
+        import struct
+        import zlib
+
+        def _chunk(typ, data):
+            body = typ + data
+            return (struct.pack(">I", len(data)) + body
+                    + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF))
+        png = (b"\x89PNG\r\n\x1a\n"
+               + _chunk(b"IHDR", struct.pack(">IIBBBBB", 20000, 20000, 8, 2, 0, 0, 0))
+               + _chunk(b"IDAT", zlib.compress(b"\x00"))
+               + _chunk(b"IEND", b""))
+        assert decode_frame(png) is None      # refused at the header, no OOM
+
+    def test_decode_is_concurrency_bounded(self):
+        # SEC2: a fixed peak-memory backstop exists so a burst of authed looks
+        # can't stack their decode buffers into an OOM. Prove the semaphore
+        # actually gates at _MAX_CONCURRENT_DECODES: acquire every slot, then a
+        # further non-blocking acquire must fail.
+        assert live._MAX_CONCURRENT_DECODES >= 1
+        got = [live._decode_sem.acquire(blocking=False)
+               for _ in range(live._MAX_CONCURRENT_DECODES)]
+        try:
+            assert all(got)                                    # all slots free initially
+            assert live._decode_sem.acquire(blocking=False) is False   # then bounded
+        finally:
+            for _ in got:
+                live._decode_sem.release()
+
+    def test_decode_sheds_instead_of_parking_a_worker_when_saturated(self):
+        # REVERT-FAILING (SEC2, refute 2026-07-20): the decode semaphore is
+        # NON-blocking — when all slots are held, decode_frame SHEDS the frame
+        # (returns None) rather than parking the worker thread on the semaphore.
+        # A blocking acquire here would DEADLOCK this test (all slots held), which
+        # is exactly the thread-starvation a burst would cause on the server.
+        pytest.importorskip("PIL")
+        got = [live._decode_sem.acquire(blocking=False)
+               for _ in range(live._MAX_CONCURRENT_DECODES)]
+        try:
+            assert all(got)
+            assert decode_frame(_jpeg()) is None       # shed, did not block/deadlock
+        finally:
+            for _ in got:
+                live._decode_sem.release()
+        assert decode_frame(_jpeg()) is not None        # slots freed → decodes again
+
 
 # --- look(): the local ladder, the ledger, and the no-egress guarantee ------
 
@@ -122,6 +185,23 @@ class TestLook:
         out = look(brain, _jpeg())
         assert out["ok"] is True and out["label"] == ""
         assert out["confidence"] == 0.0
+
+    def test_low_confidence_floor_guess_is_not_shown(self, tmp_path, monkeypatch):
+        # REVERT-FAILING (R3, refute 2026-07-20): the local floor must apply the
+        # SAME min_confidence gate the world-lens recognizer does. A 0.30 guess
+        # the recognizer would reject must NOT sail onto the HUD just because the
+        # look fell to the floor — pre-fix _local_look had no gate, so incognito
+        # and normal disagreed on the identical frame.
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("book", 0.30))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == ""     # gated out, honest
+        assert out["confidence"] == 0.0
+        # a confident hit on the same path still shows
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("book", 0.80))
+        out2 = look(brain, _jpeg())
+        assert out2["label"] == "book"
 
     def test_backend_crash_degrades_to_no_recognition(self, tmp_path, monkeypatch):
         pytest.importorskip("PIL")
@@ -287,10 +367,77 @@ class TestHttpSurface:
                 page = r.read().decode("utf-8")
             assert csp, "no Content-Security-Policy header"
             script_dir = next(p for p in csp.split(";") if "script-src" in p)
+            # nonce-based, no 'unsafe-inline'; the on-device detector adds 'self'
+            # + 'wasm-unsafe-eval' (WASM compilation only) — but NEVER the full
+            # 'unsafe-eval', and connect-src stays 'self' so nothing egresses.
             assert "'nonce-" in script_dir and "'unsafe-inline'" not in script_dir
-            nonce = re.search(r"script-src 'nonce-([^']+)'", csp).group(1)
+            assert "'unsafe-eval'" not in script_dir        # wasm-unsafe-eval ≠ unsafe-eval
+            assert "connect-src 'self'" in csp
+            assert "'wasm-unsafe-eval'" in script_dir       # the on-device detector needs it
+            nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
             assert f'<script nonce="{nonce}">' in page      # header nonce == tag nonce
             assert f'<style nonce="{nonce}">' in page
+        finally:
+            server.shutdown(); server.server_close()
+
+
+class TestDetectorAssets:
+    """The vendored on-device detector (MediaPipe loader + WASM + int8 model) is
+    served SAME-ORIGIN so the in-browser recognizer loads with zero external
+    fetch — the CSP forbids off-origin, so the frames never leave the phone."""
+
+    def test_asset_helper_types_and_confines_to_its_dir(self):
+        from dreamlayer.ai_brain.server.server import _live_asset
+        mjs = _live_asset("vision_bundle.mjs")
+        assert mjs is not None and mjs[1] == "text/javascript" and len(mjs[0]) > 1000
+        wasm = _live_asset("wasm/vision_wasm_internal.wasm")
+        assert wasm is not None and wasm[1] == "application/wasm"
+        model = _live_asset("models/efficientdet_lite0.tflite")
+        assert model is not None and model[1] == "application/octet-stream"
+        # path traversal, unknown extensions, and misses are all refused
+        assert _live_asset("../server.py") is None
+        assert _live_asset("../../__init__.py") is None
+        assert _live_asset("wasm/../../store.py") is None
+        assert _live_asset("secret.txt") is None            # unknown extension
+        assert _live_asset("models/nope.tflite") is None    # missing file
+
+    def test_vendored_assets_match_their_pinned_hashes(self):
+        # Enforce the PROVENANCE.md sha256 pins: a swapped or corrupted detector
+        # binary (served to browsers and compiled as WASM) fails CI here instead
+        # of only being caught by a human re-running sha256sum (refute 2026-07-20).
+        import hashlib
+        import re as _re
+        base = Path(live.__file__).resolve().parent / "assets" / "mediapipe"
+        prov = (base / "PROVENANCE.md").read_text(encoding="utf-8")
+        pins = _re.findall(r"\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|", prov)
+        assert len(pins) >= 4, f"expected >=4 pinned assets, parsed {len(pins)}"
+        for rel, want in pins:
+            fp = base / rel
+            assert fp.is_file(), f"pinned asset missing: {rel}"
+            got = hashlib.sha256(fp.read_bytes()).hexdigest()
+            assert got == want, f"{rel} drifted from its PROVENANCE.md sha256"
+
+    def test_assets_route_is_public_and_typed(self, tmp_path):
+        # served pre-auth (the page fetches them before pairing) with the right
+        # MIME so the browser will execute the module + compile the WASM.
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(base + "/dreamlayer/live/assets/vision_bundle.mjs",
+                             timeout=10) as r:      # no token — public asset
+                assert r.status == 200
+                assert r.headers.get("Content-Type", "").startswith("text/javascript")
+                assert len(r.read()) > 1000
+            with opener.open(base + "/dreamlayer/live/assets/wasm/vision_wasm_internal.wasm",
+                             timeout=10) as r:
+                assert r.headers.get("Content-Type") == "application/wasm"
+            # a missing asset is a clean 404, never a 500 or a file leak
+            try:
+                opener.open(base + "/dreamlayer/live/assets/models/nope.tflite", timeout=10)
+                assert False, "missing asset should 404"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
         finally:
             server.shutdown(); server.server_close()
 
@@ -485,6 +632,51 @@ class TestOneLens:
         assert out["panel"]["rows"] == []               # shape parity, no providers
         assert brain.config.cloud_calls == 0
         assert not any(i["kind"] == "look" for i in brain.activity.recent())
+
+    def test_ambient_look_is_local_only_and_leaves_no_trace(self, tmp_path, monkeypatch):
+        # A continuous-loop (ambient) frame must NOT consult the world lens /
+        # plugins / remote vision, and must write NO ledger entry — otherwise the
+        # several-a-minute cadence floods the ledger and could auto-egress every
+        # frame to a configured VLM. Only a deliberate tap escalates + records.
+        pytest.importorskip("PIL")
+        brain = self._world_brain(tmp_path, self.PRICE)   # full VLM + plugin brain
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        # a deliberate tap escalates to the full lens and records the sighting
+        tap = look(brain, _jpeg())
+        assert tap["label"] == "price tag"
+        n_after_tap = sum(1 for i in brain.activity.recent() if i["kind"] == "look")
+        assert n_after_tap >= 1
+        # now an ambient frame: it must NOT touch the world lens (boom guards that)
+        # and must add NO new ledger trace, and egress nothing
+        monkeypatch.setattr(brain, "world_lens",
+                            lambda: (_ for _ in ()).throw(
+                                AssertionError("ambient consulted the world lens")))
+        out = look(brain, _jpeg(), ambient=True)
+        assert out["ok"] is True and out["label"] == "mug"   # local classifier answered
+        assert out["panel"]["rows"] == []                    # shape parity, no providers
+        assert brain.config.cloud_calls == 0                 # nothing egressed
+        n_after_ambient = sum(1 for i in brain.activity.recent() if i["kind"] == "look")
+        assert n_after_ambient == n_after_tap                # ambient left no trace
+
+    def test_smart_path_error_flags_degraded_not_silent(self, tmp_path, monkeypatch):
+        # REVERT-FAILING (R2, refute 2026-07-20): when the world lens ERRORS
+        # (provider crash, model timeout) the look still falls to the honest floor
+        # — but it must SAY it degraded, not silently masquerade the 4-bucket floor
+        # as the smart answer. A plain "nothing recognized" is NOT flagged; only a
+        # real break is.
+        pytest.importorskip("PIL")
+        brain = self._world_brain(tmp_path, self.PRICE)
+        # a clean look (no error) must NOT be flagged degraded
+        clean = look(brain, _jpeg())
+        assert clean["label"] == "price tag" and "degraded" not in clean
+        # now make the world lens ERROR mid-look — the floor answers, flagged
+        wl = brain.world_lens()
+        monkeypatch.setattr(wl, "look",
+                            lambda arr: (_ for _ in ()).throw(RuntimeError("provider died")))
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "mug"   # floor still answers
+        assert out.get("degraded") is True                   # and is honest about it
 
     def test_both_routes_share_one_formatter(self, tmp_path):
         pytest.importorskip("PIL")

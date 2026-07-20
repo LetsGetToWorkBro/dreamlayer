@@ -84,7 +84,11 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
     from .store import _harden_state_dir
     _harden_state_dir(d)
     cert_p, key_p = d / CERT_NAME, d / KEY_NAME
-    lan = _lan_ip()
+    try:                                  # the SAME address the QR advertises
+        from .server import lan_ip
+        lan = lan_ip()
+    except Exception:
+        lan = _lan_ip()
 
     if cert_p.exists() and key_p.exists():
         try:
@@ -121,8 +125,23 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
         x509.DNSName("localhost"),
         x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
     ]
-    if lan != "127.0.0.1":
-        sans.append(x509.IPAddress(ipaddress.ip_address(lan)))
+    # Name EVERY private LAN IP this host has, not just the default-route one, so
+    # the cert matches whichever address the phone dials — surviving a VPN /
+    # multi-NIC (the QR may advertise a sibling interface) and a DHCP lease change
+    # (refute 2026-07-20). Falls back to the single `lan` if enumeration is empty.
+    ips: list[str] = []
+    try:
+        from .server import lan_ip_candidates
+        ips = lan_ip_candidates()
+    except Exception:
+        pass
+    if lan != "127.0.0.1" and lan not in ips:
+        ips.append(lan)
+    for ip in ips:
+        try:
+            sans.append(x509.IPAddress(ipaddress.ip_address(ip)))
+        except ValueError:
+            pass
     host = socket.gethostname()
     if host:
         sans.append(x509.DNSName(host))

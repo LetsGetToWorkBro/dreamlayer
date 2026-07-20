@@ -66,7 +66,15 @@ class ClipClassifier:
         import torch  # type: ignore
         if self._text_features is not None:
             return self._text_features
-        tokens = self._tokenizer(self.labels)
+        # Standard zero-shot CLIP prompt templating: a bare noun ("laptop")
+        # embeds worse than the natural phrasing the model was trained on. Wrap
+        # each label in "a photo of a {label}" for scoring, while the RETURNED
+        # label stays the clean noun (see __call__). A label already carrying an
+        # article/photo phrasing is left as-is.
+        prompts = [lbl if (" " in lbl and lbl.split(" ", 1)[0] in
+                           ("a", "an", "the", "photo")) else f"a photo of {lbl}"
+                   for lbl in self.labels]
+        tokens = self._tokenizer(prompts)
         with torch.no_grad():
             feats = self._model.encode_text(tokens)
             feats = feats / feats.norm(dim=-1, keepdim=True)
@@ -121,11 +129,17 @@ class YoloClassifier:
             return None
         try:
             res = self._model(frame, verbose=False)[0]
-            if not len(res.boxes):
+            boxes = res.boxes
+            if not len(boxes):
                 return None
-            b = res.boxes[0]
-            name = res.names[int(b.cls[0])]
-            return (str(name), float(b.conf[0]))
+            # Return the HIGHEST-CONFIDENCE detection, not boxes[0]. YOLOv8 does
+            # not return boxes confidence-sorted, so the first box is often an
+            # incidental background object rather than the subject the user aimed
+            # at — the wearer looks at a mug and gets "chair" because a chair edge
+            # scored a box first (refute 2026-07-20).
+            best = max(boxes, key=lambda b: float(b.conf[0]))
+            name = res.names[int(best.cls[0])]
+            return (str(name), float(best.conf[0]))
         except Exception as exc:
             log.warning("[yolo] infer failed: %s", exc)
             return None
@@ -171,7 +185,14 @@ class MoondreamClassifier:
                     arr = (np.clip(arr, 0, 1) * 255).astype("uint8")
                 img = Image.fromarray(arr.astype("uint8")).convert("RGB")
             answer = self._model.query(img, self.prompt).get("answer", "")
-            label = str(answer).strip().strip(".").lower()
+            # Do NOT lowercase: the person-guard's name-shape check is
+            # case-sensitive (a proper name is Title-Case / ALL-CAPS), so
+            # lowercasing "Maya Chen" -> "maya chen" blinds it and a stranger's
+            # name would ride onto the HUD — worse on the continuous ambient loop
+            # (refute 2026-07-20). Preserve the model's casing so the guard sees
+            # the signal; a Title-Cased object over-defers to the Social Lens,
+            # which is the privacy-safe direction.
+            label = str(answer).strip().strip(".")
             if not label:
                 return None
             return (label, self.confidence)
@@ -224,7 +245,9 @@ class MLXVisionClassifier:
                 from mlx_vlm import generate  # type: ignore
                 answer = generate(self._model, self._processor, self.prompt,
                                   frame, verbose=False)
-            label = str(answer or "").strip().strip(".").lower()
+            # Preserve casing (see MoondreamClassifier): the person-guard's
+            # name-shape check needs it to catch a proper name the VLM emits.
+            label = str(answer or "").strip().strip(".")
             return (label, self.confidence) if label else None
         except Exception as exc:
             log.warning("[mlx-vlm] infer failed: %s", exc)
@@ -324,14 +347,46 @@ class HeuristicVisionClassifier:
         return (best_label, round(conf, 4))
 
 
+# A broad, everyday open-vocabulary label set for zero-shot CLIP when a caller
+# wires no domain labels. CLIP needs a candidate list to score against; every
+# production call site (the Live Lens, the VisionSightingRecognizer fallback, the
+# orchestrator) calls default_classifier() with NO labels, so the old
+# `ClipClassifier.available and labels` gate meant installed CLIP was NEVER
+# reachable through any real path — it silently fell through to the 4-prototype
+# heuristic (refute 2026-07-20). This list makes CLIP a real rung: ~100 common
+# objects a phone camera actually meets, so "what is this" returns something true
+# instead of one of {houseplant, book, screen, mug}.
+COMMON_OBJECT_LABELS = [
+    "laptop", "mug", "book", "houseplant", "phone", "keys", "water bottle",
+    "backpack", "car", "watch", "coffee cup", "wine glass", "plate of food",
+    "sandwich", "pizza", "banana", "apple", "orange", "bowl of fruit", "cake",
+    "donut", "bicycle", "motorcycle", "bus", "truck", "traffic light",
+    "stop sign", "park bench", "chair", "couch", "bed", "dining table",
+    "television", "computer monitor", "keyboard", "computer mouse",
+    "remote control", "camera", "headphones", "glasses", "wristwatch",
+    "wallet", "purse", "hat", "shoes", "shirt", "jacket", "umbrella",
+    "suitcase", "dog", "cat", "bird", "horse", "potted plant", "flower",
+    "tree", "mountain", "beach", "sky", "building", "street sign", "poster",
+    "painting", "clock", "lamp", "candle", "vase", "bottle of wine",
+    "can of soda", "snack", "box of cereal", "carton of milk", "bag of chips",
+    "chocolate bar", "toothbrush", "hairbrush", "bar of soap", "towel",
+    "pillow", "blanket", "rug", "picture frame", "mirror", "window", "door",
+    "staircase", "refrigerator", "oven", "microwave", "toaster", "kettle",
+    "frying pan", "knife", "fork", "spoon", "pen", "pencil", "notebook",
+    "newspaper", "magazine", "credit card", "banknote", "coin", "receipt",
+    "business card", "game controller", "guitar", "piano", "soccer ball",
+    "basketball", "bottle of medicine", "first aid kit", "fire extinguisher",
+]
+
+
 def default_classifier(labels: Optional[list[str]] = None,
                        heuristic_fallback: bool = True):
     """The vision ladder: the best *installed* real backend first — YOLO (fast,
-    boxed) → moondream (VLM) → CLIP (zero-shot, needs a label set) — then the
-    dependency-free ``HeuristicVisionClassifier`` as the offline base rung so
-    real pixel-reading recognition happens even with no ML deps. Pass
-    ``heuristic_fallback=False`` to get the old behaviour (None when nothing
-    neural is installed, so a caller's own mock stays authoritative)."""
+    boxed) → moondream (VLM) → CLIP (zero-shot) — then the dependency-free
+    ``HeuristicVisionClassifier`` as the offline base rung so real pixel-reading
+    recognition happens even with no ML deps. Pass ``heuristic_fallback=False`` to
+    get the old behaviour (None when nothing neural is installed, so a caller's own
+    mock stays authoritative)."""
     if YoloClassifier.available:
         y = YoloClassifier()
         if y._model is not None:
@@ -342,6 +397,9 @@ def default_classifier(labels: Optional[list[str]] = None,
         return MLXVisionClassifier()
     if MoondreamClassifier.available:
         return MoondreamClassifier()
-    if ClipClassifier.available and labels:
-        return ClipClassifier(labels)
+    if ClipClassifier.available:
+        # A caller's domain labels win; otherwise CLIP scores against the broad
+        # everyday set so an installed CLIP is actually USED (not skipped for the
+        # heuristic — the old `and labels` gate made it unreachable).
+        return ClipClassifier(labels or COMMON_OBJECT_LABELS)
     return HeuristicVisionClassifier() if heuristic_fallback else None

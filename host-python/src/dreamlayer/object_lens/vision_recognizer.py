@@ -197,28 +197,45 @@ class VisionSightingRecognizer:
 
     ``describe_fn(prompt, image_b64) -> str`` is the Brain's vision seam.
     ``fallback`` is another ``classify_fn`` (default: the dependency-free
-    heuristic ladder) used when the model path yields nothing."""
+    heuristic ladder) used when the model path yields nothing. ``available`` is an
+    optional predicate: when it returns False the VLM path is skipped ENTIRELY —
+    no frame encode, no describe call — and the look goes straight to the fallback.
+    On the common default install (``_backend is None``) ``describe_fn`` is a bound
+    method that always returns ``""`` after re-encoding the frame to base64, so
+    every look paid for a JPEG encode + a no-op call it could never use (refute
+    2026-07-20). Wiring ``available`` to the backend's presence removes that cost."""
 
     def __init__(self, describe_fn: Callable[[str, Optional[str]], str],
                  fallback: Optional[Callable] = None,
-                 prompt: str = EXTRACT_PROMPT):
+                 prompt: str = EXTRACT_PROMPT,
+                 available: Optional[Callable[[], bool]] = None):
         self._describe = describe_fn
         self._prompt = prompt
+        self._available = available
         if fallback is None:
             from .classify_backends import default_classifier
             fallback = default_classifier()
         self._fallback = fallback
 
     def __call__(self, frame):
-        b64 = frame_to_b64(frame)
-        if b64 and self._describe is not None:
-            try:
-                reply = self._describe(self._prompt, b64)
-            except Exception as exc:
-                log.warning("[vision_recognizer] describe failed: %s", exc)
-                reply = ""
-            parsed = parse_sighting_json(reply)
-            if parsed is not None:
-                return parsed
+        # A custom `available` predicate that raises must not abort the look —
+        # fail toward DOING the vision work (avail=True), never toward silently
+        # dropping to the fallback. (has_vision, the only wired predicate, can't
+        # raise; this guards a future one.)
+        try:
+            avail = self._available is None or self._available()
+        except Exception:
+            avail = True
+        if avail:
+            b64 = frame_to_b64(frame)
+            if b64 and self._describe is not None:
+                try:
+                    reply = self._describe(self._prompt, b64)
+                except Exception as exc:
+                    log.warning("[vision_recognizer] describe failed: %s", exc)
+                    reply = ""
+                parsed = parse_sighting_json(reply)
+                if parsed is not None:
+                    return parsed
         # no model / declined / unparseable → the heuristic ladder (real pixels)
         return self._fallback(frame) if self._fallback else None

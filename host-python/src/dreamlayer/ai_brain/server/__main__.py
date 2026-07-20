@@ -122,7 +122,11 @@ def main(argv=None) -> int:
                                    tls_port=tls_port)
     else:
         server = make_brain_server(brain, host=args.host, port=args.port)
-    ip = _lan_ip()
+    try:                                  # the SAME address the panel QR advertises
+        from .server import lan_ip
+        ip = lan_ip()
+    except Exception:
+        ip = _lan_ip()
     print(f"DreamLayer Brain — control panel at http://{ip}:{args.port}/")
     if tls_server is not None:
         print(f"  Live Lens (camera) — https://{ip}:{tls_port}/dreamlayer/live"
