@@ -192,13 +192,13 @@ def start_tls_sibling(brain, host: str, cfg_dir, http_port: int,
     (refute 2026-07-18), so an unauthenticated LAN peer can't pin new camera
     connections."""
     import threading
-    pair = ensure_self_signed(cfg_dir)
-    if pair is None:                              # no cryptography → http only
-        return None, 0
     tport = tls_port or (http_port + 1)
     try:
-        from .server import make_brain_server
-        ctx = make_ssl_context(*pair)
+        pair = ensure_self_signed(cfg_dir)        # inside the try: a mkdir/write
+        if pair is None:                          # error (non-dir at <dir>/tls,
+            return None, 0                        # disk-full, perms) must degrade
+        from .server import make_brain_server      # to http-only, never crash the
+        ctx = make_ssl_context(*pair)             # Brain (audit 2026-07-20)
         tls_server = make_brain_server(brain, host=host, port=tport,
                                        tls_port=tport)
         tls_server.socket = ctx.wrap_socket(

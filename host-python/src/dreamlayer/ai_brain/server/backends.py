@@ -221,23 +221,50 @@ def _urllib_get(url: str, timeout: float = 4.0) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+_STREAM_MAX_LINE = 1 << 20        # 1 MiB — a progress line is ~100 bytes; a
+#                                   newline-less flood is the OOM this caps.
+_STREAM_MAX_TOTAL = 512 << 20     # generous backstop; real progress is a few MB.
+
+
 def _urllib_post_stream(url: str, payload: dict, timeout: float, on_line) -> None:
     """POST and read a newline-delimited JSON stream (Ollama's /api/pull with
     stream:true), invoking ``on_line(obj)`` per parsed object. Used to surface
-    live pull progress instead of blocking on one giant response."""
+    live pull progress instead of blocking on one giant response.
+
+    The read is BOUNDED (per-line and total): a misbehaving or hostile endpoint
+    that returns one enormous newline-less line can no longer exhaust the pull
+    thread's memory (audit 2026-07-20)."""
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data,
                                  headers={"Content-Type": "application/json"})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def _emit(chunk: bytes) -> None:
+        line = chunk.decode("utf-8", "replace").strip()
+        if not line:
+            return
+        try:
+            on_line(json.loads(line))
+        except ValueError:
+            pass                               # a partial/non-JSON keep-alive line
+
     with opener.open(req, timeout=timeout) as resp:
-        for raw in resp:                       # http.client yields one line per chunk
-            line = raw.decode("utf-8", "replace").strip()
-            if not line:
-                continue
-            try:
-                on_line(json.loads(line))
-            except ValueError:
-                continue                       # a partial/non-JSON keep-alive line
+        buf = b""
+        total = 0
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _STREAM_MAX_TOTAL:
+                raise ValueError("pull progress stream exceeded its size cap")
+            buf += chunk
+            while b"\n" in buf:
+                raw, buf = buf.split(b"\n", 1)
+                _emit(raw)
+            if len(buf) > _STREAM_MAX_LINE:    # no newline in sight → flood
+                raise ValueError("pull progress line exceeded its size cap")
+        _emit(buf)                             # trailing line without a newline
 
 
 def pull_model_stream(config, name: str, on_progress=None, streamer=None) -> dict:
