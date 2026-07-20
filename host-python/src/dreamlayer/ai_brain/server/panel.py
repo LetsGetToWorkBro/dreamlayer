@@ -379,6 +379,30 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     font:11px var(--chi);color:var(--memory);background:linear-gradient(180deg,#F6F6F6,#DEDEDE);
     border:1px solid var(--frame);border-radius:50%;cursor:pointer;padding:0}
   .ibtn:hover{filter:brightness(1.04)}
+  /* ---- DreamShell: a real phosphor terminal inside the panel ---- */
+  .term{background:#08100F;border:1px solid var(--frame);box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.2);
+    position:relative;overflow:hidden;height:min(64vh,560px);display:flex;flex-direction:column}
+  .term::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.14) 2px 3px);opacity:.5}
+  .term.veiled::before{content:"veil down · nothing leaves this screen";position:absolute;inset:0;z-index:4;
+    display:flex;align-items:center;justify-content:center;background:rgba(4,8,7,.94);color:#2CC79A;
+    font:12px var(--chi);letter-spacing:.1em}
+  .term .scr{flex:1;overflow-y:auto;padding:12px 13px;font:13.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    color:#2CC79A;text-shadow:0 0 6px rgba(44,199,154,.28);white-space:pre-wrap;word-break:break-word}
+  .term .scr b{color:#9FE8D4}.term .scr i{color:#7FA8A0;font-style:italic}
+  .term .scr .warn{color:#E0B54A}.term .scr .dim{color:#58686F}.term .scr .coral{color:#E06B52}
+  .term .scr a{color:#9FE8D4;text-decoration:underline}
+  .term .inp{display:flex;align-items:center;gap:0;border-top:1px solid #1A2422;padding:7px 13px;background:#0A1413}
+  .term .ps1{color:#9FE8D4;font:13.5px ui-monospace,Menlo,monospace;flex:none;white-space:pre}
+  .term .cmd{flex:1;background:transparent;border:0;outline:0;color:#2CC79A;caret-color:#2CC79A;
+    font:13.5px ui-monospace,Menlo,monospace;text-shadow:0 0 6px rgba(44,199,154,.28)}
+  .term-rain{position:absolute;inset:0;z-index:2;pointer-events:none}
+  @keyframes glitchy{0%,100%{transform:translate(0,0);filter:none}
+    20%{transform:translate(-2px,1px);filter:hue-rotate(30deg)}
+    40%{transform:translate(2px,-1px)}60%{transform:translate(-1px,-1px);filter:contrast(1.4)}
+    80%{transform:translate(1px,2px)}}
+  .term.glitch .scr{animation:glitchy .5s steps(2) 3}
+  @media (prefers-reduced-motion: reduce){.term::after{opacity:.24}.term.glitch .scr{animation:none}}
   .xcard{max-width:440px;width:100%;background:var(--plat);
     border:2px solid var(--frame);border-radius:0;overflow:hidden;
     box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35)}
@@ -501,6 +525,18 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <p class="lead">The glasses show cards; this Brain makes them. Tap a feature to see what it does
       and the card it draws.</p>
     <div id="xgrid"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Terminal</div><h2>DreamShell</h2>
+    <p class="lead">The layer's command line. Ask your Brain in plain words, poke at what's on,
+      or type <b>help</b> — and there's more in here than there looks. Type <b>dream</b>.</p>
+    <div class="term" id="term" tabindex="0">
+      <div class="scr" id="termScr"></div>
+      <div class="inp"><span class="ps1" id="termPs1">layer&gt; </span><input class="cmd" id="termCmd"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+        aria-label="DreamShell command line"></div>
+    </div>
   </section>
 
   <section>
@@ -1049,6 +1085,7 @@ const PAGES=[
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
   {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
+  {id:"terminal",label:"Terminal",sub:"The layer's command line. Talk to your Brain in plain words — or type dream.",match:["DreamShell"]},
   {id:"advanced",label:"Advanced",sub:"Activity, health, schedules, and maintenance.",match:["Activity","Health"]},
 ];
 let curPage="home";
@@ -1068,6 +1105,7 @@ const ICONS={
   plugins:_sv+'<rect x="3" y="3" width="8" height="8" rx="1.4"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
   caps:_sv+'<circle cx="8" cy="12" r="5"/><path d="M8 7h8a5 5 0 0 1 0 10H8"/></svg>',
   learn:_sv+'<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M18 3v18"/></svg>',
+  terminal:_sv+'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>',
   advanced:_sv+'<path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>',
 };
 function buildNav(){
@@ -1088,6 +1126,8 @@ function showPage(id){curPage=id;
   // button you have to find. (Once per panel session, so re-visits don't spam
   // the activity log or re-mint the link.)
   if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
+  // Open Terminal → boot the banner (once) and put the cursor in the prompt.
+  if(id==="terminal"&&typeof termFocus==="function"){termFocus();}
 }
 
 /* --- optional capabilities: live report + one-click on/off ---------------
@@ -2221,6 +2261,171 @@ async function installFromStore(name,btn){
 }
 window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
+
+/* =================== DreamShell — the layer's command line ===================
+   A real terminal in the panel. Most commands talk to THIS Brain for real
+   (ask, status, caps, history); the rest are the layer's own character — and a
+   few things that are only here for the person who goes looking. Type dream. */
+(function(){
+  var scr=$("termScr"), cmd=$("termCmd"), ps1=$("termPs1"), term=$("term");
+  if(!scr||!cmd) return;
+  var hist=[], hi=0, mode="shell", booted=false, THEMES=["#2CC79A","#7DFFA8","#E0B54A","#E06B52","#9FE8D4"], ti=0;
+  function w(html){var d=document.createElement("div");d.innerHTML=html;scr.appendChild(d);scr.scrollTop=scr.scrollHeight;return d;}
+  function echoCmd(raw){w('<span style="color:#9FE8D4">'+(mode==="dream"?"dream&gt; ":"layer&gt; ")+'</span>'+esc(raw));}
+  var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function boot(){ if(booted) return; booted=true;
+    w('<b>DreamShell 8.1</b> — the layer\u2019s command line');
+    api("/dreamlayer/config").then(function(r){
+      var cloud=(r&&r.config&&r.config.model==="api")?"wired":"off";
+      w('brain: <b>reachable</b>   cloud: <b>'+cloud+'</b>   veil: '+(term.classList.contains("veiled")?"up":"down"));
+      w('<span class="dim">type <b>help</b> to see what you can do. type <b>dream</b> to help juno.</span>\n');
+    }).catch(function(){ w('brain: <b>reachable</b>   cloud: <b>off</b>   veil: down');
+      w('<span class="dim">type <b>help</b>. type <b>dream</b>.</span>\n'); });
+  }
+  window.termFocus=function(){ boot(); setTimeout(function(){cmd.focus();},60); };
+  term.addEventListener("click",function(e){ if(e.target!==cmd&&getSelection().isCollapsed) cmd.focus(); });
+
+  var HELP='<b>talk to your brain</b>\n'+
+    '  <b>ask</b> <i>&lt;anything&gt;</i>   ask the Brain, out loud in text\n'+
+    '  <b>status</b>            what\u2019s connected, indexed, and which tier answers\n'+
+    '  <b>caps</b>              optional powers — on, off, and missing\n'+
+    '  <b>history</b>          your recent asks and looks\n'+
+    '  <b>veil</b>              drop the privacy veil over this screen\n'+
+    '<b>the usual</b>\n'+
+    '  help · about · whoami · date · echo · theme · clear · exit\n'+
+    '<b>and</b>\n'+
+    '  <span class="dim">type <b>dream</b>. the rest you\u2019ll find.</span>';
+
+  var PAGES_GO={home:"home",day:"day",mind:"mind",reach:"reach",privacy:"privacy",
+    receipts:"receipts",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
+  var JCLIPS=[["hey.","/panel-assets/juno_hey.mp3"],["hello.","/panel-assets/juno_hello.mp3"],
+    ["look.","/panel-assets/juno_look.mp3"],["watch out.","/panel-assets/juno_watchout.mp3"],
+    ["based.","/panel-assets/juno_based.mp3"],["uh\u2026 ok, then.","/panel-assets/juno_uhokthen.mp3"]];
+  var jv=null, jci=0;
+  function junoSpeak(){ var v=JCLIPS[jci++%JCLIPS.length];
+    try{ if(!jv)jv=new Audio(); jv.pause(); jv.src=v[1]; jv.volume=.85; jv.currentTime=0; jv.play().catch(function(){}); }catch(e){}
+    return v[0]; }
+
+  function rain(){ if(reduced){ w('<span class="dim">(rain, quietly — you asked for less motion.)</span>'); return; }
+    var cv=document.createElement("canvas"); cv.className="term-rain";
+    cv.width=term.clientWidth; cv.height=term.clientHeight; term.appendChild(cv);
+    var ctx=cv.getContext("2d"), cols=Math.floor(cv.width/12), y=[];
+    for(var i=0;i<cols;i++) y[i]=Math.random()*cv.height;
+    var gl="アカサタabcdefRAMEGLASS01".split(""), t0=Date.now(), iv=setInterval(function(){
+      ctx.fillStyle="rgba(8,16,15,.15)"; ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillStyle=THEMES[ti]; ctx.font="12px monospace";
+      for(var i=0;i<cols;i++){ ctx.fillText(gl[Math.floor(Math.random()*gl.length)],i*12,y[i]);
+        y[i]=y[i]>cv.height&&Math.random()>.975?0:y[i]+12; }
+      if(Date.now()-t0>4200){ clearInterval(iv); cv.remove(); }
+    },55); }
+  function glitch(){ term.classList.remove("glitch"); void term.offsetWidth; term.classList.add("glitch");
+    setTimeout(function(){term.classList.remove("glitch");},1600); }
+
+  /* the konami unlock — the layer keeps no secrets from you, so this just says so */
+  var kseq=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"], kk=[];
+  document.addEventListener("keydown",function(e){ if(curPage!=="terminal")return;
+    kk.push(e.key); kk=kk.slice(-kseq.length);
+    if(kk.join(",")===kseq.join(",")){ kk=[]; w('<span class="warn">\u2726 CHEAT UNLOCKED \u2726</span>');
+      w('you already have infinite lives. it\u2019s <b>your</b> memory — always was.'); junoSpeak(); glitch(); } });
+
+  function shellExec(raw){ var line=raw.trim(); if(!line) return;
+    var p=line.split(/\s+/), c=p[0].toLowerCase(), rest=line.slice(p[0].length).trim();
+    if(c==="help"||c==="?"){ w(HELP); return; }
+    if(c==="clear"){ scr.innerHTML=""; return; }
+    if(c==="about"){ w('<b>DreamLayer</b> \u2014 a private memory layer for smart glasses. This Brain runs on your machine; nothing about you is uploaded. DreamShell is its command line.'); return; }
+    if(c==="whoami"){ w('a person whose memory is about to get better.'); return; }
+    if(c==="date"){ w(esc(new Date().toString())); return; }
+    if(c==="echo"){ w(esc(rest)); return; }
+    if(c==="theme"){ ti=(ti+1)%THEMES.length; scr.style.color=THEMES[ti];
+      document.querySelectorAll("#termScr, .term .cmd").forEach(function(el){el.style.color=THEMES[ti];});
+      w('<span class="dim">phosphor \u2192 '+THEMES[ti]+'</span>'); return; }
+    if(c==="veil"){ var on=term.classList.toggle("veiled");
+      w(on?'<span class="dim">veil down. nothing leaves this screen.</span>':'veil lifted.'); return; }
+    if(c==="exit"){ w('goodbye\u2026'); setTimeout(function(){showPage("home");},420); return; }
+    if(c==="ask"){ if(!rest){ w('<span class="dim">usage: <b>ask</b> where\u2019s the lease?</span>'); return; }
+      var pend=w('<i>thinking\u2026</i>');
+      api("/dreamlayer/brain/ask",{method:"POST",body:JSON.stringify({query:rest,no_cloud:term.classList.contains("veiled")})})
+        .then(function(j){ pend.innerHTML=j&&j.text?esc(j.text)+(j.tier?' <span class="dim">\u00b7 '+esc(j.tier)+'</span>':''):'<span class="dim">no answer</span>'; scr.scrollTop=scr.scrollHeight; })
+        .catch(function(){ pend.innerHTML='<span class="coral">brain unreachable</span>'; }); return; }
+    if(c==="status"||c==="brain"){ api("/dreamlayer/config").then(function(r){
+        var s=(r&&r.stats)||{}, cfg=(r&&r.config)||{};
+        w('<b>brain</b> reachable \u00b7 model <b>'+esc(cfg.model||"keyword")+'</b>\n'+
+          'memories indexed: <b>'+(s.count!=null?s.count:"\u2014")+'</b>\n'+
+          'cloud: <b>'+(cfg.model==="api"?"wired":"off")+'</b> \u00b7 veil: <b>'+(term.classList.contains("veiled")?"up":"down")+'</b>\n'+
+          '<span class="dim">everything here runs on this machine.</span>'); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="caps"||c==="capabilities"){ var render=function(r){ var s=(r&&r.summary)||{};
+        var order=["active","off","missing","unsupported","external"];
+        w(order.filter(function(k){return s[k];}).map(function(k){return '<b>'+s[k]+'</b> '+k;}).join(" \u00b7 ")||"no capability data");
+        w('<span class="dim">open <b>Capabilities</b> in the sidebar to switch more on.</span>'); };
+      if(LASTCAPS) render(LASTCAPS); else api("/dreamlayer/capabilities").then(render).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="history"){ api("/dreamlayer/history").then(function(h){ var it=(h&&h.items)||[];
+        if(!it.length){ w('<span class="dim">nothing yet.</span>'); return; }
+        w(it.slice(0,8).map(function(x){ var t=x.kind==="ask"?(x.query||""):(x.text||""); return '<b>'+esc(x.kind)+'</b> '+esc(t); }).join("\n")); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
+    if(c==="juno"){ var line=junoSpeak(); w('<b>juno</b>: '+esc(rest?"i heard you.":"")+' <i>'+esc(line)+'</i>'); return; }
+    if(c==="matrix"||c==="rain"){ w('<span class="dim">wake up\u2026</span>'); rain(); return; }
+    if(c==="glitch"){ glitch(); w('<span class="dim">\u2014 signal recovered \u2014</span>'); return; }
+    if(c==="sudo"){ w('the layer has no root to sudo to. it\u2019s already <b>all yours</b>.'); return; }
+    if(c==="hack"){ var steps=["accessing mainframe\u2026","bypassing firewall\u2026","decrypting\u2026","0wned."];
+      var i=0,iv=setInterval(function(){ if(i<steps.length){ w('<span class="warn">'+steps[i++]+'</span>'); }
+        else{ clearInterval(iv); w('\njust kidding. there\u2019s nothing here hidden from you \u2014 it\u2019s your Brain.'); } },420); return; }
+    if(c==="moof"||c==="clarus"){ w('<b>Moof!</b> \u{1F42E} <span class="dim">the dogcow says hi. (ask a Mac historian.)</span>'); return; }
+    if(c==="42"||c==="answer"||c==="theanswer"){ w('42. but you knew that.'); return; }
+    if(c==="sosumi"){ w('beep. <span class="dim">(the lawyers kept the rest.)</span>'); return; }
+    if(c==="ls"||c==="tree"){ w('<span class="dim">.</span>\n\u251c\u2500 memories/   <span class="dim">kept, indexed, yours</span>\n\u251c\u2500 people/     <span class="dim">only those who introduced themselves</span>\n\u251c\u2500 promises/   <span class="dim">what you said you\u2019d do</span>\n\u2514\u2500 veil        <span class="dim">the off switch for all of it</span>'); return; }
+    if(PAGES_GO[c]){ w('<span class="dim">opening '+esc(c)+'\u2026</span>'); setTimeout(function(){showPage(PAGES_GO[c]);},260); return; }
+    if(c==="dream"){ startDream(); return; }
+    w('<span class="warn">?</span> unknown: <b>'+esc(c)+'</b> \u2014 try <b>help</b>');
+  }
+
+  /* ---- dream: a small adventure, ported from the site, kept on-device ---- */
+  var D=null, ROOMS={
+    desk:{name:"the desk at dusk",desc:"a platinum desk under a violet sky. paths lead <b>n</b>orth to a crystal grove, <b>e</b>ast to a shore of static, <b>w</b>est to the archive.",exits:{n:"grove",e:"shore",w:"archive"}},
+    grove:{name:"the crystal grove",desc:"teal crystals chime. north, a thin bridge disappears into mist.",exits:{s:"desk",n:"bridge"},shard:"a shard glints between two crystals."},
+    shore:{name:"the shore of static",desc:"a sea of grey noise laps at nothing. an unlit <b>lantern</b> figment sits in the sand.",exits:{w:"desk"},lanternHere:true,shard:"something is buried under the static \u2014 too dim to see."},
+    archive:{name:"the archive",desc:"shelves of memories, each labeled in chicago. it is very dark in here.",exits:{e:"desk"},dark:true,shard:"a shard rests on the third shelf."},
+    bridge:{name:"the veil bridge",desc:"juno waits at the middle of the bridge, holding out her hands.",exits:{s:"grove"}}
+  };
+  function look(){ var r=ROOMS[D.room], t='<b>'+r.name+'</b>\n'+r.desc;
+    if(r.dark&&!D.lantern) t+='\n<span class="dim">you can\u2019t make out much without a light.</span>';
+    else if(r.shard&&!D.taken[D.room]){ t+=(D.room==="shore"&&!D.lantern)?'\n'+r.shard:'\n<span class="warn">'+r.shard+'</span>'; }
+    if(D.room==="bridge") t+=D.shards===3?'\n<b>juno</b>: "you found them. <b>talk</b> to me."':'\n<b>juno</b>: "'+D.shards+' of 3. the rest are still out there."';
+    w(t); }
+  function startDream(){ mode="dream"; ps1.textContent="dream> "; D={room:"desk",shards:0,lantern:false,taken:{}};
+    w('\n<b>\u2014 d r e a m \u2014</b>\n<i>the desk at dusk. juno hovers, wings catching the last light.</i>\n<b>juno</b>: "a memory came apart \u2014 three shards, scattered where i dream. find them and meet me at the veil bridge."\n<span class="dim">verbs: n/s/e/w \u00b7 look \u00b7 take &lt;thing&gt; \u00b7 use lantern \u00b7 talk juno \u00b7 inv \u00b7 quit</span>\n');
+    look(); }
+  function dreamExec(raw){ var line=raw.trim().toLowerCase(); if(!line) return; var p=line.split(/\s+/), v=p[0];
+    var go={n:"n",north:"n",s:"s",south:"s",e:"e",east:"e",w:"w",west:"w"};
+    if(v==="go"&&p[1]) v=go[p[1]]||p[1]; if(go[v]) v=go[v];
+    if(v==="quit"){ mode="shell"; ps1.textContent="layer> "; w('<i>the dream folds shut. the desk returns.</i>\n'); return; }
+    if(v==="inv"||v==="inventory"){ w("you carry: "+(D.shards?D.shards+" shard"+(D.shards>1?"s":""):"nothing")+(D.lantern?", a lit lantern figment":"")); return; }
+    if(v==="score"){ w(D.shards+" / 3 shards"); return; }
+    if(v==="look"||v==="l"){ look(); return; }
+    if(v==="n"||v==="s"||v==="e"||v==="w"){ var r=ROOMS[D.room]; if(r.exits[v]){ D.room=r.exits[v]; look(); } else w("you can\u2019t go that way."); return; }
+    if(v==="take"){ var r2=ROOMS[D.room], what=p.slice(1).join(" ");
+      if(/lantern/.test(what)&&r2.lanternHere&&!D.lantern){ D.lantern=true; w("you pick up the lantern figment. it proves itself safe, then <b>lights</b>."); return; }
+      if(/shard/.test(what)&&r2.shard&&!D.taken[D.room]){ if(r2.dark&&!D.lantern){ w("too dark to find anything."); return; }
+        if(D.room==="shore"&&!D.lantern){ w("you dig at the static. it slips through your fingers. <span class=\"dim\">maybe with a light\u2026</span>"); return; }
+        D.taken[D.room]=true; D.shards++; w("you lift the shard. it hums like a remembered song. <b>("+D.shards+" / 3)</b>"); return; }
+      w("there\u2019s no "+esc(what||"that")+" to take here."); return; }
+    if(v==="use"&&/lantern/.test(line)){ w(D.lantern?"the lantern glows steady. dark places won\u2019t be dark.":"you don\u2019t have a lantern."); return; }
+    if(v==="talk"){ if(D.room!=="bridge"){ w('juno\u2019s voice, from somewhere: "the bridge. north of the grove."'); return; }
+      if(D.shards<3){ w('<b>juno</b>: "'+D.shards+' of 3. i\u2019ll wait. i\u2019m good at waiting."'); return; }
+      w('<b>juno</b> presses the shards together. the seams vanish.\n<b>juno</b>: "kept. not uploaded \u2014 <b>kept</b>. that\u2019s the difference."\n<i>you wake at the desk.</i>\n\n<b>\u2014 thanks for playing \u00b7 3 / 3 \u2014</b>\n'); junoSpeak();
+      mode="shell"; ps1.textContent="layer> "; return; }
+    w('<span class="dim">try: n/s/e/w \u00b7 look \u00b7 take \u00b7 use lantern \u00b7 talk juno \u00b7 inv \u00b7 quit</span>');
+  }
+
+  var COMPLETIONS=["help","ask ","status","caps","history","veil","about","whoami","date","echo ","theme","clear","exit","dream","matrix","glitch","juno ","home","plugins","receipts","caps","learn"];
+  cmd.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ var raw=cmd.value; echoCmd(raw); if(raw.trim()){ hist.push(raw); hi=hist.length; } cmd.value="";
+      (mode==="dream"?dreamExec:shellExec)(raw); }
+    else if(e.key==="ArrowUp"){ if(hi>0){ hi--; cmd.value=hist[hi]||""; } e.preventDefault(); }
+    else if(e.key==="ArrowDown"){ if(hi<hist.length){ hi++; cmd.value=hist[hi]||""; } e.preventDefault(); }
+    else if(e.key==="Tab"){ e.preventDefault(); var vv=cmd.value.toLowerCase(); if(!vv) return;
+      var m=COMPLETIONS.filter(function(x){return x.indexOf(vv)===0;});
+      if(m.length===1) cmd.value=m[0]; else if(m.length>1) w('<span class="dim">'+m.map(function(x){return x.trim();}).join("   ")+'</span>'); }
+  });
+})();
 
 load();
 loadPlugins();openStore();
