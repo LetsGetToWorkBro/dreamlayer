@@ -98,13 +98,18 @@ def test_testimony_with_spits_within_budget():
 
 def test_prism_max_intensity_within_budget():
     h = _session()
-    h.execute('_pr.on_prism({ active = 1, intensity = 100, symmetry = 12 })')
+    # Sweep EVERY symmetry, not just 12: the peak draw count is at a MIDDLE
+    # symmetry (branches on, more arms), so pinning the leanest value (12) hid
+    # the real worst case. Bound the global peak across all symmetries × phases
+    # against the budget (refute 2026-07-20).
     worst = 0
-    for i in range(12):
-        h.display.draw_calls = 0
-        h.execute(f"frame.display.clear(0x000000); _pr.draw({i * 50}); "
-                  "frame.display.show()")
-        worst = max(worst, h.display.draw_calls)
+    for sym in range(2, 13):
+        h.execute(f'_pr.on_prism({{ active = 1, intensity = 100, symmetry = {sym} }})')
+        for i in range(12):
+            h.display.draw_calls = 0
+            h.execute(f"frame.display.clear(0x000000); _pr.draw({i * 50}); "
+                      "frame.display.show()")
+            worst = max(worst, h.display.draw_calls)
     assert 0 < worst <= _budget(h)
 
 

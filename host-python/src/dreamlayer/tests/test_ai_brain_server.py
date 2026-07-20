@@ -524,3 +524,48 @@ class TestCloudTier:
         r.opt_in_cloud(True)
         assert "cloud says" in r.ask("hi").text
         assert r.explain(None, "mug").tier == "cloud"
+
+
+class TestDiscoveriesHardening:
+    """The hidden-layer discovery store, hardened after the 2026-07-20 refute
+    pass: the LOAD path validates (not just add_discovery), and a non-object
+    POST body can't crash the handler."""
+
+    def test_load_keeps_only_known_names(self, tmp_path):
+        # A hand-edited / attacker-planted discoveries.json injected arbitrary
+        # strings straight into the set (and a mixed str/int set made
+        # discoveries()'s sorted() an unhandled 500). Load now filters to known.
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="tok").save(cfg)
+        (cfg / "discoveries.json").write_text(
+            json.dumps(["prism", "evil<script>", 1, "junocolors", "nope"]))
+        b = Brain(cfg)
+        assert b.discoveries() == ["junocolors", "prism"]   # junk dropped; sorted() safe
+
+    def test_load_survives_a_non_list_file(self, tmp_path):
+        cfg = tmp_path / "cfg"; cfg.mkdir()
+        BrainConfig(token="tok").save(cfg)
+        for junk in ("5", "null", "true", '{"prism": 1, "x": 2}', "not json at all"):
+            (cfg / "discoveries.json").write_text(junk)
+            b = Brain(cfg)                              # never raises
+            assert set(b.discoveries()) <= {"prism", "junocolors"}
+
+    def test_post_non_dict_body_is_a_clean_400_not_a_dropped_connection(self, tmp_path):
+        # _body() could return a list/str/int for a non-object JSON body;
+        # _post_discoveries did _body().get(...) → AttributeError → unhandled,
+        # the worker dropped the connection with no response. _body() now coerces
+        # a non-object to {}, so this is a clean, counted 400.
+        lb = LiveBrain(tmp_path)
+        try:
+            data = json.dumps([1, 2, 3]).encode()
+            req = urllib.request.Request(
+                lb.url + "/dreamlayer/discoveries", data=data,
+                headers={"Content-Type": "application/json", **lb.h})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            try:
+                status = opener.open(req, timeout=5).status
+            except urllib.error.HTTPError as e:
+                status = e.code                          # 400 = handled, not dropped
+            assert status == 400
+        finally:
+            lb.stop()

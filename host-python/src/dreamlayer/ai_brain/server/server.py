@@ -245,8 +245,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         self._discoveries_path = self.cfg_dir / "discoveries.json"
         try:
             import json as _json
-            self._discoveries = set(_json.loads(
-                self._discoveries_path.read_text()))
+            loaded = _json.loads(self._discoveries_path.read_text())
+            # Validate on LOAD, not just on write (add_discovery): a hand-edited
+            # or attacker-planted discoveries.json must not inject arbitrary
+            # strings into the set — which discoveries() reflects to clients, and
+            # which (mixed str/int) would make its sorted() raise an unhandled
+            # 500 on the GET. Keep only the known names (refute 2026-07-20).
+            self._discoveries = {n for n in loaded
+                                 if n in self._KNOWN_DISCOVERIES}
         except Exception:
             self._discoveries = set()
         self.activity = ActivityLog(
@@ -2353,9 +2359,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _body(self) -> dict:
             raw = self._read_capped(MAX_JSON_BODY)
             try:
-                return json.loads(raw.decode("utf-8")) if raw else {}
+                parsed = json.loads(raw.decode("utf-8")) if raw else {}
             except (ValueError, UnicodeDecodeError):
                 return {}
+            # Every caller does _body().get(...); a non-object JSON body
+            # (list/str/int/null) would AttributeError and, since do_POST only
+            # catches the body-size errors, escape the handler as an unhandled
+            # 500. The return type says dict — enforce it so one odd request
+            # can't crash any POST handler (refute 2026-07-20).
+            return parsed if isinstance(parsed, dict) else {}
 
         def _raw(self, max_bytes: int = MAX_JSON_BODY) -> bytes:
             return self._read_capped(max_bytes)

@@ -1080,10 +1080,14 @@ window.addEventListener("halo-discovery",async(e)=>{
   try{await api("/dreamlayer/discoveries",{method:"POST",body:JSON.stringify({name:n})});}catch(err){}
   renderExplainers();
   if(!had&&n==="prism")toast("something new in Learn");});
-/* type its name anywhere in the panel and the Learn grid admits it exists */
+/* type its name on the page and the Learn grid admits it exists — but not while
+   you're typing INTO a field, so asking Juno "what's a prism?" or writing
+   "prismatic" in the bug form can't silently trip an irreversible unlock */
 let _kbuf="";
 document.addEventListener("keydown",e=>{
   if(!e.key||e.key.length!==1)return;
+  const el=e.target;
+  if(el&&(el.tagName==="INPUT"||el.tagName==="TEXTAREA"||el.isContentEditable)){_kbuf="";return;}
   _kbuf=(_kbuf+e.key.toLowerCase()).slice(-5);
   if(_kbuf==="prism"){let had=window._dlFound.has("prism");
     try{had=had||localStorage.getItem("dl_prism")==="found";localStorage.setItem("dl_prism","found");}catch(err){}

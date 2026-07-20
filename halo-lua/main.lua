@@ -24,6 +24,7 @@ local Parallax   = require("display.parallax")
 local Anim       = require("display.animations")
 local Telemetry  = require("ble.telemetry")
 local StasisFx   = require("display.stasis")     -- shutter + ribbon in Dream
+local Transitions = require("display.transitions") -- global reduce-motion flag
                                                  -- Mode (Renderer owns Memory
                                                  -- Mode's pass; docs/STASIS.md)
 local Theme      = require("display.theme")      -- Forkable Skin (3.6)
@@ -338,7 +339,10 @@ local function tick_body()
     local has_frame = (type(_G.frame) == "table")
     if has_frame then frame.display.clear(0x000000) end
     Parallax.tick(_tick_ms)
-    Prism.draw(_tick_ms)
+    -- pass the wearer's reduce-motion setting so the kaleidoscope honors its own
+    -- photosensitivity freeze on-device (the flag was dropped here, so on glass
+    -- every motion term stayed live regardless of the setting; refute 2026-07-20)
+    Prism.draw(_tick_ms, { reduce_motion = Transitions.reduce_motion() })
     if has_frame then frame.display.show() end
   elseif HostComm.dream_active() then
     -- Dream Mode: same terrain, different light (cinema_v2/weather.md) —

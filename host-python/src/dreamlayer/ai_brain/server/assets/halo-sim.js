@@ -1047,7 +1047,7 @@
     var hueRate = Math.max(0.1, Math.min(4, card.hue_rate || 1));
     var ms = t * 1000;
     var breath = reduce ? 1 : 1 + 0.5 * Math.sin(2 * Math.PI * ms / 5200);
-    var spin = reduce ? 0 : (ms * 0.00004 * hueRate * breath * 6) % (Math.PI * 2);
+    var spin = reduce ? 0 : (ms * 0.00004 * hueRate * breath) % (Math.PI * 2);
     var tsec = reduce ? 0 : t;
     var hueShift = reduce ? 0 : Math.floor(tsec * 0.8 * hueRate);
     var col = function (i) { return PRISM_RAINBOW[((i % 6) + 6) % 6]; };

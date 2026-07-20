@@ -114,6 +114,59 @@ class TestHiddenLayer:
         FakeTimer.fire_last()
         assert b.cards and b.cards[0][0]["type"] == "JunoColorsCard"
 
+    def test_steady_seven_tap_run_still_wakes_the_lens(self):
+        # refute 2026-07-20: the old absolute 3.5s window pruned a steadily-paced
+        # seven-tap run down to three and MISFIRED her colours. A burst is now any
+        # run of taps each within the debounce, however long it takes overall.
+        b = FakeBridge()
+        hl, clock = _layer(b)
+        for i in range(7):
+            clock["t"] = i * 1.2                    # 1.2s gaps (< 1.3 debounce), 7.2s span
+            hl.tap()
+        FakeTimer.fire_last()
+        assert not b.cards, "a steady seven-tap run misfired her colours"
+        assert b.raw and b.raw[0]["t"] == "prism" and b.raw[0]["active"] == 1
+
+    def test_prism_folds_before_her_colours_open(self):
+        # refute 2026-07-20: prism + colours shared ONE hold timer, so opening
+        # colours mid-prism-hold cancelled prism's active=0 — and the on-glass
+        # lens has no auto-close, so it stuck forever. A new egg now folds the
+        # old one back first.
+        b = FakeBridge()
+        hl, clock = _layer(b)
+        for i in range(7):
+            clock["t"] = i * 0.3
+            hl.tap()
+        FakeTimer.fire_last()                       # prism wakes (active=1), holds
+        assert b.raw[-1]["active"] == 1
+        for i in range(3):
+            clock["t"] = 5.0 + i * 0.3              # colours, mid-prism-hold
+            hl.tap()
+        FakeTimer.fire_last()
+        assert any(f.get("active") == 0 for f in b.raw), "prism never folded — stuck on glass"
+        assert b.cards[-1][0]["type"] == "JunoColorsCard"
+
+    def test_prism_is_gated_in_dream_mode(self):
+        # refute 2026-07-20: only the 3-tap branch checked Dream Mode; the 7-tap
+        # prism branch was ungated, so a bond-less Dream session woke the lens.
+        b = FakeBridge()
+        hl, clock = _layer(b, dream=True)
+        for i in range(7):
+            clock["t"] = i * 0.3
+            hl.tap()
+        FakeTimer.fire_last()
+        assert not b.raw and not b.cards, "prism fired inside Dream Mode"
+
+    def test_stop_cancels_pending_timers(self):
+        b = FakeBridge()
+        hl, clock = _layer(b)
+        for i in range(3):
+            clock["t"] = i * 0.3
+            hl.tap()
+        hl.stop()
+        assert not [t for t in FakeTimer.instances if not t.cancelled], \
+            "stop() left a timer armed to fire into a dead session"
+
 
 class TestSpriteLockstep:
     def _rows(self, text, opener):
