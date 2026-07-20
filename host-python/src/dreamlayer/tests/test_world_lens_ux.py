@@ -37,9 +37,27 @@ class TestLivePageGuidance:
     def test_no_token_notice_explains_why(self):
         from dreamlayer.ai_brain.server.live import render_live
         page = render_live("nonce")
-        # the on-load 401 notice must name the missing-token cause, not just
-        # "scan the QR"
+        # the on-load notice must name the missing-token cause and offer the
+        # code fallback, not just "scan the QR"
         assert "without its pairing token" in page
-        assert "SCAN THE QR TO CONNECT" in page
+        assert "CONNECT THIS PHONE" in page
         # it still points the wearer at the panel path
         assert "Connections" in page and "Live Lens" in page
+
+    def test_code_redeem_ui_and_call_present(self):
+        from dreamlayer.ai_brain.server.live import render_live
+        page = render_live("nonce")
+        # the typeable-code fallback: an input + the redeem call to the endpoint
+        assert "pairCode" in page and "redeemCode" in page
+        assert "/dreamlayer/live/redeem" in page
+        # a redeemed token is stored the same way a scanned one is
+        assert 'sessionStorage.setItem("dl-live-token"' in page
+
+
+class TestPanelShowsCode:
+    def test_panel_renders_the_short_code_block(self):
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel("tok")
+        assert "livecode" in html and "codebig" in html
+        assert "Can't scan?" in html
+        assert "r.code" in html   # the code from /live/link is surfaced

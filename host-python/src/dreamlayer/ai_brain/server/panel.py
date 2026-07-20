@@ -275,6 +275,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   /* the Live Lens URL is longer → denser → render it bigger so a phone camera
      locks on from a comfortable distance (the #1 "the QR won't scan" cause) */
   .qrbox.live svg{width:300px;height:300px}
+  .livecode{text-align:center;margin:8px 0 4px}
+  .livecode .codebig{font:22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:4px;
+    color:var(--memory);background:var(--surf);border:1px solid var(--line);
+    display:inline-block;padding:6px 14px;margin:4px 0}
   ol.steps{margin:10px 0 4px;padding-left:20px;color:var(--muted);font-size:12.5px;line-height:1.5}
   ol.steps li{margin:4px 0}
   ol.steps b{color:var(--text)}
@@ -1817,11 +1821,16 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
       '(it turns on automatically once the <code>cryptography</code> package is available — update the app, or run the Brain with <code>--tls</code>). '+
       'The link below still works for <b>asking</b>; only the live camera needs https.</div>';
   const qr=r.qr?`<div class="qrbox${secure?" live":""}">${r.qr}</div>`:"";
-  out.innerHTML=`<div class="paircode">${qr}${steps}`+
+  // a short code the wearer can type on the phone if it can't scan — the page
+  // exchanges it for the token at /dreamlayer/live/redeem
+  const code=r.code?`<div class="livecode"><div class="conn-s">Can't scan? On the phone, open <b>${esc((r.url||"").split("#")[0])}</b> and enter this code:</div>`+
+    `<div class="codebig">${esc(r.code)}</div>`+
+    `<div class="conn-s">Good for 5 minutes, one use.</div></div>`:"";
+  out.innerHTML=`<div class="paircode">${qr}${steps}${code}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
     `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
     `<div class="conn-s" style="margin-top:6px"><b>Scanning is the easy way</b> — the link ends in a long <code>#t=…</code> pairing token that's meant to be scanned, not typed. `+
-    `If you do type it, include the whole thing. Treat it like a password and send it only to your own phone.</div></div>`;
+    `Can't scan? Use the short code above instead. Treat both like a password and send them only to your own phone.</div></div>`;
   toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
 }
 async function loadHistory(){const h=await api("/dreamlayer/history");

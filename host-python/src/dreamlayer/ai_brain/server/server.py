@@ -1634,6 +1634,58 @@ _PACK_JOBS: dict = {}            # pack key -> {"state","detail","ts"}
 _PACK_LOCK = threading.Lock()
 
 
+# --- Live Lens short pairing code ---------------------------------------------
+# The Live Lens link carries the Brain token in its URL FRAGMENT — a scanned QR
+# delivers it, but a hand-typed URL drops it, so a phone that can't scan is
+# stuck. This vault issues a short numeric code the wearer reads off the panel
+# and types on the live page to redeem the token. It is a network-reachable
+# token handout, so it is deliberately narrow:
+#   * 8 digits (1e8 space), generated with secrets;
+#   * exactly ONE code active at a time (issuing a new one voids the old);
+#   * a short TTL (issued only when the wearer is actively pairing);
+#   * SINGLE-USE — a successful redeem consumes it;
+#   * a wrong guess never consumes it (so an attacker can't void the real one),
+#     but every attempt is brute-force locked out on the SHARED auth limiter.
+_LIVE_CODE_DIGITS = 8
+_LIVE_CODE_TTL_S = 300.0         # 5 minutes
+
+
+class _LiveCodeVault:
+    """One active, short-lived, single-use code → the Brain token."""
+
+    def __init__(self, now_fn=time.monotonic):
+        self._lock = threading.Lock()
+        self._now = now_fn
+        self._code: str = ""
+        self._token: str = ""
+        self._expiry: float = 0.0
+
+    def issue(self, token: str, ttl: float = _LIVE_CODE_TTL_S) -> str:
+        import secrets
+        code = "".join(secrets.choice("0123456789") for _ in range(_LIVE_CODE_DIGITS))
+        with self._lock:
+            self._code = code
+            self._token = token
+            self._expiry = self._now() + ttl
+        return code
+
+    def redeem(self, code: str):
+        """Return the token for a correct, unexpired code (and consume it), else
+        None. A wrong or expired code returns None WITHOUT consuming a live one."""
+        import hmac
+        if not isinstance(code, str) or not code:
+            return None
+        with self._lock:
+            if not self._code or self._now() >= self._expiry:
+                self._code = ""; self._token = ""; self._expiry = 0.0
+                return None
+            if not hmac.compare_digest(code, self._code):
+                return None                       # wrong guess — leave the real code live
+            tok = self._token
+            self._code = ""; self._token = ""; self._expiry = 0.0   # single-use
+            return tok
+
+
 def _pip_env() -> dict:
     """A pip environment with the index-redirecting vars stripped, so an
     inherited ``PIP_INDEX_URL`` / ``PIP_EXTRA_INDEX_URL`` / ``PIP_CONFIG_FILE``
@@ -1955,6 +2007,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         except Exception:                         # brain may forbid new attrs
             pass
     _auth_limiter: LockoutLimiter = _shared
+
+    # The Live Lens short pairing code lives on the Brain too, shared across both
+    # listeners for the same reason the limiter is (one active code, not one per
+    # port). A phone that can't scan the QR types this code to redeem the token.
+    _shared_vault = getattr(brain, "_shared_live_vault", None)
+    if _shared_vault is None:
+        _shared_vault = _LiveCodeVault()
+        try:
+            setattr(brain, "_shared_live_vault", _shared_vault)
+        except Exception:
+            pass
+    _live_vault: _LiveCodeVault = _shared_vault
 
     class Handler(BaseHTTPRequestHandler):
         # Per-connection socket timeout: StreamRequestHandler.setup() applies
@@ -2599,9 +2663,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             best = (https_url or http_url) + frag
             from .qr import to_svg
             brain.activity.add("look", "Generated a Live Lens link")
+            # A short code the wearer can type on the live page if the phone
+            # can't scan the QR — only meaningful when a token exists to hand out
+            # (a tokenless Brain is loopback-only; a LAN phone can't reach it).
+            code = _live_vault.issue(brain.config.token) if brain.config.token else ""
             self._json(200, {
                 "url": best, "http_url": http_url + frag,
                 "https": bool(https_url),
+                "code": code,
                 "note": ("scan with the phone camera — accept the one-time "
                          "certificate warning (it is this Brain's own)"
                          if https_url else
@@ -2792,6 +2861,36 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from . import live as live_mod
             data = self._raw(live_mod.MAX_FRAME_BYTES)
             self._json(200, live_mod.look(brain, data))
+
+        def _post_live_redeem(self, path, qs):
+            """Exchange the short Live Lens pairing code for the token.
+
+            PUBLIC — resolved before the auth gate, because the phone redeeming
+            has no token yet (that's the whole point). But it is the ONE
+            unauthenticated write, so it is hardened at every turn:
+              * do_POST already ran the DNS-rebind (_host_allowed) and CSRF
+                (_same_origin_write) guards, so a rebound/cross-origin page can't
+                reach here;
+              * every attempt is brute-force locked out on the SHARED auth
+                limiter keyed by client IP — a grinder locked out of the token
+                endpoint is locked out here too, and vice-versa, so 8 digits
+                behind a 10-tries/60 s → 5-min lockout is unbruteforceable inside
+                the code's own 5-min life;
+              * the vault gives one code, single-use, that a wrong guess never
+                consumes.
+            The token then rides the JSON response over the same channel the
+            page will use it on (https when the camera path is live)."""
+            ip = self.client_address[0]
+            if not _auth_limiter.allow(ip):
+                self._json(429, {"error": "too many attempts — wait a minute"}); return
+            code = str(self._body().get("code", "")).strip()
+            tok = _live_vault.redeem(code)
+            if not tok:
+                _auth_limiter.record_failure(ip)
+                self._json(401, {"error": "wrong or expired code"}); return
+            _auth_limiter.record_success(ip)
+            brain.activity.add("pair", "Live Lens paired by code")
+            self._json(200, {"token": tok})
 
         def _post_plugins_install(self, path, qs):
             """Install a plugin from the posted descriptor."""
@@ -3253,6 +3352,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         _POST_ROUTES_PREFIX = [
             ("/dreamlayer/event/", _post_event),
         ]
+        # PUBLIC POSTs — resolved BEFORE the auth gate (the caller has no token
+        # yet). Still behind do_POST's rebind + CSRF guards. The redeem handler
+        # carries its own brute-force lockout; keep this set to that one route.
+        _POST_PUBLIC = {
+            "/dreamlayer/live/redeem": _post_live_redeem,
+        }
 
         def do_POST(self):
             # DNS-rebind guard first (mirrors do_GET): a rebound page must not
@@ -3266,14 +3371,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # any local caller). Native/CLI callers carry no Origin and pass.
             if not self._same_origin_write():
                 self._json(403, {"error": "cross-origin write refused"}); return
-            # the auth gate stays first, exactly as before the route table
-            if not self._authed():
-                self._json(401, {"error": "unauthorised"}); return
-            handler = self._POST_ROUTES.get(path)
+            # PUBLIC POSTs (only /live/redeem) resolve BEFORE the auth gate — the
+            # caller has no token yet. They still passed the rebind + CSRF guards
+            # above, and each carries its own throttle. Non-public routes fall
+            # through the auth gate exactly as before.
+            handler = self._POST_PUBLIC.get(path)
             if handler is None:
-                for prefix, h in self._POST_ROUTES_PREFIX:
-                    if path.startswith(prefix):
-                        handler = h; break
+                if not self._authed():
+                    self._json(401, {"error": "unauthorised"}); return
+                handler = self._POST_ROUTES.get(path)
+                if handler is None:
+                    for prefix, h in self._POST_ROUTES_PREFIX:
+                        if path.startswith(prefix):
+                            handler = h; break
             if handler is None:
                 self._json(404, {"error": "not found"}); return
             # The body is read lazily inside each handler (via _body/_raw), so
