@@ -1,6 +1,6 @@
-A same-day patch to 0.5.0, and it's all about the plugin store. If you downloaded 0.5.0 this morning, this is worth the re-download; if you're new, start here.
+The biggest update since the app went two-platform. The phone's World Lens now actually recognizes things on its own, the whole project has a proper dark mode, Juno found her voice, and there's a Pokemon card plugin in the store. Also two full security audit passes, because that's the job.
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/plugins.png" alt="The plugin store, front and center" />
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_home.png" alt="The Brain panel" />
 
 ## Install (macOS 12+)
 
@@ -12,11 +12,18 @@ Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin pro
 
 Same two first-launch clicks as before: SmartScreen "More info, Run anyway" because this build isn't code signed yet, and the firewall "allow on private networks" so the phone can reach the panel on `:7777`. Uninstalling leaves `~/.dreamlayer` alone.
 
-## What's new since 0.5.0
+## What's new since 0.5.1
 
-- The store is the page now. Open Plugins and the full catalogue is just there — every plugin with its real on-glass screenshot, the official badge, and a one-click Install. No "browse" click, no second web page, nothing external. Same gate as always: integrity check, capability scan, and a smoke test before anything runs.
-- Every plugin wears its shot. The last two listings without screenshots (Open Library and Vinyl Oracle) got theirs — rendered through the actual device renderer with the plugin's real fields, and captioned with exactly what leaves your machine ("only the title leaves", "only artist + title leave"). No concept art in the store, ever.
-- Fixed: plugin thumbnails were broken boxes in 0.4.0 and 0.5.0. This morning's security hardening (correctly) blocks the panel from loading remote images — which quietly took the store thumbnails with it. Rather than punch a hole in that policy, the screenshots now ship inside the app and load from your own machine. The security stays; the pictures come back; the panel still fetches nothing from anyone.
+- World Lens got smart. Point your phone's camera at the world and it now recognizes what it sees continuously, with zero setup. The detector runs inside the phone's browser itself, so recognition happens before anything even thinks about leaving the device. Rich result panels, real camera controls, and a pile of connection-reliability fixes came along with it.
+- Midnight Platinum. Dark mode, everywhere: the website, the Brain panel, and the phone app all follow your system theme now, in the same brushed-platinum language as the light side. Your retinas at 2am are welcome.
+- Juno speaks. Click her and she answers with sound, on the site, the panel, and the phone. Small thing, changes the feel completely.
+- Learn is organized. The lens catalogue in the panel is grouped into eight chapters now instead of one long wall, and every lens still plays its real animation, drawn by the actual device renderer.
+- Capabilities install actually installs. The one-click capability installs in the panel were quietly broken in some setups; now they stream real progress and show before/after meters so you can see what you got.
+- Pairing by short code. Connecting your phone's World Lens to the Brain is now a six-character code instead of URL surgery, with an attempt cap and transport checks so the code can't be brute-forced or leaked.
+- DreamShell. There's a terminal in the project now, on desktop and phone. It does more than it says it does.
+- New plugin: Pokemon card prices. Look at a card, see what it's worth: the near-mint figure, the condition-adjusted price, and the low-high band, right on the glass. In the store with its real screenshot like everything else.
+- Two full security audits of everything shipped since 0.4.0, then an audit of the audit. Everything found was fixed with a test that fails if it ever comes back, including a panel XSS and a decompression-bomb DoS in the image path.
+- And a few things this page will not tell you about. Tap around.
 
 ## Good to know
 
