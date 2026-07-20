@@ -35,6 +35,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import threading
 
 from ...reality_compiler.v2.figment import MAX_LINES, MAX_TEXT_LEN
 
@@ -45,9 +46,34 @@ log = logging.getLogger("dreamlayer.live")
 # server's _raw() turns anything larger into a 413 before reading it).
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
+# A decompression-bomb ceiling on the DECODED pixel count, checked from the
+# header BEFORE any pixels are materialised. MAX_FRAME_BYTES bounds the
+# *compressed* upload; a tiny PNG can still declare 13000x13000 and balloon to
+# ~650 MB of RSS when decoded. The sibling /brain/look decoder
+# (vision_recognizer.b64_to_frame) already enforces exactly this cap; the public
+# Live Lens route omitted it (refute 2026-07-20), so a paired phone could OOM the
+# Brain with one crafted frame. 50 MP is far above any real downscaled phone
+# photo, far below a bomb.
+MAX_FRAME_PIXELS = 50 * 1024 * 1024
+
 # Frames are thumbnailed to this max side before classification: the vision
 # ladder's features are scale-tolerant and this bounds CPU per look.
 _MAX_SIDE = 512
+
+# Bound how many frames decode CONCURRENTLY. The server's worker pool is 64
+# threads and an authed look is not per-token rate-limited, so 64 simultaneous
+# decodes (each up to MAX_FRAME_PIXELS) could still stack tens of GB of transient
+# RSS even with the per-frame cap. This semaphore is the memory backstop: excess
+# looks queue briefly (decodes are fast) instead of racing into an OOM (refute
+# 2026-07-20). Not a rate limiter — purely a peak-memory bound.
+_MAX_CONCURRENT_DECODES = 6
+_decode_sem = threading.BoundedSemaphore(_MAX_CONCURRENT_DECODES)
+
+# Mirror the recognizer's min_confidence (ObjectRecognizer default 0.5): the
+# local floor must apply the SAME gate the world-lens path does, or a heuristic
+# guess the recognizer would reject shows anyway when the look falls to the floor
+# (refute 2026-07-20 — incognito and normal disagreed on the identical frame).
+_MIN_LOCAL_CONFIDENCE = 0.5
 
 _ladder = None            # lazy vision ladder — built once, on first look
 
@@ -99,18 +125,32 @@ def wrap_hud_lines(text: str, max_lines: int = MAX_LINES,
 
 def decode_frame(data: bytes):
     """JPEG/PNG bytes -> RGB pixel array, wholly in memory — or None when the
-    bytes aren't an image or Pillow isn't installed. Never touches disk."""
+    bytes aren't an image, are a decompression bomb, or Pillow isn't installed.
+    Never touches disk.
+
+    The dimension check reads the header (``Image.open`` is lazy) and refuses an
+    over-budget frame BEFORE ``thumbnail()`` forces a full-resolution decode, so a
+    crafted small file that declares a huge canvas can never materialise its
+    pixels. A bounded semaphore caps concurrent decodes so a burst of authed looks
+    can't stack their transient buffers into an OOM."""
     try:
         from PIL import Image
         import numpy as np
     except ImportError:
         return None
-    try:
-        im = Image.open(io.BytesIO(data))
-        im.thumbnail((_MAX_SIDE, _MAX_SIDE))
-        return np.asarray(im.convert("RGB"))
-    except Exception:
-        return None
+    with _decode_sem:
+        try:
+            im = Image.open(io.BytesIO(data))          # lazy — header only
+            w, h = im.size
+            if w * h > MAX_FRAME_PIXELS:               # pre-decode bomb guard
+                log.warning("[live] frame %dx%d exceeds %d MP — refused "
+                            "(decompression-bomb guard)", w, h,
+                            MAX_FRAME_PIXELS // (1024 * 1024))
+                return None                            # never .thumbnail()/asarray it
+            im.thumbnail((_MAX_SIDE, _MAX_SIDE))
+            return np.asarray(im.convert("RGB"))
+        except Exception:
+            return None
 
 
 def _clip_bytes(s: str, max_bytes: int = MAX_TEXT_LEN) -> str:
@@ -160,6 +200,12 @@ def _local_look(brain, arr) -> dict:
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
                 "lines": wrap_hud_lines("nothing I recognize yet")}
     label, conf = hit
+    # Same confidence floor the world-lens recognizer applies (min_confidence).
+    # Without it the floor shows a guess the recognizer would have rejected, and
+    # incognito vs. normal disagree on the identical frame (refute 2026-07-20).
+    if float(conf) < _MIN_LOCAL_CONFIDENCE:
+        return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
+                "lines": wrap_hud_lines("nothing I recognize yet")}
     # Never identify a person on the glass. The Live Lens is its OWN hot path: it
     # renders the classifier label directly and does not pass through
     # ObjectRecognizer.recognize()/world_lens, so it must apply the same layered
@@ -212,18 +258,27 @@ def world_look(brain, arr) -> dict:
         out["local_only"] = True                # the shield is up — say so
         return _with_min_panel(out)
     wl = None
+    degraded = False        # the smart path ERRORED (vs. legitimately found nothing)
     try:
         wl = brain.world_lens()
     except Exception as exc:
         log.warning("[live] world lens unavailable: %s", exc)
+        degraded = True
     panel = None
     if wl is not None:
         try:
             panel = wl.look(arr)
         except Exception as exc:                # a look never dies on a provider
             log.warning("[live] world look failed: %s", exc)
+            degraded = True
     if panel is None:
-        return _with_min_panel(_local_look(brain, arr))   # the honest floor
+        # The honest floor. Flag WHY only when the smart path actually broke — a
+        # plain "nothing recognized" is not a degradation, but a lens/provider
+        # crash silently masquerading as the 4-bucket floor is (refute 2026-07-20).
+        out = _with_min_panel(_local_look(brain, arr))
+        if degraded:
+            out["degraded"] = True
+        return out
     card = panel.to_hud_card()
     label = str(card.get("label") or card.get("primary") or "")
     conf = float(card.get("confidence") or 0.0)

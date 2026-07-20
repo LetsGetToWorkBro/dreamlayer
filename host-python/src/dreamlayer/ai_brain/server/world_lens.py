@@ -118,7 +118,8 @@ class WorldLensHost:
         from ...object_lens.recognizer import ObjectRecognizer
         from ...object_lens.vision_recognizer import VisionSightingRecognizer
         recognizer = ObjectRecognizer(
-            classify_fn=VisionSightingRecognizer(self._describe))
+            classify_fn=VisionSightingRecognizer(
+                self._describe, available=self._router.has_vision))
         self.object_lens = ObjectLens(recognizer=recognizer, privacy=self.privacy)
         self.object_lens.registry.register(AIProvider(self._router))
 

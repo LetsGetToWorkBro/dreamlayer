@@ -99,6 +99,52 @@ class TestDecodeFrame:
         arr = decode_frame(_jpeg(size=(1600, 1200)))
         assert arr is not None and max(arr.shape[:2]) <= 512
 
+    def test_oversized_canvas_is_refused_before_it_decodes(self, monkeypatch):
+        # REVERT-FAILING (SEC1, refute 2026-07-20): decode_frame must reject a
+        # frame whose declared pixel count exceeds MAX_FRAME_PIXELS from the
+        # HEADER, before thumbnail() forces a full-resolution decode. Shrink the
+        # cap so a real 64x64 frame trips it — pre-fix (no cap) it decoded anyway,
+        # which is exactly how a small PNG declaring 13000x13000 ballooned to
+        # ~650 MB of RSS on the public look route.
+        pytest.importorskip("PIL")
+        monkeypatch.setattr(live, "MAX_FRAME_PIXELS", 100)      # 64*64 = 4096 > 100
+        assert decode_frame(_jpeg(size=(64, 64))) is None
+        monkeypatch.setattr(live, "MAX_FRAME_PIXELS", 50 * 1024 * 1024)
+        assert decode_frame(_jpeg(size=(64, 64))) is not None   # under the cap: fine
+
+    def test_header_declared_bomb_never_materialises_pixels(self):
+        # A crafted PNG whose IHDR declares a 20000x20000 canvas (400 MP) with a
+        # trivial IDAT: Image.open reads the size from the header WITHOUT decoding
+        # IDAT, so the cap refuses it before a single pixel is allocated.
+        pytest.importorskip("PIL")
+        import struct
+        import zlib
+
+        def _chunk(typ, data):
+            body = typ + data
+            return (struct.pack(">I", len(data)) + body
+                    + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF))
+        png = (b"\x89PNG\r\n\x1a\n"
+               + _chunk(b"IHDR", struct.pack(">IIBBBBB", 20000, 20000, 8, 2, 0, 0, 0))
+               + _chunk(b"IDAT", zlib.compress(b"\x00"))
+               + _chunk(b"IEND", b""))
+        assert decode_frame(png) is None      # refused at the header, no OOM
+
+    def test_decode_is_concurrency_bounded(self):
+        # SEC2: a fixed peak-memory backstop exists so a burst of authed looks
+        # can't stack their decode buffers into an OOM. Prove the semaphore
+        # actually gates at _MAX_CONCURRENT_DECODES: acquire every slot, then a
+        # further non-blocking acquire must fail.
+        assert live._MAX_CONCURRENT_DECODES >= 1
+        got = [live._decode_sem.acquire(blocking=False)
+               for _ in range(live._MAX_CONCURRENT_DECODES)]
+        try:
+            assert all(got)                                    # all slots free initially
+            assert live._decode_sem.acquire(blocking=False) is False   # then bounded
+        finally:
+            for _ in got:
+                live._decode_sem.release()
+
 
 # --- look(): the local ladder, the ledger, and the no-egress guarantee ------
 
@@ -122,6 +168,23 @@ class TestLook:
         out = look(brain, _jpeg())
         assert out["ok"] is True and out["label"] == ""
         assert out["confidence"] == 0.0
+
+    def test_low_confidence_floor_guess_is_not_shown(self, tmp_path, monkeypatch):
+        # REVERT-FAILING (R3, refute 2026-07-20): the local floor must apply the
+        # SAME min_confidence gate the world-lens recognizer does. A 0.30 guess
+        # the recognizer would reject must NOT sail onto the HUD just because the
+        # look fell to the floor — pre-fix _local_look had no gate, so incognito
+        # and normal disagreed on the identical frame.
+        pytest.importorskip("PIL")
+        brain = _brain(tmp_path)
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("book", 0.30))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == ""     # gated out, honest
+        assert out["confidence"] == 0.0
+        # a confident hit on the same path still shows
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("book", 0.80))
+        out2 = look(brain, _jpeg())
+        assert out2["label"] == "book"
 
     def test_backend_crash_degrades_to_no_recognition(self, tmp_path, monkeypatch):
         pytest.importorskip("PIL")
@@ -485,6 +548,26 @@ class TestOneLens:
         assert out["panel"]["rows"] == []               # shape parity, no providers
         assert brain.config.cloud_calls == 0
         assert not any(i["kind"] == "look" for i in brain.activity.recent())
+
+    def test_smart_path_error_flags_degraded_not_silent(self, tmp_path, monkeypatch):
+        # REVERT-FAILING (R2, refute 2026-07-20): when the world lens ERRORS
+        # (provider crash, model timeout) the look still falls to the honest floor
+        # — but it must SAY it degraded, not silently masquerade the 4-bucket floor
+        # as the smart answer. A plain "nothing recognized" is NOT flagged; only a
+        # real break is.
+        pytest.importorskip("PIL")
+        brain = self._world_brain(tmp_path, self.PRICE)
+        # a clean look (no error) must NOT be flagged degraded
+        clean = look(brain, _jpeg())
+        assert clean["label"] == "price tag" and "degraded" not in clean
+        # now make the world lens ERROR mid-look — the floor answers, flagged
+        wl = brain.world_lens()
+        monkeypatch.setattr(wl, "look",
+                            lambda arr: (_ for _ in ()).throw(RuntimeError("provider died")))
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        out = look(brain, _jpeg())
+        assert out["ok"] is True and out["label"] == "mug"   # floor still answers
+        assert out.get("degraded") is True                   # and is honest about it
 
     def test_both_routes_share_one_formatter(self, tmp_path):
         pytest.importorskip("PIL")
