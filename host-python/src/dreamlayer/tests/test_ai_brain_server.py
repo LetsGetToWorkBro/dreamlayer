@@ -258,6 +258,12 @@ class TestServer:
             assert set(lives) <= known, f"unknown sim type: {set(lives) - known}"
             # the catalog covers the current library, not the 8-card past
             assert len(imgs) + len(lives) >= 25
+            # the hidden layer stays wired (never listed in EXPLAINERS):
+            # the lost-lens unlock plumbing in the panel, and the prism +
+            # true-colors renderers in the sim engine
+            assert "dl_prism" in body and "openPrism" in body
+            sim_src = sim.read_text()
+            assert "_prism" in sim_src and "_trueColors" in sim_src
         finally:
             lb.stop()
 

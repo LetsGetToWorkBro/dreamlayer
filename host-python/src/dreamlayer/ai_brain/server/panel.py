@@ -973,6 +973,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     setCollapsed(c);try{localStorage.setItem(LC,c?"1":"0");}catch(e){}});
 })();
 </script>
+<script>window.HALO_JUNO_COLOR="/panel-assets/juno_pixel.png";</script>
 <script src="/panel-assets/halo-sim.js"></script>
 <script>
 const TOKEN="__TOKEN__";
@@ -1046,7 +1047,32 @@ function renderExplainers(){const g=$("xgrid");if(!g)return;
       .filter(p=>(XCATS.some(c=>c.id===p.x.c)?p.x.c:XCATS[XCATS.length-1].id)===cat.id)
       .map(p=>`<button class="xchip" onclick="openX(${p.i})"><span class="xdot"></span>${esc(p.x.t)}</button>`).join("");
     return chips?`<div class="xcat"><div class="xcat-t">${esc(cat.t)}</div><div class="xcat-b">${esc(cat.b)}</div></div><div class="xgrid">${chips}</div>`:"";
-  }).join("");}
+  }).join("");
+  /* the lost lens: listed only once discovered (seven taps on any glass,
+     or those who type its name). Undocumented on purpose. Appended after the
+     chapters so the found chip lands at the end of the Learn grid. */
+  let _pf=false;try{_pf=localStorage.getItem("dl_prism")==="found";}catch(e){}
+  if(_pf){const b=document.createElement("button");b.className="xchip";
+    b.innerHTML='<span class="xdot" style="background:linear-gradient(135deg,#E0435A,#E0A043,#43E06B,#439AE0,#7A6BE0,#E043C7)"></span>Prism';
+    b.onclick=openPrism;g.appendChild(b);}}
+function openPrism(){const g=xglass();
+  $("xstage").style.display=g?"flex":"none";
+  $("ximg").style.display=g?"none":"block";
+  if(g){g.resize();
+    g.sim.card=null;g.sim.figment=null;g.sim.incognito=false;
+    g.show("prism",{intensity:62,symmetry:6,hue_rate:1,reduce:XSTILL},XSTILL);
+    if(XSTILL){g.sim.step(0);g.render();}else{g._on=true;g.start();}}
+  $("xkick").textContent="THE LOST LENS";
+  $("xtitle").textContent="Prism";
+  $("xtext").textContent="A reactive kaleidoscope that has lived on the device since the beginning — sound and motion become symmetry, and the colour breathes with the room. No menu ever listed it. You found it anyway.";
+  $("xmodal").classList.add("on");}
+/* type its name anywhere in the panel and the Learn grid admits it exists */
+let _kbuf="";
+document.addEventListener("keydown",e=>{
+  if(!e.key||e.key.length!==1)return;
+  _kbuf=(_kbuf+e.key.toLowerCase()).slice(-5);
+  if(_kbuf==="prism"){let had=false;try{had=localStorage.getItem("dl_prism")==="found";localStorage.setItem("dl_prism","found");}catch(err){}
+    renderExplainers();if(!had)toast("something new in Learn");}});
 /* one Glass instance, created on first live open; the TRUE renderer draws the
    lens exactly as the device would (reduced-motion gets the settled frame) */
 let XG=null;
