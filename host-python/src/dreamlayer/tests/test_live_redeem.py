@@ -54,6 +54,34 @@ class TestVault:
         assert v.redeem("") is None
         assert v.redeem(None) is None            # type: ignore[arg-type]
 
+    def test_non_ascii_guess_returns_none_never_raises(self):
+        # refute 2026-07-20: hmac.compare_digest() raises TypeError on non-ASCII,
+        # which would 500 the handler AND skip the failure count. The vault must
+        # swallow it as a plain wrong guess (return None), and leave the code live.
+        v = srv._LiveCodeVault()
+        code = v.issue("SECRET")
+        assert v.redeem("café1234") is None       # would raise pre-fix
+        assert v.redeem("🔓🔓🔓🔓🔓🔓🔓🔓") is None
+        assert v.redeem(code) == "SECRET"         # real code survived the odd guesses
+
+    def test_global_attempt_cap_voids_the_code(self):
+        # refute 2026-07-20: the per-IP HTTP lockout is IP-rotation-bypassable, so
+        # the vault caps TOTAL guesses against one code. After the cap it voids —
+        # even the correct code no longer redeems.
+        v = srv._LiveCodeVault()
+        code = v.issue("SECRET")
+        for _ in range(srv._LIVE_CODE_MAX_ATTEMPTS):
+            assert v.redeem("00000000" if code != "00000000" else "11111111") is None
+        # one past the cap → the code has self-voided
+        assert v.redeem(code) is None
+
+    def test_a_correct_guess_within_the_cap_still_works(self):
+        v = srv._LiveCodeVault()
+        code = v.issue("SECRET")
+        for _ in range(srv._LIVE_CODE_MAX_ATTEMPTS - 1):
+            v.redeem("00000000" if code != "00000000" else "11111111")
+        assert v.redeem(code) == "SECRET"         # still under the cap
+
 
 # --- the endpoint, over a live server ----------------------------------------
 
@@ -154,6 +182,87 @@ class TestRedeemEndpoint:
             status, body = lb._redeem(code)
             assert status == 429
             assert "token" not in body
+        finally:
+            lb.stop()
+
+
+class TestEndpointHardening:
+    def test_non_ascii_code_is_401_not_500_and_is_counted(self, tmp_path):
+        """A non-ASCII code must be a clean 401 (no traceback/500) AND count
+        toward the lockout — pre-fix it raised past the handler and skipped the
+        failure count, an un-throttled DoS."""
+        lb = _Live(tmp_path)
+        try:
+            lb._mint_code()
+            for _ in range(12):
+                status, body = lb._redeem("café1234")
+                assert status in (401, 429), f"non-ASCII gave {status} (500 = the bug)"
+                assert "token" not in body
+            # it was counted: by now the shared limiter has locked this IP out
+            status, _ = lb._redeem("00000000")
+            assert status == 429, "non-ASCII attempts weren't counted by the limiter"
+        finally:
+            lb.stop()
+
+    def test_offbox_redeem_over_real_tls_is_allowed(self, tmp_path):
+        """The flip side of the http refusal: a genuine TLS connection must PASS
+        the gate, or the fix would 403 every legitimate https phone. Spin up the
+        real TLS sibling and redeem over https with _from_localhost forced off, so
+        only _is_tls() can let it through."""
+        import ssl
+        try:
+            import cryptography  # noqa: F401
+        except Exception:
+            import pytest
+            pytest.skip("cryptography absent — no TLS sibling to exercise")
+        from dreamlayer.ai_brain.server.tls import start_tls_sibling
+        lb = _Live(tmp_path)
+        tls_server = None
+        try:
+            hport = lb.server.server_address[1]
+            tls_server, tport = start_tls_sibling(
+                lb.brain, "127.0.0.1", tmp_path / "cfg", http_port=hport, tls_port=0)
+            if not tls_server:
+                import pytest
+                pytest.skip("TLS sibling did not start in this env")
+            code = lb._mint_code()
+            tls_server.RequestHandlerClass._from_localhost = lambda self: False
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            opener = urllib.request.build_opener(
+                urllib.request.HTTPSHandler(context=ctx), urllib.request.ProxyHandler({}))
+            req = urllib.request.Request(
+                f"https://127.0.0.1:{tport}/dreamlayer/live/redeem",
+                data=json.dumps({"code": code}).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            with opener.open(req, timeout=5) as r:
+                assert r.status == 200
+                assert json.loads(r.read())["token"] == "tok"
+        finally:
+            if tls_server is not None:
+                tls_server.shutdown(); tls_server.server_close()
+            lb.stop()
+
+    def test_offbox_cleartext_http_redeem_is_refused(self, tmp_path):
+        """The token leaves in the response body, so an off-box caller must be on
+        TLS. Simulate off-box by forcing _from_localhost False over the plain-http
+        test listener → the redeem must 403 (never hand the token to cleartext)."""
+        lb = _Live(tmp_path)
+        try:
+            code = lb._mint_code()
+            handler = lb.server.RequestHandlerClass
+            orig = handler._from_localhost
+            handler._from_localhost = lambda self: False   # pretend LAN, not loopback
+            try:
+                status, body = lb._redeem(code)
+                assert status == 403, f"cleartext off-box redeem returned {status}"
+                assert "token" not in body
+            finally:
+                handler._from_localhost = orig
+            # and with localhost restored, the same code still works (not consumed)
+            status, body = lb._redeem(code)
+            assert status == 200 and body["token"] == "tok"
         finally:
             lb.stop()
 

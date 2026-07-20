@@ -9,7 +9,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { useBrainStore } from "../src/state/useBrainStore";
 import { playEarcon } from "../src/services/sound";
 import {
-  run, startDream, BANNER, type Line, type Mode, type DreamState, type Tone,
+  run, startDream, banner, type Line, type Mode, type DreamState, type Tone,
 } from "../src/features/dreamshell";
 
 // A terminal is its own dark world (like the HUD), not the Platinum light chrome.
@@ -29,7 +29,7 @@ export default function Terminal() {
   const setIncognito = useBrainStore((s) => s.setIncognito);
   const ask = useBrainStore((s) => s.ask);
 
-  const [lines, setLines] = React.useState<Row[]>(() => rows(BANNER));
+  const [lines, setLines] = React.useState<Row[]>(() => rows(banner(useBrainStore.getState().incognito)));
   const [input, setInput] = React.useState("");
   const [mode, setMode] = React.useState<Mode>("shell");
   const dreamRef = React.useRef<DreamState | null>(null);

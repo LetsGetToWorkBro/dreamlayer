@@ -130,6 +130,38 @@ class TestInstallJobSeam:
             srv._PACK_JOBS.clear()
 
 
+class TestPipProcessCleanup:
+    def test_run_pip_kills_the_orphan_on_timeout(self, monkeypatch):
+        """refute 2026-07-20: on a wait() timeout (or a mid-stream exception),
+        _run_pip must KILL the pip child, not leave it detached — else it keeps
+        installing while the job flips to 'failed' and a retry launches a second
+        concurrent pip. Revert the finally and this fails."""
+        import subprocess as sp
+        killed = {"v": False}
+
+        class FakePopen:
+            def __init__(self, *a, **k):
+                self.stdout = iter(["Collecting x\n", "Downloading x (1 MB)\n"])
+                self._alive = True
+
+            def wait(self, timeout=None):
+                if self._alive:
+                    raise sp.TimeoutExpired(cmd="pip", timeout=timeout)
+                return 0
+
+            def poll(self):
+                return None if self._alive else 0
+
+            def kill(self):
+                killed["v"] = True
+                self._alive = False
+
+        monkeypatch.setattr(sp, "Popen", FakePopen)
+        ok, _detail = srv._run_pip(["somepkg"])
+        assert ok is False
+        assert killed["v"] is True, "orphaned pip was not killed on timeout"
+
+
 class TestBeforeAfterScores:
     def test_every_capability_is_scored_coherently(self):
         for c in CAPABILITIES:

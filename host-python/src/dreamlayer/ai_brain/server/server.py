@@ -1632,6 +1632,7 @@ def _capability_payload(brain: Brain) -> dict:
 
 _PACK_JOBS: dict = {}            # pack key -> {"state","detail","ts"}
 _PACK_LOCK = threading.Lock()
+_PIP_TIMEOUT_S = 3600.0          # hard wall on a pip install (module-level so tests can shorten it)
 
 
 # --- Live Lens short pairing code ---------------------------------------------
@@ -1645,9 +1646,12 @@ _PACK_LOCK = threading.Lock()
 #   * a short TTL (issued only when the wearer is actively pairing);
 #   * SINGLE-USE — a successful redeem consumes it;
 #   * a wrong guess never consumes it (so an attacker can't void the real one),
-#     but every attempt is brute-force locked out on the SHARED auth limiter.
+#     but every attempt is brute-force locked out on the SHARED auth limiter;
+#   * a GLOBAL per-code attempt cap on top of the per-IP lockout, so an attacker
+#     rotating source IPs (an IPv6 /64) still can't out-guess one code's life.
 _LIVE_CODE_DIGITS = 8
 _LIVE_CODE_TTL_S = 300.0         # 5 minutes
+_LIVE_CODE_MAX_ATTEMPTS = 100    # total guesses against ONE code before it self-voids
 
 
 class _LiveCodeVault:
@@ -1659,6 +1663,7 @@ class _LiveCodeVault:
         self._code: str = ""
         self._token: str = ""
         self._expiry: float = 0.0
+        self._attempts: int = 0
 
     def issue(self, token: str, ttl: float = _LIVE_CODE_TTL_S) -> str:
         import secrets
@@ -1667,16 +1672,29 @@ class _LiveCodeVault:
             self._code = code
             self._token = token
             self._expiry = self._now() + ttl
+            self._attempts = 0
         return code
 
     def redeem(self, code: str):
         """Return the token for a correct, unexpired code (and consume it), else
         None. A wrong or expired code returns None WITHOUT consuming a live one."""
         import hmac
-        if not isinstance(code, str) or not code:
+        # A wrong/odd guess must never RAISE: hmac.compare_digest() throws on a
+        # non-ASCII string, which would escape the handler as a 500 AND land
+        # *before* the caller's record_failure() — an un-throttled traceback DoS
+        # that the per-IP lockout never sees. The code is always ASCII digits, so
+        # reject anything else up front (the format is public — this leaks nothing).
+        if not isinstance(code, str) or not code or not code.isascii():
             return None
         with self._lock:
             if not self._code or self._now() >= self._expiry:
+                self._code = ""; self._token = ""; self._expiry = 0.0
+                return None
+            # Global attempt cap (IP-independent): the per-IP HTTP lockout can be
+            # sidestepped by rotating source addresses, so bound total guesses
+            # against ANY one code. Over the cap → void it; the wearer regenerates.
+            self._attempts += 1
+            if self._attempts > _LIVE_CODE_MAX_ATTEMPTS:
                 self._code = ""; self._token = ""; self._expiry = 0.0
                 return None
             if not hmac.compare_digest(code, self._code):
@@ -1740,6 +1758,7 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
     import sys
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
            "--progress-bar", "off", *reqs]
+    proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
@@ -1755,10 +1774,21 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
                     on_line(line)
                 except Exception:               # a progress hiccup never kills pip
                     pass
-        code = proc.wait(timeout=3600)
+        code = proc.wait(timeout=_PIP_TIMEOUT_S)
         return code == 0, "\n".join(tail)
-    except Exception as exc:                     # pip missing, timeout, ...
+    except Exception as exc:                     # pip missing, timeout, decode error…
         return False, str(exc)
+    finally:
+        # Never leave a detached pip running (a wait() timeout or a mid-stream
+        # exception would otherwise orphan the child AND let a retry launch a
+        # SECOND concurrent pip, since the job flips to "failed" while the first
+        # still installs). Kill it and reap so the fd/process can't leak.
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
 
 
 _PACK_RUNNER = _run_pip
@@ -2131,6 +2161,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _from_localhost(self) -> bool:
             return self.client_address[0] in ("127.0.0.1", "::1",
                                               "::ffff:127.0.0.1")
+
+        def _is_tls(self) -> bool:
+            """True when this request arrived on the TLS sibling listener (its
+            socket is wrapped by ssl.wrap_socket in tls.start_tls_sibling), so a
+            response body is encrypted on the wire. Used to keep the Live Lens
+            token off a cleartext LAN hop."""
+            import ssl
+            return isinstance(self.connection, ssl.SSLSocket)
 
         def _host_allowed(self) -> bool:
             """DNS-rebinding defense (the read side of the same-origin policy the
@@ -2880,6 +2918,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 consumes.
             The token then rides the JSON response over the same channel the
             page will use it on (https when the camera path is live)."""
+            # The token leaves in the RESPONSE BODY, so it must ride an encrypted
+            # hop: only a loopback caller (not sniffable) or a TLS connection may
+            # redeem. The live camera path needs https anyway (getUserMedia wants
+            # a secure context), so this costs the real flow nothing and closes a
+            # cleartext-token-over-LAN leak — the fragment path it supplements is
+            # careful to keep the token off the wire (refute 2026-07-20).
+            if not (self._from_localhost() or self._is_tls()):
+                self._json(403, {"error": "redeem the code over the secure (https) link"}); return
             ip = self.client_address[0]
             if not _auth_limiter.allow(ip):
                 self._json(429, {"error": "too many attempts — wait a minute"}); return

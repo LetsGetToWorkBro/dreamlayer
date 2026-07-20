@@ -39,12 +39,16 @@ export type Outcome = {
 
 const L = (t: string, tone?: Tone): Line => ({ t, tone });
 
-export const BANNER: Line[] = [
-  L("DreamShell 8.1 — the layer's command line", "bold"),
-  L("brain: reachable   cloud: on device   veil: down"),
-  L("type help to see what you can do. type dream to help juno.", "dim"),
-  L(""),
-];
+/** The boot banner, with the veil line reflecting the LIVE posture (opening the
+ * terminal while incognito must not misreport "veil: down"). */
+export function banner(veiled: boolean): Line[] {
+  return [
+    L("DreamShell 8.1 — the layer's command line", "bold"),
+    L("brain: reachable   cloud: on device   veil: " + (veiled ? "up" : "down")),
+    L("type help to see what you can do. type dream to help juno.", "dim"),
+    L(""),
+  ];
+}
 
 const HELP: Line[] = [
   L("talk to your brain", "bold"),
@@ -66,6 +70,9 @@ const NAV: Record<string, string> = {
 
 // The Juno phrases the tap-to-speak cycles; here they just print (audio via the
 // `juno` effect, which the screen plays through the same earcon engine).
+// junoIdx is a deliberate module-level rotation counter — the ONE bit of state
+// that outlives a call, so a reopened terminal keeps advancing the cycle rather
+// than restarting at "hey." (cosmetic; nothing else here is impure).
 const JUNO_LINES = ["hey.", "hello.", "look.", "watch out.", "based.", "uh… ok, then."];
 let junoIdx = 0;
 
