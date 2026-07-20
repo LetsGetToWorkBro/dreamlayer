@@ -38,6 +38,33 @@ describe("i18n catalog", () => {
     },
   );
 
+  // Key parity is not enough: a locale can keep a key but drop/rename its
+  // %{…} interpolation token, which renders blank or wrong at runtime with no
+  // error. Assert every locale's placeholders match English per key
+  // (audit re-audit 2026-07-20).
+  const valueAt = (tree: Tree, path: string): string => {
+    let cur: string | Tree | undefined = tree;
+    for (const seg of path.split(".")) {
+      cur = cur && typeof cur === "object" ? (cur as Tree)[seg] : undefined;
+    }
+    return typeof cur === "string" ? cur : "";
+  };
+  const placeholders = (s: string): string[] =>
+    [...new Set(s.match(/%\{[^}]+\}/g) ?? [])].sort();
+
+  it.each(locales.filter((l) => l !== "en"))(
+    "%s preserves every %{…} interpolation placeholder from English",
+    (loc) => {
+      const drift: Record<string, { en: string[]; got: string[] }> = {};
+      for (const key of enKeys) {
+        const want = placeholders(valueAt(translations.en as Tree, key));
+        const got = placeholders(valueAt(translations[loc] as Tree, key));
+        if (want.join(",") !== got.join(",")) drift[key] = { en: want, got };
+      }
+      expect(drift).toEqual({});
+    },
+  );
+
   it("has no empty string values", () => {
     for (const loc of locales) {
       const tree = translations[loc] as Tree;

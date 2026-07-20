@@ -1003,13 +1003,13 @@ let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a 
 function capRight(it){
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
-    return `<button class="ghost sm" onclick="toggleCap('${esc(it.key)}',${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+    return `<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
     if(CAPFROZEN&&!CAPINSTALL) return `<span class="sstate">not in this build — runs on a source install</span>`;
     if(CAPFROZEN) return `<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
-    return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap('${esc(cmd)}')">Copy</button>`;
+    return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`;
   }
   if(it.state==="external") return `<span class="sstate">${esc(it.note||"external service")}</span>`;
   return `<span class="sstate">macOS only</span>`;
@@ -1042,10 +1042,10 @@ function packCard(p){
   let cta;
   if(job&&job.state==="installing") cta=`<span class="sstate">installing… ${esc(job.detail||"")}</span>`;
   else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
-  else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack('${p.key}')">Retry</button>`;
+  else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack(${esc(JSON.stringify(p.key))})">Retry</button>`;
   else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
   else if(!CAPINSTALL) cta=`<span class="sstate">runs on a source-install Brain</span>`;
-  else cta=`<button class="sm" onclick="installPack('${p.key}')">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
+  else cta=`<button class="sm" onclick="installPack(${esc(JSON.stringify(p.key))})">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
   const stars="●".repeat(p.impact)+"○".repeat(5-p.impact);
   return `<div class="x" style="cursor:default">
     <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}</div>
@@ -1181,7 +1181,7 @@ async function load(){
   if(!folders.length){fl.innerHTML='<li class="empty">No folders yet — choose one below so your Brain has something to read.</li>';
     dt.innerHTML='<option value="">add a folder first</option>';}
   folders.forEach(f=>{fl.innerHTML+=`<li class="folder"><span class="path">${esc(f)}</span>`+
-    `<button class="ghost sm" onclick="rmFolder('${esc(f)}')">Remove</button></li>`;
+    `<button class="ghost sm" onclick="rmFolder(${esc(JSON.stringify(f))})">Remove</button></li>`;
     dt.innerHTML+=`<option>${esc(f)}</option>`;});
   const mm=["keyword","ollama","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
   $("ourl").value=c.config.ollama_url||"";$("ochat").value=c.config.ollama_chat_model||"";
@@ -1399,9 +1399,9 @@ async function browseTo(path){
   if(r.error){toast("Folder browsing is local-only — open localhost");return;}
   browsePath=r.path; $("curpath").textContent=r.path;
   let html="";
-  if(r.parent) html+=`<div class="diritem up" onclick="browseTo('${esc(r.parent)}')">.. up one level</div>`;
+  if(r.parent) html+=`<div class="diritem up" onclick="browseTo(${esc(JSON.stringify(r.parent))})">.. up one level</div>`;
   (r.dirs||[]).forEach(d=>{const full=(r.path.endsWith('/')?r.path:r.path+'/')+d;
-    html+=`<div class="diritem" onclick="browseTo('${esc(full)}')">${esc(d)}</div>`;});
+    html+=`<div class="diritem" onclick="browseTo(${esc(JSON.stringify(full))})">${esc(d)}</div>`;});
   if(!(r.dirs||[]).length && !r.parent) html+='<div class="empty">No subfolders here</div>';
   $("dirlist").innerHTML=html||'<div class="empty">No subfolders here</div>';
 }
@@ -2007,9 +2007,9 @@ async function loadPlugins(){let r;try{r=await api("/dreamlayer/plugins");}catch
   if(!(r.installed||[]).length){ul.innerHTML='<li class="conn-s" style="margin:0">No plugins installed yet — browse the store.</li>';return;}
   ul.innerHTML=(r.installed||[]).map(p=>{
     const perms=(p.requires||[]).length?(p.requires||[]).map(x=>"needs "+esc(x)).join(" · "):"no special access";
-    return '<li class="conn">'+(p.screenshot?'<img class="cthumb" src="'+plugShot(p.name)+'" alt="'+esc(p.name)+' on the glass" onclick="openPluginDetail(\''+esc(p.name)+'\')" style="cursor:pointer" onerror="this.remove()">':'')+'<div style="flex:1;cursor:pointer" onclick="openPluginDetail(\''+esc(p.name)+'\')"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
+    return '<li class="conn">'+(p.screenshot?'<img class="cthumb" src="'+plugShot(p.name)+'" alt="'+esc(p.name)+' on the glass" onclick="openPluginDetail("+esc(JSON.stringify(p.name))+")" style="cursor:pointer" onerror="this.remove()">':'')+'<div style="flex:1;cursor:pointer" onclick="openPluginDetail("+esc(JSON.stringify(p.name))+")"><div class="conn-t">'+esc(p.name)+' <span class="conn-s">v'+esc(p.version||"")+'</span>'+(p.official?' <span style="color:var(--memory)">✓ Official</span>':'')+'</div>'+
       '<div class="conn-s">'+perms+' · <span style="color:var(--memory)">See what it does →</span></div></div>'+
-      '<button class="sm ghost" onclick="removePlugin(\''+esc(p.name)+'\')">Remove</button></li>';
+      '<button class="sm ghost" onclick="removePlugin("+esc(JSON.stringify(p.name))+")">Remove</button></li>';
   }).join("");}
 function openPluginDetail(name){const p=pluginsById[name];if(!p)return;
   const long=((p.long&&p.long.length)?p.long:[p.description||""]).map(t=>'<p>'+esc(t)+'</p>').join("");
@@ -2023,7 +2023,7 @@ function openPluginDetail(name){const p=pluginsById[name];if(!p)return;
     (p.forwho?'<div class="pdsec">Who it’s for</div><p style="color:var(--muted2,#b9c8c5);margin:0">'+esc(p.forwho)+'</p>':"")+
     '<div class="pdsec">Permissions it asks for</div>'+perms+
     '<div class="mfoot" style="margin-top:20px"><button class="ghost" onclick="closePluginDetail()">Close</button>'+
-    '<button class="ghost" onclick="removePlugin(\''+esc(p.name)+'\');closePluginDetail()">Remove</button></div></div>';
+    '<button class="ghost" onclick="removePlugin("+esc(JSON.stringify(p.name))+");closePluginDetail()">Remove</button></div></div>';
   $("pdetail").classList.add("show");}
 function closePluginDetail(){$("pdetail").classList.remove("show");}
 window.openPluginDetail=openPluginDetail;window.closePluginDetail=closePluginDetail;
@@ -2060,13 +2060,13 @@ async function openStore(){
   // the store IS the page: always render the full pinned catalogue with
   // 1-click installs — no second page, no extra click. The button refreshes.
   st.textContent="Loading the store…";
-  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){r=null;}
+  let r;try{r=await api("/dreamlayer/plugins/store",{method:"POST",body:"{}"});}catch(e){r=null;}
   if(!r||r.error){st.textContent=(r&&r.error)?r.error:"Couldn't reach the store.";return;}
   _storeOpen=true;renderStore(r.plugins||[]);
   st.textContent=`${(r.plugins||[]).length} plugins, every one through the gate — tap Install`;
 }
 async function refreshStore(){if(!_storeOpen)return;
-  let r;try{r=await api("/dreamlayer/plugins/store");}catch(e){return;}
+  let r;try{r=await api("/dreamlayer/plugins/store",{method:"POST",body:"{}"});}catch(e){return;}
   if(r&&r.plugins)renderStore(r.plugins);}
 async function installFromStore(name,btn){
   if(btn){btn.disabled=true;btn.textContent="Installing…";}

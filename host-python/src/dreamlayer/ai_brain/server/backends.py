@@ -379,6 +379,15 @@ def discover_local_agents(timeout: float = 0.6, getter=None) -> list:
     return found
 
 
+def _posture_forbids_egress(config) -> bool:
+    """True when the wearer's posture forbids off-box egress — LAN-only or a
+    quiet-hours window. Mirrors ``Brain.incognito_now()`` but reads only the
+    config, so a bare backend function can honor posture without the Brain."""
+    from .store import in_quiet_hours
+    return bool(getattr(config, "lan_only", False)
+                or in_quiet_hours(getattr(config, "quiet_hours", "") or ""))
+
+
 def probe_ollama(config, timeout: float = 4.0) -> dict:
     """Is Ollama up, and which of the configured models are pulled?
 
@@ -389,6 +398,13 @@ def probe_ollama(config, timeout: float = 4.0) -> dict:
     want = {"chat":   getattr(config, "ollama_chat_model", "") or "",
             "vision": getattr(config, "ollama_vision_model", "") or "",
             "embed":  getattr(config, "ollama_embed_model", "") or ""}
+    # A REMOTE ollama_url is egress. Honor posture: in Incognito/LAN-only don't
+    # reach an off-box endpoint (a localhost probe is not egress and still
+    # runs). Mirrors the pull path's gate — the probe was the missed sibling
+    # call-site reached by /model/status (15s poll) and /health (audit 2026-07-20).
+    if not is_local_endpoint(url) and _posture_forbids_egress(config):
+        return {"reachable": False, "url": url, "models": [], "want": want,
+                "have": {k: False for k in want}, "blocked": "posture"}
     try:
         data = _urllib_get(url + "/api/tags", timeout)
         names = [m.get("name", "") for m in (data.get("models") or [])]
