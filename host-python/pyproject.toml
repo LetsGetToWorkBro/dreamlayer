@@ -84,6 +84,7 @@ dreamlayer = [
     "ai_brain/server/assets/*.png",
     "ai_brain/server/assets/*.woff2",
     "ai_brain/server/assets/*.js",    # halo-sim.js — the TRUE renderer behind Learn
+    "ai_brain/server/assets/*.mp3",   # Juno's voice takes (click her, she talks)
 
     "models.lock",                    # model_guard sha256 pins (ship with the wheel)
     "plugins/dreamlayer.wit",         # WASM Component Model capability contract

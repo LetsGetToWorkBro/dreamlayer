@@ -261,6 +261,100 @@ class TestServer:
         finally:
             lb.stop()
 
+    def test_learn_catalog_grouped_by_category(self, tmp_path):
+        """The Learn page reads as chapters, not one wall of chips: an XCATS
+        list defines the categories (each with a one-line premise), every
+        EXPLAINERS entry files itself under one of them, and the renderer
+        emits per-category headers. Dropping the grouping fails here."""
+        import re
+        lb = LiveBrain(tmp_path)
+        try:
+            status, body = _get(lb.url + "/")
+            assert status == 200
+            # the categories exist, each with a title and a premise line
+            assert "const XCATS=[" in body
+            cats = body.split("const XCATS=[", 1)[1].split("];", 1)[0]
+            cat_ids = re.findall(r'id:"([a-z]+)"', cats)
+            assert len(cat_ids) >= 5, "Learn needs real chapters, not a token split"
+            assert len(re.findall(r'\bb:"', cats)) == len(cat_ids), \
+                "every category carries its one-line explainer"
+            # every feature files itself under a defined category
+            block = body.split("const EXPLAINERS=[", 1)[1].split("];", 1)[0]
+            feat_cats = re.findall(r'\{c:"([a-z]+)"', block)
+            n_feats = len(re.findall(r'\bt:"', block))
+            assert len(feat_cats) == n_feats, "every EXPLAINERS entry needs a c: category"
+            assert set(feat_cats) <= set(cat_ids), \
+                f"unknown category: {set(feat_cats) - set(cat_ids)}"
+            # ... and every category is actually used (no orphan headers)
+            assert set(cat_ids) <= set(feat_cats), \
+                f"empty category: {set(cat_ids) - set(feat_cats)}"
+            # the renderer emits grouped markup, not one flat grid
+            assert 'class="xcat"' in body and "xcat-t" in body and "xcat-b" in body
+        finally:
+            lb.stop()
+
+    def test_panel_juno_speaks_on_click(self, tmp_path):
+        """Clicking Juno's screen plays a bundled voice take (same clips the
+        website and phone use). All six clips ship as panel assets, the click
+        handler is wired, and mp3 serves with an audio content-type so the CSP's
+        media-src 'self' path actually plays. No external audio, ever."""
+        import dreamlayer.ai_brain.server as server_mod
+        assets = Path(server_mod.__file__).resolve().parent / "assets"
+        clips = ["juno_hey.mp3", "juno_hello.mp3", "juno_look.mp3",
+                 "juno_watchout.mp3", "juno_based.mp3", "juno_uhokthen.mp3"]
+        for c in clips:
+            assert (assets / c).is_file(), f"missing bundled voice take {c}"
+        lb = LiveBrain(tmp_path)
+        try:
+            status, body = _get(lb.url + "/")
+            assert status == 200
+            for c in clips:
+                assert f"/panel-assets/{c}" in body, f"panel never references {c}"
+            # the click wiring exists and only same-origin audio is played
+            assert "Say hi to Juno" in body
+            import re
+            srcs = re.findall(r'"([^"]+\.mp3)"', body)
+            assert srcs and all(s.startswith("/panel-assets/") for s in srcs), \
+                f"non-bundled audio source: {[s for s in srcs if not s.startswith('/panel-assets/')]}"
+            # mp3 serves as audio/mpeg (octet-stream would still play, but the
+            # contract is a typed, cacheable, same-origin asset)
+            req = urllib.request.Request(lb.url + "/panel-assets/juno_hey.mp3")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=5) as r:
+                assert r.status == 200
+                assert (r.headers.get("Content-Type") or "") == "audio/mpeg"
+                assert len(r.read()) > 10_000
+        finally:
+            lb.stop()
+
+    def test_panel_assets_all_covered_by_wheel_globs(self):
+        """Every file type in the panel assets dir is matched by a pyproject
+        package-data glob — otherwise the repo checkout serves it fine but the
+        pip wheel silently ships without it (exactly how the Juno voice takes
+        almost went missing). Repo checkouts only; the installed package has
+        no pyproject.toml beside it."""
+        import fnmatch
+        import dreamlayer.ai_brain.server as server_mod
+        assets = Path(server_mod.__file__).resolve().parent / "assets"
+        pyproject = Path(server_mod.__file__).resolve().parents[4].parent \
+            / "host-python" / "pyproject.toml"
+        if not pyproject.is_file():
+            import pytest
+            pytest.skip("no pyproject beside the package (installed wheel)")
+        try:
+            import tomllib
+        except ModuleNotFoundError:          # pragma: no cover — py<3.11
+            import tomli as tomllib
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        globs = data["tool"]["setuptools"]["package-data"]["dreamlayer"]
+        rels = [f"ai_brain/server/assets/{p.name}" for p in assets.iterdir()
+                if p.is_file() and p.name != ".DS_Store"]
+        assert rels, "assets dir unexpectedly empty"
+        missing = [r for r in rels
+                   if not any(fnmatch.fnmatch(r, g) for g in globs)]
+        assert not missing, \
+            f"panel assets not covered by any pyproject package-data glob: {missing}"
+
     def test_plugin_shots_bundled_same_origin(self, tmp_path):
         """The panel CSP pins img-src to 'self', so plugin screenshots must be
         bundled and served same-origin (a remote thumbnail would be blocked

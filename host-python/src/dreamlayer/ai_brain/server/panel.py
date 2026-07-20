@@ -329,7 +329,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
      The divs remain in the markup (inert), so they are simply hidden. */
   .cine-bg,.grain,.vignette,.head-cine{display:none}
   .wrap{position:relative;z-index:2}
-  /* feature explainers — Platinum chips that open an illustrated dialog */
+  /* feature explainers — Platinum chips that open an illustrated dialog,
+     grouped under category headers so the list reads as chapters, not a wall */
+  .xcat{margin:18px 0 4px}
+  .xcat:first-child{margin-top:6px}
+  .xcat-t{font:600 13px var(--chi);letter-spacing:.4px;text-transform:uppercase;color:var(--memory);
+    display:flex;align-items:center;gap:8px}
+  .xcat-t::after{content:"";flex:1;height:1px;background:var(--line)}
+  .xcat-b{font:13px/1.5 var(--sg);color:var(--muted);margin:3px 0 8px;max-width:620px}
   .xgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
   .xchip{display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer;
     background:linear-gradient(180deg,#F6F6F6,#DEDEDE);border:1px solid var(--frame);border-radius:0;
@@ -462,7 +469,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div class="eyebrow">Learn</div><h2>How it works</h2>
     <p class="lead">The glasses show cards; this Brain makes them. Tap a feature to see what it does
       and the card it draws.</p>
-    <div class="xgrid" id="xgrid"></div>
+    <div id="xgrid"></div>
   </section>
 
   <section>
@@ -837,10 +844,37 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <span class="jcap">the brain is listening.</span></div>
 </div>
 <script>
-/* Juno: drag by her title bar, collapse with the toggle — both persist. */
+/* Juno: drag by her title bar, collapse with the toggle — both persist.
+   Click HER (the screen, not the bar) and she talks — the same voice takes the
+   website and the phone play, served same-origin from the bundled assets. */
 (function(){
   var hero=document.getElementById("junoHero"); if(!hero) return;
   var bar=document.getElementById("junoBar"), tog=document.getElementById("junoTog");
+  var jscreen=hero.querySelector(".jscreen"), jcap=hero.querySelector(".jcap");
+  var REST=jcap?jcap.textContent:"";
+  var CLIPS=[["hey.","/panel-assets/juno_hey.mp3"],
+             ["hello.","/panel-assets/juno_hello.mp3"],
+             ["look.","/panel-assets/juno_look.mp3"],
+             ["watch out.","/panel-assets/juno_watchout.mp3"],
+             ["based.","/panel-assets/juno_based.mp3"],
+             ["uh… ok, then.","/panel-assets/juno_uhokthen.mp3"]];
+  var voice=null,ci=0,capT=null;
+  if(jscreen){
+    jscreen.style.cursor="pointer";
+    jscreen.setAttribute("role","button");
+    jscreen.setAttribute("aria-label","Say hi to Juno");
+    jscreen.addEventListener("click",function(){
+      var v=CLIPS[ci++%CLIPS.length];
+      try{
+        if(!voice)voice=new Audio();
+        voice.pause();voice.src=v[1];voice.volume=.85;voice.currentTime=0;
+        voice.play().catch(function(){});
+      }catch(e){}
+      if(jcap){jcap.textContent=v[0];
+        if(capT)clearTimeout(capT);
+        capT=setTimeout(function(){jcap.textContent=REST;},2600);}
+    });
+  }
   var LP="juno.pos", LC="juno.collapsed";
   function clamp(x,y){var w=hero.offsetWidth,h=hero.offsetHeight;
     return [Math.max(4,Math.min(x,innerWidth-w-4)),Math.max(4,Math.min(y,innerHeight-h-4))];}
@@ -884,40 +918,60 @@ let modelSel="keyword", ollamaOK=null, browsePath="";
    renderer. `live` entries replay the real on-glass animation via halo-sim.js,
    the exact engine dreamlayer.app and the simulator run (fly-ins, blooms,
    drifts — the product's own intros, not a re-creation). `img` entries show
-   the true rendered frame for cards whose animation lives on-device. */
+   the true rendered frame for cards whose animation lives on-device.
+   `c` files each feature under an XCATS chapter so the Learn page reads as
+   chapters with a one-line premise each, not one wall of chips. */
+const XCATS=[
+  {id:"ask",   t:"Juno & answers",      b:"Your assistant, and everything she can tell you — asked out loud, or ready before you ask."},
+  {id:"look",  t:"Looking at things",   b:"Glance at something and know it — named, remembered, ranked by your own taste. Frames are never stored."},
+  {id:"people",t:"People",              b:"Who's in front of you and what you share. Kept only for people who introduce themselves — a stranger is never looked up."},
+  {id:"keep",  t:"Finding & keeping",   b:"What you chose to keep, where things are, and the way back to both."},
+  {id:"day",   t:"Promises & your day", b:"What you said you'd do and where the day is headed — kept in sight before anything slips."},
+  {id:"aware", t:"Heads-up & truth",    b:"The layer speaks up on its own when it matters, and quietly checks what it hears."},
+  {id:"sound", t:"Language & sound",    b:"Speech, other languages, and sound itself — made readable on the glass."},
+  {id:"veil",  t:"Privacy",             b:"The whole layer answers to one command: go dark."},
+];
 const EXPLAINERS=[
-  {t:"Juno",live:["ready"],b:"The face of the layer. Say “Hey Juno” to wake your assistant; when the glass is idle she flies in, settles, and listens for what matters. Every card below is her handiwork."},
-  {t:"Ask anything",live:["answer",{primary:"In Documents — Friday",sub:"“where's the lease?”"}],b:"Ask out loud and the answer lands on the glass in a line or two — drawn from your own memory first, the web only when you've allowed it."},
-  {t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
-  {t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
-  {t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
-  {t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
-  {t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
-  {t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
-  {t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
-  {t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
-  {t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
-  {t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
-  {t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
-  {t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
-  {t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
-  {t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
-  {t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
-  {t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
-  {t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
-  {t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
-  {t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
-  {t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
-  {t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
-  {t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
-  {t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
-  {t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
-  {t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
-  {t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
-  {t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
+  {c:"ask",t:"Juno",live:["ready"],b:"The face of the layer. Say “Hey Juno” to wake your assistant; when the glass is idle she flies in, settles, and listens for what matters. Every card below is her handiwork."},
+  {c:"ask",t:"Ask anything",live:["answer",{primary:"In Documents — Friday",sub:"“where's the lease?”"}],b:"Ask out loud and the answer lands on the glass in a line or two — drawn from your own memory first, the web only when you've allowed it."},
+  {c:"ask",t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
+  {c:"ask",t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
+  {c:"look",t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
+  {c:"look",t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
+  {c:"people",t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
+  {c:"people",t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
+  {c:"people",t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
+  {c:"keep",t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
+  {c:"keep",t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
+  {c:"keep",t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
+  {c:"day",t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
+  {c:"day",t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
+  {c:"day",t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
+  {c:"aware",t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
+  {c:"aware",t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
+  {c:"look",t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
+  {c:"aware",t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
+  {c:"aware",t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
+  {c:"sound",t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
+  {c:"sound",t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
+  {c:"sound",t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
+  {c:"keep",t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
+  {c:"day",t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
+  {c:"keep",t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
+  {c:"sound",t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
+  {c:"keep",t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
+  {c:"veil",t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
 ];
 function renderExplainers(){const g=$("xgrid");if(!g)return;
-  g.innerHTML=EXPLAINERS.map((x,i)=>`<button class="xchip" onclick="openX(${i})"><span class="xdot"></span>${esc(x.t)}</button>`).join("");}
+  /* chapters in XCATS order; chips keep their flat EXPLAINERS index so openX(i)
+     is untouched. A feature with an unknown category falls back to the last
+     chapter rather than vanishing. */
+  g.innerHTML=XCATS.map(cat=>{
+    const chips=EXPLAINERS.map((x,i)=>({x,i}))
+      .filter(p=>(XCATS.some(c=>c.id===p.x.c)?p.x.c:XCATS[XCATS.length-1].id)===cat.id)
+      .map(p=>`<button class="xchip" onclick="openX(${p.i})"><span class="xdot"></span>${esc(p.x.t)}</button>`).join("");
+    return chips?`<div class="xcat"><div class="xcat-t">${esc(cat.t)}</div><div class="xcat-b">${esc(cat.b)}</div></div><div class="xgrid">${chips}</div>`:"";
+  }).join("");}
 /* one Glass instance, created on first live open; the TRUE renderer draws the
    lens exactly as the device would (reduced-motion gets the settled frame) */
 let XG=null;
