@@ -401,6 +401,22 @@ class TestDetectorAssets:
         assert _live_asset("secret.txt") is None            # unknown extension
         assert _live_asset("models/nope.tflite") is None    # missing file
 
+    def test_vendored_assets_match_their_pinned_hashes(self):
+        # Enforce the PROVENANCE.md sha256 pins: a swapped or corrupted detector
+        # binary (served to browsers and compiled as WASM) fails CI here instead
+        # of only being caught by a human re-running sha256sum (refute 2026-07-20).
+        import hashlib
+        import re as _re
+        base = Path(live.__file__).resolve().parent / "assets" / "mediapipe"
+        prov = (base / "PROVENANCE.md").read_text(encoding="utf-8")
+        pins = _re.findall(r"\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|", prov)
+        assert len(pins) >= 4, f"expected >=4 pinned assets, parsed {len(pins)}"
+        for rel, want in pins:
+            fp = base / rel
+            assert fp.is_file(), f"pinned asset missing: {rel}"
+            got = hashlib.sha256(fp.read_bytes()).hexdigest()
+            assert got == want, f"{rel} drifted from its PROVENANCE.md sha256"
+
     def test_assets_route_is_public_and_typed(self, tmp_path):
         # served pre-auth (the page fetches them before pairing) with the right
         # MIME so the browser will execute the module + compile the WASM.

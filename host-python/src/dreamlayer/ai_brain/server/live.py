@@ -534,18 +534,22 @@ function wrapLines(text){
   }
   return out;
 }
-let hudTimer = null, hudHoldUntil = 0;
+let hudTimer = null, hudHoldUntil = 0, hudIsDetector = false;
 function showHud(lines, o){
   o = o || {};
   const hud = $("hud");
   hud.textContent = (Array.isArray(lines) ? lines : wrapLines(lines)).join("\n");
   hud.classList.add("on");
+  hudIsDetector = !!o._detector;
   clearTimeout(hudTimer);
   if (!o.persist) hudTimer = setTimeout(() => hud.classList.remove("on"), o.ms || 6000);
   /* a deliberate message (a tap/ask result, a toast) HOLDS the HUD so the live
      on-device label doesn't immediately overwrite it; the detector's own updates
      pass _detector and respect this window */
   if (!o._detector) hudHoldUntil = performance.now() + (o.ms || 6000);
+}
+function hideDetectorHud(){   /* drop a stale LIVE label when nothing's in view; never a held result */
+  if (hudIsDetector) { $("hud").classList.remove("on"); hudIsDetector = false; }
 }
 function scan(on){ $("lens").classList.toggle("scan", !!on); }
 
@@ -604,7 +608,7 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); }
+  if (on) { renderPanel(null); clearOverlayOnce(); }   /* wipe live boxes at once */
   if (!o.silent) showHud(on ? "veil down · on-device only" : "veil lifted", {ms:2400});
   if (!on && liveOn) scheduleLoop(500);
 }
@@ -937,8 +941,9 @@ function heartbeat(){
    is NEVER boxed or named — the same "never identify a stranger" line the Brain
    holds, enforced client-side too. All same-origin (the CSP forbids off-origin
    fetches), so the frames never leave the phone for the on-device pass. */
-let detector = null, rafId = null, lastDetect = 0;
+let detector = null, rafId = null, lastDetect = 0, detectFails = 0, overlayDirty = false;
 const DETECT_MS = 90;                 /* ~11 fps — smooth, easy on the battery */
+const DETECT_MAX_FAILS = 12;          /* ~1s of persistent runtime failure → give up */
 
 async function loadDetector(){
   try {
@@ -946,7 +951,8 @@ async function loadDetector(){
     const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
     detector = await vision.ObjectDetector.createFromOptions(fileset, {
       baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/efficientdet_lite0.tflite"},
-      scoreThreshold: 0.42, maxResults: 6, runningMode: "VIDEO"});
+      scoreThreshold: 0.42, maxResults: 6, runningMode: "VIDEO",
+      categoryDenylist: ["person"]});   /* the model itself never even emits a person box */
     detectorActive = true;
     clearTimeout(loopTimer);          /* the browser recognizes now — idle the server loop */
     setTier("laptop");
@@ -954,38 +960,60 @@ async function loadDetector(){
     document.body.setAttribute("data-detector", "on");   /* status (styleable + testable) */
     startDetectLoop();
   } catch (e) {
-    detector = null; detectorActive = false;
-    document.body.setAttribute("data-detector", "off");
-    if (window.console) console.warn("[live] on-device detector unavailable — using Brain looks:", e);
-    if (liveOn && booted) scheduleLoop(400);   /* fall back to the Brain ambient loop */
+    fallBackToServer(e, "unavailable");
   }
 }
+/* Load OR runtime failure → stop the detector and hand recognition back to the
+   Brain ambient loop, so a mid-session WebGL context loss (common on mobile
+   under memory pressure) can never leave the page silently blind (refute
+   2026-07-20). */
+function fallBackToServer(e, why){
+  detectorActive = false;
+  try { if (detector && detector.close) detector.close(); } catch (_) {}
+  detector = null;
+  if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+  clearOverlayOnce(); hideDetectorHud();
+  document.body.setAttribute("data-detector", "off");
+  if (window.console)
+    console.warn("[live] on-device detector " + (why || "failed") + " — using Brain looks:", e);
+  if (liveOn && booted) scheduleLoop(400);
+}
 function startDetectLoop(){ if (rafId == null) rafId = requestAnimationFrame(detectTick); }
-function clearOverlay(){
+function clearOverlayOnce(){
+  if (!overlayDirty) return;          /* skip the redundant per-frame clear while idle */
   const cv = $("overlay"), ctx = cv.getContext("2d");
-  if (ctx) ctx.clearRect(0, 0, cv.width, cv.height);
+  if (ctx) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); }
+  overlayDirty = false;
 }
 function detectTick(ts){
   rafId = requestAnimationFrame(detectTick);
-  if (!detectorActive || !detector || !liveOn || veil || document.hidden || !camReady()) {
-    clearOverlay(); return;
+  if (!detectorActive || !detector || !liveOn || veil || document.hidden
+      || !camReady() || !booted) {
+    clearOverlayOnce(); hideDetectorHud(); return;    /* idle: wipe boxes + stale label */
   }
   if (ts - lastDetect < DETECT_MS) return;
   lastDetect = ts;
   let res = null;
-  try { res = detector.detectForVideo($("cam"), ts); } catch (e) { return; }
+  try { res = detector.detectForVideo($("cam"), ts); detectFails = 0; }
+  catch (e) {
+    if (++detectFails >= DETECT_MAX_FAILS) fallBackToServer(e, "failed at runtime");
+    return;
+  }
   paintDetections(res);
 }
 function paintDetections(res){
   const cv = $("overlay"), v = $("cam"), ctx = cv.getContext("2d");
   if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;            /* crisp brackets on retina */
   const cw = cv.clientWidth, ch = cv.clientHeight;
-  if (cv.width !== cw) cv.width = cw;
-  if (cv.height !== ch) cv.height = ch;
+  const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
+  if (cv.width !== bw) cv.width = bw;
+  if (cv.height !== bh) cv.height = bh;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);              /* draw in CSS px, scaled to device */
   ctx.clearRect(0, 0, cw, ch);
   const vw = v.videoWidth, vh = v.videoHeight;
-  if (!vw || !vh) return;
-  const scale = Math.max(cw / vw, ch / vh);          /* object-fit: cover */
+  if (!vw || !vh) { overlayDirty = false; return; }
+  const scale = Math.max(cw / vw, ch / vh);            /* object-fit: cover */
   const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
   const dets = ((res && res.detections) || [])
     .map(d => ({name: ((d.categories && d.categories[0]) || {}).categoryName || "",
@@ -999,9 +1027,13 @@ function paintDetections(res){
     const a = d.box.width * d.box.height * d.score;
     if (a > topA) { topA = a; top = d; }
   }
-  if (top && !looking && !veil && performance.now() >= hudHoldUntil)
-    showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
-            {persist:true, _detector:true});
+  overlayDirty = dets.length > 0;
+  /* update the live label only when no tap/ask result is holding the HUD */
+  if (performance.now() >= hudHoldUntil && !looking && !asking && !veil) {
+    if (top) showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
+                     {persist:true, _detector:true});
+    else hideDetectorHud();           /* nothing in view → drop the stale live label */
+  }
 }
 function drawBox(ctx, x, y, w, h, name, score){
   ctx.lineWidth = 2;

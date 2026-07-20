@@ -2517,7 +2517,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 f"style-src 'nonce-{nonce}'; "
                 "img-src 'self' data: blob:; media-src 'self' blob:; "
                 "connect-src 'self'; worker-src 'self' blob:; "
-                "base-uri 'none'; form-action 'none'")
+                # 'none' has no frame-ancestors fallback under default-src, so name
+                # it — a camera/token page must not be framable (clickjacking).
+                "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+            # belt-and-suspenders for the 'self' in script-src: never MIME-sniff a
+            # same-origin response into an executable type.
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -2565,6 +2570,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body, ctype = data
             self.send_response(200)
             self.send_header("Content-Type", ctype)
+            self.send_header("X-Content-Type-Options", "nosniff")  # serve the declared type only
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=604800, immutable")
             self.end_headers()
