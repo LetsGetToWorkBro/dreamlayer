@@ -185,7 +185,14 @@ class MoondreamClassifier:
                     arr = (np.clip(arr, 0, 1) * 255).astype("uint8")
                 img = Image.fromarray(arr.astype("uint8")).convert("RGB")
             answer = self._model.query(img, self.prompt).get("answer", "")
-            label = str(answer).strip().strip(".").lower()
+            # Do NOT lowercase: the person-guard's name-shape check is
+            # case-sensitive (a proper name is Title-Case / ALL-CAPS), so
+            # lowercasing "Maya Chen" -> "maya chen" blinds it and a stranger's
+            # name would ride onto the HUD — worse on the continuous ambient loop
+            # (refute 2026-07-20). Preserve the model's casing so the guard sees
+            # the signal; a Title-Cased object over-defers to the Social Lens,
+            # which is the privacy-safe direction.
+            label = str(answer).strip().strip(".")
             if not label:
                 return None
             return (label, self.confidence)
@@ -238,7 +245,9 @@ class MLXVisionClassifier:
                 from mlx_vlm import generate  # type: ignore
                 answer = generate(self._model, self._processor, self.prompt,
                                   frame, verbose=False)
-            label = str(answer or "").strip().strip(".").lower()
+            # Preserve casing (see MoondreamClassifier): the person-guard's
+            # name-shape check needs it to catch a proper name the VLM emits.
+            label = str(answer or "").strip().strip(".")
             return (label, self.confidence) if label else None
         except Exception as exc:
             log.warning("[mlx-vlm] infer failed: %s", exc)

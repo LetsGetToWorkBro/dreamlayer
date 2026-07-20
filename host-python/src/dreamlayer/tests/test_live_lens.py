@@ -145,6 +145,23 @@ class TestDecodeFrame:
             for _ in got:
                 live._decode_sem.release()
 
+    def test_decode_sheds_instead_of_parking_a_worker_when_saturated(self):
+        # REVERT-FAILING (SEC2, refute 2026-07-20): the decode semaphore is
+        # NON-blocking — when all slots are held, decode_frame SHEDS the frame
+        # (returns None) rather than parking the worker thread on the semaphore.
+        # A blocking acquire here would DEADLOCK this test (all slots held), which
+        # is exactly the thread-starvation a burst would cause on the server.
+        pytest.importorskip("PIL")
+        got = [live._decode_sem.acquire(blocking=False)
+               for _ in range(live._MAX_CONCURRENT_DECODES)]
+        try:
+            assert all(got)
+            assert decode_frame(_jpeg()) is None       # shed, did not block/deadlock
+        finally:
+            for _ in got:
+                live._decode_sem.release()
+        assert decode_frame(_jpeg()) is not None        # slots freed → decodes again
+
 
 # --- look(): the local ladder, the ledger, and the no-egress guarantee ------
 

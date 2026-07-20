@@ -110,4 +110,27 @@ test.describe("Live Lens page in a real browser", () => {
 
     expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
   });
+
+  // Refute 2026-07-20: an unpaired phone (401) must PAUSE the continuous loop
+  // behind the pairing modal, not keep capturing + POSTing frames every tick.
+  test("pauses the continuous loop while unpaired (401), not burning frames", async ({ page }) => {
+    let looks = 0;
+    await page.route("**/dreamlayer/live/look**", async (route) => {
+      looks++;
+      await route.fulfill({ status: 401, contentType: "application/json", body: "{}" });
+    });
+    // the boot status check also 401s → the page should show the pairing modal
+    await page.route("**/dreamlayer/status**", async (route) => {
+      await route.fulfill({ status: 401, contentType: "application/json", body: "{}" });
+    });
+
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+
+    // the pairing modal appears (not a silent dark screen)
+    await expect(page.locator(".notice")).toContainText("CONNECT THIS PHONE");
+
+    // and the loop stays paused — no look frames are captured/POSTed while unpaired
+    await page.waitForTimeout(3_000);
+    expect(looks).toBe(0);
+  });
 });

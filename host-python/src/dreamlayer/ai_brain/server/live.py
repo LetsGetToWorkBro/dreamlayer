@@ -48,13 +48,14 @@ MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 # A decompression-bomb ceiling on the DECODED pixel count, checked from the
 # header BEFORE any pixels are materialised. MAX_FRAME_BYTES bounds the
-# *compressed* upload; a tiny PNG can still declare 13000x13000 and balloon to
-# ~650 MB of RSS when decoded. The sibling /brain/look decoder
-# (vision_recognizer.b64_to_frame) already enforces exactly this cap; the public
-# Live Lens route omitted it (refute 2026-07-20), so a paired phone could OOM the
-# Brain with one crafted frame. 50 MP is far above any real downscaled phone
-# photo, far below a bomb.
-MAX_FRAME_PIXELS = 50 * 1024 * 1024
+# *compressed* upload; a tiny PNG/WebP can still declare a huge canvas and
+# balloon to hundreds of MB when decoded (a WebP decodes to ~12 bytes/pixel, far
+# above the 3 of a raw RGB array — refute 2026-07-20). The browser only ever
+# posts a <=720px frame here (see captureFrame), so 16 MP is ~30x real headroom
+# yet keeps even a crafted WebP's transient decode bounded (16 MP ~= 190 MB),
+# which with the concurrency cap below holds peak RSS to a fraction of a GB. The
+# public Live Lens route had NO pre-decode cap at all before this.
+MAX_FRAME_PIXELS = 16 * 1024 * 1024
 
 # Frames are thumbnailed to this max side before classification: the vision
 # ladder's features are scale-tolerant and this bounds CPU per look.
@@ -62,10 +63,13 @@ _MAX_SIDE = 512
 
 # Bound how many frames decode CONCURRENTLY. The server's worker pool is 64
 # threads and an authed look is not per-token rate-limited, so 64 simultaneous
-# decodes (each up to MAX_FRAME_PIXELS) could still stack tens of GB of transient
-# RSS even with the per-frame cap. This semaphore is the memory backstop: excess
-# looks queue briefly (decodes are fast) instead of racing into an OOM (refute
-# 2026-07-20). Not a rate limiter — purely a peak-memory bound.
+# decodes (each up to MAX_FRAME_PIXELS) could still stack GBs of transient RSS.
+# This semaphore caps peak decode memory. It is acquired NON-BLOCKING (see
+# decode_frame): a burst SHEDS excess frames rather than parking worker threads
+# on the semaphore — a blocked decode would hold its worker slot, so a blocking
+# acquire just trades a memory-DoS for a thread-starvation-DoS (58 of 64 workers
+# parkable on 6 slots — refute 2026-07-20). Shedding is also the right behaviour
+# for a real-time lens: the freshest frame matters, not a backlog.
 _MAX_CONCURRENT_DECODES = 6
 _decode_sem = threading.BoundedSemaphore(_MAX_CONCURRENT_DECODES)
 
@@ -138,19 +142,23 @@ def decode_frame(data: bytes):
         import numpy as np
     except ImportError:
         return None
-    with _decode_sem:
-        try:
-            im = Image.open(io.BytesIO(data))          # lazy — header only
-            w, h = im.size
-            if w * h > MAX_FRAME_PIXELS:               # pre-decode bomb guard
-                log.warning("[live] frame %dx%d exceeds %d MP — refused "
-                            "(decompression-bomb guard)", w, h,
-                            MAX_FRAME_PIXELS // (1024 * 1024))
-                return None                            # never .thumbnail()/asarray it
-            im.thumbnail((_MAX_SIDE, _MAX_SIDE))
-            return np.asarray(im.convert("RGB"))
-        except Exception:
-            return None
+    if not _decode_sem.acquire(blocking=False):        # all decode slots busy →
+        log.warning("[live] decode slots saturated — shedding a frame")
+        return None                                    # shed, don't park a worker
+    try:
+        im = Image.open(io.BytesIO(data))              # lazy — header only
+        w, h = im.size
+        if w * h > MAX_FRAME_PIXELS:                   # pre-decode bomb guard
+            log.warning("[live] frame %dx%d exceeds %d MP — refused "
+                        "(decompression-bomb guard)", w, h,
+                        MAX_FRAME_PIXELS // (1024 * 1024))
+            return None                                # never .thumbnail()/asarray it
+        im.thumbnail((_MAX_SIDE, _MAX_SIDE))
+        return np.asarray(im.convert("RGB"))
+    except Exception:
+        return None
+    finally:
+        _decode_sem.release()
 
 
 def _clip_bytes(s: str, max_bytes: int = MAX_TEXT_LEN) -> str:
@@ -222,7 +230,11 @@ def _local_look(brain, arr, ledger: bool = True) -> dict:
     if person_guard.defers_person(label, frame=arr):
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
                 "lines": wrap_hud_lines("a person — the Social Lens handles people")}
-    if ledger and not brain.incognito_now():  # incognito/ambient ⇒ no on-disk trace
+    try:                                      # incognito/ambient ⇒ no on-disk trace;
+        trace = ledger and not brain.incognito_now()   # unreadable posture ⇒ no trace
+    except Exception:
+        trace = False
+    if trace:
         brain.activity.add("look", f"Live Lens saw {label} ({conf:.0%})")
     return {"ok": True, "label": label, "confidence": round(float(conf), 4),
             "tier": "laptop",
@@ -771,10 +783,13 @@ $("lens").onclick = () => lookNow(false);
 $("lens").onkeydown = e => { if (e.key===" "||e.key==="Enter") lookNow(false); };
 
 /* ---- the continuous live loop (the glasses never wait for a tap) -------- */
-let loopTimer = null;
+let loopTimer = null, booted = false;
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
-  if (!liveOn) return;
+  /* don't run while: paused, unpaired (behind the pairing modal — else we burn
+     camera+network 401ing every tick), backgrounded (battery), or before the
+     boot posture-seed lands (so the FIRST look already knows the veil) */
+  if (!liveOn || _pairNotice || document.hidden || !booted) return;
   loopTimer = setTimeout(loopTick, delay || LOOP_MS);
 }
 async function loopTick(){
@@ -814,6 +829,7 @@ $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 let _pairNotice = null;
 function needsPairing(){
   if (_pairNotice) return;                         /* don't stack notices */
+  $("hud").classList.remove("on");                 /* drop any stuck "looking…" */
   const n = document.createElement("div");
   n.className = "notice";
   n.innerHTML =
@@ -921,6 +937,9 @@ startCam();
       "<p>This phone is paired, but your Brain isn't answering. Check that <b>this phone and the Brain are on the same Wi‑Fi</b>, and that the Brain (the Mac app) is awake.</p><p>This clears itself the moment the link is back.</p>",
       [{label:"Retry now", fn:(n)=>{ n.remove(); location.reload(); }}]);
   }
+  booted = true;                 /* posture known → the loop may start (or stay
+                                    paused if unpaired / veiled / hidden) */
+  scheduleLoop(400);
   heartbeat();
 })();
 </script>

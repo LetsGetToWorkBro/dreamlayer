@@ -62,8 +62,12 @@ class TestMLXVisionClassifier:
         assert MLXVisionClassifier()(object()) is None
 
     def test_injected_generate_maps_to_label(self):
+        # Casing is PRESERVED (only the trailing period is stripped): the
+        # person-guard's name-shape check is case-sensitive, so lowercasing here
+        # would blind it to a stranger's name (refute 2026-07-20). A single
+        # Title-Case object word never over-defers (the guard needs 2+ name tokens).
         clf = MLXVisionClassifier(_generate=lambda m, p, prompt, frame: "Monstera.")
-        assert clf(object()) == ("monstera", 0.6)
+        assert clf(object()) == ("Monstera", 0.6)
 
     def test_empty_answer_is_none(self):
         clf = MLXVisionClassifier(_generate=lambda *a: "   ")

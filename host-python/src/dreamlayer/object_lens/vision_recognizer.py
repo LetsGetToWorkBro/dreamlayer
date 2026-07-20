@@ -218,7 +218,15 @@ class VisionSightingRecognizer:
         self._fallback = fallback
 
     def __call__(self, frame):
-        if self._available is None or self._available():
+        # A custom `available` predicate that raises must not abort the look —
+        # fail toward DOING the vision work (avail=True), never toward silently
+        # dropping to the fallback. (has_vision, the only wired predicate, can't
+        # raise; this guards a future one.)
+        try:
+            avail = self._available is None or self._available()
+        except Exception:
+            avail = True
+        if avail:
             b64 = frame_to_b64(frame)
             if b64 and self._describe is not None:
                 try:

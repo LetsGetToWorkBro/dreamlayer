@@ -138,6 +138,20 @@ class TestLadderWiring:
         clf = cb.default_classifier(labels=["snake plant", "bike lock"])
         assert isinstance(clf, cb.ClipClassifier) and clf.labels == ["snake plant", "bike lock"]
 
+    def test_vlm_rungs_preserve_casing_so_the_person_guard_catches_names(self):
+        # REVERT-FAILING (refute 2026-07-20): the moondream/MLX rungs must NOT
+        # lowercase their label. The person-guard's name-shape check is
+        # case-sensitive (a proper name is Title-Case / ALL-CAPS), so a lowercased
+        # "maya chen" evades it and a stranger's name reaches the HUD — worse on
+        # the continuous ambient loop. MLX takes an injectable _generate, so we pin
+        # it without the Apple-only dependency.
+        from dreamlayer.object_lens.classify_backends import MLXVisionClassifier
+        from dreamlayer.object_lens.recognizer import _names_a_person
+        clf = MLXVisionClassifier(_generate=lambda *a, **k: "Maya Chen")
+        out = clf(object())
+        assert out == ("Maya Chen", clf.confidence)     # casing preserved, not "maya chen"
+        assert _names_a_person(out[0]) is True           # ...so the guard now defers it
+
     def test_yolo_returns_the_highest_confidence_box(self):
         # REVERT-FAILING (R6, refute 2026-07-20): YOLOv8 boxes are not
         # confidence-sorted, so returning boxes[0] hands back an incidental
