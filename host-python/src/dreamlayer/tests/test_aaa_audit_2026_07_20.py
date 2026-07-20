@@ -132,18 +132,30 @@ def _get(url, headers):
         return e.code
 
 
-def test_store_get_refuses_cross_origin_but_allows_same_origin():
+def _post(url, headers):
+    req = urllib.request.Request(url, data=b"{}", method="POST",
+                                 headers={**headers, "Content-Type": "application/json"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(req, timeout=10) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_store_catalogue_is_a_csrf_guarded_post_not_a_forgeable_get():
+    # the re-audit found the GET+same-origin guard vacuous: a no-Origin <img>
+    # GET slipped it. The catalogue is a POST now, so it inherits do_POST's CSRF
+    # guard and the forgeable GET vector is gone entirely.
     b = _brain()
-    b.config.network_mode = "lan_only"          # so store_catalogue short-circuits (no network)
+    b.config.network_mode = "lan_only"          # store_catalogue short-circuits (no network)
     server, host, port = _serve(b)
     try:
         base = f"http://{host}:{port}/dreamlayer/plugins/store"
-        # a page on another origin cannot force the Brain to hit the registry
-        assert _get(base, {"Origin": "http://evil.example"}) == 403
-        # the panel's own same-origin request is allowed through
-        assert _get(base, {"Origin": f"http://{host}:{port}"}) == 200
-        # a native/CLI caller with no Origin is allowed (unchanged)
-        assert _get(base, {}) == 200
+        assert _get(base, {}) == 404                              # the GET vector is gone
+        assert _post(base, {"Origin": "http://evil.example"}) == 403   # cross-origin refused
+        assert _post(base, {"Origin": f"http://{host}:{port}"}) == 200  # same-origin allowed
+        assert _post(base, {}) == 200                            # native/CLI (no Origin) allowed
     finally:
         server.shutdown(); server.server_close()
 
@@ -221,7 +233,7 @@ def test_report_diagnostics_redacts_a_urlish_model():
     b = _brain()
     b.config.model = "https://evil.example/v1/chat"
     out = srv._report_diagnostics(b)
-    assert "evil.example" not in out and "(custom endpoint)" in out
+    assert "evil.example" not in out and "(custom)" in out
     b.config.model = "llama3.2"
     assert "llama3.2" in srv._report_diagnostics(b)
 

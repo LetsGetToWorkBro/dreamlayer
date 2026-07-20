@@ -16,6 +16,7 @@ Pure stdlib, no dependency, deterministic clock injectable for tests.
 """
 from __future__ import annotations
 
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -46,6 +47,13 @@ class LockoutLimiter:
         self.lockout_s = lockout_s
         self._now = now_fn or time.monotonic
         self._buckets: "OrderedDict[str, _Bucket]" = OrderedDict()
+        # One limiter is shared across the HTTP + TLS listeners' thread pools
+        # (server.make_brain_server), and a single ThreadingHTTPServer was
+        # already multi-threaded, so every mutation must be serialized — an
+        # unlocked OrderedDict raced (lost-update under-counts that leak the
+        # brute-force ceiling; RuntimeError on iterate-during-mutate in _prune).
+        # Audit 2026-07-20.
+        self._lock = threading.Lock()
 
     def _prune(self) -> None:
         """Drop buckets that are neither locked nor holding a recent failure."""
@@ -75,32 +83,37 @@ class LockoutLimiter:
 
     def allow(self, key: str) -> bool:
         """True if `key` may attempt now (not currently locked out)."""
-        b = self._bucket(key)
-        return self._now() >= b.locked_until
+        with self._lock:
+            b = self._bucket(key)
+            return self._now() >= b.locked_until
 
     def record_failure(self, key: str) -> bool:
         """Register a failed attempt. Returns True if this trips a lockout."""
-        now = self._now()
-        b = self._bucket(key)
-        b.fails = [t for t in b.fails if now - t < self.window_s]
-        b.fails.append(now)
-        if len(b.fails) >= self.max_attempts:
-            b.locked_until = now + self.lockout_s
-            b.fails.clear()
-            return True
-        return False
+        with self._lock:
+            now = self._now()
+            b = self._bucket(key)
+            b.fails = [t for t in b.fails if now - t < self.window_s]
+            b.fails.append(now)
+            if len(b.fails) >= self.max_attempts:
+                b.locked_until = now + self.lockout_s
+                b.fails.clear()
+                return True
+            return False
 
     def record_success(self, key: str) -> None:
         """A good attempt clears the slate for that key."""
-        self._buckets.pop(key, None)
+        with self._lock:
+            self._buckets.pop(key, None)
 
     def retry_after(self, key: str) -> float:
         """Seconds until `key` may try again (0 if not locked)."""
-        b = self._bucket(key)
-        return max(0.0, b.locked_until - self._now())
+        with self._lock:
+            b = self._bucket(key)
+            return max(0.0, b.locked_until - self._now())
 
     def reset(self, key: str | None = None) -> None:
-        if key is None:
-            self._buckets.clear()
-        else:
-            self._buckets.pop(key, None)
+        with self._lock:
+            if key is None:
+                self._buckets.clear()
+            else:
+                self._buckets.pop(key, None)

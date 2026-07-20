@@ -1752,6 +1752,7 @@ _PULL_JOBS: dict = {}                    # model name -> {"state","percent","det
 _PULL_LOCK = threading.Lock()
 _PULL_JOBS_MAX = 32
 _PULL_JOB_TTL_S = 600.0
+_PULL_MAX_INFLIGHT = 3           # cap concurrent downloads (chat+vision+embed)
 
 
 def _model_name_ok(name: str) -> bool:
@@ -1763,10 +1764,17 @@ def _model_name_ok(name: str) -> bool:
     n = (name or "").strip()
     if not n or any(ord(c) < 32 or c.isspace() for c in n):
         return False
-    if "/" in n:
-        head = n.split("/", 1)[0]
-        if "." in head or ":" in head:          # host[:port] prefix → external registry
-            return False
+    # Ollama resolves the registry HOST by COMPONENT COUNT: `host/namespace/name`
+    # (3 parts) pins an explicit host, and a 2-part `host[:port]/name` does too
+    # when the first part looks like a host. A default-registry ref is at most
+    # `namespace/name`, so reject anything carrying a host component. (Audit
+    # 2026-07-20: a single-label host `evilhost/ns/model` slipped the old
+    # dotted-first-segment test — `evilhost` has no dot/colon but IS the host.)
+    parts = n.split("/")
+    if len(parts) >= 3:                          # host/namespace/name → explicit host
+        return False
+    if len(parts) == 2 and ("." in parts[0] or ":" in parts[0]):
+        return False                            # host[:port]/name → explicit host
     return True
 
 
@@ -1805,7 +1813,13 @@ def _pull_model_async(brain: Brain, name: str) -> dict:
         _prune_pull_jobs(now)
         cur = _PULL_JOBS.get(name)
         if cur and cur.get("state") == "pulling":
-            return dict(cur)             # already pulling — don't start a second
+            return dict(cur)             # already pulling this name — don't start a second
+        # Global in-flight cap: a caller firing many distinct names would spawn
+        # an unbounded number of daemon threads and "pulling" dict entries the
+        # cap-eviction can't drop (audit 2026-07-20). Refuse past the ceiling.
+        if sum(1 for v in _PULL_JOBS.values()
+               if v.get("state") == "pulling") >= _PULL_MAX_INFLIGHT:
+            return {"error": "too many downloads at once — let a model finish first"}
         job = {"state": "pulling", "percent": 0, "detail": "starting…", "ts": now}
         _PULL_JOBS[name] = job
 
@@ -2376,14 +2390,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Installed plugin state."""
             self._json(200, brain.plugins_state())
 
-        def _get_plugins_store(self, path, qs):
+        def _post_plugins_store(self, path, qs):
             """The in-app plugin store catalogue (fetched from the pinned
-            registry; posture-gated). This GET both egresses (to the registry)
-            and mutates Brain state (loads the index), so it takes the same CSRF
-            guard the mutating POSTs do — a page the wearer merely visits must
-            not be able to force the no-egress Brain to phone home."""
-            if not self._same_origin_write():
-                self._json(403, {"error": "cross-origin write refused"}); return
+            registry; posture-gated). It egresses AND mutates Brain state, so it
+            is a POST and inherits do_POST's _same_origin_write() CSRF guard. As a
+            GET it was forgeable by a no-Origin <img>/navigation — which
+            _same_origin_write deliberately allows for native/CLI callers — so a
+            page the wearer merely visited could force the no-egress Brain to
+            phone home; making it a POST closes that (audit 2026-07-20)."""
             self._json(200, brain.store_catalogue())
 
         def _get_rc_repertoire(self, path, qs):
@@ -2435,10 +2449,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             progress so the panel can render a live % and stop polling when a
             pull finishes."""
             out = probe_ollama(brain.config)
+            # `detail` is Ollama's raw status and can echo the configured
+            # endpoint (e.g. "could not reach Ollama: <url>"); the on-box panel
+            # gets it, but an off-box paired phone gets state+percent only, so
+            # the endpoint/topology never leaves the box (audit 2026-07-20).
+            local = self._from_localhost()
             with _PULL_LOCK:
                 out["pulls"] = {k: {"state": v.get("state"),
                                     "percent": v.get("percent", 0),
-                                    "detail": v.get("detail", "")}
+                                    **({"detail": v.get("detail", "")} if local else {})}
                                 for k, v in _PULL_JOBS.items()}
             self._json(200, out)
 
@@ -2545,7 +2564,6 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/saga": _get_saga,
             "/dreamlayer/ember": _get_ember,
             "/dreamlayer/plugins": _get_plugins,
-            "/dreamlayer/plugins/store": _get_plugins_store,
             "/dreamlayer/rc/repertoire": _get_rc_repertoire,
             "/dreamlayer/social/people": _get_social_people,
             "/dreamlayer/memories": _get_memories,
@@ -2651,7 +2669,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _post_packs(self, path, qs):
             """One-click pack install (source installs only; allowlisted —
-            the client names a curated pack, never a package)."""
+            the client names a curated pack, never a package). Local-only: it
+            runs pip on the host, so like the model pull it is an on-box action,
+            not something an off-box paired phone may trigger (audit 2026-07-20)."""
+            if not self._from_localhost():
+                self._json(403, {"error": "installing a pack is local-only"}); return
             b = self._body()
             job = _install_pack(brain, str(b.get("pack", "")))
             if "error" in job:
@@ -2695,7 +2717,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _post_plugins_store_install(self, path, qs):
             """One-click install a store plugin by name (pinned fetch → the same
-            checksum + capability/sandbox gate as a pasted package)."""
+            checksum + capability/sandbox gate as a pasted package). Local-only:
+            installing code onto the host is an on-box action, matching the model
+            pull's bar — an off-box paired phone must not install software
+            (audit 2026-07-20)."""
+            if not self._from_localhost():
+                self._json(403, {"error": "installing is local-only"}); return
             self._json(200, brain.store_install(self._body().get("name", "")))
 
         def _post_plugins_remove(self, path, qs):
@@ -3093,6 +3120,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         _POST_ROUTES = {
             "/dreamlayer/memory/browse": _post_memory_browse,
             "/dreamlayer/memory/export": _post_memory_export,
+            "/dreamlayer/plugins/store": _post_plugins_store,
             "/dreamlayer/folders": _post_folders,
             "/dreamlayer/config": _post_config,
             "/dreamlayer/capabilities": _post_capabilities,
@@ -3320,12 +3348,19 @@ def _report_diagnostics(brain: Brain) -> str:
         seams = {}
     bad = [f"{n}({(s or {}).get('failures', 0)})"
            for n, s in sorted(seams.items()) if (s or {}).get("failures", 0)]
-    # the model NAME is not PII, but a custom/api-tier value could carry a host
-    # or credential (`user@host`, `https://…`); redact rather than leak it, so
-    # the "no endpoint/key" promise holds even for an oddly-configured model.
+    # config.model is normally a tier keyword (keyword/ollama/mlx/api) or a
+    # simple model ref — never an endpoint or a path. But apply_config writes it
+    # unvalidated, so redact anything with a path/host shape: a slash/backslash,
+    # a `~`/`.` prefix, an IPv4, a `:port`, a scheme, or userinfo. This stops a
+    # report from publishing a filesystem path (with the wearer's username) or an
+    # endpoint someone set into the field (audit 2026-07-20 — the old `://`/`@`
+    # test missed bare `host:port`, a LAN IP, and `/Users/<user>/…gguf`).
+    import re as _re
     _model = str(brain.config.model or "")
-    if "://" in _model or "@" in _model:
-        _model = "(custom endpoint)"
+    if ("/" in _model or "\\" in _model or "@" in _model or _model[:1] in ("~", ".")
+            or _re.search(r"\d+\.\d+\.\d+\.\d+", _model)
+            or _re.search(r":\d{2,}", _model)):
+        _model = "(custom)"
     lines = [
         f"DreamLayer {_version()} · {_pf.system()} {_pf.machine()} · "
         f"Python {_pf.python_version()}",
