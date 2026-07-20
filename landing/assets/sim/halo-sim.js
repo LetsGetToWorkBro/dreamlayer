@@ -696,7 +696,7 @@
     // full colour is a simulator/app flourish only; the glasses' display
     // budget stays phosphor. Finding prism is remembered (dl_prism), so
     // surfaces that list lenses may then admit it exists. ----
-    this._taps = []; this._junoTaps = []; this._colorAt = null; this._colorImg = null;
+    this._taps = []; this._junoTaps = [];
     var self = this;
     canvas.addEventListener("click", function (e) {
       var r = canvas.getBoundingClientRect();
@@ -708,7 +708,14 @@
       if (isReady && x > CX - 42 && x < CX + 42 && y > 64 && y < 160) {
         self._junoTaps.push(ts);
         self._junoTaps = self._junoTaps.filter(function (t0) { return ts - t0 < 2.5; });
-        if (self._junoTaps.length >= 3) { self._junoTaps = []; self._trueColors(); }
+        if (self._junoTaps.length >= 3) {
+          self._junoTaps = [];
+          self.show("junocolors", {});
+          setTimeout(function () {
+            if (self.sim.card && self.sim.card.type === "junocolors") self.sim.card = null;
+          }, 8000);
+          try { root.dispatchEvent(new CustomEvent("halo-discovery", { detail: { id: "junocolors" } })); } catch (err) {}
+        }
         return;
       }
       self._taps.push(ts);
@@ -720,6 +727,7 @@
           if (self.sim.card && self.sim.card.type === "prism") self.sim.card = null;
         }, 12000);
         try { root.localStorage && root.localStorage.setItem("dl_prism", "found"); } catch (err) {}
+        try { root.dispatchEvent(new CustomEvent("halo-discovery", { detail: { id: "prism" } })); } catch (err) {}
       }
     });
     this.resize();
@@ -796,6 +804,7 @@
     else if (sim.card && sim.card.type === "keep") this._keep(sim.card, t);
     else if (sim.card && sim.card.type === "rosetta") this._rosetta(sim.card, t);
     else if (sim.card && sim.card.type === "prism") this._prism(sim.card, t);
+    else if (sim.card && sim.card.type === "junocolors") this._junoColors(sim.card, t);
     else this._ready(t);
     this._drawSparks();          // arrival sparkles overlay the glass, then fade
     c.restore();
@@ -816,23 +825,8 @@
       var bob = Math.round(2 * Math.sin(t * 1.6));
       cy = 112 + bob; al = 0.75 + 0.25 * Math.sin(t * 3.2);
     }
-    var colAge = this._colorAt != null ? (now() - this._colorAt) : 99;
-    if (colAge < 8 && this._colorImg) {
-      // her true colors — a brief full-colour bloom, then back to phosphor
-      var cfade = colAge < 0.5 ? colAge * 2 : colAge > 7 ? (8 - colAge) : 1;
-      var c2 = this.ctx, ih = 92, iw = ih * (this._colorImg.width / this._colorImg.height);
-      c2.save();
-      c2.globalAlpha = Math.max(0, Math.min(1, cfade));
-      c2.imageSmoothingEnabled = false;
-      c2.drawImage(this._colorImg, cx - iw / 2, cy - ih / 2 + 4, iw, ih);
-      c2.restore();
-      if (Math.random() < 0.12) this._spawnSparks(cx, cy, 1);
-      if (cfade > 0.6) this.text("her true colors", CX, 192, "xs", C.ghost);
-      else this.text("listening for what matters", CX, 192, "xs", C.ghost);
-    } else {
-      drawJuno(this.ctx, cx, cy, 3, JUNO_TEAL, al);
-      this.text("listening for what matters", CX, 192, "xs", C.ghost);
-    }
+    drawJuno(this.ctx, cx, cy, 3, JUNO_TEAL, al);
+    this.text("listening for what matters", CX, 192, "xs", C.ghost);
   };
   Glass.prototype._figment = function (f, t) {
     if (f.ended) return this._ready(t);
@@ -1085,16 +1079,67 @@
       c.stroke();
     }
   };
-  // Juno's true colors: the full-colour pixel sprite, shown briefly with a
-  // sparkle burst, then back to phosphor. The image loads lazily and only
-  // once (HALO_JUNO_COLOR lets a host page point at its own copy — the
-  // panel serves it same-origin under its CSP).
-  Glass.prototype._trueColors = function () {
-    var self = this;
-    if (this._colorImg) { this._colorAt = now(); this._spawnSparks(CX, 106, 12); return; }
-    var im = new Image();
-    im.onload = function () { self._colorImg = im; self._colorAt = now(); self._spawnSparks(CX, 106, 12); };
-    im.src = root.HALO_JUNO_COLOR || "assets/juno/juno_pixel.png";
+  // Her true colors — the same sprite quantized from the full-colour
+  // source into seven anchors. Tri-file lockstep: here,
+  // halo-lua/display/renderer.lua and hud/renderer.py (JUNO_COLOR_ROWS).
+var JUNO_COLOR_ROWS = [
+    ".......................1........",
+    "......................3.........",
+    ".................6161114........",
+    ".................115143.........",
+    "..............1..614116.........",
+    "..221........1776412161...122...",
+    ".12222......471434411....22221..",
+    "..222221....774531111..122222...",
+    "..1222223...47541.11.12222221...",
+    "...22222331..745....32222222....",
+    "....22223222..41.1122222222.....",
+    ".....22332221244.442232222......",
+    "......1222224224452223321.......",
+    ".........1113222452211..........",
+    "........12241332455211..........",
+    ".....13232141253112233221.......",
+    "....2222224.3222.222322222......",
+    "...2222214..22221.132222222.....",
+    "....232111.122222...132222......",
+    "...........3322221..............",
+    "...........3322222..............",
+    "...........31222222.............",
+    "...........3662322221...........",
+    "...........314432222221.........",
+    "...........1441632232221........",
+    "............414464322222........",
+    "............14414113143.........",
+    ".............31415..............",
+    "...............4.5..............",
+    "...............4.5..............",
+    "...............4.1..............",
+    "...............1................",
+  ];
+  var JUNO_COLOR_PAL = ["#14121A", "#F2FEFD", "#BDDAE3", "#9AC0B0", "#F1C59C", "#C7893D", "#337C80"];
+  function drawJunoColors(c, cx, cy, px, alpha) {
+    var ox = cx - 16 * px, oy = cy - 16 * px;
+    for (var y = 0; y < JUNO_COLOR_ROWS.length; y++) {
+      var row = JUNO_COLOR_ROWS[y];
+      for (var x = 0; x < row.length;) {
+        var ch = row[x];
+        if (ch === ".") { x++; continue; }
+        var x2 = x;
+        while (x2 + 1 < row.length && row[x2 + 1] === ch) x2++;
+        c.fillStyle = rgba(JUNO_COLOR_PAL[+ch - 1], alpha == null ? 1 : alpha);
+        c.fillRect(ox + x * px, oy + y * px, (x2 - x + 1) * px, px);
+        x = x2 + 1;
+      }
+    }
+  }
+  // JunoColorsCard, the device contract: host-driven and stateless — the
+  // orchestrator sends it on the discovery gesture and reverts to ReadyCard
+  // eight seconds later. The sim mirrors that exact behavior.
+  Glass.prototype._junoColors = function (card, t) {
+    var u = this._u(card, t, 0.7);
+    drawJunoColors(this.ctx, CX, CX - 8, 3, u);
+    if (Math.random() < 0.1) this._spawnSparks(CX, CX - 8, 1);
+    this._ta("her true colors", CX, 194, "xs", C.ghost, u * 0.9);
   };
   Glass.prototype._dotC = function (x, y, r, hex, a) {
     var c = this.ctx; c.fillStyle = rgba(hex, a); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();

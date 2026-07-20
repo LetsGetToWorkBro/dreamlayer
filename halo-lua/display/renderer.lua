@@ -263,6 +263,89 @@ local JUNO_ROWS = {
   "................................",
 }
 
+-- Her true colors — the same sprite, quantized from the full-colour
+-- source (landing/assets/juno/juno_pixel.png) into seven anchors the
+-- display drives directly. Tri-file lockstep: here, hud/renderer.py
+-- (_JUNO_COLOR_ROWS) and landing/assets/sim/halo-sim.js (JUNO_COLOR_ROWS).
+local JUNO_COLOR_ROWS = {
+  ".......................1........",
+  "......................3.........",
+  ".................6161114........",
+  ".................115143.........",
+  "..............1..614116.........",
+  "..221........1776412161...122...",
+  ".12222......471434411....22221..",
+  "..222221....774531111..122222...",
+  "..1222223...47541.11.12222221...",
+  "...22222331..745....32222222....",
+  "....22223222..41.1122222222.....",
+  ".....22332221244.442232222......",
+  "......1222224224452223321.......",
+  ".........1113222452211..........",
+  "........12241332455211..........",
+  ".....13232141253112233221.......",
+  "....2222224.3222.222322222......",
+  "...2222214..22221.132222222.....",
+  "....232111.122222...132222......",
+  "...........3322221..............",
+  "...........3322222..............",
+  "...........31222222.............",
+  "...........3662322221...........",
+  "...........314432222221.........",
+  "...........1441632232221........",
+  "............414464322222........",
+  "............14414113143.........",
+  ".............31415..............",
+  "...............4.5..............",
+  "...............4.5..............",
+  "...............4.1..............",
+  "...............1................",
+}
+local JUNO_COLOR_PAL = { 0x14121A, 0xF2FEFD, 0xBDDAE3, 0x9AC0B0, 0xF1C59C, 0xC7893D, 0x337C80 }
+
+local _juno_color_spans
+local function juno_color_spans()
+  if _juno_color_spans then return _juno_color_spans end
+  _juno_color_spans = {}
+  for y = 1, #JUNO_COLOR_ROWS do
+    local row = JUNO_COLOR_ROWS[y]
+    local x = 1
+    while x <= #row do
+      local ch = row:sub(x, x)
+      if ch == "." then
+        x = x + 1
+      else
+        local x2 = x
+        while x2 < #row and row:sub(x2 + 1, x2 + 1) == ch do x2 = x2 + 1 end
+        _juno_color_spans[#_juno_color_spans + 1] = { y - 1, x - 1, x2 - x + 1, ch + 0 }
+        x = x2 + 1
+      end
+    end
+  end
+  return _juno_color_spans
+end
+
+-- JunoColorsCard: the hidden flourish. Host-driven and stateless like any
+-- card — the orchestrator sends it on the discovery gesture and reverts to
+-- ReadyCard eight seconds later. Same run-drawing budget class as the teal
+-- sprite; colour costs no extra rects.
+local function draw_juno_colors(enter_t)
+  if not HAS_FRAME then return end
+  local px = 3
+  local ox, oy = CX - 16 * px, CY - 20 - 16 * px + 20
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    for _, s in ipairs(juno_color_spans()) do
+      frame.display.rect(ox + s[2] * px, (CY - 16 * px - 8) + s[1] * px, s[3] * px, px,
+                         JUNO_COLOR_PAL[s[4]], true)
+    end
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) then
+    -- late-bind the primitives text (the file-level `text` helper is
+    -- declared below this point; require() is cached, so this is free)
+    require("display.primitives").text_center(CX, CY + 66, "her true colors", "sm", P.text_ghost)
+  end
+end
+
 local _juno_spans  -- horizontal runs {y, x, w, level}, built once
 local function juno_spans()
   if _juno_spans then return _juno_spans end
@@ -1728,6 +1811,7 @@ end
 -- ---------------------------------------------------------------------------
 local DRAW = {
   ReadyCard             = function(c,sc,et,xt,it) draw_ready(sc,et,xt)                    end,
+  JunoColorsCard        = function(c,sc,et,xt,it) draw_juno_colors(et)                    end,
   SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt,it)        end,
   QueryListeningCard    = function(c,sc,et,xt,it) draw_query_listening(sc,et,it)           end,
   LoadingCard           = function(c,sc,et,xt,it) draw_loading(sc,et,it)                  end,

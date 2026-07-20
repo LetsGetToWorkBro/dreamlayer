@@ -262,8 +262,23 @@ class TestServer:
             # the lost-lens unlock plumbing in the panel, and the prism +
             # true-colors renderers in the sim engine
             assert "dl_prism" in body and "openPrism" in body
+            assert "/dreamlayer/discoveries" in body
             sim_src = sim.read_text()
-            assert "_prism" in sim_src and "_trueColors" in sim_src
+            assert "_prism" in sim_src and "junocolors" in sim_src
+            # discoveries: refused when unknown, kept when real, persistent
+            try:
+                code = _post(lb.url + "/dreamlayer/discoveries",
+                             {"name": "nope"}, lb.h)[0]
+            except urllib.error.HTTPError as e:
+                code = e.code
+            assert code == 400
+            status, r = _post(lb.url + "/dreamlayer/discoveries",
+                              {"name": "prism"}, lb.h)
+            assert status == 200 and r["found"] == ["prism"]
+            status, r = _get(lb.url + "/dreamlayer/discoveries", lb.h)
+            assert status == 200 and r["found"] == ["prism"]
+            reborn = Brain(lb.brain.cfg_dir)
+            assert reborn.discoveries() == ["prism"]
         finally:
             lb.stop()
 

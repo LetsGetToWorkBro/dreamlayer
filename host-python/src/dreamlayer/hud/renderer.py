@@ -94,6 +94,66 @@ _JUNO_SPANS = _juno_spans()
 # Her liveries (level -> theme color). Veil drops the outline level:
 # gone dark, not re-lit.
 _JUNO_TEAL = {1: T.ACCENT_MEMORY_DIM, 2: T.ACCENT_MEMORY, 3: T.MEMORY_TRACE}
+
+# Her true colors — the same sprite quantized from the full-colour source
+# (landing/assets/juno/juno_pixel.png) into seven anchors. Tri-file
+# lockstep: here, halo-lua/display/renderer.lua (JUNO_COLOR_ROWS) and
+# landing/assets/sim/halo-sim.js (JUNO_COLOR_ROWS).
+_JUNO_COLOR_ROWS = (
+    ".......................1........",
+    "......................3.........",
+    ".................6161114........",
+    ".................115143.........",
+    "..............1..614116.........",
+    "..221........1776412161...122...",
+    ".12222......471434411....22221..",
+    "..222221....774531111..122222...",
+    "..1222223...47541.11.12222221...",
+    "...22222331..745....32222222....",
+    "....22223222..41.1122222222.....",
+    ".....22332221244.442232222......",
+    "......1222224224452223321.......",
+    ".........1113222452211..........",
+    "........12241332455211..........",
+    ".....13232141253112233221.......",
+    "....2222224.3222.222322222......",
+    "...2222214..22221.132222222.....",
+    "....232111.122222...132222......",
+    "...........3322221..............",
+    "...........3322222..............",
+    "...........31222222.............",
+    "...........3662322221...........",
+    "...........314432222221.........",
+    "...........1441632232221........",
+    "............414464322222........",
+    "............14414113143.........",
+    ".............31415..............",
+    "...............4.5..............",
+    "...............4.5..............",
+    "...............4.1..............",
+    "...............1................",
+)
+_JUNO_COLOR_PAL = ("#14121A", "#F2FEFD", "#BDDAE3", "#9AC0B0", "#F1C59C", "#C7893D", "#337C80")
+
+
+def draw_juno_colors(draw, cx: int, cy: int, px: int) -> None:
+    """The hidden flourish's sprite: full-colour Juno as horizontal runs,
+    exactly like draw_juno but with direct palette hexes."""
+    ox, oy = cx - 16 * px, cy - 16 * px
+    for y, row in enumerate(_JUNO_COLOR_ROWS):
+        x = 0
+        while x < len(row):
+            ch = row[x]
+            if ch == ".":
+                x += 1
+                continue
+            x2 = x
+            while x2 + 1 < len(row) and row[x2 + 1] == ch:
+                x2 += 1
+            draw.rectangle([ox + x * px, oy + y * px,
+                            ox + (x2 + 1) * px - 1, oy + (y + 1) * px - 1],
+                           fill=_JUNO_COLOR_PAL[int(ch) - 1])
+            x = x2 + 1
 _JUNO_SUCCESS = {1: T.ACCENT_SUCCESS_DIM, 2: T.ACCENT_SUCCESS, 3: T.ACCENT_SUCCESS}
 _JUNO_VEIL = {2: T.ACCENT_ATTENTION_DIM, 3: T.PRIVACY_DANGER}
 
@@ -563,6 +623,7 @@ class CardRenderer:
             return cached
         cached = {
             "ReadyCard":            self._ready,
+            "JunoColorsCard":       self._juno_colors,
             "SavedMemoryCard":      self._saved_memory,
             "QueryListeningCard":   self._query_listening,
             "LoadingCard":          self._loading,
@@ -1538,6 +1599,14 @@ class CardRenderer:
                                  max_width=188)
         if detail:
             self._text_rgba(draw, CX, 172, detail, "sm", dim, alpha=230)
+
+    def _juno_colors(self, draw, card):
+        """JunoColorsCard — the hidden flourish, host-driven and stateless
+        like every card: the orchestrator sends it on the discovery gesture
+        and reverts to ReadyCard eight seconds later. Same run budget as the
+        teal sprite; colour costs no extra rects."""
+        draw_juno_colors(draw, CX, CY - 8, 3)
+        self._text(draw, CX, CY + 66, "her true colors", "xs", T.TEXT_GHOST)
 
     def _generic_rows(self, draw, card):
         """Fallback rows for any card without a bespoke renderer or a layout
