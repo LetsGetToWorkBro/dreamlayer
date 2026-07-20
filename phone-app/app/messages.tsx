@@ -7,7 +7,7 @@ import { Card, Section } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { pushLocal } from "../src/services/notify";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { t } from "../src/i18n";
@@ -19,6 +19,8 @@ import { t } from "../src/i18n";
  * type (or dictate) a reply, and approve — nothing is ever sent silently.
  */
 export default function Messages() {
+  const s = useS();
+  const { colors, platinum } = useTheme();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const fetchMessages = useBrainStore((s) => s.fetchMessages);
   const sendReply = useBrainStore((s) => s.sendReply);
@@ -115,7 +117,7 @@ export default function Messages() {
             Read on your glasses; tap here to reply. Nothing sends without your approval.
           </Text>
           {items.map((m, i) => {
-            const tint = m.channel === "email" ? "#3D63C7" : colors.accentMemory;
+            const tint = m.channel === "email" ? platinum.select : colors.accentMemory;
             const open = replyTo === m;
             return (
               <Card key={i} delay={i * 40} accent={tint} active={open} onPress={() => openReply(m)}>
@@ -172,7 +174,7 @@ export default function Messages() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "stretch", gap: space.md },
   tag: { width: 3, borderRadius: radius.sm, alignSelf: "stretch" },
   metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -198,4 +200,4 @@ const s = StyleSheet.create({
   },
   replyActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: space.md, minHeight: 40, alignItems: "center" },
   sendBtn: { backgroundColor: colors.accentMemory, borderRadius: radius.pill, paddingVertical: space.md, paddingHorizontal: space.xl },
-});
+}));

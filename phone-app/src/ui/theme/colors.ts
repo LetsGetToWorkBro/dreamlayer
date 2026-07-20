@@ -52,6 +52,8 @@ export const platinum = {
   teal:     "#2FD4C4",   // bright teal, only on dark chips
   coralInk: "#B3402E",
   menuHi:   "#333399",   // classic menu-selection blue
+  select:   "#3D63C7",   // focus/selection blue on controls (dark: #7B87FF)
+  line:     "#C4C4C4",   // the hairline row separator inside panels
   // title-bar pinstripe stops (light → mid → dark), 1px each
   stripe:   ["#FFFFFF", "#DDDDDD", "#ACACAC"] as const,
 } as const;

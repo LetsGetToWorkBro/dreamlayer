@@ -5,11 +5,13 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
 function Chips({ items, tint }: { items: string[]; tint: string }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <View style={s.chipWrap}>
       {items.map((it, i) => (
@@ -22,6 +24,8 @@ function Chips({ items, tint }: { items: string[]; tint: string }) {
 }
 
 export default function Profile() {
+  const s = useS();
+  const { colors } = useTheme();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getProfile = useBrainStore((s) => s.getProfile);
   const [p, setP] = React.useState<JunoProfile | null>(null);
@@ -113,7 +117,7 @@ export default function Profile() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   chip: {
     borderWidth: 1,
@@ -127,4 +131,4 @@ const s = StyleSheet.create({
     marginHorizontal: space.sm,
     opacity: 0.8,
   },
-});
+}));

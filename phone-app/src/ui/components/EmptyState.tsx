@@ -1,6 +1,6 @@
 import React from "react";
 import { Animated, View, Text, StyleSheet } from "react-native";
-import { colors, platinum } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { space } from "../theme/spacing";
 import { useEntrance } from "../anim";
@@ -10,6 +10,8 @@ import { useEntrance } from "../anim";
  * optional hint. No screen should ever render as a blank void.
  */
 export function EmptyState({ glyph = "◌", title, hint }: { glyph?: string; title: string; hint?: string }) {
+  const s = useS();
+  const { colors } = useTheme();
   const anim = useEntrance(80);
   return (
     <Animated.View style={[s.wrap, anim]}>
@@ -26,7 +28,7 @@ export function EmptyState({ glyph = "◌", title, hint }: { glyph?: string; tit
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   wrap: { alignItems: "center", justifyContent: "center", paddingVertical: space.huge },
   // an inset platinum well — the calm, empty desktop object
   ring: {
@@ -46,4 +48,4 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   glyph: { fontSize: 34, color: colors.textSecondary },
-});
+}));

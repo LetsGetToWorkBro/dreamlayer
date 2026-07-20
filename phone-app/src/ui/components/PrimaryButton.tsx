@@ -1,6 +1,6 @@
 import { Text, View, ViewStyle, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { platinum } from "../theme/colors";
+import { makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
 import { hardShadow } from "../theme/shadow";
@@ -17,6 +17,7 @@ type Props = { label: string; onPress: () => void; accent?: string; style?: View
  * and the highlight bevel disappears (the site's `.pbtn:active`).
  */
 export function PrimaryButton({ label, onPress, accent, style }: Props) {
+  const s = useS();
   const attention = accent === "attention";
   const stops: [string, string] = attention
     ? ["#E8846F", "#B3402E"]
@@ -40,7 +41,7 @@ export function PrimaryButton({ label, onPress, accent, style }: Props) {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   // the bold black default-button ring + a hard drop shadow
   ring: {
     borderRadius: radius.sm,
@@ -68,4 +69,4 @@ const s = StyleSheet.create({
     borderLeftColor: "rgba(255,255,255,0.4)",
   },
   label: { fontSize: 16, lineHeight: 20, letterSpacing: 0.2 },
-});
+}));

@@ -8,7 +8,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { Tappable } from "../src/ui/components/Tappable";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
@@ -34,6 +34,7 @@ const R = D / 2;
 
 /** The whole lens: one dot leaning where to go, or the arrival check. */
 function Ring({ dot }: { dot: Dot | null }) {
+  const st = useSt();
   let x = R;
   let y = R;
   if (dot && !dot.arrived) {
@@ -54,6 +55,8 @@ function Ring({ dot }: { dot: Dot | null }) {
 }
 
 export default function Waypath() {
+  const st = useSt();
+  const { colors } = useTheme();
   const { route, dot, status, error, navigateTo, update, clear } = useWaypathStore();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -171,7 +174,7 @@ export default function Waypath() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   input: {
     backgroundColor: colors.textPrimary + "0D",
     borderColor: colors.textSecondary + "44",
@@ -210,4 +213,4 @@ const st = StyleSheet.create({
     fontSize: 22,
   },
   status: { textAlign: "center", color: colors.textSecondary, ...typography.body },
-});
+}));

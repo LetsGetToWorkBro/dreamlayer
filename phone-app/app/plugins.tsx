@@ -8,7 +8,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
@@ -46,6 +46,8 @@ const CAP_HELP: Record<string, string> = {
  * itself (docs/MARKETPLACE.md).
  */
 export default function Plugins() {
+  const st = useSt();
+  const { colors } = useTheme();
   const index = usePluginStore((s) => s.index);
   const loading = usePluginStore((s) => s.loading);
   const offline = usePluginStore((s) => s.offline);
@@ -252,6 +254,8 @@ function PluginDetail({
   onInstall: (p: PluginEntry) => void;
   onRemove: (p: PluginEntry) => void;
 }) {
+  const st = useSt();
+  const { colors } = useTheme();
   const p = plugin;
   const paras = p ? (p.long.length ? p.long : [p.description]) : [];
   return (
@@ -355,7 +359,7 @@ function PluginDetail({
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   search: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -468,4 +472,4 @@ const st = StyleSheet.create({
     fontWeight: "700",
   },
   permHelp: { color: colors.textSecondary, fontSize: 14, flex: 1 },
-});
+}));

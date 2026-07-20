@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Tappable } from "../src/ui/components/Tappable";
-import { colors, platinum } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 import { t } from "../src/i18n";
@@ -52,6 +52,8 @@ const GROUPS: { section: string; rows: Row[] }[] = [
 ];
 
 function LinkRow({ label, onPress, last }: { label: string; onPress: () => void; last?: boolean }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <Tappable onPress={onPress} style={[s.row, last ? s.rowLast : null]}>
       <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]}>{label}</Text>
@@ -61,6 +63,7 @@ function LinkRow({ label, onPress, last }: { label: string; onPress: () => void;
 }
 
 export default function Labs() {
+  const s = useS();
   const router = useRouter();
   return (
     <Screen>
@@ -85,7 +88,7 @@ export default function Labs() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   section: { color: colors.accentMemory, marginTop: space.xl, marginBottom: space.sm },
   panel: {
     backgroundColor: platinum.face,
@@ -102,8 +105,8 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#C4C4C4",
+    borderBottomColor: platinum.line,
   },
   rowLast: { borderBottomWidth: 0 },
   chev: { ...typography.title, fontSize: 18, color: platinum.sh, marginLeft: space.sm },
-});
+}));

@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, Switch, StyleSheet } from "react-native";
-import { colors, platinum } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { Tappable } from "./Tappable";
 
@@ -9,7 +9,7 @@ import { Tappable } from "./Tappable";
 export function ConnectorCard({
   title,
   status,
-  accent = colors.accentMemory,
+  accent,
   on,
   children,
 }: {
@@ -19,6 +19,9 @@ export function ConnectorCard({
   on?: boolean;
   children?: React.ReactNode;
 }) {
+  const s = useS();
+  const { colors } = useTheme();
+  accent = accent ?? colors.accentMemory;
   return (
     <View style={[s.card, on ? { borderColor: accent, borderWidth: 1.5 } : null]}>
       <View style={s.cardHead}>
@@ -40,7 +43,7 @@ export function SwitchRow({
   value,
   onValueChange,
   disabled,
-  accent = colors.accentMemory,
+  accent,
 }: {
   label: string;
   sub?: string;
@@ -49,6 +52,9 @@ export function SwitchRow({
   disabled?: boolean;
   accent?: string;
 }) {
+  const s = useS();
+  const { colors, platinum } = useTheme();
+  accent = accent ?? colors.accentMemory;
   return (
     <View style={[s.row, disabled ? { opacity: 0.5 } : null]}>
       <View style={{ flex: 1, paddingRight: 12 }}>
@@ -69,6 +75,8 @@ export function SwitchRow({
 
 /** A single benefit bullet. */
 export function Bullet({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <View style={s.bullet}>
       <Text style={{ color: muted ? colors.textSecondary : colors.accentMemory, marginRight: 8 }}>
@@ -85,7 +93,7 @@ export function Bullet({ children, muted }: { children: React.ReactNode; muted?:
 export function PillButton({
   label,
   onPress,
-  accent = colors.accentMemory,
+  accent,
   ghost,
 }: {
   label: string;
@@ -93,6 +101,9 @@ export function PillButton({
   accent?: string;
   ghost?: boolean;
 }) {
+  const s = useS();
+  const { colors, platinum } = useTheme();
+  accent = accent ?? colors.accentMemory;
   return (
     <Tappable onPress={onPress} scaleTo={0.985} style={s.pill}>
       {(pressed) => (
@@ -124,7 +135,7 @@ export function PillButton({
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   card: {
     backgroundColor: platinum.face,
     borderRadius: 10,
@@ -170,4 +181,4 @@ const s = StyleSheet.create({
     borderLeftColor: "rgba(255,255,255,0.36)",
   },
   pillLabel: { fontSize: 15, lineHeight: 20 },
-});
+}));

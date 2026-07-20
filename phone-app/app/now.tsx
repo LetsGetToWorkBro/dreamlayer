@@ -11,7 +11,7 @@ import { StatusPill } from "../src/ui/components/StatusPill";
 import { Card } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
 import { useEntrance } from "../src/ui/anim";
-import { colors, platinum } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { pushLocal } from "../src/services/notify";
@@ -22,6 +22,8 @@ import { t } from "../src/i18n";
  * equal thirds (flex on the Pressable via containerStyle) so the labels sit
  * centered with room to breathe instead of hugging their text. */
 function QuickAction({ label, onPress, tint }: { label: string; onPress: () => void; tint?: string }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <Tappable onPress={onPress} containerStyle={{ flex: 1 }} style={s.quickBtn}>
       <Text
@@ -37,6 +39,8 @@ function QuickAction({ label, onPress, tint }: { label: string; onPress: () => v
 }
 
 export default function Now() {
+  const s = useS();
+  const { colors } = useTheme();
   const router = useRouter();
   const { paused, connected, togglePause, connect, service } = useHaloStore();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
@@ -249,7 +253,7 @@ export default function Now() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   stage: { minHeight: 260, alignItems: "center", justifyContent: "center", marginBottom: space.lg },
   pairChip: {
     marginTop: space.xl,
@@ -308,7 +312,7 @@ const s = StyleSheet.create({
   },
   evRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, gap: 8 },
   evAdd: { flexDirection: "row", gap: space.sm, alignItems: "center", marginTop: space.sm },
-  memRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
+  memRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: platinum.line },
   memRowLast: { borderBottomWidth: 0 },
   memTag: { width: 8, height: 8, borderRadius: 4, marginTop: 6, backgroundColor: colors.accentMemory, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.35)" },
-});
+}));

@@ -6,7 +6,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
@@ -14,6 +14,7 @@ const BARS = "▁▂▃▄▅▆▇█";
 
 /** A text sparkline of the heap watermark series — no chart library. */
 function Spark({ series }: { series: number[] }) {
+  const { colors } = useTheme();
   if (series.length < 2) return null;
   const lo = Math.min(...series);
   const hi = Math.max(...series);
@@ -26,6 +27,8 @@ function Spark({ series }: { series: number[] }) {
 }
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  const st = useSt();
+  const { colors } = useTheme();
   return (
     <View style={st.stat}>
       <Text style={[typography.caption, { color: colors.textSecondary }]}>{label}</Text>
@@ -35,6 +38,8 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 }
 
 export default function Vitals() {
+  const st = useSt();
+  const { colors } = useTheme();
   const v = useVitalsStore();
   const rate = Math.round(v.dismissRate() * 100);
 
@@ -92,7 +97,7 @@ export default function Vitals() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between" },
   stat: { flex: 1 },
-});
+}));

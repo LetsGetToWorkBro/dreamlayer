@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle } from "react-native-svg";
 import { useRouter } from "expo-router";
-import { platinum } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { fonts } from "../theme/fonts";
 import { Tappable } from "./Tappable";
 
@@ -50,6 +50,8 @@ function fmt(d: Date): string {
 }
 
 export function MenuBar() {
+  const s = useS();
+  const { platinum, dark } = useTheme();
   const router = useRouter();
   const [time, setTime] = React.useState(() => fmt(new Date()));
   React.useEffect(() => {
@@ -59,7 +61,7 @@ export function MenuBar() {
   return (
     <View style={s.bar}>
       <LinearGradient
-        colors={[platinum.faceHi, "#D8D8D8"]}
+        colors={[platinum.faceHi, dark ? platinum.face2 : "#D8D8D8"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={s.fill}
@@ -82,7 +84,7 @@ export function MenuBar() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ platinum, dark }) => StyleSheet.create({
   bar: {
     height: 28,
     flexDirection: "row",
@@ -96,6 +98,6 @@ const s = StyleSheet.create({
   fill: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   topHi: { position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: platinum.hi },
   mark: { paddingVertical: 6, paddingRight: 1 },
-  name: { fontFamily: fonts.chicago, fontSize: 13.5, color: "#111111" },
-  clock: { fontFamily: fonts.chicago, fontSize: 13.5, color: "#111111" },
-});
+  name: { fontFamily: fonts.chicago, fontSize: 13.5, color: dark ? platinum.ink : "#111111" },
+  clock: { fontFamily: fonts.chicago, fontSize: 13.5, color: dark ? platinum.ink : "#111111" },
+}));

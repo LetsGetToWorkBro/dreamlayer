@@ -6,7 +6,7 @@ import { useBrainStore } from "../src/state/useBrainStore";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
@@ -17,6 +17,8 @@ function latencyLabel(t: BrainTier): string {
 }
 
 function TierRow({ tier, active }: { tier: BrainTier; active: boolean }) {
+  const st = useSt();
+  const { colors } = useTheme();
   const on = tier.enabled;
   const accent = active ? colors.accentMemory : colors.textSecondary;
   return (
@@ -47,6 +49,8 @@ function TierRow({ tier, active }: { tier: BrainTier; active: boolean }) {
 }
 
 export default function BrainTiers() {
+  const st = useSt();
+  const { colors } = useTheme();
   const { model, cloud_provider, incognito, active_tier, tiers, loaded, connected, load } =
     useBrainTiersStore();
   const cloud = useBrainStore((s) => s.cloud);
@@ -112,7 +116,7 @@ export default function BrainTiers() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   ctrl: {
@@ -122,4 +126,4 @@ const st = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
-});
+}));

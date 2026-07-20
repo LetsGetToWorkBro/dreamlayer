@@ -5,7 +5,7 @@ import { View, ScrollView, StyleSheet, StyleProp, ViewStyle } from "react-native
 // edge-to-edge. This one insets identically on iOS and actually insets the
 // status/navigation bars on Android.
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
+import { makeThemedStyles } from "../theme/useTheme";
 import { gutter, space } from "../theme/spacing";
 import { CineBackdrop } from "./CineBackdrop";
 import { DemoBanner } from "./DemoBanner";
@@ -31,6 +31,7 @@ export function Screen({
   gutters?: boolean;
   menuBar?: boolean;
 }) {
+  const s = useS();
   const pad = gutters ? { paddingHorizontal: gutter } : null;
   return (
     <View style={s.root}>
@@ -60,10 +61,10 @@ export function Screen({
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: "transparent" },
   // extra bottom room so the last card clears the floating (absolute) tab bar
   scroll: { paddingTop: space.xl, paddingBottom: 116 },
   fixed: { flex: 1, paddingTop: space.xl, paddingBottom: 84 },
-});
+}));

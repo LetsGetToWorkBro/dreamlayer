@@ -18,7 +18,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { useBrainStore } from "../src/state/useBrainStore";
@@ -37,6 +37,8 @@ function fmtFold(sec: number): string {
 }
 
 export default function Rehearsal() {
+  const s = useS();
+  const { colors } = useTheme();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
 
   const onStage = useRehearsalStore((s) => s.onStage);
@@ -273,6 +275,8 @@ export default function Rehearsal() {
 }
 
 function BeatButton({ glyph, label, onPress, disabled }: { glyph: string; label: string; onPress: () => void; disabled?: boolean }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <Tappable style={[s.beatBtn, disabled && { opacity: 0.4 }]} onPress={onPress} disabled={disabled}>
       <Text style={[typography.title, { color: colors.textPrimary }]}>{glyph}</Text>
@@ -281,7 +285,7 @@ function BeatButton({ glyph, label, onPress, disabled }: { glyph: string; label:
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   recordPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -371,4 +375,4 @@ const s = StyleSheet.create({
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
   },
-});
+}));

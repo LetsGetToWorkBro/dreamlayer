@@ -1,7 +1,7 @@
 import React from "react";
 import { View, useWindowDimensions, StyleSheet } from "react-native";
 import Svg, { Defs, Pattern, RadialGradient, LinearGradient, Stop, Rect, Line } from "react-native-svg";
-import { platinum } from "../theme/colors";
+import { useTheme } from "../theme/useTheme";
 
 /**
  * CineBackdrop — the Platinum desktop behind every window. The Mac OS 8.1 grey
@@ -11,6 +11,7 @@ import { platinum } from "../theme/colors";
  * and cheap (a tiled pattern + two gradient rects).
  */
 export function CineBackdrop() {
+  const { platinum, dark } = useTheme();
   const { width, height } = useWindowDimensions();
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -23,12 +24,12 @@ export function CineBackdrop() {
           </Pattern>
           {/* light falling from the upper-left, the Platinum convention */}
           <LinearGradient id="sheen" x1="0" y1="0" x2="0.55" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.22} />
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.05 : 0.22} />
             <Stop offset="0.4" stopColor="#FFFFFF" stopOpacity={0} />
           </LinearGradient>
           <RadialGradient id="vig" cx="50%" cy="42%" rx="75%" ry="72%">
             <Stop offset="0.55" stopColor="#000000" stopOpacity={0} />
-            <Stop offset="1" stopColor="#3A3E42" stopOpacity={0.28} />
+            <Stop offset="1" stopColor={dark ? "#000000" : "#3A3E42"} stopOpacity={dark ? 0.45 : 0.28} />
           </RadialGradient>
         </Defs>
         <Rect x={0} y={0} width={width} height={height} fill="url(#pin)" />

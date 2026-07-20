@@ -19,7 +19,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
@@ -28,6 +28,8 @@ type BondState = "none" | "proposed" | "live";
 const DEMO_CODE = "rune-birch";
 
 export default function Confluence() {
+  const s = useS();
+  const { colors } = useTheme();
   const [bond, setBond] = useState<BondState>("none");
   const [codeEntry, setCodeEntry] = useState("");
   const [togetherness, setTogetherness] = useState(0.82);
@@ -157,7 +159,7 @@ export default function Confluence() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   bondPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -191,4 +193,4 @@ const s = StyleSheet.create({
   pingBtn: { alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.lg },
   dissolve: { alignSelf: "center", marginTop: space.lg, paddingVertical: space.md, paddingHorizontal: space.xxl },
   footer: { color: colors.statusPaused, textAlign: "center", marginTop: space.xxl, marginBottom: space.lg, paddingHorizontal: space.xxxl },
-});
+}));

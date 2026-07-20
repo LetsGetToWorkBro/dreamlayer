@@ -6,11 +6,12 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
 function Impact({ n }: { n: number }) {
+  const { colors } = useTheme();
   const k = Math.max(0, Math.min(5, n));
   return (
     <Text style={{ color: colors.accentMemory, letterSpacing: 2 }}>
@@ -21,6 +22,8 @@ function Impact({ n }: { n: number }) {
 }
 
 function CapRow({ c }: { c: CapItem }) {
+  const st = useSt();
+  const { colors } = useTheme();
   const profile = c.profiles && c.profiles.length ? c.profiles[0] : null;
   return (
     <Card style={{ marginBottom: space.md }}>
@@ -37,6 +40,7 @@ function CapRow({ c }: { c: CapItem }) {
 }
 
 export default function Capabilities() {
+  const { colors } = useTheme();
   const { learnable, activeCount, items, loaded, connected, load } = useCapabilityStore();
   useEffect(() => {
     load();
@@ -79,11 +83,11 @@ export default function Capabilities() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   meta: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: space.sm,
   },
-});
+}));
