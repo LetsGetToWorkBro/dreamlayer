@@ -10,14 +10,66 @@ False so the caller can fall back to the browser.
 """
 from __future__ import annotations
 
-# A module-level reference so the window (and its web view) survive past the
-# menu callback and aren't garbage-collected out from under AppKit.
+# Module-level references so the window (and its web view / UI delegate)
+# survive past the menu callback and aren't garbage-collected out from under
+# AppKit. WKWebView holds its uiDelegate WEAKLY, so dropping ours would turn
+# every confirm()/alert() in the panel back into a silent no-op.
 _window = None
+_ui_delegate = None
 
 
 def _load(web, url: str) -> None:
     from Foundation import NSURL, NSURLRequest
     web.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(url)))
+
+
+def _make_ui_delegate():
+    """A WKUIDelegate that gives the panel real JS dialogs.
+
+    A bare WKWebView has NO implementation for the JavaScript dialog hooks, so
+    window.confirm() resolves false and alert() vanishes — silently. The panel
+    guards destructive actions (rotate token, erase, restore backup) behind
+    confirm(), so without this delegate those buttons do nothing in the native
+    window while working fine in Safari. NSAlert on the main thread is the
+    canonical macOS answer."""
+    try:
+        import objc
+        from AppKit import NSAlert, NSAlertFirstButtonReturn
+        from Foundation import NSObject
+    except Exception:
+        return None
+
+    class _PanelUIDelegate(NSObject):  # pragma: no cover — AppKit-only path
+        def webView_runJavaScriptAlertPanelWithMessage_initiatedByFrame_completionHandler_(
+                self, webview, message, frame, handler):
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_("DreamLayer")
+            alert.setInformativeText_(str(message))
+            alert.addButtonWithTitle_("OK")
+            alert.runModal()
+            handler()
+
+        webView_runJavaScriptAlertPanelWithMessage_initiatedByFrame_completionHandler_ = objc.selector(
+            webView_runJavaScriptAlertPanelWithMessage_initiatedByFrame_completionHandler_,
+            signature=b"v@:@@@@?")
+
+        def webView_runJavaScriptConfirmPanelWithMessage_initiatedByFrame_completionHandler_(
+                self, webview, message, frame, handler):
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_("DreamLayer")
+            alert.setInformativeText_(str(message))
+            alert.addButtonWithTitle_("OK")
+            alert.addButtonWithTitle_("Cancel")
+            handler(alert.runModal() == NSAlertFirstButtonReturn)
+
+        webView_runJavaScriptConfirmPanelWithMessage_initiatedByFrame_completionHandler_ = objc.selector(
+            webView_runJavaScriptConfirmPanelWithMessage_initiatedByFrame_completionHandler_,
+            signature=b"v@:@@@@?")
+
+    try:
+        return _PanelUIDelegate.alloc().init()
+    except Exception:
+        return None
 
 
 def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
@@ -63,6 +115,10 @@ def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
         conf = WKWebViewConfiguration.alloc().init()
         web = WKWebView.alloc().initWithFrame_configuration_(rect, conf)
         web.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        global _ui_delegate
+        _ui_delegate = _make_ui_delegate()
+        if _ui_delegate is not None:
+            web.setUIDelegate_(_ui_delegate)
         win.setContentView_(web)
         _load(web, url)
 

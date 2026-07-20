@@ -348,6 +348,31 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .xmodal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     padding:24px;background:rgba(8,12,14,.35)}
   .xmodal.on{display:flex}
+  /* info bubble — a small Platinum dialog: what a capability/pack ACTUALLY buys
+     you, as before→after meters a person can read at a glance */
+  .imodal{position:fixed;inset:0;z-index:52;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(8,12,14,.35)}
+  .imodal.on{display:flex}
+  .ibox{width:min(480px,92vw);max-height:82vh;overflow:auto;background:var(--paper);
+    border:1px solid var(--frame);box-shadow:var(--bev-out),4px 4px 0 rgba(0,0,0,.22);padding:0}
+  .ibox .ihead{display:flex;align-items:center;gap:8px;background:var(--stripes);
+    padding:3px 6px;border-bottom:1px solid var(--frame)}
+  .ibox .ihead b{font:12px var(--chi);background:var(--plat);padding:0 8px}
+  .ibox .ibody{padding:14px 16px}
+  .ibox .ilead{font:13px/1.5 var(--sg);color:var(--text);margin:0 0 10px}
+  .irow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+  .irow:first-of-type{border-top:0}
+  .irow .it{flex:1;min-width:0;font:12.5px var(--sg);color:var(--text)}
+  .irow .it .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+  .iscore{display:flex;align-items:center;gap:6px;flex:none;font:11.5px var(--chi);color:var(--muted)}
+  .meter{width:52px;height:7px;background:var(--surf2);border:1px solid var(--line);position:relative;flex:none}
+  .meter i{position:absolute;inset:0;right:auto;background:var(--ghost)}
+  .meter.aft i{background:var(--memory)}
+  .iarrow{color:var(--memory);font-weight:700}
+  .ibtn{width:17px;height:17px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+    font:11px var(--chi);color:var(--memory);background:linear-gradient(180deg,#F6F6F6,#DEDEDE);
+    border:1px solid var(--frame);border-radius:50%;cursor:pointer;padding:0}
+  .ibtn:hover{filter:brightness(1.04)}
   .xcard{max-width:440px;width:100%;background:var(--plat);
     border:2px solid var(--frame);border-radius:0;overflow:hidden;
     box-shadow:var(--bev-out),inset 2px 2px 0 #EFEFEF,6px 6px 0 rgba(0,0,0,.35)}
@@ -823,6 +848,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   </div>
 </div>
 
+<div class="imodal" id="imodal" onclick="if(event.target===this)closeInfo()">
+  <div class="ibox">
+    <div class="ihead"><span class="tstripes"></span><b id="ititle"></b><span class="tstripes"></span></div>
+    <div class="ibody" id="ibody"></div>
+    <div style="padding:0 16px 14px;text-align:right"><button class="ghost sm" onclick="closeInfo()">Done</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="browser">
   <div class="modal">
     <h3>Choose a folder</h3>
@@ -996,7 +1029,7 @@ function openX(i){const x=EXPLAINERS[i];
   $("xkick").textContent="How it works";
   $("xtitle").textContent=x.t;$("xtext").textContent=x.b;$("xmodal").classList.add("on");}
 function closeX(){$("xmodal").classList.remove("on");if(XG)XG.stop();}
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeX();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeX();closeInfo();}});
 
 /* sidebar navigation — group the sections into app-style views. Each section
    is matched to a page by its heading, so the layout needs no per-section markup. */
@@ -1054,19 +1087,52 @@ const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
               unsupported:"var(--ghost)",external:"var(--memory)"};
 let CAPFROZEN=false;
 let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a frozen build carrying pip)
+/* --- info bubble: the exact improvement, as before→after meters --- */
+function fmtScore(v){const n=Number(v)||0;return (Math.round(n*2)/2).toString();}
+function meterPair(before,after){
+  const b=Math.max(0,Math.min(5,Number(before)||0)),a=Math.max(0,Math.min(5,Number(after)||0));
+  return `<span class="iscore"><span class="meter"><i style="width:${b/5*100}%"></i></span>${fmtScore(b)}/5`+
+    ` <span class="iarrow">→</span> <span class="meter aft"><i style="width:${a/5*100}%"></i></span>${fmtScore(a)}/5</span>`;
+}
+function openInfo(title,html){$("ititle").textContent=title;$("ibody").innerHTML=html;
+  $("imodal").classList.add("on");}
+function closeInfo(){$("imodal").classList.remove("on");}
+function capInfo(key){
+  const it=(LASTCAPS&&LASTCAPS.items||[]).find(x=>x.key===key); if(!it)return;
+  openInfo(it.key,
+    `<p class="ilead">${esc(it.title)}.</p>`+
+    (it.gain?`<p class="ilead" style="color:var(--muted)">${esc(it.gain)}.</p>`:"")+
+    `<div class="irow"><div class="it">Out of the box <span class="sub">→ with this installed</span></div>${meterPair(it.before,it.after)}</div>`);
+}
+function packInfo(key){
+  const p=(LASTCAPS&&LASTCAPS.packs||[]).find(x=>x.key===key); if(!p)return;
+  const items=(LASTCAPS.items||[]).filter(it=>p.caps.includes(it.key));
+  const rows=items.map(it=>`<div class="irow"><div class="it">${esc(it.title)}`+
+    (it.gain?`<span class="sub">${esc(it.gain)}</span>`:"")+
+    `</div>${meterPair(it.before,it.after)}</div>`).join("");
+  const avg=arr=>arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:0;
+  const b=avg(items.map(it=>Number(it.before)||0)),a=avg(items.map(it=>Number(it.after)||0));
+  openInfo(p.name,
+    `<p class="ilead">${esc(p.tagline)}</p>`+
+    `<p class="ilead" style="color:var(--muted)">Downloads ${esc(p.size)} of open-source AI onto this Mac. `+
+    `Everything runs locally — nothing about you is uploaded; models may fetch extra data on first use. `+
+    `The Brain stays usable while it installs, and every capability can be switched off afterwards.</p>`+
+    `<div class="irow"><div class="it"><b>Overall</b> <span class="sub">out of the box → with this pack</span></div>${meterPair(b,a)}</div>`+rows);
+}
 function capRight(it){
+  const info=`<button class="ibtn" title="What you gain" aria-label="What ${esc(it.key)} gains you" onclick="capInfo(${esc(JSON.stringify(it.key))})">i</button>`;
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
-    return `<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+    return info+`<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
-    if(CAPFROZEN&&!CAPINSTALL) return `<span class="sstate">not in this build — runs on a source install</span>`;
-    if(CAPFROZEN) return `<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
-    return `<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`;
+    if(CAPFROZEN&&!CAPINSTALL) return info+`<span class="sstate">not in this build — runs on a source install</span>`;
+    if(CAPFROZEN) return info+`<span class="sstate">add with a pack ↓</span>`;   // frozen but installable — packs are the one-click unit
+    return info+`<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`;
   }
-  if(it.state==="external") return `<span class="sstate">${esc(it.note||"external service")}</span>`;
-  return `<span class="sstate">macOS only</span>`;
+  if(it.state==="external") return info+`<span class="sstate">${esc(it.note||"external service")}</span>`;
+  return info+`<span class="sstate">macOS only</span>`;
 }
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
   if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
@@ -1094,7 +1160,14 @@ const PACKSTATE={installed:"installed",partial:"partially installed",available:"
 function packCard(p){
   const job=p.install||null;
   let cta;
-  if(job&&job.state==="installing") cta=`<span class="sstate">installing… ${esc(job.detail||"")}</span>`;
+  if(job&&job.state==="installing"){
+    // a real download bar, not a static "installing…" — percent streams from pip
+    const pc=Math.max(0,Math.min(99,Number(job.percent)||0));
+    cta=`<div style="flex:1;min-width:0"><div class="pbar" style="margin:0">`+
+      `<div class="pbar-t"><div class="pbar-f" style="width:${pc}%"></div></div>`+
+      `<div class="pbar-p">${pc}%</div></div>`+
+      `<div class="conn-s" style="margin-top:3px">${esc(job.detail||"installing…")}</div></div>`;
+  }
   else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
   else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack(${esc(JSON.stringify(p.key))})">Retry</button>`;
   else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
@@ -1102,7 +1175,8 @@ function packCard(p){
   else cta=`<button class="sm" onclick="installPack(${esc(JSON.stringify(p.key))})">${p.state==="partial"?"Complete pack":"Install pack"}</button>`;
   const stars="●".repeat(p.impact)+"○".repeat(5-p.impact);
   return `<div class="x" style="cursor:default">
-    <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}</div>
+    <div class="x-t">${esc(p.name)}${p.recommended?' <span class="tag" style="color:var(--memory)">recommended</span>':''}
+      <button class="ibtn" style="float:right" title="What you gain" aria-label="What the ${esc(p.name)} pack gains you" onclick="packInfo(${esc(JSON.stringify(p.key))})">i</button></div>
     <div class="x-b">${esc(p.tagline)}</div>
     <div class="conn-s" style="margin:8px 0 0">impact <span style="color:var(--memory)">${stars}</span> · download ${esc(p.size)} · ${p.caps.length} capabilities</div>
     <div class="row" style="margin-top:8px">${cta}</div></div>`;
@@ -1128,17 +1202,15 @@ function renderPackNudge(packs){
 function dismissPackNudge(){localStorage.dlPackNudgeDismissed="1";$("packNudge").style.display="none";}
 async function installPack(key){
   const p=(LASTCAPS&&LASTCAPS.packs||[]).find(x=>x.key===key); if(!p)return;
-  const warn=`Install the ${p.name} pack?\n\n${p.tagline}\n\n`+
-    `What this does: downloads about ${p.size} of open-source AI libraries onto this Mac `+
-    `(${p.caps.length} capabilities). Everything runs locally — nothing about you is uploaded, `+
-    `and models may fetch extra data on their first use. The Brain stays usable while it installs, `+
-    `and you can switch any capability off afterwards from this page.`;
-  if(!confirm(warn))return;
+  // no blocking dialog: the ⓘ bubble carries the what-and-why, the click IS the
+  // consent, and the download starts immediately with a live progress bar.
+  // (a JS confirm dialog is also a silent no-op inside the app's native
+  // WKWebView window — the old one made this button do literally nothing there.)
   let r;try{r=await api("/dreamlayer/packs",{method:"POST",body:JSON.stringify({pack:key})});}
   catch(e){toast("Brain offline");return;}
   if(r&&r.error){toast(r.error);return;}
   if(r&&r.items){LASTCAPS=r;CAPFROZEN=!!r.frozen;renderCaps(r);renderPacks(r.packs);
-    toast(p.name+" installing — this can take a while");
+    toast(p.name+" downloading…");
     schedulePackPoll();}
 }
 let packPollT=null;
@@ -1146,7 +1218,7 @@ function schedulePackPoll(){clearTimeout(packPollT);packPollT=setTimeout(async()
   let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
   if(r&&r.items){LASTCAPS=r;renderCaps(r);renderPacks(r.packs);
     if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
-},5000);}
+},1500);}   // 1.5s while installing — the bar visibly moves (matches the model pull)
 let LASTCAPS=null;
 
 async function toggleCap(key,disabled){

@@ -1646,17 +1646,65 @@ def _pip_env() -> dict:
     return env
 
 
-def _run_pip(reqs: list) -> tuple:
-    """Default pack runner: pip install into this interpreter's environment.
-    Returns (ok, last_output_lines)."""
+def _pip_progress_parser(job: dict, total: int):
+    """Turn pip's line output into an honest, monotonic job percent.
+
+    pip narrates its work — "Collecting x", "Downloading x (12.3 MB)", "Using
+    cached x", "Installing collected packages" — so a bar can move on REAL
+    events instead of a fake ticker. The denominator grows as pip discovers
+    transitive deps (start from the pack's own requirement count), download
+    events advance 5→85, the install phase pins 90, and _install_pack sets 100
+    on success. max() keeps the bar from ever sliding backward."""
+    seen: set = set()
+    done: set = set()
+
+    def bump(p: int) -> None:
+        job["percent"] = max(int(job.get("percent") or 0), max(0, min(99, p)))
+
+    def on_line(raw: str) -> None:
+        line = raw.strip()
+        if line.startswith("Collecting "):
+            name = line.split(None, 1)[1].split("==")[0].split(">=")[0].split("[")[0]
+            seen.add(name)
+            job["detail"] = f"resolving {name}"
+            bump(5 + int(80 * len(done) / max(total, len(seen))))
+        elif line.startswith(("Downloading ", "Using cached ")) or " Downloading " in line:
+            token = line.replace("Using cached ", "Downloading ").split("Downloading ", 1)[-1]
+            done.add(token.split()[0] if token else line)
+            job["detail"] = f"downloading {len(done)} of ~{max(total, len(seen))}"
+            bump(5 + int(80 * len(done) / max(total, len(seen))))
+        elif line.startswith("Installing collected packages"):
+            job["detail"] = "installing…"
+            bump(90)
+
+    return on_line
+
+
+def _run_pip(reqs: list, on_line=None) -> tuple:
+    """Default pack runner: pip install into this interpreter's environment,
+    streaming each output line into `on_line` (progress). Returns
+    (ok, last_output_lines)."""
     import subprocess
     import sys
-    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", *reqs]
+    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
+           "--progress-bar", "off", *reqs]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                              env=_pip_env())
-        tail = (proc.stdout + proc.stderr).strip().splitlines()[-6:]
-        return proc.returncode == 0, "\n".join(tail)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                env=_pip_env())
+        tail: list = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            tail.append(line.rstrip())
+            if len(tail) > 6:
+                tail.pop(0)
+            if on_line:
+                try:
+                    on_line(line)
+                except Exception:               # a progress hiccup never kills pip
+                    pass
+        code = proc.wait(timeout=3600)
+        return code == 0, "\n".join(tail)
     except Exception as exc:                     # pip missing, timeout, ...
         return False, str(exc)
 
@@ -1664,23 +1712,39 @@ def _run_pip(reqs: list) -> tuple:
 _PACK_RUNNER = _run_pip
 
 
-def _run_pip_target(reqs: list, target: str) -> tuple:
+def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     """Frozen-app pack runner: install into a WRITABLE sidecar via in-process pip
     ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
     out to, and must not — can not — install into itself). pip runs inside THIS
     interpreter, so it resolves wheels for the bundled Python's own version and
-    platform. Returns (ok, detail). Absent pip → a clear failure, never a crash —
-    the panel then still shows the honest source-install note (audit 2026-07-19)."""
+    platform. Progress: in-process pip narrates through the ``pip`` logger, so a
+    temporary handler feeds `on_line` the same lines the subprocess path parses —
+    no stdout redirection games (which would be process-global and thread-unsafe).
+    Returns (ok, detail). Absent pip → a clear failure, never a crash — the panel
+    then still shows the honest source-install note (audit 2026-07-19)."""
     try:
         from pip._internal.cli.main import main as pip_main
     except Exception as exc:                     # pip not bundled in this build
         return False, f"this build can't add packs (pip unavailable: {exc})"
     argv = ["install", "--target", str(target), "--upgrade", "--no-input",
             "--no-cache-dir", "--disable-pip-version-check",
-            "--no-warn-script-location", *reqs]
+            "--no-warn-script-location", "--progress-bar", "off", *reqs]
+    import logging
     import os
+
+    class _LineHandler(logging.Handler):         # pip's narration → on_line
+        def emit(self, record):
+            try:
+                if on_line:
+                    on_line(record.getMessage())
+            except Exception:                    # progress must never break pip
+                pass
+
+    handler = _LineHandler()
+    pip_logger = logging.getLogger("pip")
     saved = {k: os.environ.pop(k, None)           # in-process pip reads these live;
              for k in ("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_CONFIG_FILE")}
+    pip_logger.addHandler(handler)
     try:
         code = pip_main(argv)
     except SystemExit as e:                       # pip can raise SystemExit
@@ -1688,6 +1752,7 @@ def _run_pip_target(reqs: list, target: str) -> tuple:
     except Exception as exc:                       # noqa: BLE001 — never crash the job thread
         return False, str(exc)[-400:]
     finally:
+        pip_logger.removeHandler(handler)
         for k, v in saved.items():                # restore the caller's environment
             if v is not None:
                 os.environ[k] = v
@@ -1722,15 +1787,31 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
     with _PACK_LOCK:
         if any(j.get("state") == "installing" for j in _PACK_JOBS.values()):
             return {"error": "another pack is already installing"}
-        job = {"state": "installing", "detail": f"{len(reqs)} packages", "ts": time.time()}
+        job = {"state": "installing", "percent": 0,
+               "detail": f"{len(reqs)} packages", "ts": time.time()}
         _PACK_JOBS[pack_key] = job
+
+    on_line = _pip_progress_parser(job, len(reqs))
+
+    def _call_runner(runner, *args):
+        """Injected test runners are plain `lambda reqs:` — only feed on_line
+        to a runner that declares it, so the seam stays backward-compatible."""
+        import inspect
+        try:
+            if "on_line" in inspect.signature(runner).parameters:
+                return runner(*args, on_line=on_line)
+        except (TypeError, ValueError):
+            pass
+        return runner(*args)
 
     def work():
         if frozen:
-            ok, detail = _PACK_RUNNER_FROZEN(reqs, str(pack_site_dir(brain.cfg_dir)))
+            ok, detail = _call_runner(_PACK_RUNNER_FROZEN, reqs,
+                                      str(pack_site_dir(brain.cfg_dir)))
         else:
-            ok, detail = _PACK_RUNNER(reqs)
+            ok, detail = _call_runner(_PACK_RUNNER, reqs)
         job["state"] = "done" if ok else "failed"
+        job["percent"] = 100 if ok else job.get("percent", 0)
         job["detail"] = ("installed — reload the panel; restart the Brain if a "
                          "capability stays dark" if ok else (detail or "failed")[-400:])
         job["ts"] = time.time()
