@@ -22,6 +22,18 @@
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <link rel="canonical" href="https://dreamlayer.app/">
 <meta name="theme-color" content="#DDDDDD">
+<script>
+/* Midnight pre-paint — apply the stored Appearance before first paint.
+   dltheme = "midnight" | "platinum"; unset follows the system scheme. */
+(function(){
+  var t=null; try{ t=localStorage.getItem("dltheme"); }catch(e){}
+  if(t==="midnight" || (t!=="platinum" && matchMedia("(prefers-color-scheme: dark)").matches)){
+    document.documentElement.classList.add("midnight");
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute("content","#26282B");
+  }
+})();
+</script>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="preload" href="assets/fonts/ChicagoFLF.woff2" as="font" type="font/woff2" crossorigin>
@@ -196,6 +208,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   color:#8A8A8A;padding:4px 16px 3px 18px}
 .mpanel .deskpick{padding-left:34px;position:relative;justify-content:flex-start;gap:0}
 .mpanel .deskpick .chk{position:absolute;left:16px;width:12px;text-align:center}
+/* the Appearance radio-list (same construction as Desktop Picture) */
+.mpanel .themepick{padding-left:34px;position:relative;justify-content:flex-start;gap:0}
+.mpanel .themepick .chk{position:absolute;left:16px;width:12px;text-align:center}
 /* balloon help */
 @media (hover:hover){
   [data-balloon]{position:relative}
@@ -948,6 +963,113 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   .deskicons{opacity:1;transform:none;transition:none}
   #boot{display:none}
 }
+
+/* ============================================================
+   Midnight Platinum — the dark Appearance (DreamLayer menu →
+   Appearance). Class "midnight" on <html>, persisted as the
+   dltheme key; the head snippet applies it before first paint.
+   Same Platinum construction — 1px black frames, hard bevels,
+   pinstripes, hard black offset shadows — recut in graphite.
+   The dark product "screens" (hero field, HUD orbs, scopes,
+   terminal, QuickTime plate) are already screens: untouched.
+   ============================================================ */
+html.midnight{
+  color-scheme:dark;
+  --plat:#3E4044; --plat2:#36383C; --plat3:#2E3033;
+  --pl-hi:#55585D; --pl-sh:#232529; --pl-dk:#17181B;
+  --paper:#292B2E; --ink:#E6E8E9; --ink2:#9FA6AA;
+  --teal-ink:#2CC79A; --coral-ink:#E06B52;
+  --desk:#0A0F11;
+}
+/* desktop pattern — a shade deeper; the photo wallpapers stay photos */
+html.midnight body:not(.deskpic){background-image:
+  radial-gradient(rgba(44,199,154,.07) 1px, transparent 1.2px),
+  conic-gradient(from 90deg at 1px 1px, rgba(255,255,255,.03) 90deg, transparent 0)}
+/* boot — the grey startup screen goes graphite */
+html.midnight #boot{background-color:#26282B;
+  background-image:conic-gradient(from 90deg at 1px 1px, rgba(255,255,255,.05) 90deg, transparent 0)}
+html.midnight .splash{background:#34373B}
+html.midnight .splash h1{color:#E6E8E9}
+html.midnight .splash p{color:#9FA6AA}
+html.midnight .splash .pbar{background:#1F2124}
+html.midnight #boot .hint{color:#8A8F93}
+/* menu bar */
+html.midnight .menubar{background:linear-gradient(180deg,#4A4E54,#34373B);
+  box-shadow:inset 0 1px 0 #565A60}
+html.midnight .mitem,html.midnight .mclock{color:#E6E8E9}
+html.midnight .mitem[aria-expanded="true"],html.midnight .mitem:active{background:var(--hi);color:#fff}
+/* pull-down panels */
+html.midnight .mpanel{background:#34373B}
+html.midnight .mpanel a,html.midnight .mpanel button{color:#E6E8E9}
+html.midnight .mpanel a:hover,html.midnight .mpanel button:hover,
+html.midnight .mpanel a:focus-visible,html.midnight .mpanel button:focus-visible{
+  background:var(--hi);color:#fff}
+html.midnight .mpanel .mdim{color:#9FA6AA}
+html.midnight .mpanel a:hover .mdim{color:#D8D8FF}
+html.midnight .mpanel hr{border-top-color:#232529;border-bottom-color:#4E5156}
+html.midnight .mpanel .mdl-head{color:#979CA1}
+html.midnight .mpanel .chk{color:#7B87FF}
+html.midnight .mpanel a:hover .chk,html.midnight .mpanel button:hover .chk{color:#fff}
+/* windows */
+html.midnight .mw{box-shadow:var(--bev-out), inset 2px 2px 0 #494C51, 4px 4px 0 rgba(0,0,0,.5)}
+html.midnight .mw.sub{box-shadow:var(--bev-out),3px 3px 0 rgba(0,0,0,.45)}
+html.midnight .tstripes{background:repeating-linear-gradient(180deg,#4E5156 0 1px,#3A3C40 1px 2px,#2E3033 2px 3px)}
+html.midnight .ttext,html.midnight .mw.sub .ttext{color:#E6E8E9}
+html.midnight .mw:not(.active) .ttext{color:#8A8F93}
+html.midnight .wbox{background:linear-gradient(135deg,#5C5F65,#3A3C40)}
+html.midnight .wbox:active{background:#1F2124}
+html.midnight .mw:not(.active) .wbox{border-color:#55585D}
+html.midnight .wbox.collapse::after{background:#D9DBDD;box-shadow:0 1px 0 rgba(0,0,0,.55)}
+html.midnight .wbox.zoom::after{border-color:#D9DBDD}
+/* the decorative scrollbar */
+html.midnight .wsb{background-color:#26282B;
+  background-image:conic-gradient(from 90deg at 1px 1px,rgba(255,255,255,.06) 90deg,transparent 0)}
+html.midnight .wsb i{background:linear-gradient(135deg,#8A93F2,#5A61C8);
+  box-shadow:inset 1px 1px 0 rgba(255,255,255,.35)}
+/* buttons (the teal default button stays exactly as-is) */
+html.midnight .pbtn{background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+html.midnight .pbtn:active{background:#1F2124;color:#fff;box-shadow:var(--bev-in)}
+html.midnight .pbtn.go{background:linear-gradient(180deg,#49E8BC,#17AE85);color:#00251C}
+html.midnight .pbtn.go:active{background:#0B6B52;color:#fff}
+/* type on paper */
+html.midnight .eyebrow{border-bottom-color:rgba(44,199,154,.4)}
+/* raised cards on paper */
+html.midnight .can,html.midnight .getapp,html.midnight .pair-glyph,
+html.midnight .hud-float figcaption,html.midnight .soon .device,
+html.midnight .walk-steps li.on{background:#33363B}
+html.midnight .feat{border-top-color:#3B3E43}
+html.midnight .speek .inc{color:#8F979C}
+/* architecture tiers */
+html.midnight .tier .node{background:var(--paper)}
+html.midnight .tier.lit .node{background:var(--teal-ink);box-shadow:0 0 0 3px rgba(44,199,154,.22)}
+html.midnight .tier.cloud.lit .node{background:#7A868C;box-shadow:0 0 0 3px rgba(122,134,140,.25)}
+html.midnight .tier .rail i{background:#3B3E43}
+html.midnight .tier.cloud .k{color:#97A1A7}
+/* software */
+html.midnight .sw-shot .shot::after{background:linear-gradient(transparent,#292B2E)}
+/* privacy veil alert + modal */
+html.midnight .malert{box-shadow:var(--bev-out), inset 2px 2px 0 #494C51, 6px 6px 0 rgba(0,0,0,.55)}
+html.midnight .hex svg path{stroke:#E06B52}
+html.midnight .veil-contract span::before{background:#1F2124}
+html.midnight .modalveil{background:rgba(4,7,9,.55)}
+/* forms */
+html.midnight .early-row input{background:#1F2124}
+/* QuickTime chrome */
+html.midnight .qbtn{background:linear-gradient(180deg,#54575C,#37393D)}
+html.midnight .qbtn:active{background:#1F2124;color:#fff}
+html.midnight .qtrack{background:#1F2124}
+html.midnight .qtrack i{background:linear-gradient(135deg,#8A93F2,#5A61C8)}
+html.midnight .qtime{color:#C3C8CB}
+/* About This Layer */
+html.midnight .membar .trk{background:#1F2124}
+html.midnight .about-moof{color:#9FA6AA}
+/* footer */
+html.midnight footer{box-shadow:inset 0 1px 0 #55585D}
+html.midnight .foot small{color:#9FA6AA}
+/* closing window */
+html.midnight .soon .body a{border-bottom-color:rgba(44,199,154,.45)}
+/* focus rings read periwinkle on graphite */
+html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
 </style>
 </head>
 <body>
@@ -993,6 +1115,10 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
   <button class="deskpick" data-pic="dawn"><span class="chk"></span>Dawn</button>
   <button class="deskpick" data-pic="juno"><span class="chk"></span>The Scene</button>
   <button class="deskpick" data-pic="pattern"><span class="chk"></span>Platinum Pattern</button>
+  <hr>
+  <div class="mdl-head">Appearance</div>
+  <button class="themepick" data-theme="platinum"><span class="chk"></span>Platinum</button>
+  <button class="themepick" data-theme="midnight"><span class="chk"></span>Midnight Platinum</button>
   <hr>
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer.dmg">Download for Mac <span class="mdim">.dmg</span></a>
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer-Setup.exe">Download for Windows <span class="mdim">.exe</span></a>
@@ -2859,6 +2985,24 @@ mveil.addEventListener("click",closeAbout);
   apply(pic);
   picks.forEach(function(p){ p.addEventListener("click",function(){
     pic=p.dataset.pic; try{ localStorage.setItem("dldeskpic",pic); }catch(e){} apply(pic);
+  }); });
+})();
+
+/* ---------- Appearance picker (Midnight Platinum) ---------- */
+(function(){
+  var root=document.documentElement;
+  var picks=[].slice.call(document.querySelectorAll(".themepick"));
+  function apply(t){
+    root.classList.toggle("midnight", t==="midnight");
+    picks.forEach(function(p){ p.querySelector(".chk").textContent = p.dataset.theme===t ? "✓" : ""; });
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute("content", t==="midnight" ? "#26282B" : "#DDDDDD");
+  }
+  apply(root.classList.contains("midnight") ? "midnight" : "platinum");   // pre-paint set the class
+  picks.forEach(function(p){ p.addEventListener("click",function(){
+    var t=p.dataset.theme;
+    try{ localStorage.setItem("dltheme",t); }catch(e){}
+    apply(t);
   }); });
 })();
 
