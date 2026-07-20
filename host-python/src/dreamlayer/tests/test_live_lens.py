@@ -549,6 +549,31 @@ class TestOneLens:
         assert brain.config.cloud_calls == 0
         assert not any(i["kind"] == "look" for i in brain.activity.recent())
 
+    def test_ambient_look_is_local_only_and_leaves_no_trace(self, tmp_path, monkeypatch):
+        # A continuous-loop (ambient) frame must NOT consult the world lens /
+        # plugins / remote vision, and must write NO ledger entry — otherwise the
+        # several-a-minute cadence floods the ledger and could auto-egress every
+        # frame to a configured VLM. Only a deliberate tap escalates + records.
+        pytest.importorskip("PIL")
+        brain = self._world_brain(tmp_path, self.PRICE)   # full VLM + plugin brain
+        monkeypatch.setattr(live, "_ladder", lambda arr: ("mug", 0.9))
+        # a deliberate tap escalates to the full lens and records the sighting
+        tap = look(brain, _jpeg())
+        assert tap["label"] == "price tag"
+        n_after_tap = sum(1 for i in brain.activity.recent() if i["kind"] == "look")
+        assert n_after_tap >= 1
+        # now an ambient frame: it must NOT touch the world lens (boom guards that)
+        # and must add NO new ledger trace, and egress nothing
+        monkeypatch.setattr(brain, "world_lens",
+                            lambda: (_ for _ in ()).throw(
+                                AssertionError("ambient consulted the world lens")))
+        out = look(brain, _jpeg(), ambient=True)
+        assert out["ok"] is True and out["label"] == "mug"   # local classifier answered
+        assert out["panel"]["rows"] == []                    # shape parity, no providers
+        assert brain.config.cloud_calls == 0                 # nothing egressed
+        n_after_ambient = sum(1 for i in brain.activity.recent() if i["kind"] == "look")
+        assert n_after_ambient == n_after_tap                # ambient left no trace
+
     def test_smart_path_error_flags_degraded_not_silent(self, tmp_path, monkeypatch):
         # REVERT-FAILING (R2, refute 2026-07-20): when the world lens ERRORS
         # (provider crash, model timeout) the look still falls to the honest floor

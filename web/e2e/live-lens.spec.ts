@@ -53,4 +53,61 @@ test.describe("Live Lens page in a real browser", () => {
       .toBeGreaterThan(0);
     await expect(page.locator(".notice")).toHaveCount(0);
   });
+
+  // The AAA overhaul: continuous ambient recognition, the rich panel, the live
+  // toggle, and tap-to-escalate — all driven by a real browser with the look
+  // route mocked so a labelled result renders deterministically.
+  test("runs the continuous ambient loop, renders the panel, and escalates on tap", async ({ page }) => {
+    const looks: { ambient: boolean }[] = [];
+    await page.route("**/dreamlayer/live/look**", async (route) => {
+      looks.push({ ambient: /[?&]ambient=1/.test(route.request().url()) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true, label: "coffee mug", confidence: 0.91, tier: "laptop",
+          lines: ["coffee mug · 91%"],
+          panel: {
+            type: "ObjectPanelCard", primary: "coffee mug", label: "coffee mug",
+            confidence: 0.91, rows: [{ label: "$4.50 → $4.95", source: "currency" }],
+            sources: ["currency"], footer: "91% · on-device",
+          },
+        }),
+      });
+    });
+
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(String(e)));
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+
+    // live mode is the default (glasses never wait for a tap)
+    await expect(page.locator("#livebtn")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#livest")).toHaveText("live");
+
+    // 1. the loop auto-fires WITHOUT any tap, and those frames carry ambient=1
+    await expect.poll(() => looks.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    expect(looks.some((l) => l.ambient)).toBe(true);
+
+    // 2. a labelled result paints the HUD and the rich provider panel
+    await expect(page.locator("#hud")).toContainText("coffee mug");
+    await expect(page.locator("#panel")).toHaveClass(/on/);
+    await expect(page.locator("#panel")).toContainText("coffee mug");
+    await expect(page.locator("#panel")).toContainText("$4.95");
+    await expect(page.locator("#panel")).toContainText("currency");
+
+    // 3. a deliberate tap escalates — a look WITHOUT the ambient flag
+    const before = looks.length;
+    await page.locator("#lens").click();
+    await expect.poll(() => looks.length, { timeout: 6_000 }).toBeGreaterThan(before);
+    expect(looks.some((l) => !l.ambient)).toBe(true);
+
+    // 4. turning live OFF stops the loop (no new looks after a quiet period)
+    await page.locator("#livebtn").click();
+    await expect(page.locator("#livest")).toHaveText("tap");
+    const frozen = looks.length;
+    await page.waitForTimeout(3_000);
+    expect(looks.length).toBe(frozen);
+
+    expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
+  });
 });

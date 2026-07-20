@@ -2954,10 +2954,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             wearer's egress shield the look is local-only (classifier ladder,
             zero egress, no trace — test_live_lens pins it), and outside it the
             plugin providers see extracted fields, never pixels. The frame cap
-            rides the same 413-before-read machinery as every body."""
+            rides the same 413-before-read machinery as every body.
+
+            ``?ambient=1`` marks a continuous-loop frame (the live page's passive
+            "what am I looking at" cadence, several a minute): it runs the LOCAL
+            classifier only — no remote vision, no plugins, and no activity-ledger
+            trace — so the loop never floods the ledger or auto-egresses a frame.
+            A deliberate tap (no ambient flag) escalates to the full world lens."""
             from . import live as live_mod
+            ambient = qs.get("ambient", ["0"])[0] in ("1", "true")
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data))
+            self._json(200, live_mod.look(brain, data, ambient=ambient))
 
         def _post_live_redeem(self, path, qs):
             """Exchange the short Live Lens pairing code for the token.
