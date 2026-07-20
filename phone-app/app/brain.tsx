@@ -13,12 +13,14 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Tappable } from "../src/ui/components/Tappable";
 import { tapSuccess, tapWarn } from "../src/services/haptics";
 import { t } from "../src/i18n";
-import { colors, platinum } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 
 /** A drill-in row: a label + subtitle and a chevron, the iOS way into a
  * sub-screen (Preferences, Labs). */
 function NavRow({ label, sub, onPress, last }: { label: string; sub?: string; onPress: () => void; last?: boolean }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <Tappable onPress={onPress} style={[s.navRow, last ? s.navRowLast : null]} accessibilityHint="Opens a sub-screen">
       <View style={{ flex: 1 }}>
@@ -31,6 +33,8 @@ function NavRow({ label, sub, onPress, last }: { label: string; sub?: string; on
 }
 
 export default function Brain() {
+  const s = useS();
+  const { colors } = useTheme();
   const router = useRouter();
   const b = useBrainStore();
   useEffect(() => {
@@ -212,7 +216,7 @@ export default function Brain() {
         <View style={s.navPanel}>
           <NavRow
             label="Preferences"
-            sub="Assistant, Juno, privacy & data"
+            sub="Appearance, Juno, privacy & data"
             onPress={() => router.push("/settings")}
           />
           <NavRow
@@ -230,17 +234,17 @@ export default function Brain() {
   );
 }
 
-const panel = {
-  backgroundColor: platinum.face,
-  borderRadius: 10,
-  borderTopColor: platinum.hi,
-  borderLeftColor: platinum.hi,
-  borderBottomColor: platinum.sh,
-  borderRightColor: platinum.sh,
-  borderWidth: 1.5,
-} as const;
-
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => {
+  const panel = {
+    backgroundColor: platinum.face,
+    borderRadius: 10,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
+  } as const;
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
@@ -265,8 +269,9 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#C4C4C4",
+    borderBottomColor: platinum.line,
   },
   navRowLast: { borderBottomWidth: 0 },
   chev: { ...typography.title, fontSize: 18, color: platinum.sh, marginLeft: 8 },
+  });
 });

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer · Plugin Store</title>
 <meta name="description" content="Browse, rate, and install plugins the community builds on DreamLayer. Every plugin passes the safety gate before it ships.">
 <link rel="canonical" href="https://dreamlayer.app/plugins.html">
@@ -289,6 +290,50 @@
   #storewin>.mbody.screen{background:var(--plat);color:var(--ink);padding:0 0 14px}
   /* Finder status strip (the signature touch) */
   #storewin .fstatus{gap:9px;flex-wrap:wrap;row-gap:1px}
+
+  /* ===== Midnight Platinum — dark overrides for the store's own colors.
+     platinum.css flips the system vars under html.midnight; the store's
+     legacy tokens (which the script's inline styles read) and its
+     hardcoded platinum-light paint remap below. ===== */
+  html.midnight{
+    --bg:#292B2E;--surface:#212427;--surface-2:#292B2E;--surface-3:#33363A;
+    --border-2:#55585D;--text:#E6E8E9;--text-2:#9FA6AA;--text-3:#99A1A7;
+    --gold:#D9A94E;--face:#33363A;--face-hi:#3A3E43;
+    --shadow:2px 3px 0 rgba(0,0,0,.5)}
+  html.midnight .search input{background:#212427}
+  html.midnight .tab,html.midnight .seg button{background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .tab:hover:not(.on),html.midnight .seg button:hover:not(.on){
+    background:linear-gradient(180deg,#5E6166,#3E4145)}
+  html.midnight .tab.on,html.midnight .seg button.on{background:#26282B}
+  html.midnight .toolbar.stuck{border-bottom-color:#1E2023}
+  html.midnight .icon{background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .chip:hover{background:#3E4145;border-color:var(--frame)}
+  html.midnight .chip.perm{background:#3A2724;border-color:rgba(240,135,111,.5)}
+  html.midnight .chip.perm:hover{background:#3A2724;border-color:rgba(240,135,111,.5)}
+  html.midnight .btn{color:#ECEDEE;background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .btn:hover{background:linear-gradient(180deg,#5E6166,#3E4145)}
+  html.midnight .btn:active{background:#1F2124;color:#fff}
+  html.midnight .btn.primary,html.midnight .btn.buy{
+    background:linear-gradient(180deg,#49E8BC,#17AE85);color:#00251C}
+  html.midnight .btn.primary:hover,html.midnight .btn.buy:hover{
+    background:linear-gradient(180deg,#5CF2C9,#1FBE92);color:#00251C}
+  html.midnight .btn.primary:active,html.midnight .btn.buy:active{background:#0B6B52;color:#fff}
+  html.midnight .sk .shimmer{background:linear-gradient(100deg,#33363A 30%,#3E4145 50%,#33363A 70%);
+    background-size:200% 100%}
+  html.midnight .build code{background:#212427;border-color:#55585D}
+  html.midnight .safety{background:#3A3729;color:#E4E0C8}
+  html.midnight .earn{background:#1E2023}
+  html.midnight .earn .soon{background:#3A3323;border-color:rgba(217,169,78,.5)}
+  html.midnight .modal{box-shadow:var(--bev-out),inset 2px 2px 0 #43464B,6px 6px 0 rgba(0,0,0,.55)}
+  html.midnight .modal .shot{background:#26282B}
+  html.midnight .modal .x{background:linear-gradient(135deg,#5A5D62,#37393D);color:#ECEDEE}
+  html.midnight .modal .x:hover{background:linear-gradient(135deg,#63666B,#3E4145);color:#fff}
+  html.midnight .modal .x:active{background:#1F2124;color:#fff}
+  html.midnight .co .line{border-bottom-color:#1E2023;box-shadow:0 1px 0 #4A4D52}
+  html.midnight .co .line:last-of-type{box-shadow:none}
+  html.midnight .co .split{background:#212427;border-color:#55585D}
+  html.midnight .co .flagnote{background:#3A3729;color:#E4E0C8}
+  html.midnight .toast{background:#3A3729;color:#E8E4D0}
 </style>
 </head>
 <body>

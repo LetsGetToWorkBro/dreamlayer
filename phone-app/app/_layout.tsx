@@ -9,7 +9,7 @@ import {
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, platinum } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { fonts } from "../src/ui/theme/fonts";
 import { hardShadow } from "../src/ui/theme/shadow";
 import { tabBarMetrics } from "../src/ui/theme/tabBar";
@@ -22,6 +22,8 @@ import { t } from "../src/i18n";
 /** The Platinum control strip under the tabs — a light beveled bar: a hard black
  * top rule, a white highlight under it, and the top-lit platinum gradient face. */
 function TabBarBackground() {
+  const s = useS();
+  const { platinum } = useTheme();
   return (
     <View style={StyleSheet.absoluteFill}>
       <LinearGradient
@@ -46,6 +48,7 @@ const BOOT_BAR_W = 176;
 let bootPlayed = false;
 
 function BootScreen({ onDone }: { onDone: () => void }) {
+  const s = useS();
   const fade = React.useRef(new Animated.Value(1)).current;
   const zoom = React.useRef(new Animated.Value(1)).current;
   const fill = React.useRef(new Animated.Value(0)).current;
@@ -81,6 +84,8 @@ function BootScreen({ onDone }: { onDone: () => void }) {
 }
 
 export default function Layout() {
+  const s = useS();
+  const { colors, platinum } = useTheme();
   // Android is edge-to-edge: the strip must clear whatever nav the device
   // uses (gesture pill or 3-button bar). iOS ignores this — see tabBarMetrics.
   const insets = useSafeAreaInsets();
@@ -97,6 +102,9 @@ export default function Layout() {
   // apply the chosen earcon/haptic pack (B8) app-wide on launch
   React.useEffect(() => {
     usePackStore.getState().hydrate();
+    // recall the chosen appearance (Platinum / Midnight / Auto)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require("../src/state/useThemeStore").useThemeStore.getState().hydrate();
   }, []);
   // BLE: attach the native transport once at startup (P2-14). On a dev build
   // react-native-ble-plx is present, makeBlePlxTransport() returns a real
@@ -212,7 +220,7 @@ export default function Layout() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   // the hard black top rule of the control strip
   topFrame: { position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: platinum.frame },
   // the white highlight just under it — the raised bevel
@@ -246,4 +254,4 @@ const s = StyleSheet.create({
     overflow: "hidden",
   },
   bootFill: { width: BOOT_BAR_W, height: "100%", backgroundColor: colors.accentMemory },
-});
+}));

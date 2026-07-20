@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <meta property="og:image" content="https://dreamlayer.app/assets/og-card.jpg">
@@ -187,6 +188,31 @@
   .modal .pbtn{padding:7px 14px;font-size:13.5px}
   .modal .wbox:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
   .toast.ok-t{color:var(--teal-ink)}
+</style>
+<style>
+  /* ===== Midnight Platinum — dark overrides for this page's own colors.
+     platinum.css flips the system vars under html.midnight; the gallery's
+     legacy tokens and hardcoded platinum-light paint remap below. The dark
+     lens wells inside each card are the product's screens — untouched. ===== */
+  html.midnight{--bg:#292B2E;--surface:#3E4044;--surface2:#212427;
+    --text:#E6E8E9;--text2:#9FA6AA;--amber:#D9A94E;--red:#E06B52}
+  html.midnight .seg{background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .seg button:hover{background:linear-gradient(180deg,#5E6166,#3E4145)}
+  html.midnight .seg button:active{background:#1F2124;color:#fff}
+  html.midnight .seg button.on{background:#26282B;color:var(--text)}
+  html.midnight .card::before{background:linear-gradient(180deg,#4A4D52,#333538)}
+  html.midnight .card:hover{background:#464950}
+  html.midnight .card:hover::before,html.midnight .card:focus-within::before{
+    background:repeating-linear-gradient(180deg,#4E5156 0 1px,#3A3C40 1px 2px,#2E3033 2px 3px)}
+  html.midnight .chip.safe{background:#15332A}
+  html.midnight .chip.brain{background:#3A342A}
+  html.midnight .icnbtn{color:#ECEDEE;background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .icnbtn:hover{background:linear-gradient(180deg,#5E6166,#3E4145)}
+  html.midnight .icnbtn:active{background:#1F2124;color:#fff}
+  html.midnight .jam:hover{background:#464950}
+  html.midnight .jam.on{background:#26282B}
+  html.midnight .urlrow input{background:#212427}
+  /* .qrbox stays white — a QR needs its light quiet zone to scan */
 </style>
 </head>
 <body>

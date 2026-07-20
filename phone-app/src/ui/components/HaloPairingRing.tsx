@@ -9,9 +9,10 @@
 // - Easing is re-exported from react-native; no change needed.
 import React, { useEffect, useRef } from "react";
 import { View, Animated, Easing } from "react-native";
-import { colors } from "../theme/colors";
+import { useTheme } from "../theme/useTheme";
 
 export function HaloPairingRing({ scanning }: { scanning: boolean }) {
+  const { colors } = useTheme();
   const scale   = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.3)).current;
 

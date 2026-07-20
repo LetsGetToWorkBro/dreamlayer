@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { HaloCard } from "../../state/useMemoryStore";
-import { colors } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { softShadow } from "../theme/shadow";
 
@@ -12,6 +12,8 @@ import { softShadow } from "../theme/shadow";
  * it renders the same primary line + supporting lines the Halo draws.
  */
 export function HaloMirror({ card }: { card: HaloCard }) {
+  const s = useS();
+  const { colors } = useTheme();
   if (!card) {
     return (
       <View style={s.wrap}>
@@ -45,7 +47,7 @@ export function HaloMirror({ card }: { card: HaloCard }) {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   wrap: { alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   ring: {
     width: 160,
@@ -78,4 +80,4 @@ const s = StyleSheet.create({
     ...softShadow(10, 22, 0.35),
   },
   sheen: { position: "absolute", top: 0, left: 0, right: 0, height: "60%" },
-});
+}));

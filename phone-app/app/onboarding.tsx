@@ -11,7 +11,7 @@ import { useHaloStore }        from "../src/state/useHaloStore";
 import { useBrainStore }       from "../src/state/useBrainStore";
 import { ONBOARDING_STEPS }    from "../src/services/OnboardingService";
 import { tapMedium, tapSuccess, tapWarn } from "../src/services/haptics";
-import { colors }      from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography }  from "../src/ui/theme/typography";
 import { CineBackdrop }     from "../src/ui/components/CineBackdrop";
 import { OnboardingDots }   from "../src/ui/components/OnboardingDots";
@@ -22,13 +22,18 @@ import { QrScanner }        from "../src/ui/components/QrScanner";
 import { Juno }             from "../src/ui/components/Juno";
 
 const { width: SW } = Dimensions.get("window");
-const ACCENT_MAP = {
+import type { Theme } from "../src/ui/theme/useTheme";
+
+const accentMap = ({ colors }: Theme) => ({
   memory:    colors.accentMemory,
   attention: colors.accentAttention,
   success:   colors.accentSuccess,
-};
+});
 
 export default function Onboarding() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const { colors } = theme;
   const router = useRouter();
   const { stepIndex, step, advance, complete } = useOnboardingStore();
   const { connect, connected } = useHaloStore();
@@ -48,7 +53,7 @@ export default function Onboarding() {
   }, [stepIndex]);
 
   const isPairStep = step.id === "pair";
-  const accent = ACCENT_MAP[step.accent] ?? colors.accentMemory;
+  const accent = accentMap(theme)[step.accent] ?? colors.accentMemory;
 
   const finish = () => { tapSuccess(); complete(); setOnboardingSeen(true); router.replace("/now"); };
 
@@ -126,7 +131,7 @@ function StepGlyph({ stepId, accent }: { stepId: string; accent: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   root:    { flex: 1, backgroundColor: colors.background },
   safe:    { flex: 1, backgroundColor: "transparent" },
   skip:    { position: "absolute", top: 56, right: 24, zIndex: 10 },
@@ -136,7 +141,7 @@ const styles = StyleSheet.create({
   bottom:  { paddingBottom: 48, alignItems: "center", paddingHorizontal: 32 },
   scanLink: { marginTop: 18, paddingVertical: 6 },
   demoLink: { marginTop: 4, paddingVertical: 6 },
-});
+}));
 const glyphStyles = StyleSheet.create({
   shell:  { width: 120, height: 120, borderRadius: 60, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   symbol: { fontSize: 48 },

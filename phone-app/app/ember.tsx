@@ -17,7 +17,7 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
@@ -27,6 +27,7 @@ const EMBER_DIM = "#8A5E20";
 const GRADUATE_AT_DAYS = 90; // scheduler.CONSOLIDATION_THRESHOLD_DAYS
 
 function CurveBar({ e }: { e: EmberEngram }) {
+  const s = useS();
   const pct = Math.max(0.02, Math.min(1, e.stability_days / GRADUATE_AT_DAYS));
   return (
     <View style={s.barTrack}>
@@ -42,6 +43,8 @@ function dueLabel(d: number): string {
 }
 
 export default function Ember() {
+  const s = useS();
+  const { colors } = useTheme();
   const connected = useBrainStore((st) => st.macMini.connected || st.demoMode);
   const st = useEmberStore();
   const [confirmBurn, setConfirmBurn] = React.useState<number | null>(null);
@@ -184,7 +187,7 @@ export default function Ember() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   rowButtons: { flexDirection: "row", gap: space.sm, marginTop: space.md, flexWrap: "wrap" },
   btn: {
     borderWidth: 1.5,
@@ -194,4 +197,4 @@ const s = StyleSheet.create({
   },
   barTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.borderSubtle, overflow: "hidden", marginTop: space.sm },
   barFill: { height: "100%", borderRadius: radius.pill },
-});
+}));

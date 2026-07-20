@@ -10,6 +10,16 @@
 var CFG = window.PLATINUM || {};
 document.documentElement.classList.add("platinum");
 
+/* Appearance — each page carries a tiny pre-paint snippet in <head>;
+   re-assert here so the theme still lands if a page forgot it.
+   dltheme = "midnight" | "platinum"; unset follows the system scheme. */
+(function(){
+  var t=null; try{ t=localStorage.getItem("dltheme"); }catch(e){}
+  if(t==="midnight" || (t!=="platinum" && matchMedia("(prefers-color-scheme: dark)").matches))
+    document.documentElement.classList.add("midnight");
+  else if(t==="platinum") document.documentElement.classList.remove("midnight");
+})();
+
 function h(html){ var t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 
 /* ---------- menu bar ---------- */
@@ -39,6 +49,10 @@ panels.innerHTML = '\
   <button class="deskpick" data-pic="dawn"><span class="chk"></span>Dawn</button>\
   <button class="deskpick" data-pic="juno"><span class="chk"></span>The Scene</button>\
   <button class="deskpick" data-pic="pattern"><span class="chk"></span>Platinum Pattern</button>\
+  <hr>\
+  <div class="mdl-head">Appearance</div>\
+  <button class="themepick" data-theme="platinum"><span class="chk"></span>Platinum</button>\
+  <button class="themepick" data-theme="midnight"><span class="chk"></span>Midnight Platinum</button>\
   <hr>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer.dmg">Download for Mac <span class="mdim">.dmg</span></a>\
   <a href="https://github.com/LetsGetToWorkBro/dreamlayer/releases/latest/download/DreamLayer-Setup.exe">Download for Windows <span class="mdim">.exe</span></a>\
@@ -110,6 +124,24 @@ document.querySelectorAll(".mpanel a").forEach(function(a){
   apply(pic);
   picks.forEach(function(p){ p.addEventListener("click",function(){
     pic=p.dataset.pic; try{ localStorage.setItem("dldeskpic",pic); }catch(e){} apply(pic);
+  }); });
+})();
+
+/* ---------- Appearance picker (Midnight Platinum, shared with the landing) ---------- */
+(function(){
+  var root=document.documentElement;
+  var picks=[].slice.call(document.querySelectorAll(".themepick"));
+  function apply(t){
+    root.classList.toggle("midnight", t==="midnight");
+    picks.forEach(function(p){ p.querySelector(".chk").textContent = p.dataset.theme===t ? "✓" : ""; });
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute("content", t==="midnight" ? "#26282B" : "#DDDDDD");
+  }
+  apply(root.classList.contains("midnight") ? "midnight" : "platinum");
+  picks.forEach(function(p){ p.addEventListener("click",function(){
+    var t=p.dataset.theme;
+    try{ localStorage.setItem("dltheme",t); }catch(e){}
+    apply(t);
   }); });
 })();
 

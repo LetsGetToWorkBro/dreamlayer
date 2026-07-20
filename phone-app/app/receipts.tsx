@@ -8,7 +8,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
@@ -24,6 +24,7 @@ function clockTime(ts: number): string {
 }
 
 function Verdict() {
+  const { colors } = useTheme();
   const { result, keyChanged, firstSeen, pubkey, records, repin } = useReceiptStore();
   const count = records.length;
   if (!result) return null;
@@ -94,6 +95,8 @@ function Verdict() {
 }
 
 function Entry({ rec, broken }: { rec: ReceiptRecord; broken: boolean }) {
+  const st = useSt();
+  const { colors } = useTheme();
   return (
     <Card active={broken} accent={colors.accentError} style={{ marginBottom: space.sm }}>
       <View style={st.row}>
@@ -110,6 +113,7 @@ function Entry({ rec, broken }: { rec: ReceiptRecord; broken: boolean }) {
 }
 
 export default function Receipts() {
+  const { colors } = useTheme();
   const { records, result, loaded, loading, connected, error, load } = useReceiptStore();
   useEffect(() => {
     load();
@@ -155,6 +159,6 @@ export default function Receipts() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.sm },
-});
+}));

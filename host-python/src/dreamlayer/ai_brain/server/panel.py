@@ -90,6 +90,13 @@ _WINDOWS_COPY: tuple[tuple[str, str], ...] = (
 
 
 _PAGE = r"""<!doctype html><html lang="en"><head>
+<script>/* pre-paint: set the Midnight appearance before first paint so there is
+no light flash. localStorage "dltheme" ("midnight"|"platinum") wins; with no
+saved choice the OS preference decides. Kept ASCII + try/catch: it must never
+throw before the page exists. */
+(function(){try{var t=localStorage.getItem("dltheme");
+var d=t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches;
+if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
 <link rel="icon" id="favJuno" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
@@ -138,6 +145,14 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
         font:12.5px var(--chi);background:var(--surf);border:1px solid var(--frame);
         box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);padding:4px 11px}
   .live img.dot{width:16px;height:16px;display:block;image-rendering:pixelated}
+  /* appearance toggle — a little Platinum bevel-button beside the live chip:
+     ☾ offers Midnight from the light face, ☀ offers daylight from the dark */
+  .themetog{width:28px;height:26px;padding:0;flex:none;display:inline-flex;
+    align-items:center;justify-content:center;border-radius:0;
+    background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#141414;border:1px solid var(--frame);
+    box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);font:14px/1 var(--chi);cursor:pointer}
+  .themetog:hover{filter:brightness(1.03)}
+  .themetog:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in);filter:none}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,138,61,.5)}70%{box-shadow:0 0 0 7px rgba(31,138,61,0)}100%{box-shadow:0 0 0 0 rgba(31,138,61,0)}}
   h1{font-weight:700;letter-spacing:-.025em;font-size:2.1rem;margin:6px 0 2px;font-family:var(--sg)}
   .sub{color:var(--muted);margin:0 0 20px}
@@ -499,6 +514,72 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     .side .brand2,.side .navlabel{width:100%}
     .side button{width:auto}
     .content{height:auto;padding:22px 20px 60px}}
+  /* ============================================================
+     "Midnight Platinum" — the dark appearance. html.midnight is set
+     pre-paint (localStorage "dltheme", else prefers-color-scheme)
+     and flipped by the ☾/☀ button in the header bar. Identical
+     Platinum geometry — hard bevels, 1px black frames, pinstripes,
+     hard offset shadows, nothing soft — recut in graphite: window
+     faces #3E4044, paper #292B2E, ink #E6E8E9 (body text ≥4.5:1).
+     Canvases and thumbnails are "screens": dark in both looks, so
+     they carry no override. Token overrides first, then the few
+     surfaces whose colors are written out longhand.
+     ============================================================ */
+  html.midnight{
+    color-scheme:dark;
+    --bg:#0B1113; --surf:#292B2E; --surf2:#313437; --line:#43474B;
+    --memory:#2CC79A; --attention:#E8826B; --success:#35B25B; --error:#E4715F;
+    --amber:#E1A33C; --text:#E6E8E9; --muted:#9FA6AA; --ghost:#838B90;
+    --paper:#3E4044; --plat:#3E4044; --plat2:#2E3033;
+    --bev-out:inset 1px 1px 0 #55585D, inset -1px -1px 0 #232529;
+    --bev-in:inset 1px 1px 0 #232529, inset -1px -1px 0 #55585D;
+    --stripes:repeating-linear-gradient(180deg,#4E5156 0 1px,#3A3C40 1px 2px,#2E3033 2px 3px);
+  }
+  html.midnight ::selection{background:var(--hi);color:#fff}
+  html.midnight .eyebrow{border-bottom-color:rgba(44,199,154,.45)}
+  html.midnight input,html.midnight select,html.midnight textarea{background:#1F2124;color:var(--text)}
+  /* grey Platinum buttons: #54575C→#37393D, label #ECEDEE, pressed #1F2124 */
+  html.midnight button.ghost,html.midnight button.danger,html.midnight .xchip{
+    background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+  html.midnight button.danger{color:var(--error)}
+  html.midnight button.ghost:hover{color:#fff}
+  html.midnight button.ghost:active,html.midnight .xchip:active{background:#1F2124;color:#ECEDEE}
+  html.midnight .themetog{background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+  html.midnight .themetog:active{background:#1F2124;color:#fff}
+  html.midnight .sw .track{background:#1F2124}
+  html.midnight .sw input:checked + .track{background:rgba(44,199,154,.22)}
+  html.midnight .sw input:checked + .track.red{background:rgba(232,130,107,.22)}
+  html.midnight .drop{border-color:#5A5E63}
+  html.midnight .drop.hot{border-color:var(--memory);background:rgba(44,199,154,.07)}
+  html.midnight .seg button.on{background:var(--surf)}
+  html.midnight .seg button:active{background:#1F2124}
+  html.midnight .mstat,html.midnight .ans,html.midnight .paircode{background:#2E3033}
+  html.midnight code{background:#1F2124}
+  html.midnight .tier{background:rgba(44,199,154,.14);border-color:rgba(44,199,154,.45)}
+  html.midnight .shimmer{background:linear-gradient(90deg,#34373B,#43474C,#34373B);background-size:200% 100%}
+  html.midnight .paircode .warn{background:rgba(225,163,60,.10)}
+  html.midnight .tag.pair{color:#7B87FF}          /* selection blue, lifted to read on paper */
+  /* .qrbox stays white on purpose — a printed label; scanners want quiet zones */
+  html.midnight .overlay,html.midnight .xmodal{background:rgba(0,0,0,.55)}
+  html.midnight .modal,html.midnight .xcard{
+    box-shadow:var(--bev-out),inset 2px 2px 0 #55585D,6px 6px 0 rgba(0,0,0,.6)}
+  html.midnight .dirlist{background:#1F2124}
+  html.midnight .diritem{border-bottom-color:#3A3D41}
+  /* Balloon Help after dark: same balloon, night paper */
+  html.midnight #toast{background:#2E2F28;color:#F2EFD0}
+  html.midnight .side{background:linear-gradient(180deg,#45484C,#37393D);
+    box-shadow:inset -1px 0 0 #232529, inset 1px 1px 0 #55585D}
+  html.midnight .side .brand2{color:#ECEDEE}
+  html.midnight .side .navlabel{color:#9FA6AA}
+  html.midnight .side button{color:#D6D9DB}
+  html.midnight .side button:hover{background:rgba(255,255,255,.08);color:#fff}
+  /* the sidebar active row keeps the true #333399 fill — white on selection
+     blue reads on dark exactly as it did in 1997 (var(--hi) is untouched) */
+  html.midnight .content{box-shadow:inset 1px 1px 0 #232529}
+  html.midnight .content::-webkit-scrollbar-track{background:#2A2C2F}
+  html.midnight .content::-webkit-scrollbar-thumb{background:linear-gradient(135deg,#8F8FD0,#5C5CA8);
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.35)}
+  html.midnight .juno-hero .jttl,html.midnight .juno-hero .jtog{color:#ECEDEE}
 </style></head><body>
 <div class="cine-bg" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
@@ -509,7 +590,9 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   <div class="head-cine" aria-hidden="true"></div>
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
-      width="16" height="16" alt=""><span id="livetext">connecting…</span></span></div>
+      width="16" height="16" alt=""><span id="livetext">connecting…</span></span>
+    <button class="themetog" id="themeTog" type="button" aria-label="Appearance"
+      title="Appearance" onclick="toggleTheme()">☾</button></div>
   <h1 id="pageTitle">Home</h1>
   <p class="sub" id="pageSub">This Mac mini is the brain — your files, your memory, your reach.</p>
 
@@ -988,6 +1071,21 @@ const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'
 const plugShot=n=>"/panel-assets/plugshot_"+encodeURIComponent(n)+".png";
 const $=id=>document.getElementById(id);
 let modelSel="keyword", ollamaOK=null, browsePath="";
+
+/* Midnight Platinum — appearance. The pre-paint script in <head> already set
+   html.midnight from localStorage "dltheme" (else the OS preference); here we
+   keep the ☾/☀ button in step, persist the choice, and follow a live OS flip
+   only while no explicit choice is saved. */
+function applyTheme(dark){document.documentElement.classList.toggle("midnight",!!dark);
+  const b=$("themeTog");if(b){b.textContent=dark?"☀":"☾";
+    b.title=dark?"Appearance — switch to Platinum":"Appearance — switch to Midnight";}}
+function toggleTheme(){const dark=!document.documentElement.classList.contains("midnight");
+  applyTheme(dark);try{localStorage.setItem("dltheme",dark?"midnight":"platinum");}catch(e){}
+  toast(dark?"Midnight Platinum":"Platinum");}
+applyTheme(document.documentElement.classList.contains("midnight"));
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",e=>{
+  let saved=null;try{saved=localStorage.getItem("dltheme");}catch(_){}
+  if(!saved)applyTheme(e.matches);});}catch(e){}
 
 /* the current lens catalog — every feature pairs its explainer with the TRUE
    renderer. `live` entries replay the real on-glass animation via halo-sim.js,

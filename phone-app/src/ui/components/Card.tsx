@@ -3,7 +3,7 @@ import {
   Animated, View, Text, Pressable, StyleSheet, StyleProp, ViewStyle,
   LayoutAnimation, Platform, UIManager,
 } from "react-native";
-import { colors, platinum } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
 import { hardShadow } from "../theme/shadow";
@@ -31,7 +31,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 export function Card({
   children,
   active,
-  accent = colors.accentMemory,
+  accent,
   onPress,
   style,
   delay = 0,
@@ -54,6 +54,9 @@ export function Card({
   /** WindowShade — on by default for titled, non-pressable windows */
   shade?: boolean;
 }) {
+  const s = useS();
+  const { colors, platinum } = useTheme();
+  const accentColor = accent ?? colors.accentMemory;
   const anim = useEntrance(delay);
   const framed = !!title;
   const shadeable = framed && !onPress && shade !== false;
@@ -70,7 +73,7 @@ export function Card({
     <View
       style={[
         framed ? s.window : s.panel,
-        active ? { borderColor: accent } : null,
+        active ? { borderColor: accentColor } : null,
         style,
       ]}
     >
@@ -107,23 +110,24 @@ export function Card({
 }
 
 /** A small uppercase section label — the eyebrow that announces a group. */
-export function Section({ label, accent = colors.accentMemory, first }: { label: string; accent?: string; first?: boolean }) {
+export function Section({ label, accent, first }: { label: string; accent?: string; first?: boolean }) {
+  const { colors } = useTheme();
   return (
-    <Text style={[typography.eyebrow, { color: accent, marginTop: first ? 0 : space.xl, marginBottom: space.md }]}>
+    <Text style={[typography.eyebrow, { color: accent ?? colors.accentMemory, marginTop: first ? 0 : space.xl, marginBottom: space.md }]}>
       {label}
     </Text>
   );
 }
 
-const BEVEL = {
-  borderTopColor: platinum.hi,
-  borderLeftColor: platinum.hi,
-  borderBottomColor: platinum.sh,
-  borderRightColor: platinum.sh,
-  borderWidth: 1.5,
-} as const;
-
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => {
+  const BEVEL = {
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
+  } as const;
+  return StyleSheet.create({
   // plain group box — a raised platinum panel
   panel: {
     backgroundColor: platinum.face,
@@ -176,6 +180,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   // the WindowShade box's horizontal tick
-  shadeLine: { width: 7, height: 1.5, backgroundColor: "#333333" },
+  shadeLine: { width: 7, height: 1.5, backgroundColor: platinum.ink },
   wbody: { padding: space.lg },
+  });
 });

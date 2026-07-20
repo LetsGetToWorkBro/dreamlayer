@@ -5,17 +5,22 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
-const CATEGORY: { key: SagaAchievement["category"]; label: string; tint: string }[] = [
+import type { Theme } from "../src/ui/theme/useTheme";
+
+const categories = ({ colors }: Theme): { key: SagaAchievement["category"]; label: string; tint: string }[] => [
   { key: "milestone", label: "Milestones", tint: colors.accentMemory },
   { key: "quest", label: "Quests", tint: colors.accentAttention },
   { key: "explore", label: "Explore the ecosystem", tint: colors.accentSuccess },
 ];
 
 export default function Saga() {
+  const s = useS();
+  const theme = useTheme();
+  const { colors } = theme;
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getSaga = useBrainStore((s) => s.getSaga);
   const [saga, setSaga] = React.useState<SagaSnapshot | null>(null);
@@ -81,7 +86,7 @@ export default function Saga() {
           </Card>
 
           {/* badges by category */}
-          {CATEGORY.map(({ key, label, tint }, ci) => {
+          {categories(theme).map(({ key, label, tint }, ci) => {
             const items = saga.achievements.filter((a) => a.category === key);
             if (!items.length) return null;
             const got = items.filter((a) => a.unlocked).length;
@@ -129,7 +134,7 @@ export default function Saga() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   rankRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: space.md },
   barTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.borderSubtle, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: radius.pill, backgroundColor: colors.accentMemory },
@@ -138,4 +143,4 @@ const s = StyleSheet.create({
   nameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   miniTrack: { height: 4, borderRadius: radius.pill, backgroundColor: colors.borderSubtle, overflow: "hidden", marginTop: 6 },
   miniFill: { height: "100%", borderRadius: radius.pill },
-});
+}));

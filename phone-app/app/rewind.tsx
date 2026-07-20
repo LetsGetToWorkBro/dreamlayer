@@ -5,17 +5,19 @@ import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
-const KIND_COLOR: Record<string, string> = {
+import type { Theme } from "../src/ui/theme/useTheme";
+
+const kindColors = ({ colors, platinum }: Theme): Record<string, string> => ({
   message: colors.accentMemory,
-  event: "#3D63C7",
+  event: platinum.select,
   people: colors.accentSuccess,
   ask: colors.accentAttention,
   "cloud-egress": colors.accentAttention,
-};
+});
 
 function kindLabel(kind: string): string {
   if (kind === "cloud-egress") return "cloud";
@@ -24,6 +26,9 @@ function kindLabel(kind: string): string {
 }
 
 export default function Rewind() {
+  const s = useS();
+  const theme = useTheme();
+  const { colors } = theme;
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getRewind = useBrainStore((s) => s.getRewind);
   const [blocks, setBlocks] = React.useState<RewindBlock[] | null>(null);
@@ -61,7 +66,7 @@ export default function Rewind() {
           <View key={b.hour}>
             <Section label={b.label} first={bi === 0} accent={colors.textSecondary} />
             {b.items.map((it, i) => {
-              const tint = KIND_COLOR[it.kind] ?? colors.textSecondary;
+              const tint = kindColors(theme)[it.kind] ?? colors.textSecondary;
               return (
                 <Card key={`${b.hour}-${i}`} delay={bi * 50 + i * 35}>
                   <View style={s.row}>
@@ -81,7 +86,7 @@ export default function Rewind() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "stretch", gap: space.md },
   tag: { width: 3, borderRadius: radius.sm, alignSelf: "stretch" },
-});
+}));

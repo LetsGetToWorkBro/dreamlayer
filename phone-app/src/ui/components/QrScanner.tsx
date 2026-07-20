@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Modal } from "react-native";
-import { colors } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
 import { Tappable } from "./Tappable";
@@ -27,6 +27,8 @@ export function QrScanner({
   onClose: () => void;
   onScan: (code: string) => void;
 }) {
+  const s = useS();
+  const { colors } = useTheme();
   const CameraView = CameraMod?.CameraView;
   const usePermissions = CameraMod?.useCameraPermissions;
   const [permission, requestPermission] = usePermissions ? usePermissions() : [null, async () => {}];
@@ -90,7 +92,7 @@ export function QrScanner({
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   shell: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: "row",
@@ -128,4 +130,4 @@ const s = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.huge,
   },
-});
+}));

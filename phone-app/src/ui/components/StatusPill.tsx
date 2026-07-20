@@ -1,11 +1,13 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors, platinum } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { useConnectionStore } from "../../state/useConnectionStore";
 
 /** A small live/paused indicator — a Platinum status well with a colored LED. */
 export function StatusPill({ paused }: { paused: boolean }) {
+  const s = useS();
+  const { colors } = useTheme();
   const tint = paused ? colors.statusPaused : colors.accentSuccess;
   return (
     <View style={s.pill}>
@@ -19,6 +21,8 @@ export function StatusPill({ paused }: { paused: boolean }) {
  * unreachable — rendered from the single connection state machine, never a
  * per-call guess. Renders nothing while no Brain is paired. */
 export function BrainPill() {
+  const s = useS();
+  const { colors } = useTheme();
   const state = useConnectionStore((s) => s.state);
   const labelFn = useConnectionStore((s) => s.label);
   if (state === "unpaired") return null;
@@ -31,7 +35,7 @@ export function BrainPill() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -52,4 +56,4 @@ const s = StyleSheet.create({
   },
   dot: { width: 7, height: 7, borderRadius: 4, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.35)" },
   label: { opacity: 1 },
-});
+}));

@@ -7,18 +7,20 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { Tappable } from "../src/ui/components/Tappable";
 import { EmptyState } from "../src/ui/components/EmptyState";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { t } from "../src/i18n";
 
-const KIND_COLOR: Record<string, string> = {
+import type { Theme } from "../src/ui/theme/useTheme";
+
+const kindColors = ({ colors, platinum }: Theme): Record<string, string> => ({
   Promise: colors.accentAttention,
   Person: colors.accentMemory,
   Object: colors.accentSuccess,
-  Place: "#3D63C7",
+  Place: platinum.select,
   Note: colors.textSecondary,
-};
+});
 
 const DAY = 86_400_000;
 function bucketOf(ts: number): string {
@@ -38,6 +40,9 @@ function group(memories: Memory[]): { label: string; items: Memory[] }[] {
 }
 
 export default function Memories() {
+  const s = useS();
+  const theme = useTheme();
+  const { colors } = theme;
   const memories = useMemoryStore((s) => s.memories);
   const refresh = useMemoryStore((s) => s.refresh);
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
@@ -146,7 +151,7 @@ export default function Memories() {
               accent={colors.textSecondary}
             />
             {g.items.map((m, i) => {
-              const tint = KIND_COLOR[m.kind] ?? colors.textSecondary;
+              const tint = kindColors(theme)[m.kind] ?? colors.textSecondary;
               return (
                 <Card key={m.id} delay={gi * 60 + i * 45}>
                   <View style={s.row}>
@@ -169,7 +174,7 @@ export default function Memories() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "stretch", gap: space.md },
   tag: { width: 3, borderRadius: radius.sm, alignSelf: "stretch" },
   metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -192,4 +197,4 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-});
+}));

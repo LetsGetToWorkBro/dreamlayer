@@ -2,7 +2,7 @@ import React from "react";
 import { View } from "react-native";
 import { Redirect } from "expo-router";
 import { useBrainStore } from "../src/state/useBrainStore";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme } from "../src/ui/theme/useTheme";
 
 /**
  * Boot route — decide where a cold launch lands once state has hydrated.
@@ -11,6 +11,7 @@ import { colors } from "../src/ui/theme/colors";
  * onboarding at a returning user.
  */
 export default function Index() {
+  const { colors } = useTheme();
   const hydrated = useBrainStore((s) => s.hydrated);
   const demoMode = useBrainStore((s) => s.demoMode);
   const paired = useBrainStore((s) => s.macMini.connected || s.glasses.connected);

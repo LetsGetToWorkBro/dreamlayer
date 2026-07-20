@@ -15,7 +15,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { Tappable } from "../src/ui/components/Tappable";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 import { t } from "../src/i18n";
@@ -23,6 +23,8 @@ import { useBrainStore } from "../src/state/useBrainStore";
 import { usePeopleStore, Person } from "../src/state/usePeopleStore";
 
 export default function People() {
+  const s = useS();
+  const { colors } = useTheme();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const people = usePeopleStore((s) => s.people);
   const loading = usePeopleStore((s) => s.loading);
@@ -104,6 +106,8 @@ function PersonCard({
   onToggle: () => void;
   delay: number;
 }) {
+  const s = useS();
+  const { colors } = useTheme();
   const addNote = usePeopleStore((s) => s.addNote);
   const removeNote = usePeopleStore((s) => s.removeNote);
   const settle = usePeopleStore((s) => s.settle);
@@ -194,7 +198,7 @@ function PersonCard({
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   search: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -236,4 +240,4 @@ const s = StyleSheet.create({
   addBtn: { backgroundColor: colors.accentMemory, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm },
   addBtnText: { color: "#FFFFFF", fontWeight: "700" },
   hint: { color: colors.statusPaused, marginTop: space.md, textAlign: "center" },
-});
+}));

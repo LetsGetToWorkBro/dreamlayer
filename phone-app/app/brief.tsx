@@ -7,7 +7,7 @@ import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card, Section } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
@@ -30,6 +30,8 @@ function stamp(ts: number): string {
  * and kept here so you can read it whenever, even offline.
  */
 export default function Brief() {
+  const s = useS();
+  const { colors } = useTheme();
   const macConnected = useBrainStore((s) => s.macMini.connected || s.demoMode);
   const getLongBrief = useBrainStore((s) => s.getLongBrief);
   const stored = useBrainStore((s) => s.longBrief);
@@ -113,10 +115,10 @@ export default function Brief() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.xs },
   dot: {
     width: 6, height: 6, borderRadius: 3, marginTop: 8,
     backgroundColor: colors.accentMemory,
   },
-});
+}));

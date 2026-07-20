@@ -20,7 +20,8 @@ import {
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
-import { colors } from "../theme/colors";
+import { useTheme, makeThemedStyles } from "../theme/useTheme";
+import type { Theme } from "../theme/useTheme";
 import { playEarcon } from "../../services/sound";
 
 export type JunoState = "idle" | "thinking" | "success";
@@ -38,11 +39,11 @@ const SPEAK_CYCLE: readonly { phrase: string; family: string }[] = [
   { phrase: "kept — not uploaded — kept.", family: "sfx" },
 ];
 
-const AURA_BY_STATE: Record<JunoState, string> = {
+const auraByState = ({ colors }: Theme): Record<JunoState, string> => ({
   idle:    colors.accentMemory,   // teal
   thinking:colors.accentMemory,
   success: colors.accentSuccess,  // green
-};
+});
 
 const CLIP_W = 400, CLIP_H = 226;   // the clip's intrinsic (landscape) size
 
@@ -65,7 +66,10 @@ export function Juno({
   /** Notified with the caption each time she speaks (for a parent-owned bubble). */
   onSpeak?: (phrase: string) => void;
 }) {
-  const aura = AURA_BY_STATE[state] ?? colors.accentMemory;
+  const styles = useStyles();
+  const theme = useTheme();
+  const { colors } = theme;
+  const aura = auraByState(theme)[state] ?? colors.accentMemory;
   const h = Math.round(width * CLIP_H / CLIP_W);   // preserve the clip's aspect
 
   const [reduce, setReduce] = useState(false);
@@ -175,7 +179,7 @@ export function Juno({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center" },
   capWrap: { position: "absolute", top: -6, left: 0, right: 0, alignItems: "center", zIndex: 5 },
   capBubble: {
@@ -188,6 +192,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   capText: { color: colors.textPrimary, fontSize: 13, fontWeight: "600", textAlign: "center" },
-});
+}));
 
 export default Juno;

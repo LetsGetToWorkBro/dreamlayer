@@ -6,11 +6,13 @@ import { play } from "../src/services/haptics";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card } from "../src/ui/components/Card";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { space } from "../src/ui/theme/spacing";
 
 export default function Packs() {
+  const st = useSt();
+  const { colors } = useTheme();
   const { selectedId, select, hydrate } = usePackStore();
   useEffect(() => {
     hydrate();
@@ -52,6 +54,6 @@ export default function Packs() {
   );
 }
 
-const st = StyleSheet.create({
+const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-});
+}));

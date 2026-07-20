@@ -21,7 +21,7 @@ import { EmptyState } from "../src/ui/components/EmptyState";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
 import { play } from "../src/services/haptics";
 import { t } from "../src/i18n";
-import { colors } from "../src/ui/theme/colors";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { radius, space } from "../src/ui/theme/spacing";
 
@@ -48,6 +48,8 @@ const kit = loadCamera();
 /** The on-glass panel a look produced — title, subtitle, provider rows, and an
  * honest provenance footer (which providers spoke, how sure the read was). */
 export function LensPanel({ panel }: { panel: LookPanel }) {
+  const s = useS();
+  const { colors } = useTheme();
   if (!panel.ok) {
     const veiled = !!panel.veiled;
     return (
@@ -108,6 +110,8 @@ export function LensPanel({ panel }: { panel: LookPanel }) {
 }
 
 function LiveLook() {
+  const s = useS();
+  const { colors } = useTheme();
   const look = useBrainStore((s) => s.look);
   const [permission, requestPermission] = kit!.useCameraPermissions();
   const camRef = React.useRef<any>(null);
@@ -194,7 +198,7 @@ export default function Look() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   viewport: {
     height: 320,
     borderRadius: radius.lg,
@@ -221,4 +225,4 @@ const s = StyleSheet.create({
   },
   glassEyebrow: { color: "#3F8F5C", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 },
   glassLine: { color: "#7DFFA8", lineHeight: 20 },
-});
+}));

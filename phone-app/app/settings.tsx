@@ -6,15 +6,19 @@ import { useRouter } from "expo-router";
 import { useHaloStore } from "../src/state/useHaloStore";
 import { useMemoryStore } from "../src/state/useMemoryStore";
 import { useBrainStore } from "../src/state/useBrainStore";
-import { colors, platinum } from "../src/ui/theme/colors";
+import { useThemeStore, THEME_MODES, type ThemeMode } from "../src/state/useThemeStore";
+import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
 import { typography } from "../src/ui/theme/typography";
 import { DemoBanner } from "../src/ui/components/DemoBanner";
 import { CineBackdrop } from "../src/ui/components/CineBackdrop";
 import { MenuBar } from "../src/ui/components/MenuBar";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
+import { Tappable } from "../src/ui/components/Tappable";
 import { t } from "../src/i18n";
 
 function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <View style={s.row}>
       <View style={{ flex: 1, paddingRight: 12 }}>
@@ -26,7 +30,45 @@ function Row({ label, sub, right }: { label: string; sub?: string; right: React.
   );
 }
 
+/** The Appearance chooser — three Platinum radio buttons in one beveled row:
+ * the light desktop, Midnight, or follow the phone (Auto). The chosen one
+ * presses IN — face2, inverted bevel, teal ink — like a real Mac OS 8 control. */
+function AppearanceRow() {
+  const s = useS();
+  const mode = useThemeStore((st) => st.mode);
+  const setMode = useThemeStore((st) => st.setMode);
+  const labels: Record<ThemeMode, string> = {
+    platinum: t("settings.themePlatinum"),
+    midnight: t("settings.themeMidnight"),
+    auto: t("settings.themeAuto"),
+  };
+  return (
+    <View style={s.appearanceRow} accessibilityRole="radiogroup">
+      {THEME_MODES.map((m) => {
+        const on = mode === m;
+        return (
+          <Tappable
+            key={m}
+            onPress={() => setMode(m)}
+            accessibilityRole="radio"
+            accessibilityLabel={labels[m]}
+            accessibilityHint={on ? "Selected" : undefined}
+            containerStyle={{ flex: 1 }}
+            style={[s.appearanceBtn, on ? s.appearanceBtnOn : null]}
+          >
+            <Text style={[s.appearanceText, on ? s.appearanceTextOn : null]} numberOfLines={1}>
+              {labels[m]}
+            </Text>
+          </Tappable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function Settings() {
+  const s = useS();
+  const { colors, platinum } = useTheme();
   const router = useRouter();
   const { paused, togglePause } = useHaloStore();
   const { service } = useMemoryStore();
@@ -76,6 +118,14 @@ export default function Settings() {
       </View>
 
       <View style={s.section}>
+        <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.appearance")}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 12 }]}>
+          {t("settings.appearanceSub")}
+        </Text>
+        <AppearanceRow />
+      </View>
+
+      <View style={s.section}>
         <Text style={[typography.eyebrow, { color: colors.accentMemory, marginBottom: 14 }]}>{t("settings.privacy")}</Text>
         <Row
           label={t("settings.proactiveCards")}
@@ -120,7 +170,7 @@ export default function Settings() {
             <Switch
               value={focus}
               onValueChange={setFocus}
-              trackColor={{ true: "#3D63C7", false: colors.borderSubtle }}
+              trackColor={{ true: platinum.select, false: colors.borderSubtle }}
               thumbColor={platinum.well}
             />
           }
@@ -320,7 +370,7 @@ export default function Settings() {
   );
 }
 
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: "transparent" },
   // room so the last row clears the floating tab bar
@@ -341,8 +391,30 @@ const s = StyleSheet.create({
     borderRightColor: platinum.sh,
     borderWidth: 1.5,
   },
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
-  linkRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#C4C4C4" },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: platinum.line },
+  // the Appearance radio strip — raised Platinum chips; the active one presses IN
+  appearanceRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  appearanceBtn: {
+    borderRadius: 6,
+    borderTopColor: platinum.hi,
+    borderLeftColor: platinum.hi,
+    borderBottomColor: platinum.sh,
+    borderRightColor: platinum.sh,
+    borderWidth: 1.5,
+    backgroundColor: platinum.face,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  appearanceBtnOn: {
+    backgroundColor: platinum.face2,
+    borderTopColor: platinum.sh,
+    borderLeftColor: platinum.sh,
+    borderBottomColor: platinum.hi,
+    borderRightColor: platinum.hi,
+  },
+  appearanceText: { ...typography.caption, color: colors.textPrimary, opacity: 1 },
+  appearanceTextOn: { color: platinum.tealInk, fontFamily: typography.eyebrow.fontFamily },
+  linkRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: platinum.line },
   subGroup: { paddingLeft: 16, borderLeftWidth: 2, borderLeftColor: platinum.sh, marginLeft: 2 },
   danger: { paddingVertical: 16, alignItems: "center", borderRadius: 8, borderWidth: 1.5, borderColor: colors.accentError, marginTop: 8, marginBottom: 6, backgroundColor: platinum.well },
-});
+}));

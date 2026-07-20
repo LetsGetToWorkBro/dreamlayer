@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem("dltheme");if(t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <title>DreamLayer · Lens Builder</title>
 <meta name="theme-color" content="#DDDDDD" />
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
@@ -402,6 +403,67 @@
   @media (prefers-reduced-motion:reduce){
     .dl-flash,.recipe,button.btn,.askex button,.bgpick button,.juno-avatar{transition:none}
   }
+
+  /* ===== Midnight Platinum — dark overrides for the builder's own colors.
+     platinum.css flips the system vars under html.midnight; below remaps
+     only this page's hardcoded paper/white/selection paint. The Halo live
+     preview well stays dark — it's the glasses' real display. Ids, classes
+     and the script contract are untouched. ===== */
+  html.midnight .col.left,html.midnight .col.right{background:#33363A}
+  html.midnight code{background:#212427;border-color:#55585D}
+  html.midnight button.btn.ghost{background:linear-gradient(180deg,#54575C,#37393D);color:#ECEDEE}
+  html.midnight button.btn.ghost:active{background:#1F2124;color:#fff}
+  html.midnight button.btn.ghost.on{background:linear-gradient(180deg,#2A2D30,#33363A);color:var(--ink)}
+  html.midnight input,html.midnight select,html.midnight textarea{background:#212427}
+  html.midnight label.f{color:#C6CBCE}
+  html.midnight .askex button{color:#ECEDEE;background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .askex button:active{background:#1F2124;color:#fff}
+  html.midnight .juno-avatar[data-state="success"]{box-shadow:var(--bev-in),0 0 0 2px #46C97E}
+  html.midnight .recipe{background:#313438}
+  html.midnight .recipe:hover{background:#383B3F}
+  html.midnight .recipe.on{background:#7B87FF;color:#10122E;
+    box-shadow:inset 1px 1px 0 rgba(255,255,255,.3),inset -1px -1px 0 rgba(0,0,0,.35),
+    2px 2px 0 rgba(0,0,0,.5)}
+  html.midnight .recipe.on b{color:#10122E}
+  html.midnight .recipe.on span{color:#23264A}
+  html.midnight .recipe.on .rx-ico .ic{color:#082A20}
+  html.midnight .recipe.on .rx-tag{color:#6E2417;border-color:rgba(16,18,46,.55)}
+  html.midnight .modeswitch button{background:linear-gradient(180deg,#54575C,#37393D);color:#B9C0C4}
+  html.midnight .modeswitch button.on{background:linear-gradient(180deg,#2A2D30,#33363A);
+    color:var(--ink);box-shadow:var(--bev-in),inset 0 1px 3px rgba(0,0,0,.4)}
+  html.midnight .bgpick button{color:#ECEDEE;background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .bgpick button.on{background:linear-gradient(180deg,#2A2D30,#33363A);color:var(--teal-ink)}
+  html.midnight .pb-widths .wd{background:#212427}
+  html.midnight .lens-does{background:#313438}
+  html.midnight .scene .sub::after{background:linear-gradient(180deg,#1E2023 0,#1E2023 1px,#4A4D52 1px,#4A4D52 2px)}
+  html.midnight .ib{background:linear-gradient(180deg,#54575C,#37393D)}
+  html.midnight .ib:active{background:#1F2124;color:#fff}
+  html.midnight .pop{background:#3A3729;color:#E8E4D0}
+  html.midnight .chip{border-color:#55585D}
+  html.midnight .graph{background:#212427}
+  html.midnight .graph svg rect[fill="#0e1a18"]{fill:#2E3134}
+  html.midnight .graph svg rect[fill="#12312c"]{fill:#1C4436}
+  html.midnight .graph svg rect[stroke="#1c2e2b"]{stroke:#55585D}
+  html.midnight .graph svg marker path[fill="#8aa5a0"]{fill:#8A9296}
+  html.midnight .proof{background:#313438}
+  html.midnight .proof.ok{background:#263831}
+  html.midnight .proof.bad{background:#3A2A26}
+  html.midnight .proof .will li::marker{color:#46C97E}
+  html.midnight .tour{box-shadow:var(--bev-out),inset 2px 2px 0 #43464B,6px 6px 0 rgba(0,0,0,.55)}
+  html.midnight .tour-x,html.midnight .share-x{
+    background:linear-gradient(135deg,#5A5D62,#37393D);color:#ECEDEE}
+  html.midnight .tour-x:hover,html.midnight .share-x:hover{color:#fff}
+  html.midnight .tour-x:active,html.midnight .share-x:active{background:#1F2124;color:#fff}
+  html.midnight .tour-rail{border-right-color:#1E2023;box-shadow:inset -1px 0 0 #4A4D52}
+  html.midnight .tour-rail .step:hover{background:#33363A}
+  html.midnight .tour-rail .step.on{background:#7B87FF;color:#10122E}
+  html.midnight .tour-rail .step .n{background:#212427;color:#B9C0C4}
+  html.midnight .tour-rail .step.on .n{color:#A9B2FF}
+  html.midnight .tour-rail .step.done .n{background:#2CC79A;color:#0A241C}
+  html.midnight .remix-banner{background:#3A3729}
+  html.midnight .share{box-shadow:var(--bev-out),inset 2px 2px 0 #43464B,6px 6px 0 rgba(0,0,0,.55)}
+  /* .share-qr stays white — a QR needs its light quiet zone to scan */
+  @media(max-width:640px){html.midnight .tour-rail{border-bottom-color:#1E2023}}
 </style>
 </head>
 <body>

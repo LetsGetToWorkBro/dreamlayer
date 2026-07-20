@@ -1,7 +1,7 @@
 import React from "react";
 import { Animated, View, Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, platinum } from "../theme/colors";
+import { makeThemedStyles } from "../theme/useTheme";
 import { typography } from "../theme/typography";
 import { space, radius } from "../theme/spacing";
 import { hardShadow } from "../theme/shadow";
@@ -33,6 +33,7 @@ export function ScreenHeader({
   /** override the auto back control (defaults to on when the stack can pop) */
   back?: boolean;
 }) {
+  const s = useS();
   const anim = useEntrance(0);
   const router = useRouter();
   const canBack = back !== false && (back === true || (router.canGoBack?.() ?? false));
@@ -56,16 +57,16 @@ export function ScreenHeader({
   );
 }
 
-const box = {
-  width: 13,
-  height: 13,
-  borderRadius: 2,
-  borderWidth: 1,
-  borderColor: platinum.frame,
-  backgroundColor: platinum.face,
-} as const;
-
-const s = StyleSheet.create({
+const useS = makeThemedStyles(({ colors, platinum }) => {
+  const box = {
+    width: 13,
+    height: 13,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: platinum.frame,
+    backgroundColor: platinum.face,
+  } as const;
+  return StyleSheet.create({
   wrap: { marginBottom: space.lg },
   eyebrow: { color: colors.accentMemory, marginBottom: space.sm },
   bar: {
@@ -106,4 +107,5 @@ const s = StyleSheet.create({
   },
   right: { minWidth: 13, alignItems: "flex-end", justifyContent: "center" },
   subtitle: { color: colors.textSecondary, marginTop: space.md, paddingHorizontal: space.xs },
+  });
 });

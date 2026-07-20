@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, StyleProp, ViewStyle } from "react-native";
 import Svg, { Defs, Pattern, Rect, Line } from "react-native-svg";
-import { platinum } from "../theme/colors";
+import { useTheme } from "../theme/useTheme";
 
 /**
  * Pinstripe — the Mac OS 8.1 active-title-bar fill: crisp horizontal hairlines,
@@ -10,6 +10,7 @@ import { platinum } from "../theme/colors";
  * boxes render on top.
  */
 export function Pinstripe({ style }: { style?: StyleProp<ViewStyle> }) {
+  const { platinum } = useTheme();
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <Svg width="100%" height="100%">
