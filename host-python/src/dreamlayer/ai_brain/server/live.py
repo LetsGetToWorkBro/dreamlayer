@@ -464,8 +464,8 @@ _PAGE = r"""<!doctype html>
 </head>
 <body>
 <video id="cam" autoplay playsinline muted></video>
-<canvas id="overlay" aria-hidden="true"></canvas>
 <div id="veilshade"></div>
+<canvas id="overlay" aria-hidden="true"></canvas>
 <div id="lens" role="button" aria-label="Look — recognize what the camera sees" tabindex="0">
   <div id="hud" aria-live="polite"></div>
 </div>
@@ -534,7 +534,7 @@ function wrapLines(text){
   }
   return out;
 }
-let hudTimer = null;
+let hudTimer = null, hudHoldUntil = 0;
 function showHud(lines, o){
   o = o || {};
   const hud = $("hud");
@@ -542,6 +542,10 @@ function showHud(lines, o){
   hud.classList.add("on");
   clearTimeout(hudTimer);
   if (!o.persist) hudTimer = setTimeout(() => hud.classList.remove("on"), o.ms || 6000);
+  /* a deliberate message (a tap/ask result, a toast) HOLDS the HUD so the live
+     on-device label doesn't immediately overwrite it; the detector's own updates
+     pass _detector and respect this window */
+  if (!o._detector) hudHoldUntil = performance.now() + (o.ms || 6000);
 }
 function scan(on){ $("lens").classList.toggle("scan", !!on); }
 
@@ -782,14 +786,18 @@ async function lookNow(auto){
 $("lens").onclick = () => lookNow(false);
 $("lens").onkeydown = e => { if (e.key===" "||e.key==="Enter") lookNow(false); };
 
-/* ---- the continuous live loop (the glasses never wait for a tap) -------- */
-let loopTimer = null, booted = false;
+/* ---- the continuous live loop (the glasses never wait for a tap) --------
+   This is the Brain-round-trip ambient loop, the fallback when the on-device
+   detector isn't available. When the detector IS running (detectorActive), the
+   browser recognizes locally every frame and this server loop stays idle. */
+let loopTimer = null, booted = false, detectorActive = false;
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
   /* don't run while: paused, unpaired (behind the pairing modal — else we burn
-     camera+network 401ing every tick), backgrounded (battery), or before the
-     boot posture-seed lands (so the FIRST look already knows the veil) */
-  if (!liveOn || _pairNotice || document.hidden || !booted) return;
+     camera+network 401ing every tick), backgrounded (battery), before the boot
+     posture-seed lands (so the FIRST look already knows the veil), or when the
+     on-device detector is doing the recognizing */
+  if (!liveOn || _pairNotice || document.hidden || !booted || detectorActive) return;
   loopTimer = setTimeout(loopTick, delay || LOOP_MS);
 }
 async function loopTick(){
@@ -920,9 +928,105 @@ function heartbeat(){
   }, 10000);
 }
 
+/* ---- on-device detector: real recognition IN THE PHONE, zero setup ------
+   MediaPipe EfficientDet-Lite0 runs continuous object detection on the video
+   frames, right here in the browser — nothing leaves the phone, and no Brain
+   vision model is needed, so it's smart for EVERYONE out of the box. Boxes
+   anchor labels to the world like the glasses. It degrades cleanly: if the model
+   can't load (old device, blocked), the Brain ambient loop takes over. A person
+   is NEVER boxed or named — the same "never identify a stranger" line the Brain
+   holds, enforced client-side too. All same-origin (the CSP forbids off-origin
+   fetches), so the frames never leave the phone for the on-device pass. */
+let detector = null, rafId = null, lastDetect = 0;
+const DETECT_MS = 90;                 /* ~11 fps — smooth, easy on the battery */
+
+async function loadDetector(){
+  try {
+    const vision = await import("/dreamlayer/live/assets/vision_bundle.mjs");
+    const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
+    detector = await vision.ObjectDetector.createFromOptions(fileset, {
+      baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/efficientdet_lite0.tflite"},
+      scoreThreshold: 0.42, maxResults: 6, runningMode: "VIDEO"});
+    detectorActive = true;
+    clearTimeout(loopTimer);          /* the browser recognizes now — idle the server loop */
+    setTier("laptop");
+    showHud("on-device vision ✨", {ms:1800});
+    document.body.setAttribute("data-detector", "on");   /* status (styleable + testable) */
+    startDetectLoop();
+  } catch (e) {
+    detector = null; detectorActive = false;
+    document.body.setAttribute("data-detector", "off");
+    if (window.console) console.warn("[live] on-device detector unavailable — using Brain looks:", e);
+    if (liveOn && booted) scheduleLoop(400);   /* fall back to the Brain ambient loop */
+  }
+}
+function startDetectLoop(){ if (rafId == null) rafId = requestAnimationFrame(detectTick); }
+function clearOverlay(){
+  const cv = $("overlay"), ctx = cv.getContext("2d");
+  if (ctx) ctx.clearRect(0, 0, cv.width, cv.height);
+}
+function detectTick(ts){
+  rafId = requestAnimationFrame(detectTick);
+  if (!detectorActive || !detector || !liveOn || veil || document.hidden || !camReady()) {
+    clearOverlay(); return;
+  }
+  if (ts - lastDetect < DETECT_MS) return;
+  lastDetect = ts;
+  let res = null;
+  try { res = detector.detectForVideo($("cam"), ts); } catch (e) { return; }
+  paintDetections(res);
+}
+function paintDetections(res){
+  const cv = $("overlay"), v = $("cam"), ctx = cv.getContext("2d");
+  if (!ctx) return;
+  const cw = cv.clientWidth, ch = cv.clientHeight;
+  if (cv.width !== cw) cv.width = cw;
+  if (cv.height !== ch) cv.height = ch;
+  ctx.clearRect(0, 0, cw, ch);
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) return;
+  const scale = Math.max(cw / vw, ch / vh);          /* object-fit: cover */
+  const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
+  const dets = ((res && res.detections) || [])
+    .map(d => ({name: ((d.categories && d.categories[0]) || {}).categoryName || "",
+                score: ((d.categories && d.categories[0]) || {}).score || 0,
+                box: d.boundingBox}))
+    .filter(d => d.name && d.name !== "person" && d.box);   /* NEVER a person */
+  let top = null, topA = 0;
+  for (const d of dets) {
+    const x = d.box.originX * scale + ox, y = d.box.originY * scale + oy;
+    drawBox(ctx, x, y, d.box.width * scale, d.box.height * scale, d.name, d.score);
+    const a = d.box.width * d.box.height * d.score;
+    if (a > topA) { topA = a; top = d; }
+  }
+  if (top && !looking && !veil && performance.now() >= hudHoldUntil)
+    showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
+            {persist:true, _detector:true});
+}
+function drawBox(ctx, x, y, w, h, name, score){
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(125,255,168,.9)";
+  ctx.shadowColor = "rgba(125,255,168,.55)"; ctx.shadowBlur = 8;
+  const c = Math.max(6, Math.min(20, w / 4, h / 4));   /* corner brackets, not a full box */
+  ctx.beginPath();
+  ctx.moveTo(x, y + c); ctx.lineTo(x, y); ctx.lineTo(x + c, y);
+  ctx.moveTo(x + w - c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + c);
+  ctx.moveTo(x + w, y + h - c); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - c, y + h);
+  ctx.moveTo(x + c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - c);
+  ctx.stroke(); ctx.shadowBlur = 0;
+  const label = name + "  " + Math.round(score * 100) + "%";
+  ctx.font = "12px ui-monospace, Menlo, monospace";
+  const tw = ctx.measureText(label).width + 10;
+  ctx.fillStyle = "rgba(5,10,8,.72)";
+  ctx.fillRect(x, Math.max(0, y - 18), tw, 16);
+  ctx.fillStyle = "rgba(125,255,168,.95)";
+  ctx.fillText(label, x + 5, Math.max(11, y - 6));
+}
+
 /* ---- boot --------------------------------------------------------------- */
 setLive(true);
 startCam();
+loadDetector();                       /* progressive enhancement — non-blocking */
 (async () => {                                    /* first link check + posture seed */
   try {
     const t0 = performance.now();

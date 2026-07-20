@@ -367,10 +367,61 @@ class TestHttpSurface:
                 page = r.read().decode("utf-8")
             assert csp, "no Content-Security-Policy header"
             script_dir = next(p for p in csp.split(";") if "script-src" in p)
+            # nonce-based, no 'unsafe-inline'; the on-device detector adds 'self'
+            # + 'wasm-unsafe-eval' (WASM compilation only) — but NEVER the full
+            # 'unsafe-eval', and connect-src stays 'self' so nothing egresses.
             assert "'nonce-" in script_dir and "'unsafe-inline'" not in script_dir
-            nonce = re.search(r"script-src 'nonce-([^']+)'", csp).group(1)
+            assert "'unsafe-eval'" not in script_dir        # wasm-unsafe-eval ≠ unsafe-eval
+            assert "connect-src 'self'" in csp
+            assert "'wasm-unsafe-eval'" in script_dir       # the on-device detector needs it
+            nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
             assert f'<script nonce="{nonce}">' in page      # header nonce == tag nonce
             assert f'<style nonce="{nonce}">' in page
+        finally:
+            server.shutdown(); server.server_close()
+
+
+class TestDetectorAssets:
+    """The vendored on-device detector (MediaPipe loader + WASM + int8 model) is
+    served SAME-ORIGIN so the in-browser recognizer loads with zero external
+    fetch — the CSP forbids off-origin, so the frames never leave the phone."""
+
+    def test_asset_helper_types_and_confines_to_its_dir(self):
+        from dreamlayer.ai_brain.server.server import _live_asset
+        mjs = _live_asset("vision_bundle.mjs")
+        assert mjs is not None and mjs[1] == "text/javascript" and len(mjs[0]) > 1000
+        wasm = _live_asset("wasm/vision_wasm_internal.wasm")
+        assert wasm is not None and wasm[1] == "application/wasm"
+        model = _live_asset("models/efficientdet_lite0.tflite")
+        assert model is not None and model[1] == "application/octet-stream"
+        # path traversal, unknown extensions, and misses are all refused
+        assert _live_asset("../server.py") is None
+        assert _live_asset("../../__init__.py") is None
+        assert _live_asset("wasm/../../store.py") is None
+        assert _live_asset("secret.txt") is None            # unknown extension
+        assert _live_asset("models/nope.tflite") is None    # missing file
+
+    def test_assets_route_is_public_and_typed(self, tmp_path):
+        # served pre-auth (the page fetches them before pairing) with the right
+        # MIME so the browser will execute the module + compile the WASM.
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(base + "/dreamlayer/live/assets/vision_bundle.mjs",
+                             timeout=10) as r:      # no token — public asset
+                assert r.status == 200
+                assert r.headers.get("Content-Type", "").startswith("text/javascript")
+                assert len(r.read()) > 1000
+            with opener.open(base + "/dreamlayer/live/assets/wasm/vision_wasm_internal.wasm",
+                             timeout=10) as r:
+                assert r.headers.get("Content-Type") == "application/wasm"
+            # a missing asset is a clean 404, never a 500 or a file leak
+            try:
+                opener.open(base + "/dreamlayer/live/assets/models/nope.tflite", timeout=10)
+                assert False, "missing asset should 404"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
         finally:
             server.shutdown(); server.server_close()
 
