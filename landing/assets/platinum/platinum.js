@@ -154,16 +154,24 @@ if(CFG.daLine !== false){
       "i’m keeping your place. it’s safe with me.",
       "the cloud is off. i like it quiet.",
       "i’ll remember you were here. that’s the job.",
-      "careful — i’m ticklish on the wings."
+      "careful — i’m ticklish on the wings.",
+      "kept — not uploaded — kept.",
+      "i run on your machine. only yours.",
+      "shhh — the cloud might hear. (it can’t. it’s off.)",
+      "poke me again. i dare you."
     ];
     var TERM='come find me — <a href="./terminal.html">type dream in the Terminal</a>.';
     var RARE="✦ a rare line. keep it — keeping is the whole idea.";
-    /* she can actually talk — real clips, played only on a click */
-    var VOICED=[["based.","assets/juno/juno_based.mp3"],
+    /* she can actually talk — real clips, played only on a click. rotates through all of them. */
+    var VOICED=[["hey.","assets/juno/juno_hey.mp3"],
+                ["hello.","assets/juno/juno_hello.mp3"],
+                ["look.","assets/juno/juno_look.mp3"],
+                ["watch out.","assets/juno/juno_watchout.mp3"],
+                ["based.","assets/juno/juno_based.mp3"],
                 ["uh… ok, then.","assets/juno/juno_uhokthen.mp3"]];
-    var voiceEl=null;
+    var voiceEl=null, vi=0;
     function say(i){
-      var v=VOICED[((i%2)+2)%2];
+      var n=VOICED.length, v=VOICED[((i%n)+n)%n];
       cap.textContent=v[0];
       try{
         if(!voiceEl) voiceEl=new Audio();
@@ -189,12 +197,10 @@ if(CFG.daLine !== false){
         }
       }
       var line=null, voice=-1;
-      if(clicks%4===0) line=TERM;
-      else if(clicks===2) voice=0;
-      else if(clicks===6) voice=1;
-      else if(clicks>6 && Math.random()<0.2) voice=clicks;
+      if(clicks%4===0) line=TERM;                   // every 4th click points you to the Terminal
+      else if(clicks%2===0) voice=vi++;             // even clicks: she speaks, cycling every clip
       else if(Math.random()<1/12) line=RARE;
-      else if(clicks>12) line="okay. back to work. (flattered, though.)";
+      else if(clicks>18) line="okay. back to work. (flattered, though.)";
       else line=LINES[(clicks-1)%LINES.length];
       if(voice>=0) say(voice); else cap.innerHTML=line;
     }
