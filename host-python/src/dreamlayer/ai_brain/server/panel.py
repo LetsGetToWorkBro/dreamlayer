@@ -271,8 +271,10 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:200px;height:200px;max-width:100%}
-  .qrbox.live svg{width:236px;height:236px}   /* the Live Lens URL is longer → denser → render bigger to stay scannable */
+  .qrbox svg{display:block;width:232px;height:232px;max-width:100%}
+  /* the Live Lens URL is longer → denser → render it bigger so a phone camera
+     locks on from a comfortable distance (the #1 "the QR won't scan" cause) */
+  .qrbox.live svg{width:300px;height:300px}
   ol.steps{margin:10px 0 4px;padding-left:20px;color:var(--muted);font-size:12.5px;line-height:1.5}
   ol.steps li{margin:4px 0}
   ol.steps b{color:var(--text)}
@@ -577,7 +579,7 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
     <div id="pairout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
-      <button id="livebtn" onclick="liveLink()">Get the link</button></div>
+      <button id="livebtn" onclick="liveLink()">Refresh QR</button></div>
     <div id="liveout"></div>
   </section>
 
@@ -1071,12 +1073,17 @@ function buildNav(){
     PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
   showPage(curPage);
 }
+let _liveAutoLoaded=false;
 function showPage(id){curPage=id;
   document.querySelectorAll("main>section").forEach(s=>s.classList.toggle("pon",s.dataset.page===id));
   document.querySelectorAll(".side button").forEach(b=>b.classList.toggle("on",b.dataset.p===id));
   const p=PAGES.find(x=>x.id===id);
   if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
   const c=document.querySelector(".content"); if(c)c.scrollTop=0;
+  // Open Connections → the Live Lens QR is already there, not hidden behind a
+  // button you have to find. (Once per panel session, so re-visits don't spam
+  // the activity log or re-mint the link.)
+  if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
 }
 
 /* --- optional capabilities: live report + one-click on/off ---------------
@@ -1813,7 +1820,8 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
   out.innerHTML=`<div class="paircode">${qr}${steps}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
     `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
-    `<div class="conn-s" style="margin-top:6px">This link carries your pairing token — treat it like a password and send it only to your own phone.</div></div>`;
+    `<div class="conn-s" style="margin-top:6px"><b>Scanning is the easy way</b> — the link ends in a long <code>#t=…</code> pairing token that's meant to be scanned, not typed. `+
+    `If you do type it, include the whole thing. Treat it like a password and send it only to your own phone.</div></div>`;
   toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
 }
 async function loadHistory(){const h=await api("/dreamlayer/history");

@@ -514,8 +514,13 @@ $("send").onclick = ask;
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 
 function needsPairing(){
-  notice("NOT PAIRED",
-    "<p>Open the panel on the Brain's computer &rarr; <b>Connections &rarr; Live Lens</b> and scan the QR &mdash; the link carries your pairing token.</p>");
+  notice("SCAN THE QR TO CONNECT",
+    "<p>This page opened <b>without its pairing token</b>, so the Brain won't answer yet. "+
+    "The token rides the end of the link (the part after <code>#</code>) &mdash; too long to type, "+
+    "which is what the QR is for.</p>"+
+    "<p>On the Brain's computer: open the panel &rarr; <b>Connections &rarr; Live Lens</b> and "+
+    "<b>point your phone camera at the QR</b>. If you're typing the link by hand, copy the "+
+    "<b>whole</b> thing including the <code>#t=&hellip;</code> at the end.</p>");
 }
 
 /* ---- optional voice: honest about whose ears these are ------------------ */
