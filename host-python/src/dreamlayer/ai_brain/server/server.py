@@ -1791,7 +1791,10 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
                 pass
 
 
-_PACK_RUNNER = _run_pip
+# Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
+# _install_pack's _call_runner feeds on_line only to one that declares it. The
+# permissive annotation lets tests inject a 1-arg lambda without a mypy clash.
+_PACK_RUNNER: "Callable[..., tuple]" = _run_pip
 
 
 def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
@@ -1845,7 +1848,7 @@ def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     return False, f"pip exited {code}"
 
 
-_PACK_RUNNER_FROZEN = _run_pip_target
+_PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
 
 
 def _install_pack(brain: Brain, pack_key: str) -> dict:
