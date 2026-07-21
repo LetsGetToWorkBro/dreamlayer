@@ -38,6 +38,13 @@ class Config:
     # 32-d mock's, so the floor tracks it rather than the fixture.
     recall_min_confidence:      float = 0.35
     reduce_motion:              bool  = False
+    # Juno's spoken voice (Piper TTS): off by default — it needs the `voice`
+    # extra and a voice model, and a headless Brain shouldn't surprise a room
+    # with audio. Flip it on (panel toggle or `DL_JUNO_VOICE=1`) once a model
+    # is in place; absent piper/model, it stays a silent no-op regardless.
+    juno_voice:                 bool  = field(
+        default_factory=lambda: os.environ.get("DL_JUNO_VOICE", "").strip().lower()
+        in ("1", "true", "yes", "on"))
 
     # LLM tier-3 extraction
     llm_model:                  str   = "gpt-4o-mini"

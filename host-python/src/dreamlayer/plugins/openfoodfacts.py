@@ -24,6 +24,12 @@ from ._egress import no_redirect_opener, read_capped
 NUTRISCORE_RATING = {"a": 4.8, "b": 4.0, "c": 3.0, "d": 2.0, "e": 1.0}
 
 SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl"
+# Product-by-barcode endpoint (same pinned host as SEARCH_URL, so the
+# no_redirect_opener host-pin still holds). v2 lets us ask for just the fields
+# we surface, keeping the reply small.
+PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product"
+
+_BARCODE_RE = __import__("re").compile(r"\D")
 
 
 def build_query(label: str) -> str:
@@ -33,6 +39,73 @@ def build_query(label: str) -> str:
         "fields": "product_name,nutriscore_grade,brands,allergens_tags",
     })
     return f"{SEARCH_URL}?{q}"
+
+
+def build_barcode_query(code: str) -> str:
+    """The product-by-code URL for a decoded barcode. `code` is sanitized to
+    digits — a barcode is numeric, and this keeps a decoder glitch from
+    building a URL with path-traversal or query junk in it."""
+    digits = _BARCODE_RE.sub("", code or "")
+    fields = "product_name,nutriscore_grade,brands,allergens_tags,ingredients_text"
+    q = urllib.parse.urlencode({"fields": fields})
+    return f"{PRODUCT_URL}/{digits}.json?{q}"
+
+
+def lookup_by_barcode(code: str, fetch_fn: Callable[[str], object]) -> dict:
+    """Resolve a decoded barcode to a product dict (nutriscore/allergens/brand/
+    ingredients/name), or {} on any miss/failure — a lens never breaks on a bad
+    scan. Adds `ingredients` and `product_name` on top of parse_product so the
+    dietary check has ingredient text to match, not just the allergen tags."""
+    digits = _BARCODE_RE.sub("", code or "")
+    if not (8 <= len(digits) <= 14):                  # not a product GTIN
+        return {}
+    try:
+        raw = fetch_fn(build_barcode_query(digits))
+        data = cast(dict, json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {}))
+        # OFF: status 1 = found, 0 = unknown. Compare as a string so a reply
+        # that sends "1"/"success" (or an int) never raises out of int()
+        if str(data.get("status", "")).strip() not in ("1", "success"):
+            return {}
+        product = data.get("product") or {}
+        out = parse_product(product)
+        ing = str(product.get("ingredients_text", "") or "").strip()
+        if ing:
+            out["ingredients"] = ing[:300]
+        name = str(product.get("product_name", "") or "").strip()
+        if name:
+            out["product_name"] = name[:80]
+        return out
+    except Exception:
+        return {}
+
+
+def off_barcode_fn(fetch_fn: Callable[[str], object], ttl: float = 600.0,
+                   now_fn: Optional[Callable[[], float]] = None,
+                   maxsize: int = 256) -> Callable[[str], dict]:
+    """A cached `lookup(barcode) -> product dict` bound to a fetch function.
+    Keyed on the sanitized digits (an exact, ideal cache key), caching even a
+    miss so a repeated glance at the same item doesn't re-hit the API. The cache
+    is BOUNDED (oldest-inserted evicted past `maxsize`) so a stream of distinct
+    barcodes — a QR that encodes varying numbers, damaged EANs — can't grow it
+    without limit (audit 2026-07-21)."""
+    import time
+    from collections import OrderedDict
+    now = now_fn or time.time
+    cache: "OrderedDict[str, tuple]" = OrderedDict()
+
+    def lookup_fn(code: str) -> dict:
+        key = _BARCODE_RE.sub("", code or "")
+        hit = cache.get(key)
+        if hit is not None and (now() - hit[0]) < ttl:
+            return hit[1]
+        result = lookup_by_barcode(key, fetch_fn)
+        cache[key] = (now(), result)
+        cache.move_to_end(key)
+        while len(cache) > max(1, maxsize):
+            cache.popitem(last=False)              # evict the oldest
+        return result
+
+    return lookup_fn
 
 
 def parse_product(product: dict) -> dict:
@@ -88,10 +161,15 @@ def off_shop_fn(fetch_fn: Callable[[str], object], ttl: float = 300.0,
     return shop
 
 
-def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
+def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5,
+                   timeout: float = 4.0) -> str:
     """The shipped network fetch: urllib with a couple of retries on transient
     failures (5xx / connection errors), since Open Food Facts 503s under load.
-    A descriptive User-Agent is what OFF asks of API clients.
+    A descriptive User-Agent is what OFF asks of API clients. `retries`/`timeout`
+    are tunable so a latency-sensitive caller (the barcode lens, which runs
+    inside a ~1.5s glance deadline on a shared thread pool) can bound its worst
+    case instead of the default 13.5s retry budget starving the pool (audit
+    2026-07-21).
 
     Hardened egress (audit 2026-07-17) via the shared :mod:`plugins._egress`
     primitives: the read is size-capped (response-OOM) and 3xx redirects are
@@ -106,7 +184,7 @@ def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
     last: Exception = RuntimeError("no attempt")
     for attempt in range(max(1, retries + 1)):
         try:
-            with opener.open(req, timeout=4) as r:   # network capability, no redirects
+            with opener.open(req, timeout=timeout) as r:  # network cap, no redirects
                 return read_capped(r).decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             last = e

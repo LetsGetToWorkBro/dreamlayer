@@ -127,10 +127,42 @@ MIN_FRAME_VARIANCE = 1e-4       # a flat/black frame has nothing to recognise
 class ObjectRecognizer:
     def __init__(self, classify_fn: Optional[Callable] = None,
                  min_confidence: float = 0.5,
-                 taxonomy: Optional[list[str]] = None):
+                 taxonomy: Optional[list[str]] = None,
+                 ocr_fn: Optional[Callable] = None,
+                 barcode_fn: Optional[Callable] = None):
         self._classify = classify_fn
         self.min_confidence = min_confidence
         self.taxonomy = taxonomy or DEFAULT_TAXONOMY
+        # OCR reader: an explicit read_fn(frame)->str, else the default RapidOCR
+        # rung is resolved lazily on first look (None when no OCR wheel is
+        # installed — the text channel simply stays the VLM's / empty).
+        self._ocr_fn = ocr_fn
+        self._ocr_ready = ocr_fn is not None
+        # Barcode decoder: an explicit decode_fn(frame)->[(sym,value),...], else
+        # the default zxing-cpp rung, resolved lazily (None when absent → no
+        # barcode attribute, and the food lens stays quiet).
+        self._barcode_fn = barcode_fn
+        self._barcode_ready = barcode_fn is not None
+
+    def _ocr(self) -> Optional[Callable]:
+        if not self._ocr_ready:
+            try:
+                from .ocr_backends import default_ocr
+                self._ocr_fn = default_ocr()
+            except Exception:                          # noqa: BLE001 — OCR is never load-bearing
+                self._ocr_fn = None
+            self._ocr_ready = True
+        return self._ocr_fn
+
+    def _barcode(self) -> Optional[Callable]:
+        if not self._barcode_ready:
+            try:
+                from .barcode_backends import default_barcode_decoder
+                self._barcode_fn = default_barcode_decoder()
+            except Exception:                          # noqa: BLE001 — never load-bearing
+                self._barcode_fn = None
+            self._barcode_ready = True
+        return self._barcode_fn
 
     def recognize(self, frame) -> Optional[ObjectSighting]:
         """Name the object in a frame, or None (no frame / low confidence /
@@ -161,8 +193,72 @@ class ObjectRecognizer:
             return None
         if person_guard.frame_is_dominated_by_a_person(frame):
             return None                       # visual ground truth: a human subject
+        attrs = self._read_text_into(frame, attrs)
+        attrs = self._decode_barcode_into(frame, attrs)
         return ObjectSighting(label=label, confidence=confidence,
                               attributes=attrs or {})
+
+    def _decode_barcode_into(self, frame, attrs) -> dict:
+        """Attach attributes["barcode"] with the first numeric product code (or
+        any decoded symbology) read off the frame, so the food lens can look it
+        up. Pure on-device decode — no network, no identity. A no-op when no
+        decoder wheel is installed or nothing scans."""
+        decode = self._barcode()
+        if decode is None:
+            return attrs
+        try:
+            hits = decode(frame) or []
+            from .barcode_backends import is_gtin
+            # tolerate any (sym, value) or bare-value shape a decoder returns —
+            # unpacking a malformed row must not break the look (the unpack has
+            # to sit INSIDE the guard; audit 2026-07-21)
+            values = [row[-1] if isinstance(row, (tuple, list)) else row
+                      for row in hits]
+            values = [str(v) for v in values if v]
+            # a numeric GTIN (a food/product code) is what the lookup wants; fall
+            # back to the first decoded value (e.g. a QR) so the attribute is honest
+            code = next((v for v in values if is_gtin(v)),
+                        values[0] if values else "")
+        except Exception:                              # noqa: BLE001 — never breaks a look
+            return attrs
+        if not code:
+            return attrs
+        attrs = dict(attrs or {})
+        attrs["barcode"] = code
+        return attrs
+
+    def _read_text_into(self, frame, attrs) -> dict:
+        """Fill attributes["text"] with what OCR actually reads on the object —
+        real text beats the VLM's guess, and it lights up the translation, taste,
+        and price/ISBN providers that consume this field. A no-op when no OCR
+        wheel is installed (reader is None) or nothing legible/allowed is read.
+        The reader has already dropped any person-named or contact-detail line,
+        so this can only add safe text."""
+        reader = self._ocr()
+        if reader is None:
+            return attrs
+        try:
+            text = reader(frame)
+        except Exception:                              # noqa: BLE001 — OCR never breaks a look
+            return attrs
+        if not text:
+            return attrs
+        # Boundary re-gate on the ASSEMBLED text — the reader filters line by
+        # line, but a name badge renders "Maya" and "Chen" as SEPARATE regions
+        # that each pass the per-line shape rule and only read as a person once
+        # joined. Running person_guard on the whole string catches the reassembled
+        # name (and defends any non-default ocr_fn), and it fails CLOSED: an
+        # error here drops the text rather than surfacing a possible name
+        # (audit 2026-07-21).
+        try:
+            from . import person_guard
+            if person_guard.defers_person(text):
+                return attrs
+        except Exception:                              # noqa: BLE001 — can't confirm safe → drop
+            return attrs
+        attrs = dict(attrs or {})
+        attrs["text"] = text                           # OCR is ground truth over a guess
+        return attrs
 
     # -- deterministic mock ------------------------------------------------
 

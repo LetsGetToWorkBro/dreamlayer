@@ -1624,6 +1624,7 @@ def _juno_asset(name: str) -> "Optional[tuple[bytes, str]]":
 _LIVE_ASSET_CTYPES = {
     ".mjs": "text/javascript", ".js": "text/javascript",
     ".wasm": "application/wasm", ".tflite": "application/octet-stream",
+    ".task": "application/octet-stream",   # MediaPipe gesture recognizer bundle
 }
 
 

@@ -118,6 +118,11 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("mic_capture", "Live microphone → the capture pipeline", "voice",
         ("sounddevice",), "voice", "orchestrator/capture.py",
         gain="baseline has no audio input at all; this reads the mic and drives the VAD→ASR→hub loop", impact=5, before=0, after=5),
+    Cap("local_tts", "Juno speaks — on-device neural voice", "voice",
+        ("piper",), "voice", "orchestrator/tts_piper.py",
+        note="off by default (DL_JUNO_VOICE=1); needs a Piper voice model "
+             "($DL_PIPER_VOICE or <cfg>/voices/*.onnx)",
+        gain="baseline shows Juno's reply only as text on the glass; this speaks it aloud, offline — no cloud voice, audio never leaves the Brain", impact=4, before=0, after=4.5),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
@@ -174,6 +179,15 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("coremltools",), "vision", "object_lens/classify_backends.py",
         kind="darwin",
         gain="runs recognition on Apple silicon instead of CPU — faster, cooler", impact=2, before=3, after=4.5),
+    Cap("text_ocr", "Read text in view (prices, menus, ISBNs)", "vision",
+        ("rapidocr_onnxruntime",), "vision", "object_lens/ocr_backends.py",
+        note="every OCR line is person- and PII-scrubbed before it surfaces",
+        gain="baseline only has the vision model's guess at any text; this reads it for real, on-device — feeding the translation and taste lenses and the price/ISBN providers", impact=4, before=1.5, after=4.5),
+    Cap("barcode_scan", "Scan a product barcode → nutrition & allergens", "vision",
+        ("zxingcpp",), "vision", "object_lens/barcode_backends.py",
+        note="decoding is on-device; the Open Food Facts lookup sends only the "
+             "numeric code, and only when the Veil is down",
+        gain="baseline can't read a barcode at all; this decodes it on-device and checks the product's allergens against your dietary rules — 'contains milk, soy — you avoid dairy'", impact=3, before=0, after=4),
 
     # --- causal ---------------------------------------------------------------------
     Cap("causal_fusion", "Causal inference over credibility channels", "causal",

@@ -430,12 +430,34 @@ class TestDetectorAssets:
         assert wasm is not None and wasm[1] == "application/wasm"
         model = _live_asset("models/efficientdet_lite0.tflite")
         assert model is not None and model[1] == "application/octet-stream"
+        gesture = _live_asset("models/gesture_recognizer.task")
+        assert gesture is not None and gesture[1] == "application/octet-stream"
         # path traversal, unknown extensions, and misses are all refused
         assert _live_asset("../server.py") is None
         assert _live_asset("../../__init__.py") is None
         assert _live_asset("wasm/../../store.py") is None
         assert _live_asset("secret.txt") is None            # unknown extension
         assert _live_asset("models/nope.tflite") is None    # missing file
+
+    def test_page_ships_on_device_gesture_control(self):
+        page = live.render_live("nonce")
+        # the in-browser gesture loop loads the vendored recognizer + model
+        # (same-origin, so no CSP change) and runs on the phone's own <video>
+        assert "loadGesture()" in page
+        assert "GestureRecognizer" in page
+        assert "/dreamlayer/live/assets/models/gesture_recognizer.task" in page
+        assert 'gesturer.recognizeForVideo($("cam")' in page
+        # navigation, not recognition: mapped shapes call existing HUD actions
+        for shape in ("Pointing_Up", "Open_Palm", "Victory"):
+            assert shape in page
+        assert "toggleDream()" in page
+        # the look gesture (which POSTs a frame) is guarded so it never fires in
+        # dream mode — whose contract is "nothing egresses" (audit fix)
+        assert "if (!dreamOn) lookNow(false)" in page
+        # gated like the detector (veil / hidden / camReady) and debounced on the
+        # STABLE shape so a held hand fires once and a score dip can't re-fire
+        assert "veil || document.hidden || !camReady()" in page
+        assert "GESTURE_STABLE" in page and "GESTURE_RELEASE" in page
 
     def test_vendored_assets_match_their_pinned_hashes(self):
         # Enforce the PROVENANCE.md sha256 pins: a swapped or corrupted detector

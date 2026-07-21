@@ -173,3 +173,20 @@ class TestQueueUi:
         assert 'id="dlall"' in html
         assert 'id="dlqueue"' in html
         assert html.index('id="dlall"') < html.index('id="packgrid"')
+
+    def test_every_per_item_button_routes_through_the_visible_queue(self):
+        # #3: models and plugins used to bypass the queue (a separate model
+        # progress bar; a blocking store install). Now a single pack, model,
+        # OR plugin all enqueue through queueDownload, so each is one row in
+        # the same visible #dlqueue as "Download all".
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        # the unified "Download all" (renamed off the packs-only name)
+        assert "downloadAll()" in html
+        assert "downloadAllPacks" not in html
+        # a model pull routes through the queue, not a direct fire-and-forget
+        assert 'queueDownload("model"' in html
+        # a store install routes through the queue, not a blocking await
+        assert 'queueDownload("plugin"' in html
+        # Download all reaches past packs to grab the missing models too
+        assert "MODELMISS" in html

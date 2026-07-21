@@ -2114,10 +2114,97 @@ function drawBox(ctx, x, y, w, h, name, score){
   ctx.fillText(label, x + 5, Math.max(11, y - 6));
 }
 
+/* ---- on-device hand gestures — HUD navigation without a tap ------------------
+   The SAME vendored MediaPipe runtime that powers the object detector also ships
+   a GestureRecognizer. It reads hand GEOMETRY only (21 landmarks + a canned
+   gesture enum) — never a face, never identity — entirely in-browser on the
+   phone's <video>, so nothing about the hand leaves the device and it never
+   touches the server look path or person_guard. It drives NAVIGATION, not
+   recognition:
+     point up   → look at what's in front of you   (lookNow)
+     open palm  → clear the HUD                     (glassClear)
+     victory    → toggle dream mode                 (toggleDream)
+   A gesture fires ONCE when a new hand-shape appears (debounced) — never
+   repeatedly while the hand is held. Failure to load is a silent no-op: gestures
+   are a bonus, the tap grammar is always there. */
+let gesturer = null, gRaf = null, gLastRun = 0, gFails = 0;
+let gLastFired = "", gStable = "", gStableCount = 0;
+const GESTURE_MS = 120;                /* ~8 fps — lighter than the detector loop */
+const GESTURE_MAX_FAILS = 12;
+const GESTURE_STABLE = 2;              /* frames a shape must hold before it fires */
+const GESTURE_RELEASE = 4;            /* frames the hand must LEAVE before it re-arms */
+const GESTURE_MIN_SCORE = 0.6;
+const GESTURE_ACTIONS = {
+  /* point-up asks the Brain "what's this?" — but a look POSTs the camera frame,
+     and dream mode's contract is "nothing egresses", so never look while
+     dreaming (lookNow itself has no dream guard — the tap/key paths gate it
+     externally, so the gesture path must too) */
+  Pointing_Up: () => { if (!dreamOn) lookNow(false); },
+  Open_Palm:   () => { glassClear(); hideDetectorHud(); },
+  Victory:     () => toggleDream()
+};
+async function loadGesture(){
+  try {
+    const vision = await import("/dreamlayer/live/assets/vision_bundle.mjs");
+    const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
+    gesturer = await vision.GestureRecognizer.createFromOptions(fileset, {
+      baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/gesture_recognizer.task"},
+      numHands: 1, runningMode: "VIDEO"});
+    document.body.setAttribute("data-gesture", "on");   /* status (styleable + testable) */
+    gRaf = requestAnimationFrame(gestureTick);
+  } catch (e) {
+    document.body.setAttribute("data-gesture", "off");
+    if (window.console) console.warn("[live] gesture recognizer unavailable:", e);
+  }
+}
+function gestureTick(ts){
+  gRaf = requestAnimationFrame(gestureTick);
+  /* idle guards mirror the detector's — but NOT dreamOn: a Victory must be able
+     to leave dream mode, and lookNow already no-ops while dreaming */
+  if (!gesturer || !liveOn || veil || document.hidden || !camReady() || !booted) return;
+  if (ts - gLastRun < GESTURE_MS) return;
+  gLastRun = ts;
+  let res = null;
+  try { res = gesturer.recognizeForVideo($("cam"), ts); gFails = 0; }
+  catch (e) {
+    if (++gFails >= GESTURE_MAX_FAILS) {           /* runtime death → stop, silently */
+      try { if (gesturer && gesturer.close) gesturer.close(); } catch (_) {}
+      gesturer = null;
+      if (gRaf != null) { cancelAnimationFrame(gRaf); gRaf = null; }
+      document.body.setAttribute("data-gesture", "off");
+    }
+    return;
+  }
+  const g = ((res && res.gestures && res.gestures[0]) || [])[0];
+  let name = (g && g.categoryName) || "None";
+  const score = (g && g.score) || 0;
+  /* a below-threshold read is "no clear gesture" — treat it as None for
+     latching so a confidence dip on a HELD hand can't look like a new shape */
+  if (name !== "None" && score < GESTURE_MIN_SCORE) name = "None";
+  /* debounce on the STABLE shape, not the per-frame read: a shape must hold for
+     GESTURE_STABLE frames to fire, and the hand must LEAVE (read None) for
+     GESTURE_RELEASE frames before the same shape can fire again. So one hold =
+     one action — a mid-hold score dip or a 1-frame dropout never re-fires. */
+  if (name === gStable) { if (gStableCount < 64) gStableCount++; }
+  else { gStable = name; gStableCount = 1; }
+  if (gStable === "None") {
+    if (gStableCount >= GESTURE_RELEASE) gLastFired = "";   /* hand truly gone → re-arm */
+    return;
+  }
+  if (gStableCount < GESTURE_STABLE) return;   /* not held long enough yet */
+  if (gStable === gLastFired) return;          /* already fired for this hold */
+  gLastFired = gStable;                         /* consume the slot (mapped or not) */
+  const act = GESTURE_ACTIONS[gStable];
+  if (!act) return;
+  showHud("gesture: " + gStable.replace("_", " ").toLowerCase(), {ms:900});
+  try { act(); } catch (_) {}
+}
+
 /* ---- boot --------------------------------------------------------------- */
 setLive(true);
 startCam();
 loadDetector();                       /* progressive enhancement — non-blocking */
+loadGesture();                        /* on-device hand gestures — same, non-blocking */
 (async () => {                                    /* first link check + posture seed */
   /* a QR that carried the SHORT pairing code (#c=) redeems for the token
      BEFORE the status probe — else an about-to-pair phone 401s and pops the

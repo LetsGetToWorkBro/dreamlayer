@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import logging
 from ..logging_setup import with_correlation_id
 from ..memory.db import MemoryDB
 from ..memory.retrieval import Retriever
@@ -39,6 +40,8 @@ from ._ops_helpers import (          # noqa: F401  (re-export for compatibility)
     _default_http_get, _default_http_post,
     _parse_scene_reply, _parse_taste_reply,
 )
+
+log = logging.getLogger("dreamlayer.orchestrator")
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # Types for the shared-state surface below. Imported only for type
@@ -180,6 +183,10 @@ class Orchestrator(
         self._init_dream_rem_horizon(cfg, bridge)
         self._init_confluence_plugins(cfg)
         bridge.on_event(self._on_event)
+        # last: give Juno a voice if the wearer asked for one (opt-in; a no-op
+        # when piper or a voice model is absent, so this never fails a build)
+        if getattr(cfg, "juno_voice", False):
+            self.set_voice(True)
 
     # ------------------------------------------------------------------
     # Construction — dependency-ordered builders
@@ -195,6 +202,10 @@ class Orchestrator(
         self.db = MemoryDB(db_path)
         self.config = cfg
         self.state = HostState()
+        # Juno's spoken voice: a no-op until set_voice() wires Piper (if the
+        # `voice` extra + a model are present). Every juno reply routes through
+        # _juno_say, so turning voice on is one call, and off costs nothing.
+        self._juno_speak = lambda _line: None
 
         # Embedder ladder: local MiniLM → OpenAI (key) → hashing lexical model,
         # first available (memory.embeddings.default_embedder). The offline
@@ -489,6 +500,16 @@ class Orchestrator(
             engine="argos")
         self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
+        # Barcode → Open Food Facts → your dietary rules. Only the numeric code
+        # leaves, and only when the Veil is down (allow_capture); your
+        # DietaryProfile never leaves the device.
+        from ..object_lens.barcode_lens import BarcodeFoodProvider
+        from ..plugins.openfoodfacts import _default_fetch, off_barcode_fn
+        # snappy fetch (no retries, 2s) so a slow OFF can't starve the glance pool
+        _off = off_barcode_fn(lambda u: _default_fetch(u, retries=0, timeout=2.0))
+        self.object_lens.registry.register(BarcodeFoodProvider(
+            self.dietary, lookup_fn=_off,
+            allow_network=self.privacy.allow_capture))
         # Waypath: point-me-to-my-things from anchors
         self.waypath = WaypathLens()
         # Scholar: look at a test question and get the answer; look at a form and
@@ -741,6 +762,34 @@ class Orchestrator(
         return self.lucid.query(text or None, camera_frame=frame).to_hud_card()
 
     @with_correlation_id
+    def set_voice(self, on: bool) -> bool:
+        """Turn Juno's spoken voice on/off. Returns whether she can actually
+        speak now (piper installed AND a voice model loaded). Off — or a missing
+        dep/model — leaves _juno_say sending text exactly as before."""
+        if not on:
+            self._juno_speak = lambda _line: None
+            return False
+        try:
+            from .tts_piper import make_speak_fn
+            speak = make_speak_fn()
+        except Exception as exc:                       # noqa: BLE001 — never fail wiring
+            log.debug("[tts] voice unavailable: %s", exc)
+            speak = None
+        self._juno_speak = speak or (lambda _line: None)
+        # make_speak_fn always returns a callable; .ready is True only when a
+        # voice model actually loaded (else it's the silent no-op)
+        return bool(getattr(speak, "ready", False))
+
+    def _juno_say(self, line: str, tone: str, event: str = "juno") -> None:
+        """The one funnel for a Juno reply: text on the glass, and — when her
+        voice is on — the same words spoken aloud. Speech never blocks or breaks
+        the card (make_speak_fn plays on its own thread and swallows errors)."""
+        self.bridge.send_card(cards.juno_reply(line, tone), event=event)
+        try:
+            self._juno_speak(line)
+        except Exception as exc:                       # noqa: BLE001
+            log.debug("[tts] speak failed: %s", exc)
+
     def ask_juno(self, text: str) -> dict:
         """The full "Hey Juno" surface: run a device command if it is one
         ("turn on focus", "go incognito", "rewind my day"), otherwise answer
@@ -757,14 +806,14 @@ class Orchestrator(
                 line = persona.confirm("learned_name", name=learned["value"])
             else:
                 line = persona.confirm("learned_pref")
-            self.bridge.send_card(cards.juno_reply(line, "action"), event="juno")
+            self._juno_say(line, "action")
             self.publish_profile()          # a teach is worth pushing right away
             return {"intent": "learn", "text": line, "executed": True,
                     "learned": learned}
         cmd = parse_command(text)
         if cmd is not None:
             line, executed, intent = self._run_command(cmd)
-            self.bridge.send_card(cards.juno_reply(line, "action"), event="juno")
+            self._juno_say(line, "action")
             return {"intent": intent, "text": line, "executed": executed}
         # not a command → knowledge / conversation. Your questions also reveal
         # what you care about, so the Juno keeps learning as you ask.
@@ -786,7 +835,7 @@ class Orchestrator(
             line = res["say"]
         else:
             line = persona.dunno()
-        self.bridge.send_card(cards.juno_reply(line, "answer"), event="juno")
+        self._juno_say(line, "answer")
         out = {"intent": kind, "text": line, "executed": False}
         out.update({k: v for k, v in res.items() if k not in ("intent", "answer")})
         return out

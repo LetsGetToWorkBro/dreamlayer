@@ -99,7 +99,8 @@ var d=t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches;
 if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
-<link rel="icon" id="favJuno" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
+<link rel="icon" id="favJuno" href="/panel-assets/app_icon.png">
+<link rel="apple-touch-icon" href="/panel-assets/app_icon.png">
 <style>
   /* ============================================================
      DreamLayer Brain — Mac OS 8.1 "Platinum" control panel.
@@ -200,8 +201,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   pre{overflow-x:auto}
 
   /* system status */
-  .sys{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
-  .sys:first-child{border-top:0}
+  .sysitem{border-top:1px solid var(--line)}
+  .sysitem:first-child{border-top:0}
+  .sys{display:flex;align-items:center;gap:12px;padding:12px 0;cursor:pointer;user-select:none}
+  .sys:hover{background:rgba(0,0,0,.025)}
+  .scaret{flex:none;color:var(--ghost);font-size:.78rem;width:12px;text-align:center}
+  .sysdetail{display:none;padding:0 0 13px 21px}
+  .sysdetail.open{display:block}
+  .sysd-body{color:var(--muted);font-size:.86rem;line-height:1.5;margin-bottom:9px}
+  .sysd-body b{color:var(--text)}
+  .sysd-list{margin-top:6px;font-family:ui-monospace,Menlo,monospace;font-size:.79rem;color:var(--text);word-break:break-all}
+  .sgo{font-size:.82rem;padding:5px 13px;border-radius:6px}
   .sdot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ghost);
         box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
   .sdot.ok{background:var(--success)}
@@ -286,11 +296,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:232px;height:232px;max-width:100%}
+  .qrbox svg{display:block;width:300px;height:300px;max-width:100%}
   /* the Live Lens QR now carries the short pairing code (sparse), and renders
      bigger still, so a phone camera locks on from a comfortable distance off a
-     glossy screen (the #1 "the QR won't scan" cause) */
-  .qrbox.live svg{width:340px;height:340px}
+     glossy screen (the #1 "the QR won't scan" cause). The http fallback carries
+     the long token and is the densest, so even the base size is generous. */
+  .qrbox.live svg{width:380px;height:380px}
+  /* the pairing container is a disclosure: collapsed until you need it, and it
+     folds away again so a big scannable QR never permanently eats the panel. */
+  #liveout{overflow:hidden;transition:max-height .28s ease;max-height:0}
+  #liveout.open{max-height:1400px}
+  #livebtn.on{background:var(--memory);color:#fff}
   .livecode{text-align:center;margin:8px 0 4px}
   .livecode .codebig{font:22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:4px;
     color:var(--memory);background:var(--surf);border:1px solid var(--line);
@@ -446,11 +462,46 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     box-shadow:inset -1px 0 0 #9A9A9A, inset 1px 1px 0 #F4F4F4}
   .side .brand2{display:flex;align-items:center;gap:10px;padding:6px 10px 14px;
     font:16px var(--chi);font-weight:400;letter-spacing:.01em;color:#111}
-  .side .brand2 .rd{position:relative;width:16px;height:16px;flex:none;border-radius:50%;
-    border:2.5px solid var(--memory)}
-  .side .brand2 .rd::after{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--memory)}
+  /* the app's own logo, edge-to-edge — one mark everywhere, no teal ring */
+  .side .brand2 .brandlogo{width:22px;height:22px;flex:none;border-radius:6px;object-fit:cover;
+    box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .side .navlabel{font:10.5px var(--chi);letter-spacing:.1em;text-transform:uppercase;
     color:#6E7671;padding:10px 11px 5px}
+  .navsearch{padding:2px 6px 6px;position:relative}
+  .navsearch input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--frame);
+    background:#FBFBFB;color:#111;font-size:13px;outline:none}
+  .navsearch input:focus{border-color:var(--memory)}
+  .navres{display:none;flex-direction:column;gap:1px;margin-top:5px;max-height:46vh;overflow-y:auto}
+  .navres.on{display:flex}
+  .navr{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;
+    padding:7px 9px;border-radius:6px;font-size:12.5px;background:transparent;border:0;cursor:pointer;color:#1a1a1a}
+  .navr:hover,.navr.navsel{background:rgba(0,0,0,.06)}
+  .navrp{font-size:9.5px;color:var(--ghost);text-transform:uppercase;letter-spacing:.06em;flex:none}
+  .navr.empty{color:var(--muted);cursor:default;font-size:11.5px}
+  html.midnight .navsearch input{background:#2A2C2E;color:#ECEDEE;border-color:#4A4D50}
+  html.midnight .navr{color:#DCE0E2}
+  /* first-open setup walkthrough */
+  .setupwrap{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
+    background:rgba(10,12,14,.55);backdrop-filter:blur(3px);padding:16px}
+  .setupwrap.on{display:flex}
+  .setupcard{width:min(93vw,440px);background:#fff;border:1px solid var(--frame);border-radius:16px;
+    padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .setupjuno{image-rendering:pixelated;margin:0 auto 6px;display:block}
+  .setuptitle{font-size:20px;color:var(--text);margin-bottom:4px}
+  .setupsub{color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:14px}
+  #setupsteps{display:flex;flex-direction:column;gap:8px;text-align:left}
+  .setupstep{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border-radius:11px;
+    border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--text)}
+  .setupstep:hover{border-color:var(--memory);background:rgba(0,0,0,.02)}
+  .setupnum{flex:none;width:24px;height:24px;border-radius:50%;background:var(--memory);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+  .setupbody{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .setupbody b{font-size:13.5px}
+  .setupbody span{font-size:11.8px;color:var(--muted);line-height:1.4}
+  .setupgo{flex:none;color:var(--memory);font-size:12px;font-weight:600}
+  .setupskip{margin-top:14px;font-size:12.5px}
+  html.midnight .setupcard{background:#26282A}
+  html.midnight .setupstep{color:#ECEDEE}
   .side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:0;
     color:#26292B;font:14px var(--chi);padding:7px 11px;border-radius:0;box-shadow:none;
     cursor:default;outline:none}
@@ -592,6 +643,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
       width="16" height="16" alt=""><span id="livetext">connecting…</span></span>
+    <button class="themetog" id="helpBtn" type="button" aria-label="Help and report a bug"
+      title="Help &amp; report a bug" onclick="gotoReport()">?</button>
     <button class="themetog" id="themeTog" type="button" aria-label="Appearance"
       title="Appearance" onclick="toggleTheme()">☾</button></div>
   <h1 id="pageTitle">Home</h1>
@@ -703,7 +756,7 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div id="pairout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
-      <button id="livebtn" onclick="liveLink()">Refresh QR</button></div>
+      <button id="livebtn" onclick="toggleLive()">Connect a phone</button></div>
     <div id="liveout"></div>
   </section>
 
@@ -966,6 +1019,15 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   </main>
   </div>
 </div>
+<div id="setup" class="setupwrap" aria-hidden="true">
+  <div class="setupcard" role="dialog" aria-label="Set up DreamLayer">
+    <img class="setupjuno" src="/panel-assets/juno_da.webp" alt="Juno" width="56" height="56">
+    <div class="setuptitle">Welcome — I&rsquo;m Juno</div>
+    <div class="setupsub">Four quick steps and your Brain is ready. Do them now, or anytime from the sidebar search.</div>
+    <div id="setupsteps"></div>
+    <button class="setupskip ghost" onclick="setupClose()">I&rsquo;ll explore on my own</button>
+  </div>
+</div>
 
 <div class="xmodal" id="xmodal" onclick="if(event.target===this)closeX()">
   <div class="xcard">
@@ -1113,29 +1175,29 @@ const EXPLAINERS=[
   {c:"ask",t:"Answer-ahead",live:["answer",{primary:"Thursday the 24th",sub:"they asked: “when do we ship?”"}],b:"When someone asks YOU something, Juno pulls the answer from what you know and shows it in time for you to say it yourself. No wake word."},
   {c:"ask",t:"Scholar",live:["answer",{primary:"x = 12",sub:"7 + 5, from the board"}],b:"Look at a problem and get the step that unlocks it — worked from what's actually in front of you, shown before you're stuck."},
   {c:"look",t:"World lens",live:["object",{eyebrow:"JUNO",title:"Snake plant",cap:"water every 2 weeks",ghost:"last done · Tuesday"}],b:"Glance at a thing and know it — the name, your own history with it, and what your plugins add. Frames are never stored; plugins see the label, never the pixels."},
-  {c:"look",t:"Taste lens",img:"taste.png",b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
+  {c:"look",t:"Taste lens",live:["taste",{eyebrow:"TASTE",win:"Ridge Cabernet ’19",winNote:"your kind of bold",second:"House red",avoid:"The sweet moscato"}],b:"In front of a shelf, your own taste ranks what you're looking at — the winner, the runner-up, and the one you swore off last time."},
   {c:"people",t:"Face recall",live:["recall",{name:"Jordan",relation:"Studio Atlas · Producer",debts:["Owes you the invoice"],note:"Asked about the deadline"}],b:"Glance at someone you've met and get their name, how you know them, and your last note — privately, only to you."},
   {c:"people",t:"Introductions",live:["intro",{initial:"M",title:"“Hi, I'm Maya.”",cap:"Maya · kept",ghost:"introduced herself · kept"}],b:"Only people who introduce themselves are kept — a stranger is never looked up. “Hi, I'm Maya” is the consent."},
-  {c:"people",t:"Person context",img:"person_context_v2.png",b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
+  {c:"people",t:"Person context",live:["recall",{name:"Marcus",relation:"Neighbor · 3B",debts:["You owe him the drill"],note:"Here about the package"}],b:"Before you even ask: who's in front of you, why they're here, and what you owe each other."},
   {c:"keep",t:"Object recall",live:["waypath",{eyebrow:"OBJECT RECALL",title:"Kitchen table",cap:"your keys",ghost:"beside blue notebook · 7:42 PM"}],b:"“Where are my keys?” The place you last saw them, as somewhere you can walk back to."},
   {c:"keep",t:"Waypath",live:["waypath",{eyebrow:"LUCID RECALL",title:"North rack 4th & Alder",cap:"your bike",ghost:"seen 8:12 AM · high"}],b:"Stash a location out loud and get walked back later — one point of light at the right bearing. No map."},
   {c:"keep",t:"Saved memory",live:["toast",{eyebrow:"SAVED",primary:"House keys — kitchen table"}],b:"Say “remember this” and it's kept — with the proof on the glass the moment it lands."},
-  {c:"day",t:"Commitment recall",img:"commitment_recall.png",b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
+  {c:"day",t:"Commitment recall",live:["keep",{eyebrow:"COMMITMENT",title:"Send the deck",cap:"→ Priya",ghost:"promised · by Thursday"}],b:"Promises you spoke become things the layer tracks — who, what, and when it's due."},
   {c:"day",t:"Promise drift",live:["keep",{eyebrow:"DRIFT DETECTED",title:"Send the lease",cap:"→ Marcus",ghost:"Friday before noon"}],b:"A promise about to slip drifts toward the rim of your sight and glows as its deadline nears. Hard to ignore — that's the point."},
   {c:"day",t:"Morning brief",live:["brief",{eyebrow:"YOUR DAY",primary:"3 messages · invoice due",detail:"Jordan needs a reply",footer:"2 meetings before noon"}],b:"Each morning, a short synthesis of what's new and what's on you: messages, mail, calendar, and anything you're tracking."},
-  {c:"aware",t:"Proactive memory",img:"proactive_memory.png",b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
-  {c:"aware",t:"Proactive alerts",img:"hark.png",b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
-  {c:"look",t:"Glance choices",img:"glance_choice.png",b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
+  {c:"aware",t:"Proactive memory",live:["brief",{eyebrow:"BEFORE YOU ASK",primary:"Invoice due Friday",detail:"the promise you made Marcus",footer:"and the name you'll need at 3"}],b:"The layer surfaces what you'd want before you ask — the doc due Friday, the promise you made, the name you'll need."},
+  {c:"aware",t:"Proactive alerts",live:["fact",{eyebrow:"LISTEN",primary:"Leave in 5 minutes",detail:"traffic building on Alder",footer:"or you'll miss the 5:20",color:"#FF6600",flash:true}],b:"Juno speaks up when it matters — “Listen!” for a slipping promise or someone you owe, “Watch out!” when you need to leave now."},
+  {c:"look",t:"Glance choices",live:["glance",{eyebrow:"GLANCE",options:["Answer it","Translate it","Know it"]}],b:"One look, three moves — answer it, translate it, or know it. Pick with a glance."},
   {c:"aware",t:"Fact check",live:["fact",{eyebrow:"CHECK THIS",primary:"“Sold out since March”",detail:"in stock today",footer:"checked · 2 sources",color:"#FF6600",flash:true}],b:"As people talk, claims get quietly checked — against what you know, and what they told you before. Amber means look closer."},
-  {c:"aware",t:"Truth gauge",img:"truth_gauge.png",b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
-  {c:"sound",t:"Live caption",img:"live_caption.png",b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
-  {c:"sound",t:"Spoken caption",img:"spoken_caption.png",b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
+  {c:"aware",t:"Truth gauge",live:["gauge",{eyebrow:"TRUTH GAUGE",score:0.72,label:"Mostly holds up",sources:2}],b:"When a claim sounds off, a quiet gauge shows how well it holds up — sourced and checked, never guessed."},
+  {c:"sound",t:"Live caption",live:["caption",{eyebrow:"LIVE CAPTION",text:"and the meeting moves to three on Thursday"}],b:"Speech becomes text on the glass in real time — for a loud room, a fast talker, or a language you're still learning."},
+  {c:"sound",t:"Spoken caption",live:["caption",{eyebrow:"JUNO SAID",text:"leave in five to make the 5:20"}],b:"What Juno says out loud is also written on the glass — for loud rooms, or when you'd rather read."},
   {c:"sound",t:"Rosetta",live:["rosetta",{eyebrow:"ROSETTA · ES → EN",title:"“Grilled octopus, house lemon.”",cap:"read back in yours",ghost:"live · on device"}],b:"A menu you can't read reads back in your own words — live, on device."},
-  {c:"keep",t:"Rewind",img:"time_scrub_node.png",b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
-  {c:"day",t:"Deviation alert",img:"deviation_alert.png",b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
-  {c:"keep",t:"Ember",img:"ember_flare.png",b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
-  {c:"sound",t:"Synesthesia",img:"synesthesia_v2.png",b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
-  {c:"keep",t:"World anchor",img:"world_anchor.png",b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
+  {c:"keep",t:"Rewind",live:["scrub",{eyebrow:"REWIND",total:6,idx:3,node:"the café on Alder",label:"2:14 PM"}],b:"Scrub back through your day as one timeline — every moment a node you can stand on."},
+  {c:"day",t:"Deviation alert",live:["fact",{eyebrow:"OFF-PLAN",primary:"The 5:40 is cancelled",detail:"your route just changed",footer:"leave now for the 5:20",color:"#FF6600",flash:true}],b:"When the day goes off-plan — a route, a time, a promise — the glass says so before it costs you."},
+  {c:"keep",t:"Ember",live:["ember",{eyebrow:"EMBER",primary:"the Krebs cycle",reps:3,next:"in 2 days"}],b:"Tend a memory until it lives in you — Ember resurfaces it at widening intervals until you own it for good."},
+  {c:"sound",t:"Synesthesia",live:["synesthesia",{eyebrow:"SOUND → COLOR",label:"your name",color:"#5B7CFF"}],b:"Sound becomes color at the rim — a doorbell, your name, a siren — for when hearing isn't enough."},
+  {c:"keep",t:"World anchor",live:["waypath",{eyebrow:"WORLD ANCHOR",title:"The oak by the gate",cap:"note left here",ghost:"“meter reading” · waiting"}],b:"Pin a note to a place in the world; it's waiting on the glass when you return."},
   {c:"veil",t:"Privacy veil",live:["veil"],b:"Drop the veil and the whole layer goes dark — nothing captured, nothing shown — until you lift it. Yours to command."},
 ];
 function renderExplainers(){const g=$("xgrid");if(!g)return;
@@ -1228,8 +1290,7 @@ const PAGES=[
   {id:"day",label:"Your day",sub:"Your morning brief, agenda, reminders, and the people you meet.",match:["Morning brief","Agenda","Who you","Reminders"]},
   {id:"mind",label:"Intelligence",sub:"Choose your AI, point it at your files, and tune how it thinks.",match:["Wire the cloud","Folders it reads","Ask your stuff","Model"]},
   {id:"reach",label:"Connections",sub:"Pair your phone and glasses, and decide how far the Brain reaches.",match:["Reach","On your glasses"]},
-  {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, and the controls that keep it yours.",match:["Privacy controls"]},
-  {id:"receipts",label:"Receipts",sub:"A signed, tamper-evident record of what the Brain did — verify it yourself.",match:["Privacy receipt"]},
+  {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, the controls that keep it yours — and the signed receipt you can verify yourself.",match:["Privacy controls","Privacy receipt"]},
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
   {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
@@ -1258,11 +1319,91 @@ const ICONS={
 };
 function buildNav(){
   document.querySelectorAll("main>section").forEach(s=>{s.dataset.page=pageOf(s);});
-  $("side").innerHTML='<div class="brand2"><span class="rd"></span>DreamLayer</div>'+
+  $("side").innerHTML='<div class="brand2"><img class="brandlogo" src="/panel-assets/app_icon.png" width="22" height="22" alt="">DreamLayer</div>'+
+    '<div class="navsearch"><input id="navq" type="search" autocomplete="off" placeholder="Search settings…" '+
+      'oninput="onNavSearch()" onkeydown="navKey(event)" aria-label="Search settings"><div id="navres" class="navres" role="listbox"></div></div>'+
     '<div class="navlabel">Brain</div>'+
     PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
   showPage(curPage);
 }
+/* Sidebar search: type what you want, jump straight to the setting. Fuzzy +
+   keyword/synonym matched on-device (no round-trip), results as you type. */
+const SEARCH_INDEX=[
+  {label:"Choose your AI model",page:"mind",kw:"model ollama llama local intelligence brain tier gpt mlx on-device"},
+  {label:"Wire the cloud provider",page:"mind",kw:"cloud openai anthropic claude gemini openrouter api key provider frontier"},
+  {label:"Folders it reads (memory index)",page:"mind",kw:"folders files index memory documents ask your stuff search sources rag"},
+  {label:"Ask your memory anything",page:"mind",kw:"ask question recall search stuff answer"},
+  {label:"Pair a phone",page:"reach",kw:"phone pair qr code connect device app scan"},
+  {label:"Live Lens — phone as glasses",page:"reach",kw:"live lens camera glasses browser no app hud pair qr"},
+  {label:"Incognito / private stretch",page:"reach",kw:"incognito private lan offline no cloud quiet"},
+  {label:"Connections & how far it reaches",page:"reach",kw:"cloud reach connections glasses network"},
+  {label:"Privacy controls & the veil",page:"privacy",kw:"privacy veil pause capture retention keep delete controls forget"},
+  {label:"Privacy receipt — verify it yourself",page:"privacy",kw:"receipt verify signed ledger proof tamper ed25519 audit activity"},
+  {label:"Plugins — browse & install",page:"plugins",kw:"plugins extensions lens store install package"},
+  {label:"Capabilities & packs (downloads)",page:"caps",kw:"capabilities packs download operator install extras powers optional voice vision"},
+  {label:"Learn how each feature works",page:"learn",kw:"learn how cards hud animation lenses features guide"},
+  {label:"Terminal / DreamShell",page:"terminal",kw:"terminal shell command dream cli console"},
+  {label:"Morning brief, agenda & reminders",page:"day",kw:"morning brief agenda calendar reminders schedule day tasks"},
+  {label:"People you meet",page:"day",kw:"people social names faces met contacts introductions"},
+  {label:"Report a bug / get help",page:"report",kw:"bug report problem issue feedback help broken crash support"},
+  {label:"Health, activity & schedule",page:"advanced",kw:"advanced health activity schedule maintenance logs ops status"},
+  {label:"Set up DreamLayer (walkthrough)",page:"setup",kw:"setup walkthrough tutorial guide onboarding start getting started first run"},
+];
+function _navScore(item,q){
+  const hay=(item.label+" "+item.kw).toLowerCase(), lab=item.label.toLowerCase();
+  const toks=q.toLowerCase().split(/\s+/).filter(Boolean); let sc=0;
+  for(const t of toks){
+    if(lab.includes(t))sc+=3; else if(hay.includes(t))sc+=2;
+    else{let i=0;for(const c of hay){if(c===t[i])i++;if(i>=t.length)break;}if(i>=t.length)sc+=0.5;}
+  }
+  return sc;
+}
+let _navSel=-1;
+function onNavSearch(){
+  const q=($("navq").value||"").trim(), res=$("navres"); _navSel=-1;
+  if(!q){res.innerHTML="";res.classList.remove("on");return;}
+  const hits=SEARCH_INDEX.map(x=>[_navScore(x,q),x]).filter(a=>a[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,7);
+  res.innerHTML=hits.length
+    ? hits.map(([,x],i)=>`<button class="navr" role="option" data-page="${x.page}" onclick="navGo('${x.page}')">${esc(x.label)}<span class="navrp">${esc(x.page==="report"?"help":x.page)}</span></button>`).join("")
+    : '<div class="navr empty">No match — try “model”, “pair”, “privacy”…</div>';
+  res.classList.add("on");
+}
+function navKey(e){
+  const res=$("navres"), items=res.querySelectorAll(".navr:not(.empty)");
+  if(e.key==="Escape"){$("navq").value="";onNavSearch();return;}
+  if(!items.length)return;
+  if(e.key==="ArrowDown"){e.preventDefault();_navSel=Math.min(items.length-1,_navSel+1);}
+  else if(e.key==="ArrowUp"){e.preventDefault();_navSel=Math.max(0,_navSel-1);}
+  else if(e.key==="Enter"){e.preventDefault();(items[_navSel]||items[0]).click();return;}
+  else return;
+  items.forEach((el,i)=>el.classList.toggle("navsel",i===_navSel));
+}
+function navGo(page){
+  $("navq").value="";$("navres").innerHTML="";$("navres").classList.remove("on");
+  if(page==="report"){gotoReport();return;}
+  if(page==="setup"){showSetup(true);return;}
+  showPage(page);
+}
+/* First-open walkthrough: Juno orients a new user and links straight into each
+   setup area. Shown once (localStorage), replayable from the sidebar search. */
+const SETUP_STEPS=[
+  {t:"Choose your intelligence",d:"On-device Ollama (free, private) — or wire a cloud tier for the hardest asks.",page:"mind"},
+  {t:"Point it at your files",d:"Add the folders DreamLayer may read, so “ask your stuff” knows your stuff.",page:"mind"},
+  {t:"Pair your phone",d:"Turn any phone into the glasses with the Live Lens — nothing to install.",page:"reach"},
+  {t:"Set your privacy",d:"Choose what’s kept, and meet the Veil — your one-tap “deaf and blind” switch.",page:"privacy"},
+];
+function renderSetupSteps(){
+  $("setupsteps").innerHTML=SETUP_STEPS.map((s,i)=>`<button class="setupstep" onclick="setupGo('${s.page}')">`+
+    `<span class="setupnum">${i+1}</span><span class="setupbody"><b>${esc(s.t)}</b><span>${esc(s.d)}</span></span>`+
+    `<span class="setupgo">Set up →</span></button>`).join("");
+}
+function showSetup(force){
+  if(!force){try{if(localStorage.getItem("dl_setup_seen"))return;}catch(e){return;}}
+  renderSetupSteps();$("setup").classList.add("on");$("setup").setAttribute("aria-hidden","false");
+}
+function _setupSeen(){try{localStorage.setItem("dl_setup_seen","1");}catch(e){}}
+function setupGo(page){_setupSeen();$("setup").classList.remove("on");$("setup").setAttribute("aria-hidden","true");showPage(page);}
+function setupClose(){_setupSeen();$("setup").classList.remove("on");$("setup").setAttribute("aria-hidden","true");}
 let _liveAutoLoaded=false;
 function showPage(id){curPage=id;
   document.querySelectorAll("main>section").forEach(s=>s.classList.toggle("pon",s.dataset.page===id));
@@ -1270,10 +1411,9 @@ function showPage(id){curPage=id;
   const p=PAGES.find(x=>x.id===id);
   if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
   const c=document.querySelector(".content"); if(c)c.scrollTop=0;
-  // Open Connections → the Live Lens QR is already there, not hidden behind a
-  // button you have to find. (Once per panel session, so re-visits don't spam
-  // the activity log or re-mint the link.)
-  if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
+  // Connections → the Live Lens pairing lives behind "Connect a phone" now
+  // (a collapsible disclosure), so a big scannable QR never permanently eats
+  // the panel; toggleLive() lazy-loads it on first open.
   if(id==="caps"&&typeof pollDownloads==="function")pollDownloads();
   // Open Terminal → boot the banner (once) and put the cursor in the prompt.
   if(id==="terminal"&&typeof termFocus==="function"){termFocus();}
@@ -1393,22 +1533,30 @@ let _dlPoll=null;
 function renderDownloadAll(packs){
   const el=$("dlall"); if(!el)return;
   const todo=packs.filter(p=>p.state!=="installed"&&!(p.install&&p.install.state==="done"));
-  el.innerHTML=todo.length
-    ?`<button class="sm" onclick="downloadAllPacks()">Download all (${todo.length})</button>`
+  const models=(window.MODELMISS||[]);
+  const items=todo.map(p=>({kind:"pack",key:p.key}))
+    .concat(models.map(m=>({kind:"model",key:m})));
+  const n=items.length;
+  const note=(todo.length&&models.length)
+    ?` <span class="conn-s" style="margin-left:4px">(${todo.length} pack${todo.length>1?"s":""} + ${models.length} model${models.length>1?"s":""})</span>`
     :"";
-  el.dataset.keys=JSON.stringify(todo.map(p=>p.key));
+  el.innerHTML=n
+    ?`<button class="sm" onclick="downloadAll()">Download all (${n})</button>${note}`
+    :"";
+  el.dataset.items=JSON.stringify(items);
 }
-async function downloadAllPacks(){
+async function downloadAll(){
   const el=$("dlall"); if(!el)return;
-  let keys=[]; try{keys=JSON.parse(el.dataset.keys||"[]");}catch(e){}
-  if(!keys.length)return;
+  let items=[]; try{items=JSON.parse(el.dataset.items||"[]");}catch(e){}
+  if(!items.length)return;
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",
-              {items:keys.map(k=>({kind:"pack",key:k}))});
-    toast("Queued "+keys.length+" pack downloads");
+    await api("/dreamlayer/downloads/enqueue","POST",{items:items});
+    toast("Queued "+items.length+" download"+(items.length>1?"s":""));
     pollDownloads();
   }catch(e){toast("Couldn't queue downloads");}
 }
+// one generic enqueue every per-item button routes through, so a single pack,
+// model, or plugin lands in the same visible queue as "Download all"
 async function queueDownload(kind,key){
   try{
     await api("/dreamlayer/downloads/enqueue","POST",{kind:kind,key:key});
@@ -1437,7 +1585,11 @@ async function pollDownloads(){
     return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;
   }).join("");
   if(live.length){_dlPoll=setTimeout(pollDownloads,1500);}
-  else{loadCaps();}   // queue drained → refresh pack states
+  else{                       // queue drained → refresh whatever it touched
+    loadCaps();
+    if(q.some(i=>i.kind==="plugin")){loadPlugins();refreshStore();}
+    if(q.some(i=>i.kind==="model")&&modelSel==="ollama")checkModel();
+  }
 }
 function renderPackNudge(packs){
   const el=$("packNudge"); if(!el)return;
@@ -1718,8 +1870,22 @@ async function syncRemNow(){$("remStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/reminders/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} reminder(s)`);loadReminders();loadHistory();}
 
-function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
-  `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}
+// Each status row expands to show exactly what's connected to what, plus a
+// button to the setting that governs it. Open state lives in _sysOpen so the
+// 4-second refresh never collapses a row you opened.
+let _sysOpen=new Set();
+function sysRow(key,name,state,cls,detail,page,goLabel){
+  const open=_sysOpen.has(key);
+  const go=page?`<button class="sgo" onclick="event.stopPropagation();showPage('${page}')">${goLabel||"Open settings"} ↗</button>`:"";
+  return `<div class="sysitem"><div class="sys" role="button" tabindex="0" onclick="toggleSys('${key}')" `+
+    `onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleSys('${key}')}">`+
+    `<span class="sdot ${cls}"></span><span class="sname">${name}</span>`+
+    `<span class="sstate">${state}</span><span class="scaret">${open?'▾':'▸'}</span></div>`+
+    `<div class="sysdetail${open?' open':''}" id="sysd-${key}"><div class="sysd-body">${detail||''}</div>${go}</div></div>`;}
+function toggleSys(k){
+  const open=_sysOpen.has(k); open?_sysOpen.delete(k):_sysOpen.add(k);
+  const d=document.getElementById("sysd-"+k); if(d)d.classList.toggle("open",!open);
+  const hdr=d&&d.parentElement.querySelector(".sys .scaret"); if(hdr)hdr.textContent=open?'▸':'▾';}
 /* the live chip: pixel Juno wearing the same traffic-light dot as the
    menu bar / tray — one face for the connection story everywhere. The
    favicon takes the full-body TINT variant: at tab size a badge is a
@@ -1742,14 +1908,23 @@ async function refreshStatus(){
     : ["Keyword · active","ok"];
   const cloudTxt = s.cloud ? (s.cloud_ready?"<b>On · ready</b>":"<b>On · not configured</b>") : "Off";
   const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
+  const idxAgo=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
+  const missList=(s.missing&&s.missing.length)?`<div class="sysd-list">${s.missing.map(m=>esc(m)).join("<br>")}</div>`:"";
   $("sysrows").innerHTML=
-    sysRow("Brain","<b>Online</b>","ok")+
-    sysRow("Model",`<b>${model[0]}</b>`,model[1])+
-    sysRow("Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off")+
-    sysRow("Incognito",incogTxt,s.incognito?"warn":"off")+
-    sysRow("Phone",phone[0].replace(/^([^·]+)/,'<b>$1</b>'),phone[1])+
-    sysRow("Index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off")+
-    ((s.missing&&s.missing.length)?sysRow("⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn"):"");
+    sysRow("brain","Brain","<b>Online</b>","ok",
+      "Running on this Mac mini — it serves this panel, the Live Lens, and your glasses to devices on your LAN. Nothing leaves it unless you turn the cloud tier on.","advanced","Health & activity")+
+    sysRow("model","Model",`<b>${model[0]}</b>`,model[1],
+      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`:"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
+    sysRow("cloud","Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off",
+      (s.cloud?(s.cloud_ready?"A cloud provider is wired for the hardest, non-personal asks.":"Turned on but no provider/key is set yet."):"Off — everything runs on-device.")+" Your files, memory, and people never need the cloud.","mind","Wire the cloud tier")+
+    sysRow("incognito","Incognito",incogTxt,s.incognito?"warn":"off",
+      (s.incognito?(s.quiet?"On (quiet hours) — ":"On — ")+"stays on your LAN, forces the cloud off, and logs nothing.":"Off — normal operation. Flip it on for a private stretch.")+"","reach","Connections")+
+    sysRow("phone","Phone",phone[0].replace(/^([^·]+)/,'<b>$1</b>'),phone[1],
+      (s.phone_ago==null?"No phone paired yet. Pair one to use the Live Lens (the phone becomes the glasses) or the app.":`Paired${s.phone_ago<120?" and connected":""} — last seen ${s.phone_ago<120?s.phone_ago+"s":Math.floor(s.phone_ago/60)+"m"} ago.`),"reach","Pair a phone")+
+    sysRow("index","Memory index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off",
+      `Indexed ${idxAgo}${s.email_docs?` · ${s.email_docs} mail/chat docs`:""}. This is what "ask your stuff" searches — point it at more folders to grow it.`,"mind","Folders it reads")+
+    ((s.missing&&s.missing.length)?sysRow("folders","⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn",
+      `These folders were indexed before but can't be found now (moved, renamed, or an unplugged drive):${missList}Re-add or remove them so the index stays accurate.`,"mind","Fix folders"):"");
   $("egress").innerHTML=`The cloud has been used <b>${s.cloud_calls||0}</b> time${s.cloud_calls===1?'':'s'} since setup — every one is logged below.`;
   const idxa=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
   let info=`Indexed ${idxa}`;
@@ -1952,11 +2127,11 @@ function renderModel(){
   el.innerHTML='<div class="mstat"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
 }
 async function checkModel(){
-  if(modelSel!=="ollama")return;
+  if(modelSel!=="ollama"){window.MODELMISS=[];return;}
   let r; try{r=await api("/dreamlayer/model/status");}catch(e){r={reachable:false};}
   ollamaOK=!!r.reachable; refreshStatus();
   const el=$("modelStatus");
-  if(!r.reachable){
+  if(!r.reachable){window.MODELMISS=[];
     el.innerHTML='<div class="mstat"><div class="head"><span class="sdot warn"></span>'+
       `<b>Ollama isn't running</b></div><div class="lead" style="margin:0 0 4px">`+
       `Not reachable at <code>${esc(r.url||"http://127.0.0.1:11434")}</code>. Set it up on this Mac mini:</div>`+
@@ -1979,6 +2154,10 @@ async function checkModel(){
     else if(job&&job.state==="failed"){st='<span class="st warn-t">pull failed</span>';miss.push(nm);}
     else{st='<span class="st warn-t">not pulled</span>';miss.push(nm);}
     return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm">${esc(nm)}</span>${st}</div>`;}).join("");
+  // remember what's missing so "Download all" on the Capabilities page can grab
+  // the models too, and the caps button count stays honest
+  window.MODELMISS=miss.slice();
+  if($("dlall"))renderDownloadAll((LASTCAPS&&LASTCAPS.packs)||[]);
   // live progress bars for any in-flight pull
   const pulling=Object.keys(pulls).filter(nm=>pulls[nm].state==="pulling");
   const prog=pulling.map(nm=>{const p=pulls[nm].percent||0;
@@ -2000,11 +2179,12 @@ async function checkModel(){
   if(pulling.length)setTimeout(checkModel,1500);
 }
 async function pullModel(name){
-  toast(`Pulling ${name}…`);
-  // fire-and-forget: the server pulls in the background and reports % via
-  // /model/status, so this returns instantly instead of blocking for minutes.
-  try{await api("/dreamlayer/model/pull",{method:"POST",body:JSON.stringify({model:name})});}catch(e){}
-  checkModel();   // renders the job + starts the progress-poll loop
+  // route through the same visible download queue as packs and plugins, so
+  // every pull is one row you can watch (and cancel while it waits its turn).
+  // the queue worker runs the real background pull, so /model/status still
+  // streams the % into the inline bar here — one download, shown in both places.
+  await queueDownload("model",name);
+  checkModel();   // renders the inline job + starts the progress-poll loop
 }
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
@@ -2045,6 +2225,18 @@ function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.cli
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
 let _liveurl="";
 function copyLiveLink(){if(navigator.clipboard&&_liveurl){navigator.clipboard.writeText(_liveurl).then(()=>toast("Live Lens link copied"));}}
+// The pairing QR is a disclosure: collapsed until asked for, and it folds away
+// again. First open lazy-loads the link (so re-visits don't re-mint it or spam
+// the activity log); the "Refresh QR" inside re-mints on demand.
+let _liveOpen=false;
+function toggleLive(){
+  _liveOpen=!_liveOpen;
+  const o=$("liveout"), b=$("livebtn");
+  o.classList.toggle("open",_liveOpen);
+  b.classList.toggle("on",_liveOpen);
+  b.textContent=_liveOpen?"Hide":"Connect a phone";
+  if(_liveOpen&&!_liveAutoLoaded){_liveAutoLoaded=true;liveLink();}
+}
 async function liveLink(){const out=$("liveout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
   let r;try{r=await api("/dreamlayer/live/link");}catch(e){r=null;}
   if(!r||!r.url){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
@@ -2070,7 +2262,9 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
     `<div class="conn-s">Good for 5 minutes, one use.</div></div>`:"";
   out.innerHTML=`<div class="paircode">${qr}${steps}${code}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
-    `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
+    `<span style="margin-left:8px;display:inline-flex;gap:6px">`+
+    `<button class="sm ghost" onclick="copyLiveLink()">Copy link</button>`+
+    `<button class="sm ghost" onclick="liveLink()">Refresh QR</button></span></div>`+
     `<div class="conn-s" style="margin-top:6px"><b>Scanning is the easy way</b> — the link ends in a long <code>#t=…</code> pairing token that's meant to be scanned, not typed. `+
     `Can't scan? Use the short code above instead. Treat both like a password and send them only to your own phone.</div></div>`;
   toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
@@ -2342,6 +2536,13 @@ async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e
    Nothing is sent automatically: the wearer reviews it, then opens or copies. */
 let _repbody="";
 function copyReport(){if(navigator.clipboard&&_repbody){navigator.clipboard.writeText(_repbody).then(()=>toast("Report copied"));}}
+// Reachable from the top-bar "?" (and Juno) so reporting a bug is never buried:
+// jump to the report box and put the cursor in it.
+function gotoReport(){
+  showPage("advanced");
+  setTimeout(()=>{const s=$("repSummary"); if(s){s.scrollIntoView({behavior:"smooth",block:"center"});s.focus();}},80);
+  toast("Tell me what went wrong — I’ll draft the report for you.");
+}
 async function prepReport(){
   const s=$("repSummary").value.trim(), d=$("repDetail").value.trim();
   if(!s&&!d){toast("Add a short description first");return;}
@@ -2454,12 +2655,12 @@ async function refreshStore(){if(!_storeOpen)return;
   let r;try{r=await api("/dreamlayer/plugins/store",{method:"POST",body:"{}"});}catch(e){return;}
   if(r&&r.plugins)renderStore(r.plugins);}
 async function installFromStore(name,btn){
-  if(btn){btn.disabled=true;btn.textContent="Installing…";}
-  let r;try{r=await api("/dreamlayer/plugins/store/install",{method:"POST",body:JSON.stringify({name})});}catch(e){r=null;}
-  if(r&&r.ok){toast("Installed "+name);loadPlugins();refreshStore();}
-  else{const e=(r&&r.errors&&r.errors.length)?r.errors.join("; "):"install failed";
-    toast("Install failed");$("storeStatus").textContent=e;
-    if(btn){btn.disabled=false;btn.textContent="Install";}}
+  if(btn){btn.disabled=true;btn.textContent="Queued…";}
+  // through the same visible queue: the install runs in the background so
+  // browsing the store never blocks, and the card flips to "✓ installed"
+  // on its own when pollDownloads sees the plugin finish (see pollDownloads).
+  try{await queueDownload("plugin",name);}
+  catch(e){toast("Couldn't queue "+name);if(btn){btn.disabled=false;btn.textContent="Install";}}
 }
 window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
@@ -2499,7 +2700,7 @@ window.removePlugin=removePlugin;
     '  <span class="dim">type <b>dream</b>. the rest you\u2019ll find.</span>';
 
   var PAGES_GO={home:"home",day:"day",mind:"mind",reach:"reach",privacy:"privacy",
-    receipts:"receipts",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
+    receipts:"privacy",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
   var JCLIPS=[["hey.","/panel-assets/juno_hey.mp3"],["hello.","/panel-assets/juno_hello.mp3"],
     ["look.","/panel-assets/juno_look.mp3"],["watch out.","/panel-assets/juno_watchout.mp3"],
     ["based.","/panel-assets/juno_based.mp3"],["uh\u2026 ok, then.","/panel-assets/juno_uhokthen.mp3"]];
@@ -2633,6 +2834,7 @@ load();
 loadPlugins();openStore();
 renderExplainers();
 buildNav();
+showSetup();
 setInterval(refreshStatus,4000);
 setInterval(()=>{if(modelSel==="ollama")checkModel();},15000);
 </script></body></html>"""
