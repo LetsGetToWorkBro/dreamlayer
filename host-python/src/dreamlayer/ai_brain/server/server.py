@@ -2973,6 +2973,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "stats": brain.index.stats(),
             })
 
+        def _get_meetings(self, path, qs):
+            """Your meetings — attendees, notes, and the action items pulled from
+            them. Local; your own words never leave the Brain."""
+            try:
+                self._json(200, {"meetings": brain.meetings(50)})
+            except Exception:                          # noqa: BLE001
+                self._json(200, {"meetings": []})
+
         def _get_tts(self, path, qs):
             """Whether Juno can speak, and in which voice — so the panel/phone
             can show the toggle honestly. No synthesis here."""
@@ -3324,6 +3332,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/messages/recent": _get_messages_recent,
             "/dreamlayer/model/status": _get_model_status,
             "/dreamlayer/tts": _get_tts,
+            "/dreamlayer/meetings": _get_meetings,
             "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
@@ -3450,6 +3459,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             privacy posture is the wearer's, not the Mac's)."""
             b = self._body()
             query = b.get("query", "")
+            # A meeting command holds the thread across the conversation: "start a
+            # meeting with Sarah and Marcus", "note that we ship Friday", "end
+            # the meeting" — captured (attendees + action items) rather than
+            # answered.
+            try:
+                mc = brain.meeting_command(query)
+            except Exception:                          # noqa: BLE001
+                mc = None
+            if mc:
+                self._json(200, {"text": mc.get("say", ""), "tier": "local",
+                                 "sources": [], "confidence": 1.0,
+                                 "intent": mc.get("intent"), "meeting": mc.get("meeting")})
+                return
             # An introduction is a CONSENT moment, not a question: "this is Sarah"
             # / "meet Sarah from Acme" enrolls Sarah into the People roster (so
             # the Social Lens can recognize her next time) and confirms — instead
