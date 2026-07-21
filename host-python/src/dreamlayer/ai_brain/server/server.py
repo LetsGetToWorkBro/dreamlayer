@@ -3470,7 +3470,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             b = self._body()
             self._json(200, room(brain).weather(
                 str(b.get("sid", "")), b.get("state", 0.0),
-                b.get("colors") or []))
+                b.get("colors") or [], resync=bool(b.get("resync"))))
 
         def _post_downloads_enqueue(self, path, qs):
             """Queue downloads (packs / models / plugins) — accepts one item

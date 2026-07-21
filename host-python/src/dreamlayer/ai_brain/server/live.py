@@ -828,6 +828,7 @@ function onDreamMotion(e){
 async function enterDream(){
   dreamOn = true;
   const myGen = ++dreamGen;
+  if (confOn) _confResync = true;    /* rejoin mid-bond → one forced emit */
   document.body.setAttribute("data-dream", "on");
   clearTimeout(loopTimer);                 /* dream replaces memory-mode looks */
   renderPanel(null); glassClear(); clearOverlayOnce(); hideDetectorHud();
@@ -1033,18 +1034,24 @@ function slotRgb(c){
   return "rgb(" + cl(y + 1.402 * cr) + "," + cl(y - 0.344 * cb - 0.714 * cr) +
          "," + cl(y + 1.772 * cb) + ")";
 }
+let _confBusy = false, _confResync = false;
 async function confBeat(){
-  if (!confOn || !dreamOn) return;
+  if (!confOn || !dreamOn || _confBusy) return;   /* one beat in flight — a slow
+                                                     link must not pile up stale
+                                                     out-of-order frames */
+  _confBusy = true;
   try {
     const rsp = await fetchJSON("/dreamlayer/live/weather", {
       method: "POST",
       headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
       body: JSON.stringify({sid: CONF_SID, state: confMyState(),
-                            colors: confSlots()})}, 4000);
+                            colors: confSlots(), resync: _confResync})}, 4000);
+    _confResync = false;
     const j = rsp.json || {};
     for (const f of (j.frames || [])) applyConfFrame(f);
     if (j.entangled === false && !j.waiting) setConfOn(false);
   } catch (e) { /* a missed beat is just weather */ }
+  finally { _confBusy = false; }
 }
 function applyConfFrame(f){
   if (!f || !f.t && !f.mode) return;

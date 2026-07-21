@@ -203,3 +203,57 @@ class TestPageShipsConfluence:
         card = page.split("function confCard", 1)[1].split("function confHide", 1)[0]
         assert ".innerHTML" not in card
         assert "createElement" in card and ".textContent" in card
+
+
+class TestRefuteFixes:
+    """The confluence refute wave, pinned."""
+
+    def test_double_propose_then_accepting_the_first_code_is_clean(self, tmp_path):
+        # refute 2026-07-21: the stale offer survived a re-propose; accepting
+        # its code hit BondManager.confirm's KeyError → an unhandled 500.
+        conf = room(_brain(tmp_path))
+        first = conf.propose("a")["code"]
+        conf.propose("a")                                # re-propose replaces
+        out = conf.accept("b", first)                    # old code: plain error
+        assert "error" in out and "KeyError" not in str(out)
+        assert conf.accept("b", conf.propose("a")["code"]) == {"ok": True}
+
+    def test_malformed_colors_never_500_the_peers_beats(self, tmp_path):
+        # refute 2026-07-21: one side's garbage slot reached _blend_colors /
+        # _slot_rgb through the engine and raised on the PEER's beat.
+        conf = room(_brain(tmp_path))
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        for _ in range(8):
+            conf.weather("a", 0.8, [{"idx": 1, "y": "stormy", "cb": None}])
+            out = conf.weather("b", 0.8, _slots())       # must never raise
+            assert "frames" in out
+
+    def test_wrong_code_guessing_is_throttled(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        conf.propose("a")
+        for _ in range(10):
+            assert "error" in conf.accept("b", "not-real")
+        out = conf.accept("b", "not-real")
+        assert "wait a minute" in out["error"]           # the guess window closed
+
+    def test_colliding_codes_refuse_instead_of_bonding_arbitrarily(self, tmp_path):
+        clock = {"t": 1000.0}
+        conf = LiveConfluence(_brain(tmp_path), now_fn=lambda: clock["t"])
+        c1 = conf.propose("a")["code"]
+        conf.propose("x")
+        conf._offers[next(iter(conf._offers))]  # offers exist
+        # force a collision: give x's offer the same code as a's
+        for o in conf._offers.values():
+            o["code"] = c1
+        assert "ambiguous" in conf.accept("b", c1)["error"]
+
+    def test_resync_forces_one_fresh_emit(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        _beats(conf, "a", "b", 8)                        # settled: no emits now
+        quiet = conf.weather("a", 0.8, _slots())["frames"]
+        assert quiet == []                               # EMIT_HYSTERESIS holds
+        fresh = conf.weather("a", 0.8, _slots(), resync=True)["frames"]
+        assert any(f.get("mode") in ("merged", "split") for f in fresh)

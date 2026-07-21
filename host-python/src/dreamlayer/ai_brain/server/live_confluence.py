@@ -100,6 +100,9 @@ class LiveConfluence:
             self._prune()
             if sid not in self._sessions and len(self._sessions) >= ROOM_MAX:
                 return {"error": "the room is full"}
+            prior = self._sessions.get(sid)
+            if prior is not None:            # re-propose: the old offer dies with
+                self._offers.pop(prior.get("bond_id") or "", None)   # the old bond
             mgr = BondManager(privacy=self._gate, now_fn=self._now)
             offer = mgr.propose(label="live-lens")
             self._sessions[sid] = {"mgr": mgr, "sky": None, "peer": None,
@@ -116,16 +119,30 @@ class LiveConfluence:
             return {"error": "no session id or code"}
         with self._lock:
             self._prune()
+            now = self._now()
+            # wrong-code throttle: the two-word space is small, and a wrong
+            # code returns a 200-level answer the auth limiter never sees —
+            # bound total guesses per room window (refute 2026-07-21)
+            self._accept_fails = [t for t in getattr(self, "_accept_fails", [])
+                                  if now - t < 60.0]
+            if len(self._accept_fails) >= 10:
+                return {"error": "too many wrong codes — wait a minute"}
             if sid not in self._sessions and len(self._sessions) >= ROOM_MAX:
                 return {"error": "the room is full"}
-            match = next((b for b, o in self._offers.items()
-                          if o["code"] == code and o["sid"] != sid), None)
+            matches = [b for b, o in self._offers.items()
+                       if o["code"] == code and o["sid"] != sid]
+            if len(matches) > 1:             # a collision must never bond to an
+                return {"error": "that code is ambiguous right now — mint a fresh one"}   # arbitrary offer
+            match = matches[0] if matches else None
             if match is None:
+                self._accept_fails.append(now)
                 return {"error": "no open offer matches that code"}
             offer = self._offers.pop(match)
             a = self._sessions.get(offer["sid"])
             if a is None:
                 return {"error": "the proposer left"}
+            if a["mgr"].bond(match) is None:  # a stale offer from a replaced
+                return {"error": "that offer expired — mint a fresh one"}   # manager (refute: KeyError 500)
             # the REAL three-step: accept on this side, confirm on theirs —
             # both keys derive from (bond_id, code); every packet is MAC'd
             b_mgr = BondManager(privacy=self._gate, now_fn=self._now)
@@ -157,7 +174,8 @@ class LiveConfluence:
 
     # -- the only traffic --------------------------------------------------
 
-    def weather(self, sid: str, state: float, colors: list) -> dict:
+    def weather(self, sid: str, state: float, colors: list,
+                resync: bool = False) -> dict:
         """One 2 Hz beat from one side: package my weather for the peer
         (HMAC'd, veil-silenced), fold in anything the peer sent, tick MY
         EntangledSky, and hand back the frames my glass would draw."""
@@ -167,7 +185,18 @@ class LiveConfluence:
             return {"error": "bad state"}
         if not isinstance(colors, list):
             colors = []
-        colors = colors[:4]
+        clean: list = []
+        for c in colors[:4]:                 # a malformed slot from one side must
+            if not isinstance(c, dict):      # never 500 the PEER's beats when the
+                continue                     # engine folds it in (refute 2026-07-21)
+            try:
+                clean.append({"idx": int(c.get("idx", 0)),
+                              "y": max(0, min(1023, int(c.get("y", 512)))),
+                              "cb": max(0, min(1023, int(c.get("cb", 512)))),
+                              "cr": max(0, min(1023, int(c.get("cr", 512))))})
+            except (TypeError, ValueError):
+                continue
+        colors = clean
         with self._lock:
             self._prune()
             s = self._session((sid or "").strip())
@@ -183,9 +212,14 @@ class LiveConfluence:
             if sky is None:
                 return {"entangled": False, "frames": [],
                         "waiting": bool(s.get("bond_id") in self._offers)}
-            if wire is not None:
+            if resync:                       # a client re-entering dream mid-bond
+                sky._last_emit_tg = None     # would otherwise stare at a blank
+            if wire is not None:             # overlay until togetherness MOVES
                 sky.receive(wire)
-            frames = sky.tick(state, colors)
+            try:
+                frames = sky.tick(state, colors)
+            except Exception:                # the engine never 500s a beat
+                frames = []
             return {"entangled": True,
                     "peer_live": bool(sky.peer_present()),
                     "frames": frames}
