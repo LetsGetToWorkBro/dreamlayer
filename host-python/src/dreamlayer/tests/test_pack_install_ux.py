@@ -130,6 +130,72 @@ class TestInstallJobSeam:
             srv._PACK_JOBS.clear()
 
 
+class TestResilientInstall:
+    """One fragile dependency must not fail the whole pack — the installer tries the
+    fast batch, then salvages per-package, reporting only what genuinely couldn't be
+    added (the Operator pack's 19-dep long tail — refute 2026-07-21)."""
+
+    def test_batch_success_is_the_fast_path(self):
+        calls = []
+        def once(subset):
+            calls.append(list(subset)); return True, "installed"
+        ok, _ = srv._install_resilient(["a<1", "b<2", "c"], None, once)
+        assert ok is True
+        assert calls == [["a<1", "b<2", "c"]]        # ONE batch call, no per-package loop
+
+    def test_one_bad_dep_no_longer_fails_the_whole_pack(self):
+        # the batch blows up on the bad one; per-package salvages all but 'pylsl'
+        def once(subset):
+            if len(subset) > 1:
+                return False, "pip exited 1"
+            return ("pylsl" not in subset[0]), "done"
+        reqs = ["rich<15", "watchdog<7", "pylsl<2,>=1", "cbor2<7"]
+        ok, detail = srv._install_resilient(reqs, None, once)
+        assert ok is False                            # not fully installed...
+        assert detail.startswith("PARTIAL:")          # ...but PARTIAL, not a hard fail
+        assert "pylsl" in detail and "added 3 of 4" in detail
+
+    def test_per_package_fully_recovers_from_a_batch_hiccup(self):
+        # batch fails (e.g. a transient resolver conflict) but every package installs alone
+        def once(subset):
+            return (len(subset) == 1), ("ok" if len(subset) == 1 else "batch conflict")
+        ok, _ = srv._install_resilient(["a", "b", "c"], None, once)
+        assert ok is True
+
+    def test_total_failure_stays_a_failure_not_partial(self):
+        ok, detail = srv._install_resilient(["a", "b"], None, lambda s: (False, "no network"))
+        assert ok is False and not detail.startswith("PARTIAL:")
+
+    def test_single_req_short_circuits_the_salvage_loop(self):
+        calls = []
+        def once(subset):
+            calls.append(list(subset)); return False, "boom"
+        ok, _ = srv._install_resilient(["only<1"], None, once)
+        assert ok is False and len(calls) == 1        # a lone req never loops per-package
+
+    def test_req_name_extracts_the_bare_distribution(self):
+        assert srv._req_name("pylsl<2,>=1") == "pylsl"
+        assert srv._req_name("skia-python<145,>=144") == "skia-python"
+        assert srv._req_name("mlx>=0.32,<1; sys_platform=='darwin'") == "mlx"
+
+    def test_partial_maps_to_a_partial_job_state_not_red_failed(self, tmp_path, monkeypatch):
+        b = _mkbrain(tmp_path)
+        monkeypatch.setattr(srv, "_PACK_RUNNER",
+                            lambda reqs: (False, "PARTIAL:added 3 of 4 — couldn't add pylsl"))
+        srv._PACK_JOBS.clear()
+        try:
+            job = srv._install_pack(b, "guardian")
+            for _ in range(100):
+                if job["state"] in ("partial", "failed", "done"):
+                    break
+                time.sleep(0.05)
+            assert job["state"] == "partial"          # usable pack, not a red failure
+            assert job["percent"] == 100
+            assert "pylsl" in job["detail"] and "PARTIAL:" not in job["detail"]
+        finally:
+            srv._PACK_JOBS.clear()
+
+
 class TestPipProcessCleanup:
     def test_run_pip_kills_the_orphan_on_timeout(self, monkeypatch):
         """refute 2026-07-20: on a wait() timeout (or a mid-stream exception),

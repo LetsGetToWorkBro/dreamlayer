@@ -1365,6 +1365,7 @@ function packCard(p){
       `<div class="conn-s" style="margin-top:3px">${esc(job.detail||"installing…")}</div></div>`;
   }
   else if(job&&job.state==="done") cta=`<span class="sstate" style="color:var(--success)">${esc(job.detail)}</span>`;
+  else if(job&&job.state==="partial") cta=`<span class="sstate" style="color:var(--amber,#C7893D)">${esc(job.detail)}</span> <button class="ghost sm" onclick="installPack(${esc(JSON.stringify(p.key))})">Retry the rest</button>`;
   else if(job&&job.state==="failed") cta=`<span class="sstate" style="color:var(--error)">failed — ${esc(job.detail||"")}</span> <button class="ghost sm" onclick="installPack(${esc(JSON.stringify(p.key))})">Retry</button>`;
   else if(p.state==="installed") cta=`<span class="sstate" style="color:var(--success)">installed</span>`;
   else if(!CAPINSTALL) cta=`<span class="sstate">runs on a source-install Brain</span>`;

@@ -1866,10 +1866,51 @@ def _pip_progress_parser(job: dict, total: int):
     return on_line
 
 
-def _run_pip(reqs: list, on_line=None) -> tuple:
-    """Default pack runner: pip install into this interpreter's environment,
-    streaming each output line into `on_line` (progress). Returns
-    (ok, last_output_lines)."""
+def _req_name(req: str) -> str:
+    """The bare distribution name from a requirement string, for a human note
+    ('pylsl<2,>=1' -> 'pylsl')."""
+    import re
+    m = re.match(r"\s*([A-Za-z0-9._-]+)", req or "")
+    return m.group(1) if m else (req or "").strip()
+
+
+def _install_resilient(reqs: list, on_line, once) -> tuple:
+    """Install a pack's requirements so ONE fragile dependency can't fail the
+    whole pack. Try the fast batch first (shared-dependency resolution in a single
+    pip run); if that fails, install each requirement on its OWN and salvage
+    everything installable, naming only what genuinely couldn't be added (refute
+    2026-07-21: the Operator pack's 19-package long tail meant a single build /
+    wheel failure marked the ENTIRE pack "failed — pip exited 1", even though 18
+    of 19 would install). ``once(subset)`` runs one pip install of that subset.
+
+    Returns (ok, detail): ok=True when ALL installed; a ``"PARTIAL:…"`` detail when
+    some installed and some didn't (the pack is usable, minus the named few); a
+    plain failure only when nothing could be installed."""
+    ok, detail = once(list(reqs))
+    if ok or len(reqs) <= 1:
+        return ok, detail
+    installed: list = []
+    failed: list = []
+    for r in reqs:
+        o, _ = once([r])
+        (installed if o else failed).append(r)
+    if not failed:
+        return True, "installed"
+    names = ", ".join(_req_name(r) for r in failed)
+    if installed:
+        return False, ("PARTIAL:added %d of %d — couldn't add %s (needs a build "
+                       "tool or a wheel this machine doesn't have; the rest of "
+                       "the pack is active)"
+                       % (len(installed), len(reqs), names))
+    return False, ("couldn't add the pack's packages (%s) — %s"
+                   % (names, (detail or "pip failed")[-160:]))
+
+
+def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
+    """Source-install runner: pip install `reqs` into this interpreter's
+    environment, streaming each output line into `on_line` (progress). Returns
+    (ok, last_output_lines). One pip invocation — the resilient wrapper (_run_pip)
+    handles the salvage retry."""
     import subprocess
     import sys
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
@@ -1907,15 +1948,22 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
                 pass
 
 
+def _run_pip(reqs: list, on_line=None) -> tuple:
+    """Default pack runner (source install): resilient batch-then-per-package so
+    one fragile dependency can't fail the whole pack (see _install_resilient)."""
+    return _install_resilient(reqs, on_line,
+                              lambda subset: _pip_subprocess_once(subset, on_line))
+
+
 # Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
 # _install_pack's _call_runner feeds on_line only to one that declares it. The
 # permissive annotation lets tests inject a 1-arg lambda without a mypy clash.
 _PACK_RUNNER: "Callable[..., tuple]" = _run_pip
 
 
-def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
-    """Frozen-app pack runner: install into a WRITABLE sidecar via in-process pip
-    ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
+def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
+    """Frozen-app single-shot: install `reqs` into a WRITABLE sidecar via in-process
+    pip ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
     out to, and must not — can not — install into itself). pip runs inside THIS
     interpreter, so it resolves wheels for the bundled Python's own version and
     platform. Progress: in-process pip narrates through the ``pip`` logger, so a
@@ -1962,6 +2010,13 @@ def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
         importlib.invalidate_caches()             # so find_spec sees the new packages now
         return True, "installed"
     return False, f"pip exited {code}"
+
+
+def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
+    """Frozen-app pack runner: resilient batch-then-per-package into the sidecar so
+    one fragile dependency can't fail the whole pack (see _install_resilient)."""
+    return _install_resilient(
+        reqs, on_line, lambda subset: _pip_target_once(subset, target, on_line))
 
 
 _PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
@@ -2011,13 +2066,22 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
                                       str(pack_site_dir(brain.cfg_dir)))
         else:
             ok, detail = _call_runner(_PACK_RUNNER, reqs)
-        job["state"] = "done" if ok else "failed"
-        job["percent"] = 100 if ok else job.get("percent", 0)
-        job["detail"] = ("installed — reload the panel; restart the Brain if a "
-                         "capability stays dark" if ok else (detail or "failed")[-400:])
+        detail = detail or ""
+        if ok:
+            job["state"], job["percent"] = "done", 100
+            job["detail"] = ("installed — reload the panel; restart the Brain if a "
+                             "capability stays dark")
+        elif detail.startswith("PARTIAL:"):     # some installed, a few couldn't —
+            job["state"], job["percent"] = "partial", 100   # the pack is still usable
+            job["detail"] = detail[len("PARTIAL:"):]
+        else:
+            job["state"] = "failed"
+            job["percent"] = job.get("percent", 0)
+            job["detail"] = detail[-400:] or "failed"
         job["ts"] = time.time()
         brain.activity.add("config", f"Pack {pack_key} install "
-                           + ("finished" if ok else "failed"))
+                           + {"done": "finished", "partial": "partly finished"}
+                           .get(job["state"], "failed"))
 
     threading.Thread(target=work, daemon=True).start()
     brain.activity.add("config", f"Pack {pack_key} install started")
