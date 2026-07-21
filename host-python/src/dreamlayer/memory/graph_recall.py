@@ -71,7 +71,10 @@ class GraphRecall:
         try:
             from lightrag import QueryParam  # type: ignore
             out = self._rag.query(query, param=QueryParam(mode="hybrid"))
-            out = str(out or "").strip()
+            # the sync hybrid path returns a str; if a build/config hands back a
+            # coroutine or a dict, str() would surface "<coroutine ...>" garbage as
+            # the answer — only accept a real string, else fall back to None.
+            out = out.strip() if isinstance(out, str) else ""
             return out or None
         except Exception as exc:                       # noqa: BLE001
             log.error("[graph_recall] query failed: %s", exc)

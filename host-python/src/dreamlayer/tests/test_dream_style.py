@@ -44,6 +44,11 @@ class TestPainterly:
         out = PainterlyFilter().stylize(np.full((8, 8), 120, np.uint8))
         assert out is not None and out.shape == (8, 8, 3)
 
+    def test_single_channel_hw1_is_painted(self):
+        # (H,W,1) grayscale/depth layout must paint, not silently return None
+        out = PainterlyFilter().stylize(np.full((8, 8, 1), 120, np.uint8))
+        assert out is not None and out.shape == (8, 8, 3)
+
 
 class TestNeuralFallback:
     def test_unavailable_without_runtime_or_model(self):

@@ -23,6 +23,39 @@ class TestFrameCoercion:
         assert V._np_image(np.zeros((8, 8, 4), np.uint8)).shape == (8, 8, 3)
         assert V._np_image(object()) is None
 
+    def test_single_channel_hw1_is_expanded(self):
+        # (H,W,1) is a common grayscale/depth layout — coerce to RGB, not drop it
+        out = V._np_image(np.full((6, 6, 1), 120, np.uint8))
+        assert out is not None and out.shape == (6, 6, 3)
+
+    def test_negative_floats_clip_not_wrap(self):
+        # a float frame in [0,255] scale with a stray negative must not wrap to 255
+        out = V._np_image(np.array([[[-1.0, 200.0, 50.0]]], dtype=np.float32))
+        assert out is not None and out[0, 0, 0] == 0            # -1 → 0, not 255
+
+
+class TestDepthEdge:
+    def test_tiny_map_returns_none_not_nan(self, monkeypatch):
+        # a depth map smaller than the centre window used to make an empty patch
+        # whose mean() is nan; it must degrade to None (refute 2026-07-21).
+        r = V.DepthReader()
+
+        class Pipe:
+            def __call__(self, img):
+                return {"depth": np.array([[0.2, 0.9, 0.5]], dtype=np.float32)}  # 1x3
+
+        r._pipe = Pipe()
+        val = r.nearest_relative(_frame())
+        assert val is None or (isinstance(val, float) and val == val)  # never nan
+
+
+class TestFindGuards:
+    def test_non_iterable_terms_never_raise(self):
+        f = V.YoloWorldFinder()
+        assert f.find(_frame(), 42) is None          # int → no raise, None
+        assert f.find(_frame(), "keys") is None       # bare string → not split, None
+        assert f.find(_frame(), None) is None
+
 
 class TestFallbacks:
     def test_math_ocr(self):

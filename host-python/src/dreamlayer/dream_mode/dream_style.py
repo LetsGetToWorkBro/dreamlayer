@@ -46,9 +46,12 @@ def _np_image(frame):
         arr = np.asarray(frame)
         if arr.dtype != np.uint8:
             arr = (np.clip(arr, 0, 1) * 255).astype("uint8") \
-                if arr.size and arr.max() <= 1.0 else arr.astype("uint8")
+                if arr.size and arr.max() <= 1.0 \
+                else np.clip(arr, 0, 255).astype("uint8")   # clip: don't wrap negatives
         if arr.ndim == 2:
             arr = np.stack([arr] * 3, axis=-1)
+        if arr.ndim == 3 and arr.shape[2] == 1:             # (H,W,1) → real RGB
+            arr = np.repeat(arr, 3, axis=2)
         if arr.ndim == 3 and arr.shape[2] == 4:
             arr = arr[:, :, :3]
         return arr if (arr.ndim == 3 and arr.shape[2] == 3 and arr.size) else None

@@ -30,6 +30,15 @@ class TestClassifier:
     def test_public_and_bare_hostnames_are_egress(self, host):
         assert E.check_local(host) is False
 
+    def test_bytes_host_is_classified_not_waved_through(self):
+        # CPython accepts a bytes host: socket.connect((b"8.8.8.8", 80)). It must
+        # NOT be treated as local just because it isn't a str (refute 2026-07-21).
+        assert E._addr_is_local((b"8.8.8.8", 80)) is False
+        assert E._addr_is_local((bytearray(b"1.1.1.1"), 53)) is False
+        assert E._addr_is_local((b"127.0.0.1", 80)) is True   # local stays local
+        # a genuinely unclassifiable non-str host inside an inet tuple → egress
+        assert E._addr_is_local((12345, 80)) is False
+
     def test_matches_server_local_nets(self):
         # cross-check: every net the server treats as local must be sealed as
         # local too (the seal set is a superset — it adds IPv6 link-local/ULA).
@@ -112,6 +121,41 @@ class TestAttest:
         with E.sealed_attest(BoomActivity()) as seal:
             pass
         assert seal.verdict()["sealed"] is True
+
+    def test_attest_catches_egress_on_a_worker_thread(self):
+        # THE false-negative the refute found: an operation that egresses on a
+        # spawned thread must NOT be certified clean. sealed_attest seals the
+        # whole process, so a worker-thread public connect is still recorded.
+        import threading
+
+        class FakeActivity:
+            def __init__(self):
+                self.logged = []
+
+            def add(self, kind, text):
+                self.logged.append((kind, text))
+
+        act = FakeActivity()
+        with E.sealed_attest(act) as seal:
+            t = threading.Thread(
+                target=lambda: E._audit("socket.connect", (None, ("8.8.8.8", 443))))
+            t.start()
+            t.join()
+        v = seal.verdict()
+        assert v["sealed"] is False and "8.8.8.8" in v["hosts"]
+        assert act.logged and "public attempt" in act.logged[0][1]
+
+    def test_thread_scoped_seal_is_honestly_scoped_to_its_thread(self):
+        # documented limitation: a plain (thread-scoped) egress_seal watches only
+        # the sealing thread; a worker thread is not covered (which is exactly why
+        # sealed_attest uses whole_process). This pins that honest boundary.
+        import threading
+        with E.egress_seal(enforce=False) as seal:      # thread-scoped
+            t = threading.Thread(
+                target=lambda: E._audit("socket.connect", (None, ("8.8.8.8", 443))))
+            t.start()
+            t.join()
+        assert seal.verdict()["sealed"] is True         # worker thread not seen
 
 
 @pytest.mark.allow_egress

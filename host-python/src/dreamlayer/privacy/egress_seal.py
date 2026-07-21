@@ -20,8 +20,13 @@ disclosure of individual records, so the seal's verdict inherits that when logge
 Scope: the seal is THREAD-scoped by default (the threaded Brain server runs many
 requests at once; a process-global arm would flag one thread's legitimate LAN
 call because another thread is sealed). It watches the sealing thread — the one
-running the operation you're attesting. Pass `whole_process=True` to arm every
-thread for a single-threaded batch job.
+running the operation you're attesting. LIMITATION (be honest): a thread-scoped
+seal does NOT see egress on a thread the operation spawns (a ThreadPoolExecutor,
+`loop.run_in_executor`, a bare Thread) — that socket op runs on another thread
+with no seal. So when the work may hand off to a pool, seal `whole_process=True`.
+`sealed_attest()` — the helper that writes a SIGNED receipt — always uses
+whole-process for exactly this reason: it must never certify "clean" while data
+left on a worker thread.
 """
 from __future__ import annotations
 
@@ -59,8 +64,14 @@ def _addr_is_local(address) -> bool:
     if not isinstance(address, tuple) or not address:
         return True                          # AF_UNIX path / unknown non-inet
     host = address[0]
+    # CPython accepts a BYTES host in an inet tuple (the `et#`/idna arg form), so
+    # `socket.connect((b"8.8.8.8", 80))` is real egress — decode it before the
+    # check (refute 2026-07-21). Anything still not a str inside an inet tuple is
+    # unclassifiable → treat as egress (fail-safe), NOT local.
+    if isinstance(host, (bytes, bytearray)):
+        host = host.decode("ascii", "replace")
     if not isinstance(host, str):
-        return True
+        return False
     host = host.strip().lower()
     if host in ("", "localhost"):
         return True
@@ -182,7 +193,7 @@ def egress_seal(enforce: bool = True, whole_process: bool = False):
                 _local.seals.remove(seal)
 
 
-def sealed_attest(activity, enforce: bool = True):
+def sealed_attest(activity, enforce: bool = False):
     """Convenience: run nothing, just return a context manager that — on exit —
     writes the seal's verdict into a SIGNED ActivityLog so the receipt is
     tamper-evident. Use as::
@@ -193,10 +204,21 @@ def sealed_attest(activity, enforce: bool = True):
 
     `activity` is any object with `.add(kind, text)` (the Brain's ActivityLog).
     Best-effort logging — a ledger write must never break the sealed work.
+
+    WHOLE-PROCESS on purpose (refute 2026-07-21): a thread-scoped seal watches
+    only the calling thread, so an operation that hands its network I/O to a
+    worker thread / ThreadPoolExecutor / asyncio executor would egress UNSEEN and
+    this would sign a FALSE "nothing left the device" receipt. The attestation
+    therefore seals the whole process for its window — a false NEGATIVE (certify
+    clean while data left) is the dangerous failure; catching a concurrent,
+    possibly-unrelated egress instead is the safe one. It defaults to OBSERVE
+    (enforce=False) so it records the truth into the receipt without raising into
+    — and breaking — either the sealed work or a concurrent request. Pass
+    enforce=True only on a single-purpose Brain where hard-blocking is wanted.
     """
     @contextlib.contextmanager
     def _cm():
-        with egress_seal(enforce=enforce) as seal:
+        with egress_seal(enforce=enforce, whole_process=True) as seal:
             try:
                 yield seal
             finally:

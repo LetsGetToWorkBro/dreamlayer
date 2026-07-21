@@ -40,9 +40,12 @@ def _np_image(frame):
         arr = np.asarray(frame)
         if arr.dtype != np.uint8:
             arr = (np.clip(arr, 0, 1) * 255).astype("uint8") \
-                if arr.size and arr.max() <= 1.0 else arr.astype("uint8")
+                if arr.size and arr.max() <= 1.0 \
+                else np.clip(arr, 0, 255).astype("uint8")   # clip: don't wrap negatives
         if arr.ndim == 2:
             arr = np.stack([arr] * 3, axis=-1)
+        if arr.ndim == 3 and arr.shape[2] == 1:             # (H,W,1) → real RGB
+            arr = np.repeat(arr, 3, axis=2)
         if arr.ndim == 3 and arr.shape[2] == 4:
             arr = arr[:, :, :3]
         return arr if (arr.ndim == 3 and arr.shape[2] == 3 and arr.size) else None
@@ -93,10 +96,30 @@ class DocReader:
 
     def __init__(self):
         self._ok = self.available
+        self._rec = None            # cached RecognitionPredictor (loads a model once)
+        self._det = None            # cached DetectionPredictor
 
     @property
     def ready(self) -> bool:
         return self._ok
+
+    def _predictors(self):
+        """Build & cache surya's predictors once (each loads a model). Returns
+        (recognition, detection) or (None, None) on any import/load failure."""
+        if self._rec is not None:
+            return self._rec, self._det
+        try:
+            # surya-ocr >= 0.5 API: predictor objects, not the removed run_ocr /
+            # surya.model.* tree (refute 2026-07-21 — the old imports were dead
+            # against the pinned surya-ocr>=0.6, so read_doc always returned {}).
+            from surya.recognition import RecognitionPredictor  # type: ignore
+            from surya.detection import DetectionPredictor  # type: ignore
+            self._rec = RecognitionPredictor()
+            self._det = DetectionPredictor()
+        except Exception as exc:                       # noqa: BLE001
+            log.info("[doc] surya predictors unavailable: %s", exc)
+            self._rec = self._det = None
+        return self._rec, self._det
 
     def read_doc(self, frame) -> dict:
         """{'text': str, 'blocks': [str, ...]} with reading order, or {} when
@@ -105,17 +128,19 @@ class DocReader:
             return {}
         try:
             from PIL import Image  # type: ignore
-            from surya.ocr import run_ocr  # type: ignore
-            from surya.model.detection.model import (  # type: ignore
-                load_model as load_det, load_processor as load_det_proc)
-            from surya.model.recognition.model import load_model as load_rec  # type: ignore
-            from surya.model.recognition.processor import load_processor as load_rec_proc  # type: ignore
+            rec, det = self._predictors()
+            if rec is None:
+                return {}
             arr = _np_image(frame)
             if arr is None:
                 return {}
             img = Image.fromarray(arr)
-            preds = run_ocr([img], [["en"]], load_det(), load_det_proc(),
-                            load_rec(), load_rec_proc())
+            # newer surya auto-detects language and dropped the langs arg; older
+            # 0.6.x still accepts it — try the current signature, fall back once.
+            try:
+                preds = rec([img], det_predictor=det)
+            except TypeError:
+                preds = rec([img], [["en"]], det)
             lines = [ln.text for ln in (preds[0].text_lines if preds else [])]
             return {"text": " ".join(lines)[:2000], "blocks": lines[:100]}
         except Exception as exc:                       # noqa: BLE001
@@ -163,8 +188,13 @@ class DepthReader:
                 return None
             h, w = depth.shape
             cy, cx = h // 2, w // 2
-            patch = depth[max(0, cy - h // 6):cy + h // 6,
-                          max(0, cx - w // 6):cx + w // 6]
+            # a tiny map (any dim < 6) makes h//6 == 0 and the centre patch empty,
+            # whose .mean() is nan — so widen the half-window to at least 1 px so
+            # the patch is never empty (refute 2026-07-21: nan escaped the guards).
+            hy, hx = max(1, h // 6), max(1, w // 6)
+            patch = depth[max(0, cy - hy):cy + hy, max(0, cx - hx):cx + hx]
+            if patch.size == 0:
+                return None
             # transformers depth maps: larger value = nearer; normalise to 0..1
             lo, hi = float(depth.min()), float(depth.max())
             if hi <= lo:
@@ -187,7 +217,12 @@ class YoloWorldFinder:
         """[(term, confidence), …] for the named things present, or None when
         unavailable / nothing found. `terms` is any list of nouns — 'my keys',
         'a fire extinguisher' — no fixed taxonomy."""
-        terms = [str(t).strip() for t in (terms or []) if str(t).strip()]
+        # accept only a real sequence of nouns: a bare string would iterate into
+        # single letters, and a non-iterable (an int) would raise before the try
+        # (refute 2026-07-21). Anything else → no terms → None.
+        if not isinstance(terms, (list, tuple, set, frozenset)):
+            return None
+        terms = [str(t).strip() for t in terms if str(t).strip()]
         if not self.available or not terms:
             return None
         arr = _np_image(frame)
