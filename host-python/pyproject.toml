@@ -57,6 +57,9 @@ interpreter = ["transformers>=4.40,<5", "sentencepiece>=0.2,<1"]
 # non-speech sound recognition (PANNs / AudioSet) — the glasses hear the world:
 # alarms, kettle, doorbell, glass. Classifies sound TYPES, never voiceprints. Opt-in.
 sound-events = ["panns-inference>=0.1,<1"]
+# birdsong recognition (BirdNET — 6,000+ species from sound, Pi-Zero-sized) — the
+# world narrates itself on a walk. Opt-in, not in any profile.
+birds = ["birdnetlib>=0.18,<1"]
 # temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
 # by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
 memory-graph = ["lightrag-hku>=1,<2"]

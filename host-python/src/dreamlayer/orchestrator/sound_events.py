@@ -131,34 +131,70 @@ def attention_for(detections, min_conf: float = _MIN_CONF) -> Optional[Alert]:
 
 
 class SoundEventDetector:
-    """Wrap PANNs audio tagging. `available` is the wheel; `ready` is True once the
-    tagger (and its checkpoint) have loaded. Loading is lazy. Note: PANNs fetches a
-    model checkpoint on first load — a model-weights download, posture-gated like
-    the other local models; audio itself never leaves the Brain."""
+    """Wrap audio tagging behind ONE detector, on an engine ladder (the same
+    shape as Kokoro→Piper): PANNs (panns_inference, AudioSet's full 527 classes)
+    first, else sherpa-onnx audio tagging (already in the `voice` extra — no
+    torch) with a model dir at $DL_AUDIO_TAG_DIR (model.onnx + labels file).
+    `available` is either engine's wheel; `ready` once a tagger actually loaded.
+    Note: PANNs fetches its checkpoint on first load — a model-weights download,
+    posture-gated like the other local models; audio itself never leaves the
+    Brain."""
 
     dep = "panns_inference"
-    available = _has("panns_inference")
+    available = _has("panns_inference") or _has("sherpa_onnx")
 
-    def __init__(self):
-        self._tagger = None
-        self._labels = None
+    def __init__(self, sherpa_dir: Optional[str] = None):
+        from typing import Any as _Any
+        self._tagger: _Any = None    # panns backend
+        self._labels: _Any = None
+        self._sherpa: _Any = None    # sherpa-onnx backend
         self._loaded = False
+        self.backend = ""
+        import os
+        self._sherpa_dir = sherpa_dir or os.environ.get("DL_AUDIO_TAG_DIR", "")
 
     def _load(self) -> bool:
         if self._loaded:
-            return self._tagger is not None
+            return self._tagger is not None or self._sherpa is not None
         self._loaded = True
-        if not self.available:
-            return False
+        if _has("panns_inference"):
+            try:
+                from panns_inference import AudioTagging  # type: ignore
+                from panns_inference.config import labels  # type: ignore
+                self._tagger = AudioTagging(checkpoint_path=None, device="cpu")
+                self._labels = list(labels)
+                self.backend = "panns"
+                return True
+            except Exception as exc:             # noqa: BLE001
+                log.info("[sound] PANNs load failed: %s; trying sherpa", exc)
+                self._tagger = None
+        self._load_sherpa()
+        return self._tagger is not None or self._sherpa is not None
+
+    def _load_sherpa(self) -> None:
+        """The no-torch fallback: sherpa-onnx audio tagging from a local model
+        dir. Absent the wheel, the dir, or its files → stays off, never raises."""
+        from pathlib import Path
+        d = Path(self._sherpa_dir) if self._sherpa_dir else None
+        if d is None or not _has("sherpa_onnx"):
+            return
         try:
-            from panns_inference import AudioTagging  # type: ignore
-            from panns_inference.config import labels  # type: ignore
-            self._tagger = AudioTagging(checkpoint_path=None, device="cpu")
-            self._labels = list(labels)
+            model = d / "model.onnx"
+            labels = next(iter(sorted(d.glob("*.csv"))), None) or (d / "labels.txt")
+            if not model.is_file() or not Path(labels).is_file():
+                return
+            import sherpa_onnx  # type: ignore
+            cfg = sherpa_onnx.AudioTaggingConfig(
+                model=sherpa_onnx.AudioTaggingModelConfig(
+                    zipformer=sherpa_onnx.OfflineZipformerAudioTaggingModelConfig(
+                        model=str(model)),
+                    num_threads=1),
+                labels=str(labels))
+            self._sherpa = sherpa_onnx.AudioTagging(cfg)
+            self.backend = "sherpa"
         except Exception as exc:                 # noqa: BLE001
-            log.info("[sound] PANNs load failed: %s; sound sense off", exc)
-            self._tagger = None
-        return self._tagger is not None
+            log.info("[sound] sherpa tagger load failed: %s", exc)
+            self._sherpa = None
 
     @property
     def ready(self) -> bool:
@@ -170,6 +206,8 @@ class SoundEventDetector:
         unavailable / on any failure. Never raises into the capture loop."""
         if not self._load():
             return []
+        if self._tagger is None and self._sherpa is not None:
+            return self._detect_sherpa(audio, sample_rate, top_k)
         mono = _to_mono(audio, sample_rate, _SR)
         if mono is None:
             return []
@@ -185,6 +223,22 @@ class SoundEventDetector:
             return [(str(self._labels[i]), float(clip[i])) for i in idx]
         except Exception as exc:                 # noqa: BLE001
             log.error("[sound] inference failed: %s", exc)
+            return []
+
+    def _detect_sherpa(self, audio, sample_rate: int,
+                       top_k: int) -> List[Tuple[str, float]]:
+        """The sherpa-onnx tagging path (models run at 16 kHz)."""
+        mono = _to_mono(audio, sample_rate, 16000)
+        if mono is None:
+            return []
+        try:
+            stream = self._sherpa.create_stream()
+            stream.accept_waveform(16000, mono)
+            events = self._sherpa.compute(stream, max(1, int(top_k)))
+            return [(str(getattr(e, "name", "")), float(getattr(e, "prob", 0.0)))
+                    for e in (events or []) if getattr(e, "name", "")]
+        except Exception as exc:                 # noqa: BLE001
+            log.error("[sound] sherpa inference failed: %s", exc)
             return []
 
     def listen(self, audio, sample_rate: int = _SR) -> Optional[Alert]:
