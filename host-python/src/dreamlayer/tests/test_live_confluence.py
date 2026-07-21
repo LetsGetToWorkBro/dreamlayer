@@ -204,6 +204,63 @@ class TestPageShipsConfluence:
         assert ".innerHTML" not in card
         assert "createElement" in card and ".textContent" in card
 
+    def test_weather_gift_ships(self):
+        from dreamlayer.ai_brain.server.live import render_live
+        page = render_live()
+        for n in ("function confGift", "function drawGiftWash",
+                  "/dreamlayer/live/confluence/gift", 'f.t === "gift"',
+                  "Give my sky"):
+            assert n in page, f"weather-gift piece missing: {n}"
+
+
+class TestWeatherGift:
+    """The Weather Gift — one authenticated palette handed across the bond,
+    played as a 30 s wash on the peer's glass, then their own weather returns.
+    The real confluence.gift primitive underneath."""
+
+    def test_gift_reaches_the_peer_as_a_gift_frame(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        assert conf.gift("a", _slots()) == {"ok": True}
+        out = conf.weather("b", 0.6, _slots())
+        gifts = [f for f in out["frames"] if f.get("t") == "gift"]
+        assert gifts, "the gift never reached the peer"
+        assert gifts[0]["colors"], "the gift carried no palette"
+
+    def test_gift_needs_a_shared_sky(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        conf.propose("a")                        # proposed, nobody accepted
+        assert conf.gift("a", _slots())["ok"] is False
+        # and an unknown session can't gift at all
+        assert conf.gift("nobody", _slots())["ok"] is False
+
+    def test_gift_plays_once(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        conf.gift("a", _slots())
+        conf.weather("b", 0.6, _slots())         # drains + plays the gift
+        again = conf.weather("b", 0.6, _slots())
+        assert not [f for f in again["frames"] if f.get("t") == "gift"]
+
+    def test_veil_silences_the_gift(self, tmp_path):
+        brain = _brain(tmp_path, network_mode="lan_only")   # incognito_now() True
+        conf = room(brain)
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        assert conf.gift("a", _slots())["ok"] is False       # sender sends nothing
+        out = conf.weather("b", 0.6, _slots())
+        assert not [f for f in out["frames"] if f.get("t") == "gift"]
+
+    def test_malformed_gift_colors_never_crash_the_peer(self, tmp_path):
+        conf = room(_brain(tmp_path))
+        code = conf.propose("a")["code"]
+        conf.accept("b", code)
+        assert conf.gift("a", [{"idx": 1, "y": "storm", "cb": None}, "junk"])["ok"] is True
+        out = conf.weather("b", 0.6, _slots())               # must never raise
+        assert "frames" in out
+
 
 class TestRefuteFixes:
     """The confluence refute wave, pinned."""

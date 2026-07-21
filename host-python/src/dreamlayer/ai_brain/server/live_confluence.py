@@ -27,14 +27,21 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import namedtuple
 from typing import Optional
 
 from ...confluence.bond import BondManager
 from ...confluence.entangle import EntangledSky
+from ...confluence.gift import unwrap_gift, wrap_gift
 
 ROOM_MAX = 8              # sessions with live confluence state, per Brain
 SESSION_STALE_S = 60.0    # silent this long → the session is dropped
 OFFER_TTL_S = 600.0       # an unaccepted code dies after 10 minutes
+
+# The Weather Gift primitive wants a WeatherLedger snapshot; on the Live Lens
+# the "moment" being gifted is the sender's CURRENT sky, so we hand it a minimal
+# snapshot of (colors, ts) — the same two fields wrap_gift reads.
+_GiftSnap = namedtuple("_GiftSnap", ["colors", "ts"])
 
 
 class _PostureGate:
@@ -89,6 +96,26 @@ class LiveConfluence:
         if s is not None:
             s["seen"] = self._now()
         return s
+
+    @staticmethod
+    def _clean_colors(colors: list) -> list:
+        """Sanitize the four palette slots from one side to the device's 10-bit
+        YCbCr shape. A malformed slot is dropped, never allowed to reach the
+        engine and 500 the peer's beats (refute 2026-07-21)."""
+        if not isinstance(colors, list):
+            return []
+        clean: list = []
+        for c in colors[:4]:
+            if not isinstance(c, dict):
+                continue
+            try:
+                clean.append({"idx": int(c.get("idx", 0)),
+                              "y": max(0, min(1023, int(c.get("y", 512)))),
+                              "cb": max(0, min(1023, int(c.get("cb", 512)))),
+                              "cr": max(0, min(1023, int(c.get("cr", 512))))})
+            except (TypeError, ValueError):
+                continue
+        return clean
 
     # -- the three-step opt-in --------------------------------------------
 
@@ -183,20 +210,7 @@ class LiveConfluence:
             state = max(0.0, min(1.0, float(state)))
         except (TypeError, ValueError):
             return {"error": "bad state"}
-        if not isinstance(colors, list):
-            colors = []
-        clean: list = []
-        for c in colors[:4]:                 # a malformed slot from one side must
-            if not isinstance(c, dict):      # never 500 the PEER's beats when the
-                continue                     # engine folds it in (refute 2026-07-21)
-            try:
-                clean.append({"idx": int(c.get("idx", 0)),
-                              "y": max(0, min(1023, int(c.get("y", 512)))),
-                              "cb": max(0, min(1023, int(c.get("cb", 512)))),
-                              "cr": max(0, min(1023, int(c.get("cr", 512))))})
-            except (TypeError, ValueError):
-                continue
-        colors = clean
+        colors = self._clean_colors(colors)
         with self._lock:
             self._prune()
             s = self._session((sid or "").strip())
@@ -212,6 +226,11 @@ class LiveConfluence:
             if sky is None:
                 return {"entangled": False, "frames": [],
                         "waiting": bool(s.get("bond_id") in self._offers)}
+            # a Weather Gift the peer handed me plays FIRST: it is the
+            # deliberate, must-not-drop event, and unwrap advances the shared
+            # replay counter — folding a lower-seq weather beat after it is a
+            # harmless dropped tick, the reverse would replay-drop the gift
+            gift_frames = self._receive_gift(s)
             if resync:                       # a client re-entering dream mid-bond
                 sky._last_emit_tg = None     # would otherwise stare at a blank
             if wire is not None:             # overlay until togetherness MOVES
@@ -222,7 +241,46 @@ class LiveConfluence:
                 frames = []
             return {"entangled": True,
                     "peer_live": bool(sky.peer_present()),
-                    "frames": frames}
+                    "frames": gift_frames + frames}
+
+    def _receive_gift(self, s: dict) -> list:
+        """Pop and authenticate a gift the peer left in this session's inbox.
+        Returns at most one ``{"t": "gift", ...}`` frame the client plays as a
+        timed wash, or ``[]``. Recall-gated (a paused wearer plays nothing even
+        from an authentic gift) and forgery-proof (unwrap runs the real
+        HMAC/replay/bond-live checks)."""
+        gwire = s.pop("inbox_gift", None)
+        if gwire is None:
+            return []
+        played = unwrap_gift(s["mgr"], gwire, privacy=self._gate)
+        if not played:
+            return []
+        # unwrap returns GIFT_PLAY_S/GIFT_FRAME_EVERY_S identical palette frames;
+        # the client already renders the palette, so one gift frame carries the
+        # colors and it runs the 30 s countdown itself
+        return [{"t": "gift", "colors": played[0].get("colors") or []}]
+
+    def gift(self, sid: str, colors: list) -> dict:
+        """Hand my CURRENT sky across the bond as a Weather Gift — a 30-second
+        wash on the peer's glass, "this is what my moment felt like", then their
+        own weather flows back. One authenticated palette snapshot + an hour
+        label crosses (never place, never events); the veil silences the sender
+        and a stranger's radio can't forge it. The real confluence.gift
+        primitive underneath — nothing faked here."""
+        colors = self._clean_colors(colors)
+        with self._lock:
+            self._prune()
+            s = self._session((sid or "").strip())
+            if s is None:
+                return {"ok": False, "error": "not in a shared sky"}
+            peer = self._sessions.get(s.get("peer"))
+            if peer is None:
+                return {"ok": False, "error": "no one to give to yet"}
+            wire = wrap_gift(s["mgr"], _GiftSnap(colors=colors, ts=self._now()))
+            if wire is None:                 # no live bond, or veiled → nothing sent
+                return {"ok": False, "error": "the sky isn't shared right now"}
+            peer["inbox_gift"] = wire        # delivered on the peer's next beat
+            return {"ok": True}
 
 
 def room(brain) -> LiveConfluence:

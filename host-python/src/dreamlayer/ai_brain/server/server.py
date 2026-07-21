@@ -3391,6 +3391,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             data = self._raw(live_mod.MAX_FRAME_BYTES)
             self._json(200, live_mod.look(brain, data, ambient=ambient))
 
+        def _post_live_dream_scene(self, path, qs):
+            """One Dream-Mode scene beat: a JPEG frame in, the REAL
+            SynesthesiaCard (six-word phrase + gestural sprite) and — when a
+            saved place-memory matches — a WorldAnchorCard ghost out. The frame
+            is decoded in memory and never persisted; it never leaves the Brain
+            (world_lens._describe keeps it local), and under the wearer's veil
+            both cards are None. The frame cap rides the same 413-before-read
+            machinery as a look."""
+            from . import live as live_mod
+            from .live_dream import dream
+            data = self._raw(live_mod.MAX_FRAME_BYTES)
+            self._json(200, dream(brain).scene(data))
+
         def _post_live_redeem(self, path, qs):
             """Exchange the short Live Lens pairing code for the token.
 
@@ -3460,6 +3473,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from .live_confluence import room
             b = self._body()
             self._json(200, room(brain).dissolve(str(b.get("sid", ""))))
+
+        def _post_conf_gift(self, path, qs):
+            """Confluence Weather Gift: hand my current sky to the bonded peer as
+            a 30 s wash on their glass. Real confluence.gift underneath — one
+            authenticated palette snapshot, veil-silenced, nothing persisted."""
+            from .live_confluence import room
+            b = self._body()
+            self._json(200, room(brain).gift(str(b.get("sid", "")),
+                                             b.get("colors") or []))
 
         def _post_live_weather(self, path, qs):
             """One dream-cadence weather beat: my state+palette in, MY sky's
@@ -3916,6 +3938,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/live/confluence/propose": _post_conf_propose,
             "/dreamlayer/live/confluence/accept": _post_conf_accept,
             "/dreamlayer/live/confluence/dissolve": _post_conf_dissolve,
+            "/dreamlayer/live/confluence/gift": _post_conf_gift,
             "/dreamlayer/live/weather": _post_live_weather,
             "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,
@@ -3956,6 +3979,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/message/draft": _post_message_draft,
             "/dreamlayer/message/send": _post_message_send,
             "/dreamlayer/live/look": _post_live_look,
+            "/dreamlayer/live/dream/scene": _post_live_dream_scene,
         }
         # prefix/dynamic routes (ordered fallback for non-exact paths)
         _POST_ROUTES_PREFIX = [

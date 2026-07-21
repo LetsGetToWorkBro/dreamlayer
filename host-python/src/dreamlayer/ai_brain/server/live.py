@@ -486,7 +486,22 @@ _PAGE = r"""<!doctype html>
   .pairmsg{min-height:1.1em;color:var(--amber)}
   #privacy{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);
     left:0;right:0;text-align:center;color:var(--phos-dim);font-size:10.5px;
-    letter-spacing:.06em;padding:0 16px;pointer-events:none}
+    letter-spacing:.06em;padding:0 16px;pointer-events:none;transition:opacity .3s}
+  #privacy.hide{opacity:0}
+  /* live captions — the room's speech on the glass (the glasses' Live Caption
+     feature; here through the phone's own speech service, said plainly) */
+  #ccbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
+  #captions{position:fixed;left:0;right:0;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 60px);
+    display:flex;justify-content:center;padding:0 14px;pointer-events:none;
+    opacity:0;transition:opacity .3s;z-index:3}
+  #captions.on{opacity:1}
+  #captions .cc{max-width:min(92vw,560px);background:rgba(5,10,8,.76);
+    border-radius:10px;padding:7px 13px;font:14px/1.45 ui-monospace,Menlo,monospace;
+    color:#EAF6EE;text-align:center;backdrop-filter:blur(3px);white-space:pre-wrap}
+  #captions .cc .iim{color:var(--phos-dim)}
+  #captions .cc .csrc{display:block;font-size:9.5px;color:var(--phos-dim);
+    letter-spacing:.11em;text-transform:uppercase;margin-top:4px}
   /* Juno's first-run tour: anchored coach marks over the REAL controls.
      The card owns pointer events; the spotlight ring never does — the lens,
      veil, and ask bar stay clickable throughout (the e2e clicks them). */
@@ -529,6 +544,34 @@ _PAGE = r"""<!doctype html>
   #confcard .acts{display:flex;gap:8px;margin-top:11px}
   #confcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
   #confmsg{min-height:1.1em;color:var(--amber);font-size:12px;margin-top:6px}
+  /* privacy receipt: the tamper-evident ledger, VERIFIED on this phone. The
+     card mirrors the confluence card; the verdict rail turns green only when
+     THIS browser re-checked the Ed25519 chain and it held. */
+  #rcptcard{position:fixed;left:50%;top:16%;transform:translateX(-50%);
+    width:min(90vw,400px);max-height:74vh;z-index:8;background:rgba(5,10,8,.96);
+    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    backdrop-filter:blur(5px);display:none;flex-direction:column}
+  #rcptcard.on{display:flex}
+  #rcptcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+    text-transform:uppercase;margin-bottom:8px}
+  #rcptverdict{border-left:3px solid var(--phos-dim);padding-left:9px;margin:2px 0 8px}
+  #rcptverdict.ok{border-left-color:var(--phos)}
+  #rcptverdict.bad{border-left-color:var(--amber)}
+  #rcpthead{font-size:13px;color:#EAF6EE;line-height:1.4}
+  #rcptsub{font-size:11.5px;color:var(--phos-dim);line-height:1.45;margin-top:3px}
+  #rcptlist{list-style:none;overflow-y:auto;margin:4px 0 2px;
+    border-top:1px solid rgba(42,60,68,.5)}
+  #rcptlist li{display:flex;gap:8px;align-items:baseline;padding:6px 0;
+    border-bottom:1px solid rgba(42,60,68,.35)}
+  #rcptlist li.bad{border-left:2px solid var(--amber);padding-left:7px}
+  #rcptlist .rk{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--phos-dim);flex:none;width:60px}
+  #rcptlist .rt{flex:1;min-width:0;font-size:12px;color:#DDEFE4;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rcptlist .rs{flex:none;font:10px ui-monospace,Menlo,monospace;color:var(--phos-dim)}
+  #rcptcard .acts{display:flex;gap:8px;margin-top:10px}
+  #rcptcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
+  #rcptbtn.on{color:var(--phos);border-color:rgba(125,255,168,.6)}
   /* short viewports (landscape phones, split view): the card moves to the TOP
      so it can never sit over the lens it is pointing at (refute 2026-07-21) */
   @media (max-height: 540px){
@@ -554,6 +597,8 @@ _PAGE = r"""<!doctype html>
   <span class="chip on" id="livebtn" role="switch" aria-checked="true" tabindex="0">&#9673; <b id="livest">live</b></span>
   <span class="chip" id="veilbtn" role="switch" aria-checked="false" tabindex="0">veil <b id="veilst">off</b></span>
   <span class="chip" id="confbtn" role="button" tabindex="0" title="Share the sky with someone">entangle</span>
+  <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
+  <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
 </div>
 <div id="controls">
@@ -575,6 +620,15 @@ _PAGE = r"""<!doctype html>
   <div id="confbody"></div>
   <div id="confmsg"></div>
 </div>
+<div id="rcptcard" role="dialog" aria-label="Privacy receipt">
+  <h3>Privacy receipt</h3>
+  <div id="rcptverdict"><div id="rcpthead"></div><div id="rcptsub"></div></div>
+  <ul id="rcptlist"></ul>
+  <div class="acts">
+    <button id="rcptverify" type="button">Re-verify</button>
+    <button id="rcptclose" type="button" class="ghost">Close</button>
+  </div>
+</div>
 <div id="tour" aria-live="polite">
   <div id="tourring"></div>
   <div id="tourcard">
@@ -589,6 +643,7 @@ _PAGE = r"""<!doctype html>
     </div>
   </div>
 </div>
+<div id="captions" aria-live="polite"><div class="cc"></div></div>
 <div id="privacy">camera &rarr; your Brain on your LAN &middot; frames are never stored &middot; plugin rows see the label, never the pixels</div>
 <script__NONCE__>
 "use strict";
@@ -859,6 +914,7 @@ function exitDream(){
   dreamOn = false;
   dreamGen++;                      /* invalidate any enterDream still awaiting */
   confHide(); confState = null; confBlend = null;
+  dreamScene = null; dreamGhost = null; giftColors = null;   /* the scene wakes too */
   document.body.setAttribute("data-dream", "off");
   if (dreamRaf != null) { cancelAnimationFrame(dreamRaf); dreamRaf = null; }
   window.removeEventListener("devicemotion", onDreamMotion);
@@ -886,6 +942,10 @@ function dreamTick(){                      /* the 2 Hz reactor pass */
   dweather.energy   = dweather.energy * 0.7 + energy * 0.3;
   dweather.luma     = 0.3 + Math.min(0.4, amp * 0.8 + dmotion.mag * 0.15);
   confBeat();                        /* the shared sky rides the same 2 Hz */
+  if (performance.now() - _lastSceneT >= SCENE_MS) {   /* the scene, at 4 s */
+    _lastSceneT = performance.now();
+    dreamSceneBeat();
+  }
 }
 function dreamCurl(x, y, t){               /* cheap curl of a drifting field */
   const n = (a, b) => Math.sin(a * 0.061 + t * 0.00021 + Math.sin(b * 0.047 - t * 0.00013));
@@ -923,8 +983,84 @@ function dreamFrame(ts){
     ctx.fillStyle = ember; ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawGiftWash(ctx);                 /* a gifted moment washing the glass */
   drawConfluence(ctx);               /* the shared sky, when two are dreaming */
-  gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
+  drawSynesthesia(ctx);              /* the scene, read as a phrase + a gesture */
+  drawGhost(ctx);                    /* a memory echo, when a place matches */
+  if (!(dreamScene && performance.now() < dreamSceneUntil))
+    gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
+}
+
+/* ---- the dream's scene layer: the REAL SynesthesiaCard + memory echoes ----
+   Every SCENE_INTERVAL (the device's 4 s cadence) a frame goes to the Brain's
+   OWN vision (world_lens._describe — it never leaves the Brain, and it degrades
+   to the honest offline mood cycle with no model), coming back as a six-word
+   phrase + a three-shape gestural sprite; and when a place you SAVED matches, a
+   dim memory-echo ghost surfaces it. Same primitives the glasses run
+   (SceneDescriber + GhostLayer), just fed by this phone's camera. */
+const SCENE_MS = 4000;               /* SCENE_INTERVAL_S = 4.0 (dream_mode/engine) */
+let dreamScene = null, dreamSceneUntil = 0;
+let dreamGhost = null, dreamGhostUntil = 0;
+let _sceneBusy = false, _lastSceneT = 0;
+async function dreamSceneBeat(){
+  if (!dreamOn || veil || _sceneBusy || !camReady()) return;
+  _sceneBusy = true;
+  try {
+    const c = captureFrame(512);
+    if (!c) return;
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.8));
+    if (!blob || !dreamOn || veil) return;   /* woke / veiled mid-capture */
+    const rsp = await fetchJSON("/dreamlayer/live/dream/scene",
+      {method: "POST", headers: HDRS(), body: blob}, 12000);
+    const j = rsp.json || {};
+    const now = performance.now();
+    if (j.scene) { dreamScene = j.scene; dreamSceneUntil = now + (j.scene.dismiss_ms || 4000); }
+    if (j.ghost) { dreamGhost = j.ghost; dreamGhostUntil = now + (j.ghost.dismiss_ms || 8000); }
+  } catch (e) { /* a missed scene is just a quieter dream */ }
+  finally { _sceneBusy = false; }
+}
+function hexRgb(n){ n = n | 0; return "rgb(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + ")"; }
+function drawGesture(ctx, kind, x, y, sz){
+  ctx.beginPath();
+  if (kind === "line") { ctx.moveTo(x - sz, y); ctx.lineTo(x + sz, y); ctx.stroke(); }
+  else if (kind === "rect") { ctx.strokeRect(x - sz/2, y - sz/2, sz, sz); }
+  else if (kind === "triangle") {
+    ctx.moveTo(x, y - sz/2); ctx.lineTo(x + sz/2, y + sz/2);
+    ctx.lineTo(x - sz/2, y + sz/2); ctx.closePath(); ctx.stroke();
+  } else { ctx.arc(x, y, sz/2, 0, 2 * Math.PI); ctx.stroke(); }
+}
+function drawSynesthesia(ctx){
+  if (!dreamScene || performance.now() >= dreamSceneUntil) return;
+  const phrase = String(dreamScene.description || dreamScene.primary || "");
+  gtext(ctx, "DREAM", 128, 64, GP.text_ghost, "sm");
+  const words = phrase.split(/\s+/).filter(Boolean);
+  const mid = Math.ceil(words.length / 2);           /* the six words, two lines */
+  gtext(ctx, words.slice(0, mid).join(" "), 128, 88, GP.text_primary, "sm");
+  const l2 = words.slice(mid).join(" ");
+  if (l2) gtext(ctx, l2, 128, 102, GP.text_primary, "sm");
+  const shapes = Array.isArray(dreamScene.shapes) ? dreamScene.shapes : [];
+  if (!shapes.length) return;                         /* the gestural sprite */
+  const col = hexRgb(dreamScene.dominant_color || 0x2CC79A);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(128, 128, 126, 0, 2 * Math.PI); ctx.clip();
+  ctx.globalAlpha = 0.85; ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
+  for (const s of shapes) {
+    const x = 44 + (Math.max(0, Math.min(127, s.x | 0)) / 127) * 168;   /* [44,212] */
+    const y = 140 + (Math.max(0, Math.min(127, s.y | 0)) / 127) * 42;   /* [140,182] */
+    drawGesture(ctx, s.kind, x, y, Math.max(6, Math.min(38, (s.size | 0) * 0.62)));
+  }
+  ctx.restore();
+}
+function drawGhost(ctx){
+  if (!dreamGhost || performance.now() >= dreamGhostUntil) return;
+  const g = dreamGhost;
+  ctx.save();
+  ctx.globalAlpha = Number(g.opacity) || 0.20;        /* the device's 20% ghost */
+  gtext(ctx, "MEMORY ECHO", 128, 190, GP.text_ghost, "sm");
+  gtext(ctx, String(g.summary || g.primary || ""), 128, 206, GP.memory_trace, "sm");
+  const detail = String(g.detail || "");
+  if (detail) gtext(ctx, detail, 128, 220, GP.text_ghost, "sm");
+  ctx.restore();
 }
 
 
@@ -1011,6 +1147,7 @@ try {
 let confOn = false;                 /* an offer or bond is live for this side */
 let confState = null;               /* {mode, tg, seamDeg, gapDeg, peerRgb} */
 let confBlend = null;               /* merged palette slots from MY sky */
+let giftColors = null, giftUntil = 0;   /* a Weather Gift washing my glass, 30 s */
 function confSlots(){
   /* my four palette slots, in the device's 10-bit YCbCr slot shape — the
      same two-band weather that drives the solo dream (sky = pressure on the
@@ -1055,6 +1192,12 @@ async function confBeat(){
 }
 function applyConfFrame(f){
   if (!f || !f.t && !f.mode) return;
+  if (f.t === "gift") {              /* a moment they chose to hand me */
+    giftColors = Array.isArray(f.colors) && f.colors.length ? f.colors : null;
+    if (giftColors) { giftUntil = performance.now() + 30000;   /* GIFT_PLAY_S */
+                      showHud(["a gift · their sky"], {ms: 2600}); }
+    return;
+  }
   if (f.t === "palette") { confBlend = f.colors || null; return; }
   if (f.mode === "solo") { confState = null; confBlend = null; return; }
   if (f.mode === "merged") {
@@ -1114,6 +1257,30 @@ function drawConfluence(ctx){
   ctx.restore();
   gtext(ctx, "APART " + (100 - confState.tg) + "%", 128, 226, GP.text_ghost, "sm");
 }
+function drawGiftWash(ctx){
+  /* a Weather Gift: their recorded sky washes over mine for 30 s, fading as it
+     plays, then my own weather flows back. One authenticated palette, nothing
+     more — the real confluence.gift, rendered as light. */
+  if (!giftColors || performance.now() >= giftUntil) return;
+  const remain = (giftUntil - performance.now()) / 30000;   /* 1 -> 0 */
+  const slot = giftColors.find(c => (c.idx | 0) === 1) || giftColors[0];
+  if (!slot) return;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(128, 128, 128, 0, 2 * Math.PI); ctx.clip();
+  ctx.globalAlpha = 0.12 + remain * 0.30;
+  ctx.fillStyle = slotRgb(slot);
+  ctx.beginPath(); ctx.arc(128, 128, 128, 0, 2 * Math.PI); ctx.fill();
+  ctx.restore();
+  gtext(ctx, "A GIFT · THEIR SKY", 128, 240, GP.text_ghost, "sm");
+}
+async function confGift(){
+  try {
+    const j = await confApi("/dreamlayer/live/confluence/gift",
+                            {sid: CONF_SID, colors: confSlots()});
+    if (j.ok) { confHide(); showHud(["your sky · sent"], {ms: 2600}); }
+    else $("confmsg").textContent = j.error || "couldn't send the sky";
+  } catch (e) { $("confmsg").textContent = "brain unreachable"; }
+}
 function setConfOn(on){
   confOn = on;
   if (!on) { confState = null; confBlend = null; }
@@ -1148,7 +1315,9 @@ function confCard(mode, code){
     setTimeout(() => inp.focus(), 60);
   } else if (mode === "bonded") {
     p("Entangled. The sky is shared while you both dream — merged when your weathers agree, split when they part.");
-    acts.appendChild(btn("Untangle", confDissolve));
+    p("Or hand them this exact moment: your sky washes over theirs for thirty seconds, then their own weather flows back.");
+    acts.appendChild(btn("Give my sky", confGift));
+    acts.appendChild(btn("Untangle", confDissolve, true));
     acts.appendChild(btn("Close", confHide, true));
   }
   body.appendChild(acts);
@@ -1541,14 +1710,229 @@ if (SR) {
   let rec = null;
   $("mic").onclick = () => {
     if (rec) { rec.stop(); return; }
+    const wasCC = captionsOn;
+    if (wasCC) stopCaptions(true);        /* one recognizer at a time — pause CC */
     rec = new SR(); rec.lang = navigator.language || "en-US";
     $("mic").setAttribute("aria-pressed", "true");
     showHud("listening (phone speech service)", {ms:3200});
     rec.onresult = e => { $("q").value = e.results[0][0].transcript; ask(); };
-    rec.onend = () => { $("mic").setAttribute("aria-pressed", "false"); rec = null; };
+    rec.onend = () => {
+      $("mic").setAttribute("aria-pressed", "false"); rec = null;
+      if (wasCC) startCaptions();          /* resume the captions we paused */
+    };
     rec.start();
   };
 }
+
+/* ---- live captions: the room's speech, on the glass ----------------------
+   The glasses' Live Caption feature, on the phone through the phone's OWN
+   speech service (said plainly, like the ask mic). A continuous recognizer
+   streams interim + final text into a budget-clamped strip. It is deaf under
+   the veil and while backgrounded (the mic is never held hot), auto-restarts
+   when the browser ends a segment, and never leaves the phone — recognition
+   is the browser's, the transcript is drawn locally and posted nowhere. */
+let captionsOn = false, captionRec = null, captionFinal = "";
+function ccAvailable(){ return !!SR; }
+if (ccAvailable()) $("ccbtn").hidden = false;
+function renderCaptions(finalText, interim){
+  const box = $("captions").firstElementChild;
+  box.textContent = "";
+  const tail = (finalText || "").split(/\s+/).slice(-14).join(" ");   /* ~2 lines */
+  if (tail) box.appendChild(document.createTextNode(tail + " "));
+  if (interim) {
+    const s = document.createElement("span"); s.className = "iim";
+    s.textContent = interim; box.appendChild(s);
+  }
+  const src = document.createElement("span"); src.className = "csrc";
+  src.textContent = "live caption · your phone's speech service";
+  box.appendChild(src);
+  $("captions").classList.toggle("on", captionsOn && !!(tail || interim));
+}
+function startCaptions(){
+  if (!ccAvailable() || veil || captionRec) return;
+  captionsOn = true;
+  $("ccbtn").classList.add("on");
+  $("ccbtn").setAttribute("aria-checked", "true");
+  $("privacy").classList.add("hide");
+  try {
+    captionRec = new SR();
+    captionRec.lang = navigator.language || "en-US";
+    captionRec.continuous = true;
+    captionRec.interimResults = true;
+    captionRec.onresult = e => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) captionFinal = (captionFinal + " " + r[0].transcript).trim();
+        else interim += r[0].transcript;
+      }
+      renderCaptions(captionFinal, interim);
+    };
+    captionRec.onerror = ev => { if (ev && ev.error === "not-allowed") stopCaptions(); };
+    captionRec.onend = () => {           /* the browser ends segments — re-arm */
+      captionRec = null;
+      if (captionsOn && !veil && !document.hidden) { try { startCaptions(); } catch (e) {} }
+    };
+    captionRec.start();
+    renderCaptions(captionFinal, "");
+  } catch (e) { stopCaptions(); }
+}
+function stopCaptions(keepFlag){
+  if (!keepFlag) {
+    captionsOn = false;
+    $("ccbtn").classList.remove("on");
+    $("ccbtn").setAttribute("aria-checked", "false");
+    $("privacy").classList.remove("hide");
+    $("captions").classList.remove("on");
+  }
+  try { if (captionRec) { captionRec.onend = null; captionRec.stop(); } } catch (e) {}
+  captionRec = null;
+}
+function toggleCaptions(){ if (captionsOn) stopCaptions(); else startCaptions(); }
+$("ccbtn").onclick = toggleCaptions;
+$("ccbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") toggleCaptions(); };
+
+/* ---- privacy receipt: the tamper-evident ledger, VERIFIED on THIS phone ----
+   GET /dreamlayer/receipt is the hash-chained, Ed25519-signed activity ledger
+   + the public key. We verify it HERE, offline: the SHA-256 chain always, and
+   the signature when this browser exposes WebCrypto Ed25519 (iOS 17+/Chromium
+   137+). The canonical bytes reproduce Python's json.dumps(sort_keys=True,
+   separators=(',',':'), ensure_ascii=True) EXACTLY — a known-answer self test
+   guards canonCore(), and we degrade to chain-only rather than raise a false
+   alarm if it ever drifts. Nothing from the Brain is trusted: the green verdict
+   is this phone's own arithmetic, drawn XSS-safe via textContent. */
+let RECEIPT = null, ED25519 = null;
+function _pyStr(s){ s = (s == null) ? "" : String(s); let o = '"';
+  for (const ch of s){ const cp = ch.codePointAt(0);
+    if (ch === '"') o += '\\"'; else if (ch === '\\') o += '\\\\';
+    else if (cp === 8) o += '\\b'; else if (cp === 9) o += '\\t'; else if (cp === 10) o += '\\n';
+    else if (cp === 12) o += '\\f'; else if (cp === 13) o += '\\r';
+    else if (cp < 0x20) o += '\\u' + cp.toString(16).padStart(4, '0');
+    else if (cp < 0x80) o += ch;
+    else if (cp > 0xFFFF){ const c = cp - 0x10000;
+      o += '\\u' + (0xD800 + (c >> 10)).toString(16).padStart(4, '0')
+        +  '\\u' + (0xDC00 + (c & 0x3FF)).toString(16).padStart(4, '0'); }
+    else o += '\\u' + cp.toString(16).padStart(4, '0'); }
+  return o + '"'; }
+/* ts is a float from time.time(); Python renders an integer-valued float "N.0" */
+function _pyFloat(v){ v = Number(v); return Number.isInteger(v) ? v.toFixed(1) : String(v); }
+function canonCore(r){ return '{"kind":' + _pyStr(r.kind) + ',"prev":' + _pyStr(r.prev || "")
+  + ',"seq":' + String(r.seq) + ',"text":' + _pyStr(r.text) + ',"ts":' + _pyFloat(r.ts) + '}'; }
+function _canonHead(h){ return '{"count":' + String(h.count) + ',"head":' + _pyStr(h.head) + ',"last_seq":' + String(h.last_seq) + '}'; }
+const _rcptEnc = new TextEncoder();
+async function _sha256hex(bytes){ const h = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.prototype.map.call(new Uint8Array(h), b => b.toString(16).padStart(2, '0')).join(''); }
+function _hexToBytes(h){ h = h || ""; const a = new Uint8Array(Math.floor(h.length / 2));
+  for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; }
+async function _probeEd25519(){ if (ED25519 !== null) return ED25519;
+  try { await crypto.subtle.importKey("raw", new Uint8Array(32), {name: "Ed25519"}, false, ["verify"]); ED25519 = true; }
+  catch (e) { ED25519 = false; } return ED25519; }
+async function _edVerify(pubHex, sigHex, bytes){
+  try { const k = await crypto.subtle.importKey("raw", _hexToBytes(pubHex), {name: "Ed25519"}, false, ["verify"]);
+    return await crypto.subtle.verify({name: "Ed25519"}, k, _hexToBytes(sigHex), bytes); }
+  catch (e) { return false; } }
+/* known-answer: matches the Python vector in test_receipt_verify_vectors.py */
+function _canonSelfTest(){
+  const r = {seq: 2, ts: 1700000000.0, kind: "plugin",
+             text: "emoji 🎉 and quote \" and backslash \\", prev: "deadbeef"};
+  return canonCore(r) === '{"kind":"plugin","prev":"deadbeef","seq":2,"text":"emoji \\ud83c\\udf89 and quote \\" and backslash \\\\","ts":1700000000.0}'; }
+function _rcptRow(rec, bad){
+  const li = document.createElement("li");
+  if (bad) li.className = "bad";
+  const k = document.createElement("span"); k.className = "rk"; k.textContent = String(rec.kind || "");
+  const t = document.createElement("span"); t.className = "rt"; t.textContent = String(rec.text || rec.kind || "");
+  const s = document.createElement("span"); s.className = "rs"; s.textContent = "seq " + String(rec.seq);
+  li.appendChild(k); li.appendChild(t); li.appendChild(s);
+  return li;
+}
+function _renderRecs(badSet){
+  const ul = $("rcptlist"); ul.textContent = "";
+  const recs = (RECEIPT && RECEIPT.records) || [];
+  if (!recs.length) {
+    const li = document.createElement("li"); li.textContent = "Nothing recorded yet.";
+    ul.appendChild(li); return;
+  }
+  for (let i = recs.length - 1; i >= 0; i--)
+    ul.appendChild(_rcptRow(recs[i], badSet && badSet.has(i)));
+}
+async function loadReceipt(){
+  const rsp = await fetchJSON("/dreamlayer/receipt", {headers: HDRS()}, 9000);
+  if (rsp.status === 401) { RECEIPT = null; return "pair"; }
+  RECEIPT = rsp.json || null;
+  return RECEIPT ? "" : "unreachable";
+}
+async function verifyReceipt(){
+  const head = $("rcpthead"), sub = $("rcptsub"), verdict = $("rcptverdict");
+  verdict.className = ""; head.textContent = "Verifying on this phone…"; sub.textContent = "";
+  const ld = await loadReceipt();
+  if (ld === "pair") { head.textContent = "Pair this phone first";
+    sub.textContent = "Connect to your Brain to fetch its signed receipt."; _renderRecs(null); return; }
+  if (ld === "unreachable") { verdict.className = "bad"; head.textContent = "Brain unreachable";
+    sub.textContent = "Couldn’t fetch the receipt — try again."; _renderRecs(null); return; }
+  const r = RECEIPT; const recs = r.records || [];
+  _renderRecs(null);
+  if (!recs.length) { head.textContent = "No activity recorded yet";
+    sub.textContent = r.pubkey ? "The ledger is signed and empty — nothing to prove yet."
+                               : "Install the privacy extra so the Brain signs its ledger.";
+    return; }
+  const canonOK = _canonSelfTest();
+  const sigSupported = (await _probeEd25519()) && !!r.pubkey && canonOK;
+  let chainOK = true, seqOK = true, sigOK = true, firstBroken = -1;
+  let prev = recs[0].prev || "";
+  const base = recs[0].seq;
+  for (let i = 0; i < recs.length; i++) { const rec = recs[i]; const bytes = _rcptEnc.encode(canonCore(rec));
+    if (i > 0 && (rec.prev || "") !== prev) { chainOK = false; if (firstBroken < 0) firstBroken = i; }
+    if (rec.seq !== base + i) seqOK = false;
+    if (sigSupported && !(await _edVerify(r.pubkey, rec.sig || "", bytes))) { sigOK = false; if (firstBroken < 0) firstBroken = i; }
+    prev = await _sha256hex(bytes); }
+  let attested = null, tailShort = false, unattested = false, headVerified = false;
+  const h = r.head;
+  if (sigSupported && h && h.sig) {
+    const hOK = await _edVerify(r.pubkey, h.sig, _rcptEnc.encode(_canonHead(h)));
+    if (!hOK) { chainOK = false; if (firstBroken < 0) firstBroken = recs.length - 1; }
+    else { headVerified = true; attested = h.count; const lastSeq = recs[recs.length - 1].seq;
+      if (h.last_seq === lastSeq) { if (h.head !== prev) { chainOK = false; if (firstBroken < 0) firstBroken = recs.length - 1; } }
+      else if (h.last_seq < lastSeq) { unattested = true; }
+      else { tailShort = true; } } }
+  const signedLedger = !!r.pubkey;
+  const hardTamper = !chainOK || !seqOK || (sigSupported && !sigOK) || unattested;
+  const tailComplete = !signedLedger || (sigSupported && headVerified && !tailShort);
+  const fullyVerified = signedLedger && sigSupported && !hardTamper && tailComplete;
+  if (fullyVerified) {
+    verdict.className = "ok";
+    head.textContent = "Verified · signed by this device, unaltered";
+    sub.textContent = recs.length + (attested && attested > recs.length ? " of " + attested : "")
+      + " actions · chain intact · signature valid — the Brain can’t lie to you.";
+    _renderRecs(null);
+  } else if (hardTamper) {
+    verdict.className = "bad";
+    head.textContent = unattested ? "Tampering detected · unattested entries" : "Tampering detected · entry " + (firstBroken + 1);
+    sub.textContent = unattested
+      ? "The ledger carries entries beyond its signed length — records were appended without the Brain’s key."
+      : !chainOK ? "A hash-chain link is broken — an entry was altered or removed after signing."
+      : (!seqOK ? "A sequence number is missing — an entry was deleted."
+                : "A signature failed — a record was changed after it was signed.");
+    const bad = new Set(); for (let i = Math.max(firstBroken, 0); i < recs.length; i++) bad.add(i);
+    _renderRecs(bad);
+  } else if (!signedLedger) {
+    head.textContent = "Unsigned ledger";
+    sub.textContent = "The chain is internally consistent, but this Brain isn’t signing receipts (no privacy extra).";
+  } else if (!sigSupported) {
+    head.textContent = "Chain intact · signature not checked here";
+    sub.textContent = "Every action seals the one before it, but this browser can’t run Ed25519 — verify the signature on the desktop panel.";
+  } else if (tailShort) {
+    head.textContent = "Recent entries may be missing";
+    sub.textContent = "The signed length is " + attested + ", but only " + recs.length + " were returned. The shown actions are authentic — re-verify.";
+  } else {
+    head.textContent = "Can’t confirm completeness";
+    sub.textContent = "The shown actions are authentic, but the signed length anchor is missing — re-verify.";
+  }
+}
+function openReceipt(){ $("rcptcard").classList.add("on"); verifyReceipt(); }
+$("rcptbtn").onclick = openReceipt;
+$("rcptbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") openReceipt(); };
+$("rcptclose").onclick = () => $("rcptcard").classList.remove("on");
+$("rcptverify").onclick = verifyReceipt;
 
 /* ---- backgrounding: stop looking, save battery, resume clean ------------ */
 document.addEventListener("visibilitychange", () => {

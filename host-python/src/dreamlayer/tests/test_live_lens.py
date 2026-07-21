@@ -311,6 +311,42 @@ class TestPage:
         assert "<script>" in bare and "nonce=" not in bare
 
 
+class TestPrivacyReceipt:
+    """The privacy receipt, verified on THIS phone: the client re-checks the
+    hash chain + Ed25519 signature offline — the green verdict is the phone's
+    own arithmetic, never the Brain's word."""
+
+    def test_page_ships_the_client_verifier(self):
+        page = render_live()
+        for n in ("function verifyReceipt", "function canonCore",
+                  "function _edVerify", "function _canonSelfTest",
+                  "/dreamlayer/receipt", "Privacy receipt", '"Ed25519"'):
+            assert n in page, f"receipt piece missing: {n}"
+
+    def test_canonical_self_test_string_matches_the_python_vector(self):
+        # the client gates signature-checking on this exact known-answer vector;
+        # it MUST equal Python's json.dumps canonicalization (the contract pinned
+        # in test_receipt_verify_vectors.py). Compare against _canonical here so a
+        # drift on either side fails in lockstep.
+        from dreamlayer.reality_compiler.sign_crypto import _canonical
+        want = _canonical({"seq": 2, "ts": 1700000000.0, "kind": "plugin",
+                           "text": "emoji \U0001F389 and quote \" and backslash \\",
+                           "prev": "deadbeef"}).decode()
+        page = render_live()
+        # the literal appears in the page's _canonSelfTest as a SINGLE-quoted JS
+        # string, so only backslashes double; the quotes stay bare. Reconstruct
+        # that source form and assert it is present.
+        js_literal = want.replace("\\", "\\\\")
+        assert js_literal in page, "client self-test vector drifted from Python"
+
+    def test_receipt_is_verified_client_side_not_server_asserted(self):
+        # the page must contain the real verification arithmetic, not a trusted
+        # server flag: chain hashing + signature verify both run in the browser
+        page = render_live()
+        assert 'crypto.subtle.digest("SHA-256"' in page      # the chain, locally
+        assert 'crypto.subtle.verify' in page                # the signature, locally
+
+
 # --- the HTTP surface: gate, caps, link ------------------------------------
 
 def _serve(brain):
