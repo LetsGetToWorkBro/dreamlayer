@@ -913,6 +913,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       click (no uninstall); missing ones show the exact install.
       <a href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/DEPLOYMENT.md" target="_blank">How switching on works ↗</a></p>
     <div class="conn-s" id="capsum" style="margin:0 0 10px">…</div>
+    <div id="dlall" style="margin:0 0 8px"></div>
+    <div id="dlqueue" style="display:none;margin:0 0 10px"></div>
     <div class="xgrid" id="packgrid" style="margin:0 0 8px"></div>
     <div id="caprows"></div>
   </section>
