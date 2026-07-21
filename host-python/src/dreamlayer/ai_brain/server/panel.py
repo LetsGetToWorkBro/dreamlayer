@@ -1272,6 +1272,7 @@ function showPage(id){curPage=id;
   // button you have to find. (Once per panel session, so re-visits don't spam
   // the activity log or re-mint the link.)
   if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
+  if(id==="caps"&&typeof pollDownloads==="function")pollDownloads();
   // Open Terminal → boot the banner (once) and put the cursor in the prompt.
   if(id==="terminal"&&typeof termFocus==="function"){termFocus();}
 }
@@ -1383,6 +1384,58 @@ function renderPacks(packs){
   const g=$("packgrid"); if(!g)return;
   g.innerHTML=(packs||[]).map(packCard).join("");
   renderPackNudge(packs||[]);
+  renderDownloadAll(packs||[]);
+}
+// ---- unified download queue: packs, plugins, and model pulls in one line ----
+let _dlPoll=null;
+function renderDownloadAll(packs){
+  const el=$("dlall"); if(!el)return;
+  const todo=packs.filter(p=>p.state!=="installed"&&!(p.install&&p.install.state==="done"));
+  el.innerHTML=todo.length
+    ?`<button class="sm" onclick="downloadAllPacks()">Download all (${todo.length})</button>`
+    :"";
+  el.dataset.keys=JSON.stringify(todo.map(p=>p.key));
+}
+async function downloadAllPacks(){
+  const el=$("dlall"); if(!el)return;
+  let keys=[]; try{keys=JSON.parse(el.dataset.keys||"[]");}catch(e){}
+  if(!keys.length)return;
+  try{
+    await api("/dreamlayer/downloads/enqueue","POST",
+              {items:keys.map(k=>({kind:"pack",key:k}))});
+    toast("Queued "+keys.length+" pack downloads");
+    pollDownloads();
+  }catch(e){toast("Couldn't queue downloads");}
+}
+async function queueDownload(kind,key){
+  try{
+    await api("/dreamlayer/downloads/enqueue","POST",{kind:kind,key:key});
+    toast("Queued "+key); pollDownloads();
+  }catch(e){toast("Couldn't queue "+key);}
+}
+async function cancelDownload(id){
+  try{await api("/dreamlayer/downloads/cancel","POST",{id:id});}catch(e){}
+  pollDownloads();
+}
+async function pollDownloads(){
+  clearTimeout(_dlPoll);
+  const el=$("dlqueue"); if(!el)return;
+  let r; try{r=await api("/dreamlayer/downloads");}catch(e){return;}
+  const q=(r&&r.queue)||[];
+  const live=q.filter(i=>i.state==="queued"||i.state==="running");
+  if(!q.length){el.style.display="none";el.innerHTML="";return;}
+  el.style.display="";
+  el.innerHTML=q.map(i=>{
+    const pos=i.state==="queued"?` · #${(i.position|0)+1} in line`:"";
+    const pct=i.state==="running"?` · ${i.percent|0}%`:"";
+    const cancel=i.state==="queued"
+      ?` <button class="ghost sm" onclick="cancelDownload(${i.id})">Cancel</button>`:"";
+    const cls=i.state==="failed"?"style=\"color:var(--warn,#B85C38)\"":
+              i.state==="done"?"style=\"color:var(--memory)\"":"";
+    return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;
+  }).join("");
+  if(live.length){_dlPoll=setTimeout(pollDownloads,1500);}
+  else{loadCaps();}   // queue drained → refresh pack states
 }
 function renderPackNudge(packs){
   const el=$("packNudge"); if(!el)return;

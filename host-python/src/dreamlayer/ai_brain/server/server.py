@@ -2057,6 +2057,117 @@ def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
 _PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
 
 
+# --- Unified download queue ---------------------------------------------------
+# One serial queue over the EXISTING install machineries: capability packs
+# (_install_pack jobs), model pulls (_pull_model_async jobs), and store
+# plugins (brain.store_install). Items run one at a time in enqueue order;
+# the panel polls /dreamlayer/downloads for positions + live progress, and
+# "Download all" is just enqueue-many. Only a still-queued item can cancel —
+# the underlying machineries have no mid-flight cancel, and pretending
+# otherwise would lie about what's on disk.
+_DL_QUEUE: list = []
+_DL_LOCK = threading.Lock()
+_DL_WORKER: dict = {"t": None}
+_DL_KINDS = ("pack", "model", "plugin")
+
+
+def _dl_snapshot() -> list:
+    with _DL_LOCK:
+        out = []
+        pos = 0
+        for it in _DL_QUEUE:
+            d = {k: it[k] for k in ("id", "kind", "key", "state", "detail",
+                                    "percent")}
+            if it["state"] == "queued":
+                d["position"] = pos
+            if it["state"] in ("queued", "running"):
+                pos += 1
+            out.append(d)
+        return out
+
+
+def _dl_enqueue(brain: Brain, kind: str, key: str) -> dict:
+    kind, key = (kind or "").strip(), (key or "").strip()
+    if kind not in _DL_KINDS or not key:
+        return {"error": "unknown download kind or empty name"}
+    with _DL_LOCK:
+        for it in _DL_QUEUE:
+            if (it["kind"], it["key"]) == (kind, key) and \
+                    it["state"] in ("queued", "running"):
+                return {"ok": True, "id": it["id"], "note": "already queued"}
+        item = {"id": max((i["id"] for i in _DL_QUEUE), default=0) + 1,
+                "kind": kind, "key": key, "state": "queued",
+                "detail": "queued", "percent": 0}
+        _DL_QUEUE.append(item)
+        t = _DL_WORKER.get("t")
+        if t is None or not t.is_alive():
+            t = threading.Thread(target=_dl_drain, args=(brain,), daemon=True)
+            _DL_WORKER["t"] = t
+            t.start()
+        return {"ok": True, "id": item["id"]}
+
+
+def _dl_cancel(item_id: int) -> dict:
+    with _DL_LOCK:
+        for it in _DL_QUEUE:
+            if it["id"] == item_id and it["state"] == "queued":
+                it["state"], it["detail"] = "cancelled", "cancelled"
+                return {"ok": True}
+    return {"error": "only a still-queued download can be cancelled"}
+
+
+def _dl_next():
+    with _DL_LOCK:
+        for it in _DL_QUEUE:
+            if it["state"] == "queued":
+                it["state"], it["detail"] = "running", "starting…"
+                return it
+        # queue drained — keep only the last 20 finished rows for the panel
+        done = [x for x in _DL_QUEUE
+                if x["state"] in ("done", "failed", "partial", "cancelled")]
+        for x in done[:-20]:
+            _DL_QUEUE.remove(x)
+        return None
+
+
+def _dl_drain(brain: Brain) -> None:
+    while True:
+        it = _dl_next()
+        if it is None:
+            return
+        try:
+            _dl_run_one(brain, it)
+        except Exception as exc:                  # noqa: BLE001 — queue never dies
+            it["state"], it["detail"] = "failed", str(exc)[-160:]
+
+
+def _dl_run_one(brain: Brain, it: dict, poll_s: float = 1.0,
+                max_polls: int = 3600) -> None:
+    kind, key = it["kind"], it["key"]
+    if kind == "plugin":
+        res = brain.store_install(key)            # synchronous, checksum-gated
+        if res.get("ok"):
+            it["state"], it["percent"], it["detail"] = "done", 100, "installed"
+        else:
+            errs = res.get("errors") or [res.get("error") or "install failed"]
+            it["state"], it["detail"] = "failed", str(errs[0])[-160:]
+        return
+    job = _install_pack(brain, key) if kind == "pack" \
+        else _pull_model_async(brain, key)
+    if "error" in job:
+        it["state"], it["detail"] = "failed", str(job["error"])[-160:]
+        return
+    for _ in range(max_polls):                    # ≤1h per item
+        st = job.get("state")
+        it["percent"] = int(job.get("percent") or 0)
+        it["detail"] = str(job.get("detail") or st or "")[:160]
+        if st in ("done", "failed", "partial"):
+            it["state"] = st
+            return
+        time.sleep(poll_s)
+    it["state"], it["detail"] = "failed", "timed out after an hour"
+
+
 def _install_pack(brain: Brain, pack_key: str) -> dict:
     """Validate and launch a pack install. Returns the job dict (or an error).
 
@@ -2952,6 +3063,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from .qr import to_svg
             self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
 
+        def _get_downloads(self, path, qs):
+            """The unified download queue — positions + live progress."""
+            self._json(200, {"queue": _dl_snapshot()})
+
         def _get_live_link(self, path, qs):
             """The Live Lens link + QR — only handed to the local panel, exactly
             like the pairing code (the link carries the token, so the link IS
@@ -3050,6 +3165,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
             "/dreamlayer/live/link": _get_live_link,
+            "/dreamlayer/downloads": _get_downloads,
         }
 
         # -- routing ----------------------------------------------------
@@ -3243,6 +3359,31 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if not self._from_localhost():
                 self._json(403, {"error": "installing is local-only"}); return
             self._json(200, brain.store_install(self._body().get("name", "")))
+
+        def _post_downloads_enqueue(self, path, qs):
+            """Queue downloads (packs / models / plugins) — accepts one item
+            or {"items": [...]} for Download All. Local-only, matching the
+            pack/plugin/model install bar."""
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
+            b = self._body()
+            items = b.get("items") if isinstance(b.get("items"), list) else [b]
+            out = [_dl_enqueue(brain, str((i or {}).get("kind", "")),
+                               str((i or {}).get("key", "")))
+                   for i in items[:32]]
+            self._json(200, {"ok": True, "queued": out,
+                             "queue": _dl_snapshot()})
+
+        def _post_downloads_cancel(self, path, qs):
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
+            try:
+                item_id = int(self._body().get("id") or 0)
+            except (TypeError, ValueError):
+                item_id = 0
+            self._json(200, _dl_cancel(item_id))
 
         def _post_plugins_remove(self, path, qs):
             """Remove an installed plugin by name."""
@@ -3656,6 +3797,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/upload": _post_upload,
             "/dreamlayer/brain/ask": _post_brain_ask,
             "/dreamlayer/plugins/install": _post_plugins_install,
+            "/dreamlayer/downloads/enqueue": _post_downloads_enqueue,
+            "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,
             "/dreamlayer/plugins/store/install": _post_plugins_store_install,
             "/dreamlayer/plugins/remove": _post_plugins_remove,
