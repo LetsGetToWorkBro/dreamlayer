@@ -54,6 +54,9 @@ depth    = ["transformers>=4.40,<5"]
 # live speech-to-speech interpreter (Meta SeamlessM4T-v2 via transformers) — the ear
 # half of Rosetta; audio stays on the Brain. Opt-in, heavy, not in any profile.
 interpreter = ["transformers>=4.40,<5", "sentencepiece>=0.2,<1"]
+# non-speech sound recognition (PANNs / AudioSet) — the glasses hear the world:
+# alarms, kettle, doorbell, glass. Classifies sound TYPES, never voiceprints. Opt-in.
+sound-events = ["panns-inference>=0.1,<1"]
 # temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
 # by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
 memory-graph = ["lightrag-hku>=1,<2"]
