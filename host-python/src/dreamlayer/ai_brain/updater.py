@@ -55,7 +55,10 @@ def pick_asset(release: dict, platform: str | None = None) -> Optional[dict]:
         if not digest.startswith("sha256:"):
             return None                   # no declared digest → no install
         url = str(a.get("browser_download_url") or "")
-        if not url.startswith("https://"):
+        # pinned to THIS repo's release downloads — a manipulated release JSON
+        # must not be able to point the download anywhere else (refute A1-2)
+        if not url.startswith(
+                "https://github.com/LetsGetToWorkBro/dreamlayer/releases/download/"):
             return None
         return {"name": want, "url": url,
                 "sha256": digest.split(":", 1)[1].lower(),
@@ -127,7 +130,7 @@ def authenticode_ok(exe: Path, run: Callable = subprocess.run) -> bool:
         res = run(["powershell", "-NoProfile", "-Command",
                    f"(Get-AuthenticodeSignature '{exe}').Status"],
                   capture_output=True, timeout=60, text=True)
-        return res.returncode == 0 and "Valid" in (res.stdout or "")
+        return res.returncode == 0 and (res.stdout or "").strip() == "Valid"
     except Exception:
         return False
 
@@ -137,6 +140,8 @@ def install_macos(dmg: Path, app_dir: str = "/Applications",
     """Mount the verified dmg, swap DreamLayer.app into /Applications, unmount,
     relaunch the new copy. Returns False (leaving the old app untouched) on
     any step failing — a botched update must never eat the working install."""
+    if not gatekeeper_ok(dmg, run=run):
+        return False                      # the gate is code, not convention (A3-5)
     mount = None
     try:
         res = run(["hdiutil", "attach", "-nobrowse", "-readonly", str(dmg)],
@@ -156,10 +161,22 @@ def install_macos(dmg: Path, app_dir: str = "/Applications",
                timeout=600).returncode != 0:
             run(["rm", "-rf", str(stage)], capture_output=True, timeout=120)
             return False
-        run(["rm", "-rf", str(dst)], capture_output=True, timeout=120)
+        # swap with rollback (refute A3-1/A3-2): park the old bundle, move the
+        # new one in; on failure put the old one back. The old app is deleted
+        # LAST, only after the new one is in place — never rm-then-hope.
+        old = dst.with_name("DreamLayer.app.old")
+        run(["rm", "-rf", str(old)], capture_output=True, timeout=120)
+        had_old = dst.exists()
+        if had_old and run(["mv", str(dst), str(old)], capture_output=True,
+                           timeout=120).returncode != 0:
+            run(["rm", "-rf", str(stage)], capture_output=True, timeout=120)
+            return False
         if run(["mv", str(stage), str(dst)], capture_output=True,
                timeout=120).returncode != 0:
+            if had_old:
+                run(["mv", str(old), str(dst)], capture_output=True, timeout=120)
             return False
+        run(["rm", "-rf", str(old)], capture_output=True, timeout=120)
         run(["open", "-n", str(dst)], capture_output=True, timeout=60)
         return True
     finally:
@@ -171,6 +188,8 @@ def install_windows(exe: Path, start: Optional[Callable] = None) -> bool:
     """Launch the verified installer (per-user, no admin prompt) and let it
     take over; the caller exits the running app."""
     try:
+        if not authenticode_ok(exe):
+            return False                  # the gate is code, not convention (A3-5)
         if start is None:
             import os
             start = os.startfile            # type: ignore[attr-defined]
@@ -178,3 +197,15 @@ def install_windows(exe: Path, start: Optional[Callable] = None) -> bool:
         return True
     except Exception:
         return False
+
+
+def is_upgrade(latest_tag: str, current: str) -> bool:
+    """Install-time downgrade refusal (refute A4): True ONLY when latest_tag
+    parses and is strictly newer than current. Uncomparable tags refuse —
+    check_for_update may OFFER them for a human to inspect, but nothing
+    auto-installs a version it cannot compare."""
+    from .menubar import _parse_version
+    lv, cv = _parse_version(latest_tag), _parse_version(current)
+    if lv is None or cv is None:
+        return False
+    return lv > cv

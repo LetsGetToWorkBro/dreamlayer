@@ -18,7 +18,7 @@ def _release(name="DreamLayer.dmg", data=b"dmg-bytes", digest=None, url=None):
     d = digest or "sha256:" + hashlib.sha256(data).hexdigest()
     return {"assets": [{
         "name": name, "digest": d, "size": len(data),
-        "browser_download_url": url or f"https://github.com/x/y/releases/download/v1/{name}",
+        "browser_download_url": url or f"https://github.com/LetsGetToWorkBro/dreamlayer/releases/download/v1/{name}",
     }]}
 
 
@@ -47,8 +47,14 @@ class TestPickAsset:
         rel["assets"][0].pop("digest")
         assert updater.pick_asset(rel, platform="darwin") is None
 
+    def test_off_repo_url_is_refused(self):
+        # refute A1-2: a manipulated release JSON must not point the download
+        # off this repo's release path — even a valid-https elsewhere refuses.
+        rel = _release(url="https://attacker.example/DreamLayer.dmg")
+        assert updater.pick_asset(rel, platform="darwin") is None
+
     def test_non_https_url_is_refused(self):
-        rel = _release(url="http://github.com/x/y/releases/download/v1/DreamLayer.dmg")
+        rel = _release(url="http://github.com/LetsGetToWorkBro/dreamlayer/releases/download/v1/DreamLayer.dmg")
         assert updater.pick_asset(rel, platform="darwin") is None
 
     def test_unknown_platform_or_missing_asset_is_none(self):

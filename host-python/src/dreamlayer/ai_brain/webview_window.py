@@ -95,12 +95,18 @@ def _set_dock_presence(on: bool) -> None:
 
 
 _close_delegate = None       # retained — NSWindow holds its delegate weakly
+_close_delegate_cls = None   # ObjC classes register GLOBALLY by name — creating
+                             # the class twice (window rebuilt) raises objc.error
+                             # and silently strips the delegate (refute B2-2)
 
 
 def _make_close_delegate():
     """A window delegate that drops Dock presence when the panel closes.
     Returns None off-Mac (no AppKit), mirroring _make_ui_delegate."""
+    global _close_delegate_cls
     try:
+        if _close_delegate_cls is not None:
+            return _close_delegate_cls.alloc().init()
         import objc
         from Foundation import NSObject
 
@@ -112,6 +118,7 @@ def _make_close_delegate():
             def windowWillClose_(self, note):
                 _set_dock_presence(False)
 
+        _close_delegate_cls = _PanelCloseDelegate
         return _PanelCloseDelegate.alloc().init()
     except Exception:
         return None
@@ -174,7 +181,10 @@ def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
             win.setDelegate_(_close_delegate)
 
         win.makeKeyAndOrderFront_(None)
-        _set_dock_presence(True)
+        # promote ONLY when the close delegate is attached — else the app
+        # would be STUCK in the Dock with no restore path (refute B2-3)
+        if _close_delegate is not None:
+            _set_dock_presence(True)
         NSApp().activateIgnoringOtherApps_(True)
         _window = win
         return True
