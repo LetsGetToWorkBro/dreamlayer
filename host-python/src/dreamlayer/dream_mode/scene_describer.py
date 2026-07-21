@@ -49,7 +49,9 @@ _FALLBACK_MOODS = [
 ]
 _POETIC_PROMPT = (
     "Describe this scene in exactly 6 evocative words. "
-    "Be poetic, not literal. No punctuation."
+    "Be poetic, not literal. No punctuation. "
+    "Never name or identify any person, even someone famous — describe only "
+    "mood, light, colour, and form."
 )
 _SPRITE_PROMPT = (
     "Reduce this scene to a gestural composition. Reply with JSON only: "

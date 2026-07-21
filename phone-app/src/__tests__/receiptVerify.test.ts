@@ -144,4 +144,15 @@ describe("receipt verification", () => {
       '{"kind":"plugin","prev":"deadbeef","seq":2,"text":"emoji \\ud83c\\udf89 and quote \\" and backslash \\\\","ts":1700000000.0}',
     );
   });
+
+  test("canonicalCore escapes DEL (0x7F) like Python but keeps ~ literal", () => {
+    // 0x7F is the one char a naive "cp < 0x80" client emits raw; ensure_ascii
+    // escapes it to , so an honest record carrying it must not mis-verify.
+    const core: ReceiptRecord = {
+      seq: 4, ts: 1700000000.0, kind: "look", text: "note\x7f~end", prev: "y",
+    };
+    expect(canonicalCore(core)).toBe(
+      '{"kind":"look","prev":"y","seq":4,"text":"note\\u007f~end","ts":1700000000.0}',
+    );
+  });
 });

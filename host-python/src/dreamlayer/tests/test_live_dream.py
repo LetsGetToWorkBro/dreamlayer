@@ -49,6 +49,37 @@ class TestScene:
         assert out["scene"] is None
 
 
+class TestNeverIdentifies:
+    """The dream never names a stranger — the product's hardest privacy rule,
+    enforced on the synesthesia phrase through the same person_guard every
+    world-lens surface uses."""
+
+    def test_a_named_person_is_reduced_to_a_nameless_line(self, tmp_path):
+        from dreamlayer.ai_brain.server.live_dream import _NAMELESS_MOOD
+        ld = LiveDream(_brain(tmp_path))
+        named = {"type": "SynesthesiaCard", "version": 2,
+                 "description": "Alice Chen laughing beneath golden oak",
+                 "primary": "Alice Chen laughing beneath golden oak",
+                 "dominant_color": 0x2CC79A,
+                 "shapes": [{"kind": "circle", "x": 1, "y": 2, "size": 10}] * 3}
+        out = ld._guard_identity(named)
+        assert out["description"] == _NAMELESS_MOOD          # the name is gone
+        assert "Alice" not in out["primary"] and "Chen" not in str(out)
+        assert len(out["shapes"]) == 3                        # the gesture survives
+
+    def test_an_abstract_phrase_passes_through_untouched(self, tmp_path):
+        ld = LiveDream(_brain(tmp_path))
+        safe = {"type": "SynesthesiaCard", "version": 2,
+                "description": "soft light still breathing here",
+                "dominant_color": 1, "shapes": []}
+        assert ld._guard_identity(safe)["description"] == "soft light still breathing here"
+
+    def test_the_prompt_forbids_naming_a_person(self):
+        from dreamlayer.dream_mode.scene_describer import _POETIC_PROMPT
+        assert "identify any person" in _POETIC_PROMPT.lower() \
+            or "name" in _POETIC_PROMPT.lower()
+
+
 class TestGhost:
     def test_saved_place_surfaces_a_memory_echo(self, tmp_path):
         brain = _brain(tmp_path)

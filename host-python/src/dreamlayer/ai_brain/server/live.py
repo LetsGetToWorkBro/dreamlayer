@@ -986,7 +986,9 @@ function dreamFrame(ts){
   drawGiftWash(ctx);                 /* a gifted moment washing the glass */
   drawConfluence(ctx);               /* the shared sky, when two are dreaming */
   drawSynesthesia(ctx);              /* the scene, read as a phrase + a gesture */
-  drawGhost(ctx);                    /* a memory echo, when a place matches */
+  drawGhost(ctx);                    /* a memory echo — one of your kept moments
+                                        drifting up in the dream (a reverie, not
+                                        a location match: this phone has no GPS) */
   if (!(dreamScene && performance.now() < dreamSceneUntil))
     gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
 }
@@ -1808,7 +1810,11 @@ function _pyStr(s){ s = (s == null) ? "" : String(s); let o = '"';
     else if (cp === 8) o += '\\b'; else if (cp === 9) o += '\\t'; else if (cp === 10) o += '\\n';
     else if (cp === 12) o += '\\f'; else if (cp === 13) o += '\\r';
     else if (cp < 0x20) o += '\\u' + cp.toString(16).padStart(4, '0');
-    else if (cp < 0x80) o += ch;
+    else if (cp < 0x7F) o += ch;      /* 0x20-0x7E literal; DEL (0x7F) is NOT
+                                         printable-ASCII — Python's ensure_ascii
+                                         escapes it to \\u007f, so we must too, or
+                                         an honest record with a 0x7F byte would
+                                         mis-verify as tampered (refute 2026-07-21) */
     else if (cp > 0xFFFF){ const c = cp - 0x10000;
       o += '\\u' + (0xD800 + (c >> 10)).toString(16).padStart(4, '0')
         +  '\\u' + (0xDC00 + (c & 0x3FF)).toString(16).padStart(4, '0'); }
@@ -1898,11 +1904,29 @@ async function verifyReceipt(){
   const hardTamper = !chainOK || !seqOK || (sigSupported && !sigOK) || unattested;
   const tailComplete = !signedLedger || (sigSupported && headVerified && !tailShort);
   const fullyVerified = signedLedger && sigSupported && !hardTamper && tailComplete;
-  if (fullyVerified) {
+  // trust-on-first-use: a signature only proves "consistent under SOME key". A
+  // malicious Brain could mint a fresh key and sign a laundered ledger, which
+  // would read green — unless we pin the key on first sight and flag a CHANGE.
+  // Pinned per-origin (localStorage is already origin-scoped to this Brain);
+  // we pin only a fully-verified key, never a tampered one (refute 2026-07-21).
+  const fp = signedLedger ? (r.pubkey.slice(0, 8) + "…" + r.pubkey.slice(-4)) : "";
+  let keyStatus = "none";
+  if (signedLedger) {
+    try {
+      const pinned = localStorage.getItem("dl-rcpt-key");
+      if (!pinned) { if (fullyVerified) localStorage.setItem("dl-rcpt-key", r.pubkey); keyStatus = "first"; }
+      else if (pinned === r.pubkey) keyStatus = "same";
+      else keyStatus = "changed";
+    } catch (e) { keyStatus = "none"; }   /* storage blocked → can't pin */
+  }
+  const keyChanged = keyStatus === "changed";
+  const trulyVerified = fullyVerified && !keyChanged;
+  if (trulyVerified) {
     verdict.className = "ok";
-    head.textContent = "Verified · signed by this device, unaltered";
+    head.textContent = "Verified on this phone · authentic, unaltered";
     sub.textContent = recs.length + (attested && attested > recs.length ? " of " + attested : "")
-      + " actions · chain intact · signature valid — the Brain can’t lie to you.";
+      + " actions · chain + Ed25519 signature checked here · key " + fp
+      + (keyStatus === "first" ? " (trusted from now on)" : "");
     _renderRecs(null);
   } else if (hardTamper) {
     verdict.className = "bad";
@@ -1914,6 +1938,12 @@ async function verifyReceipt(){
                 : "A signature failed — a record was changed after it was signed.");
     const bad = new Set(); for (let i = Math.max(firstBroken, 0); i < recs.length; i++) bad.add(i);
     _renderRecs(bad);
+  } else if (keyChanged) {
+    verdict.className = "bad";
+    head.textContent = "Signing key changed";
+    sub.textContent = "This ledger is internally valid, but it’s signed by a DIFFERENT key (" + fp
+      + ") than the one this phone trusted before. If you didn’t reset your Brain, don’t trust it.";
+    _renderRecs(null);
   } else if (!signedLedger) {
     head.textContent = "Unsigned ledger";
     sub.textContent = "The chain is internally consistent, but this Brain isn’t signing receipts (no privacy extra).";

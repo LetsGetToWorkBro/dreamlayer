@@ -26,16 +26,32 @@ so the mood cycle and the 2-minute per-anchor ghost cooldown carry across beats.
 from __future__ import annotations
 
 import asyncio
-import base64
+import threading
 import time
 from typing import Optional
 
 from ...dream_mode.ghost_layer import GhostLayer
 from ...dream_mode.scene_describer import SceneDescriber
-from ...object_lens.vision_recognizer import b64_to_frame, frame_to_b64
+from ...hud import cards as C
+from ...object_lens import person_guard
+from ...object_lens.vision_recognizer import frame_to_b64
 from ...orchestrator.recall_context import RecallContext
 
 MAX_ANCHORS = 24          # newest place-memories fed to the ghost layer
+
+# Bound concurrent scene beats. Each runs up to two VLM calls; a hung backend
+# (the 5 s wait_for only bounds the awaited result, not the orphaned worker
+# thread asyncio.run then joins on shutdown) would otherwise pin a request
+# worker for as long as the backend's own socket timeout. Non-blocking: a burst
+# SHEDS excess beats (the freshest frame is what matters), so the dream can pin
+# at most this many of the server's workers, never the whole pool.
+_MAX_CONCURRENT_SCENES = 3
+_scene_sem = threading.BoundedSemaphore(_MAX_CONCURRENT_SCENES)
+
+# The dream's synesthesia never identifies a stranger — even when a person is
+# the subject or the VLM slips a name in, the phrase falls back to this nameless
+# line and only the abstract gesture remains. The privacy rule IS the feature.
+_NAMELESS_MOOD = "a presence here — unnamed by design"
 
 
 def _has_vision(brain) -> bool:
@@ -78,10 +94,15 @@ class LiveDream:
         self._ghost = GhostLayer(privacy=gate)
 
     def _make_vision_fn(self, wl):
+        from . import live as live_mod
         async def vision_fn(jpeg: bytes, prompt: str) -> str:
-            # decode → re-encode through the shared helper so the decompression
-            # -bomb guard runs and the backend gets the JPEG-base64 it expects
-            frame = b64_to_frame(base64.b64encode(jpeg).decode("ascii"))
+            # decode through the LOOK path's hardened decoder — a 16 MP pre-decode
+            # bomb guard, a thumbnail to 512 BEFORE materialising pixels, and a
+            # bounded concurrency semaphore — so a token-holding attacker can't
+            # post a small, highly-compressible frame that balloons to hundreds of
+            # MB per beat and OOMs the Brain (the client posts <=512, but the
+            # server must not trust that — refute 2026-07-21).
+            frame = await asyncio.to_thread(live_mod.decode_frame, jpeg)
             if frame is None:
                 raise ValueError("unreadable frame")
             image_b64 = frame_to_b64(frame)
@@ -94,7 +115,13 @@ class LiveDream:
     def _anchors(self) -> list:
         """The wearer's real place-memories (Waypath), newest first, shaped for
         the GhostLayer. Empty when nothing has been saved — no ghost is
-        invented, so a fresh Brain simply surfaces none."""
+        invented, so a fresh Brain simply surfaces none.
+
+        Honest framing: on the glasses the ghost is triggered by BEING at the
+        place (a location match). This phone has no location sense, so these are
+        not location-matched — they are your own kept moments drifting up in the
+        dream (a reverie, never a "you are here" claim), the same rows the
+        Memories tab already shows, and only ever your own, veil-gated."""
         wp = getattr(self._brain, "waypath", None)
         if wp is None:
             return []
@@ -120,29 +147,59 @@ class LiveDream:
         return out
 
     def scene(self, jpeg: bytes) -> dict:
-        """One scene beat: a camera frame in, the real SynesthesiaCard +
-        (when a place-memory matches) a WorldAnchorCard out. Veiled → both
-        None. The frame is read in memory and never persisted.
+        """One scene beat: a camera frame in, the real SynesthesiaCard + (a
+        memory echo of one of your kept moments) out. Veiled → both None. The
+        frame is read in memory and never persisted.
 
         No lock is held across the VLM call: doing so would serialize every
         phone's scene beat behind one blocking describe (a slow remote model =>
         a stall for everyone). The shared state is safe without it — GhostLayer
         .tick is a synchronous, GIL-atomic dict touch, and the only race on the
         describer is its fallback-mood index, whose worst case is a repeated or
-        skipped mood line (cosmetic, never a crash or a leak)."""
+        skipped mood line (cosmetic, never a crash or a leak). Concurrency is
+        capped instead by a non-blocking semaphore so a hung backend can pin only
+        a few workers, not the whole pool."""
         if self._wl.veiled():                 # incognito: no frame to the VLM,
             return {"scene": None, "ghost": None}   # no ghost surfaced
-        ctx = RecallContext(camera_frame=jpeg or b"",
-                            world_anchors=self._anchors())
+        if not _scene_sem.acquire(blocking=False):
+            return {"scene": None, "ghost": None}   # saturated → shed this beat
         try:
-            scene = asyncio.run(self._describer.tick(ctx))
-        except Exception:
-            scene = None
+            ctx = RecallContext(camera_frame=jpeg or b"",
+                                world_anchors=self._anchors())
+            try:
+                scene = asyncio.run(self._describer.tick(ctx))
+            except Exception:
+                scene = None
+            if scene is not None:
+                scene = self._guard_identity(scene)
+            try:
+                ghost = self._ghost.tick(ctx)
+            except Exception:
+                ghost = None
+            return {"scene": scene, "ghost": ghost}
+        finally:
+            _scene_sem.release()
+
+    def _guard_identity(self, scene: dict) -> dict:
+        """The dream never identifies a stranger. If the six-word phrase names a
+        person, drop the identity: keep the abstract gesture, replace the phrase
+        with a nameless line. Routes through the SAME person_guard primitive
+        every world-lens surface uses — the deterministic name-shape guard always
+        runs (it catches a naming phrase with no optional deps), and Presidio NER
+        adds depth when the privacy extra is installed. Fail-open only in the
+        harmless direction: an error here never invents an identity. (The phrase,
+        not the frame, is the identity surface here — a poetic line about a
+        *presence* with no name is the Social-Lens contract, not a breach.)"""
         try:
-            ghost = self._ghost.tick(ctx)
+            if not person_guard.defers_person(str(scene.get("description", ""))):
+                return scene
         except Exception:
-            ghost = None
-        return {"scene": scene, "ghost": ghost}
+            return scene                      # never break the dream on a guard error
+        return C.synesthesia_card_v2(
+            description=_NAMELESS_MOOD,
+            dominant_color=scene.get("dominant_color", 0x2CC79A),
+            shapes=scene.get("shapes", []),
+        )
 
 
 def dream(brain) -> LiveDream:
