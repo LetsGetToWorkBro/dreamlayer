@@ -80,6 +80,34 @@ def decode_pairing(code: str) -> PairingBundle:
         relay_url=_checked_url(data.get("relay_url", ""), "relay_url"))
 
 
+_SOUND_TAG = "dl:"               # marks a chirp as OURS (not stray audio)
+
+
+def catch_pairing_sound(pcm, link=None) -> str:
+    """Decode a sung DreamLayer pairing chirp back to its short code, or "".
+
+    The Brain sings the short single-use live-code as a ggwave chirp (see the
+    /dreamlayer/pair/sound endpoint); this is the catching side. `pcm` is captured
+    audio (float32 @ 48 kHz — raw bytes or a float list/array); `link` is an
+    optional injected SoundLink (else the default is built). Only a chirp carrying
+    our 'dl:' tag and a plausible numeric code is accepted, so stray room audio
+    decodes to "" — the caller then redeems the returned code the same way the
+    typed/scanned code is redeemed. Never raises."""
+    if link is None:
+        from .soundlink import default_soundlink
+        link = default_soundlink()
+    if link is None:
+        return ""
+    try:
+        payload = (link.decode(pcm) or "").strip()
+    except Exception:                              # noqa: BLE001 — never raise into capture
+        return ""
+    if not payload.startswith(_SOUND_TAG):
+        return ""
+    code = payload[len(_SOUND_TAG):].strip()
+    return code if (code.isdigit() and 1 <= len(code) <= 16) else ""
+
+
 def connect_all(orchestrator, bundle: PairingBundle,
                 http_post=None, encode_frame=None) -> dict:
     """Wire a phone (orchestrator) to a paired Brain (and note the glasses).

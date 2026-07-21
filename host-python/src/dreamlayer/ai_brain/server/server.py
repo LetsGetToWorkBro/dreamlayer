@@ -3363,6 +3363,44 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                          "--tls for the https link; asking works over http"),
                 "qr": to_svg(qr_payload)})
 
+        def _get_pair_sound(self, path, qs):
+            """Pair by SOUND — the QR-free fallback. The Brain "sings" the same
+            short, single-use pairing code as a near-ultrasonic ggwave chirp; a
+            phone in earshot catches it and redeems via /dreamlayer/live/redeem,
+            exactly as if the code were scanned or typed. Local-only (like the QR
+            handout). Returns the code, whether sound is available, and — when it
+            is — a base64 WAV the panel plays. Absent ggwave, `available` is False
+            and the panel keeps the QR."""
+            if not self._from_localhost():
+                self._json(403, {"error": "pairing is local-only"}); return
+            if not brain.config.token:
+                self._json(200, {"available": False, "code": "",
+                                 "reason": "no token — this Brain is loopback-only"})
+                return
+            from ...soundlink import default_soundlink
+            link = default_soundlink()
+            code = _live_vault.issue(brain.config.token)
+            wav_b64 = ""
+            if link is not None:
+                import base64
+                # a short scheme tag so a listener knows this chirp is a DreamLayer
+                # pairing code (not stray audio) — mirrors the QR's dreamlayer: prefix
+                wav = link.encode_wav("dl:" + code)
+                if wav:
+                    wav_b64 = base64.b64encode(wav).decode("ascii")
+            if wav_b64:
+                brain.activity.add("pair", "Sang a pairing code over sound")
+            self._json(200, {
+                "available": bool(wav_b64),
+                "code": code,
+                "ultrasound": True,
+                "wav_b64": wav_b64,
+                "note": ("hold your phone near this Mac and tap Listen — the "
+                         "code is sung as a near-ultrasonic chirp"
+                         if wav_b64 else
+                         "install the soundlink pack (ggwave) to pair by sound; "
+                         "the QR and typed code still work")})
+
         # -- GET route table --------------------------------------------
         # exact-path public routes, resolved BEFORE the auth gate
         _GET_PUBLIC = {
@@ -3416,6 +3454,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
+            "/dreamlayer/pair/sound": _get_pair_sound,
             "/dreamlayer/live/link": _get_live_link,
             "/dreamlayer/downloads": _get_downloads,
         }
