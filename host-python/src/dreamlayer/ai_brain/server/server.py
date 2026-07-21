@@ -1911,7 +1911,21 @@ def _install_resilient(reqs: list, on_line, once) -> tuple:
                    % (names, (detail or "pip failed")[-160:]))
 
 
-def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
+def _constraints_file(reqs: list):
+    """The pack's FULL pin list as a pip constraints file. The per-package
+    salvage loop passes it with -c so each lone install still resolves inside
+    the pack's own pins — without it, N independent resolutions could up/
+    downgrade shared deps the batch resolver had refused, and the union would
+    be reported as "installed" (refute 2026-07-21, pack-salvage audit)."""
+    import tempfile
+    f = tempfile.NamedTemporaryFile("w", suffix=".txt", prefix="dl-pack-c-",
+                                    delete=False)
+    f.write("\n".join(reqs) + "\n")
+    f.close()
+    return f.name
+
+
+def _pip_subprocess_once(reqs: list, on_line=None, constraints=None) -> tuple:
     """Source-install runner: pip install `reqs` into this interpreter's
     environment, streaming each output line into `on_line` (progress). Returns
     (ok, last_output_lines). One pip invocation — the resilient wrapper (_run_pip)
@@ -1920,6 +1934,8 @@ def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
     import sys
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
            "--progress-bar", "off", *reqs]
+    if constraints:
+        cmd += ["-c", _constraints_file(constraints)]
     proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
@@ -1956,8 +1972,15 @@ def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
 def _run_pip(reqs: list, on_line=None) -> tuple:
     """Default pack runner (source install): resilient batch-then-per-package so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
-    return _install_resilient(reqs, on_line,
-                              lambda subset: _pip_subprocess_once(subset, on_line))
+    all_reqs = list(reqs)
+    return _install_resilient(
+        all_reqs, on_line,
+        lambda subset: _pip_subprocess_once(
+            subset, on_line,
+            # salvage runs one req at a time — constrain each to the pack's
+            # own pins so N independent resolutions can't drift from what the
+            # batch resolver checked (refute 2026-07-21)
+            constraints=all_reqs if len(subset) < len(all_reqs) else None))
 
 
 # Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
@@ -1966,7 +1989,8 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
 _PACK_RUNNER: "Callable[..., tuple]" = _run_pip
 
 
-def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
+def _pip_target_once(reqs: list, target: str, on_line=None,
+                     constraints=None) -> tuple:
     """Frozen-app single-shot: install `reqs` into a WRITABLE sidecar via in-process
     pip ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
     out to, and must not — can not — install into itself). pip runs inside THIS
@@ -1983,6 +2007,8 @@ def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
     argv = ["install", "--target", str(target), "--upgrade", "--no-input",
             "--no-cache-dir", "--disable-pip-version-check",
             "--no-warn-script-location", "--progress-bar", "off", *reqs]
+    if constraints:
+        argv += ["-c", _constraints_file(constraints)]
     import logging
     import os
 
@@ -2020,8 +2046,12 @@ def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
 def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     """Frozen-app pack runner: resilient batch-then-per-package into the sidecar so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
+    all_reqs = list(reqs)
     return _install_resilient(
-        reqs, on_line, lambda subset: _pip_target_once(subset, target, on_line))
+        all_reqs, on_line,
+        lambda subset: _pip_target_once(
+            subset, target, on_line,
+            constraints=all_reqs if len(subset) < len(all_reqs) else None))
 
 
 _PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
@@ -3478,6 +3508,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     label=label, confidence=max(0.0, min(1.0, conf)),
                     attributes=attrs if isinstance(attrs, dict) else {})
                 panel = wl.look_sighting(sighting, facet=facet)
+                if panel is not None:
+                    # the image path records its look in world_look; the
+                    # deterministic label path must not under-report
+                    # (refute 2026-07-21, ledger-parity finding)
+                    try:
+                        brain.activity.add("look", f"Lens saw {label}")
+                    except Exception:
+                        pass
             else:
                 panel = wl.look(b64_to_frame(b.get("image")), facet=facet)
             if panel is None:

@@ -79,8 +79,8 @@ def test_status_icon_paths_ship_and_never_fake_green():
         assert p.endswith(name) and os.path.exists(p)
 
     # unknown/absent → the offline sprite, mirroring dot_color's honesty rule
-    assert menubar.status_icon_path(None).endswith("juno_status_tint_offline.png")
-    assert menubar.status_icon_path({"icon": "??"}).endswith("juno_status_tint_offline.png")
+    assert menubar.status_icon_path(None).endswith("juno_tpl_offline.png")
+    assert menubar.status_icon_path({"icon": "??"}).endswith("juno_tpl_offline.png")
 
 
 # -- stale-token recovery: a mid-session rotation is picked up, no restart ------

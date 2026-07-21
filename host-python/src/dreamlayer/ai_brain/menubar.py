@@ -167,11 +167,17 @@ def check_for_update(current: str | None = None, fetch_fn=None,
 # The badge variants (juno_status_*.png) stay in server/assets for larger
 # surfaces like the panel chip, where text sits beside her.
 _ASSETS = Path(__file__).resolve().parent / "server" / "assets"
+# TEMPLATE sprites (alpha-only monochrome): the new macOS menu bar is
+# transparent/tinted, so a fixed-color sprite fights it — a template image is
+# rendered by the OS (white on dark, black on light, correct vibrancy).
+# Status is carried by SHAPE, not color: solid Juno = online, outline =
+# offline, veil slash = incognito, cloud-dot cutout = cloud in use. The
+# colored Junos stay in the panel, where color still works.
 STATUS_ICONS = {
-    "\U0001F7E2": "juno_status_tint_online.png",
-    "\U0001F7E1": "juno_status_tint_cloud.png",
-    "\U0001F576": "juno_status_tint_incognito.png",
-    "⚪": "juno_status_tint_offline.png",
+    "\U0001F7E2": "juno_tpl_online.png",
+    "\U0001F7E1": "juno_tpl_cloud.png",
+    "\U0001F576": "juno_tpl_incognito.png",
+    "⚪": "juno_tpl_offline.png",
 }
 
 
@@ -526,7 +532,7 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # isn't in this install, the emoji traffic light still works
             icon0 = status_icon_path(None)
             if os.path.exists(icon0):
-                super().__init__("DreamLayer", icon=icon0, template=False,
+                super().__init__("DreamLayer", icon=icon0, template=True,
                                  quit_button="Quit DreamLayer")
             else:
                 super().__init__("⚪", quit_button="Quit DreamLayer")
@@ -534,6 +540,22 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
                          "Check for Updates", None, "Status"]
             self.refresh(None)
             rumps.Timer(self.refresh, 15).start()
+            # Dock-click → open the panel. The reopen event lands on the app
+            # delegate, which exists only once the run loop is live — attach
+            # on a one-shot timer tick (off-Mac inert inside the helper).
+            self._reopen_timer = rumps.Timer(self._install_reopen, 2)
+            self._reopen_timer.start()
+
+        def _install_reopen(self, timer):
+            try:
+                timer.stop()
+            except Exception:
+                pass
+            try:
+                from .webview_window import install_reopen_handler
+                install_reopen_handler(self._clicked_open_panel)
+            except Exception:
+                pass
 
         def _api(self, path, method="GET", body=b"{}"):
             # _authed_api carries the cached token and, on a 401/403, invalidates
