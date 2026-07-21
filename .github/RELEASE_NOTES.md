@@ -1,6 +1,6 @@
 This one is about the phone and the Mac growing up. The Live Lens in your phone's browser is now a true 1:1 stand-in for the glasses, the app updates itself from the menu bar, and Juno gives you the tour the first time you open the lens.
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/platinum_home.png" alt="The Brain panel" />
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/midnight_home.png" alt="The Brain panel in Midnight Platinum" />
 
 ## Install (macOS 12+)
 
@@ -15,8 +15,12 @@ Same two first-launch clicks as before: SmartScreen "More info, Run anyway" beca
 ## What's new since 0.6.0
 
 - Live Lens is now 1:1 with the glasses. Every lens in the catalogue runs in your phone's browser, drawing the real device card the real renderer would draw, and the pairing QR actually scans on the first try. Double-tap the lens and you're in Dream Mode, exactly the gesture the glasses will use.
+
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/live_tour.png" alt="The Live Lens on the phone, Juno starting her tour" width="360" />
 - The app updates itself. "Check for updates" now downloads and installs right from the menu bar, with live progress in the menu item, and relaunches into the new copy. Every byte is verified before it touches anything: the download must match the sha256 the release declares, and the install stages a copy and swaps, so a failed update can never eat your working app. On Windows the same core is wired but honestly refuses until the builds are code signed; it falls back to this page.
-- One download queue. Capability packs, store plugins, and model pulls now share a single queue with live progress and a "Download all" button, instead of racing each other.
+- One download queue. Capability packs, store plugins, and model pulls now share a single queue with live progress and a "Download all" button, instead of racing each other. (The button shipped hidden by a missing container in the page; this release also fixes that, with a test so it stays fixed.)
+
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/midnight_capabilities.png" alt="Capabilities in dark mode with Download all" />
 - Juno gives the tour. First time you open the Live Lens, she walks you through the actual controls: tap to look, double-tap for dreams, the veil, asking your memory. Six steps, shown once, replayable from the ? chip.
 - The Mac app behaves like a Mac app. Clicking the Dock icon opens the panel, the panel window shows up in Cmd-Tab with the real icon, the app icon sits on Apple's squircle grid instead of getting boxed, and the menu-bar Juno is a proper template icon now: the system colors it, and her shape carries the status (solid online, outline offline, slash for veil).
 - Three adversarial audit waves over all of it, every confirmed finding fixed with a test that fails if it comes back. The ones worth knowing: "Erase all memories" now also drops the hot sighting ring, a remembered "cupboard" can no longer fabricate a "seen before" for a cup, and the mic can never stay hot after Dream Mode ends, including when you background the tab.
