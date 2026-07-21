@@ -550,6 +550,25 @@ class TestLiveLinkQr:
         finally:
             server.shutdown(); server.server_close()
 
+    def test_http_only_qr_keeps_the_token_fragment(self, tmp_path):
+        # refute F1 (2026-07-21): /live/redeem refuses non-TLS callers, so an
+        # http-mode QR carrying #c= could NEVER pair. Without --tls the QR must
+        # keep the #t= token link (which never rides the wire at all).
+        brain = _brain(tmp_path)
+        server = make_brain_server(brain, "127.0.0.1", 0)      # no tls_port
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        try:
+            status, body = _req(base + "/dreamlayer/live/link",
+                                headers={"X-DreamLayer-Token": TOKEN})
+            assert status == 200
+            out = json.loads(body)
+            payload = _decode_qr_svg(out["qr"])
+            assert payload.endswith("#t=" + TOKEN)             # pairable over http
+            assert "#c=" not in payload
+        finally:
+            server.shutdown(); server.server_close()
+
     def test_code_qr_is_a_strictly_smaller_matrix_than_the_token_qr(self):
         # the point of #c=: with the PRODUCTION 32-hex token (token_hex(16)) the
         # code QR is a lower version — bigger modules at the same render size.

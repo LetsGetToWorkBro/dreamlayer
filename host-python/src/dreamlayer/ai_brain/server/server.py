@@ -2953,7 +2953,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # onto off a glossy screen far more reliably — the #1 "the QR won't
             # scan" cause. The page redeems #c= for the token on load (same
             # paired end state); Copy-link still hands out the full token URL.
-            qr_payload = (base_url + "#c=" + code) if code else best
+            qr_payload = (base_url + "#c=" + code) if (code and https_url) else best
+            # ^ #c= ONLY on the https link: /live/redeem refuses non-TLS
+            #   callers, so an http QR carrying a code could never pair
+            #   (refute F1) — http keeps the fragment token, which never
+            #   rides the wire at all.
             self._json(200, {
                 "url": best, "http_url": http_url + frag,
                 "https": bool(https_url),
