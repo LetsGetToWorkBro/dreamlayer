@@ -252,7 +252,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline has boxes only; this gives pixel-accurate masks for the glance target and scene density", impact=1, before=0, after=3.5),
 
     # --- causal ---------------------------------------------------------------------
-    Cap("causal_fusion", "Causal inference over credibility channels", "causal",
+    Cap("causal_fusion", "Causal inference over credibility channels", "intelligence",
         ("dowhy",), "causal", "truth_lens/causal_fusion.py",
         gain="baseline fuses credibility channels with fixed weights; this infers causally", impact=2, before=3, after=4),
 
@@ -333,7 +333,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("wasm_plugins", "In-process capability-enforced WASM plugin host", "platform",
         ("wasmtime",), "platform", "plugins/wasm_component_host.py",
         gain="baseline isolates an untrusted plugin in a subprocess; this runs a WASM guest in-process with ZERO ambient authority — it can only call the host functions its declared capabilities link", impact=4, before=3, after=5),
-    Cap("crdt_sync", "Conflict-free repertoire sync across your devices", "sync",
+    Cap("crdt_sync", "Conflict-free repertoire sync across your devices", "platform",
         ("loro",), "sync", "reality_compiler/v2/vault_sync.py",
         gain="baseline keeps your Figments and memory on one device; this syncs them peer-to-peer across your devices — no server, no conflicts (a loro CRDT)", impact=3, before=1, after=4.5),
 
@@ -446,14 +446,54 @@ def enabled(key: str, env: Optional[dict] = None) -> bool:
     return cap is not None and state(cap, env) == "active"
 
 
+# --- display groups: the capabilities page, organised -------------------------
+# Every Cap.tier is one of these keys. Each carries a human title and a one-line
+# "what this group unlocks", in the order the panel shows them — so the page
+# reads as a story ("Memory → Hearing → Sight → …"), not a flat dump. The panel
+# renders a header + blurb per group from this table (payload["tiers"]).
+TIERS: Tuple[Tuple[str, str, str], ...] = (
+    ("memory", "Memory",
+     "How much the Brain remembers — and how well it finds it again, by meaning and over time."),
+    ("voice", "Hearing & Voice",
+     "The ear and the mouth: hear speech and the world's sounds, and answer aloud — all on-device."),
+    ("vision", "Sight",
+     "See and read the world through a camera: objects, text, depth, documents, even the night sky."),
+    ("intelligence", "Understanding",
+     "The thinking layer — parse language, track who's who, read faces, reason about cause."),
+    ("structured", "Precision",
+     "Schema-locked output and typed pipelines, so the Brain answers in exact, checkable shapes."),
+    ("privacy", "Privacy & Trust",
+     "Scrub, sign, and defend — provable, on-device privacy you can verify."),
+    ("platform", "Connectivity & Platform",
+     "Bridges, plugins, and sync — how the Brain reaches your other devices and extends itself."),
+    ("infra", "Operations",
+     "Dashboards, discovery, and the quiet machinery that keeps the Brain running."),
+    ("services", "Local Services",
+     "Self-hosted apps on your own LAN the Brain reads as memory — configured, never the cloud."),
+)
+_TIER_ORDER = {k: i for i, (k, _t, _b) in enumerate(TIERS)}
+_TIER_TITLE = {k: t for (k, t, _b) in TIERS}
+
+
+def tiers() -> list[dict]:
+    """The display-group metadata, in page order (title + what it unlocks)."""
+    return [{"key": k, "title": t, "blurb": b} for (k, t, b) in TIERS]
+
+
 def report(env: Optional[dict] = None) -> list[dict]:
-    return [{
-        "key": c.key, "tier": c.tier, "title": c.title, "state": state(c, env),
+    """Every capability as a panel row, GROUPED by display tier in page order
+    (stable within a tier), so the panel's contiguous-group rendering holds no
+    matter where a Cap sits in the source tuple."""
+    rows = [{
+        "key": c.key, "tier": c.tier, "tier_title": _TIER_TITLE.get(c.tier, c.tier),
+        "title": c.title, "state": state(c, env),
         "extra": c.extra, "profiles": list(c.profiles), "modules": list(c.modules),
         "seam": c.seam, "kind": c.kind, "flag": c.flag_env, "note": c.note,
         "gain": c.gain, "impact": c.impact,
         "before": c.before, "after": c.after,
     } for c in CAPABILITIES]
+    rows.sort(key=lambda r: _TIER_ORDER.get(str(r["tier"]), len(TIERS)))
+    return rows
 
 
 def summary(env: Optional[dict] = None) -> dict:
@@ -462,6 +502,79 @@ def summary(env: Optional[dict] = None) -> dict:
         s = state(c, env)
         counts[s] = counts.get(s, 0) + 1
     return counts
+
+
+# --- power stats: the number at the top that climbs as you install ------------
+# The capabilities page opens with "how awakened is this Brain" — a single
+# percent + level that RISES every time a capability flips to active. Only
+# installable capabilities (a library you can add) count toward the meter, so it
+# can actually reach 100% on a given machine; services and wrong-platform caps
+# are reported alongside but never trap the percent below full.
+
+# level bands (low, label) — the climb a person feels as they download more.
+_LEVELS: Tuple[Tuple[int, str], ...] = (
+    (0, "Dormant"), (10, "Waking"), (25, "Aware"),
+    (45, "Attuned"), (65, "Sharp"), (85, "Ascendant"),
+)
+
+
+def _level_for(percent: float) -> Tuple[int, str]:
+    """(index, label) for a completion percent — the highest band it clears."""
+    idx, label = 0, _LEVELS[0][1]
+    for i, (low, name) in enumerate(_LEVELS):
+        if percent >= low:
+            idx, label = i, name
+    return idx, label
+
+
+def power_stats(env: Optional[dict] = None) -> dict:
+    """The awakening meter for the top of the capabilities page.
+
+    Counts only INSTALLABLE capabilities (kind python/darwin that this machine
+    supports): `unlocked` are the ones actually active, weighted by impact into
+    a `power` score out of `power_total`. `percent` and `level` climb as packs
+    install. `by_tier` powers per-group mini-bars; `services` reports the
+    configurable local-service caps separately (they never gate the percent)."""
+    unlocked = total = 0
+    power = power_total = 0
+    by_tier: dict[str, dict] = {}
+    services_total = services_on = 0
+    for c in CAPABILITIES:
+        st = state(c, env)
+        if c.kind == "service":
+            services_total += 1
+            # a service reads "external"; treat a disabled one as off, else on-ish
+            if st != "off":
+                services_on += 1
+            continue
+        if st == "unsupported":
+            continue                              # can't be had on this machine
+        total += 1
+        power_total += c.impact
+        bucket = by_tier.setdefault(
+            c.tier, {"title": _TIER_TITLE.get(c.tier, c.tier),
+                     "unlocked": 0, "total": 0, "power": 0, "power_total": 0})
+        bucket["total"] += 1
+        bucket["power_total"] += c.impact
+        if st == "active":
+            unlocked += 1
+            power += c.impact
+            bucket["unlocked"] += 1
+            bucket["power"] += c.impact
+    percent = round(100 * power / power_total) if power_total else 0
+    level_index, level = _level_for(percent)
+    # order by_tier for display
+    ordered = {k: by_tier[k] for k in sorted(by_tier, key=lambda t: _TIER_ORDER.get(t, len(TIERS)))}
+    next_at = next((low for low, _n in _LEVELS if low > percent), None)
+    return {
+        "unlocked": unlocked, "total": total,
+        "power": power, "power_total": power_total,
+        "percent": percent,
+        "level": level, "level_index": level_index, "level_max": len(_LEVELS) - 1,
+        "next_level_at": next_at,
+        "services_on": services_on, "services_total": services_total,
+        "by_tier": ordered,
+    }
 
 
 # --- packs: curated upgrade bundles the panel offers ------------------------------

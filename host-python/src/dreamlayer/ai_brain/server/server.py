@@ -1821,7 +1821,7 @@ def _capability_payload(brain: Brain) -> dict:
     import os
     import sys
     from ...capabilities import (PROFILES, packs_report, report, summary,
-                                 pack_installer_available)
+                                 pack_installer_available, power_stats, tiers)
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
@@ -1831,6 +1831,8 @@ def _capability_payload(brain: Brain) -> dict:
         if job:
             p["install"] = dict(job)
     return {"items": report(env=env), "summary": summary(env=env),
+            # the awakening meter + the group headers the page opens with
+            "stats": power_stats(env=env), "tiers": tiers(),
             "profiles": {k: list(v) for k, v in PROFILES.items()},
             "disabled": list(brain.config.disabled_caps),
             "packs": packs,
