@@ -628,6 +628,45 @@ class TestPhoneRunsEveryGlassesLens:
         assert len(wl.ring) == 0
 
 
+class TestDreamScope:
+    """Dream mode on the live page — the glasses' DOUBLE-TAP grammar and a
+    scope of the real DreamEngine models (mic_reactor two-band weather,
+    imu_reactor curl field, dream_renderer's 24-particle core at 2 Hz), the
+    same way the phone app's DreamCanvas replays them. Client-only; the veil
+    WAKES the dream so the mic is released, never merely ignored."""
+
+    def test_page_ships_the_dream_scope(self):
+        page = render_live()
+        for needle in ("function enterDream", "function exitDream",
+                       "function toggleDream", "DREAM_TICK_MS = 500",
+                       "devicemotion", 'data-dream'):
+            assert needle in page, f"dream piece missing: {needle}"
+        # the device models, pinned: 24 particles clipped to r<=96, 12 vectors
+        assert "i < 24" in page and "96 - 3" in page and "i < 12" in page
+
+    def test_double_tap_toggles_and_single_tap_still_looks(self):
+        page = render_live()
+        tap = page.split('$("lens").onclick', 1)[1].split("$(\"lens\").onkeydown", 1)[0]
+        assert "toggleDream()" in tap and "lookNow(false)" in tap
+        assert "300" in tap                                # the double-tap window
+
+    def test_dream_idles_the_memory_mode_loops(self):
+        # DreamEngine replaces memory mode on the glasses — here both the Brain
+        # ambient loop and the on-device detector idle while dreaming.
+        page = render_live()
+        sched = page.split("function scheduleLoop", 1)[1].split("function ", 1)[0]
+        assert "dreamOn" in sched
+        tick = page.split("function detectTick", 1)[1].split("function ", 1)[0]
+        assert "dreamOn" in tick
+
+    def test_veil_wakes_the_dream_and_releases_the_mic(self):
+        page = render_live()
+        veil_fn = page.split("function setVeil", 1)[1].split("function ", 1)[0]
+        assert "exitDream()" in veil_fn
+        exit_fn = page.split("function exitDream", 1)[1].split("function ", 1)[0]
+        assert "getTracks().forEach(t => t.stop())" in exit_fn   # mic RELEASED
+
+
 # --- tls.py: the appliance certificate --------------------------------------
 
 class TestTls:
