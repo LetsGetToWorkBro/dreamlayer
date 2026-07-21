@@ -1529,9 +1529,10 @@ function renderCapStats(r){
   const s=r.stats; if(!s){el.innerHTML="";return;}
   const pct=Math.max(0,Math.min(100,Number(s.percent)||0));
   const toNext=(s.next_level_at!=null)?Math.max(0,s.next_level_at-pct):0;
-  const nextTxt=(s.next_level_at!=null)
-    ? `${toNext}% more to the next level — install a pack below to awaken more`
-    : "fully awakened — every installable power is active";
+  let nextTxt;
+  if(s.fully) nextTxt="fully awakened — every installable power is active";
+  else if(s.next_level_at!=null) nextTxt=`${toNext}% more to the next level — install a pack below to awaken more`;
+  else nextTxt=`at the top level — ${Math.max(0,100-pct)}% more power to fully awaken`;
   const bt=s.by_tier||{}; let tiers="";
   Object.keys(bt).forEach(k=>{const t=bt[k];
     const tp=t.power_total?Math.round(100*t.power/t.power_total):0;

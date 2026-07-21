@@ -547,6 +547,13 @@ def power_stats(env: Optional[dict] = None) -> dict:
             if st != "off":
                 services_on += 1
             continue
+        # only PACK-INSTALLABLE caps (python/darwin) gate the meter, so installing
+        # every pack the panel offers can actually reach 100%. `manual` caps
+        # (extra=None, research-only pip installs like diart) are real but no pack
+        # ships them — counting them would cap the panel at <100% forever (audit
+        # 2026-07-21).
+        if c.kind not in ("python", "darwin"):
+            continue
         if st == "unsupported":
             continue                              # can't be had on this machine
         total += 1
@@ -566,10 +573,14 @@ def power_stats(env: Optional[dict] = None) -> dict:
     # order by_tier for display
     ordered = {k: by_tier[k] for k in sorted(by_tier, key=lambda t: _TIER_ORDER.get(t, len(TIERS)))}
     next_at = next((low for low, _n in _LEVELS if low > percent), None)
+    # "fully awakened" means every installable power is ACTIVE — not merely at the
+    # top level band (85%+): a machine can be Ascendant with powers still off, so
+    # the panel must key that copy off `fully`, never off next_level_at (audit).
+    fully = power_total > 0 and power >= power_total
     return {
         "unlocked": unlocked, "total": total,
         "power": power, "power_total": power_total,
-        "percent": percent,
+        "percent": percent, "fully": fully,
         "level": level, "level_index": level_index, "level_max": len(_LEVELS) - 1,
         "next_level_at": next_at,
         "services_on": services_on, "services_total": services_total,

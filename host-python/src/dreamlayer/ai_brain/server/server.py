@@ -1896,6 +1896,13 @@ class _LiveCodeVault:
             self._attempts = 0
         return code
 
+    def current(self) -> str:
+        """The active, UNEXPIRED code without issuing (and voiding) a new one —
+        so a second delivery channel (pair-by-sound) hands out the SAME code the
+        QR/typed path already showed, never a colliding one. "" when none is live."""
+        with self._lock:
+            return self._code if (self._code and self._now() < self._expiry) else ""
+
     def redeem(self, code: str):
         """Return the token for a correct, unexpired code (and consume it), else
         None. A wrong or expired code returns None WITHOUT consuming a live one."""
@@ -3379,15 +3386,29 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(200, {"available": False, "code": "",
                                  "reason": "no token — this Brain is loopback-only"})
                 return
-            from ...soundlink import default_soundlink
+            from ...soundlink import default_soundlink, SOUND_TAG
             link = default_soundlink()
-            code = _live_vault.issue(brain.config.token)
+            # Reuse a live code if the panel already issued one (e.g. via
+            # /live/link's QR) so the SUNG code is the SAME credential the QR
+            # shows — the single-code vault holds one at a time, so issuing a
+            # fresh one here would silently void the QR (audit 2026-07-21).
+            code = _live_vault.current()
+            if not code:
+                if link is None:
+                    # can't sing AND no code to reuse → don't burn one, so the
+                    # QR/typed path this call falls back to stays valid
+                    self._json(200, {
+                        "available": False, "code": "", "wav_b64": "",
+                        "note": "install the soundlink pack (ggwave) to pair by "
+                                "sound; the QR and typed code still work"})
+                    return
+                code = _live_vault.issue(brain.config.token)
             wav_b64 = ""
             if link is not None:
                 import base64
                 # a short scheme tag so a listener knows this chirp is a DreamLayer
                 # pairing code (not stray audio) — mirrors the QR's dreamlayer: prefix
-                wav = link.encode_wav("dl:" + code)
+                wav = link.encode_wav(SOUND_TAG + code)
                 if wav:
                     wav_b64 = base64.b64encode(wav).decode("ascii")
             if wav_b64:

@@ -49,12 +49,29 @@ def test_report_is_grouped_contiguously_by_tier():
 def test_power_stats_shape_and_bounds():
     s = C.power_stats(env={})
     for k in ("unlocked", "total", "power", "power_total", "percent",
-              "level", "by_tier", "services_total"):
+              "level", "by_tier", "services_total", "fully"):
         assert k in s
     assert 0 <= s["percent"] <= 100
     assert s["unlocked"] <= s["total"]
     assert s["power"] <= s["power_total"]
     assert s["level"] in [name for (_low, name) in C._LEVELS]
+    # "fully" is true ONLY at real 100% power, never merely at the top level band
+    assert s["fully"] == (s["power"] >= s["power_total"] > 0)
+
+
+def test_only_pack_installable_caps_gate_the_meter():
+    # manual/research caps (extra=None, e.g. diart) and services must NOT sit in
+    # the denominator, so installing every pack can reach a true 100%.
+    manual_impact = sum(c.impact for c in C.CAPABILITIES if c.kind == "manual")
+    assert manual_impact > 0                       # there are manual caps
+    installable = sum(c.impact for c in C.CAPABILITIES if c.kind in ("python", "darwin"))
+    s = C.power_stats(env={})
+    # power_total counts only installable caps this machine supports (<= all installable)
+    assert s["power_total"] <= installable
+    # and never includes a manual cap's impact
+    assert s["power_total"] == sum(
+        c.impact for c in C.CAPABILITIES
+        if c.kind in ("python", "darwin") and C.state(c, env={}) != "unsupported")
 
 
 def test_level_climbs_monotonically_with_percent():

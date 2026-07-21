@@ -80,9 +80,6 @@ def decode_pairing(code: str) -> PairingBundle:
         relay_url=_checked_url(data.get("relay_url", ""), "relay_url"))
 
 
-_SOUND_TAG = "dl:"               # marks a chirp as OURS (not stray audio)
-
-
 def catch_pairing_sound(pcm, link=None) -> str:
     """Decode a sung DreamLayer pairing chirp back to its short code, or "".
 
@@ -93,6 +90,7 @@ def catch_pairing_sound(pcm, link=None) -> str:
     our 'dl:' tag and a plausible numeric code is accepted, so stray room audio
     decodes to "" — the caller then redeems the returned code the same way the
     typed/scanned code is redeemed. Never raises."""
+    from .soundlink import SOUND_TAG
     if link is None:
         from .soundlink import default_soundlink
         link = default_soundlink()
@@ -102,10 +100,13 @@ def catch_pairing_sound(pcm, link=None) -> str:
         payload = (link.decode(pcm) or "").strip()
     except Exception:                              # noqa: BLE001 — never raise into capture
         return ""
-    if not payload.startswith(_SOUND_TAG):
+    if not payload.startswith(SOUND_TAG):
         return ""
-    code = payload[len(_SOUND_TAG):].strip()
-    return code if (code.isdigit() and 1 <= len(code) <= 16) else ""
+    code = payload[len(SOUND_TAG):].strip()
+    # ASCII digits only: str.isdigit() also accepts fullwidth / Arabic-Indic /
+    # superscript digits, which are NOT the [0-9] live code and would violate the
+    # "a plausible numeric code" contract (audit 2026-07-21). isascii() pins it.
+    return code if (code.isascii() and code.isdigit() and 1 <= len(code) <= 16) else ""
 
 
 def connect_all(orchestrator, bundle: PairingBundle,

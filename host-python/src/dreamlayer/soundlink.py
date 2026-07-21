@@ -27,6 +27,7 @@ from typing import Optional
 
 log = logging.getLogger("dreamlayer.soundlink")
 
+SOUND_TAG = "dl:"                # marks a chirp as OURS (not stray room audio)
 SAMPLE_RATE = 48000              # ggwave's native rate (its examples use 48 kHz)
 # ggwave protocol ids: 1 = audible "Fast"; 4 = near-ultrasonic "[U] Fast" — the
 # one humans barely hear, so a pairing chirp doesn't fill the room with beeps.
@@ -66,8 +67,9 @@ class SoundLink:
         text = text or ""
         if not text or not self.available:
             return b""
-        if len(text.encode("utf-8", "replace")) > _MAX_PAYLOAD:
-            log.info("[soundlink] payload too long for one chirp (%d bytes)", len(text))
+        nbytes = len(text.encode("utf-8", "replace"))
+        if nbytes > _MAX_PAYLOAD:
+            log.info("[soundlink] payload too long for one chirp (%d bytes)", nbytes)
             return b""
         try:
             import ggwave

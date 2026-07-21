@@ -84,6 +84,13 @@ def test_catch_rejects_untagged_or_nonnumeric_audio():
     assert catch_pairing_sound(link.encode("hello world"), link=link) == ""
     # tagged but not a numeric code (won't match a live code)
     assert catch_pairing_sound(link.encode("dl:DROP TABLE"), link=link) == ""
+    # tagged with NON-ASCII "digits" (fullwidth / superscript / Arabic-Indic) —
+    # str.isdigit() accepts these, but they are not the [0-9] live code
+    assert catch_pairing_sound(link.encode("dl:１２３４５６７８"), link=link) == ""
+    assert catch_pairing_sound(link.encode("dl:²²²²²²²²"), link=link) == ""
+    assert catch_pairing_sound(link.encode("dl:٣٣٣٣٣٣٣٣"), link=link) == ""
+    # a real ASCII code still passes
+    assert catch_pairing_sound(link.encode("dl:12345678"), link=link) == "12345678"
     # no link available at all
     assert catch_pairing_sound(b"anything", link=None) == "" or default_soundlink() is None
 
@@ -125,15 +132,30 @@ class LiveBrain:
         self.server.shutdown(); self.server.server_close()
 
 
-def test_pair_sound_issues_a_code_and_degrades_without_ggwave(tmp_path):
+def test_pair_sound_degrades_without_ggwave_and_never_burns_a_code(tmp_path):
     lb = LiveBrain(tmp_path)
     try:
+        # no live code yet + ggwave absent → don't issue (and void) a code; keep
+        # the QR/typed path this call falls back to fully valid
+        st, body = _get(lb.url + "/dreamlayer/pair/sound", lb.h)
+        assert st == 200 and body["available"] is False
+        assert body["code"] == "" and body["wav_b64"] == ""
+        assert "soundlink" in body["note"] or "ggwave" in body["note"]
+    finally:
+        lb.stop()
+
+
+def test_pair_sound_reuses_the_live_code_never_a_colliding_one(tmp_path):
+    """The single-code vault holds one at a time; pair-by-sound must sing the
+    SAME code the QR already issued, not a fresh one that voids the QR."""
+    lb = LiveBrain(tmp_path)
+    try:
+        _, link = _get(lb.url + "/dreamlayer/live/link", lb.h)   # QR issues a code
+        code = link["code"]
+        assert code and code.isdigit() and len(code) == 8
         st, body = _get(lb.url + "/dreamlayer/pair/sound", lb.h)
         assert st == 200
-        assert body["available"] is False          # ggwave absent
-        assert body["code"] and body["code"].isdigit() and len(body["code"]) == 8
-        assert body["wav_b64"] == ""
-        assert "soundlink" in body["note"] or "ggwave" in body["note"]
+        assert body["code"] == code               # reused — the QR is NOT voided
     finally:
         lb.stop()
 
@@ -165,8 +187,12 @@ def test_sung_code_redeems_the_same_token(tmp_path):
     typed code would — a true QR-free fallback, not a parallel credential."""
     lb = LiveBrain(tmp_path, token="secret-token-xyz")
     try:
+        # the panel issues a code (the QR path) …
+        _, live = _get(lb.url + "/dreamlayer/live/link", lb.h)
+        code = live["code"]
+        # … and pair-by-sound sings that SAME code
         _, body = _get(lb.url + "/dreamlayer/pair/sound", lb.h)
-        code = body["code"]
+        assert body["code"] == code
         # the phone catches the chirp (reversible fake stands in for ggwave)
         link = _LoopLink()
         chirp = link.encode("dl:" + code)
