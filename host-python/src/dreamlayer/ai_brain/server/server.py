@@ -387,6 +387,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # screen can read and edit them. The hub owns the truth; this is a
         # mirror the phone drives.
         self.social_people: list = self._load_people()
+        # Consent-based recognition: teach the person guard who you've MET, so an
+        # introduced person is recognized (the Social Lens's point) and only a
+        # genuine stranger is deferred. The guard reads this on every look; it's
+        # mtime-cached, so this is a cheap closure over the roster.
+        try:
+            from ...object_lens import person_guard as _pg
+            _pg.set_known_people(self.known_names)
+        except Exception:                              # noqa: BLE001 — never fail Brain boot
+            pass
         # Waypath: where you left your things. "I left my bike at the north rack"
         # → a spoken anchor; "where's my bike?" reads it back. Persisted so the
         # phone's typed-voice loop (stash then locate) is self-contained here,
@@ -3440,7 +3449,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             sends no_cloud; honor it over this Brain's own cloud config (the
             privacy posture is the wearer's, not the Mac's)."""
             b = self._body()
-            ans = brain.ask(b.get("query", ""), no_cloud=bool(b.get("no_cloud")))
+            query = b.get("query", "")
+            # An introduction is a CONSENT moment, not a question: "this is Sarah"
+            # / "meet Sarah from Acme" enrolls Sarah into the People roster (so
+            # the Social Lens can recognize her next time) and confirms — instead
+            # of trying to answer it as a query.
+            intro = None
+            try:
+                intro = brain.introduce(query)
+            except Exception:                          # noqa: BLE001
+                intro = None
+            if intro:
+                nm = intro["name"]
+                note = f" — {intro['note']}" if intro.get("note") else ""
+                self._json(200, {"text": f"Good to meet {nm}{note}. I'll remember.",
+                                 "tier": "local", "sources": [], "confidence": 1.0,
+                                 "intent": "introduce", "enrolled": intro})
+                return
+            ans = brain.ask(query, no_cloud=bool(b.get("no_cloud")))
             self._json(200, _answer_json(ans))
 
         def _post_live_look(self, path, qs):

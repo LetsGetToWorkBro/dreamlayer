@@ -230,7 +230,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("anyio",), "privacy", "orchestrator/concurrency_anyio.py",
         note="asyncio fallback is always on",
         gain="baseline cancel-all is hand-rolled asyncio; this makes the Veil-stop guarantee structural", impact=2, before=3.5, after=5),
-    Cap("stranger_defense", "Never identify a stranger (name NER)", "privacy",
+    Cap("stranger_defense", "Recognize people you've met; never a stranger", "privacy",
         ("presidio_analyzer",), "privacy", "object_lens/person_guard.py",
         note="deterministic name-shape + person-word guard is ALWAYS on; "
              "`dreamlayer setup models` activates the presidio NER layer; the "

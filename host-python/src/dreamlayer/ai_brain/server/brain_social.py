@@ -29,6 +29,41 @@ class SocialOps(BrainHost):
         out.sort(key=lambda e: -e["ts"])
         return out
 
+    def known_names(self) -> set:
+        """Everyone you've CONSENTED to remember — the roster the person guard
+        consults so an introduced person is recognized, not deferred as a
+        stranger. Union of the People registry (people.json) and the social
+        mirror. Cached against people.json's mtime so it's cheap to call on every
+        look."""
+        p = self.cfg_dir / "people.json"
+        try:
+            mt = p.stat().st_mtime if p.exists() else 0.0
+        except OSError:
+            mt = 0.0
+        mirror = getattr(self, "social_people", []) or []
+        cache = getattr(self, "_known_names_cache", None)
+        if cache is not None and cache[0] == mt and cache[2] == len(mirror):
+            return cache[1]
+        names = {e["name"].strip() for e in self.people() if e.get("name")}
+        for pp in mirror:
+            n = str(pp.get("name", "")).strip()
+            if n:
+                names.add(n)
+        self._known_names_cache = (mt, names, len(mirror))
+        return names
+
+    def introduce(self, text: str):
+        """Natural-language front door to add_person: 'this is Sarah', 'meet
+        Sarah', 'her name is Sarah', 'I'm Sarah from marketing' → enroll Sarah
+        (with consent, on-device). Returns {name, ...} or None when the text
+        isn't an introduction."""
+        from ...social_lens.introductions import parse_introduction
+        parsed = parse_introduction(text)
+        if not parsed:
+            return None
+        self.add_person(parsed["name"], note=parsed.get("note", ""))
+        return parsed
+
     def add_person(self, name: str, note: str = "", tags=None) -> list:
         """Introduce (or update) a person. Re-adding a name updates the note."""
         name = (name or "").strip()
