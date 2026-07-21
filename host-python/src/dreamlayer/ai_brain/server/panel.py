@@ -99,7 +99,8 @@ var d=t?t==="midnight":matchMedia("(prefers-color-scheme: dark)").matches;
 if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DreamLayer Brain</title>
-<link rel="icon" id="favJuno" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
+<link rel="icon" id="favJuno" href="/panel-assets/app_icon.png">
+<link rel="apple-touch-icon" href="/panel-assets/app_icon.png">
 <style>
   /* ============================================================
      DreamLayer Brain — Mac OS 8.1 "Platinum" control panel.

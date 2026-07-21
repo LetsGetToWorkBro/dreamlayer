@@ -34,7 +34,7 @@
   }
 })();
 </script>
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="%232CC79A" stroke-width="4"/><circle cx="32" cy="32" r="6" fill="%232CC79A"/></svg>'>
+<link rel="icon" href="assets/logo.png">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="preload" href="assets/fonts/ChicagoFLF.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -846,8 +846,8 @@ footer{margin:9svh 0 0;background:var(--plat);border-top:1px solid var(--frame);
 /* keep the wordmark clear of the Juno desk accessory */
 @media(min-width:960px){.foot{padding-left:186px}}
 .wordmark{display:flex;align-items:center;gap:9px;font-family:var(--chi);font-size:14px;color:var(--ink)}
-.wordmark .ring{width:15px;height:15px;border:2.5px solid var(--teal-ink);border-radius:50%;position:relative}
-.wordmark .ring::after{content:"";position:absolute;inset:3.5px;background:var(--teal-ink);border-radius:50%}
+.wordmark .ring{width:16px;height:16px;border-radius:4px;position:relative;
+  background:url(assets/logo.png) center/cover no-repeat}
 .foot .mono{font-size:12px;color:var(--ink2)}
 .foot .mono a{border-bottom:1px solid transparent}
 .foot .mono a:hover{color:var(--teal-ink);border-bottom-color:var(--teal-ink)}
