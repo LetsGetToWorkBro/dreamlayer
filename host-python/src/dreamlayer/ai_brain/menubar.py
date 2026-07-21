@@ -167,11 +167,17 @@ def check_for_update(current: str | None = None, fetch_fn=None,
 # The badge variants (juno_status_*.png) stay in server/assets for larger
 # surfaces like the panel chip, where text sits beside her.
 _ASSETS = Path(__file__).resolve().parent / "server" / "assets"
+# TEMPLATE sprites (alpha-only monochrome): the new macOS menu bar is
+# transparent/tinted, so a fixed-color sprite fights it — a template image is
+# rendered by the OS (white on dark, black on light, correct vibrancy).
+# Status is carried by SHAPE, not color: solid Juno = online, outline =
+# offline, veil slash = incognito, cloud-dot cutout = cloud in use. The
+# colored Junos stay in the panel, where color still works.
 STATUS_ICONS = {
-    "\U0001F7E2": "juno_status_tint_online.png",
-    "\U0001F7E1": "juno_status_tint_cloud.png",
-    "\U0001F576": "juno_status_tint_incognito.png",
-    "⚪": "juno_status_tint_offline.png",
+    "\U0001F7E2": "juno_tpl_online.png",
+    "\U0001F7E1": "juno_tpl_cloud.png",
+    "\U0001F576": "juno_tpl_incognito.png",
+    "⚪": "juno_tpl_offline.png",
 }
 
 
@@ -526,7 +532,7 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # isn't in this install, the emoji traffic light still works
             icon0 = status_icon_path(None)
             if os.path.exists(icon0):
-                super().__init__("DreamLayer", icon=icon0, template=False,
+                super().__init__("DreamLayer", icon=icon0, template=True,
                                  quit_button="Quit DreamLayer")
             else:
                 super().__init__("⚪", quit_button="Quit DreamLayer")
@@ -534,6 +540,27 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
                          "Check for Updates", None, "Status"]
             self.refresh(None)
             rumps.Timer(self.refresh, 15).start()
+            # Dock-click → open the panel. The reopen event lands on the app
+            # delegate, which exists only once the run loop is live — attach
+            # on a one-shot timer tick (off-Mac inert inside the helper).
+            self._reopen_timer = rumps.Timer(self._install_reopen, 2)
+            self._reopen_timer.start()
+
+        def _install_reopen(self, timer):
+            # keep trying until the app delegate exists (bounded) — a one-shot
+            # miss made Dock-click reopen silently dead for the whole process
+            # lifetime (refute B2)
+            try:
+                from .webview_window import install_reopen_handler
+                ok = install_reopen_handler(self._clicked_open_panel)
+            except Exception:
+                ok = True                     # no AppKit here → stop trying
+            self._reopen_tries = getattr(self, "_reopen_tries", 0) + 1
+            if ok or self._reopen_tries >= 30:
+                try:
+                    timer.stop()
+                except Exception:
+                    pass
 
         def _api(self, path, method="GET", body=b"{}"):
             # _authed_api carries the cached token and, on a 401/403, invalidates
@@ -579,11 +606,67 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # the UI thread froze the whole menu bar for up to the fetch timeout
             # per click. A worker does the fetch and posts the result when it
             # returns (audit 2026-07-17).
+            if getattr(self, "_upd_busy", False):
+                return                        # one update flow at a time (refute A2:
+            self._upd_busy = True             # racing installs shared one stage path)
+            item = self.menu["Check for Updates"]
+
+            def _ui(fn):
+                # AppKit objects (menu items, terminate:) must be touched on
+                # the MAIN thread — rumps marshals nothing (refute A1)
+                try:
+                    from PyObjCTools import AppHelper
+                    AppHelper.callAfter(fn)
+                except Exception:
+                    try:
+                        fn()
+                    except Exception:
+                        pass
+
+            def _notify(msg, url=""):
+                # rumps.notification RAISES in a source run (no bundle
+                # Info.plist) — a toast must never kill the flow (refute A1b)
+                def go():
+                    try:
+                        rumps.notification("DreamLayer", msg, url)
+                    except Exception:
+                        pass
+                _ui(go)
+
+            last = {"pct": -1}
+
+            def _prog(done, total):
+                pct = int(done * 100 / total) if total else 0
+                if pct == last["pct"]:
+                    return                    # one callAfter per percent, not per chunk
+                last["pct"] = pct
+                _ui(lambda: setattr(item, "title", f"Downloading update… {pct}%"))
+
             def _work():
-                res = check_for_update()
-                rumps.notification(
-                    "DreamLayer", res["message"],
-                    res.get("url") if res["status"] == "update" else "")
+                try:
+                    res = check_for_update()
+                    if res["status"] != "update":
+                        _notify(res["message"])
+                        return
+                    # update straight from the app: download → digest-verify →
+                    # Gatekeeper gate → staged swap → relaunch. The Releases
+                    # page is only the FALLBACK when a step can't proceed.
+                    from .updater import perform_update
+                    _ui(lambda: setattr(item, "title", "Downloading update…"))
+                    try:
+                        ok, msg = perform_update(progress=_prog)
+                    except Exception:         # belt over the updater's own braces
+                        ok, msg = False, "updater hit an unexpected error"
+                    if ok:
+                        _notify(msg)
+                        _ui(rumps.quit_application)   # the new copy is relaunching
+                    else:
+                        _notify(f"{res['message']} — {msg}", res.get("url") or "")
+                        import webbrowser
+                        webbrowser.open(res.get("url") or RELEASES_PAGE)
+                finally:
+                    self._upd_busy = False
+                    _ui(lambda: setattr(item, "title", "Check for Updates"))
             threading.Thread(target=_work, daemon=True).start()
 
         @rumps.clicked("Sync now")

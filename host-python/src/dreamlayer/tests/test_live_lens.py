@@ -946,3 +946,34 @@ class TestOneLens:
         calls.clear()
         assert wl._describe("p", "img") == ""             # blocked
         assert not calls and brain.config.cloud_calls == 1
+
+
+class TestJunoTour:
+    """Juno's first-run guided tour — the REAL sprite, the REAL controls,
+    shown once (localStorage) and replayable from the ? chip. The spotlight
+    ring never takes pointer events, so the lens/veil/ask stay clickable
+    (the browser e2e's direct clicks must keep passing with the tour up)."""
+
+    def test_page_ships_the_tour(self):
+        page = render_live()
+        for n in ('id="tour"', 'id="tourring"', 'id="tourcard"', "TOUR_STEPS",
+                  "function startTour", "function endTour", "dl-live-tour",
+                  'id="tourbtn"'):
+            assert n in page, f"tour piece missing: {n}"
+        # Juno is the real sprite, embedded same-origin (CSP img-src data:)
+        assert "data:image/png;base64," in page
+        # steps anchor to REAL controls only
+        assert '"lens"' in page and '"veilbtn"' in page and '"q"' in page
+
+    def test_tour_never_blocks_the_controls(self):
+        page = render_live()
+        css = page.split("#tour{", 1)[1].split("}", 1)[0]
+        assert "pointer-events:none" in css              # overlay passes through
+        ring = page.split("#tourring{", 1)[1].split("}", 1)[0]
+        assert "pointer-events:none" in ring             # spotlight too
+        assert 'class="notice"' not in page.split('id="tour"')[1].split("</div>")[0]
+
+    def test_tour_text_is_textcontent_not_html(self):
+        page = render_live()
+        fn = page.split("function tourNext", 1)[1].split("function ", 1)[0]
+        assert ".textContent" in fn and ".innerHTML" not in fn

@@ -291,7 +291,12 @@ class WorldLensHost:
         except Exception:
             return
         try:
+            import time as _t
             from ...pipelines.ingest import MemoryEvent
+            # age-parity with the glasses' hot store: the REM sweep composts
+            # ring events older than 24h nightly; the Brain has no night, so
+            # purge on append (refute 2026-07-21, retention-parity finding)
+            self.ring.purge_before(_t.time() - 24 * 3600)
             self.ring.append(MemoryEvent(kind="object", summary=key,
                                          confidence=0.90, meta={"object": key},
                                          source="look"), source="look")

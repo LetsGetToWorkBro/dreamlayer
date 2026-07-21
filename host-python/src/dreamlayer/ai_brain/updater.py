@@ -209,3 +209,41 @@ def is_upgrade(latest_tag: str, current: str) -> bool:
     if lv is None or cv is None:
         return False
     return lv > cv
+
+
+def perform_update(current: str | None = None, fetch_fn=None,
+                   platform: str | None = None,
+                   progress: Optional[Callable[[int, int], None]] = None,
+                   download=None, install=None) -> tuple:
+    """The whole in-app update, end to end: fetch the latest release (the same
+    click-only fetch check_for_update uses), refuse non-upgrades, pick the
+    platform asset, download + digest-verify, then install behind the platform
+    signature gate. Returns (ok, message). Every step injectable for offline
+    tests; any failure returns a plain-English reason so the caller can fall
+    back to opening the Releases page."""
+    import json as _json
+    from .menubar import RELEASES_API, _default_update_fetch, current_version
+    cur = current or current_version()
+    fetch = fetch_fn or _default_update_fetch
+    try:
+        release = _json.loads(fetch(RELEASES_API, 10.0))
+        tag = str(release.get("tag_name") or "")
+        asset = pick_asset(release, platform=platform)
+    except Exception:
+        # a malformed feed (non-object JSON, bad assets/size fields) must be
+        # a plain answer, not an escaping exception (refute A3)
+        return False, "couldn't read the release feed"
+    if not is_upgrade(tag, cur):
+        return False, f"no upgrade (running {cur}, latest {tag or 'unknown'})"
+    if asset is None:
+        return False, "this release has no verifiable installer for this machine"
+    try:
+        path = (download or download_verified)(asset, progress=progress)
+    except Exception as exc:
+        return False, f"download failed verification: {exc}"
+    plat = platform or sys.platform
+    installer = install or (install_macos if plat == "darwin" else install_windows)
+    if not installer(path):
+        return False, ("the installer didn't pass its signature gate or the "
+                       "swap failed — nothing was changed")
+    return True, f"updated to {tag} — restarting"

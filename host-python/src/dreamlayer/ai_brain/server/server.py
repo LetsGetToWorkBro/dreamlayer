@@ -1911,7 +1911,21 @@ def _install_resilient(reqs: list, on_line, once) -> tuple:
                    % (names, (detail or "pip failed")[-160:]))
 
 
-def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
+def _constraints_file(reqs: list):
+    """The pack's FULL pin list as a pip constraints file. The per-package
+    salvage loop passes it with -c so each lone install still resolves inside
+    the pack's own pins — without it, N independent resolutions could up/
+    downgrade shared deps the batch resolver had refused, and the union would
+    be reported as "installed" (refute 2026-07-21, pack-salvage audit)."""
+    import tempfile
+    f = tempfile.NamedTemporaryFile("w", suffix=".txt", prefix="dl-pack-c-",
+                                    delete=False)
+    f.write("\n".join(reqs) + "\n")
+    f.close()
+    return f.name
+
+
+def _pip_subprocess_once(reqs: list, on_line=None, constraints=None) -> tuple:
     """Source-install runner: pip install `reqs` into this interpreter's
     environment, streaming each output line into `on_line` (progress). Returns
     (ok, last_output_lines). One pip invocation — the resilient wrapper (_run_pip)
@@ -1920,6 +1934,8 @@ def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
     import sys
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
            "--progress-bar", "off", *reqs]
+    if constraints:
+        cmd += ["-c", str(constraints)]
     proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
@@ -1956,8 +1972,31 @@ def _pip_subprocess_once(reqs: list, on_line=None) -> tuple:
 def _run_pip(reqs: list, on_line=None) -> tuple:
     """Default pack runner (source install): resilient batch-then-per-package so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
-    return _install_resilient(reqs, on_line,
-                              lambda subset: _pip_subprocess_once(subset, on_line))
+    all_reqs = list(reqs)
+    import os as _os
+    cpath = None
+    try:
+        try:
+            # ONE constraints file per run, removed afterwards (a leak of one
+            # temp file per salvage attempt — refute 2026-07-21); creation
+            # failure degrades to no constraints, never a dead job thread
+            cpath = _constraints_file(all_reqs) if len(all_reqs) > 1 else None
+        except Exception:
+            cpath = None
+        return _install_resilient(
+            all_reqs, on_line,
+            lambda subset: _pip_subprocess_once(
+                subset, on_line,
+                # salvage runs one req at a time — constrain each to the
+                # pack's own pins so N independent resolutions can't drift
+                # from what the batch resolver checked
+                constraints=cpath if len(subset) < len(all_reqs) else None))
+    finally:
+        if cpath:
+            try:
+                _os.unlink(cpath)
+            except OSError:
+                pass
 
 
 # Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
@@ -1966,7 +2005,8 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
 _PACK_RUNNER: "Callable[..., tuple]" = _run_pip
 
 
-def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
+def _pip_target_once(reqs: list, target: str, on_line=None,
+                     constraints=None) -> tuple:
     """Frozen-app single-shot: install `reqs` into a WRITABLE sidecar via in-process
     pip ``--target`` (a sealed, code-signed bundle has no external python/pip to shell
     out to, and must not — can not — install into itself). pip runs inside THIS
@@ -1983,6 +2023,8 @@ def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
     argv = ["install", "--target", str(target), "--upgrade", "--no-input",
             "--no-cache-dir", "--disable-pip-version-check",
             "--no-warn-script-location", "--progress-bar", "off", *reqs]
+    if constraints:
+        argv += ["-c", str(constraints)]
     import logging
     import os
 
@@ -2020,11 +2062,188 @@ def _pip_target_once(reqs: list, target: str, on_line=None) -> tuple:
 def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     """Frozen-app pack runner: resilient batch-then-per-package into the sidecar so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
-    return _install_resilient(
-        reqs, on_line, lambda subset: _pip_target_once(subset, target, on_line))
+    all_reqs = list(reqs)
+    import os as _os
+    cpath = None
+    try:
+        try:
+            cpath = _constraints_file(all_reqs) if len(all_reqs) > 1 else None
+        except Exception:
+            cpath = None
+        return _install_resilient(
+            all_reqs, on_line,
+            lambda subset: _pip_target_once(
+                subset, target, on_line,
+                constraints=cpath if len(subset) < len(all_reqs) else None))
+    finally:
+        if cpath:
+            try:
+                _os.unlink(cpath)
+            except OSError:
+                pass
 
 
 _PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
+
+
+# --- Unified download queue ---------------------------------------------------
+# One serial queue over the EXISTING install machineries: capability packs
+# (_install_pack jobs), model pulls (_pull_model_async jobs), and store
+# plugins (brain.store_install). Items run one at a time in enqueue order;
+# the panel polls /dreamlayer/downloads for positions + live progress, and
+# "Download all" is just enqueue-many. Only a still-queued item can cancel —
+# the underlying machineries have no mid-flight cancel, and pretending
+# otherwise would lie about what's on disk.
+_DL_QUEUE: list = []
+_DL_LOCK = threading.Lock()
+_DL_WORKER: dict = {"t": None}
+_DL_KINDS = ("pack", "model", "plugin")
+
+
+def _dl_snapshot() -> list:
+    with _DL_LOCK:
+        out = []
+        pos = 0
+        for it in _DL_QUEUE:
+            d = {k: it[k] for k in ("id", "kind", "key", "state", "detail",
+                                    "percent")}
+            if it["state"] == "queued":
+                d["position"] = pos
+            if it["state"] in ("queued", "running"):
+                pos += 1
+            out.append(d)
+        return out
+
+
+def _dl_enqueue(brain: Brain, kind: str, key: str) -> dict:
+    kind, key = (kind or "").strip(), (key or "").strip()
+    if kind not in _DL_KINDS or not key:
+        return {"error": "unknown download kind or empty name"}
+    with _DL_LOCK:
+        live = sum(1 for i in _DL_QUEUE if i["state"] in ("queued", "running"))
+        if live >= 64:                       # cross-request growth cap (refute F4)
+            return {"error": "the queue is full — let some downloads finish"}
+        for it in _DL_QUEUE:
+            if (it["kind"], it["key"]) == (kind, key) and \
+                    it["state"] in ("queued", "running"):
+                return {"ok": True, "id": it["id"], "note": "already queued"}
+        item = {"id": max((i["id"] for i in _DL_QUEUE), default=0) + 1,
+                "kind": kind, "key": key, "state": "queued",
+                "detail": "queued", "percent": 0}
+        _DL_QUEUE.append(item)
+        t = _DL_WORKER.get("t")
+        if t is None or not t.is_alive():
+            t = threading.Thread(target=_dl_drain, args=(brain,), daemon=True)
+            _DL_WORKER["t"] = t
+            t.start()
+        return {"ok": True, "id": item["id"]}
+
+
+def _dl_cancel(item_id: int) -> dict:
+    with _DL_LOCK:
+        for it in _DL_QUEUE:
+            if it["id"] == item_id and it["state"] == "queued":
+                it["state"], it["detail"] = "cancelled", "cancelled"
+                return {"ok": True}
+    return {"error": "only a still-queued download can be cancelled"}
+
+
+def _dl_next():
+    with _DL_LOCK:
+        # prune finished rows EVERY pass (not only at drain) so a long-running
+        # item can't let the list grow unboundedly across requests (refute F4)
+        done = [x for x in _DL_QUEUE
+                if x["state"] in ("done", "failed", "partial", "cancelled")]
+        for x in done[:-20]:
+            _DL_QUEUE.remove(x)
+        for it in _DL_QUEUE:
+            if it["state"] == "queued":
+                it["state"], it["detail"] = "running", "starting…"
+                return it
+        # drained: clear the worker slot UNDER THE LOCK — an enqueue landing
+        # between this decision and the thread dying saw is_alive()==True and
+        # stranded its item with no worker (refute F3)
+        _DL_WORKER["t"] = None
+        return None
+
+
+def _dl_drain(brain: Brain) -> None:
+    while True:
+        it = _dl_next()
+        if it is None:
+            return
+        try:
+            _dl_run_one(brain, it)
+        except Exception as exc:                  # noqa: BLE001 — queue never dies
+            it["state"], it["detail"] = "failed", str(exc)[-160:]
+
+
+_DL_BUSY = ("another pack is already installing",
+            "too many downloads at once")
+
+
+def _dl_live_job(kind: str, key: str, job: dict) -> dict:
+    """The LIVE job dict to poll. _pull_model_async returns a shallow COPY
+    (its worker mutates the original in _PULL_JOBS), so polling the return
+    value showed 0%/pulling forever and wedged the queue for the full hour
+    (refute F1). Packs already return the live dict."""
+    if kind == "model":
+        with _PULL_LOCK:
+            return _PULL_JOBS.get(key, job)
+    return job
+
+
+def _dl_run_one(brain: Brain, it: dict, poll_s: float = 1.0,
+                max_polls: int = 3600) -> None:
+    kind, key = it["kind"], it["key"]
+    if kind == "plugin":
+        # bound the synchronous store install — a stalled registry fetch must
+        # not wedge the single queue worker forever (refute F5)
+        box: dict = {}
+
+        def _go():
+            try:
+                box["res"] = brain.store_install(key)
+            except Exception as exc:              # noqa: BLE001
+                box["res"] = {"error": str(exc)[-160:]}
+        t = threading.Thread(target=_go, daemon=True)
+        t.start()
+        t.join(timeout=180)
+        res = box.get("res")
+        if res is None:
+            it["state"], it["detail"] = "failed", "plugin install timed out"
+        elif res.get("ok"):
+            it["state"], it["percent"], it["detail"] = "done", 100, "installed"
+        else:
+            errs = res.get("errors") or [res.get("error") or "install failed"]
+            it["state"], it["detail"] = "failed", str(errs[0])[-160:]
+        return
+    launch = _install_pack if kind == "pack" else _pull_model_async
+    job = launch(brain, key)
+    polls = 0
+    while "error" in job and any(b in str(job["error"]) for b in _DL_BUSY):
+        # a DIRECT panel install/pull is mid-flight — WAIT for our turn
+        # instead of failing the whole batch spuriously (refute F2/F7)
+        it["detail"] = "waiting for the current install to finish…"
+        polls += 1
+        if polls >= max_polls:
+            it["state"], it["detail"] = "failed", "timed out waiting in line"
+            return
+        time.sleep(poll_s)
+        job = launch(brain, key)
+    if "error" in job:
+        it["state"], it["detail"] = "failed", str(job["error"])[-160:]
+        return
+    for _ in range(polls, max_polls):             # ≤1h per item
+        live = _dl_live_job(kind, key, job)
+        st = live.get("state")
+        it["percent"] = int(live.get("percent") or 0)
+        it["detail"] = str(live.get("detail") or st or "")[:160]
+        if st in ("done", "failed", "partial"):
+            it["state"] = st
+            return
+        time.sleep(poll_s)
+    it["state"], it["detail"] = "failed", "timed out after an hour"
 
 
 def _install_pack(brain: Brain, pack_key: str) -> dict:
@@ -2922,6 +3141,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             from .qr import to_svg
             self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
 
+        def _get_downloads(self, path, qs):
+            """The unified download queue — positions + live progress.
+            Local-only like the writes: pip/pull error tails can carry local
+            filesystem paths a paired phone has no business reading (F6)."""
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
+            self._json(200, {"queue": _dl_snapshot()})
+
         def _get_live_link(self, path, qs):
             """The Live Lens link + QR — only handed to the local panel, exactly
             like the pairing code (the link carries the token, so the link IS
@@ -3020,6 +3248,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
             "/dreamlayer/live/link": _get_live_link,
+            "/dreamlayer/downloads": _get_downloads,
         }
 
         # -- routing ----------------------------------------------------
@@ -3213,6 +3442,31 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if not self._from_localhost():
                 self._json(403, {"error": "installing is local-only"}); return
             self._json(200, brain.store_install(self._body().get("name", "")))
+
+        def _post_downloads_enqueue(self, path, qs):
+            """Queue downloads (packs / models / plugins) — accepts one item
+            or {"items": [...]} for Download All. Local-only, matching the
+            pack/plugin/model install bar."""
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
+            b = self._body()
+            items = b.get("items") if isinstance(b.get("items"), list) else [b]
+            out = [_dl_enqueue(brain, str((i or {}).get("kind", "")),
+                               str((i or {}).get("key", "")))
+                   for i in items[:32]]
+            self._json(200, {"ok": True, "queued": out,
+                             "queue": _dl_snapshot()})
+
+        def _post_downloads_cancel(self, path, qs):
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
+            try:
+                item_id = int(self._body().get("id") or 0)
+            except (TypeError, ValueError):
+                item_id = 0
+            self._json(200, _dl_cancel(item_id))
 
         def _post_plugins_remove(self, path, qs):
             """Remove an installed plugin by name."""
@@ -3480,6 +3734,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 panel = wl.look_sighting(sighting, facet=facet)
             else:
                 panel = wl.look(b64_to_frame(b.get("image")), facet=facet)
+            if panel is not None:
+                # world_look records image looks; the label and image+facet
+                # branches must not under-report (refute 2026-07-21) — and
+                # the veil is re-checked at write time (a veil dropped
+                # mid-request must not land a ledger line)
+                try:
+                    if not brain.incognito_now():
+                        seen = label or getattr(panel.sighting, "label", "")
+                        brain.activity.add("look", f"Lens saw {seen}")
+                except Exception:
+                    pass
             if panel is None:
                 self._json(200, {"ok": False, "reason": "couldn't make it out"})
                 return
@@ -3618,6 +3883,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/upload": _post_upload,
             "/dreamlayer/brain/ask": _post_brain_ask,
             "/dreamlayer/plugins/install": _post_plugins_install,
+            "/dreamlayer/downloads/enqueue": _post_downloads_enqueue,
+            "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,
             "/dreamlayer/plugins/store/install": _post_plugins_store_install,
             "/dreamlayer/plugins/remove": _post_plugins_remove,

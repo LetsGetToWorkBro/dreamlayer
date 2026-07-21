@@ -331,17 +331,42 @@ def run_tray(directory: str | None = None, port: int = DEFAULT_PORT) -> int:
         # pumping the loop, so a slow/timing-out fetch would freeze the tray for
         # up to the fetch timeout per click (same fix as the macOS menu bar;
         # audit 2026-07-17).
+        if state.get("upd_busy"):
+            return                            # one update flow at a time (refute A2)
+        state["upd_busy"] = True
+
         def _work():
-            res = check_for_update()
             try:
-                icon.notify(res["message"], "DreamLayer")
-            except Exception:
-                pass
-            if res["status"] == "update":
+                res = check_for_update()
+                if res["status"] != "update":
+                    try:
+                        icon.notify(res["message"], "DreamLayer")
+                    except Exception:
+                        pass
+                    return
+                # In-app update: download → digest-verify → Authenticode gate
+                # → run the installer. Today's builds aren't code-signed yet,
+                # so the gate honestly refuses and we fall back to the
+                # Releases page — signed builds install in-app with no change.
                 try:
-                    webbrowser.open(res["url"])
+                    from .updater import perform_update
+                    icon.notify("Downloading update…", "DreamLayer")
+                    ok, msg = perform_update()
+                except Exception:
+                    ok, msg = False, "updater unavailable"
+                try:
+                    icon.notify(msg if ok else f"{res['message']} — {msg}",
+                                "DreamLayer")
                 except Exception:
                     pass
+                if not ok:
+                    try:
+                        webbrowser.open(res["url"])
+                    except Exception:
+                        pass
+            finally:
+                state["upd_busy"] = False     # the early "up to date" return
+                                              # must release the guard too
         threading.Thread(target=_work, daemon=True).start()
 
     def toggle_incognito(icon, item):

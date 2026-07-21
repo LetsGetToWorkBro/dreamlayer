@@ -190,3 +190,44 @@ def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
         return True
     except Exception:
         return False
+
+
+_reopen_installed = False
+
+
+def install_reopen_handler(open_cb) -> bool:
+    """Make a Dock-icon click open the panel while its window is closed.
+
+    The app is an LSUIElement menu-bar appliance, so clicking its (pinned)
+    Dock tile sends ``applicationShouldHandleReopen:hasVisibleWindows:`` to
+    the app delegate — which never implemented it, so the click did nothing.
+    rumps owns that delegate, so the handler is added to the delegate's CLASS
+    at runtime (objc.classAddMethod), calling ``open_cb`` on the main thread.
+    Idempotent; off-Mac (no AppKit/objc) it is inert and returns False."""
+    global _reopen_installed
+    if _reopen_installed:
+        return True
+    try:
+        import objc
+        from AppKit import NSApp
+        delegate = NSApp().delegate()
+        if delegate is None:
+            return False
+
+        def _reopen(self, sender, has_visible):
+            try:
+                open_cb()
+            except Exception:
+                pass
+            return True
+
+        objc.classAddMethod(
+            type(delegate),
+            b"applicationShouldHandleReopen:hasVisibleWindows:",
+            objc.selector(_reopen,
+                          selector=b"applicationShouldHandleReopen:hasVisibleWindows:",
+                          signature=b"c@:@c"))
+        _reopen_installed = True
+        return True
+    except Exception:
+        return False

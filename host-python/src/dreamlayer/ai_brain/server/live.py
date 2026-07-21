@@ -346,7 +346,30 @@ def render_live(nonce: str = "") -> str:
     attr = f' nonce="{nonce}"' if nonce else ""
     return (_PAGE
             .replace("__BOOT__", json.dumps(boot))
+            .replace("__JUNO__", _juno_data_uri())
             .replace("__NONCE__", attr))
+
+
+_JUNO_URI: str = ""
+
+
+def _juno_data_uri() -> str:
+    """Juno's real pixel sprite (server/assets/juno_da_still.png, ~5 KB) as a
+    data: URI, so the tour needs no new route and stays same-origin under the
+    strict CSP (img-src allows data:). Cached after the first read; absent
+    asset → empty src (the tour still runs, text-only)."""
+    global _JUNO_URI
+    if _JUNO_URI:
+        return _JUNO_URI
+    try:
+        import base64
+        from pathlib import Path
+        p = Path(__file__).resolve().parent / "assets" / "juno_da_still.png"
+        _JUNO_URI = "data:image/png;base64," + base64.b64encode(
+            p.read_bytes()).decode()
+    except Exception:
+        _JUNO_URI = ""
+    return _JUNO_URI
 
 
 # One inline page, zero external fetches (the CSP-of-necessity for a LAN
@@ -464,7 +487,34 @@ _PAGE = r"""<!doctype html>
   #privacy{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);
     left:0;right:0;text-align:center;color:var(--phos-dim);font-size:10.5px;
     letter-spacing:.06em;padding:0 16px;pointer-events:none}
-  @media (prefers-reduced-motion: reduce){ #hud,#panel{transition:none} #lens.scan{animation:none} }
+  /* Juno's first-run tour: anchored coach marks over the REAL controls.
+     The card owns pointer events; the spotlight ring never does — the lens,
+     veil, and ask bar stay clickable throughout (the e2e clicks them). */
+  #tour{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .4s}
+  #tour.on{opacity:1}
+  #tourring{position:fixed;border:2px solid rgba(125,255,168,.85);border-radius:14px;
+    pointer-events:none;box-shadow:0 0 0 6000px rgba(3,6,5,.45), 0 0 24px rgba(125,255,168,.5);
+    transition:all .35s ease;display:none}
+  #tourcard{position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom,0px) + 96px);width:min(88vw,420px);
+    pointer-events:auto;background:rgba(5,10,8,.94);border:1px solid rgba(125,255,168,.4);
+    border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;
+    backdrop-filter:blur(5px)}
+  #tourcard img{width:44px;height:44px;image-rendering:pixelated;flex:none;margin-top:2px}
+  #tourcard .tourbody{flex:1}
+  #tourtext b{color:var(--phos);font-weight:normal;display:block;font-size:13px;
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+  #tourtext{font-size:13px;line-height:1.5;color:#DDEFE4}
+  #touracts{display:flex;gap:8px;margin-top:9px}
+  #touracts button{padding:6px 14px;border-radius:16px;font-size:12px}
+  #touracts .ghost{border-color:rgba(125,255,168,.25);color:var(--phos-dim)}
+  /* short viewports (landscape phones, split view): the card moves to the TOP
+     so it can never sit over the lens it is pointing at (refute 2026-07-21) */
+  @media (max-height: 540px){
+    #tourcard{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}
+  }
+  #tourdots{color:var(--phos-dim);font-size:11px;margin-left:auto;align-self:center}
+  @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan{animation:none} }
 </style>
 </head>
 <body>
@@ -482,6 +532,7 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="tier" hidden><b id="tiertx"></b></span>
   <span class="chip on" id="livebtn" role="switch" aria-checked="true" tabindex="0">&#9673; <b id="livest">live</b></span>
   <span class="chip" id="veilbtn" role="switch" aria-checked="false" tabindex="0">veil <b id="veilst">off</b></span>
+  <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
 </div>
 <div id="controls">
   <button id="torch" type="button" hidden aria-pressed="false" aria-label="Flashlight" title="Flashlight">&#128161;</button>
@@ -496,6 +547,20 @@ _PAGE = r"""<!doctype html>
   <button id="mic" hidden aria-pressed="false"
           title="Voice uses your phone's speech service, not the Brain's on-device ASR">&#127908;</button>
   <button id="send" aria-label="Send">ask</button>
+</div>
+<div id="tour" aria-live="polite">
+  <div id="tourring"></div>
+  <div id="tourcard">
+    <img id="tourjuno" alt="Juno" src="__JUNO__">
+    <div class="tourbody">
+      <div id="tourtext"><b>JUNO</b><span id="tourmsg"></span></div>
+      <div id="touracts">
+        <button id="tournext" type="button">Next</button>
+        <button id="tourskip" type="button" class="ghost">Skip</button>
+        <span id="tourdots"></span>
+      </div>
+    </div>
+  </div>
 </div>
 <div id="privacy">camera &rarr; your Brain on your LAN &middot; frames are never stored &middot; plugin rows see the label, never the pixels</div>
 <script__NONCE__>
@@ -830,6 +895,67 @@ function dreamFrame(ts){
   ctx.globalAlpha = 1;
   gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
 }
+
+
+/* ---- Juno's first-run tour: the pro walkthrough of the REAL controls -----
+   Anchored coach marks stepping through the actual elements — tap-to-look,
+   double-tap dream, the veil, ask-your-memory — with tips. Shown once
+   (localStorage), replayable from the ? chip. Text lands via textContent;
+   the spotlight ring never takes pointer events, so every control stays
+   live (and the e2e's direct clicks keep working) while the tour is up. */
+const TOUR_STEPS = [
+  {a: null, t: "I\u2019m Juno \u2014 your lens into DreamLayer. Give me thirty seconds and I\u2019ll show you how to see the way the glasses do."},
+  {a: "lens", t: "Tap the lens for a closer look. I read the thing in view and draw the same card the glasses draw \u2014 price tags convert, books rate, and what you\u2019ve seen before says so. Tip: fill the circle with ONE thing."},
+  {a: "lens", t: "Double-tap and I dream. Your mic becomes the weather, moving the phone bends the light \u2014 all on this phone, nothing leaves. Double-tap again to wake me."},
+  {a: "veilbtn", t: "The veil is your privacy switch. Veil down, I\u2019m deliberately blind \u2014 no looks, no memory, no trace. Your posture, mirrored everywhere."},
+  {a: "q", t: "Ask your memory anything \u2014 \u201cwhere did I last see my keys?\u201d Recall runs on YOUR Brain, on your LAN. Tip: pinch to zoom; the torch button appears when your camera has one."},
+  {a: null, t: "That\u2019s the tour \u2014 the real system, without the glass. Point me at something."}
+];
+let tourStep = -1;
+function tourSeen(){ try { return !!localStorage.getItem("dl-live-tour"); } catch (e) { return true; } }
+function tourMark(){ try { localStorage.setItem("dl-live-tour", "1"); } catch (e) {} }
+function startTour(force){
+  if (!force && (tourSeen() || _pairNotice)) return;  /* pairing first — the tour
+                                                         follows a successful redeem */
+  tourStep = -1;
+  $("tour").classList.add("on");
+  tourNext();
+}
+function endTour(){
+  $("tour").classList.remove("on");
+  $("tourring").style.display = "none";
+  tourMark();
+}
+function placeRing(st){
+  const ring = $("tourring");
+  const el = st && st.a && $(st.a);
+  if (!el) { ring.style.display = "none"; return; }
+  const r = el.getBoundingClientRect();
+  ring.style.display = "block";
+  ring.style.left = (r.left - 8) + "px";
+  ring.style.top = (r.top - 8) + "px";
+  ring.style.width = (r.width + 16) + "px";
+  ring.style.height = (r.height + 16) + "px";
+  ring.style.borderRadius = st.a === "lens" ? "50%" : "14px";
+}
+function tourNext(){
+  tourStep++;
+  if (tourStep >= TOUR_STEPS.length) { endTour(); return; }
+  const st = TOUR_STEPS[tourStep];
+  $("tourmsg").textContent = st.t;                    /* untrusted-safe by habit */
+  $("tourdots").textContent = (tourStep + 1) + " / " + TOUR_STEPS.length;
+  $("tournext").textContent = tourStep === TOUR_STEPS.length - 1 ? "Begin" : "Next";
+  placeRing(st);
+}
+/* rotate/resize mid-tour: re-anchor the spotlight to where the control IS */
+window.addEventListener("resize", () => {
+  if ($("tour").classList.contains("on") && tourStep >= 0)
+    placeRing(TOUR_STEPS[tourStep]);
+});
+$("tournext").onclick = tourNext;
+$("tourskip").onclick = endTour;
+$("tourbtn").onclick = () => startTour(true);
+$("tourbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") startTour(true); };
 
 /* ---- link + tier chips -------------------------------------------------- */
 function setLink(ok, ms){
@@ -1368,6 +1494,7 @@ loadDetector();                       /* progressive enhancement — non-blockin
   }
   booted = true;                 /* posture known → the loop may start (or stay
                                     paused if unpaired / veiled / hidden) */
+  startTour(false);              /* first-timers meet Juno; ? replays the tour */
   scheduleLoop(400);
   heartbeat();
 })();
