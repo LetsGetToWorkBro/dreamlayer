@@ -244,17 +244,23 @@ class TestServer:
                 assert r.status == 200
                 assert "javascript" in (r.headers.get("Content-Type") or "")
                 assert b"Glass" in r.read()
-            # every PNG fallback named in the catalog is really bundled
+            # every PNG fallback named in the catalog is really bundled. The
+            # catalog is now all-live (the user asked for the real HUD on every
+            # card, no stale stills), so imgs may be empty — but any that remain
+            # must still resolve to a shipped asset.
             block = body.split("const EXPLAINERS=[", 1)[1].split("];", 1)[0]
             imgs = re.findall(r'img:"([a-z0-9_.]+)"', block)
-            assert len(imgs) >= 10
             for name in imgs:
                 assert (assets / name).is_file(), f"missing panel asset {name}"
-            # every live type is one the sim renders
-            known = {"ready", "veil", "answer", "recall", "fact", "brief",
-                     "toast", "object", "intro", "waypath", "keep", "rosetta"}
+            # every live type is one the sim actually renders — derived from the
+            # engine's OWN dispatch table so this can never drift from halo-sim.js
+            # again (ready/veil are the default + incognito branches, not a
+            # card.type ===)
+            sim_src = sim.read_text(encoding="utf-8")
+            known = set(re.findall(r'card\.type === "([a-z_]+)"', sim_src))
+            known |= {"ready", "veil"}
             lives = re.findall(r'live:\["([a-z_]+)"', block)
-            assert len(lives) >= 10
+            assert len(lives) >= 20
             assert set(lives) <= known, f"unknown sim type: {set(lives) - known}"
             # the catalog covers the current library, not the 8-card past
             assert len(imgs) + len(lives) >= 25
