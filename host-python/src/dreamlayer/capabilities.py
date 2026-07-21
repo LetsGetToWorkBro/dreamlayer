@@ -108,6 +108,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("lightrag",), "memory-graph", "memory/graph_recall.py",
         note="opt-in; built by your own local model + embedder — nothing leaves the Brain",
         gain="vector recall finds what's similar; this follows entity + time edges, so 'what did the doctor say about my knee in March' resolves by connection, not just cosine", impact=4, before=2.5, after=4.5),
+    Cap("memory_rehearsal", "Never forget a name — scheduled rehearsal (FSRS)", "memory",
+        ("fsrs",), "srs", "memory/rehearsal_fsrs.py",
+        note="the baseline expanding-interval scheduler always works; FSRS sharpens the timing",
+        gain="baseline resurfaces a memory on a fixed doubling schedule; FSRS (the scheduler behind modern Anki) times each rehearsal to the real forgetting curve — names, faces, facts come back right before you'd lose them", impact=3, before=2.5, after=4.5),
 
     # --- voice ------------------------------------------------------------------
     Cap("voice_vad", "Neural speech/noise gating before ASR", "voice",
@@ -329,6 +333,14 @@ CAPABILITIES: Tuple[Cap, ...] = (
         (), None, "ai_brain/exo_cluster.py",
         kind="service", note="http://127.0.0.1:52415",
         gain="single-machine inference only; this runs one bigger model across your machines", impact=2, before=3, after=4),
+    Cap("screen_memory", "Your screen becomes memory (screenpipe)", "services",
+        (), None, "memory/source_screenpipe.py",
+        kind="service", note="screenpipe app — read-only from ~/.screenpipe/db.sqlite",
+        gain="the Brain remembers only what you tell it; with screenpipe running it also remembers what was on your screen — a Rewind-style memory before the glasses ship, all on-device", impact=4, before=0, after=4.5),
+    Cap("desk_memory", "What you worked on, remembered (ActivityWatch)", "services",
+        (), None, "memory/source_activitywatch.py",
+        kind="service", note="http://127.0.0.1:5600 — a decade-trusted local tracker",
+        gain="recall has no work-context spine; this indexes app + window-title time so 'what was I doing Tuesday' just answers — a gentler privacy gradient than screen capture", impact=3, before=0, after=3.5),
 )
 
 _BY_KEY = {c.key: c for c in CAPABILITIES}
@@ -571,6 +583,8 @@ def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
     urls = {
         "ollama_local": "http://127.0.0.1:11434/api/tags",
         "exo_cluster": "http://127.0.0.1:52415/v1/models",
+        "screen_memory": "http://127.0.0.1:3030/health",
+        "desk_memory": "http://127.0.0.1:5600/api/0/info",
     }
     url = urls.get(cap.key)
     if not url:

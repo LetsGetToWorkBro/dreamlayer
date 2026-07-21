@@ -60,6 +60,9 @@ sound-events = ["panns-inference>=0.1,<1"]
 # temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
 # by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
 memory-graph = ["lightrag-hku>=1,<2"]
+# spaced-repetition rehearsal (py-fsrs, the scheduler behind modern Anki) — the
+# baseline expanding-interval scheduler needs nothing; this personalizes it. Opt-in.
+srs = ["fsrs>=4,<6"]
 # neural fast-style-transfer for Dream Mode (see the world as a painting) — the
 # ONNX runtime; you supply the .onnx style model. Opt-in, not in any profile.
 dream-style = ["onnxruntime>=1.17,<2"]
