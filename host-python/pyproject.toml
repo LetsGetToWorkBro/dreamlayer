@@ -35,6 +35,9 @@ dream    = ["brilliant-msg>=7,<8", "Pillow>=10"]   # pip install dreamlayer[drea
 #     working fallback, so the core system runs with none of them installed) ---
 memory   = ["sqlite-vec>=0.1,<1", "chromadb>=1,<2", "sentence-transformers>=5,<6", "model2vec>=0.8,<1", "mem0ai>=2,<3", "lancedb>=0.34,<1", "usearch>=2,<3", "docarray>=0.41,<1", "networkx>=3,<4"]
 voice    = ["silero-vad>=6,<7", "faster-whisper>=1,<2", "openwakeword>=0.6,<1", "sounddevice>=0.5,<1", "sherpa-onnx>=1,<2", "piper-tts>=1.2,<2"]
+# zero-shot voice cloning (Juno speaks in her own voice, offline) — heavy (torch),
+# opt-in only, so it is NOT in any deployment profile: `pip install dreamlayer[voice-clone]`
+voice-clone = ["coqui-tts>=0.24,<1"]
 asr-extra = ["whisperx>=3,<4"]
 structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=1.102.0,<2"]
 llm      = ["litellm>=1,<2"]

@@ -68,6 +68,7 @@ class PiperTTS:
                  dirs: tuple[Path, ...] = ()):
         self._voice = None
         self._rate = 22050
+        self.voice_name = ""
         if not _HAS_PIPER:
             return
         model = find_voice_model(voice_model, dirs)
@@ -79,6 +80,7 @@ class PiperTTS:
             self._voice = PiperVoice.load(str(model))
             cfg = getattr(self._voice, "config", None)
             self._rate = int(getattr(cfg, "sample_rate", 0) or 22050)
+            self.voice_name = model.stem          # e.g. "juno" or "en_US-amy-medium"
         except Exception as exc:                       # noqa: BLE001
             log.error("[tts] piper voice load failed: %s; silent fallback", exc)
             self._voice = None

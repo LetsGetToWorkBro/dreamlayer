@@ -1648,6 +1648,45 @@ def _live_asset(name: str) -> "Optional[tuple[bytes, str]]":
     return (fp.read_bytes(), ctype) if fp.is_file() else None
 
 
+# --- Juno's local voice (Piper) — synthesized on the Brain, played by the client
+_JUNO_TTS: dict = {}
+
+
+def _juno_tts(brain):
+    """A per-Brain cached PiperTTS. It prefers a `juno.onnx` voice in
+    <cfg>/voices/ (the cloned Juno voice) and falls back to any voice there or
+    $DL_PIPER_VOICE. Cached once ready so the ONNX model loads a single time; a
+    not-ready instance is cheap to re-probe, so dropping a voice in later just
+    works on the next call. Never raises."""
+    key = str(getattr(brain, "cfg_dir", "") or "")
+    inst = _JUNO_TTS.get(key)
+    if inst is not None and getattr(inst, "ready", False):
+        return inst
+    inst = None
+    # 1) her OWN cloned voice (XTTS from the baked juno_*.mp3 clips), if the
+    #    engine is installed — this is "her voice", not a stock one
+    try:
+        from ...orchestrator.voice_clone import CloneTTS
+        refs = sorted((Path(__file__).resolve().parent / "assets").glob("juno_*.mp3"))
+        clone = CloneTTS(refs)
+        if clone.ready:
+            inst = clone
+    except Exception:                                  # noqa: BLE001 — voice is never load-bearing
+        inst = None
+    # 2) else a Piper voice (a cloned juno.onnx if present, else any / $DL_PIPER_VOICE)
+    if inst is None:
+        try:
+            from ...orchestrator.tts_piper import PiperTTS, find_voice_model
+            vdir = Path(brain.cfg_dir) / "voices" if getattr(brain, "cfg_dir", None) else None
+            dirs = (vdir,) if vdir else ()
+            juno = find_voice_model(str(vdir / "juno.onnx"), ()) if vdir else None
+            inst = PiperTTS(voice_model=(str(juno) if juno else None), dirs=dirs)
+        except Exception:                              # noqa: BLE001
+            inst = None
+    _JUNO_TTS[key] = inst
+    return inst
+
+
 def _builder_page(token: str) -> "Optional[str]":
     """The builder HTML, rewritten to load figment.js from the Brain and told
     it's same-origin (so it hides the URL/token inputs and deploys relatively).
@@ -2925,6 +2964,36 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "stats": brain.index.stats(),
             })
 
+        def _get_tts(self, path, qs):
+            """Whether Juno can speak, and in which voice — so the panel/phone
+            can show the toggle honestly. No synthesis here."""
+            tts = _juno_tts(brain)
+            self._json(200, {"ready": bool(tts and tts.ready),
+                             "voice": (tts.voice_name if tts else "")})
+
+        def _post_tts(self, path, qs):
+            """Synthesize Juno's voice for a line of text and return the WAV.
+
+            Audio goes the RIGHT direction: the (headless) Brain synthesizes
+            locally — Piper on CPU, no cloud, no API credits — and hands the WAV
+            to the client that actually has a speaker (the panel here, the phone
+            or the glasses on the LAN). When TTS isn't set up (no engine or no
+            voice model) it's a clean 204 so the caller just stays silent."""
+            text = str((self._body() or {}).get("text", "") or "").strip()
+            if not text:
+                self._json(400, {"error": "no text"}); return
+            tts = _juno_tts(brain)
+            wav = tts.synthesize(text[:600]) if (tts and tts.ready) else None
+            if not wav:
+                self.send_response(204); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(wav)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(wav)
+
         def _get_token(self, path, qs):
             """The pairing token — handed only to the local panel."""
             if not self._from_localhost():
@@ -3245,6 +3314,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/brief/long/latest": _get_brief_long_latest,
             "/dreamlayer/messages/recent": _get_messages_recent,
             "/dreamlayer/model/status": _get_model_status,
+            "/dreamlayer/tts": _get_tts,
             "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
@@ -3968,6 +4038,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/saga/record": _post_saga_record,
             "/dreamlayer/profile": _post_profile,
             "/dreamlayer/model/pull": _post_model_pull,
+            "/dreamlayer/tts": _post_tts,
             "/dreamlayer/people": _post_people,
             "/dreamlayer/brain/explain": _post_brain_explain,
             "/dreamlayer/brain/look": _post_brain_look,
