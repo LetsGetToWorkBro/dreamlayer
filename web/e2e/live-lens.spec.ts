@@ -143,4 +143,123 @@ test.describe("Live Lens page in a real browser", () => {
     await page.waitForTimeout(3_000);
     expect(looks).toBe(0);
   });
+
+  // The privacy receipt is VERIFIED in the browser, not taken on the Brain's
+  // word: this real signed ledger (a genuine Ed25519 chain, produced by Python)
+  // is served to the page, and the "Verified" verdict only appears if the
+  // browser's own WebCrypto Ed25519 + SHA-256 chain check pass — under the
+  // strict CSP (crypto.subtle must not be blocked, the script must not throw).
+  const SIGNED_RECEIPT = {
+    pubkey: "0367d6de7569cd459ad8522f36de1c29f2da70c49108884862b35dd656630148",
+    algorithm: "ed25519-sha256-chain",
+    records: [
+      { ts: 1784616763.874479, kind: "pair", text: "Live Lens paired by code", seq: 0, prev: "",
+        sig: "f16fa2ad922aedeb520a3319b577a36a18d08092c86286729d67de96f5bfdc76d68021c7a51914016460d7a53359e46e9dd2719727a5c21f37e10aac3cf8f402" },
+      { ts: 1784616763.874903, kind: "look", text: "Lens saw coffee mug", seq: 1,
+        prev: "efea3e430d48ff94c6f05a33f4e234f2f15f481b66d83ab7a43f6f43fb108bc5",
+        sig: "811d7f11344ba6d224dbdc0f0575c2272cc34e9ce6e0e3d5a9a1795bcf6c0564416e13befa610eac44ad88bbfdddcf94f10b4ad70aad721816354e99e510dc06" },
+    ],
+    head: { last_seq: 1, head: "349f2a520f07f0e20263f2f121582585f6d881dd6d675ffdc73794bcfa00d2ee", count: 2,
+      sig: "3f79fa9e7aaa952e4fa3f2948abbf8ad85f676096ebf35ba561ba4d59ccf3b452e3df36d7406edceb17f861df0880c2aea050e590a4e7028c4849ea6bf63f305" },
+  };
+  test("verifies the privacy receipt in the browser (Ed25519 under the CSP)", async ({ page }) => {
+    const cspErrors: string[] = [];
+    page.on("console", (m: ConsoleMessage) => {
+      const t = m.text();
+      if (/content security|csp|refused to (execute|load|apply|connect|compile)/i.test(t)) cspErrors.push(t);
+    });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(String(e)));
+    await page.route("**/dreamlayer/receipt**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SIGNED_RECEIPT) }));
+
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+    await page.locator("#rcptbtn").click();
+    await expect(page.locator("#rcptcard")).toHaveClass(/on/);
+    // the verdict is the browser's own arithmetic — "Verified" means the
+    // Ed25519 signatures + the SHA-256 chain both checked out locally
+    await expect(page.locator("#rcpthead")).toContainText("Verified", { timeout: 10_000 });
+    await expect(page.locator("#rcptverdict")).toHaveClass(/ok/);
+    // the two signed actions render (as text, never HTML)
+    await expect(page.locator("#rcptlist li")).toHaveCount(2);
+    await expect(page.locator("#rcptlist")).toContainText("Lens saw coffee mug");
+    expect(cspErrors, `CSP blocked the verifier:\n${cspErrors.join("\n")}`).toEqual([]);
+    expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
+  });
+
+  // Trust-on-first-use: after the phone pins the first Brain's key, a receipt
+  // signed by a DIFFERENT key — the "mint a fresh key, sign a laundered ledger"
+  // attack — must NOT read green. Its records are internally valid, so only the
+  // pin catches it.
+  const LAUNDERED_RECEIPT = {
+    pubkey: "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    algorithm: "ed25519-sha256-chain",
+    records: [
+      { ts: 1784617900.2227733, kind: "pair", text: "Live Lens paired by code", seq: 0, prev: "",
+        sig: "9d98207f8721baf165009fd510d1e7d479e2421c8b85ff122f91a0ed7143879d88e090eb995182c993bc17cf7ee6f3a4041a09df0284e901b84921f06fb29d0d" },
+      { ts: 1784617900.223552, kind: "look", text: "Lens saw a laundered ledger", seq: 1,
+        prev: "5e58d1f253c9fe0a4fa28b444b6347f1519cca80ee1388cd441e97b3a25a7011",
+        sig: "1ba31471fa94f03ef72f46008c901f1174e2787fa5b2ab8e8b7be4b773236dc6520a76ca5977c0bea699ad38d4eac6df464954001d6aa6baa905d31b202fe005" },
+    ],
+    head: { last_seq: 1, head: "cb079c3a195a1443fe42bf241c803d8d69c227e326140d140426ab823a7174d4", count: 2,
+      sig: "c23a0028e3d5445045a44080eb0ae91d9f42c4f95ad9ce466b00235820cfe71cde5cdc01c09deaf3d43d6d5196e4659535486a5d6bf317ebe9a621e9648e780e" },
+  };
+  const serveReceipt = (page: import("@playwright/test").Page, obj: unknown) =>
+    page.route("**/dreamlayer/receipt**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(obj) }));
+  test("a key change (laundered ledger under a fresh key) is caught, not green", async ({ page }) => {
+    // first fetch = this Brain's real key (pinned), later fetches = a fresh key
+    let calls = 0;
+    await page.route("**/dreamlayer/receipt**", (route) => {
+      calls += 1;
+      const obj = calls === 1 ? SIGNED_RECEIPT : LAUNDERED_RECEIPT;
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(obj) });
+    });
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+    // first sight of THIS Brain's key → pinned, verified green
+    await page.locator("#rcptbtn").click();
+    await expect(page.locator("#rcpthead")).toContainText("Verified", { timeout: 10_000 });
+    await expect(page.locator("#rcptverdict")).toHaveClass(/ok/);
+    // now a ledger signed by a DIFFERENT key (internally valid, so ONLY the
+    // trust-on-first-use pin catches the substitution) must never read green
+    await page.locator("#rcptverify").click();
+    await expect(page.locator("#rcpthead")).toContainText("key changed", { timeout: 10_000 });
+    await expect(page.locator("#rcptverdict")).not.toHaveClass(/ok/);
+  });
+
+  // Dream Mode's scene layer runs end-to-end in a real browser: a double-tap
+  // enters the dream, and the 4 s scene cadence POSTs a real camera frame to
+  // the Brain's dream/scene route (the synesthesia + memory-echo pipeline).
+  test("double-tap enters the dream and posts a scene frame", async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(String(e)));
+    let sceneBeats = 0;
+    await page.route("**/dreamlayer/live/dream/scene**", async (route) => {
+      sceneBeats++;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          scene: { type: "SynesthesiaCard", version: 2, description: "soft light still breathing here",
+                   dominant_color: 0x2cc79a, shapes: [{ kind: "circle", x: 64, y: 64, size: 24 }], dismiss_ms: 4000 },
+          ghost: null,
+        }),
+      });
+    });
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+    // wait for the camera so the scene beat has a frame to capture
+    await expect
+      .poll(() => page.evaluate(() => {
+        const v = document.querySelector<HTMLVideoElement>("#cam");
+        return v && v.srcObject ? v.videoWidth : 0;
+      }), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    // a double-tap within the 300 ms window — dispatched together so timing is exact
+    await page.evaluate(() => {
+      const el = document.getElementById("lens")!;
+      el.click(); el.click();
+    });
+    await expect(page.locator("body")).toHaveAttribute("data-dream", "on");
+    await expect.poll(() => sceneBeats, { timeout: 8_000 }).toBeGreaterThan(0);
+    expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
+  });
 });

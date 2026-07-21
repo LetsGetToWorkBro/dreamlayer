@@ -72,7 +72,10 @@ function pyStr(s: string): string {
     else if (cp === 12) o += "\\f";
     else if (cp === 13) o += "\\r";
     else if (cp < 0x20) o += "\\u" + cp.toString(16).padStart(4, "0");
-    else if (cp < 0x80) o += ch;
+    // DEL (0x7F) is not printable-ASCII — Python's ensure_ascii escapes it to
+    // , so a record carrying a 0x7F byte must too, or it mis-verifies as
+    // tampered (refute 2026-07-21).
+    else if (cp < 0x7f) o += ch;
     else if (cp > 0xffff) {
       const c = cp - 0x10000;
       o +=

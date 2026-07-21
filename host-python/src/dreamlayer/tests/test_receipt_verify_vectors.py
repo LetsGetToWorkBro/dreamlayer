@@ -33,6 +33,13 @@ VECTORS = [
     ({"seq": 3, "ts": 1700000000.25, "kind": "tab",
       "text": "tab\there\nnewline", "prev": "x"},
      '{"kind":"tab","prev":"x","seq":3,"text":"tab\\there\\nnewline","ts":1700000000.25}'),
+    # DEL (0x7F) is NOT printable-ASCII, so ensure_ascii escapes it to  —
+    # the ONE character a naive "cp < 0x80 => literal" client gets wrong, which
+    # would make an honest record carrying 0x7F mis-verify as tampered. The
+    # printable neighbour ~ (0x7E) must stay literal (refute 2026-07-21).
+    ({"seq": 4, "ts": 1700000000.0, "kind": "look",
+      "text": "note\x7f~end", "prev": "y"},
+     '{"kind":"look","prev":"y","seq":4,"text":"note\\u007f~end","ts":1700000000.0}'),
 ]
 
 

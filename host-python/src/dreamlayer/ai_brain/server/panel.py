@@ -2102,7 +2102,7 @@ function _pyStr(s){s=(s==null)?"":String(s);let o='"';
     else if(cp===8)o+='\\b';else if(cp===9)o+='\\t';else if(cp===10)o+='\\n';
     else if(cp===12)o+='\\f';else if(cp===13)o+='\\r';
     else if(cp<0x20)o+='\\u'+cp.toString(16).padStart(4,'0');
-    else if(cp<0x80)o+=ch;
+    else if(cp<0x7F)o+=ch;   /* DEL (0x7F) is not printable-ASCII: ensure_ascii escapes it (refute 2026-07-21) */
     else if(cp>0xFFFF){const c=cp-0x10000;
       o+='\\u'+(0xD800+(c>>10)).toString(16).padStart(4,'0')
         +'\\u'+(0xDC00+(c&0x3FF)).toString(16).padStart(4,'0');}
