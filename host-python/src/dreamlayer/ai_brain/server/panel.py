@@ -201,8 +201,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   pre{overflow-x:auto}
 
   /* system status */
-  .sys{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
-  .sys:first-child{border-top:0}
+  .sysitem{border-top:1px solid var(--line)}
+  .sysitem:first-child{border-top:0}
+  .sys{display:flex;align-items:center;gap:12px;padding:12px 0;cursor:pointer;user-select:none}
+  .sys:hover{background:rgba(0,0,0,.025)}
+  .scaret{flex:none;color:var(--ghost);font-size:.78rem;width:12px;text-align:center}
+  .sysdetail{display:none;padding:0 0 13px 21px}
+  .sysdetail.open{display:block}
+  .sysd-body{color:var(--muted);font-size:.86rem;line-height:1.5;margin-bottom:9px}
+  .sysd-body b{color:var(--text)}
+  .sysd-list{margin-top:6px;font-family:ui-monospace,Menlo,monospace;font-size:.79rem;color:var(--text);word-break:break-all}
+  .sgo{font-size:.82rem;padding:5px 13px;border-radius:6px}
   .sdot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ghost);
         box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
   .sdot.ok{background:var(--success)}
@@ -458,6 +467,41 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .side .navlabel{font:10.5px var(--chi);letter-spacing:.1em;text-transform:uppercase;
     color:#6E7671;padding:10px 11px 5px}
+  .navsearch{padding:2px 6px 6px;position:relative}
+  .navsearch input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--frame);
+    background:#FBFBFB;color:#111;font-size:13px;outline:none}
+  .navsearch input:focus{border-color:var(--memory)}
+  .navres{display:none;flex-direction:column;gap:1px;margin-top:5px;max-height:46vh;overflow-y:auto}
+  .navres.on{display:flex}
+  .navr{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;
+    padding:7px 9px;border-radius:6px;font-size:12.5px;background:transparent;border:0;cursor:pointer;color:#1a1a1a}
+  .navr:hover,.navr.navsel{background:rgba(0,0,0,.06)}
+  .navrp{font-size:9.5px;color:var(--ghost);text-transform:uppercase;letter-spacing:.06em;flex:none}
+  .navr.empty{color:var(--muted);cursor:default;font-size:11.5px}
+  html.midnight .navsearch input{background:#2A2C2E;color:#ECEDEE;border-color:#4A4D50}
+  html.midnight .navr{color:#DCE0E2}
+  /* first-open setup walkthrough */
+  .setupwrap{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
+    background:rgba(10,12,14,.55);backdrop-filter:blur(3px);padding:16px}
+  .setupwrap.on{display:flex}
+  .setupcard{width:min(93vw,440px);background:#fff;border:1px solid var(--frame);border-radius:16px;
+    padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .setupjuno{image-rendering:pixelated;margin:0 auto 6px;display:block}
+  .setuptitle{font-size:20px;color:var(--text);margin-bottom:4px}
+  .setupsub{color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:14px}
+  #setupsteps{display:flex;flex-direction:column;gap:8px;text-align:left}
+  .setupstep{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border-radius:11px;
+    border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--text)}
+  .setupstep:hover{border-color:var(--memory);background:rgba(0,0,0,.02)}
+  .setupnum{flex:none;width:24px;height:24px;border-radius:50%;background:var(--memory);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+  .setupbody{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .setupbody b{font-size:13.5px}
+  .setupbody span{font-size:11.8px;color:var(--muted);line-height:1.4}
+  .setupgo{flex:none;color:var(--memory);font-size:12px;font-weight:600}
+  .setupskip{margin-top:14px;font-size:12.5px}
+  html.midnight .setupcard{background:#26282A}
+  html.midnight .setupstep{color:#ECEDEE}
   .side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:0;
     color:#26292B;font:14px var(--chi);padding:7px 11px;border-radius:0;box-shadow:none;
     cursor:default;outline:none}
@@ -975,6 +1019,15 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   </main>
   </div>
 </div>
+<div id="setup" class="setupwrap" aria-hidden="true">
+  <div class="setupcard" role="dialog" aria-label="Set up DreamLayer">
+    <img class="setupjuno" src="/panel-assets/juno_da.webp" alt="Juno" width="56" height="56">
+    <div class="setuptitle">Welcome — I&rsquo;m Juno</div>
+    <div class="setupsub">Four quick steps and your Brain is ready. Do them now, or anytime from the sidebar search.</div>
+    <div id="setupsteps"></div>
+    <button class="setupskip ghost" onclick="setupClose()">I&rsquo;ll explore on my own</button>
+  </div>
+</div>
 
 <div class="xmodal" id="xmodal" onclick="if(event.target===this)closeX()">
   <div class="xcard">
@@ -1267,10 +1320,90 @@ const ICONS={
 function buildNav(){
   document.querySelectorAll("main>section").forEach(s=>{s.dataset.page=pageOf(s);});
   $("side").innerHTML='<div class="brand2"><img class="brandlogo" src="/panel-assets/app_icon.png" width="22" height="22" alt="">DreamLayer</div>'+
+    '<div class="navsearch"><input id="navq" type="search" autocomplete="off" placeholder="Search settings…" '+
+      'oninput="onNavSearch()" onkeydown="navKey(event)" aria-label="Search settings"><div id="navres" class="navres" role="listbox"></div></div>'+
     '<div class="navlabel">Brain</div>'+
     PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
   showPage(curPage);
 }
+/* Sidebar search: type what you want, jump straight to the setting. Fuzzy +
+   keyword/synonym matched on-device (no round-trip), results as you type. */
+const SEARCH_INDEX=[
+  {label:"Choose your AI model",page:"mind",kw:"model ollama llama local intelligence brain tier gpt mlx on-device"},
+  {label:"Wire the cloud provider",page:"mind",kw:"cloud openai anthropic claude gemini openrouter api key provider frontier"},
+  {label:"Folders it reads (memory index)",page:"mind",kw:"folders files index memory documents ask your stuff search sources rag"},
+  {label:"Ask your memory anything",page:"mind",kw:"ask question recall search stuff answer"},
+  {label:"Pair a phone",page:"reach",kw:"phone pair qr code connect device app scan"},
+  {label:"Live Lens — phone as glasses",page:"reach",kw:"live lens camera glasses browser no app hud pair qr"},
+  {label:"Incognito / private stretch",page:"reach",kw:"incognito private lan offline no cloud quiet"},
+  {label:"Connections & how far it reaches",page:"reach",kw:"cloud reach connections glasses network"},
+  {label:"Privacy controls & the veil",page:"privacy",kw:"privacy veil pause capture retention keep delete controls forget"},
+  {label:"Privacy receipt — verify it yourself",page:"privacy",kw:"receipt verify signed ledger proof tamper ed25519 audit activity"},
+  {label:"Plugins — browse & install",page:"plugins",kw:"plugins extensions lens store install package"},
+  {label:"Capabilities & packs (downloads)",page:"caps",kw:"capabilities packs download operator install extras powers optional voice vision"},
+  {label:"Learn how each feature works",page:"learn",kw:"learn how cards hud animation lenses features guide"},
+  {label:"Terminal / DreamShell",page:"terminal",kw:"terminal shell command dream cli console"},
+  {label:"Morning brief, agenda & reminders",page:"day",kw:"morning brief agenda calendar reminders schedule day tasks"},
+  {label:"People you meet",page:"day",kw:"people social names faces met contacts introductions"},
+  {label:"Report a bug / get help",page:"report",kw:"bug report problem issue feedback help broken crash support"},
+  {label:"Health, activity & schedule",page:"advanced",kw:"advanced health activity schedule maintenance logs ops status"},
+  {label:"Set up DreamLayer (walkthrough)",page:"setup",kw:"setup walkthrough tutorial guide onboarding start getting started first run"},
+];
+function _navScore(item,q){
+  const hay=(item.label+" "+item.kw).toLowerCase(), lab=item.label.toLowerCase();
+  const toks=q.toLowerCase().split(/\s+/).filter(Boolean); let sc=0;
+  for(const t of toks){
+    if(lab.includes(t))sc+=3; else if(hay.includes(t))sc+=2;
+    else{let i=0;for(const c of hay){if(c===t[i])i++;if(i>=t.length)break;}if(i>=t.length)sc+=0.5;}
+  }
+  return sc;
+}
+let _navSel=-1;
+function onNavSearch(){
+  const q=($("navq").value||"").trim(), res=$("navres"); _navSel=-1;
+  if(!q){res.innerHTML="";res.classList.remove("on");return;}
+  const hits=SEARCH_INDEX.map(x=>[_navScore(x,q),x]).filter(a=>a[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,7);
+  res.innerHTML=hits.length
+    ? hits.map(([,x],i)=>`<button class="navr" role="option" data-page="${x.page}" onclick="navGo('${x.page}')">${esc(x.label)}<span class="navrp">${esc(x.page==="report"?"help":x.page)}</span></button>`).join("")
+    : '<div class="navr empty">No match — try “model”, “pair”, “privacy”…</div>';
+  res.classList.add("on");
+}
+function navKey(e){
+  const res=$("navres"), items=res.querySelectorAll(".navr:not(.empty)");
+  if(e.key==="Escape"){$("navq").value="";onNavSearch();return;}
+  if(!items.length)return;
+  if(e.key==="ArrowDown"){e.preventDefault();_navSel=Math.min(items.length-1,_navSel+1);}
+  else if(e.key==="ArrowUp"){e.preventDefault();_navSel=Math.max(0,_navSel-1);}
+  else if(e.key==="Enter"){e.preventDefault();(items[_navSel]||items[0]).click();return;}
+  else return;
+  items.forEach((el,i)=>el.classList.toggle("navsel",i===_navSel));
+}
+function navGo(page){
+  $("navq").value="";$("navres").innerHTML="";$("navres").classList.remove("on");
+  if(page==="report"){gotoReport();return;}
+  if(page==="setup"){showSetup(true);return;}
+  showPage(page);
+}
+/* First-open walkthrough: Juno orients a new user and links straight into each
+   setup area. Shown once (localStorage), replayable from the sidebar search. */
+const SETUP_STEPS=[
+  {t:"Choose your intelligence",d:"On-device Ollama (free, private) — or wire a cloud tier for the hardest asks.",page:"mind"},
+  {t:"Point it at your files",d:"Add the folders DreamLayer may read, so “ask your stuff” knows your stuff.",page:"mind"},
+  {t:"Pair your phone",d:"Turn any phone into the glasses with the Live Lens — nothing to install.",page:"reach"},
+  {t:"Set your privacy",d:"Choose what’s kept, and meet the Veil — your one-tap “deaf and blind” switch.",page:"privacy"},
+];
+function renderSetupSteps(){
+  $("setupsteps").innerHTML=SETUP_STEPS.map((s,i)=>`<button class="setupstep" onclick="setupGo('${s.page}')">`+
+    `<span class="setupnum">${i+1}</span><span class="setupbody"><b>${esc(s.t)}</b><span>${esc(s.d)}</span></span>`+
+    `<span class="setupgo">Set up →</span></button>`).join("");
+}
+function showSetup(force){
+  if(!force){try{if(localStorage.getItem("dl_setup_seen"))return;}catch(e){return;}}
+  renderSetupSteps();$("setup").classList.add("on");$("setup").setAttribute("aria-hidden","false");
+}
+function _setupSeen(){try{localStorage.setItem("dl_setup_seen","1");}catch(e){}}
+function setupGo(page){_setupSeen();$("setup").classList.remove("on");$("setup").setAttribute("aria-hidden","true");showPage(page);}
+function setupClose(){_setupSeen();$("setup").classList.remove("on");$("setup").setAttribute("aria-hidden","true");}
 let _liveAutoLoaded=false;
 function showPage(id){curPage=id;
   document.querySelectorAll("main>section").forEach(s=>s.classList.toggle("pon",s.dataset.page===id));
@@ -1725,8 +1858,22 @@ async function syncRemNow(){$("remStatus").textContent="Syncing…";
   const r=await api("/dreamlayer/reminders/sync",{method:"POST",body:"{}"});
   toast(`Synced ${r.synced||0} reminder(s)`);loadReminders();loadHistory();}
 
-function sysRow(name,state,cls){return `<div class="sys"><span class="sdot ${cls}"></span>`+
-  `<span class="sname">${name}</span><span class="sstate">${state}</span></div>`;}
+// Each status row expands to show exactly what's connected to what, plus a
+// button to the setting that governs it. Open state lives in _sysOpen so the
+// 4-second refresh never collapses a row you opened.
+let _sysOpen=new Set();
+function sysRow(key,name,state,cls,detail,page,goLabel){
+  const open=_sysOpen.has(key);
+  const go=page?`<button class="sgo" onclick="event.stopPropagation();showPage('${page}')">${goLabel||"Open settings"} ↗</button>`:"";
+  return `<div class="sysitem"><div class="sys" role="button" tabindex="0" onclick="toggleSys('${key}')" `+
+    `onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleSys('${key}')}">`+
+    `<span class="sdot ${cls}"></span><span class="sname">${name}</span>`+
+    `<span class="sstate">${state}</span><span class="scaret">${open?'▾':'▸'}</span></div>`+
+    `<div class="sysdetail${open?' open':''}" id="sysd-${key}"><div class="sysd-body">${detail||''}</div>${go}</div></div>`;}
+function toggleSys(k){
+  const open=_sysOpen.has(k); open?_sysOpen.delete(k):_sysOpen.add(k);
+  const d=document.getElementById("sysd-"+k); if(d)d.classList.toggle("open",!open);
+  const hdr=d&&d.parentElement.querySelector(".sys .scaret"); if(hdr)hdr.textContent=open?'▸':'▾';}
 /* the live chip: pixel Juno wearing the same traffic-light dot as the
    menu bar / tray — one face for the connection story everywhere. The
    favicon takes the full-body TINT variant: at tab size a badge is a
@@ -1749,14 +1896,23 @@ async function refreshStatus(){
     : ["Keyword · active","ok"];
   const cloudTxt = s.cloud ? (s.cloud_ready?"<b>On · ready</b>":"<b>On · not configured</b>") : "Off";
   const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
+  const idxAgo=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
+  const missList=(s.missing&&s.missing.length)?`<div class="sysd-list">${s.missing.map(m=>esc(m)).join("<br>")}</div>`:"";
   $("sysrows").innerHTML=
-    sysRow("Brain","<b>Online</b>","ok")+
-    sysRow("Model",`<b>${model[0]}</b>`,model[1])+
-    sysRow("Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off")+
-    sysRow("Incognito",incogTxt,s.incognito?"warn":"off")+
-    sysRow("Phone",phone[0].replace(/^([^·]+)/,'<b>$1</b>'),phone[1])+
-    sysRow("Index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off")+
-    ((s.missing&&s.missing.length)?sysRow("⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn"):"");
+    sysRow("brain","Brain","<b>Online</b>","ok",
+      "Running on this Mac mini — it serves this panel, the Live Lens, and your glasses to devices on your LAN. Nothing leaves it unless you turn the cloud tier on.","advanced","Health & activity")+
+    sysRow("model","Model",`<b>${model[0]}</b>`,model[1],
+      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`:"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
+    sysRow("cloud","Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off",
+      (s.cloud?(s.cloud_ready?"A cloud provider is wired for the hardest, non-personal asks.":"Turned on but no provider/key is set yet."):"Off — everything runs on-device.")+" Your files, memory, and people never need the cloud.","mind","Wire the cloud tier")+
+    sysRow("incognito","Incognito",incogTxt,s.incognito?"warn":"off",
+      (s.incognito?(s.quiet?"On (quiet hours) — ":"On — ")+"stays on your LAN, forces the cloud off, and logs nothing.":"Off — normal operation. Flip it on for a private stretch.")+"","reach","Connections")+
+    sysRow("phone","Phone",phone[0].replace(/^([^·]+)/,'<b>$1</b>'),phone[1],
+      (s.phone_ago==null?"No phone paired yet. Pair one to use the Live Lens (the phone becomes the glasses) or the app.":`Paired${s.phone_ago<120?" and connected":""} — last seen ${s.phone_ago<120?s.phone_ago+"s":Math.floor(s.phone_ago/60)+"m"} ago.`),"reach","Pair a phone")+
+    sysRow("index","Memory index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off",
+      `Indexed ${idxAgo}${s.email_docs?` · ${s.email_docs} mail/chat docs`:""}. This is what "ask your stuff" searches — point it at more folders to grow it.`,"mind","Folders it reads")+
+    ((s.missing&&s.missing.length)?sysRow("folders","⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn",
+      `These folders were indexed before but can't be found now (moved, renamed, or an unplugged drive):${missList}Re-add or remove them so the index stays accurate.`,"mind","Fix folders"):"");
   $("egress").innerHTML=`The cloud has been used <b>${s.cloud_calls||0}</b> time${s.cloud_calls===1?'':'s'} since setup — every one is logged below.`;
   const idxa=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
   let info=`Indexed ${idxa}`;
@@ -2661,6 +2817,7 @@ load();
 loadPlugins();openStore();
 renderExplainers();
 buildNav();
+showSetup();
 setInterval(refreshStatus,4000);
 setInterval(()=>{if(modelSel==="ollama")checkModel();},15000);
 </script></body></html>"""
