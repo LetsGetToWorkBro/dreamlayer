@@ -28,6 +28,8 @@ WINDOW_MS = 200                      # per push window
 SILENCE_HANG_MS = 600                # trailing silence that ends a segment
 MAX_SEGMENT_MS = 12000               # hard cap so a monologue still endpoints
 MAX_CONSECUTIVE_READ_ERRORS = 20     # give up only after a run of read() faults
+AMBIENT_WINDOW_MS = 3000             # non-speech audio pooled before it's tagged
+AMBIENT_MAX_MS = 6000                # hard cap on the ambient buffer (drop-oldest)
 
 
 class CapturePipeline:
@@ -36,15 +38,21 @@ class CapturePipeline:
     no transcript — same graceful-degradation contract as every seam."""
 
     def __init__(self, orch, vad=None, asr=None, speaker=None, wake=None,
-                 speaker_resolver=None, tagger=None, enrolled_speakers=None,
+                 speaker_resolver=None, tagger=None, bird=None,
+                 enrolled_speakers=None,
                  sample_rate: int = SAMPLE_RATE,
                  silence_hang_ms: float = SILENCE_HANG_MS,
                  max_segment_ms: float = MAX_SEGMENT_MS,
+                 ambient_window_ms: float = AMBIENT_WINDOW_MS,
                  now_fn=None):
         self.orch = orch
         self.vad = vad
         self.asr = asr
         self.speaker = speaker           # ECAPASpeaker (embedding), optional
+        # bird/nature lens (BirdLens), optional: the non-speech path also gets a
+        # look through a species lens so a dawn chorus becomes a soft note, not
+        # noise. Fed the pooled ambient buffer, never a speech segment.
+        self.bird = bird
         # acoustic-context tagger (SherpaAudioTagger), optional: the top non-
         # speech events in a segment (doorbell/alarm/…) — the second brain
         # understands sound, not just words. Routed to the hub if it accepts it.
@@ -68,10 +76,12 @@ class CapturePipeline:
         self.sample_rate = sample_rate
         self.silence_hang_ms = silence_hang_ms
         self.max_segment_ms = max_segment_ms
+        self.ambient_window_ms = ambient_window_ms
         self._now = now_fn or time.monotonic
         self._seg: list = []             # accumulated speech samples
         self._seg_started = 0.0
         self._last_speech = 0.0
+        self._ambient: list = []         # pooled NON-speech samples (world sound)
         self._source = None
         self._stop: threading.Event | None = None
         self._thread: threading.Thread | None = None
@@ -125,10 +135,57 @@ class CapturePipeline:
                 return self._endpoint(now)
             return None
 
-        # silence: end the segment once the hang time has passed
+        # silence: pool it for the world-sound (non-speech) path, and end any
+        # pending speech segment once the hang time has passed.
+        self._accumulate_ambient(samples)
         if self._seg and (now - self._last_speech) * 1000.0 >= self.silence_hang_ms:
             return self._endpoint(now)
         return None
+
+    def _accumulate_ambient(self, samples) -> None:
+        """Pool non-speech PCM and, once ~`ambient_window_ms` has gathered, hand
+        the window to the world-sound path (tagger + bird lens). The buffer is
+        drop-oldest capped at AMBIENT_MAX_MS so a long quiet stretch can't grow
+        it without bound. No-op unless a tagger or bird lens is present."""
+        if self.tagger is None and self.bird is None:
+            return
+        try:
+            self._ambient.extend(samples)
+        except TypeError:
+            return
+        cap = int(self.sample_rate * AMBIENT_MAX_MS / 1000.0)
+        if len(self._ambient) > cap:
+            self._ambient = self._ambient[-cap:]
+        span_ms = len(self._ambient) * 1000.0 / max(1, self.sample_rate)
+        if span_ms >= self.ambient_window_ms:
+            buf, self._ambient = self._ambient, []
+            self._ambient_context(buf)
+
+    def _ambient_context(self, buf) -> None:
+        """One pooled window of world sound → the hub. The tagger names events
+        (birdsong/traffic/alarm/…) and the bird lens gets the raw buffer for a
+        species read. Both best-effort; a hub without the seams is a no-op."""
+        if self.tagger is not None:
+            try:
+                tags = self.tagger.tag(buf) or []
+            except Exception as exc:
+                self._record(exc)
+                tags = []
+            if tags:
+                self.last_acoustic = tags
+                note = getattr(self.orch, "note_acoustic_context", None)
+                if callable(note):
+                    try:
+                        note(tags)
+                    except Exception as exc:
+                        self._record(exc)
+        if self.bird is not None:
+            note_audio = getattr(self.orch, "note_ambient_audio", None)
+            if callable(note_audio):
+                try:
+                    note_audio(buf, self.sample_rate)
+                except Exception as exc:
+                    self._record(exc)
 
     def flush(self) -> str | None:
         """Force-endpoint any pending segment now (a source drained, or stop()).
@@ -176,8 +233,21 @@ class CapturePipeline:
                 if self._health() is not None:
                     self._health().record_failure("asr", exc)
         self._acoustic_context(segment)
+        self._speech_audio(segment)
         self._route(text, label)
         return text
+
+    def _speech_audio(self, segment) -> None:
+        """Hand the raw speech segment to the hub's live-interpreter seam (if it
+        wants it) so a foreign-language utterance can be voiced back in the
+        listener's tongue. Best-effort; a hub without `note_speech_audio` is a
+        no-op. The transcript already routed separately via `_route`."""
+        note = getattr(self.orch, "note_speech_audio", None)
+        if callable(note):
+            try:
+                note(segment, self.sample_rate)
+            except Exception as exc:
+                self._record(exc)
 
     def _acoustic_context(self, segment) -> None:
         """Tag the segment's non-speech sound (doorbell/alarm/…) and hand it to

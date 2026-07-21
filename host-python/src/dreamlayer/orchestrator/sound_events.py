@@ -252,6 +252,12 @@ class SoundEventDetector:
         attention Alert (which carries its own Veil/Focus gating + cooldown)."""
         return attention_for(self.detect(audio, sample_rate))
 
+    def tag(self, audio, sample_rate: int = _SR) -> List[Tuple[str, float]]:
+        """Alias so this drops straight into CapturePipeline's `tagger` seam
+        (which calls `tagger.tag(segment)` and routes the tags to the hub's
+        `note_acoustic_context`). Same shape as SherpaAudioTagger.tag."""
+        return self.detect(audio, sample_rate)
+
 
 def _to_mono(audio, sample_rate: int, target_sr: int):
     """float32 mono at target_sr in [-1,1], or None. Linear resample (no extra
