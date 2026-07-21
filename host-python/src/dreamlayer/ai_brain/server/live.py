@@ -2128,13 +2128,18 @@ function drawBox(ctx, x, y, w, h, name, score){
    repeatedly while the hand is held. Failure to load is a silent no-op: gestures
    are a bonus, the tap grammar is always there. */
 let gesturer = null, gRaf = null, gLastRun = 0, gFails = 0;
-let gLastFired = "", gLastFireTs = 0, gStable = "", gStableCount = 0;
+let gLastFired = "", gStable = "", gStableCount = 0;
 const GESTURE_MS = 120;                /* ~8 fps — lighter than the detector loop */
 const GESTURE_MAX_FAILS = 12;
-const GESTURE_COOLDOWN = 1400;         /* debounce a rapid A->B->A flicker */
+const GESTURE_STABLE = 2;              /* frames a shape must hold before it fires */
+const GESTURE_RELEASE = 4;            /* frames the hand must LEAVE before it re-arms */
 const GESTURE_MIN_SCORE = 0.6;
 const GESTURE_ACTIONS = {
-  Pointing_Up: () => lookNow(false),
+  /* point-up asks the Brain "what's this?" — but a look POSTs the camera frame,
+     and dream mode's contract is "nothing egresses", so never look while
+     dreaming (lookNow itself has no dream guard — the tap/key paths gate it
+     externally, so the gesture path must too) */
+  Pointing_Up: () => { if (!dreamOn) lookNow(false); },
   Open_Palm:   () => { glassClear(); hideDetectorHud(); },
   Victory:     () => toggleDream()
 };
@@ -2171,22 +2176,27 @@ function gestureTick(ts){
     return;
   }
   const g = ((res && res.gestures && res.gestures[0]) || [])[0];
-  const name = (g && g.categoryName) || "None";
+  let name = (g && g.categoryName) || "None";
   const score = (g && g.score) || 0;
-  /* require the SAME gesture on two consecutive reads before acting — a hand
-     mid-transition flickers through shapes and shouldn't fire on the flicker */
-  if (name === gStable) gStableCount++; else { gStable = name; gStableCount = 1; }
-  if (gStableCount < 2) return;
-  fireGesture(name, score, ts);
-}
-function fireGesture(name, score, ts){
-  if (name === "None" || score < GESTURE_MIN_SCORE) { gLastFired = ""; return; }
-  const act = GESTURE_ACTIONS[name];
-  if (!act) { gLastFired = name; return; }     /* an unmapped shape still consumes the slot */
-  if (name === gLastFired) return;             /* already fired for this hold — wait till it leaves */
-  if (ts - gLastFireTs < GESTURE_COOLDOWN) return;
-  gLastFired = name; gLastFireTs = ts;
-  showHud("gesture: " + name.replace("_", " ").toLowerCase(), {ms:900});
+  /* a below-threshold read is "no clear gesture" — treat it as None for
+     latching so a confidence dip on a HELD hand can't look like a new shape */
+  if (name !== "None" && score < GESTURE_MIN_SCORE) name = "None";
+  /* debounce on the STABLE shape, not the per-frame read: a shape must hold for
+     GESTURE_STABLE frames to fire, and the hand must LEAVE (read None) for
+     GESTURE_RELEASE frames before the same shape can fire again. So one hold =
+     one action — a mid-hold score dip or a 1-frame dropout never re-fires. */
+  if (name === gStable) { if (gStableCount < 64) gStableCount++; }
+  else { gStable = name; gStableCount = 1; }
+  if (gStable === "None") {
+    if (gStableCount >= GESTURE_RELEASE) gLastFired = "";   /* hand truly gone → re-arm */
+    return;
+  }
+  if (gStableCount < GESTURE_STABLE) return;   /* not held long enough yet */
+  if (gStable === gLastFired) return;          /* already fired for this hold */
+  gLastFired = gStable;                         /* consume the slot (mapped or not) */
+  const act = GESTURE_ACTIONS[gStable];
+  if (!act) return;
+  showHud("gesture: " + gStable.replace("_", " ").toLowerCase(), {ms:900});
   try { act(); } catch (_) {}
 }
 

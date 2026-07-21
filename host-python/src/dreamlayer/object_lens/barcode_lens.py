@@ -33,8 +33,10 @@ class BarcodeFoodProvider(PanelProvider):
                  allow_network: Optional[Callable[[], bool]] = None):
         self.profile = profile or DietaryProfile()
         self._lookup = lookup_fn
-        # default: allow unless a gate says otherwise (tests wire a real gate)
-        self._allow = allow_network or (lambda: True)
+        # fail CLOSED by default: no gate wired → no egress. A caller that wants
+        # the permissive posture must pass one explicitly (matches the project's
+        # NullGate/requires_capture convention; audit 2026-07-21).
+        self._allow = allow_network or (lambda: False)
 
     def matches(self, sighting) -> bool:
         return bool((sighting.attributes or {}).get("barcode"))

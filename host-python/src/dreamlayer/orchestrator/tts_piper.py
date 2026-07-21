@@ -157,20 +157,39 @@ def make_speak_fn(voice_model: Optional[str] = None,
                   dirs: tuple[Path, ...] = ()) -> Callable[[str], None]:
     """A ready-to-wire `speak(text)` callable (mirrors rosetta's make_translate_fn).
 
-    Synthesizes and plays on a daemon thread so a reply never blocks on audio.
-    When piper or a voice model is missing, the returned callable is a no-op —
-    so `orchestrator._juno_say` can call it unconditionally."""
+    speak(text) only ENQUEUES — it never blocks the caller and never spawns a
+    thread per reply. A single daemon worker synthesizes AND plays one utterance
+    at a time, so the neural inference is off the reply thread (a slow synth
+    can't stall ask_juno) and two replies can't fight over sounddevice's one
+    output stream. Under a burst the bounded queue drops the newest rather than
+    pile up. When piper or a voice model is missing, the returned callable is a
+    silent no-op so `orchestrator._juno_say` can call it unconditionally."""
     tts = PiperTTS(voice_model, dirs)
     if not tts.ready:
         noop: Callable[[str], None] = lambda _text: None
         noop.ready = False        # type: ignore[attr-defined]
         return noop
 
+    import queue as _queue
+    q: "_queue.Queue[str]" = _queue.Queue(maxsize=8)
+
+    def _worker() -> None:
+        while True:
+            text = q.get()
+            try:
+                wav = tts.synthesize(text)
+                if wav:
+                    tts.play(wav)               # blocking, but on THIS worker only
+            except Exception as exc:             # noqa: BLE001 — the worker never dies
+                log.error("[tts] speak failed: %s", exc)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
     def speak(text: str) -> None:
-        wav = tts.synthesize(text)
-        if not wav:
-            return
-        threading.Thread(target=tts.play, args=(wav,), daemon=True).start()
+        try:
+            q.put_nowait(text)                   # non-blocking; never stalls the reply
+        except _queue.Full:
+            pass                                 # a backlog of speech → drop, don't pile up
 
     speak.ready = True            # type: ignore[attr-defined]
     return speak

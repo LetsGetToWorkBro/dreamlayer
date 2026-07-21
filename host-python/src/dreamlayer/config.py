@@ -43,7 +43,8 @@ class Config:
     # with audio. Flip it on (panel toggle or `DL_JUNO_VOICE=1`) once a model
     # is in place; absent piper/model, it stays a silent no-op regardless.
     juno_voice:                 bool  = field(
-        default_factory=lambda: os.environ.get("DL_JUNO_VOICE", "") not in ("", "0", "false", "no"))
+        default_factory=lambda: os.environ.get("DL_JUNO_VOICE", "").strip().lower()
+        in ("1", "true", "yes", "on"))
 
     # LLM tier-3 extraction
     llm_model:                  str   = "gpt-4o-mini"

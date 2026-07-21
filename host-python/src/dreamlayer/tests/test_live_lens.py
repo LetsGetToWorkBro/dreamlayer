@@ -450,11 +450,14 @@ class TestDetectorAssets:
         # navigation, not recognition: mapped shapes call existing HUD actions
         for shape in ("Pointing_Up", "Open_Palm", "Victory"):
             assert shape in page
-        assert "lookNow(false)" in page and "toggleDream()" in page
-        # gated like the detector (veil / hidden / camReady) and debounced so a
-        # held hand fires once, not every frame
+        assert "toggleDream()" in page
+        # the look gesture (which POSTs a frame) is guarded so it never fires in
+        # dream mode — whose contract is "nothing egresses" (audit fix)
+        assert "if (!dreamOn) lookNow(false)" in page
+        # gated like the detector (veil / hidden / camReady) and debounced on the
+        # STABLE shape so a held hand fires once and a score dip can't re-fire
         assert "veil || document.hidden || !camReady()" in page
-        assert "GESTURE_COOLDOWN" in page
+        assert "GESTURE_STABLE" in page and "GESTURE_RELEASE" in page
 
     def test_vendored_assets_match_their_pinned_hashes(self):
         # Enforce the PROVENANCE.md sha256 pins: a swapped or corrupted detector

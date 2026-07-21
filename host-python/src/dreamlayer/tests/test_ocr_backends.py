@@ -53,6 +53,16 @@ class TestPrivacyScrub:
     def test_contact_detail_lines_are_dropped(self):
         assert O._keep_line("maya@example.com") is False
         assert O._keep_line("call 555-123-4567") is False
+        assert O._keep_line("(555) 123-4567") is False
+        assert O._keep_line("+1 555 123 4567") is False
+
+    def test_isbns_and_prices_are_kept_not_scrubbed_as_phones(self):
+        # the old \d{7,15} phone rule swallowed every ISBN — a headline OCR
+        # target; a bare digit run must now survive (audit fix)
+        assert O._keep_line("9780306406157") is True     # ISBN-13
+        assert O._keep_line("0306406152") is True        # ISBN-10
+        assert O._keep_line("978-0-306-40615-7") is True # hyphenated ISBN
+        assert O._keep_line("$4.95") is True
 
     def test_ordinary_world_text_is_kept(self):
         assert O._keep_line("Chardonnay 2019 $12") is True
@@ -80,13 +90,39 @@ class TestRecognizerEnrichment:
     def test_ocr_is_ground_truth_over_a_vlm_guess(self):
         rec = ObjectRecognizer(
             classify_fn=lambda f: ("menu", 0.9, {"text": "blurry guess"}),
-            ocr_fn=lambda f: "Prix Fixe 35")
+            ocr_fn=lambda f: "Latte 4.50")
         s = rec.recognize(self._frame())
-        assert s.attributes["text"] == "Prix Fixe 35"
+        assert s.attributes["text"] == "Latte 4.50"
 
     def test_no_ocr_leaves_the_look_untouched(self):
         rec = ObjectRecognizer(classify_fn=lambda f: ("mug", 0.9, {}),
                                ocr_fn=lambda f: "")
+        s = rec.recognize(self._frame())
+        assert "text" not in s.attributes
+
+    def test_a_name_reassembled_across_lines_is_dropped_at_the_boundary(self):
+        # a badge renders "Maya" and "Chen" as separate regions; each passes the
+        # per-line shape rule, but the recognizer re-gates the JOINED text so the
+        # reassembled name never reaches attributes["text"] (audit fix)
+        rec = ObjectRecognizer(classify_fn=lambda f: ("lanyard", 0.9, {}),
+                               ocr_fn=lambda f: "Maya Chen")
+        s = rec.recognize(self._frame())
+        assert "text" not in s.attributes
+
+    def test_a_raising_ocr_guard_drops_the_text(self, monkeypatch):
+        # the boundary gate fails CLOSED: if person_guard raises on the OCR text,
+        # drop it. (Raise only for the OCR string so the earlier label check —
+        # which calls the same guard — is unaffected.)
+        import dreamlayer.object_lens.person_guard as pg
+        orig = pg.defers_person
+
+        def flaky(label, frame=None):
+            if label == "anything at all":
+                raise RuntimeError("boom")
+            return orig(label, frame)
+        monkeypatch.setattr(pg, "defers_person", flaky)
+        rec = ObjectRecognizer(classify_fn=lambda f: ("sign", 0.9, {}),
+                               ocr_fn=lambda f: "anything at all")
         s = rec.recognize(self._frame())
         assert "text" not in s.attributes
 

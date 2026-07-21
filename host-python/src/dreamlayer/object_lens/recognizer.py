@@ -208,15 +208,19 @@ class ObjectRecognizer:
             return attrs
         try:
             hits = decode(frame) or []
+            from .barcode_backends import is_gtin
+            # tolerate any (sym, value) or bare-value shape a decoder returns —
+            # unpacking a malformed row must not break the look (the unpack has
+            # to sit INSIDE the guard; audit 2026-07-21)
+            values = [row[-1] if isinstance(row, (tuple, list)) else row
+                      for row in hits]
+            values = [str(v) for v in values if v]
+            # a numeric GTIN (a food/product code) is what the lookup wants; fall
+            # back to the first decoded value (e.g. a QR) so the attribute is honest
+            code = next((v for v in values if is_gtin(v)),
+                        values[0] if values else "")
         except Exception:                              # noqa: BLE001 — never breaks a look
             return attrs
-        if not hits:
-            return attrs
-        from .barcode_backends import is_gtin
-        values = [v for _sym, v in hits if v]
-        # a numeric GTIN (a food/product code) is what the lookup wants; fall
-        # back to the first decoded value (e.g. a QR) so the attribute is honest
-        code = next((v for v in values if is_gtin(v)), values[0] if values else "")
         if not code:
             return attrs
         attrs = dict(attrs or {})
@@ -238,6 +242,19 @@ class ObjectRecognizer:
         except Exception:                              # noqa: BLE001 — OCR never breaks a look
             return attrs
         if not text:
+            return attrs
+        # Boundary re-gate on the ASSEMBLED text — the reader filters line by
+        # line, but a name badge renders "Maya" and "Chen" as SEPARATE regions
+        # that each pass the per-line shape rule and only read as a person once
+        # joined. Running person_guard on the whole string catches the reassembled
+        # name (and defends any non-default ocr_fn), and it fails CLOSED: an
+        # error here drops the text rather than surfacing a possible name
+        # (audit 2026-07-21).
+        try:
+            from . import person_guard
+            if person_guard.defers_person(text):
+                return attrs
+        except Exception:                              # noqa: BLE001 — can't confirm safe → drop
             return attrs
         attrs = dict(attrs or {})
         attrs["text"] = text                           # OCR is ground truth over a guess

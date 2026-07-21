@@ -71,6 +71,28 @@ class TestOffBarcodeLookup:
         assert fn("01 2345 678 9012")["nutriscore"] == "B"   # same digits → cached
         assert len(calls) == 1
 
+    def test_string_or_int_status_both_count_as_found(self):
+        for st in ("1", 1):
+            out = OFF.lookup_by_barcode(
+                "0123456789012",
+                lambda u, s=st: '{"status": %s, "product": {"nutriscore_grade":"a"}}'
+                % ('"1"' if s == "1" else "1"))
+            assert out.get("nutriscore") == "A"
+
+    def test_cache_is_bounded(self):
+        # a stream of DISTINCT barcodes can't grow the cache without limit — the
+        # oldest is evicted, proven by the first key needing a re-fetch
+        calls = []
+        fn = OFF.off_barcode_fn(lambda u: calls.append(u) or '{"status":0}',
+                                ttl=9e9, now_fn=lambda: 0.0, maxsize=8)
+        first = "1000000000000"
+        fn(first)                                    # cached
+        for i in range(1, 20):                       # 19 more distinct → evicts oldest
+            fn(f"{1000000000000 + i}")
+        n = len(calls)
+        fn(first)                                    # evicted → must re-fetch
+        assert len(calls) == n + 1
+
 
 class TestRecognizerAttachesBarcode:
     def _frame(self):
@@ -148,6 +170,15 @@ class TestBarcodeFoodProvider:
     def test_empty_product_emits_nothing(self):
         rows = self._provider(DietaryProfile(), {}).build(self._sighting())
         assert rows == []
+
+    def test_default_gate_fails_closed(self):
+        # a provider built with NO allow_network gate must NOT egress (fail
+        # closed — a forgotten gate can't leak; audit fix)
+        calls = []
+        p = BarcodeFoodProvider(DietaryProfile(avoid={"dairy"}),
+                                lookup_fn=lambda c: calls.append(c) or {"allergens": ["milk"]})
+        assert p.build(self._sighting()) == []
+        assert calls == []
 
 
 def test_barcode_scan_capability_registered():

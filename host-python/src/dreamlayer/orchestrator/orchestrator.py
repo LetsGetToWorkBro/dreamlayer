@@ -505,8 +505,10 @@ class Orchestrator(
         # DietaryProfile never leaves the device.
         from ..object_lens.barcode_lens import BarcodeFoodProvider
         from ..plugins.openfoodfacts import _default_fetch, off_barcode_fn
+        # snappy fetch (no retries, 2s) so a slow OFF can't starve the glance pool
+        _off = off_barcode_fn(lambda u: _default_fetch(u, retries=0, timeout=2.0))
         self.object_lens.registry.register(BarcodeFoodProvider(
-            self.dietary, lookup_fn=off_barcode_fn(_default_fetch),
+            self.dietary, lookup_fn=_off,
             allow_network=self.privacy.allow_capture))
         # Waypath: point-me-to-my-things from anchors
         self.waypath = WaypathLens()

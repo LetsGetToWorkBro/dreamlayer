@@ -107,6 +107,29 @@ class TestJunoSaySeam:
 
 # --- capability registration --------------------------------------------------
 
+class TestVoiceConfigParsing:
+    """DL_JUNO_VOICE must read like a boolean flag: only affirmative spellings
+    turn it on. The old `not in ("","0","false","no")` flipped ON for `off`,
+    `False`, `No`, ` 0`… — the opposite of what an operator silencing a room
+    would expect (audit fix)."""
+
+    def _flag(self, monkeypatch, val):
+        from dreamlayer.config import Config
+        if val is None:
+            monkeypatch.delenv("DL_JUNO_VOICE", raising=False)
+        else:
+            monkeypatch.setenv("DL_JUNO_VOICE", val)
+        return Config().juno_voice
+
+    def test_unset_and_negative_spellings_are_off(self, monkeypatch):
+        for v in (None, "", "0", "false", "no", "off", "OFF", "False", "No", " 0 "):
+            assert self._flag(monkeypatch, v) is False, f"{v!r} should be OFF"
+
+    def test_affirmative_spellings_are_on(self, monkeypatch):
+        for v in ("1", "true", "TRUE", "yes", "on", " on "):
+            assert self._flag(monkeypatch, v) is True, f"{v!r} should be ON"
+
+
 def test_local_tts_capability_registered():
     from dreamlayer import capabilities as C
     cap = next((c for c in C.CAPABILITIES if c.key == "local_tts"), None)

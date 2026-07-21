@@ -8,10 +8,15 @@ treat as "no text". Real inference — the ONNX models load on first call.
 
 Privacy is baked in, not bolted on: every OCR line passes through
 `person_guard` (a name badge / lanyard / ID is dropped) AND a contact-detail
-scrub (an email or phone number is dropped) BEFORE the text is ever returned.
-OCR is the first thing in the system that reads free text off the world, so it
-is the one place that guarantee has to live — a stranger's name read off a
-badge must never reach a panel, a translation, or a memory.
+scrub (an email or phone number is dropped) BEFORE the text is ever returned,
+and the recognizer re-gates the ASSEMBLED text so a name split across two lines
+can't sneak through reassembled. OCR is the first thing in the system that reads
+free text off the world, so it is the one place that guarantee has to live — a
+stranger's name read off a badge must never reach a panel, a translation, or a
+memory. The deterministic name-shape layer catches multi-token names (a full
+name, however it wraps); a LONE given name is the documented case that needs the
+Presidio NER layer from the privacy pack — the same layering `person_guard`
+applies everywhere.
 """
 from __future__ import annotations
 
@@ -30,11 +35,20 @@ def _has(name: str) -> bool:
         return False
 
 
-# An email, or a phone-number-like run of 7-15 digits — the same contact-detail
-# PII that vision_recognizer._clean_attrs strips from a VLM's "text" field, held
-# here so an OCR read of a business card is scrubbed identically (a raw digit run
-# of an ISBN length is kept; only phone-shaped separators trip it).
-_PII_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w{2,}|(?:\+?\d[\s().-]?){7,15}")
+# An email, or a SEPARATOR-BEARING phone number — the same contact-detail PII
+# that vision_recognizer._clean_attrs strips from a VLM's "text" field, held here
+# so an OCR read of a business card is scrubbed identically. The phone branch
+# requires grouping punctuation (spaces / dots / dashes / parens / a + country
+# code), so a BARE digit run — an ISBN, a price, a SKU, all headline OCR targets —
+# is kept (the old `\d{7,15}` swallowed every ISBN; audit 2026-07-21).
+_PII_RE = re.compile(
+    r"[\w.+-]+@[\w-]+\.\w{2,}"                                # email
+    # a phone is 2+ digit groups joined by separators, then a final group
+    # ("555-123-4567", "(555) 123-4567", "+1 555 123 4567"). Requiring TWO
+    # separated groups keeps a hyphenated ISBN ("978-0-306-40615-7", whose lone
+    # digit and 5-digit run break the group chain) from matching a phone.
+    r"|(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]){2,4}\d{2,4}"
+)
 
 
 def _to_ocr_image(frame):
@@ -79,8 +93,8 @@ def _keep_line(line: str) -> bool:
         from . import person_guard
         if person_guard.defers_person(line):
             return False
-    except Exception:                                  # noqa: BLE001 — fail toward the guard's own no-op
-        pass
+    except Exception:                                  # noqa: BLE001
+        return False                                   # can't confirm safe → drop the line
     return True
 
 

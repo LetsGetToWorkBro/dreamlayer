@@ -62,7 +62,9 @@ def lookup_by_barcode(code: str, fetch_fn: Callable[[str], object]) -> dict:
     try:
         raw = fetch_fn(build_barcode_query(digits))
         data = cast(dict, json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {}))
-        if int(data.get("status", 0)) != 1:           # OFF: 1 = found, 0 = unknown
+        # OFF: status 1 = found, 0 = unknown. Compare as a string so a reply
+        # that sends "1"/"success" (or an int) never raises out of int()
+        if str(data.get("status", "")).strip() not in ("1", "success"):
             return {}
         product = data.get("product") or {}
         out = parse_product(product)
@@ -78,13 +80,18 @@ def lookup_by_barcode(code: str, fetch_fn: Callable[[str], object]) -> dict:
 
 
 def off_barcode_fn(fetch_fn: Callable[[str], object], ttl: float = 600.0,
-                   now_fn: Optional[Callable[[], float]] = None) -> Callable[[str], dict]:
+                   now_fn: Optional[Callable[[], float]] = None,
+                   maxsize: int = 256) -> Callable[[str], dict]:
     """A cached `lookup(barcode) -> product dict` bound to a fetch function.
     Keyed on the sanitized digits (an exact, ideal cache key), caching even a
-    miss so a repeated glance at the same item doesn't re-hit the API."""
+    miss so a repeated glance at the same item doesn't re-hit the API. The cache
+    is BOUNDED (oldest-inserted evicted past `maxsize`) so a stream of distinct
+    barcodes — a QR that encodes varying numbers, damaged EANs — can't grow it
+    without limit (audit 2026-07-21)."""
     import time
+    from collections import OrderedDict
     now = now_fn or time.time
-    cache: dict = {}
+    cache: "OrderedDict[str, tuple]" = OrderedDict()
 
     def lookup_fn(code: str) -> dict:
         key = _BARCODE_RE.sub("", code or "")
@@ -93,6 +100,9 @@ def off_barcode_fn(fetch_fn: Callable[[str], object], ttl: float = 600.0,
             return hit[1]
         result = lookup_by_barcode(key, fetch_fn)
         cache[key] = (now(), result)
+        cache.move_to_end(key)
+        while len(cache) > max(1, maxsize):
+            cache.popitem(last=False)              # evict the oldest
         return result
 
     return lookup_fn
@@ -151,10 +161,15 @@ def off_shop_fn(fetch_fn: Callable[[str], object], ttl: float = 300.0,
     return shop
 
 
-def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
+def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5,
+                   timeout: float = 4.0) -> str:
     """The shipped network fetch: urllib with a couple of retries on transient
     failures (5xx / connection errors), since Open Food Facts 503s under load.
-    A descriptive User-Agent is what OFF asks of API clients.
+    A descriptive User-Agent is what OFF asks of API clients. `retries`/`timeout`
+    are tunable so a latency-sensitive caller (the barcode lens, which runs
+    inside a ~1.5s glance deadline on a shared thread pool) can bound its worst
+    case instead of the default 13.5s retry budget starving the pool (audit
+    2026-07-21).
 
     Hardened egress (audit 2026-07-17) via the shared :mod:`plugins._egress`
     primitives: the read is size-capped (response-OOM) and 3xx redirects are
@@ -169,7 +184,7 @@ def _default_fetch(url: str, retries: int = 2, backoff: float = 0.5) -> str:
     last: Exception = RuntimeError("no attempt")
     for attempt in range(max(1, retries + 1)):
         try:
-            with opener.open(req, timeout=4) as r:   # network capability, no redirects
+            with opener.open(req, timeout=timeout) as r:  # network cap, no redirects
                 return read_capped(r).decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             last = e
