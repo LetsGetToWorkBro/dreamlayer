@@ -134,6 +134,12 @@ class WorldLensOps(OpsHost):
             return self.look_at_object(frame, facet="ai")
         if action == "taste":
             return self.taste(frame)
+        if action == "read_math":
+            return self.read_math(frame)
+        if action == "read_doc":
+            return self.read_document(frame)
+        if action == "depth":
+            return self.sense_depth(frame)
         return self.look_at_object(frame)     # juno / default
 
 
@@ -521,3 +527,134 @@ class WorldLensOps(OpsHost):
             self.bridge.send_card(result.card, event="deviation_alert")
             return result.card
         return None
+
+
+    # ==================================================================
+    # W4 — the frontier lenses: reachable triggers for engines the N-waves
+    # shipped but never wired (math/doc/depth, the sky, weather, aircraft,
+    # dream stylization). Each lazily builds its engine ONCE, is veil-gated
+    # at the door, and no-ops cleanly with no wheel / no data / no network.
+    # ==================================================================
+
+    def _frontier_lens(self, key: str, factory):
+        """Build a frontier-lens engine once and cache it (None on any failure,
+        so a missing wheel is a permanent clean no-op, not a rebuild per call)."""
+        if key not in self._frontier:
+            try:
+                self._frontier[key] = factory()
+            except Exception:                    # noqa: BLE001 — never fail wiring
+                self._frontier[key] = None
+        return self._frontier[key]
+
+    def read_math(self, frame, now: float | None = None) -> str:
+        """LaTeX-OCR: read the equation in view and put its LaTeX on the glass.
+        "" when the wheel is absent or nothing reads. Veil-gated (a camera frame)."""
+        if not self.privacy.allow_capture():
+            return ""
+        from ..object_lens.vision_extras import MathOcrReader
+        reader = self._frontier_lens("math", MathOcrReader)
+        if reader is None or not getattr(reader, "ready", False):
+            return ""
+        latex = (reader.read_math(frame) or "").strip()
+        if latex:
+            self._juno_say(latex, "answer", event="math")
+        return latex
+
+    def read_document(self, frame, now: float | None = None) -> dict:
+        """Document layout (Surya): read a form/receipt/page into text + blocks in
+        reading order. {} when unavailable. Veil-gated."""
+        if not self.privacy.allow_capture():
+            return {}
+        from ..object_lens.vision_extras import DocReader
+        reader = self._frontier_lens("doc", DocReader)
+        if reader is None or not getattr(reader, "ready", False):
+            return {}
+        doc = reader.read_doc(frame) or {}
+        text = str(doc.get("text", "")).strip()
+        if text:
+            self._juno_say(text[:160], "answer", event="doc")
+        return doc
+
+    def sense_depth(self, frame, now: float | None = None,
+                    near: float = 0.85) -> float | None:
+        """Monocular depth: a 0..1 closeness of the nearest thing centre-of-view
+        (relative, honest — a proximity cue, not metres). When something is very
+        close it taps you ("Something close ahead"). None when unavailable."""
+        if not self.privacy.allow_capture():
+            return None
+        from ..object_lens.vision_extras import DepthReader
+        reader = self._frontier_lens("depth", DepthReader)
+        if reader is None or not getattr(reader, "ready", False):
+            return None
+        prox = reader.nearest_relative(frame)
+        if prox is not None and prox >= near:
+            self.harken(_Alert("watchout", "Something close ahead",
+                               "straight in front", "depth:near"))
+        return prox
+
+    def look_up(self, lat: float, lon: float,
+                when_ts: float | None = None) -> dict:
+        """The "look up" lens (Skyfield): name the planets and any ISS pass over
+        your place and time, and whisper it. {} when the ephemeris isn't present.
+        Fully offline — no coordinates leave the device. Veil-gated."""
+        if not self.privacy.allow_capture():
+            return {}
+        from ..object_lens.sky_lens import default_sky_lens, say_sky
+        lens = self._frontier_lens("sky", default_sky_lens)
+        if lens is None:
+            return {}
+        sky = lens.night_sky(lat, lon, when_ts) or {}
+        line = say_sky(sky)
+        if line:
+            self._juno_say(line, "answer", event="sky")
+        return sky
+
+    def weather(self, lat: float, lon: float, fetch_fn=None) -> dict | None:
+        """Ground the sky in the real forecast (Open-Meteo). EGRESS: rounded
+        coordinates out, a forecast back — so it is veil-gated and only fires when
+        capture is allowed. None when it can't reach or the veil is down."""
+        if not self.privacy.allow_capture():
+            return None
+        from ..plugins.open_meteo import current_weather, say_weather
+        w = current_weather(lat, lon, fetch_fn=fetch_fn)
+        line = say_weather(w)
+        if line:
+            self._juno_say(line, "answer", event="weather")
+        return w
+
+    def skywatch(self, lat: float, lon: float, fetch_fn=None) -> dict | None:
+        """Name the plane overhead (adsb.lol). EGRESS like weather() — rounded
+        position out, nearby aircraft back — so veil-gated. None when nothing is
+        overhead, the veil is down, or the network is unreachable."""
+        if not self.privacy.allow_capture():
+            return None
+        from ..plugins.skywatch_adsb import overhead, say_plane
+        p = overhead(lat, lon, fetch_fn=fetch_fn)
+        line = say_plane(p)
+        if line:
+            self._juno_say(line, "answer", event="skywatch")
+        return p
+
+    def dream_frame(self, frame):
+        """Dream Mode's brush: run a camera frame through the stylizer (the neural
+        painter when a model is present, else the always-on painterly wash). Used
+        by Dream Mode to see the world as a painting; returns the stylized frame
+        (or the input unchanged if even the fallback can't run). Veil-gated."""
+        if not self.privacy.allow_capture():
+            return frame
+        from ..dream_mode.dream_style import default_stylizer
+        stylizer = self._frontier_lens("dream_style", default_stylizer)
+        if stylizer is None:
+            return frame
+        try:
+            out = stylizer.stylize(frame)
+            return out if out is not None else frame
+        except Exception:                        # noqa: BLE001
+            return frame
+
+
+def _Alert(level, clue, detail, key):
+    """A local Alert factory so the depth lens can hand harken() the same shape
+    the sound/bird lenses do, without importing attention at module load."""
+    from .attention import Alert
+    return Alert(level, clue, detail, key)

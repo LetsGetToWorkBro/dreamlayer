@@ -135,6 +135,12 @@ class SocialOps(BrainHost):
                         "ts": time.time(), "source": "manual"})
             self._save_json("people.json", cur)
             self.activity.add("people", f"Introduced {name}")
+        # W6: start rehearsing the name — the moment right after you meet someone
+        # is exactly when it slips. Best-effort; never fails the introduction.
+        try:
+            self.rehearse_person(name, note or "")
+        except Exception:                          # noqa: BLE001
+            pass
         return self.people()
 
     def remove_person(self, name: str) -> list:

@@ -160,6 +160,20 @@ class OpsHost:
         _speaker_flags: dict
         _recent_glance_intent: tuple[str, float]
 
+        # -- W1/W2 the always-on ear + W7 the off-grid mesh. Read across
+        #    mixins; the values are built in Orchestrator._init_juno_attention
+        #    (and set_voice wires _juno_speak). Declared once here so a
+        #    standalone mixin type-checks. --
+        _alert_marks: dict
+        _bird_lens: Any
+        _bird_built: bool
+        _interpret_on: bool
+        _interpret_target: str
+        _capture: Any
+        _juno_speak: Any
+        _mesh: Any
+        _frontier: dict          # W4 lazy frontier-lens engine cache
+
         # -- Internal shared state: initialised to None/0.0 in
         #    Orchestrator.__init__ and given a real value by a mixin method.
         #    Declared here (once) as the Optional it truly is, so neither side
@@ -200,3 +214,11 @@ class OpsHost:
         def publish_people(self, http_post: Any = None) -> dict | None: ...
         def publish_plugin_event(self, kind: str,
                                  payload: dict | None = None) -> None: ...
+        def _juno_say(self, line: str, tone: str,
+                      event: str = "juno") -> None: ...
+        def hark(self, clue: str, detail: str = "", importance: str = "normal",
+                 now: float | None = None, cooldown_s: float = 120.0) -> Any: ...
+        def harken(self, alerts: Any, now: float | None = None,
+                   speak: bool = True) -> Any: ...
+        def mesh_tee(self, pattern: Any) -> None: ...
+        def mesh_send(self, text: str) -> bool: ...

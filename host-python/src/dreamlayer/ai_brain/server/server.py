@@ -57,6 +57,7 @@ from .brain_calendar import CalendarOps
 from .brain_social import SocialOps
 from .brain_reminders import ReminderOps
 from .brain_waypath import WaypathOps
+from .brain_sources import SourceOps
 
 TOKEN_HEADER = "X-DreamLayer-Token"
 
@@ -247,13 +248,13 @@ def _hour_label(ts: float) -> str:
     return f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
 
 
-class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
+class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     """The Brain's live state: config + index + history, rebuilt on change.
 
     The coordinator holds __init__/ask/_ask_cloud/save/config and inherits its
     cohesive method clusters from sibling mixins (RCOps, CalendarOps, SocialOps,
-    ReminderOps, WaypathOps) — the same ops_* pattern the orchestrator uses.
-    Every mixin method runs on this shared self.
+    ReminderOps, WaypathOps, SourceOps) — the same ops_* pattern the orchestrator
+    uses. Every mixin method runs on this shared self.
     """
 
     def __init__(self, cfg_dir: Path | str, sources_fn=None, messages_fn=None,
@@ -313,6 +314,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             self.cfg_dir, signer=activity_receipt_signer(self.cfg_dir),
             watermark=activity_receipt_watermark(self.cfg_dir))
         self.index = FileIndex(self.config)
+        # W3: live memory sources (screenpipe/ActivityWatch/Immich/Dawarich) +
+        # the LightRAG knowledge graph + the FSRS rehearsal store. All lazily
+        # built by SourceOps and config-gated; None/0.0 until first use.
+        self._graph = None
+        self._graph_built = False
+        self._src_stop: threading.Event | None = None
+        self.last_sources_sync = 0.0
+        self._rehearsal_store = None
         # Platform sources: macOS reads Messages/Mail/Calendar.app; Windows
         # reads Thunderbird mbox + .ics feeds (windows_sources). Each module
         # returns [] off its platform, so this dispatch only picks the honest
@@ -593,6 +602,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 # degrade (keyword search still works) but on the record — a
                 # silent pass here hid a broken mail source (audit 2026-07-14).
                 self.health.record_failure("index:email", exc)
+        # W3: fold the live local sources in too (when the wearer switched them
+        # on) — a folder reindex also freshens screen/desk/photo/place memory.
+        self.maybe_sync_sources()
         self._sig = self._signature()
         self.last_index_ts = time.time()
         return self.index.stats()
@@ -675,6 +687,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         # the World lens closes over this backend; a rewire means the next look
         # rebuilds against the new vision tier.
         self._world_lens = None
+        # the knowledge graph also closes over the local backend (its LLM +
+        # embedder) — a rewire re-arms the lazy build against the new tier.
+        self._graph_built = False
+        self._graph = None
 
     def save(self) -> None:
         self.config.save(self.cfg_dir)
@@ -706,8 +722,17 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                   "exclude_globs", "quiet_hours", "retention_days", "brief_hour",
                   "calendar_sync", "calendar_names", "calendar_days",
                   "calendar_ics",
-                  "contacts_sync", "reminders_sync", "reminder_lists"):
+                  "contacts_sync", "reminders_sync", "reminder_lists",
+                  "sources_sync", "immich_base_url", "immich_api_key",
+                  "home_assistant_url", "home_assistant_token",
+                  "dawarich_url", "dawarich_api_key"):
             if k in updates:
+                # a secret field echoed back as its "set" mask means "unchanged":
+                # don't clobber the real key with the sentinel (public() masks
+                # these, so the panel round-trips the placeholder).
+                if k in ("immich_api_key", "home_assistant_token",
+                         "dawarich_api_key") and updates[k] == "set":
+                    continue
                 setattr(self.config, k, updates[k])
         from .backends import is_blocked_endpoint
         for uk in _url_fields:
@@ -728,6 +753,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
                 self.sync_contacts()
             if updates.get("reminders_sync") or ("reminder_lists" in updates and self.config.reminders_sync):
                 self.sync_reminders()
+            if updates.get("sources_sync"):
+                self.sync_sources()
         except Exception:
             # a failed opportunistic sync must not fail the config write that
             # triggered it (the sync loop retries on schedule); log so a broken
@@ -770,6 +797,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         ans = None
         if self.config.model == "api":
             ans = self._ask_primary_api(query, no_cloud)
+        if ans is None:
+            # temporal knowledge-graph tier (LightRAG): "what's connected, and
+            # when" — consulted before the keyword index, fully on-device (built
+            # by the Brain's own local model + embedder). None when absent.
+            g = self.graph_answer(query)
+            if g:
+                ans = Answer(text=str(g).strip(), sources=["memory-graph"],
+                             tier="laptop", confidence=0.6)
         if ans is None:
             ans = self.index.ask(query)
         if ans is None and not no_cloud \
@@ -1284,6 +1319,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
         day_end = time.time() + 86400
         due = [r for r in self.reminders() if 0 < r.get("ts", 0) <= day_end]
         due_lines = ["Reminder: " + r["title"] for r in due[:(8 if long else 3)]]
+        # W6: names worth resurfacing this morning (FSRS rehearsal) — the moment
+        # to relearn a name is before you next see them.
+        rehearse = self.rehearsals_due(limit=(5 if long else 2))
+        rehearse_lines = ["Remember: " + str(r.get("text", "")).strip()
+                          for r in rehearse if str(r.get("text", "")).strip()]
         try:
             msgs = self._messages_fn(self.config, 30 if long else 20) if self.config.email_enabled else []
         except Exception:
@@ -1298,7 +1338,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
 
         # -- the short brief: the original one-glance contract, unchanged ------
         if not long:
-            bullets = list(agenda) + events + due_lines
+            bullets = list(agenda) + events + due_lines + rehearse_lines
             if texts:
                 who = ", ".join(dict.fromkeys(m.get("who", "") for m in texts if m.get("who")))
                 bullets.append(f"{len(texts)} new text{'s' if len(texts) != 1 else ''}"
@@ -1781,7 +1821,7 @@ def _capability_payload(brain: Brain) -> dict:
     import os
     import sys
     from ...capabilities import (PROFILES, packs_report, report, summary,
-                                 pack_installer_available)
+                                 pack_installer_available, power_stats, tiers)
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
@@ -1791,6 +1831,8 @@ def _capability_payload(brain: Brain) -> dict:
         if job:
             p["install"] = dict(job)
     return {"items": report(env=env), "summary": summary(env=env),
+            # the awakening meter + the group headers the page opens with
+            "stats": power_stats(env=env), "tiers": tiers(),
             "profiles": {k: list(v) for k, v in PROFILES.items()},
             "disabled": list(brain.config.disabled_caps),
             "packs": packs,
@@ -1853,6 +1895,13 @@ class _LiveCodeVault:
             self._expiry = self._now() + ttl
             self._attempts = 0
         return code
+
+    def current(self) -> str:
+        """The active, UNEXPIRED code without issuing (and voiding) a new one —
+        so a second delivery channel (pair-by-sound) hands out the SAME code the
+        QR/typed path already showed, never a colliding one. "" when none is live."""
+        with self._lock:
+            return self._code if (self._code and self._now() < self._expiry) else ""
 
     def redeem(self, code: str):
         """Return the token for a correct, unexpired code (and consume it), else
@@ -3071,6 +3120,36 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             independently confirm what the Brain did was not altered."""
             self._json(200, brain.activity.receipt())
 
+        def _get_rehearsal(self, path, qs):
+            """Names/facts worth resurfacing right now (FSRS rehearsal), most-
+            overdue first — the Rehearsal surface's feed."""
+            try:
+                limit = int(qs.get("limit", ["5"])[0])
+            except (ValueError, IndexError):
+                limit = 5
+            self._json(200, {"items": brain.rehearsals_due(limit),
+                             "engine": brain._rehearsal().engine_name})
+
+        def _post_rehearsal(self, path, qs):
+            """Record a rehearsal outcome (rating: again|hard|good|easy) and
+            schedule the next review."""
+            b = self._body()
+            item_id = str(b.get("id", "")).strip()
+            if not item_id:
+                self._json(400, {"error": "id required"}); return
+            out = brain.review_rehearsal(item_id, str(b.get("rating", "good")))
+            self._json(200, {"item": out})
+
+        def _post_sealed_recall(self, path, qs):
+            """Answer under a whole-process egress seal — on-device tiers only —
+            and return the answer alongside the signed receipt attesting nothing
+            left the device."""
+            b = self._body()
+            query = str(b.get("query", "")).strip()
+            if not query:
+                self._json(400, {"error": "query required"}); return
+            self._json(200, brain.sealed_recall(query))
+
         def _get_calendar(self, path, qs):
             """Upcoming agenda events."""
             self._json(200, {"items": brain.calendar()})
@@ -3293,6 +3372,58 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                          "--tls for the https link; asking works over http"),
                 "qr": to_svg(qr_payload)})
 
+        def _get_pair_sound(self, path, qs):
+            """Pair by SOUND — the QR-free fallback. The Brain "sings" the same
+            short, single-use pairing code as a near-ultrasonic ggwave chirp; a
+            phone in earshot catches it and redeems via /dreamlayer/live/redeem,
+            exactly as if the code were scanned or typed. Local-only (like the QR
+            handout). Returns the code, whether sound is available, and — when it
+            is — a base64 WAV the panel plays. Absent ggwave, `available` is False
+            and the panel keeps the QR."""
+            if not self._from_localhost():
+                self._json(403, {"error": "pairing is local-only"}); return
+            if not brain.config.token:
+                self._json(200, {"available": False, "code": "",
+                                 "reason": "no token — this Brain is loopback-only"})
+                return
+            from ...soundlink import default_soundlink, SOUND_TAG
+            link = default_soundlink()
+            # Reuse a live code if the panel already issued one (e.g. via
+            # /live/link's QR) so the SUNG code is the SAME credential the QR
+            # shows — the single-code vault holds one at a time, so issuing a
+            # fresh one here would silently void the QR (audit 2026-07-21).
+            code = _live_vault.current()
+            if not code:
+                if link is None:
+                    # can't sing AND no code to reuse → don't burn one, so the
+                    # QR/typed path this call falls back to stays valid
+                    self._json(200, {
+                        "available": False, "code": "", "wav_b64": "",
+                        "note": "install the soundlink pack (ggwave) to pair by "
+                                "sound; the QR and typed code still work"})
+                    return
+                code = _live_vault.issue(brain.config.token)
+            wav_b64 = ""
+            if link is not None:
+                import base64
+                # a short scheme tag so a listener knows this chirp is a DreamLayer
+                # pairing code (not stray audio) — mirrors the QR's dreamlayer: prefix
+                wav = link.encode_wav(SOUND_TAG + code)
+                if wav:
+                    wav_b64 = base64.b64encode(wav).decode("ascii")
+            if wav_b64:
+                brain.activity.add("pair", "Sang a pairing code over sound")
+            self._json(200, {
+                "available": bool(wav_b64),
+                "code": code,
+                "ultrasound": True,
+                "wav_b64": wav_b64,
+                "note": ("hold your phone near this Mac and tap Listen — the "
+                         "code is sung as a near-ultrasonic chirp"
+                         if wav_b64 else
+                         "install the soundlink pack (ggwave) to pair by sound; "
+                         "the QR and typed code still work")})
+
         # -- GET route table --------------------------------------------
         # exact-path public routes, resolved BEFORE the auth gate
         _GET_PUBLIC = {
@@ -3322,6 +3453,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
             "/dreamlayer/receipt": _get_receipt,
+            "/dreamlayer/rehearsal": _get_rehearsal,
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,
@@ -3345,6 +3477,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/api/discover": _get_api_discover,
             "/dreamlayer/browse": _get_browse,
             "/dreamlayer/pair": _get_pair,
+            "/dreamlayer/pair/sound": _get_pair_sound,
             "/dreamlayer/live/link": _get_live_link,
             "/dreamlayer/downloads": _get_downloads,
         }
@@ -4109,6 +4242,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/message/send": _post_message_send,
             "/dreamlayer/live/look": _post_live_look,
             "/dreamlayer/live/dream/scene": _post_live_dream_scene,
+            "/dreamlayer/rehearsal/review": _post_rehearsal,
+            "/dreamlayer/recall/sealed": _post_sealed_recall,
         }
         # prefix/dynamic routes (ordered fallback for non-exact paths)
         _POST_ROUTES_PREFIX = [

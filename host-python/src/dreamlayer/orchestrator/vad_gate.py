@@ -65,3 +65,10 @@ class SileroVADGate:
         scale = 32768.0 if peak > 1.0 else 1.0
         rms = (sum((float(v) / scale) ** 2 for v in vals) / len(vals)) ** 0.5
         return rms >= self.threshold
+
+
+def default_vad(sample_rate: int = 16000) -> "SileroVADGate":
+    """The speech/silence gate for the capture loop. Always non-None: silero-vad
+    when installed, else the cheap energy fallback — so the ambient (non-speech)
+    path is fed a real speech-vs-silence decision either way."""
+    return SileroVADGate(sample_rate=sample_rate)

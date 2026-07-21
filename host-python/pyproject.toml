@@ -77,6 +77,11 @@ srs = ["fsrs>=4,<6"]
 # neural fast-style-transfer for Dream Mode (see the world as a painting) — the
 # ONNX runtime; you supply the .onnx style model. Opt-in, not in any profile.
 dream-style = ["onnxruntime>=1.17,<2"]
+# data-over-sound (ggwave — near-ultrasonic audio chirps, from the llama.cpp
+# author) — transmit small payloads between devices as sound. A QR-free pairing
+# fallback: the Brain sings a code, the phone catches it out of the air. Opt-in,
+# tiny; absent the wheel the pairing QR path is unchanged.
+soundlink = ["ggwave>=0.4,<1"]
 causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]

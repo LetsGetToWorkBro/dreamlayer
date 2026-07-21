@@ -74,3 +74,70 @@ class ConfluenceOps(OpsHost):
         self.dream._ctx.speaker = speaker
         if direction_deg is not None:
             self.dream._ctx.extra["voice_direction_deg"] = direction_deg
+
+
+    # ------------------------------------------------------------------
+    # W7: off-grid mesh (Meshtastic) — the bond, at miles range
+    # ------------------------------------------------------------------
+
+    def attach_mesh(self, bridge=None, tcp_host: str | None = None) -> bool:
+        """Bring a Meshtastic node online: a bond that carries over LoRa when
+        BLE/wifi/cell are all gone. Inbound texts surface as message cards.
+        `bridge` is injectable for tests; else a local node (USB → LAN tcp).
+        Returns whether a node actually connected. Never raises."""
+        try:
+            if bridge is None:
+                from .mesh_bridge import default_mesh
+                bridge = default_mesh(tcp_host)
+            if bridge is None:
+                return False
+            if not bridge.connect():
+                return False
+            bridge.on_text(self._on_mesh_text)
+            self._mesh = bridge
+            return True
+        except Exception:                              # noqa: BLE001 — never fail wiring
+            self._mesh = None
+            return False
+
+    def detach_mesh(self) -> None:
+        mesh = getattr(self, "_mesh", None)
+        if mesh is not None:
+            try:
+                mesh.close()
+            except Exception:                          # noqa: BLE001
+                pass
+        self._mesh = None
+
+    def mesh_send(self, text: str) -> bool:
+        """Send one short line over the mesh. False when no node is attached or
+        the radio errors — the BLE path is unaffected."""
+        mesh = getattr(self, "_mesh", None)
+        if mesh is None:
+            return False
+        try:
+            return bool(mesh.send(text))
+        except Exception:                              # noqa: BLE001
+            return False
+
+    def _on_mesh_text(self, sender: str, text: str) -> None:
+        """An off-grid text arrived — show it on the glass (veil-gated). The
+        mesh is a broadcast radio: this only renders text a peer chose to send."""
+        text = (text or "").strip()
+        if not text or not self.privacy.allow_capture():
+            return
+        from ..hud import cards
+        card = cards.juno_reply(f"{sender or 'mesh'}: {text}"[:160], "answer")
+        try:
+            self.bridge.send_card(card, event="mesh")
+        except Exception:                              # noqa: BLE001
+            pass
+
+    def mesh_tee(self, pattern) -> None:
+        """When a tincan ping fires and a mesh node is up, also send it over LoRa
+        so the bond reaches miles, not just BLE range. Nonverbal by design — a
+        short pulse marker, never a transcript."""
+        if getattr(self, "_mesh", None) is None or not pattern:
+            return
+        n = len(pattern) if hasattr(pattern, "__len__") else 1
+        self.mesh_send("·" * max(1, min(n, 8)))

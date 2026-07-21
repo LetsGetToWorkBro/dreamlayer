@@ -7,11 +7,21 @@ was changed in the move.
 """
 from __future__ import annotations
 
+import logging
+
 from ._ops_host import OpsHost
 
 from ..hud import cards
 from ._ops_helpers import _default_http_get
 from ._ops_helpers import _default_http_post
+
+_log = logging.getLogger("dreamlayer.listen")
+
+# The same world-sound alert shouldn't nag while it keeps sounding: a kettle
+# whistles for a minute, a smoke alarm chirps every 30s. A per-key cooldown here
+# (longer than hark's own 120s global pacing) means each distinct sound taps you
+# once, then holds.
+_SOUND_COOLDOWN_S = 300.0
 
 
 class JunoAttentionOps(OpsHost):
@@ -342,3 +352,190 @@ class JunoAttentionOps(OpsHost):
                 self.attention.mark(a.key, now)
                 return card
         return None
+
+
+    # ==================================================================
+    # W1/W2 — the always-on ear: world sound → attention, speech → the hub
+    # ==================================================================
+
+    def harken(self, alerts, now: float | None = None, speak: bool = True):
+        """Raise the most important world-sound alert as a hark — Juno's tap on
+        the shoulder ("Smoke alarm", "Someone's at the door", "A goldfinch") —
+        and, when her voice is on, say it aloud. Watch-outs outrank listens; a
+        per-key cooldown means the *same* sound never nags even while it keeps
+        sounding. Accepts one Alert or a list; returns the card sent, or None."""
+        import time
+        if alerts is None:
+            return None
+        if not isinstance(alerts, (list, tuple)):
+            alerts = [alerts]
+        alerts = [a for a in alerts if a is not None]
+        if not alerts:
+            return None
+        now = now if now is not None else time.time()
+        alerts = sorted(
+            alerts, key=lambda a: 0 if getattr(a, "level", "") == "watchout" else 1)
+        for a in alerts:
+            key = getattr(a, "key", "") or getattr(a, "clue", "")
+            if now - self._alert_marks.get(key, -1e9) < _SOUND_COOLDOWN_S:
+                continue
+            importance = "urgent" if getattr(a, "level", "") == "watchout" else "normal"
+            card = self.hark(a.clue, getattr(a, "detail", ""), importance, now=now)
+            if card is not None:                 # hark passed the Veil/Focus gates
+                self._alert_marks[key] = now
+                if speak:
+                    try:
+                        self._juno_speak(a.clue)
+                    except Exception:            # noqa: BLE001 — voice never breaks a tap
+                        pass
+                return card
+        return None
+
+
+    def note_acoustic_context(self, tags) -> None:
+        """The capture loop tagged the world's non-speech sound (doorbell / smoke
+        alarm / kettle …). Map the tags to at most one attention alert and harken
+        it. Pure-map + gated; a benign soundscape is a silent no-op. Duck-typed
+        seam the CapturePipeline calls — safe to invoke with any [(label, score)]."""
+        from . import sound_events
+        try:
+            alert = sound_events.attention_for(tags)
+        except Exception:                        # noqa: BLE001
+            return
+        if alert is not None:
+            self.harken(alert)
+
+
+    def note_ambient_audio(self, audio, sample_rate: int = 16000) -> None:
+        """A pooled window of world sound → a look through the bird/nature lens,
+        so a dawn chorus becomes a gentle note rather than noise. Builds the lens
+        once (lazily); absent the wheel it stays None and this no-ops."""
+        if not self._bird_built:
+            self._bird_built = True
+            try:
+                from .bird_lens import default_bird_lens
+                self._bird_lens = default_bird_lens()
+            except Exception:                    # noqa: BLE001
+                self._bird_lens = None
+        lens = self._bird_lens
+        if lens is None:
+            return
+        try:
+            alert = lens.listen(audio, sample_rate)
+        except Exception:                        # noqa: BLE001
+            return
+        if alert is not None:
+            self.harken(alert)
+
+
+    # -- live interpreter: someone's foreign speech, voiced back to you ----
+
+    def set_interpret(self, on: bool = True, target: str = "en") -> bool:
+        """Turn the live cross-language interpreter on/off. When on, each speech
+        segment the capture loop hears is run through SeamlessM4T and its meaning
+        voiced back in `target`. Returns whether it can actually interpret now
+        (the wheel is present); off is always a clean no-op."""
+        self._interpret_on = bool(on)
+        self._interpret_target = (target or "en").strip() or "en"
+        return self._interpret_on and self._can_interpret()
+
+
+    def _can_interpret(self) -> bool:
+        """Whether a live interpreter is actually wired (the SeamlessM4T wheel is
+        present and RosettaLens got an interpret_fn)."""
+        return getattr(self.rosetta, "_interpret", None) is not None
+
+
+    def note_speech_audio(self, segment, sample_rate: int = 16000) -> None:
+        """The capture loop endpointed a speech segment. When the interpreter is
+        on, carry its meaning across into `_interpret_target` and voice it back —
+        the transcript already routed separately via hear()/ingest_caption. Veil-
+        gated, best-effort; a failure or an off switch is a silent no-op."""
+        if not self._interpret_on or not self._can_interpret():
+            return
+        if not self.privacy.allow_capture():
+            return
+        try:
+            res = self.rosetta.hear(segment, sample_rate, self._interpret_target)
+        except Exception as exc:                 # noqa: BLE001
+            _log.debug("[interpret] hear failed: %s", exc)
+            return
+        line = (getattr(res, "translated", "") or "").strip()
+        if line:
+            self._juno_say(line, "answer", event="interpret")
+
+
+    # -- lifecycle: open a real microphone and drive the loop -------------
+
+    def start_listening(self, mic=None, moonshine_dir: str | None = None,
+                        whisper_model: str | None = None) -> dict:
+        """Open the always-on ear: build the ASR ladder (Moonshine → faster-
+        whisper), the sound-event tagger and bird lens, and a VAD gate, then run
+        a CapturePipeline over a real microphone on a daemon thread. Returns a
+        status dict; when no engine or no mic is available it reports `ok: False`
+        with a `reason` and changes nothing. Idempotent — a second call while
+        already listening is a no-op status read."""
+        if self._capture is not None:
+            return self.listening_status()
+        from .asr_select import make_asr, asr_engine_name
+        asr = make_asr(moonshine_dir, whisper_model)
+        if asr is None:
+            return {"ok": False, "reason": "no-asr",
+                    "detail": "no speech engine installed (Moonshine / faster-whisper)"}
+        if mic is None:
+            from .capture import SoundDeviceMic
+            mic = SoundDeviceMic()
+            if not getattr(mic, "available", False):
+                return {"ok": False, "reason": "no-mic",
+                        "detail": "no microphone backend (sounddevice) available"}
+        from .capture import CapturePipeline
+        from .vad_gate import default_vad
+        from .sound_events import default_sound_detector
+        try:
+            tagger = default_sound_detector()
+        except Exception:                        # noqa: BLE001
+            tagger = None
+        if not self._bird_built:
+            self._bird_built = True
+            try:
+                from .bird_lens import default_bird_lens
+                self._bird_lens = default_bird_lens()
+            except Exception:                    # noqa: BLE001
+                self._bird_lens = None
+        pipe = CapturePipeline(self, vad=default_vad(), asr=asr,
+                               tagger=tagger, bird=self._bird_lens)
+        try:
+            pipe.start(mic)
+        except Exception as exc:                 # noqa: BLE001 — a dead mic isn't fatal
+            _log.error("[listen] mic open failed: %s", exc)
+            return {"ok": False, "reason": "mic-error", "detail": str(exc)}
+        self._capture = pipe
+        return {"ok": True, "engine": asr_engine_name(asr),
+                "sound_events": tagger is not None,
+                "birds": self._bird_lens is not None,
+                "interpret": self._interpret_on and self._can_interpret()}
+
+
+    def stop_listening(self) -> None:
+        """Close the microphone and tear down the capture loop. Safe to call when
+        not listening."""
+        pipe, self._capture = self._capture, None
+        if pipe is not None:
+            try:
+                pipe.stop()
+            except Exception:                    # noqa: BLE001
+                pass
+
+
+    def listening_status(self) -> dict:
+        """Whether the ear is open right now, and which engines are live — for the
+        app's status surface."""
+        pipe = self._capture
+        if pipe is None:
+            return {"ok": False, "listening": False}
+        from .asr_select import asr_engine_name
+        return {"ok": True, "listening": True,
+                "engine": asr_engine_name(getattr(pipe, "asr", None)),
+                "sound_events": getattr(pipe, "tagger", None) is not None,
+                "birds": getattr(pipe, "bird", None) is not None,
+                "interpret": self._interpret_on and self._can_interpret()}

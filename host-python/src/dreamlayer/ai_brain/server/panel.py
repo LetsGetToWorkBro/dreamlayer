@@ -285,6 +285,27 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .ans .src{display:inline-flex;gap:8px;align-items:center;font:11px ui-monospace,Menlo,monospace;color:var(--ghost);margin-top:8px}
   .tier{background:rgba(11,107,82,.12);color:var(--memory);border:1px solid rgba(11,107,82,.4);
        border-radius:0;padding:2px 8px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--chi)}
+  /* the awakening meter at the top of the capabilities page — a single number
+     that climbs every time a capability flips to active. */
+  .capstats{background:#FFFFFF;border:1px solid var(--frame);box-shadow:var(--bev-out);
+       border-radius:0;padding:16px;margin:0 0 14px}
+  .capstats .cs-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .capstats .cs-pct{font:600 34px var(--chi);color:var(--memory);line-height:1}
+  .capstats .cs-lvl{font:600 13px var(--chi);text-transform:uppercase;letter-spacing:.1em;
+       color:var(--ink);background:rgba(11,107,82,.10);border:1px solid rgba(11,107,82,.35);padding:2px 9px}
+  .capstats .cs-sub{color:var(--muted);font-size:12px;margin-left:auto}
+  .capstats .cs-bar{height:10px;background:var(--frame);margin:12px 0 4px;overflow:hidden}
+  .capstats .cs-fill{height:100%;background:linear-gradient(90deg,var(--memory),#2CC79A);
+       width:0;transition:width .6s var(--ease)}
+  .capstats .cs-next{color:var(--muted);font-size:11px}
+  .capstats .cs-tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+       gap:8px 16px;margin-top:14px}
+  .capstats .cs-tier{min-width:0}
+  .capstats .cs-tt{font-size:12px;color:var(--ink);display:flex;justify-content:space-between;gap:6px}
+  .capstats .cs-tt b{color:var(--memory);font-weight:600}
+  .capstats .cs-tb{height:5px;background:var(--frame);margin-top:4px;overflow:hidden}
+  .capstats .cs-tf{height:100%;background:var(--memory);width:0;transition:width .6s var(--ease)}
+  html.midnight .capstats .cs-lvl{background:rgba(44,199,154,.14);border-color:rgba(44,199,154,.45)}
   .shimmer{height:14px;margin:6px 0;background:linear-gradient(90deg,#E7EAE9,#F6F8F7,#E7EAE9);
        background-size:200% 100%;animation:sh 1.1s linear infinite}
   .shimmer.s2{width:70%}
@@ -970,6 +991,7 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       library is present, so nothing here is ever required. Installed ones switch off with one
       click (no uninstall); missing ones show the exact install.
       <a href="https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/docs/DEPLOYMENT.md" target="_blank">How switching on works ↗</a></p>
+    <div id="capstats" class="capstats"></div>
     <div class="conn-s" id="capsum" style="margin:0 0 10px">…</div>
     <div id="dlall" style="margin:0 0 8px"></div>
     <div id="dlqueue" style="display:none;margin:0 0 10px"></div>
@@ -1501,14 +1523,42 @@ function capRight(it){
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
   if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
   if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
+/* --- the awakening meter: a percent + level that climbs as caps install --- */
+function renderCapStats(r){
+  const el=$("capstats"); if(!el)return;
+  const s=r.stats; if(!s){el.innerHTML="";return;}
+  const pct=Math.max(0,Math.min(100,Number(s.percent)||0));
+  const toNext=(s.next_level_at!=null)?Math.max(0,s.next_level_at-pct):0;
+  let nextTxt;
+  if(s.fully) nextTxt="fully awakened — every installable power is active";
+  else if(s.next_level_at!=null) nextTxt=`${toNext}% more to the next level — install a pack below to awaken more`;
+  else nextTxt=`at the top level — ${Math.max(0,100-pct)}% more power to fully awaken`;
+  const bt=s.by_tier||{}; let tiers="";
+  Object.keys(bt).forEach(k=>{const t=bt[k];
+    const tp=t.power_total?Math.round(100*t.power/t.power_total):0;
+    tiers+=`<div class="cs-tier"><div class="cs-tt"><span>${esc(t.title)}</span> <b>${t.unlocked}/${t.total}</b></div>`+
+      `<div class="cs-tb"><div class="cs-tf" style="width:${tp}%"></div></div></div>`;});
+  const svc=s.services_total?` · ${s.services_total} local services`:"";
+  el.innerHTML=`<div class="cs-top">
+      <span class="cs-pct">${pct}%</span>
+      <span class="cs-lvl" title="Level ${(s.level_index||0)+1} of ${(s.level_max||0)+1}">${esc(s.level||"")}</span>
+      <span class="cs-sub">${s.unlocked}/${s.total} powers active · ${s.power}/${s.power_total} impact${svc}</span>
+    </div>
+    <div class="cs-bar"><div class="cs-fill" style="width:${pct}%"></div></div>
+    <div class="cs-next">${esc(nextTxt)}</div>
+    <div class="cs-tiers">${tiers}</div>`;
+}
 function renderCaps(r){
+  renderCapStats(r);
   const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
   $("capsum").textContent=order.filter(k=>s[k]).map(k=>`${s[k]} ${k}`).join(" · ")
     +(r.frozen?"  ·  bundled app (fixed set)":"");
+  const blurb={}; (r.tiers||[]).forEach(t=>{blurb[t.key]=t.blurb;});
   let tier="",html="";
   r.items.forEach(it=>{
     if(it.tier!==tier){tier=it.tier;
-      html+=`<div class="navlabel" style="padding:12px 0 4px">${esc(tier)}</div>`;}
+      html+=`<div class="navlabel" style="padding:14px 0 2px">${esc(it.tier_title||tier)}</div>`;
+      if(blurb[tier])html+=`<div class="conn-s" style="margin:0 0 6px">${esc(blurb[tier])}</div>`;}
     html+=`<div class="conn" style="padding:8px 0">
       <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${CAPDOT[it.state]||"var(--ghost)"}"></span>
       <div style="flex:1;min-width:0"><div class="conn-t">${esc(it.key)}

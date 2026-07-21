@@ -419,6 +419,16 @@ class Orchestrator(
         self.attention = AttentionPolicy()
         self.attention_on = True                # proactive spoken alerts
         self._tick_stop = None                  # the proactive heartbeat loop
+        # W1: the always-on ear. Per-key cooldowns for world-sound harks (a
+        # kettle that whistles for a minute shouldn't nag), the lazily-built
+        # bird/nature lens, live-interpreter state, and the capture pipeline
+        # handle once start_listening() opens a mic.
+        self._alert_marks: dict = {}            # sound-alert key → last hark ts
+        self._bird_lens = None                  # BirdSongLens, built on first use
+        self._bird_built = False                # tried-to-build guard (build once)
+        self._interpret_on = False              # live cross-language interpreter
+        self._interpret_target = "en"           # tongue to voice back into
+        self._capture = None                    # CapturePipeline, when listening
         # Veritas — the live fact-checker. As people talk, it flags when a
         # speaker contradicts their *own* earlier words (offline, from the
         # ledger) and hands checkable claims to the Brain/cloud to verify. Off by
@@ -485,6 +495,10 @@ class Orchestrator(
         # real pixel-reading recognition with no ML deps, without false objects.
         from ..object_lens.recognizer import ObjectRecognizer
         from ..object_lens.classify_backends import default_classifier
+        # W4: frontier-lens engines (math/doc/depth OCR, the sky, dream stylizer)
+        # are heavy and optional — built lazily on first trigger and cached here
+        # (None when a wheel is absent, so a missing engine is a permanent no-op).
+        self._frontier: dict = {}
         _clf = default_classifier()
         _recognizer = ObjectRecognizer(classify_fn=_clf) if _clf else None
         self.object_lens = ObjectLens(ring=self.ring, privacy=self.privacy,
@@ -495,9 +509,16 @@ class Orchestrator(
         # Rosetta: wire the offline Argos backend when installed (extras
         # `platform`); absent → translate_fn=None, identical no-op behavior.
         from ..rosetta_argos import ArgosTranslator, make_translate_fn
+        # The ear, too: SeamlessM4T live speech-interpreter plugs into interpret_fn
+        # when the wheel is present (extras `interpreter`); absent → None and
+        # hear() cleanly no-ops. Lets the capture loop voice a foreign utterance
+        # back in the listener's tongue.
+        from ..rosetta_seamless import SeamlessInterpreter, make_interpret_fn
         self.rosetta = RosettaLens(
             translate_fn=make_translate_fn() if ArgosTranslator.available else None,
-            engine="argos")
+            engine="argos",
+            interpret_fn=make_interpret_fn() if SeamlessInterpreter.available
+            else None)
         self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
         # Barcode → Open Food Facts → your dietary rules. Only the numeric code
@@ -640,6 +661,7 @@ class Orchestrator(
         # Confluence: attached by the app layer when a bond goes live
         self.bonds = None
         self.tincan = None
+        self._mesh = None                       # W7: Meshtastic node, when attached
         self.tap_collector = TapCollector()
         self.confluence_outbox: list[dict] = []
         # GhostMode mesh (2+ wearers) + The Beacon: attached by the app layer
