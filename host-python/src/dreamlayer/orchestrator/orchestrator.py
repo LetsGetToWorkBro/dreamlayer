@@ -495,6 +495,10 @@ class Orchestrator(
         # real pixel-reading recognition with no ML deps, without false objects.
         from ..object_lens.recognizer import ObjectRecognizer
         from ..object_lens.classify_backends import default_classifier
+        # W4: frontier-lens engines (math/doc/depth OCR, the sky, dream stylizer)
+        # are heavy and optional — built lazily on first trigger and cached here
+        # (None when a wheel is absent, so a missing engine is a permanent no-op).
+        self._frontier: dict = {}
         _clf = default_classifier()
         _recognizer = ObjectRecognizer(classify_fn=_clf) if _clf else None
         self.object_lens = ObjectLens(ring=self.ring, privacy=self.privacy,
