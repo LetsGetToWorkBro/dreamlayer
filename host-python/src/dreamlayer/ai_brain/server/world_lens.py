@@ -285,6 +285,11 @@ class WorldLensHost:
         key = (label or "").strip().lower()
         if not key:
             return
+        try:                                 # veil re-check: a look IN FLIGHT when
+            if not self.privacy.allow_capture():   # the veil dropped must not land
+                return                             # (TOCTOU — refute 2026-07-21)
+        except Exception:
+            return
         try:
             from ...pipelines.ingest import MemoryEvent
             self.ring.append(MemoryEvent(kind="object", summary=key,

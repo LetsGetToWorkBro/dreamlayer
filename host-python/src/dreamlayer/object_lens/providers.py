@@ -24,6 +24,18 @@ from .schema import ObjectSighting, PanelRow, ObjectPanel
 from .polled import humanize_age
 
 
+def _mentions(key: str, text: str) -> bool:
+    """True when `text` mentions `key` as a WHOLE word. A raw substring test
+    fabricated prior sightings — "cup" matched "cupboard", "car" matched
+    "cardboard box" — so an object you never saw claimed "seen before"
+    (refute 2026-07-21). Word boundaries keep multi-word keys working
+    ("coffee mug" still matches inside "bought a coffee mug")."""
+    import re
+    if not key:
+        return False
+    return bool(re.search(r"\b" + re.escape(key) + r"\b", text))
+
+
 def _age_note(data: dict) -> str:
     """A '(2h ago)' marker when a polled snapshot has gone stale."""
     if data.get("_stale") and data.get("_age_s") is not None:
@@ -73,7 +85,7 @@ class MemoryProvider(PanelProvider):
                 continue                      # private sightings never surface
             summary = (getattr(ev, "summary", "") or "").lower()
             label = str(meta.get("object", "")).lower()
-            if key in summary or key == label:
+            if _mentions(key, summary) or key == label:
                 seen.append((b.ts, ev, meta))
                 if meta.get("owned") or "bought" in summary or "my " + key in summary:
                     owned = True

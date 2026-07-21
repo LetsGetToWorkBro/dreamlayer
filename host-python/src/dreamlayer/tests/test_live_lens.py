@@ -550,6 +550,25 @@ class TestLiveLinkQr:
         finally:
             server.shutdown(); server.server_close()
 
+    def test_http_only_qr_keeps_the_token_fragment(self, tmp_path):
+        # refute F1 (2026-07-21): /live/redeem refuses non-TLS callers, so an
+        # http-mode QR carrying #c= could NEVER pair. Without --tls the QR must
+        # keep the #t= token link (which never rides the wire at all).
+        brain = _brain(tmp_path)
+        server = make_brain_server(brain, "127.0.0.1", 0)      # no tls_port
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        try:
+            status, body = _req(base + "/dreamlayer/live/link",
+                                headers={"X-DreamLayer-Token": TOKEN})
+            assert status == 200
+            out = json.loads(body)
+            payload = _decode_qr_svg(out["qr"])
+            assert payload.endswith("#t=" + TOKEN)             # pairable over http
+            assert "#c=" not in payload
+        finally:
+            server.shutdown(); server.server_close()
+
     def test_code_qr_is_a_strictly_smaller_matrix_than_the_token_qr(self):
         # the point of #c=: with the PRODUCTION 32-hex token (token_hex(16)) the
         # code QR is a lower version — bigger modules at the same render size.
@@ -616,6 +635,26 @@ class TestPhoneRunsEveryGlassesLens:
         assert not any("seen before" in r.label for r in first.rows)
         second = wl.look_sighting(ObjectSighting(label="coffee mug", confidence=0.9))
         assert any("seen before" in r.label for r in second.rows)
+
+    def test_seen_before_never_substring_fabricates(self, tmp_path):
+        # refute 2026-07-21: "cup" must NOT match a prior "cupboard" — a raw
+        # substring test claimed sightings of objects never seen.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        wl = _brain(tmp_path).world_lens()
+        wl.look_sighting(ObjectSighting(label="cupboard", confidence=0.9))
+        p = wl.look_sighting(ObjectSighting(label="cup", confidence=0.9))
+        assert not any("seen before" in r.label for r in p.rows)
+
+    def test_erase_everything_drops_the_sighting_ring(self, tmp_path):
+        # refute 2026-07-21: purge_memories left the cached host (and its
+        # ring) alive — pre-erase sightings surfaced on the next look.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        brain = _brain(tmp_path)
+        brain.world_lens().look_sighting(
+            ObjectSighting(label="coffee mug", confidence=0.9))
+        assert len(brain.world_lens().ring) > 0
+        brain.purge_memories()
+        assert len(brain.world_lens().ring) == 0
 
     def test_veiled_look_leaves_no_ring_trace(self, tmp_path):
         # the veil gate runs BEFORE the ring append — a veiled look must not

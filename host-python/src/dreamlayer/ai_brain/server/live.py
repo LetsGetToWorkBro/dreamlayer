@@ -687,10 +687,11 @@ function glassObjectCard(card){
   gtext(ctx, footer, 128, 50, GP.text_ghost, "sm");
   gtext(ctx, obj, 128, 66, GP.memory_trace, "md");
   /* place: the memory row carries it when the ring knows one ("last at X") */
-  const memRow = (card.rows || []).find(r => String(r.source||"").startsWith("memory"));
+  const grows = Array.isArray(card.rows) ? card.rows : [];
+  const memRow = grows.find(r => String(r.source||"").startsWith("memory"));
   const m = memRow && /last at (.+)$/.exec(String(memRow.detail || memRow.value || ""));
   if (m) gtext(ctx, m[1], 128, 150, GP.text_primary, "lg");
-  let detail = String(((card.rows || [])[0] || {}).label || card.detail || "");
+  let detail = String((grows[0] || {}).label || card.detail || "");
   if (detail.length > 18) detail = detail.slice(0, 17) + "…";
   if (detail) gtext(ctx, "[ " + detail + " ]", 128, 176, GP.text_secondary, "md");
   $("glass").classList.add("on");
@@ -710,6 +711,9 @@ function glassObjectCard(card){
    DreamCanvas — nothing egresses; the veil quiets the feeds; the mic is
    released the moment dream ends. */
 let dreamOn = false, dreamRaf = null, dreamAudio = null, dreamAnalyser = null;
+let dreamGen = 0;                 /* bumped on every enter/exit — an await that
+                                     resolves after its dream ended must STOP the
+                                     stream it got, not attach it (refute F7/F8) */
 let dreamACtx = null, dreamLastTick = 0, dreamT = 0;
 const DREAM_TICK_MS = 500;                 /* 2 Hz — DreamEngine.AMBIENT_HZ */
 const dweather = {pressure: 0, energy: 0, luma: 0.35};
@@ -731,13 +735,19 @@ function onDreamMotion(e){
 }
 async function enterDream(){
   dreamOn = true;
+  const myGen = ++dreamGen;
   document.body.setAttribute("data-dream", "on");
   clearTimeout(loopTimer);                 /* dream replaces memory-mode looks */
   renderPanel(null); glassClear(); clearOverlayOnce(); hideDetectorHud();
   $("hint").textContent = "dream mode · double-tap to wake";
   try {                                    /* mic weather — asked inside the tap */
     if (!veil) {
-      dreamAudio = await navigator.mediaDevices.getUserMedia({audio: true});
+      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      if (myGen !== dreamGen || !dreamOn || veil) {   /* dream ended mid-prompt */
+        try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        return;
+      }
+      dreamAudio = stream;
       dreamACtx = new (window.AudioContext || window.webkitAudioContext)();
       const src = dreamACtx.createMediaStreamSource(dreamAudio);
       dreamAnalyser = dreamACtx.createAnalyser();
@@ -747,12 +757,14 @@ async function enterDream(){
   } catch (e) { dreamAnalyser = null; }    /* no mic → motion/time weather only */
   try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission)
           await DeviceMotionEvent.requestPermission(); } catch (e) {}
+  if (myGen !== dreamGen || !dreamOn) { exitDream(); return; }  /* ended mid-prompt */
   window.addEventListener("devicemotion", onDreamMotion);
   $("glass").classList.add("on");
   dreamRaf = requestAnimationFrame(dreamFrame);
 }
 function exitDream(){
   dreamOn = false;
+  dreamGen++;                      /* invalidate any enterDream still awaiting */
   document.body.setAttribute("data-dream", "off");
   if (dreamRaf != null) { cancelAnimationFrame(dreamRaf); dreamRaf = null; }
   window.removeEventListener("devicemotion", onDreamMotion);
@@ -977,6 +989,9 @@ async function fetchJSON(url, opts, timeoutMs){
 /* ---- look: frame -> YOUR brain -> label (never during the veil) --------- */
 let noHitStreak = 0;
 function renderResult(j, auto){
+  if (dreamOn) return;             /* a look in flight when dream began must not
+                                      stomp the shared glass canvas, then hide it
+                                      3.5s later via glassTimer (refute F10) */
   if (!j || j.ok === false) {
     if (!auto) showHud(j && j.reason ? j.reason : "look failed", {ms:3000});
     return;
@@ -1176,6 +1191,8 @@ if (SR) {
 /* ---- backgrounding: stop looking, save battery, resume clean ------------ */
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    if (dreamOn) exitDream();      /* background tabs keep capturing audio —
+                                      the mic must not stay hot (refute F9) */
     clearTimeout(loopTimer);
     try { if (actx && actx.state === "running") actx.suspend(); } catch (e) {}
   } else {
@@ -1190,7 +1207,7 @@ function heartbeat(){
     if (!document.hidden && !looking) {
       try {
         const t0 = performance.now();
-        const r = await fetch("/dreamlayer/status", {headers: HDRS()});
+        const r = await fetchJSON("/dreamlayer/status", {headers: HDRS()}, 8000);
         setLink(r.ok, performance.now() - t0);
       } catch (e) { setLink(false, 0); }
     }
