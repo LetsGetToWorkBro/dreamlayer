@@ -698,6 +698,127 @@ function glassObjectCard(card){
   glassTimer = setTimeout(glassClear, card.dismiss_ms || 3500);
 }
 
+/* ---- dream mode: the glasses' double-tap, on the phone ------------------
+   The real thing's mechanics, scoped here the way the phone app's
+   DreamCanvas already does: DOUBLE-TAP toggles it (orchestrator on_button
+   "double_tap" → DreamEngine), and the render replays the SAME models —
+   mic_reactor.py's two-band palette weather (low FFT bins = atmospheric
+   pressure on the Cb/storm axis, high bins = energy on the Cr/ember axis,
+   amplitude = luma), imu_reactor.py's curl-noise line field (12 vectors),
+   and dream_renderer.lua's 24-particle core clipped inside r=96, over "the
+   day, dimmed". Cadence 2 Hz = DreamEngine.AMBIENT_HZ. Client-only like
+   DreamCanvas — nothing egresses; the veil quiets the feeds; the mic is
+   released the moment dream ends. */
+let dreamOn = false, dreamRaf = null, dreamAudio = null, dreamAnalyser = null;
+let dreamACtx = null, dreamLastTick = 0, dreamT = 0;
+const DREAM_TICK_MS = 500;                 /* 2 Hz — DreamEngine.AMBIENT_HZ */
+const dweather = {pressure: 0, energy: 0, luma: 0.35};
+const dmotion = {mag: 0};
+const dparticles = [];
+for (let i = 0; i < 24; i++)               /* 24 particles, as the device */
+  dparticles.push({a: i / 24 * Math.PI * 2, r: 28 + (i * 53) % 62,
+                   v: 0.0006 + ((i * 31) % 10) / 11000});
+function ycbcr(y, cb, cr){                 /* the palette cmd's color space */
+  const Y = y * 255, r = Y + 1.402 * cr * 128, b = Y + 1.772 * cb * 128,
+        g = Y - 0.344 * cb * 128 - 0.714 * cr * 128;
+  const c = v => Math.max(0, Math.min(255, v | 0));
+  return "rgb(" + c(r) + "," + c(g) + "," + c(b) + ")";
+}
+function onDreamMotion(e){
+  const a = (e.accelerationIncludingGravity || e.acceleration || {});
+  const m = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+  dmotion.mag = dmotion.mag * 0.8 + Math.min(1, Math.abs(m - 9.8) / 12) * 0.2;
+}
+async function enterDream(){
+  dreamOn = true;
+  document.body.setAttribute("data-dream", "on");
+  clearTimeout(loopTimer);                 /* dream replaces memory-mode looks */
+  renderPanel(null); glassClear(); clearOverlayOnce(); hideDetectorHud();
+  $("hint").textContent = "dream mode · double-tap to wake";
+  try {                                    /* mic weather — asked inside the tap */
+    if (!veil) {
+      dreamAudio = await navigator.mediaDevices.getUserMedia({audio: true});
+      dreamACtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = dreamACtx.createMediaStreamSource(dreamAudio);
+      dreamAnalyser = dreamACtx.createAnalyser();
+      dreamAnalyser.fftSize = 256;
+      src.connect(dreamAnalyser);
+    }
+  } catch (e) { dreamAnalyser = null; }    /* no mic → motion/time weather only */
+  try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission)
+          await DeviceMotionEvent.requestPermission(); } catch (e) {}
+  window.addEventListener("devicemotion", onDreamMotion);
+  $("glass").classList.add("on");
+  dreamRaf = requestAnimationFrame(dreamFrame);
+}
+function exitDream(){
+  dreamOn = false;
+  document.body.setAttribute("data-dream", "off");
+  if (dreamRaf != null) { cancelAnimationFrame(dreamRaf); dreamRaf = null; }
+  window.removeEventListener("devicemotion", onDreamMotion);
+  try { if (dreamAudio) dreamAudio.getTracks().forEach(t => t.stop()); } catch (e) {}
+  try { if (dreamACtx) dreamACtx.close(); } catch (e) {}
+  dreamAudio = null; dreamAnalyser = null; dreamACtx = null;
+  glassClear();
+  setLive(liveOn);                         /* restores the hint + ambient loop */
+}
+function toggleDream(){ if (dreamOn) exitDream(); else enterDream(); }
+function dreamTick(){                      /* the 2 Hz reactor pass */
+  let pressure = 0, energy = 0, amp = 0;
+  if (dreamAnalyser && !veil) {
+    const bins = new Uint8Array(dreamAnalyser.frequencyBinCount);
+    dreamAnalyser.getByteFrequencyData(bins);
+    let lo = 0, hi = 0;
+    for (let i = 1; i <= 8; i++) lo += bins[i];
+    for (let i = 24; i < 96; i++) hi += bins[i];
+    for (let i = 0; i < bins.length; i++) amp += bins[i];
+    pressure = lo / (8 * 255); energy = hi / (72 * 255);
+    amp = amp / (bins.length * 255);
+  }
+  /* becalmed drift when quiet/veiled — the sky never flatlines */
+  dweather.pressure = dweather.pressure * 0.7 + (pressure + dmotion.mag * 0.3) * 0.3;
+  dweather.energy   = dweather.energy * 0.7 + energy * 0.3;
+  dweather.luma     = 0.3 + Math.min(0.4, amp * 0.8 + dmotion.mag * 0.15);
+}
+function dreamCurl(x, y, t){               /* cheap curl of a drifting field */
+  const n = (a, b) => Math.sin(a * 0.061 + t * 0.00021 + Math.sin(b * 0.047 - t * 0.00013));
+  return Math.atan2(n(x + 13, y) - n(x - 13, y), n(x, y - 13) - n(x, y + 13));
+}
+function dreamFrame(ts){
+  if (!dreamOn) return;
+  dreamRaf = requestAnimationFrame(dreamFrame);
+  if (ts - dreamLastTick >= DREAM_TICK_MS) { dreamLastTick = ts; dreamTick(); }
+  dreamT = ts;
+  const ctx = glassCtx();
+  /* the day, dimmed (HZ.draw dim=true) — a change of light, not a scene cut */
+  ctx.beginPath(); ctx.arc(128, 128, 128, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(3,6,5," + (0.78 - dweather.luma * 0.25).toFixed(3) + ")";
+  ctx.fill();
+  const sky = ycbcr(dweather.luma, 0.18 + dweather.pressure * 0.5,
+                    -0.10 - dweather.pressure * 0.15);
+  const ember = ycbcr(dweather.luma + 0.1, -0.12, 0.14 + dweather.energy * 0.55);
+  /* line field: 12 curl vectors bending with motion (imu_reactor) */
+  ctx.strokeStyle = sky; ctx.lineWidth = 1.1; ctx.globalAlpha = 0.7;
+  for (let i = 0; i < 12; i++) {
+    const gx = 44 + (i % 4) * 56, gy = 52 + ((i / 4) | 0) * 66;
+    const a = dreamCurl(gx, gy, ts) + dmotion.mag * Math.sin(ts * 0.002 + i);
+    const L = 14 + dweather.pressure * 12;
+    ctx.beginPath(); ctx.moveTo(gx - Math.cos(a) * L, gy - Math.sin(a) * L);
+    ctx.lineTo(gx + Math.cos(a) * L, gy + Math.sin(a) * L); ctx.stroke();
+  }
+  /* particles: the midground core, clipped inside r=96, agitated by energy */
+  ctx.globalAlpha = 1;
+  for (const p of dparticles) {
+    p.a += p.v * (1 + dweather.energy * 6 + dmotion.mag * 2);
+    const r = Math.min(96 - 3, p.r * (1 + dweather.energy * 0.12));
+    const x = 128 + Math.cos(p.a) * r, y = 128 + Math.sin(p.a) * r;
+    ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 2 * Math.PI);
+    ctx.fillStyle = ember; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
+}
+
 /* ---- link + tier chips -------------------------------------------------- */
 function setLink(ok, ms){
   $("linkst").textContent = ok ? ("brain " + (ms|0) + "ms") : "no link";
@@ -717,7 +838,10 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); }   /* wipe live surfaces at once */
+  if (on) { renderPanel(null); clearOverlayOnce(); glassClear();
+            if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
+                                             dream so the mic is RELEASED, not
+                                             merely ignored */
   if (!o.silent) showHud(on ? "veil down · on-device only" : "veil lifted", {ms:2400});
   if (!on && liveOn) scheduleLoop(500);
 }
@@ -905,8 +1029,23 @@ async function lookNow(auto){
     else { setLink(false, 0); if (!auto) showHud("brain unreachable", {ms:3000}); }
   } finally { looking = false; scan(false); }
 }
-$("lens").onclick = () => lookNow(false);
-$("lens").onkeydown = e => { if (e.key===" "||e.key==="Enter") lookNow(false); };
+/* tap = look; DOUBLE-tap = dream mode — the glasses' exact button grammar
+   (orchestrator on_button: single glance, double_tap toggles dream). The
+   single look waits one double-tap window so the gestures never collide. */
+let _tapT = 0, _tapTimer = null;
+$("lens").onclick = () => {
+  const now = performance.now();
+  if (now - _tapT < 300) {
+    clearTimeout(_tapTimer); _tapT = 0;
+    toggleDream(); return;
+  }
+  _tapT = now;
+  _tapTimer = setTimeout(() => { if (!dreamOn) lookNow(false); }, 300);
+};
+$("lens").onkeydown = e => {
+  if (e.key===" "||e.key==="Enter") { if (dreamOn) exitDream(); else lookNow(false); }
+  if (e.key==="d"||e.key==="D") toggleDream();
+};
 
 /* ---- the continuous live loop (the glasses never wait for a tap) --------
    This is the Brain-round-trip ambient loop, the fallback when the on-device
@@ -919,7 +1058,8 @@ function scheduleLoop(delay){
      camera+network 401ing every tick), backgrounded (battery), before the boot
      posture-seed lands (so the FIRST look already knows the veil), or when the
      on-device detector is doing the recognizing */
-  if (!liveOn || _pairNotice || document.hidden || !booted || detectorActive) return;
+  if (!liveOn || _pairNotice || document.hidden || !booted || detectorActive
+      || dreamOn) return;                  /* dream replaces memory-mode looks */
   loopTimer = setTimeout(loopTick, delay || LOOP_MS);
 }
 async function loopTick(){
@@ -1114,7 +1254,7 @@ function clearOverlayOnce(){
 function detectTick(ts){
   rafId = requestAnimationFrame(detectTick);
   if (!detectorActive || !detector || !liveOn || veil || document.hidden
-      || !camReady() || !booted) {
+      || !camReady() || !booted || dreamOn) {
     clearOverlayOnce(); hideDetectorHud(); return;    /* idle: wipe boxes + stale label */
   }
   if (ts - lastDetect < DETECT_MS) return;
