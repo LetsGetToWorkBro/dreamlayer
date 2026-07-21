@@ -601,11 +601,36 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # the UI thread froze the whole menu bar for up to the fetch timeout
             # per click. A worker does the fetch and posts the result when it
             # returns (audit 2026-07-17).
+            item = self.menu["Check for Updates"]
+
+            def _prog(done, total):
+                try:
+                    pct = int(done * 100 / total) if total else 0
+                    item.title = f"Downloading update… {pct}%"
+                except Exception:
+                    pass
+
             def _work():
                 res = check_for_update()
-                rumps.notification(
-                    "DreamLayer", res["message"],
-                    res.get("url") if res["status"] == "update" else "")
+                if res["status"] != "update":
+                    rumps.notification("DreamLayer", res["message"], "")
+                    return
+                # update straight from the app: download → digest-verify →
+                # Gatekeeper gate → staged swap → relaunch. The Releases page
+                # is only the FALLBACK when any step honestly can't proceed.
+                from .updater import perform_update
+                item.title = "Downloading update…"
+                ok, msg = perform_update(progress=_prog)
+                item.title = "Check for Updates"
+                if ok:
+                    rumps.notification("DreamLayer", msg, "")
+                    rumps.quit_application()      # the new copy is relaunching
+                else:
+                    rumps.notification(
+                        "DreamLayer", f"{res['message']} — {msg}",
+                        res.get("url") or "")
+                    import webbrowser
+                    webbrowser.open(res.get("url") or RELEASES_PAGE)
             threading.Thread(target=_work, daemon=True).start()
 
         @rumps.clicked("Sync now")

@@ -109,3 +109,46 @@ class TestPlatformGates:
         boom = lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError())
         assert updater.gatekeeper_ok(f, run=boom) is False
         assert updater.authenticode_ok(f, run=boom) is False
+
+
+class TestPerformUpdate:
+    """End-to-end wiring: fetch → upgrade gate → pick → download → install,
+    every seam injected. The Releases page is only ever the FALLBACK."""
+
+    def _feed(self, tag="v9.9.9", data=b"bytes", name="DreamLayer.dmg"):
+        import json
+        rel = _release(name=name, data=data)
+        rel["tag_name"] = tag
+        return lambda url, t: json.dumps(rel).encode()
+
+    def test_happy_path_updates(self, tmp_path):
+        calls = {}
+        ok, msg = updater.perform_update(
+            current="0.1.0", fetch_fn=self._feed(), platform="darwin",
+            download=lambda a, progress=None: tmp_path / "x.dmg",
+            install=lambda p: calls.setdefault("installed", p) or True)
+        assert ok and "v9.9.9" in msg and calls["installed"]
+
+    def test_downgrade_refused_at_install_time(self):
+        ok, msg = updater.perform_update(
+            current="9.9.9", fetch_fn=self._feed(tag="v0.0.1"),
+            platform="darwin",
+            download=lambda a, progress=None: (_ for _ in ()).throw(
+                AssertionError("must not download a downgrade")),
+            install=lambda p: True)
+        assert ok is False and "no upgrade" in msg
+
+    def test_uncomparable_tag_refuses(self):
+        ok, msg = updater.perform_update(
+            current="1.0.0", fetch_fn=self._feed(tag="nightly"),
+            platform="darwin", download=lambda a, progress=None: None,
+            install=lambda p: True)
+        assert ok is False                      # never auto-install "nightly"
+
+    def test_failed_gate_reports_nothing_changed(self, tmp_path):
+        ok, msg = updater.perform_update(
+            current="0.1.0", fetch_fn=self._feed(name="DreamLayer-Setup.exe"),
+            platform="win32",
+            download=lambda a, progress=None: tmp_path / "s.exe",
+            install=lambda p: False)            # Authenticode gate refuses
+        assert ok is False and "nothing was changed" in msg
