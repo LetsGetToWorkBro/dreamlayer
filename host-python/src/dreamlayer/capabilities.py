@@ -132,6 +132,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="opt-in (heavy); clones her timbre from the baked juno_*.mp3 clips "
              "via XTTS at inference — no training, no cloud",
         gain="baseline (or local_tts) speaks in a generic voice; this speaks in Juno's own voice, zero-shot cloned on-device from her existing clips", impact=3, before=0, after=4),
+    Cap("live_interpret", "A live interpreter in your ear (speech↔speech)", "voice",
+        ("transformers",), "interpreter", "rosetta_seamless.py",
+        note="opt-in (heavy); SeamlessM4T-v2 on-device — audio never leaves the Brain",
+        gain="Rosetta's eye translates text you look at; this translates the conversation you're IN — a foreign speaker's meaning is spoken into your ear, and your reply back in their language, offline", impact=4, before=0, after=4.5),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
