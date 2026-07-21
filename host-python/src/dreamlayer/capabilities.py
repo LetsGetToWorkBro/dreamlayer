@@ -495,6 +495,18 @@ PACKS: Tuple[Pack, ...] = (
     Pack("operator", "Operator",
          "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
          ("infra", "llm", "platform", "sync"), "~200 MB", 2),
+    Pack("interpreter", "Interpreter",
+         "A live interpreter in your ear: a foreign speaker's meaning spoken to you, and your reply back in their language — SeamlessM4T on-device, audio never leaves this Mac.",
+         ("interpreter",), "~2–4 GB", 4),
+    Pack("world-sense", "World Sense",
+         "Senses beyond speech: alarms, doorbell and glass-breaking taps, birdsong ID, document and handwriting/math reading, and a sense of distance from one camera.",
+         ("sound-events", "birds", "doc-ocr", "math-ocr", "depth"), "~1–2 GB", 3),
+    Pack("stargazer", "Stargazer",
+         "Look up and know the sky — planets, stars, and constellations named from your place and time, fully offline.",
+         ("sky",), "~50 MB", 2),
+    Pack("mind-palace", "Mind Palace",
+         "Deeper memory: a temporal knowledge graph that answers what's connected and when, plus spaced rehearsal that resurfaces a name right before you'd lose it.",
+         ("memory-graph", "srs"), "~500 MB", 3),
 )
 
 _PACK_BY_KEY = {p.key: p for p in PACKS}
