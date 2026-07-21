@@ -508,6 +508,27 @@ _PAGE = r"""<!doctype html>
   #touracts{display:flex;gap:8px;margin-top:9px}
   #touracts button{padding:6px 14px;border-radius:16px;font-size:12px}
   #touracts .ghost{border-color:rgba(125,255,168,.25);color:var(--phos-dim)}
+  /* confluence: the chip lives only in dream mode; the code card is the one
+     piece of chrome — the three words two humans speak to each other */
+  #confbtn{display:none}
+  body[data-dream="on"] #confbtn{display:inline-block}
+  #confbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
+  #confcard{position:fixed;left:50%;top:24%;transform:translateX(-50%);
+    width:min(86vw,360px);z-index:8;background:rgba(5,10,8,.95);
+    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    backdrop-filter:blur(5px);display:none}
+  #confcard.on{display:block}
+  #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+    text-transform:uppercase;margin-bottom:8px}
+  #confcard p{font-size:12.5px;color:#DDEFE4;line-height:1.5;margin:6px 0}
+  #confcard .code{font-size:20px;letter-spacing:2px;color:var(--amber);
+    text-align:center;margin:10px 0;user-select:all}
+  #confcard input{width:100%;font:15px ui-monospace,Menlo,monospace;
+    letter-spacing:1px;text-align:center;padding:9px;border-radius:8px;
+    border:1px solid var(--phos-dim);background:#05100D;color:var(--phos)}
+  #confcard .acts{display:flex;gap:8px;margin-top:11px}
+  #confcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
+  #confmsg{min-height:1.1em;color:var(--amber);font-size:12px;margin-top:6px}
   /* short viewports (landscape phones, split view): the card moves to the TOP
      so it can never sit over the lens it is pointing at (refute 2026-07-21) */
   @media (max-height: 540px){
@@ -532,6 +553,7 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="tier" hidden><b id="tiertx"></b></span>
   <span class="chip on" id="livebtn" role="switch" aria-checked="true" tabindex="0">&#9673; <b id="livest">live</b></span>
   <span class="chip" id="veilbtn" role="switch" aria-checked="false" tabindex="0">veil <b id="veilst">off</b></span>
+  <span class="chip" id="confbtn" role="button" tabindex="0" title="Share the sky with someone">entangle</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
 </div>
 <div id="controls">
@@ -547,6 +569,11 @@ _PAGE = r"""<!doctype html>
   <button id="mic" hidden aria-pressed="false"
           title="Voice uses your phone's speech service, not the Brain's on-device ASR">&#127908;</button>
   <button id="send" aria-label="Send">ask</button>
+</div>
+<div id="confcard" role="dialog" aria-label="Entangle two skies">
+  <h3>Confluence</h3>
+  <div id="confbody"></div>
+  <div id="confmsg"></div>
 </div>
 <div id="tour" aria-live="polite">
   <div id="tourring"></div>
@@ -830,6 +857,7 @@ async function enterDream(){
 function exitDream(){
   dreamOn = false;
   dreamGen++;                      /* invalidate any enterDream still awaiting */
+  confHide(); confState = null; confBlend = null;
   document.body.setAttribute("data-dream", "off");
   if (dreamRaf != null) { cancelAnimationFrame(dreamRaf); dreamRaf = null; }
   window.removeEventListener("devicemotion", onDreamMotion);
@@ -856,6 +884,7 @@ function dreamTick(){                      /* the 2 Hz reactor pass */
   dweather.pressure = dweather.pressure * 0.7 + (pressure + dmotion.mag * 0.3) * 0.3;
   dweather.energy   = dweather.energy * 0.7 + energy * 0.3;
   dweather.luma     = 0.3 + Math.min(0.4, amp * 0.8 + dmotion.mag * 0.15);
+  confBeat();                        /* the shared sky rides the same 2 Hz */
 }
 function dreamCurl(x, y, t){               /* cheap curl of a drifting field */
   const n = (a, b) => Math.sin(a * 0.061 + t * 0.00021 + Math.sin(b * 0.047 - t * 0.00013));
@@ -893,6 +922,7 @@ function dreamFrame(ts){
     ctx.fillStyle = ember; ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawConfluence(ctx);               /* the shared sky, when two are dreaming */
   gtext(ctx, "DREAM", 128, 36, GP.text_ghost, "sm");
 }
 
@@ -956,6 +986,205 @@ $("tournext").onclick = tourNext;
 $("tourskip").onclick = endTour;
 $("tourbtn").onclick = () => startTour(true);
 $("tourbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") startTour(true); };
+
+
+/* ---- confluence: two skies, one room -------------------------------------
+   The REAL two-wearer layer, through the Brain as the meeting point. This
+   client only speaks and paints: it posts my weather beat (state + palette
+   slots) at the dream 2 Hz and renders exactly the frames MY EntangledSky
+   returns — a blended palette when merged, a seam with the peer's half-sky
+   (seam_dd / gap_deg / peer_rgb) when split, a solo frame when the peer
+   fades. All bond math, authentication, hysteresis, and staleness live
+   server-side in the real BondManager/EntangledSky — nothing is faked here,
+   and nothing but weather numbers ever leaves this phone. */
+let CONF_SID = "";
+try {
+  CONF_SID = sessionStorage.getItem("dl-live-csid") || "";
+  if (!CONF_SID) {
+    CONF_SID = (crypto.randomUUID ? crypto.randomUUID()
+                : String(Math.floor(performance.now())) + "-" +
+                  String((crypto.getRandomValues(new Uint32Array(2))[0])));
+    sessionStorage.setItem("dl-live-csid", CONF_SID);
+  }
+} catch (e) { CONF_SID = "sid-" + String(performance.now() | 0); }
+let confOn = false;                 /* an offer or bond is live for this side */
+let confState = null;               /* {mode, tg, seamDeg, gapDeg, peerRgb} */
+let confBlend = null;               /* merged palette slots from MY sky */
+function confSlots(){
+  /* my four palette slots, in the device's 10-bit YCbCr slot shape — the
+     same two-band weather that drives the solo dream (sky = pressure on the
+     Cb/storm axis, energy = ember on the Cr axis, luma = amplitude) */
+  const y = Math.round(Math.max(0, Math.min(1, dweather.luma)) * 255) * 4;
+  const q = v => Math.round((Math.max(-1, Math.min(1, v)) * 128 + 128)) * 4;
+  const sky = {idx: 1, y: y, cb: q(0.18 + dweather.pressure * 0.5),
+               cr: q(-0.10 - dweather.pressure * 0.15)};
+  const ember = {idx: 2, y: Math.min(1023, y + 100), cb: q(-0.12),
+                 cr: q(0.14 + dweather.energy * 0.55)};
+  return [sky, ember,
+          {idx: 3, y: Math.max(0, y - 120), cb: sky.cb, cr: sky.cr},
+          {idx: 4, y: Math.max(0, y - 200), cb: ember.cb, cr: ember.cr}];
+}
+function confMyState(){
+  return Math.min(1, dweather.pressure * 0.5 + dweather.energy * 0.5);
+}
+function slotRgb(c){
+  const y = (c.y || 512) / 4, cb = (c.cb || 512) / 4 - 128, cr = (c.cr || 512) / 4 - 128;
+  const cl = v => Math.max(0, Math.min(255, v | 0));
+  return "rgb(" + cl(y + 1.402 * cr) + "," + cl(y - 0.344 * cb - 0.714 * cr) +
+         "," + cl(y + 1.772 * cb) + ")";
+}
+async function confBeat(){
+  if (!confOn || !dreamOn) return;
+  try {
+    const rsp = await fetchJSON("/dreamlayer/live/weather", {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({sid: CONF_SID, state: confMyState(),
+                            colors: confSlots()})}, 4000);
+    const j = rsp.json || {};
+    for (const f of (j.frames || [])) applyConfFrame(f);
+    if (j.entangled === false && !j.waiting) setConfOn(false);
+  } catch (e) { /* a missed beat is just weather */ }
+}
+function applyConfFrame(f){
+  if (!f || !f.t && !f.mode) return;
+  if (f.t === "palette") { confBlend = f.colors || null; return; }
+  if (f.mode === "solo") { confState = null; confBlend = null; return; }
+  if (f.mode === "merged") {
+    confState = {mode: "merged", tg: (f.tg | 0)};
+    return;
+  }
+  if (f.mode === "split") {
+    confState = {mode: "split", tg: (f.tg | 0),
+                 seamDeg: (f.seam_dd | 0) / 10,
+                 gapDeg: (f.gap_deg | 0),
+                 peerRgb: Array.isArray(f.peer_rgb) ? f.peer_rgb : [60, 70, 75]};
+    confBlend = null;
+  }
+}
+function drawConfluence(ctx){
+  /* the shared sky, over the dream, inside the glass circle */
+  if (!confState) return;
+  if (confState.mode === "merged") {
+    /* one coherent front: a soft ring breathing with togetherness */
+    const a = 0.10 + (confState.tg / 100) * 0.25;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(128, 128, 120, 0, 2 * Math.PI);
+    let col = "rgba(125,255,168," + a.toFixed(3) + ")";
+    if (confBlend) {
+      const skySlot = confBlend.find(c => (c.idx | 0) === 1);
+      if (skySlot) col = slotRgb(skySlot);
+      ctx.globalAlpha = a;
+    }
+    ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.stroke();
+    ctx.restore();
+    gtext(ctx, "TOGETHER " + confState.tg + "%", 128, 226, GP.text_ghost, "sm");
+    return;
+  }
+  /* split: the sky divides — my half keeps my weather, the peer's half
+     arrives as one ready RGB; the seam stands at seam_dd, its gap widening
+     with divergence, its softness fading with togetherness */
+  const th = (confState.seamDeg || -90) * Math.PI / 180;
+  const gap = (confState.gapDeg || 8) * Math.PI / 180;
+  const [pr, pg, pb] = confState.peerRgb;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(128, 128, 127, 0, 2 * Math.PI); ctx.clip();
+  ctx.beginPath();
+  ctx.moveTo(128, 128);
+  ctx.arc(128, 128, 130, th + gap / 2, th + Math.PI - gap / 2);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(" + pr + "," + pg + "," + pb + ",0.38)";
+  ctx.fill();
+  const soft = Math.max(0.15, 1 - (confState.tg / 100));
+  for (const t of [th, th + Math.PI]) {
+    ctx.beginPath();
+    ctx.moveTo(128 + Math.cos(t) * 30, 128 + Math.sin(t) * 30);
+    ctx.lineTo(128 + Math.cos(t) * 127, 128 + Math.sin(t) * 127);
+    ctx.strokeStyle = "rgba(255,196,107," + (0.25 + soft * 0.45).toFixed(3) + ")";
+    ctx.lineWidth = 1 + soft * 2.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+  gtext(ctx, "APART " + (100 - confState.tg) + "%", 128, 226, GP.text_ghost, "sm");
+}
+function setConfOn(on){
+  confOn = on;
+  if (!on) { confState = null; confBlend = null; }
+  $("confbtn").classList.toggle("on", on);
+}
+function confCard(mode, code){
+  const card = $("confcard"), body = $("confbody"), msg = $("confmsg");
+  body.textContent = ""; msg.textContent = "";
+  const p = t => { const el = document.createElement("p"); el.textContent = t; body.appendChild(el); };
+  const btn = (t, fn, ghost) => {
+    const b = document.createElement("button"); b.type = "button";
+    b.textContent = t; if (ghost) b.className = "ghost"; b.onclick = fn; return b;
+  };
+  const acts = document.createElement("div"); acts.className = "acts";
+  if (mode === "choose") {
+    p("Share the sky with someone dreaming on this Brain. One of you gets a code; the other speaks it back.");
+    acts.appendChild(btn("Get a code", confPropose));
+    acts.appendChild(btn("I have a code", () => confCard("enter"), true));
+  } else if (mode === "code") {
+    p("Say these three words to them — the code IS the bond:");
+    const c = document.createElement("div"); c.className = "code";
+    c.textContent = code; body.appendChild(c);
+    p("Keep dreaming. The moment they enter it, your skies meet.");
+    acts.appendChild(btn("Done", confHide));
+  } else if (mode === "enter") {
+    p("Type the words they spoke:");
+    const inp = document.createElement("input");
+    inp.id = "confcode"; inp.autocomplete = "off";
+    inp.placeholder = "amber-birch"; body.appendChild(inp);
+    acts.appendChild(btn("Entangle", confAccept));
+    acts.appendChild(btn("Back", () => confCard("choose"), true));
+    setTimeout(() => inp.focus(), 60);
+  } else if (mode === "bonded") {
+    p("Entangled. The sky is shared while you both dream — merged when your weathers agree, split when they part.");
+    acts.appendChild(btn("Untangle", confDissolve));
+    acts.appendChild(btn("Close", confHide, true));
+  }
+  body.appendChild(acts);
+  card.classList.add("on");
+}
+function confHide(){ $("confcard").classList.remove("on"); }
+async function confApi(path, body){
+  const rsp = await fetchJSON(path, {
+    method: "POST",
+    headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+    body: JSON.stringify(body)}, 6000);
+  return rsp.json || {};
+}
+async function confPropose(){
+  try {
+    const j = await confApi("/dreamlayer/live/confluence/propose", {sid: CONF_SID});
+    if (j.code) { setConfOn(true); confCard("code", j.code); }
+    else $("confmsg").textContent = j.error || "couldn't make a code";
+  } catch (e) { $("confmsg").textContent = "brain unreachable"; }
+}
+async function confAccept(){
+  const code = ($("confcode") && $("confcode").value) || "";
+  try {
+    const j = await confApi("/dreamlayer/live/confluence/accept",
+                            {sid: CONF_SID, code: code});
+    if (j.ok) { setConfOn(true); confHide(); showHud(["skies entangled"], {ms: 2600}); }
+    else $("confmsg").textContent = j.error || "that code didn't take";
+  } catch (e) { $("confmsg").textContent = "brain unreachable"; }
+}
+async function confDissolve(){
+  try { await confApi("/dreamlayer/live/confluence/dissolve", {sid: CONF_SID}); }
+  catch (e) { /* the room stale-drops it anyway */ }
+  setConfOn(false); confHide();
+  showHud(["skies apart"], {ms: 2200});
+}
+$("confbtn").onclick = () => {
+  if (!dreamOn) return;
+  confCard(confOn ? "bonded" : "choose");
+};
+$("confbtn").onkeydown = e => {
+  if ((e.key === " " || e.key === "Enter") && dreamOn)
+    confCard(confOn ? "bonded" : "choose");
+};
 
 /* ---- link + tier chips -------------------------------------------------- */
 function setLink(ok, ms){

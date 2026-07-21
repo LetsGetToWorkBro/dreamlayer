@@ -3443,6 +3443,35 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 self._json(403, {"error": "installing is local-only"}); return
             self._json(200, brain.store_install(self._body().get("name", "")))
 
+        def _post_conf_propose(self, path, qs):
+            """Confluence (Live Lens): mint a bond offer — the three-word code
+            the two humans speak to each other. Real BondManager underneath."""
+            from .live_confluence import room
+            b = self._body()
+            self._json(200, room(brain).propose(str(b.get("sid", ""))))
+
+        def _post_conf_accept(self, path, qs):
+            from .live_confluence import room
+            b = self._body()
+            self._json(200, room(brain).accept(str(b.get("sid", "")),
+                                               str(b.get("code", ""))))
+
+        def _post_conf_dissolve(self, path, qs):
+            from .live_confluence import room
+            b = self._body()
+            self._json(200, room(brain).dissolve(str(b.get("sid", ""))))
+
+        def _post_live_weather(self, path, qs):
+            """One dream-cadence weather beat: my state+palette in, MY sky's
+            frames out (merged blend / split seam / solo) — the real
+            EntangledSky per side, HMAC'd packets between them, nothing
+            persisted anywhere."""
+            from .live_confluence import room
+            b = self._body()
+            self._json(200, room(brain).weather(
+                str(b.get("sid", "")), b.get("state", 0.0),
+                b.get("colors") or []))
+
         def _post_downloads_enqueue(self, path, qs):
             """Queue downloads (packs / models / plugins) — accepts one item
             or {"items": [...]} for Download All. Local-only, matching the
@@ -3884,6 +3913,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/brain/ask": _post_brain_ask,
             "/dreamlayer/plugins/install": _post_plugins_install,
             "/dreamlayer/downloads/enqueue": _post_downloads_enqueue,
+            "/dreamlayer/live/confluence/propose": _post_conf_propose,
+            "/dreamlayer/live/confluence/accept": _post_conf_accept,
+            "/dreamlayer/live/confluence/dissolve": _post_conf_dissolve,
+            "/dreamlayer/live/weather": _post_live_weather,
             "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,
             "/dreamlayer/plugins/store/install": _post_plugins_store_install,
