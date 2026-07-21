@@ -500,6 +500,14 @@ class Orchestrator(
             engine="argos")
         self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
+        # Barcode → Open Food Facts → your dietary rules. Only the numeric code
+        # leaves, and only when the Veil is down (allow_capture); your
+        # DietaryProfile never leaves the device.
+        from ..object_lens.barcode_lens import BarcodeFoodProvider
+        from ..plugins.openfoodfacts import _default_fetch, off_barcode_fn
+        self.object_lens.registry.register(BarcodeFoodProvider(
+            self.dietary, lookup_fn=off_barcode_fn(_default_fetch),
+            allow_network=self.privacy.allow_capture))
         # Waypath: point-me-to-my-things from anchors
         self.waypath = WaypathLens()
         # Scholar: look at a test question and get the answer; look at a form and

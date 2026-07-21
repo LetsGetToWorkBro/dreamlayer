@@ -183,6 +183,11 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("rapidocr_onnxruntime",), "vision", "object_lens/ocr_backends.py",
         note="every OCR line is person- and PII-scrubbed before it surfaces",
         gain="baseline only has the vision model's guess at any text; this reads it for real, on-device — feeding the translation and taste lenses and the price/ISBN providers", impact=4, before=1.5, after=4.5),
+    Cap("barcode_scan", "Scan a product barcode → nutrition & allergens", "vision",
+        ("zxingcpp",), "vision", "object_lens/barcode_backends.py",
+        note="decoding is on-device; the Open Food Facts lookup sends only the "
+             "numeric code, and only when the Veil is down",
+        gain="baseline can't read a barcode at all; this decodes it on-device and checks the product's allergens against your dietary rules — 'contains milk, soy — you avoid dairy'", impact=3, before=0, after=4),
 
     # --- causal ---------------------------------------------------------------------
     Cap("causal_fusion", "Causal inference over credibility channels", "causal",

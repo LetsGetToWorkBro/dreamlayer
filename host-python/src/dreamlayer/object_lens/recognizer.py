@@ -128,7 +128,8 @@ class ObjectRecognizer:
     def __init__(self, classify_fn: Optional[Callable] = None,
                  min_confidence: float = 0.5,
                  taxonomy: Optional[list[str]] = None,
-                 ocr_fn: Optional[Callable] = None):
+                 ocr_fn: Optional[Callable] = None,
+                 barcode_fn: Optional[Callable] = None):
         self._classify = classify_fn
         self.min_confidence = min_confidence
         self.taxonomy = taxonomy or DEFAULT_TAXONOMY
@@ -137,6 +138,11 @@ class ObjectRecognizer:
         # installed — the text channel simply stays the VLM's / empty).
         self._ocr_fn = ocr_fn
         self._ocr_ready = ocr_fn is not None
+        # Barcode decoder: an explicit decode_fn(frame)->[(sym,value),...], else
+        # the default zxing-cpp rung, resolved lazily (None when absent → no
+        # barcode attribute, and the food lens stays quiet).
+        self._barcode_fn = barcode_fn
+        self._barcode_ready = barcode_fn is not None
 
     def _ocr(self) -> Optional[Callable]:
         if not self._ocr_ready:
@@ -147,6 +153,16 @@ class ObjectRecognizer:
                 self._ocr_fn = None
             self._ocr_ready = True
         return self._ocr_fn
+
+    def _barcode(self) -> Optional[Callable]:
+        if not self._barcode_ready:
+            try:
+                from .barcode_backends import default_barcode_decoder
+                self._barcode_fn = default_barcode_decoder()
+            except Exception:                          # noqa: BLE001 — never load-bearing
+                self._barcode_fn = None
+            self._barcode_ready = True
+        return self._barcode_fn
 
     def recognize(self, frame) -> Optional[ObjectSighting]:
         """Name the object in a frame, or None (no frame / low confidence /
@@ -178,8 +194,34 @@ class ObjectRecognizer:
         if person_guard.frame_is_dominated_by_a_person(frame):
             return None                       # visual ground truth: a human subject
         attrs = self._read_text_into(frame, attrs)
+        attrs = self._decode_barcode_into(frame, attrs)
         return ObjectSighting(label=label, confidence=confidence,
                               attributes=attrs or {})
+
+    def _decode_barcode_into(self, frame, attrs) -> dict:
+        """Attach attributes["barcode"] with the first numeric product code (or
+        any decoded symbology) read off the frame, so the food lens can look it
+        up. Pure on-device decode — no network, no identity. A no-op when no
+        decoder wheel is installed or nothing scans."""
+        decode = self._barcode()
+        if decode is None:
+            return attrs
+        try:
+            hits = decode(frame) or []
+        except Exception:                              # noqa: BLE001 — never breaks a look
+            return attrs
+        if not hits:
+            return attrs
+        from .barcode_backends import is_gtin
+        values = [v for _sym, v in hits if v]
+        # a numeric GTIN (a food/product code) is what the lookup wants; fall
+        # back to the first decoded value (e.g. a QR) so the attribute is honest
+        code = next((v for v in values if is_gtin(v)), values[0] if values else "")
+        if not code:
+            return attrs
+        attrs = dict(attrs or {})
+        attrs["barcode"] = code
+        return attrs
 
     def _read_text_into(self, frame, attrs) -> dict:
         """Fill attributes["text"] with what OCR actually reads on the object —

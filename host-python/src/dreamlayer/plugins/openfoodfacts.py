@@ -24,6 +24,12 @@ from ._egress import no_redirect_opener, read_capped
 NUTRISCORE_RATING = {"a": 4.8, "b": 4.0, "c": 3.0, "d": 2.0, "e": 1.0}
 
 SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl"
+# Product-by-barcode endpoint (same pinned host as SEARCH_URL, so the
+# no_redirect_opener host-pin still holds). v2 lets us ask for just the fields
+# we surface, keeping the reply small.
+PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product"
+
+_BARCODE_RE = __import__("re").compile(r"\D")
 
 
 def build_query(label: str) -> str:
@@ -33,6 +39,63 @@ def build_query(label: str) -> str:
         "fields": "product_name,nutriscore_grade,brands,allergens_tags",
     })
     return f"{SEARCH_URL}?{q}"
+
+
+def build_barcode_query(code: str) -> str:
+    """The product-by-code URL for a decoded barcode. `code` is sanitized to
+    digits — a barcode is numeric, and this keeps a decoder glitch from
+    building a URL with path-traversal or query junk in it."""
+    digits = _BARCODE_RE.sub("", code or "")
+    fields = "product_name,nutriscore_grade,brands,allergens_tags,ingredients_text"
+    q = urllib.parse.urlencode({"fields": fields})
+    return f"{PRODUCT_URL}/{digits}.json?{q}"
+
+
+def lookup_by_barcode(code: str, fetch_fn: Callable[[str], object]) -> dict:
+    """Resolve a decoded barcode to a product dict (nutriscore/allergens/brand/
+    ingredients/name), or {} on any miss/failure — a lens never breaks on a bad
+    scan. Adds `ingredients` and `product_name` on top of parse_product so the
+    dietary check has ingredient text to match, not just the allergen tags."""
+    digits = _BARCODE_RE.sub("", code or "")
+    if not (8 <= len(digits) <= 14):                  # not a product GTIN
+        return {}
+    try:
+        raw = fetch_fn(build_barcode_query(digits))
+        data = cast(dict, json.loads(raw) if isinstance(raw, (str, bytes)) else (raw or {}))
+        if int(data.get("status", 0)) != 1:           # OFF: 1 = found, 0 = unknown
+            return {}
+        product = data.get("product") or {}
+        out = parse_product(product)
+        ing = str(product.get("ingredients_text", "") or "").strip()
+        if ing:
+            out["ingredients"] = ing[:300]
+        name = str(product.get("product_name", "") or "").strip()
+        if name:
+            out["product_name"] = name[:80]
+        return out
+    except Exception:
+        return {}
+
+
+def off_barcode_fn(fetch_fn: Callable[[str], object], ttl: float = 600.0,
+                   now_fn: Optional[Callable[[], float]] = None) -> Callable[[str], dict]:
+    """A cached `lookup(barcode) -> product dict` bound to a fetch function.
+    Keyed on the sanitized digits (an exact, ideal cache key), caching even a
+    miss so a repeated glance at the same item doesn't re-hit the API."""
+    import time
+    now = now_fn or time.time
+    cache: dict = {}
+
+    def lookup_fn(code: str) -> dict:
+        key = _BARCODE_RE.sub("", code or "")
+        hit = cache.get(key)
+        if hit is not None and (now() - hit[0]) < ttl:
+            return hit[1]
+        result = lookup_by_barcode(key, fetch_fn)
+        cache[key] = (now(), result)
+        return result
+
+    return lookup_fn
 
 
 def parse_product(product: dict) -> dict:
