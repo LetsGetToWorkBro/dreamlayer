@@ -42,7 +42,15 @@ asr-extra = ["whisperx>=3,<4"]
 structured = ["outlines>=1,<2", "instructor>=1,<2", "pydantic>=2,<3", "pydantic-ai>=1.102.0,<2"]
 llm      = ["litellm>=1,<2"]
 intelligence = ["speechbrain>=1,<2", "spacy>=3,<4", "river>=0.23,<1", "human-learn>=0.3,<1", "supervision>=0.29,<1"]
+# a tiny generalist NER (GLiNER) for sharper commitment / entity extraction than
+# the regex + spaCy path — opt-in, so not in any deployment profile.
+nlp-extra = ["gliner>=0.2,<1"]
 vision   = ["ultralytics>=8,<9", "moondream>=1,<2", "open-clip-torch>=3,<4", "rapidocr-onnxruntime>=1.3,<2", "zxing-cpp>=2,<3", "coremltools>=9,<10; sys_platform=='darwin'", "mlx-vlm>=0.6,<1; sys_platform=='darwin'"]
+# on-device document + math reading, atop the OCR path (opt-in, heavy)
+math-ocr = ["pix2tex>=0.1,<1"]
+doc-ocr  = ["surya-ocr>=0.6,<1"]
+# monocular depth (Depth Anything V2 via transformers) — spatial sense from one camera
+depth    = ["transformers>=4.40,<5"]
 causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]

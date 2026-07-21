@@ -48,10 +48,14 @@ def extract_actions(text: str) -> list[dict]:
 class MeetingLog:
     """A tiny append-only meeting store backed by one JSON file."""
 
-    def __init__(self, path, now_fn=None):
+    def __init__(self, path, now_fn=None, ner=None):
         self.path = Path(path)
         import time
         self._now = now_fn or time.time
+        # optional sharper extractor (GLiNER); when present its commitments are
+        # merged on top of the deterministic ones. `ner.extract(text)->[{text,
+        # when, who}]`. None → deterministic only.
+        self._ner = ner
 
     # -- persistence -------------------------------------------------------
     def _load(self) -> list:
@@ -102,8 +106,16 @@ class MeetingLog:
         if live is None:
             return None
         live["notes"].append({"text": text[:500], "ts": self._now()})
-        for a in extract_actions(text):
-            if a not in live["actions"]:
+        actions = list(extract_actions(text))
+        if self._ner is not None:                      # GLiNER catches what regex can't
+            try:
+                for e in self._ner.extract(text) or []:
+                    actions.append({"text": str(e.get("text", ""))[:200],
+                                    "when": str(e.get("when", ""))})
+            except Exception:                          # noqa: BLE001 — never break a note
+                pass
+        for a in actions:
+            if a.get("text") and a not in live["actions"]:
                 live["actions"].append(a)
         # "we decided to …" / "decision: …" is a decision, not a to-do
         if re.search(r"\b(we decided|decision\s*[:\-]|agreed to)\b", text, re.I):
