@@ -1533,22 +1533,30 @@ let _dlPoll=null;
 function renderDownloadAll(packs){
   const el=$("dlall"); if(!el)return;
   const todo=packs.filter(p=>p.state!=="installed"&&!(p.install&&p.install.state==="done"));
-  el.innerHTML=todo.length
-    ?`<button class="sm" onclick="downloadAllPacks()">Download all (${todo.length})</button>`
+  const models=(window.MODELMISS||[]);
+  const items=todo.map(p=>({kind:"pack",key:p.key}))
+    .concat(models.map(m=>({kind:"model",key:m})));
+  const n=items.length;
+  const note=(todo.length&&models.length)
+    ?` <span class="conn-s" style="margin-left:4px">(${todo.length} pack${todo.length>1?"s":""} + ${models.length} model${models.length>1?"s":""})</span>`
     :"";
-  el.dataset.keys=JSON.stringify(todo.map(p=>p.key));
+  el.innerHTML=n
+    ?`<button class="sm" onclick="downloadAll()">Download all (${n})</button>${note}`
+    :"";
+  el.dataset.items=JSON.stringify(items);
 }
-async function downloadAllPacks(){
+async function downloadAll(){
   const el=$("dlall"); if(!el)return;
-  let keys=[]; try{keys=JSON.parse(el.dataset.keys||"[]");}catch(e){}
-  if(!keys.length)return;
+  let items=[]; try{items=JSON.parse(el.dataset.items||"[]");}catch(e){}
+  if(!items.length)return;
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",
-              {items:keys.map(k=>({kind:"pack",key:k}))});
-    toast("Queued "+keys.length+" pack downloads");
+    await api("/dreamlayer/downloads/enqueue","POST",{items:items});
+    toast("Queued "+items.length+" download"+(items.length>1?"s":""));
     pollDownloads();
   }catch(e){toast("Couldn't queue downloads");}
 }
+// one generic enqueue every per-item button routes through, so a single pack,
+// model, or plugin lands in the same visible queue as "Download all"
 async function queueDownload(kind,key){
   try{
     await api("/dreamlayer/downloads/enqueue","POST",{kind:kind,key:key});
@@ -1577,7 +1585,11 @@ async function pollDownloads(){
     return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;
   }).join("");
   if(live.length){_dlPoll=setTimeout(pollDownloads,1500);}
-  else{loadCaps();}   // queue drained → refresh pack states
+  else{                       // queue drained → refresh whatever it touched
+    loadCaps();
+    if(q.some(i=>i.kind==="plugin")){loadPlugins();refreshStore();}
+    if(q.some(i=>i.kind==="model")&&modelSel==="ollama")checkModel();
+  }
 }
 function renderPackNudge(packs){
   const el=$("packNudge"); if(!el)return;
@@ -2115,11 +2127,11 @@ function renderModel(){
   el.innerHTML='<div class="mstat"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
 }
 async function checkModel(){
-  if(modelSel!=="ollama")return;
+  if(modelSel!=="ollama"){window.MODELMISS=[];return;}
   let r; try{r=await api("/dreamlayer/model/status");}catch(e){r={reachable:false};}
   ollamaOK=!!r.reachable; refreshStatus();
   const el=$("modelStatus");
-  if(!r.reachable){
+  if(!r.reachable){window.MODELMISS=[];
     el.innerHTML='<div class="mstat"><div class="head"><span class="sdot warn"></span>'+
       `<b>Ollama isn't running</b></div><div class="lead" style="margin:0 0 4px">`+
       `Not reachable at <code>${esc(r.url||"http://127.0.0.1:11434")}</code>. Set it up on this Mac mini:</div>`+
@@ -2142,6 +2154,10 @@ async function checkModel(){
     else if(job&&job.state==="failed"){st='<span class="st warn-t">pull failed</span>';miss.push(nm);}
     else{st='<span class="st warn-t">not pulled</span>';miss.push(nm);}
     return `<div class="mrow"><span class="lbl">${lbl}</span><span class="nm">${esc(nm)}</span>${st}</div>`;}).join("");
+  // remember what's missing so "Download all" on the Capabilities page can grab
+  // the models too, and the caps button count stays honest
+  window.MODELMISS=miss.slice();
+  if($("dlall"))renderDownloadAll((LASTCAPS&&LASTCAPS.packs)||[]);
   // live progress bars for any in-flight pull
   const pulling=Object.keys(pulls).filter(nm=>pulls[nm].state==="pulling");
   const prog=pulling.map(nm=>{const p=pulls[nm].percent||0;
@@ -2163,11 +2179,12 @@ async function checkModel(){
   if(pulling.length)setTimeout(checkModel,1500);
 }
 async function pullModel(name){
-  toast(`Pulling ${name}…`);
-  // fire-and-forget: the server pulls in the background and reports % via
-  // /model/status, so this returns instantly instead of blocking for minutes.
-  try{await api("/dreamlayer/model/pull",{method:"POST",body:JSON.stringify({model:name})});}catch(e){}
-  checkModel();   // renders the job + starts the progress-poll loop
+  // route through the same visible download queue as packs and plugins, so
+  // every pull is one row you can watch (and cancel while it waits its turn).
+  // the queue worker runs the real background pull, so /model/status still
+  // streams the % into the inline bar here — one download, shown in both places.
+  await queueDownload("model",name);
+  checkModel();   // renders the inline job + starts the progress-poll loop
 }
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
@@ -2638,12 +2655,12 @@ async function refreshStore(){if(!_storeOpen)return;
   let r;try{r=await api("/dreamlayer/plugins/store",{method:"POST",body:"{}"});}catch(e){return;}
   if(r&&r.plugins)renderStore(r.plugins);}
 async function installFromStore(name,btn){
-  if(btn){btn.disabled=true;btn.textContent="Installing…";}
-  let r;try{r=await api("/dreamlayer/plugins/store/install",{method:"POST",body:JSON.stringify({name})});}catch(e){r=null;}
-  if(r&&r.ok){toast("Installed "+name);loadPlugins();refreshStore();}
-  else{const e=(r&&r.errors&&r.errors.length)?r.errors.join("; "):"install failed";
-    toast("Install failed");$("storeStatus").textContent=e;
-    if(btn){btn.disabled=false;btn.textContent="Install";}}
+  if(btn){btn.disabled=true;btn.textContent="Queued…";}
+  // through the same visible queue: the install runs in the background so
+  // browsing the store never blocks, and the card flips to "✓ installed"
+  // on its own when pollDownloads sees the plugin finish (see pollDownloads).
+  try{await queueDownload("plugin",name);}
+  catch(e){toast("Couldn't queue "+name);if(btn){btn.disabled=false;btn.textContent="Install";}}
 }
 window.openStore=openStore;window.installFromStore=installFromStore;
 window.removePlugin=removePlugin;
