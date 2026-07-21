@@ -160,3 +160,16 @@ class TestQueueHttp:
             assert all(i["state"] == "done" for i in out["queue"])
         finally:
             server.shutdown(); server.server_close()
+
+
+class TestQueueUi:
+    def test_panel_carries_the_queue_containers(self):
+        # The queue JS renders the Download-all button into #dlall and the
+        # live strip into #dlqueue — both no-op silently if the caps section
+        # doesn't carry the divs, which is exactly how the button shipped
+        # invisible once. Pin the containers next to the packs grid.
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        assert 'id="dlall"' in html
+        assert 'id="dlqueue"' in html
+        assert html.index('id="dlall"') < html.index('id="packgrid"')
