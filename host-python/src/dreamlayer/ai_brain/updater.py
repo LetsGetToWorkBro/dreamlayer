@@ -227,12 +227,14 @@ def perform_update(current: str | None = None, fetch_fn=None,
     fetch = fetch_fn or _default_update_fetch
     try:
         release = _json.loads(fetch(RELEASES_API, 10.0))
+        tag = str(release.get("tag_name") or "")
+        asset = pick_asset(release, platform=platform)
     except Exception:
-        return False, "couldn't reach the release feed"
-    tag = str(release.get("tag_name") or "")
+        # a malformed feed (non-object JSON, bad assets/size fields) must be
+        # a plain answer, not an escaping exception (refute A3)
+        return False, "couldn't read the release feed"
     if not is_upgrade(tag, cur):
         return False, f"no upgrade (running {cur}, latest {tag or 'unknown'})"
-    asset = pick_asset(release, platform=platform)
     if asset is None:
         return False, "this release has no verifiable installer for this machine"
     try:

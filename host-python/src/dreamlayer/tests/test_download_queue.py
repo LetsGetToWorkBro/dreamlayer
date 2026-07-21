@@ -11,7 +11,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 import dreamlayer.ai_brain.server.server as srv
 from dreamlayer.ai_brain.server import Brain, make_brain_server

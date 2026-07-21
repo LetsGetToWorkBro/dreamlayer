@@ -1429,7 +1429,7 @@ async function pollDownloads(){
     const pos=i.state==="queued"?` · #${(i.position|0)+1} in line`:"";
     const pct=i.state==="running"?` · ${i.percent|0}%`:"";
     const cancel=i.state==="queued"
-      ?` <button class="ghost sm" onclick="cancelDownload(${i.id})">Cancel</button>`:"";
+      ?` <button class="ghost sm" onclick="cancelDownload(${i.id|0})">Cancel</button>`:"";
     const cls=i.state==="failed"?"style=\"color:var(--warn,#B85C38)\"":
               i.state==="done"?"style=\"color:var(--memory)\"":"";
     return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;

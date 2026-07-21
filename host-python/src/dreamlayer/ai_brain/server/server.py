@@ -2091,6 +2091,9 @@ def _dl_enqueue(brain: Brain, kind: str, key: str) -> dict:
     if kind not in _DL_KINDS or not key:
         return {"error": "unknown download kind or empty name"}
     with _DL_LOCK:
+        live = sum(1 for i in _DL_QUEUE if i["state"] in ("queued", "running"))
+        if live >= 64:                       # cross-request growth cap (refute F4)
+            return {"error": "the queue is full — let some downloads finish"}
         for it in _DL_QUEUE:
             if (it["kind"], it["key"]) == (kind, key) and \
                     it["state"] in ("queued", "running"):
@@ -2118,15 +2121,20 @@ def _dl_cancel(item_id: int) -> dict:
 
 def _dl_next():
     with _DL_LOCK:
-        for it in _DL_QUEUE:
-            if it["state"] == "queued":
-                it["state"], it["detail"] = "running", "starting…"
-                return it
-        # queue drained — keep only the last 20 finished rows for the panel
+        # prune finished rows EVERY pass (not only at drain) so a long-running
+        # item can't let the list grow unboundedly across requests (refute F4)
         done = [x for x in _DL_QUEUE
                 if x["state"] in ("done", "failed", "partial", "cancelled")]
         for x in done[:-20]:
             _DL_QUEUE.remove(x)
+        for it in _DL_QUEUE:
+            if it["state"] == "queued":
+                it["state"], it["detail"] = "running", "starting…"
+                return it
+        # drained: clear the worker slot UNDER THE LOCK — an enqueue landing
+        # between this decision and the thread dying saw is_alive()==True and
+        # stranded its item with no worker (refute F3)
+        _DL_WORKER["t"] = None
         return None
 
 
@@ -2141,26 +2149,67 @@ def _dl_drain(brain: Brain) -> None:
             it["state"], it["detail"] = "failed", str(exc)[-160:]
 
 
+_DL_BUSY = ("another pack is already installing",
+            "too many downloads at once")
+
+
+def _dl_live_job(kind: str, key: str, job: dict) -> dict:
+    """The LIVE job dict to poll. _pull_model_async returns a shallow COPY
+    (its worker mutates the original in _PULL_JOBS), so polling the return
+    value showed 0%/pulling forever and wedged the queue for the full hour
+    (refute F1). Packs already return the live dict."""
+    if kind == "model":
+        with _PULL_LOCK:
+            return _PULL_JOBS.get(key, job)
+    return job
+
+
 def _dl_run_one(brain: Brain, it: dict, poll_s: float = 1.0,
                 max_polls: int = 3600) -> None:
     kind, key = it["kind"], it["key"]
     if kind == "plugin":
-        res = brain.store_install(key)            # synchronous, checksum-gated
-        if res.get("ok"):
+        # bound the synchronous store install — a stalled registry fetch must
+        # not wedge the single queue worker forever (refute F5)
+        box: dict = {}
+
+        def _go():
+            try:
+                box["res"] = brain.store_install(key)
+            except Exception as exc:              # noqa: BLE001
+                box["res"] = {"error": str(exc)[-160:]}
+        t = threading.Thread(target=_go, daemon=True)
+        t.start()
+        t.join(timeout=180)
+        res = box.get("res")
+        if res is None:
+            it["state"], it["detail"] = "failed", "plugin install timed out"
+        elif res.get("ok"):
             it["state"], it["percent"], it["detail"] = "done", 100, "installed"
         else:
             errs = res.get("errors") or [res.get("error") or "install failed"]
             it["state"], it["detail"] = "failed", str(errs[0])[-160:]
         return
-    job = _install_pack(brain, key) if kind == "pack" \
-        else _pull_model_async(brain, key)
+    launch = _install_pack if kind == "pack" else _pull_model_async
+    job = launch(brain, key)
+    polls = 0
+    while "error" in job and any(b in str(job["error"]) for b in _DL_BUSY):
+        # a DIRECT panel install/pull is mid-flight — WAIT for our turn
+        # instead of failing the whole batch spuriously (refute F2/F7)
+        it["detail"] = "waiting for the current install to finish…"
+        polls += 1
+        if polls >= max_polls:
+            it["state"], it["detail"] = "failed", "timed out waiting in line"
+            return
+        time.sleep(poll_s)
+        job = launch(brain, key)
     if "error" in job:
         it["state"], it["detail"] = "failed", str(job["error"])[-160:]
         return
-    for _ in range(max_polls):                    # ≤1h per item
-        st = job.get("state")
-        it["percent"] = int(job.get("percent") or 0)
-        it["detail"] = str(job.get("detail") or st or "")[:160]
+    for _ in range(polls, max_polls):             # ≤1h per item
+        live = _dl_live_job(kind, key, job)
+        st = live.get("state")
+        it["percent"] = int(live.get("percent") or 0)
+        it["detail"] = str(live.get("detail") or st or "")[:160]
         if st in ("done", "failed", "partial"):
             it["state"] = st
             return
@@ -3064,7 +3113,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, {"code": code, "url": url, "qr": to_svg(code)})
 
         def _get_downloads(self, path, qs):
-            """The unified download queue — positions + live progress."""
+            """The unified download queue — positions + live progress.
+            Local-only like the writes: pip/pull error tails can carry local
+            filesystem paths a paired phone has no business reading (F6)."""
+            if not self._from_localhost():
+                self._json(403, {"error": "downloads are managed on this Mac"})
+                return
             self._json(200, {"queue": _dl_snapshot()})
 
         def _get_live_link(self, path, qs):

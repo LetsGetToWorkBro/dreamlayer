@@ -547,15 +547,20 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             self._reopen_timer.start()
 
         def _install_reopen(self, timer):
-            try:
-                timer.stop()
-            except Exception:
-                pass
+            # keep trying until the app delegate exists (bounded) — a one-shot
+            # miss made Dock-click reopen silently dead for the whole process
+            # lifetime (refute B2)
             try:
                 from .webview_window import install_reopen_handler
-                install_reopen_handler(self._clicked_open_panel)
+                ok = install_reopen_handler(self._clicked_open_panel)
             except Exception:
-                pass
+                ok = True                     # no AppKit here → stop trying
+            self._reopen_tries = getattr(self, "_reopen_tries", 0) + 1
+            if ok or self._reopen_tries >= 30:
+                try:
+                    timer.stop()
+                except Exception:
+                    pass
 
         def _api(self, path, method="GET", body=b"{}"):
             # _authed_api carries the cached token and, on a 401/403, invalidates
@@ -601,36 +606,67 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # the UI thread froze the whole menu bar for up to the fetch timeout
             # per click. A worker does the fetch and posts the result when it
             # returns (audit 2026-07-17).
+            if getattr(self, "_upd_busy", False):
+                return                        # one update flow at a time (refute A2:
+            self._upd_busy = True             # racing installs shared one stage path)
             item = self.menu["Check for Updates"]
 
-            def _prog(done, total):
+            def _ui(fn):
+                # AppKit objects (menu items, terminate:) must be touched on
+                # the MAIN thread — rumps marshals nothing (refute A1)
                 try:
-                    pct = int(done * 100 / total) if total else 0
-                    item.title = f"Downloading update… {pct}%"
+                    from PyObjCTools import AppHelper
+                    AppHelper.callAfter(fn)
                 except Exception:
-                    pass
+                    try:
+                        fn()
+                    except Exception:
+                        pass
+
+            def _notify(msg, url=""):
+                # rumps.notification RAISES in a source run (no bundle
+                # Info.plist) — a toast must never kill the flow (refute A1b)
+                def go():
+                    try:
+                        rumps.notification("DreamLayer", msg, url)
+                    except Exception:
+                        pass
+                _ui(go)
+
+            last = {"pct": -1}
+
+            def _prog(done, total):
+                pct = int(done * 100 / total) if total else 0
+                if pct == last["pct"]:
+                    return                    # one callAfter per percent, not per chunk
+                last["pct"] = pct
+                _ui(lambda: setattr(item, "title", f"Downloading update… {pct}%"))
 
             def _work():
-                res = check_for_update()
-                if res["status"] != "update":
-                    rumps.notification("DreamLayer", res["message"], "")
-                    return
-                # update straight from the app: download → digest-verify →
-                # Gatekeeper gate → staged swap → relaunch. The Releases page
-                # is only the FALLBACK when any step honestly can't proceed.
-                from .updater import perform_update
-                item.title = "Downloading update…"
-                ok, msg = perform_update(progress=_prog)
-                item.title = "Check for Updates"
-                if ok:
-                    rumps.notification("DreamLayer", msg, "")
-                    rumps.quit_application()      # the new copy is relaunching
-                else:
-                    rumps.notification(
-                        "DreamLayer", f"{res['message']} — {msg}",
-                        res.get("url") or "")
-                    import webbrowser
-                    webbrowser.open(res.get("url") or RELEASES_PAGE)
+                try:
+                    res = check_for_update()
+                    if res["status"] != "update":
+                        _notify(res["message"])
+                        return
+                    # update straight from the app: download → digest-verify →
+                    # Gatekeeper gate → staged swap → relaunch. The Releases
+                    # page is only the FALLBACK when a step can't proceed.
+                    from .updater import perform_update
+                    _ui(lambda: setattr(item, "title", "Downloading update…"))
+                    try:
+                        ok, msg = perform_update(progress=_prog)
+                    except Exception:         # belt over the updater's own braces
+                        ok, msg = False, "updater hit an unexpected error"
+                    if ok:
+                        _notify(msg)
+                        _ui(rumps.quit_application)   # the new copy is relaunching
+                    else:
+                        _notify(f"{res['message']} — {msg}", res.get("url") or "")
+                        import webbrowser
+                        webbrowser.open(res.get("url") or RELEASES_PAGE)
+                finally:
+                    self._upd_busy = False
+                    _ui(lambda: setattr(item, "title", "Check for Updates"))
             threading.Thread(target=_work, daemon=True).start()
 
         @rumps.clicked("Sync now")
