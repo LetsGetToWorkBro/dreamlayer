@@ -805,6 +805,13 @@
     else if (sim.card && sim.card.type === "rosetta") this._rosetta(sim.card, t);
     else if (sim.card && sim.card.type === "prism") this._prism(sim.card, t);
     else if (sim.card && sim.card.type === "junocolors") this._junoColors(sim.card, t);
+    else if (sim.card && sim.card.type === "taste") this._taste(sim.card, t);
+    else if (sim.card && sim.card.type === "glance") this._glance(sim.card, t);
+    else if (sim.card && sim.card.type === "gauge") this._gauge(sim.card, t);
+    else if (sim.card && sim.card.type === "caption") this._caption(sim.card, t);
+    else if (sim.card && sim.card.type === "scrub") this._scrub(sim.card, t);
+    else if (sim.card && sim.card.type === "ember") this._ember(sim.card, t);
+    else if (sim.card && sim.card.type === "synesthesia") this._synesthesia(sim.card, t);
     else this._ready(t);
     this._drawSparks();          // arrival sparkles overlay the glass, then fade
     c.restore();
@@ -908,6 +915,89 @@
     for (var i = 0; i < words.length; i++) { var test = (cur + " " + words[i]).trim(); if (test.length > 22 && cur) { lines.push(cur); cur = words[i]; } else cur = test; }
     if (cur) lines.push(cur); lines = lines.slice(0, 3);
     for (var j = 0; j < lines.length; j++) this.text(lines[j], CX, 130 + j * 26, "md", C.text);
+  };
+  // Taste Lens — your own ranking of what's on the shelf: winner, runner-up, avoid.
+  Glass.prototype._taste = function (card, t) {
+    var c = this.ctx;
+    this.text(card.eyebrow || "TASTE", CX, 58, "sm", C.teal);
+    c.strokeStyle = rgba(C.border, .9); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(CX - 70, 74); c.lineTo(CX + 70, 74); c.stroke();
+    var pl = .55 + .45 * (.5 + .5 * Math.sin((t || 0) * 3));
+    c.fillStyle = rgba(C.teal, pl); c.beginPath(); c.arc(CX - 78, 98, 4, 0, 6.283); c.fill();
+    this.text(this._clip(card.win || "", 18), CX, 98, "md", C.text);
+    if (card.winNote) this.text(this._clip(card.winNote, 26), CX, 118, "xs", C.teal);
+    this.text("2 · " + this._clip(card.second || "", 16), CX, 150, "sm", C.text2);
+    if (card.avoid) this.text("✕ " + this._clip(card.avoid, 16), CX, 180, "sm", C.coral);
+  };
+  // Glance choices — one look, three moves; the highlight cycles.
+  Glass.prototype._glance = function (card, t) {
+    var opts = card.options || ["Answer it", "Translate", "Know it"];
+    this.text(card.eyebrow || "GLANCE", CX, 62, "sm", C.teal);
+    var sel = Math.floor((t || 0) / 1.1) % opts.length;
+    for (var i = 0; i < opts.length; i++) { var y = 112 + i * 34, on = i === sel;
+      this.text((on ? "▸ " : "   ") + opts[i], CX, y, on ? "md" : "sm", on ? C.text : C.text2); }
+  };
+  // Truth gauge — how well a claim holds up, on a sweeping arc.
+  Glass.prototype._gauge = function (card, t) {
+    var c = this.ctx, sc = card.score == null ? .7 : Math.max(0, Math.min(1, card.score));
+    this.text(card.eyebrow || "TRUTH GAUGE", CX, 56, "sm", C.teal);
+    var a0 = Math.PI * 0.82, a1 = Math.PI * 2.18, cy = 122, r = 48;
+    c.lineWidth = 8; c.strokeStyle = rgba(C.border, .8);
+    c.beginPath(); c.arc(CX, cy, r, a0, a1); c.stroke();
+    var col = sc > .66 ? C.teal : sc > .33 ? C.amber : C.coral;
+    var grow = Math.min(1, (t || 0) / .8);
+    c.strokeStyle = rgba(col, .95);
+    c.beginPath(); c.arc(CX, cy, r, a0, a0 + (a1 - a0) * sc * grow); c.stroke();
+    this.text(Math.round(sc * 100) + "%", CX, cy + 4, "lg", C.text);
+    this.text(this._clip(card.label || "", 24), CX, 188, "sm", C.text2);
+    if (card.sources) this.text(card.sources + " sources", CX, 206, "xs", C.ghost);
+  };
+  // Live / spoken caption — words stream onto the glass with a live pulse.
+  Glass.prototype._caption = function (card, t) {
+    var c = this.ctx, words = String(card.text || "").split(" ");
+    var n = Math.min(words.length, 1 + Math.floor((t || 0) * 3));
+    this.text(card.eyebrow || "LIVE CAPTION", CX, 66, "sm", C.teal);
+    var bl = .35 + .65 * (.5 + .5 * Math.sin((t || 0) * 5));
+    c.fillStyle = rgba(C.teal, bl); c.beginPath(); c.arc(CX - 66, 62, 3, 0, 6.283); c.fill();
+    var lines = this._wrap(words.slice(0, n).join(" "), 22).slice(-3), y = 118;
+    for (var i = 0; i < lines.length; i++) { this.text(lines[i], CX, y, "md", C.text); y += 28; }
+  };
+  // Rewind — your day as one timeline; the current node glows.
+  Glass.prototype._scrub = function (card, t) {
+    var c = this.ctx, total = card.total || 6, idx = card.idx == null ? 3 : card.idx;
+    this.text(card.eyebrow || "REWIND", CX, 60, "sm", C.teal);
+    var y = 128, x0 = CX - 84, x1 = CX + 84;
+    c.strokeStyle = rgba(C.border, .9); c.lineWidth = 2;
+    c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke();
+    for (var i = 0; i < total; i++) { var x = x0 + (x1 - x0) * (total < 2 ? .5 : i / (total - 1)), on = i === idx;
+      c.fillStyle = rgba(on ? C.teal : C.ghost, on ? 1 : .6);
+      c.beginPath(); c.arc(x, y, on ? 6 : 3, 0, 6.283); c.fill();
+      if (on) { c.strokeStyle = rgba(C.teal, .35 + .3 * (.5 + .5 * Math.sin((t || 0) * 3))); c.lineWidth = 1.5;
+        c.beginPath(); c.arc(x, y, 11, 0, 6.283); c.stroke(); } }
+    this.text(this._clip(card.node || "", 24), CX, 168, "md", C.text);
+    if (card.label) this.text(card.label, CX, 190, "sm", C.text2);
+  };
+  // Ember — a memory tended until it lives in you; a breathing flare.
+  Glass.prototype._ember = function (card, t) {
+    var c = this.ctx, g = .5 + .5 * Math.sin((t || 0) * 2), cy = 116, r = 22 + 6 * g;
+    this.text(card.eyebrow || "EMBER", CX, 58, "sm", C.amber);
+    var grd = c.createRadialGradient(CX, cy, 2, CX, cy, r);
+    grd.addColorStop(0, rgba("#FFC176", .95)); grd.addColorStop(.5, rgba(C.amber, .5 * (.6 + .4 * g)));
+    grd.addColorStop(1, rgba(C.amber, 0));
+    c.fillStyle = grd; c.beginPath(); c.arc(CX, cy, r, 0, 6.283); c.fill();
+    this.text(this._clip(card.primary || "", 22), CX, 166, "md", C.text);
+    if (card.reps != null) this.text("tended " + card.reps + "×", CX, 188, "sm", C.text2);
+    if (card.next) this.text("next · " + card.next, CX, 206, "xs", C.ghost);
+  };
+  // Synesthesia — sound becomes color at the rim; arcs bloom, a word names it.
+  Glass.prototype._synesthesia = function (card, t) {
+    var c = this.ctx, col = card.color || C.teal;
+    for (var i = 0; i < 5; i++) { var a = (t || 0) * 1.2 + i * 1.25;
+      var al = .12 + .13 * (.5 + .5 * Math.sin((t || 0) * 2 + i));
+      c.strokeStyle = rgba(col, al); c.lineWidth = 5 - i * .6;
+      c.beginPath(); c.arc(CX, CX, CX - 10 - i * 6, a, a + 1.1); c.stroke(); }
+    this.text(card.eyebrow || "SOUND → COLOR", CX, 118, "sm", C.text2);
+    this.text(this._clip(card.label || "", 18), CX, 146, "lg", C.text);
   };
   Glass.prototype._veil = function (t) {
     // Juno goes dark: still on the glass, wings down, seeing nothing.
