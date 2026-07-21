@@ -328,3 +328,4 @@ class IngestOps(OpsHost):
             wire = self.tincan.compose(pattern)
             if wire:
                 self.confluence_outbox.append(wire)
+                self.mesh_tee(pattern)          # also over LoRa when a node is up
