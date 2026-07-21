@@ -179,6 +179,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("coremltools",), "vision", "object_lens/classify_backends.py",
         kind="darwin",
         gain="runs recognition on Apple silicon instead of CPU — faster, cooler", impact=2, before=3, after=4.5),
+    Cap("text_ocr", "Read text in view (prices, menus, ISBNs)", "vision",
+        ("rapidocr_onnxruntime",), "vision", "object_lens/ocr_backends.py",
+        note="every OCR line is person- and PII-scrubbed before it surfaces",
+        gain="baseline only has the vision model's guess at any text; this reads it for real, on-device — feeding the translation and taste lenses and the price/ISBN providers", impact=4, before=1.5, after=4.5),
 
     # --- causal ---------------------------------------------------------------------
     Cap("causal_fusion", "Causal inference over credibility channels", "causal",

@@ -15,18 +15,21 @@ from dreamlayer.ai_brain.server.panel import render_panel
 
 
 class TestPanelConnectUX:
-    def test_live_qr_autoloads_on_connections(self):
+    def test_live_qr_loads_on_demand_from_a_collapsible(self):
         html = render_panel("tok")
-        # showPage('reach') kicks liveLink() once, so the QR is present without
-        # the user finding a button
-        assert "_liveAutoLoaded" in html
-        assert 'id==="reach"' in html and "liveLink()" in html
+        # per the user's ask, the QR is no longer always shown: it lives behind a
+        # "Connect a phone" toggle that lazy-loads liveLink() on first open and
+        # folds away again (toggleLive / _liveOpen / _liveAutoLoaded)
+        assert "Connect a phone" in html
+        assert "toggleLive()" in html
+        assert "_liveOpen" in html and "_liveAutoLoaded" in html
+        assert "liveLink()" in html
 
     def test_qr_rendered_large_enough_to_scan(self):
         html = render_panel("tok")
         # the Live Lens QR (now the sparse short-code payload) must render at a
         # comfortable scanning size — bigger modules lock on off a glossy screen
-        assert ".qrbox.live svg{width:340px" in html
+        assert ".qrbox.live svg{width:380px" in html
 
     def test_panel_explains_the_token_cannot_be_typed(self):
         html = render_panel("tok")

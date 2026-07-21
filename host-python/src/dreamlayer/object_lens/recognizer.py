@@ -127,10 +127,26 @@ MIN_FRAME_VARIANCE = 1e-4       # a flat/black frame has nothing to recognise
 class ObjectRecognizer:
     def __init__(self, classify_fn: Optional[Callable] = None,
                  min_confidence: float = 0.5,
-                 taxonomy: Optional[list[str]] = None):
+                 taxonomy: Optional[list[str]] = None,
+                 ocr_fn: Optional[Callable] = None):
         self._classify = classify_fn
         self.min_confidence = min_confidence
         self.taxonomy = taxonomy or DEFAULT_TAXONOMY
+        # OCR reader: an explicit read_fn(frame)->str, else the default RapidOCR
+        # rung is resolved lazily on first look (None when no OCR wheel is
+        # installed — the text channel simply stays the VLM's / empty).
+        self._ocr_fn = ocr_fn
+        self._ocr_ready = ocr_fn is not None
+
+    def _ocr(self) -> Optional[Callable]:
+        if not self._ocr_ready:
+            try:
+                from .ocr_backends import default_ocr
+                self._ocr_fn = default_ocr()
+            except Exception:                          # noqa: BLE001 — OCR is never load-bearing
+                self._ocr_fn = None
+            self._ocr_ready = True
+        return self._ocr_fn
 
     def recognize(self, frame) -> Optional[ObjectSighting]:
         """Name the object in a frame, or None (no frame / low confidence /
@@ -161,8 +177,29 @@ class ObjectRecognizer:
             return None
         if person_guard.frame_is_dominated_by_a_person(frame):
             return None                       # visual ground truth: a human subject
+        attrs = self._read_text_into(frame, attrs)
         return ObjectSighting(label=label, confidence=confidence,
                               attributes=attrs or {})
+
+    def _read_text_into(self, frame, attrs) -> dict:
+        """Fill attributes["text"] with what OCR actually reads on the object —
+        real text beats the VLM's guess, and it lights up the translation, taste,
+        and price/ISBN providers that consume this field. A no-op when no OCR
+        wheel is installed (reader is None) or nothing legible/allowed is read.
+        The reader has already dropped any person-named or contact-detail line,
+        so this can only add safe text."""
+        reader = self._ocr()
+        if reader is None:
+            return attrs
+        try:
+            text = reader(frame)
+        except Exception:                              # noqa: BLE001 — OCR never breaks a look
+            return attrs
+        if not text:
+            return attrs
+        attrs = dict(attrs or {})
+        attrs["text"] = text                           # OCR is ground truth over a guess
+        return attrs
 
     # -- deterministic mock ------------------------------------------------
 
