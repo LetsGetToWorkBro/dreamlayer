@@ -24,10 +24,23 @@ _BASE = "http://127.0.0.1:5600"
 _MAX_TITLE = 200
 
 
+def _is_loopback_url(url: str) -> bool:
+    """True only when the PARSED host is loopback. A string-prefix check is a
+    trap: 'http://127.0.0.1.evil.com' and 'http://127.0.0.1@evil.com' both start
+    with the loopback prefix while resolving to an attacker host (refute
+    2026-07-21). Parse, then compare the hostname exactly."""
+    try:
+        import urllib.parse
+        host = urllib.parse.urlsplit(url or "").hostname or ""
+        return host in ("127.0.0.1", "::1", "localhost")
+    except ValueError:
+        return False
+
+
 def _default_fetch(url: str, timeout: float = 2.0) -> Optional[bytes]:
     """Loopback-only GET. The guard is structural: this module only ever builds
     URLs on 127.0.0.1, and refuses anything else defensively."""
-    if not url.startswith("http://127.0.0.1"):
+    if not _is_loopback_url(url):
         return None
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -43,8 +56,9 @@ class ActivityWatchSource:
 
     def __init__(self, base: str = _BASE,
                  fetch_fn: Optional[Callable[[str], Optional[bytes]]] = None):
-        # structural loopback pin — a config typo must not turn this into egress
-        self.base = base if base.startswith("http://127.0.0.1") else _BASE
+        # structural loopback pin on the PARSED host — a config typo (or
+        # '127.0.0.1.evil.com') must not turn this into egress
+        self.base = (base or "").rstrip("/") if _is_loopback_url(base) else _BASE
         self._fetch = fetch_fn or _default_fetch
 
     @property

@@ -79,6 +79,20 @@ class TestScheduler:
         it = s.add("ok", "fact", "hello")
         assert it is not None
         assert s.review("ok", "not-a-rating") is not None   # falls back to good
+        assert s.add(5, "fact", "five") is not None          # non-str id coerced
+        assert s.review(5, "good") is not None
+        assert s.drop(5) is True
+
+    def test_field_corrupt_store_degrades_not_raises(self, tmp_path):
+        # valid JSON, junk interval_days: review must reschedule, not ValueError
+        import json
+        p = tmp_path / "r.json"
+        p.write_text(json.dumps({"x": {"id": "x", "kind": "fact", "text": "hi",
+                                       "due_ts": 0.0, "interval_days": "oops",
+                                       "reps": 0, "fsrs": None}}))
+        s = RehearsalScheduler(p, now_fn=FakeClock())
+        out = s.review("x", "good")
+        assert out is not None and out["interval_days"] >= 1.0
 
     def test_readd_refreshes_text_keeps_schedule(self, tmp_path):
         clock = FakeClock()

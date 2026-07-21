@@ -113,6 +113,20 @@ class TestActivityWatch:
                                 fetch_fn=lambda url, timeout=2.0: None)
         assert s.base.startswith("http://127.0.0.1")
 
+    def test_loopback_lookalike_hosts_are_pinned_back(self):
+        # '127.0.0.1.evil.com' / '127.0.0.1@evil.com' pass a string-prefix check
+        # while resolving to an attacker host — the pin must parse the hostname
+        # (refute 2026-07-21).
+        from dreamlayer.memory.source_activitywatch import _is_loopback_url
+        for base in ("http://127.0.0.1.evil.com:5600",
+                     "http://127.0.0.1@evil.com:5600"):
+            s = ActivityWatchSource(base=base,
+                                    fetch_fn=lambda url, timeout=2.0: None)
+            assert s.base == "http://127.0.0.1:5600", base
+            assert _is_loopback_url(base) is False, base
+        assert _is_loopback_url("http://127.0.0.1:5600/api") is True
+        assert _is_loopback_url("http://localhost:5600") is True
+
     def test_malformed_replies_degrade(self):
         s = ActivityWatchSource(fetch_fn=lambda url, timeout=2.0: b"{not json")
         assert s.buckets() == [] and s.recent() == []

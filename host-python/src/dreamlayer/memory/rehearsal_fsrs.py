@@ -146,9 +146,10 @@ class RehearsalScheduler:
         """Start rehearsing something (a name, a fact). First review is due in
         ten minutes — the moment right after meeting someone is when the name
         slips. Re-adding an existing id refreshes its text but keeps schedule."""
-        item_id = (item_id or "").strip()
-        if not item_id or not (text or "").strip():
+        item_id = str(item_id or "").strip()
+        if not item_id or not str(text or "").strip():
             return None
+        text = str(text)
         it = self._items.get(item_id)
         if it is None:
             it = {"id": item_id, "kind": kind or "fact", "text": text.strip(),
@@ -163,7 +164,7 @@ class RehearsalScheduler:
     def review(self, item_id: str, rating: str) -> Optional[dict]:
         """Record a rehearsal outcome and schedule the next one. Unknown id or
         rating degrades safely (rating falls back to 'good')."""
-        it = self._items.get((item_id or "").strip())
+        it = self._items.get(str(item_id or "").strip())
         if it is None:
             return None
         rating = rating if rating in _RATINGS else "good"
@@ -173,8 +174,13 @@ class RehearsalScheduler:
             it["due_ts"], it["fsrs"] = nxt
             it["interval_days"] = max((it["due_ts"] - now) / _DAY, 10.0 / 1440.0)
         else:                                       # baseline path
-            it["interval_days"] = _baseline_next(float(it.get("interval_days", 1.0)),
-                                                 rating)
+            # a field-corrupt store (valid JSON, junk interval) must degrade,
+            # not raise (refute 2026-07-21) — restart that item at one day
+            try:
+                prev = float(it.get("interval_days", 1.0) or 1.0)
+            except (TypeError, ValueError):
+                prev = 1.0
+            it["interval_days"] = _baseline_next(prev, rating)
             it["due_ts"] = now + it["interval_days"] * _DAY
         it["reps"] = int(it.get("reps", 0)) + 1
         self._save()
@@ -190,7 +196,7 @@ class RehearsalScheduler:
         return out[:max(1, int(limit))]
 
     def drop(self, item_id: str) -> bool:
-        if self._items.pop((item_id or "").strip(), None) is not None:
+        if self._items.pop(str(item_id or "").strip(), None) is not None:
             self._save()
             return True
         return False
