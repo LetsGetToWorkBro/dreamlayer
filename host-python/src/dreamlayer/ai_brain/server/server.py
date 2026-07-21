@@ -1662,26 +1662,35 @@ _JUNO_TTS: dict = {}
 
 
 def _juno_tts(brain):
-    """A per-Brain cached PiperTTS. It prefers a `juno.onnx` voice in
-    <cfg>/voices/ (the cloned Juno voice) and falls back to any voice there or
-    $DL_PIPER_VOICE. Cached once ready so the ONNX model loads a single time; a
-    not-ready instance is cheap to re-probe, so dropping a voice in later just
+    """A per-Brain cached TTS engine for Juno's voice. Preference: Kokoro-82M (the
+    natural on-device default) → her OWN cloned voice (XTTS from the baked
+    juno_*.mp3 clips) → a Piper voice (`juno.onnx` in <cfg>/voices/, else any /
+    $DL_PIPER_VOICE). Cached once ready so the model loads a single time; a
+    not-ready instance is cheap to re-probe, so installing an engine later just
     works on the next call. Never raises."""
     key = str(getattr(brain, "cfg_dir", "") or "")
     inst = _JUNO_TTS.get(key)
     if inst is not None and getattr(inst, "ready", False):
         return inst
     inst = None
-    # 1) her OWN cloned voice (XTTS from the baked juno_*.mp3 clips), if the
-    #    engine is installed — this is "her voice", not a stock one
+    # 0) Kokoro-82M — Juno's default on-device voice (natural, Apache-2.0, no cloud)
     try:
-        from ...orchestrator.voice_clone import CloneTTS
-        refs = sorted((Path(__file__).resolve().parent / "assets").glob("juno_*.mp3"))
-        clone = CloneTTS(refs)
-        if clone.ready:
-            inst = clone
+        from ...orchestrator.tts_kokoro import KokoroTTS
+        k = KokoroTTS()
+        if k.ready:
+            inst = k
     except Exception:                                  # noqa: BLE001 — voice is never load-bearing
         inst = None
+    # 1) her OWN cloned voice (XTTS from the baked juno_*.mp3 clips), if installed
+    if inst is None:
+        try:
+            from ...orchestrator.voice_clone import CloneTTS
+            refs = sorted((Path(__file__).resolve().parent / "assets").glob("juno_*.mp3"))
+            clone = CloneTTS(refs)
+            if clone.ready:
+                inst = clone
+        except Exception:                              # noqa: BLE001
+            inst = None
     # 2) else a Piper voice (a cloned juno.onnx if present, else any / $DL_PIPER_VOICE)
     if inst is None:
         try:
@@ -2992,8 +3001,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Synthesize Juno's voice for a line of text and return the WAV.
 
             Audio goes the RIGHT direction: the (headless) Brain synthesizes
-            locally — Piper on CPU, no cloud, no API credits — and hands the WAV
-            to the client that actually has a speaker (the panel here, the phone
+            locally — Kokoro/Piper on CPU, no cloud, no API credits — and hands the
+            WAV to the client that actually has a speaker (the panel here, the phone
             or the glasses on the LAN). When TTS isn't set up (no engine or no
             voice model) it's a clean 204 so the caller just stays silent."""
             text = str((self._body() or {}).get("text", "") or "").strip()

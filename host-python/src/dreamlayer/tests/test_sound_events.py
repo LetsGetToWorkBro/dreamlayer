@@ -50,8 +50,16 @@ class TestAttentionPolicy:
 
     def test_malformed_detections_never_raise(self):
         assert S.attention_for([None, (), ("only-label",), ("x", "NaN")]) is None
+        assert S.attention_for([{"a": 1}]) is None        # a dict item (KeyError) is swallowed
+        assert S.attention_for([("x", object())]) is None
         assert S.attention_for([]) is None
         assert S.attention_for(None) is None
+
+    def test_nan_confidence_does_not_fire_a_false_alarm(self):
+        # a NaN confidence on a MAPPED label must NOT defeat the threshold and
+        # raise the loudest alert Juno can make (refute 2026-07-21).
+        assert S.attention_for([("Smoke alarm", float("nan"))]) is None
+        assert S.attention_for([("Doorbell", float("nan"))]) is None
 
     def test_alert_key_is_stable_for_cooldown(self):
         a = S.attention_for([("Smoke alarm", 0.8)])
@@ -79,6 +87,14 @@ class TestAudioCoerce:
 
     def test_empty_is_none(self):
         assert S._to_mono(np.zeros(0, np.float32), 16000, 32000) is None
+
+    def test_channels_first_stereo_is_not_destroyed(self):
+        out = S._to_mono(np.zeros((2, 200), dtype=np.float32), 32000, 32000)
+        assert out is not None and out.size == 200
+
+    def test_hot_float_not_mistaken_for_int16(self):
+        out = S._to_mono(np.array([-2.0, 2.0], dtype=np.float32), 32000, 32000)
+        assert out is not None and float(np.max(np.abs(out))) >= 0.9
 
 
 def test_sound_events_capability_registered():

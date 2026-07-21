@@ -110,9 +110,12 @@ def attention_for(detections, min_conf: float = _MIN_CONF) -> Optional[Alert]:
     for item in (detections or []):
         try:
             label, conf = item[0], float(item[1])
-        except (TypeError, ValueError, IndexError):
+        except (TypeError, ValueError, LookupError):   # LookupError: a dict item, etc.
             continue
-        if conf < min_conf:
+        # `not (conf >= min_conf)` rejects NaN too: a NaN confidence (which numpy's
+        # argsort ranks FIRST) would otherwise pass `conf < min_conf` and fire the
+        # loudest possible alert — a false smoke-alarm watchout (refute 2026-07-21).
+        if not (conf >= min_conf):
             continue
         m = _match(str(label))
         if m is None:
@@ -196,14 +199,21 @@ def _to_mono(audio, sample_rate: int, target_sr: int):
     dep). Shared shape/scale discipline with rosetta_seamless._to_mono16k."""
     try:
         import numpy as np
-        a = np.asarray(audio, dtype=np.float32)
+        raw = np.asarray(audio)
+        is_int = np.issubdtype(raw.dtype, np.integer)
+        a = raw.astype(np.float32)
         if a.size == 0:
             return None
-        if a.ndim == 2:
-            a = a.mean(axis=1)
+        if a.ndim == 2:                          # stereo → mono: collapse the
+            a = a.mean(axis=1) if a.shape[1] <= a.shape[0] else a.mean(axis=0)
         a = a.reshape(-1)
-        peak = float(np.max(np.abs(a))) if a.size else 0.0
-        if peak > 1.5:                           # looks like int16 PCM → normalise
+        # integer PCM → scale by full-scale; float assumed [-1,1] unless its peak
+        # is far past any real float mic signal, i.e. int16 handed in as float
+        # (refute 2026-07-21: a plain peak>1.5 test wrecked legitimately-hot float).
+        if is_int:
+            info = np.iinfo(raw.dtype)
+            a = a / float(max(abs(int(info.min)), int(info.max)))
+        elif a.size and float(np.max(np.abs(a))) > 32.0:
             a = a / 32768.0
         sr = int(sample_rate or target_sr)
         if sr != target_sr and a.size:

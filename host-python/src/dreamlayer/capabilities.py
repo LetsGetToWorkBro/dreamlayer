@@ -127,6 +127,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="off by default (DL_JUNO_VOICE=1); needs a Piper voice model "
              "($DL_PIPER_VOICE or <cfg>/voices/*.onnx)",
         gain="baseline shows Juno's reply only as text on the glass; this speaks it aloud, offline — no cloud voice, audio never leaves the Brain", impact=4, before=0, after=4.5),
+    Cap("kokoro_tts", "Juno's natural on-device voice (Kokoro-82M)", "voice",
+        ("kokoro",), "voice", "orchestrator/tts_kokoro.py",
+        note="off by default (DL_JUNO_VOICE=1); Kokoro-82M, Apache-2.0 — pick a voice with $DL_KOKORO_VOICE. Preferred over Piper when installed.",
+        gain="baseline shows Juno's reply only as text; Kokoro-82M speaks it in a strikingly natural voice — tiny, offline, audio never leaves the Brain (far more lifelike than Piper)", impact=5, before=0, after=5),
     Cap("voice_clone", "Juno speaks in HER OWN voice (cloned, offline)", "voice",
         ("TTS",), "voice-clone", "orchestrator/voice_clone.py",
         note="opt-in (heavy); clones her timbre from the baked juno_*.mp3 clips "

@@ -43,6 +43,21 @@ class TestAudioCoercion:
     def test_empty_audio_is_none(self):
         assert RS._to_mono16k(np.zeros(0, np.float32), 16000) is None
 
+    def test_channels_first_stereo_is_not_destroyed(self):
+        # (channels, n) layout — collapse the channel axis, keep the samples
+        out = RS._to_mono16k(np.zeros((2, 200), dtype=np.float32), 16000)
+        assert out is not None and out.size == 200
+
+    def test_hot_float_is_not_mistaken_for_int16(self):
+        # a legitimately-hot float [-2,2] must not be divided to near-silence
+        out = RS._to_mono16k(np.array([-2.0, 2.0, 1.8], dtype=np.float32), 16000)
+        assert out is not None and float(np.max(np.abs(out))) >= 0.9
+
+    def test_true_int16_dtype_is_scaled_by_full_scale(self):
+        out = RS._to_mono16k(np.array([16384, -16384], dtype=np.int16), 16000)
+        assert out is not None
+        assert 0.4 < float(np.max(np.abs(out))) <= 1.0
+
     def test_wav_roundtrips(self):
         wav = RS._wav_bytes(np.linspace(-1, 1, 320, dtype=np.float32), 16000)
         assert wav is not None and wav[:4] == b"RIFF"

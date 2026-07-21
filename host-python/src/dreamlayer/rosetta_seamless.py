@@ -53,15 +53,22 @@ def _to_mono16k(audio, sample_rate: int):
     None. Linear resample keeps this dependency-light (no torchaudio needed)."""
     try:
         import numpy as np
-        a = np.asarray(audio, dtype=np.float32)
+        raw = np.asarray(audio)
+        is_int = np.issubdtype(raw.dtype, np.integer)
+        a = raw.astype(np.float32)
         if a.size == 0:
             return None
-        if a.ndim == 2:                          # (n, channels) → mono
-            a = a.mean(axis=1)
+        if a.ndim == 2:                          # stereo → mono: collapse the
+            a = a.mean(axis=1) if a.shape[1] <= a.shape[0] else a.mean(axis=0)
         a = a.reshape(-1)
-        # int PCM arrives as large ints; scale to [-1, 1] if it looks like int16
-        peak = float(np.max(np.abs(a))) if a.size else 0.0
-        if peak > 1.5:
+        # integer PCM → scale by its own full-scale; a float array is assumed
+        # already in [-1, 1] UNLESS its peak is far beyond any real float mic
+        # signal (hundreds+), which means int16 values were handed in as float
+        # (refute 2026-07-21: a plain peak>1.5 test wrecked legitimately-hot float).
+        if is_int:
+            info = np.iinfo(raw.dtype)
+            a = a / float(max(abs(int(info.min)), int(info.max)))
+        elif a.size and float(np.max(np.abs(a))) > 32.0:
             a = a / 32768.0
         sr = int(sample_rate or _SR)
         if sr != _SR and a.size:
