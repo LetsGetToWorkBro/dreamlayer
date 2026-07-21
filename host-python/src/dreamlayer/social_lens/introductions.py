@@ -20,7 +20,11 @@ from typing import Optional
 # purpose — the leading capital is what tells a name from an ordinary word, so
 # the cue prefixes below scope their case-insensitivity with (?i:…) and never
 # let re.I leak onto this class (which would match "from"/"me" as a name).
-_NAME = r"([A-ZÀ-Ÿ][a-zà-ÿA-ZÀ-Ÿ'’-]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿA-ZÀ-Ÿ'’-]+){0,2})"
+# Latin letters with accents, precise sub-ranges (À-Ö, Ø-Þ upper; à-ö, ø-ÿ lower)
+# so the class excludes × (U+00D7) and ÷ (U+00F7) and doesn't overlap itself —
+# the old À-Ÿ span did both (CodeQL: overly-permissive range).
+_NAME = (r"([A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-Þà-öø-ÿ'’-]+"
+         r"(?:\s+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-Þà-öø-ÿ'’-]+){0,2})")
 
 # Introduction cues. Each captures the name in group 1; a trailing "from/at/who/…"
 # clause becomes the note. Ordered most-specific first.
