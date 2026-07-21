@@ -286,11 +286,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:232px;height:232px;max-width:100%}
+  .qrbox svg{display:block;width:300px;height:300px;max-width:100%}
   /* the Live Lens QR now carries the short pairing code (sparse), and renders
      bigger still, so a phone camera locks on from a comfortable distance off a
-     glossy screen (the #1 "the QR won't scan" cause) */
-  .qrbox.live svg{width:340px;height:340px}
+     glossy screen (the #1 "the QR won't scan" cause). The http fallback carries
+     the long token and is the densest, so even the base size is generous. */
+  .qrbox.live svg{width:380px;height:380px}
+  /* the pairing container is a disclosure: collapsed until you need it, and it
+     folds away again so a big scannable QR never permanently eats the panel. */
+  #liveout{overflow:hidden;transition:max-height .28s ease;max-height:0}
+  #liveout.open{max-height:1400px}
+  #livebtn.on{background:var(--memory);color:#fff}
   .livecode{text-align:center;margin:8px 0 4px}
   .livecode .codebig{font:22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:4px;
     color:var(--memory);background:var(--surf);border:1px solid var(--line);
@@ -446,9 +452,9 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     box-shadow:inset -1px 0 0 #9A9A9A, inset 1px 1px 0 #F4F4F4}
   .side .brand2{display:flex;align-items:center;gap:10px;padding:6px 10px 14px;
     font:16px var(--chi);font-weight:400;letter-spacing:.01em;color:#111}
-  .side .brand2 .rd{position:relative;width:16px;height:16px;flex:none;border-radius:50%;
-    border:2.5px solid var(--memory)}
-  .side .brand2 .rd::after{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--memory)}
+  /* the app's own logo, edge-to-edge — one mark everywhere, no teal ring */
+  .side .brand2 .brandlogo{width:22px;height:22px;flex:none;border-radius:6px;object-fit:cover;
+    box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .side .navlabel{font:10.5px var(--chi);letter-spacing:.1em;text-transform:uppercase;
     color:#6E7671;padding:10px 11px 5px}
   .side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:0;
@@ -592,6 +598,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
       width="16" height="16" alt=""><span id="livetext">connecting…</span></span>
+    <button class="themetog" id="helpBtn" type="button" aria-label="Help and report a bug"
+      title="Help &amp; report a bug" onclick="gotoReport()">?</button>
     <button class="themetog" id="themeTog" type="button" aria-label="Appearance"
       title="Appearance" onclick="toggleTheme()">☾</button></div>
   <h1 id="pageTitle">Home</h1>
@@ -703,7 +711,7 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div id="pairout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
-      <button id="livebtn" onclick="liveLink()">Refresh QR</button></div>
+      <button id="livebtn" onclick="toggleLive()">Connect a phone</button></div>
     <div id="liveout"></div>
   </section>
 
@@ -1228,8 +1236,7 @@ const PAGES=[
   {id:"day",label:"Your day",sub:"Your morning brief, agenda, reminders, and the people you meet.",match:["Morning brief","Agenda","Who you","Reminders"]},
   {id:"mind",label:"Intelligence",sub:"Choose your AI, point it at your files, and tune how it thinks.",match:["Wire the cloud","Folders it reads","Ask your stuff","Model"]},
   {id:"reach",label:"Connections",sub:"Pair your phone and glasses, and decide how far the Brain reaches.",match:["Reach","On your glasses"]},
-  {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, and the controls that keep it yours.",match:["Privacy controls"]},
-  {id:"receipts",label:"Receipts",sub:"A signed, tamper-evident record of what the Brain did — verify it yourself.",match:["Privacy receipt"]},
+  {id:"privacy",label:"Privacy",sub:"What's kept, what's shared, the controls that keep it yours — and the signed receipt you can verify yourself.",match:["Privacy controls","Privacy receipt"]},
   {id:"plugins",label:"Plugins",sub:"Extend the Brain — browse, install, and manage plugins.",match:["Plugins"]},
   {id:"caps",label:"Capabilities",sub:"Every optional power of the Brain — what's on, what's off, and how to switch more on.",match:["Capabilities"]},
   {id:"learn",label:"Learn",sub:"How each feature works, with the card it draws on the glass.",match:["How it works"]},
@@ -1258,7 +1265,7 @@ const ICONS={
 };
 function buildNav(){
   document.querySelectorAll("main>section").forEach(s=>{s.dataset.page=pageOf(s);});
-  $("side").innerHTML='<div class="brand2"><span class="rd"></span>DreamLayer</div>'+
+  $("side").innerHTML='<div class="brand2"><img class="brandlogo" src="/panel-assets/app_icon.png" width="22" height="22" alt="">DreamLayer</div>'+
     '<div class="navlabel">Brain</div>'+
     PAGES.map(p=>`<button data-p="${p.id}" onclick="showPage('${p.id}')">${ICONS[p.id]||''}<span>${esc(p.label)}</span></button>`).join("");
   showPage(curPage);
@@ -1270,10 +1277,9 @@ function showPage(id){curPage=id;
   const p=PAGES.find(x=>x.id===id);
   if(p){$("pageTitle").textContent=p.label; if(p.sub)$("pageSub").textContent=p.sub;}
   const c=document.querySelector(".content"); if(c)c.scrollTop=0;
-  // Open Connections → the Live Lens QR is already there, not hidden behind a
-  // button you have to find. (Once per panel session, so re-visits don't spam
-  // the activity log or re-mint the link.)
-  if(id==="reach"&&!_liveAutoLoaded&&typeof liveLink==="function"){_liveAutoLoaded=true;liveLink();}
+  // Connections → the Live Lens pairing lives behind "Connect a phone" now
+  // (a collapsible disclosure), so a big scannable QR never permanently eats
+  // the panel; toggleLive() lazy-loads it on first open.
   if(id==="caps"&&typeof pollDownloads==="function")pollDownloads();
   // Open Terminal → boot the banner (once) and put the cursor in the prompt.
   if(id==="terminal"&&typeof termFocus==="function"){termFocus();}
@@ -2045,6 +2051,18 @@ function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.cli
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
 let _liveurl="";
 function copyLiveLink(){if(navigator.clipboard&&_liveurl){navigator.clipboard.writeText(_liveurl).then(()=>toast("Live Lens link copied"));}}
+// The pairing QR is a disclosure: collapsed until asked for, and it folds away
+// again. First open lazy-loads the link (so re-visits don't re-mint it or spam
+// the activity log); the "Refresh QR" inside re-mints on demand.
+let _liveOpen=false;
+function toggleLive(){
+  _liveOpen=!_liveOpen;
+  const o=$("liveout"), b=$("livebtn");
+  o.classList.toggle("open",_liveOpen);
+  b.classList.toggle("on",_liveOpen);
+  b.textContent=_liveOpen?"Hide":"Connect a phone";
+  if(_liveOpen&&!_liveAutoLoaded){_liveAutoLoaded=true;liveLink();}
+}
 async function liveLink(){const out=$("liveout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
   let r;try{r=await api("/dreamlayer/live/link");}catch(e){r=null;}
   if(!r||!r.url){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
@@ -2070,7 +2088,9 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
     `<div class="conn-s">Good for 5 minutes, one use.</div></div>`:"";
   out.innerHTML=`<div class="paircode">${qr}${steps}${code}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
-    `<button class="sm ghost" onclick="copyLiveLink()" style="margin-left:8px">Copy link</button></div>`+
+    `<span style="margin-left:8px;display:inline-flex;gap:6px">`+
+    `<button class="sm ghost" onclick="copyLiveLink()">Copy link</button>`+
+    `<button class="sm ghost" onclick="liveLink()">Refresh QR</button></span></div>`+
     `<div class="conn-s" style="margin-top:6px"><b>Scanning is the easy way</b> — the link ends in a long <code>#t=…</code> pairing token that's meant to be scanned, not typed. `+
     `Can't scan? Use the short code above instead. Treat both like a password and send them only to your own phone.</div></div>`;
   toast(secure?"Live Lens link ready":"Live Lens ready — camera needs https");
@@ -2342,6 +2362,13 @@ async function loadHealth(){let h;try{h=await api("/dreamlayer/health");}catch(e
    Nothing is sent automatically: the wearer reviews it, then opens or copies. */
 let _repbody="";
 function copyReport(){if(navigator.clipboard&&_repbody){navigator.clipboard.writeText(_repbody).then(()=>toast("Report copied"));}}
+// Reachable from the top-bar "?" (and Juno) so reporting a bug is never buried:
+// jump to the report box and put the cursor in it.
+function gotoReport(){
+  showPage("advanced");
+  setTimeout(()=>{const s=$("repSummary"); if(s){s.scrollIntoView({behavior:"smooth",block:"center"});s.focus();}},80);
+  toast("Tell me what went wrong — I’ll draft the report for you.");
+}
 async function prepReport(){
   const s=$("repSummary").value.trim(), d=$("repDetail").value.trim();
   if(!s&&!d){toast("Add a short description first");return;}
@@ -2499,7 +2526,7 @@ window.removePlugin=removePlugin;
     '  <span class="dim">type <b>dream</b>. the rest you\u2019ll find.</span>';
 
   var PAGES_GO={home:"home",day:"day",mind:"mind",reach:"reach",privacy:"privacy",
-    receipts:"receipts",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
+    receipts:"privacy",plugins:"plugins",caps:"caps",learn:"learn",advanced:"advanced"};
   var JCLIPS=[["hey.","/panel-assets/juno_hey.mp3"],["hello.","/panel-assets/juno_hello.mp3"],
     ["look.","/panel-assets/juno_look.mp3"],["watch out.","/panel-assets/juno_watchout.mp3"],
     ["based.","/panel-assets/juno_based.mp3"],["uh\u2026 ok, then.","/panel-assets/juno_uhokthen.mp3"]];
