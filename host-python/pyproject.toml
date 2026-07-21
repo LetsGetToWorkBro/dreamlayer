@@ -51,6 +51,9 @@ math-ocr = ["pix2tex>=0.1,<1"]
 doc-ocr  = ["surya-ocr>=0.6,<1"]
 # monocular depth (Depth Anything V2 via transformers) — spatial sense from one camera
 depth    = ["transformers>=4.40,<5"]
+# temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
+# by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
+memory-graph = ["lightrag-hku>=1,<2"]
 causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]

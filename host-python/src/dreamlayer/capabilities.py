@@ -104,6 +104,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("social_graph", "Relationship graph algorithms", "memory",
         ("networkx",), "memory", "social_lens/graph.py",
         gain="baseline graph is a dict of names; this adds paths, mutual friends, communities", impact=3, before=2, after=4),
+    Cap("memory_graph", "Temporal knowledge-graph recall (what's connected, and when)", "memory",
+        ("lightrag",), "memory-graph", "memory/graph_recall.py",
+        note="opt-in; built by your own local model + embedder — nothing leaves the Brain",
+        gain="vector recall finds what's similar; this follows entity + time edges, so 'what did the doctor say about my knee in March' resolves by connection, not just cosine", impact=4, before=2.5, after=4.5),
 
     # --- voice ------------------------------------------------------------------
     Cap("voice_vad", "Neural speech/noise gating before ASR", "voice",
