@@ -2934,13 +2934,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             tls_port = getattr(self.server, "tls_port", None)
             https_url = (f"https://{host}:{tls_port}/dreamlayer/live"
                          if tls_port else "")
-            best = (https_url or http_url) + frag
+            base_url = https_url or http_url
+            best = base_url + frag
             from .qr import to_svg
             brain.activity.add("look", "Generated a Live Lens link")
             # A short code the wearer can type on the live page if the phone
             # can't scan the QR — only meaningful when a token exists to hand out
             # (a tokenless Brain is loopback-only; a LAN phone can't reach it).
             code = _live_vault.issue(brain.config.token) if brain.config.token else ""
+            # The QR encodes the SHORT code (#c=) instead of the 32-char token
+            # (#t=) whenever a code exists: a sparser matrix (lower QR version →
+            # bigger modules at the same render size) that a phone camera locks
+            # onto off a glossy screen far more reliably — the #1 "the QR won't
+            # scan" cause. The page redeems #c= for the token on load (same
+            # paired end state); Copy-link still hands out the full token URL.
+            qr_payload = (base_url + "#c=" + code) if code else best
             self._json(200, {
                 "url": best, "http_url": http_url + frag,
                 "https": bool(https_url),
@@ -2950,7 +2958,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                          if https_url else
                          "cameras need a secure page: restart the Brain with "
                          "--tls for the https link; asking works over http"),
-                "qr": to_svg(best)})
+                "qr": to_svg(qr_payload)})
 
         # -- GET route table --------------------------------------------
         # exact-path public routes, resolved BEFORE the auth gate

@@ -505,6 +505,129 @@ class TestDetectorAssets:
             server.shutdown(); server.server_close()
 
 
+def _decode_qr_svg(svg: str, scale: int = 6, quiet: int = 4) -> str:
+    """Rebuild the module grid from the panel's QR <svg> and decode it back to
+    its payload — proving what a phone camera would actually scan."""
+    import re
+
+    from dreamlayer.ai_brain.server.qr import decode_matrix
+    m = re.search(r'<svg[^>]*width="(\d+)"', svg)
+    assert m is not None, "qr svg has no width"
+    dim = int(m.group(1))
+    n = dim // scale - 2 * quiet
+    grid = [[0] * n for _ in range(n)]
+    for xs, ys, ws in re.findall(r'<rect x="(\d+)" y="(\d+)" width="(\d+)"', svg):
+        x, y, w = int(xs), int(ys), int(ws)
+        if w != scale:
+            continue
+        c, r = x // scale - quiet, y // scale - quiet
+        if 0 <= r < n and 0 <= c < n:
+            grid[r][c] = 1
+    return decode_matrix(grid).decode()
+
+
+class TestLiveLinkQr:
+    """The QR is what the phone actually scans. It must encode the SPARSE short
+    code (#c=), not the 32-char token (#t=): a lower QR version → bigger modules
+    at the same render → locks on off a glossy screen; the page redeems it on
+    load. Copy-link still hands out the full token URL. (refute 2026-07-21: the
+    QR encoded the long token link and phones couldn't lock onto it — the typed
+    code worked, the scan didn't.)"""
+
+    def test_qr_encodes_the_short_code_not_the_token(self, tmp_path):
+        brain = _brain(tmp_path)
+        server, base = _serve(brain)
+        try:
+            status, body = _req(base + "/dreamlayer/live/link",
+                                headers={"X-DreamLayer-Token": TOKEN})
+            assert status == 200
+            out = json.loads(body)
+            payload = _decode_qr_svg(out["qr"])
+            assert payload.startswith("https://")          # the camera-able link
+            assert payload.endswith("#c=" + out["code"])   # the SPARSE code…
+            assert TOKEN not in payload                    # …never the token
+            assert "#t=" + TOKEN in out["url"]             # copy-link keeps it
+        finally:
+            server.shutdown(); server.server_close()
+
+    def test_code_qr_is_a_strictly_smaller_matrix_than_the_token_qr(self):
+        # the point of #c=: with the PRODUCTION 32-hex token (token_hex(16)) the
+        # code QR is a lower version — bigger modules at the same render size.
+        from dreamlayer.ai_brain.server.qr import encode_matrix
+        host = "https://192.168.1.42:8443/dreamlayer/live"
+        code_n = len(encode_matrix(host + "#c=12345678"))
+        token_n = len(encode_matrix(host + "#t=" + "a" * 32))
+        assert code_n < token_n, f"code {code_n} not sparser than token {token_n}"
+
+    def test_page_redeems_a_qr_carried_code_on_boot(self):
+        # the client half: #c= parsed from the fragment, redeemed via the SAME
+        # doRedeem the typed-code modal uses (one implementation, two entries).
+        page = render_live()
+        assert 'location.hash.startsWith("#c=")' in page
+        assert "PENDING_CODE" in page and "function doRedeem" in page
+
+
+class TestGlassRenderer:
+    """The lens circle draws the DEVICE card — a faithful port of the glasses'
+    object-family renderer (halo-lua/display/renderer.lua draw_object_recall),
+    not an invented phone UI: same 256px space, same geometry, palette.lua
+    colors, typography.lua sizes, fed by the same ObjectPanel the Brain built."""
+
+    def test_page_ships_the_device_renderer_port(self):
+        page = render_live()
+        assert 'id="glass"' in page                       # the 256px round display
+        assert "function glassObjectCard" in page
+        # geometry verbatim from renderer.lua:596 — jewel at (128,88), you-dot
+        # at (128,198), the place field disc at (128,112) r62
+        for needle in ("128, 88", "128, 198", "128, 112, 62"):
+            assert needle in page, f"device geometry missing: {needle}"
+        # palette.lua verbatim
+        for hexv in ("#ECF0F1", "#00FFAA", "#B8FFE9", "#FFAA00", "#2A3C44"):
+            assert hexv in page, f"palette color missing: {hexv}"
+        # typography.lua sizes
+        assert "lg:17" in page and "md:13" in page and "sm:10" in page
+
+    def test_glass_clears_under_the_veil(self):
+        page = render_live()
+        assert "glassClear()" in page
+        veil_fn = page.split("function setVeil", 1)[1].split("function ", 1)[0]
+        assert "glassClear" in veil_fn
+
+
+class TestPhoneRunsEveryGlassesLens:
+    """Provider parity (refute 2026-07-21): the phone World-lens host must wire
+    the SAME built-in provider set the glasses do (orchestrator._init_object_
+    lenses: Memory + AI + Label + Rosetta) — previously it registered only
+    AIProvider, so a phone look ran a subset of the product's lenses."""
+
+    def test_host_registers_the_full_builtin_set(self, tmp_path):
+        brain = _brain(tmp_path)
+        wl = brain.world_lens()
+        names = {p.name for p in wl.object_lens.registry._providers}
+        assert {"memory", "ai", "label", "rosetta"} <= names, names
+
+    def test_seen_before_is_real_ring_memory(self, tmp_path):
+        # the same SemanticRingBuffer the glasses run: a second look at the same
+        # object recalls the first — and a FIRST look never claims a prior one.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        brain = _brain(tmp_path)
+        wl = brain.world_lens()
+        first = wl.look_sighting(ObjectSighting(label="coffee mug", confidence=0.9))
+        assert not any("seen before" in r.label for r in first.rows)
+        second = wl.look_sighting(ObjectSighting(label="coffee mug", confidence=0.9))
+        assert any("seen before" in r.label for r in second.rows)
+
+    def test_veiled_look_leaves_no_ring_trace(self, tmp_path):
+        # the veil gate runs BEFORE the ring append — a veiled look must not
+        # add a sighting the wearer never agreed to remember.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        brain = _brain(tmp_path, network_mode="lan_only")
+        assert brain.incognito_now() is True
+        wl = brain.world_lens()
+        assert wl.look_sighting(ObjectSighting(label="mug", confidence=0.9)) is None
+        assert len(wl.ring) == 0
+
+
 # --- tls.py: the appliance certificate --------------------------------------
 
 class TestTls:
@@ -692,6 +815,11 @@ class TestOneLens:
                                 headers=hdr)
             assert status == 200
             browser = json.loads(body)
+            # The hot ring is REAL now (provider parity 2026-07-21): a second
+            # look at the same photo legitimately learns "seen before" — exactly
+            # as the glasses would. Comparing the two ROUTES needs equal memory
+            # state, so clear the ring between them; the formatter is the claim.
+            brain.world_lens().ring.clear()
             status, body = _req(
                 base + "/dreamlayer/brain/look",
                 data=json.dumps(
