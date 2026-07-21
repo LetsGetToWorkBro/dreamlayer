@@ -1,10 +1,10 @@
-This one is about the phone and the Mac growing up. The Live Lens in your phone's browser is now a true 1:1 stand-in for the glasses, the app updates itself from the menu bar, and Juno gives you the tour the first time you open the lens.
+The biggest batch yet. Juno actually speaks now, the Brain grew real senses — hearing, sight, even the night sky — and the Capabilities page got rebuilt around one honest number: how awake your Brain actually is. Everything below is opt-in, lazy-imported, and falls back gracefully with nothing installed — the core app is exactly as light as it was yesterday.
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/midnight_home.png" alt="The Brain panel in Midnight Platinum" />
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/v08_setup.png" alt="Juno's first-run setup walkthrough" />
 
 ## Install (macOS 12+)
 
-Download `DreamLayer.dmg` below, double-click, drag DreamLayer to Applications. Runs from the menu bar. Signed and notarized, so Gatekeeper stays quiet. Upgrading: drag over the old one, your data doesn't live in the app bundle. This is also the last time you should need this page on a Mac: from 0.7.0 on, the app updates itself.
+Download `DreamLayer.dmg` below, double-click, drag DreamLayer to Applications. Runs from the menu bar. Signed and notarized, so Gatekeeper stays quiet. Upgrading: drag over the old one, your data doesn't live in the app bundle. Already on 0.7.0? The app updates itself now — check the menu.
 
 ## Install (Windows 10/11)
 
@@ -12,23 +12,45 @@ Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin pro
 
 Same two first-launch clicks as before: SmartScreen "More info, Run anyway" because this build isn't code signed yet, and the firewall "allow on private networks" so the phone can reach the panel on `:7777`. Uninstalling leaves `~/.dreamlayer` alone.
 
-## What's new since 0.6.0
+## What's new since 0.7.0
 
-- Live Lens is now 1:1 with the glasses. Every lens in the catalogue runs in your phone's browser, drawing the real device card the real renderer would draw, and the pairing QR actually scans on the first try. Double-tap the lens and you're in Dream Mode, exactly the gesture the glasses will use.
+### Juno speaks
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/live_tour.png" alt="The Live Lens on the phone, Juno starting her tour" width="360" />
-- The app updates itself. "Check for updates" now downloads and installs right from the menu bar, with live progress in the menu item, and relaunches into the new copy. Every byte is verified before it touches anything: the download must match the sha256 the release declares, and the install stages a copy and swaps, so a failed update can never eat your working app. On Windows the same core is wired but honestly refuses until the builds are code signed; it falls back to this page.
-- One download queue. Capability packs, store plugins, and model pulls now share a single queue with live progress and a "Download all" button, instead of racing each other. (The button shipped hidden by a missing container in the page; this release also fixes that, with a test so it stays fixed.)
+Turn her on and the Brain answers out loud, entirely on-device — no cloud voice, no API credits. Kokoro (82M params, strikingly natural) is used when installed; Piper is the always-available fallback. There's even an opt-in path where she speaks in her *own* voice, cloned offline from her existing clips. And a live interpreter (Meta's SeamlessM4T) can translate a real conversation in your ear, both directions, audio never leaving the Brain.
 
-<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/midnight_capabilities.png" alt="Capabilities in dark mode with Download all" />
-- Juno gives the tour. First time you open the Live Lens, she walks you through the actual controls: tap to look, double-tap for dreams, the veil, asking your memory. Six steps, shown once, replayable from the ? chip.
-- The Mac app behaves like a Mac app. Clicking the Dock icon opens the panel, the panel window shows up in Cmd-Tab with the real icon, the app icon sits on Apple's squircle grid instead of getting boxed, and the menu-bar Juno is a proper template icon now: the system colors it, and her shape carries the status (solid online, outline offline, slash for veil).
-- Three adversarial audit waves over all of it, every confirmed finding fixed with a test that fails if it comes back. The ones worth knowing: "Erase all memories" now also drops the hot sighting ring, a remembered "cupboard" can no longer fabricate a "seen before" for a cup, and the mic can never stay hot after Dream Mode ends, including when you background the tab.
-- Pack installs are sturdier: one fragile dependency no longer sinks the whole pack, and whatever can install does, with the pack's full pins held so nothing drifts.
+### The Capabilities page, rebuilt
+
+<img src="https://raw.githubusercontent.com/LetsGetToWorkBro/dreamlayer/main/docs/gitbook/assets/panel/v08_capabilities.png" alt="The Capabilities page with the new awakening meter" />
+
+One number at the top now: how awakened your Brain is, as a percent and a level — Dormant climbing to Ascendant — broken down by tier (Memory, Hearing, Sight, Understanding, and more) so you can see exactly what installing a pack unlocks. Four new packs join the original five: **Interpreter** (the live speech translator), **World Sense** (hearing beyond speech — alarms, doorbell, breaking glass, birdsong, on-device OCR and barcode reading, a sense of depth), **Stargazer** (name the planets and catch the ISS crossing, computed fully offline from local star data), and **Mind Palace** (a temporal knowledge graph and spaced-repetition rehearsal, so the Brain resurfaces a name right before you'd forget it).
+
+### The world got senses
+
+The Brain now notices sound it isn't listening *to* — a smoke alarm, a kettle, glass breaking, a doorbell — and taps you, without ever fingerprinting a voice. On a walk it can name the birdsong overhead. Point it at a barcode and it checks the product against your dietary rules. Show it a menu, a receipt, or a whiteboard and it reads the text, on-device, every line scrubbed for names before it surfaces. Show it a math equation and it reads that too.
+
+### Bridges to what you already run
+
+If you self-host Immich, Home Assistant, Dawarich, Syncthing, screenpipe, or ActivityWatch, the Brain can now read from them as memory sources — your own photos, your own house, your own location history, all on your own LAN, nothing routed through us. And the tincan bond can now ride an off-grid LoRa mesh (Meshtastic) for miles of range with no wifi and no cell signal at all.
+
+### Pairing by sound
+
+A new fallback for connecting your phone: the Brain sings the short pairing code as a near-ultrasonic chirp, and a phone in earshot catches it out of the air — no camera, no typing. The QR and typed-code paths are unchanged; this just adds a third way in when neither is convenient.
+
+### The full glasses demo, on the Live Lens
+
+Live captions, Dream Mode's real synesthesia (an actual scene describer painting the mood, not a placeholder), memory-echo ghosts layered over what you're looking at, and a client-verified privacy receipt you can check yourself, cryptographically, without trusting the panel to tell the truth. Two phones running Confluence now share one dreamed sky together, on the real rendering engine both sides trust.
+
+### Ten desktop fixes
+
+Collapsible pairing QR, one clean app icon everywhere, a visible per-item download queue, an expandable status tray, first-run walkthrough (that's Juno at the top of this page), searchable settings, a reachable bug-report button, and Learn's cards all running live animation now.
+
+### Meeting mode + consent-based recognition
+
+Recognition is consent-aware now — introduce someone once ("this is Sarah") and the Brain remembers them; a genuine stranger is still never identified. Turn on Meeting mode and it captures attendees, notes, and the action items pulled out of what was actually said.
 
 ## Good to know
 
 - Still a pre-hardware build. The Brain, panel, phone pairing, plugins, lenses, and simulator are real and running. The physical glasses seams (camera, mic, BLE) connect when hardware does.
-- Updates remain click-only. The app never checks in the background; nothing phones home.
+- Every integration above is opt-in and lazily imported — install nothing extra and the app behaves exactly as it did in 0.7.0. The Capabilities page is the honest map of what each one costs and unlocks.
 - The full source for the dmg and the exe is this repository. Don't trust me, build it yourself: `.github/workflows/build-macos-app.yml` and `.github/workflows/build-windows-app.yml` are the recipes. Release assets carry Sigstore cosign bundles, so you can verify the bytes came from this repo's CI.
 - Found something broken? There's a button for that in the panel. Want to write a plugin? `examples/hello-lens`, and the open issues are the menu.
