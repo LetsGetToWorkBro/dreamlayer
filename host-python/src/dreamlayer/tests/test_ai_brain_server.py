@@ -575,3 +575,26 @@ class TestDiscoveriesHardening:
             assert status == 400
         finally:
             lb.stop()
+
+
+class TestDarkModeCoverage:
+    def test_every_hardcoded_white_card_has_a_midnight_override(self):
+        # A hardcoded `background:#FFF...` on a card renders as a blinding white
+        # box no matter the theme unless `html.midnight` repaints it — exactly
+        # what happened to the Capabilities awakening meter (.capstats): every
+        # sibling card (.mstat/.ans/.paircode, .setupcard, .dirlist, ...) got a
+        # dark pair, this one didn't. A few are correctly theme-invariant (a
+        # scannable QR must stay white-on-black; plain form controls have their
+        # own blanket `html.midnight input,select,textarea` rule) — allowlisted
+        # by selector, not exempted wholesale.
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        import re
+        exempt = {"input,select,textarea", ".qrbox", ".diritem:hover:before"}
+        for m in re.finditer(r"([^\n{]+?)\{background:#[fF]{3}(?:[fF]{3}|[eE]8)[^}]*\}", html):
+            selector = m.group(1).strip()
+            if selector in exempt:
+                continue
+            base = selector.lstrip(".").split(",")[0].split(" ")[0]
+            assert f".midnight {selector}" in html or f".midnight .{base}" in html, (
+                f"{selector!r} is hardcoded white with no html.midnight override")
