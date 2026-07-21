@@ -118,6 +118,11 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("mic_capture", "Live microphone → the capture pipeline", "voice",
         ("sounddevice",), "voice", "orchestrator/capture.py",
         gain="baseline has no audio input at all; this reads the mic and drives the VAD→ASR→hub loop", impact=5, before=0, after=5),
+    Cap("local_tts", "Juno speaks — on-device neural voice", "voice",
+        ("piper",), "voice", "orchestrator/tts_piper.py",
+        note="off by default (DL_JUNO_VOICE=1); needs a Piper voice model "
+             "($DL_PIPER_VOICE or <cfg>/voices/*.onnx)",
+        gain="baseline shows Juno's reply only as text on the glass; this speaks it aloud, offline — no cloud voice, audio never leaves the Brain", impact=4, before=0, after=4.5),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
