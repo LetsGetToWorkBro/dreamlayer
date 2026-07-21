@@ -507,6 +507,12 @@ _PAGE = r"""<!doctype html>
   #tourtext{font-size:13px;line-height:1.5;color:#DDEFE4}
   #touracts{display:flex;gap:8px;margin-top:9px}
   #touracts button{padding:6px 14px;border-radius:16px;font-size:12px}
+  #touracts .ghost{border-color:rgba(125,255,168,.25);color:var(--phos-dim)}
+  /* short viewports (landscape phones, split view): the card moves to the TOP
+     so it can never sit over the lens it is pointing at (refute 2026-07-21) */
+  @media (max-height: 540px){
+    #tourcard{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}
+  }
   #tourdots{color:var(--phos-dim);font-size:11px;margin-left:auto;align-self:center}
   @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan{animation:none} }
 </style>
@@ -909,7 +915,8 @@ let tourStep = -1;
 function tourSeen(){ try { return !!localStorage.getItem("dl-live-tour"); } catch (e) { return true; } }
 function tourMark(){ try { localStorage.setItem("dl-live-tour", "1"); } catch (e) {} }
 function startTour(force){
-  if (!force && tourSeen()) return;
+  if (!force && (tourSeen() || _pairNotice)) return;  /* pairing first — the tour
+                                                         follows a successful redeem */
   tourStep = -1;
   $("tour").classList.add("on");
   tourNext();
@@ -919,6 +926,18 @@ function endTour(){
   $("tourring").style.display = "none";
   tourMark();
 }
+function placeRing(st){
+  const ring = $("tourring");
+  const el = st && st.a && $(st.a);
+  if (!el) { ring.style.display = "none"; return; }
+  const r = el.getBoundingClientRect();
+  ring.style.display = "block";
+  ring.style.left = (r.left - 8) + "px";
+  ring.style.top = (r.top - 8) + "px";
+  ring.style.width = (r.width + 16) + "px";
+  ring.style.height = (r.height + 16) + "px";
+  ring.style.borderRadius = st.a === "lens" ? "50%" : "14px";
+}
 function tourNext(){
   tourStep++;
   if (tourStep >= TOUR_STEPS.length) { endTour(); return; }
@@ -926,20 +945,13 @@ function tourNext(){
   $("tourmsg").textContent = st.t;                    /* untrusted-safe by habit */
   $("tourdots").textContent = (tourStep + 1) + " / " + TOUR_STEPS.length;
   $("tournext").textContent = tourStep === TOUR_STEPS.length - 1 ? "Begin" : "Next";
-  const ring = $("tourring");
-  const el = st.a && $(st.a);
-  if (el) {
-    const r = el.getBoundingClientRect();
-    ring.style.display = "block";
-    ring.style.left = (r.left - 8) + "px";
-    ring.style.top = (r.top - 8) + "px";
-    ring.style.width = (r.width + 16) + "px";
-    ring.style.height = (r.height + 16) + "px";
-    ring.style.borderRadius = st.a === "lens" ? "50%" : "14px";
-  } else {
-    ring.style.display = "none";
-  }
+  placeRing(st);
 }
+/* rotate/resize mid-tour: re-anchor the spotlight to where the control IS */
+window.addEventListener("resize", () => {
+  if ($("tour").classList.contains("on") && tourStep >= 0)
+    placeRing(TOUR_STEPS[tourStep]);
+});
 $("tournext").onclick = tourNext;
 $("tourskip").onclick = endTour;
 $("tourbtn").onclick = () => startTour(true);

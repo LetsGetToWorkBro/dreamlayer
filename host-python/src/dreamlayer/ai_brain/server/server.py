@@ -1935,7 +1935,7 @@ def _pip_subprocess_once(reqs: list, on_line=None, constraints=None) -> tuple:
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
            "--progress-bar", "off", *reqs]
     if constraints:
-        cmd += ["-c", _constraints_file(constraints)]
+        cmd += ["-c", str(constraints)]
     proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
@@ -1973,14 +1973,30 @@ def _run_pip(reqs: list, on_line=None) -> tuple:
     """Default pack runner (source install): resilient batch-then-per-package so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
     all_reqs = list(reqs)
-    return _install_resilient(
-        all_reqs, on_line,
-        lambda subset: _pip_subprocess_once(
-            subset, on_line,
-            # salvage runs one req at a time — constrain each to the pack's
-            # own pins so N independent resolutions can't drift from what the
-            # batch resolver checked (refute 2026-07-21)
-            constraints=all_reqs if len(subset) < len(all_reqs) else None))
+    import os as _os
+    cpath = None
+    try:
+        try:
+            # ONE constraints file per run, removed afterwards (a leak of one
+            # temp file per salvage attempt — refute 2026-07-21); creation
+            # failure degrades to no constraints, never a dead job thread
+            cpath = _constraints_file(all_reqs) if len(all_reqs) > 1 else None
+        except Exception:
+            cpath = None
+        return _install_resilient(
+            all_reqs, on_line,
+            lambda subset: _pip_subprocess_once(
+                subset, on_line,
+                # salvage runs one req at a time — constrain each to the
+                # pack's own pins so N independent resolutions can't drift
+                # from what the batch resolver checked
+                constraints=cpath if len(subset) < len(all_reqs) else None))
+    finally:
+        if cpath:
+            try:
+                _os.unlink(cpath)
+            except OSError:
+                pass
 
 
 # Variable-arity by contract: a runner may take (reqs) or (reqs, on_line=…);
@@ -2008,7 +2024,7 @@ def _pip_target_once(reqs: list, target: str, on_line=None,
             "--no-cache-dir", "--disable-pip-version-check",
             "--no-warn-script-location", "--progress-bar", "off", *reqs]
     if constraints:
-        argv += ["-c", _constraints_file(constraints)]
+        argv += ["-c", str(constraints)]
     import logging
     import os
 
@@ -2047,11 +2063,24 @@ def _run_pip_target(reqs: list, target: str, on_line=None) -> tuple:
     """Frozen-app pack runner: resilient batch-then-per-package into the sidecar so
     one fragile dependency can't fail the whole pack (see _install_resilient)."""
     all_reqs = list(reqs)
-    return _install_resilient(
-        all_reqs, on_line,
-        lambda subset: _pip_target_once(
-            subset, target, on_line,
-            constraints=all_reqs if len(subset) < len(all_reqs) else None))
+    import os as _os
+    cpath = None
+    try:
+        try:
+            cpath = _constraints_file(all_reqs) if len(all_reqs) > 1 else None
+        except Exception:
+            cpath = None
+        return _install_resilient(
+            all_reqs, on_line,
+            lambda subset: _pip_target_once(
+                subset, target, on_line,
+                constraints=cpath if len(subset) < len(all_reqs) else None))
+    finally:
+        if cpath:
+            try:
+                _os.unlink(cpath)
+            except OSError:
+                pass
 
 
 _PACK_RUNNER_FROZEN: "Callable[..., tuple]" = _run_pip_target
@@ -3703,16 +3732,19 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     label=label, confidence=max(0.0, min(1.0, conf)),
                     attributes=attrs if isinstance(attrs, dict) else {})
                 panel = wl.look_sighting(sighting, facet=facet)
-                if panel is not None:
-                    # the image path records its look in world_look; the
-                    # deterministic label path must not under-report
-                    # (refute 2026-07-21, ledger-parity finding)
-                    try:
-                        brain.activity.add("look", f"Lens saw {label}")
-                    except Exception:
-                        pass
             else:
                 panel = wl.look(b64_to_frame(b.get("image")), facet=facet)
+            if panel is not None:
+                # world_look records image looks; the label and image+facet
+                # branches must not under-report (refute 2026-07-21) — and
+                # the veil is re-checked at write time (a veil dropped
+                # mid-request must not land a ledger line)
+                try:
+                    if not brain.incognito_now():
+                        seen = label or getattr(panel.sighting, "label", "")
+                        brain.activity.add("look", f"Lens saw {seen}")
+                except Exception:
+                    pass
             if panel is None:
                 self._json(200, {"ok": False, "reason": "couldn't make it out"})
                 return
