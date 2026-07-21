@@ -502,6 +502,18 @@ class BrainConfig:
     contacts_sync: bool = False     # pull Contacts.app into the People registry
     reminders_sync: bool = False    # pull open Reminders.app to-dos
     reminder_lists: list[str] = field(default_factory=list)  # [] = all lists
+    # -- live memory sources (W3/W5): all strictly LOCAL --------------------
+    # screenpipe (read-only local DB) + ActivityWatch (loopback REST) need no
+    # config; Immich / Home Assistant / Dawarich are LAN services pinned to a
+    # local endpoint. sources_sync is the master switch; a non-local base_url is
+    # rejected by the source itself (is_local_endpoint), so a typo can't egress.
+    sources_sync: bool = False      # fold local sources into memory on a poll
+    immich_base_url: str = ""       # self-hosted Immich on the LAN (photo memory)
+    immich_api_key: str = ""
+    home_assistant_url: str = ""    # Home Assistant on the LAN (presence/context)
+    home_assistant_token: str = ""
+    dawarich_url: str = ""          # self-hosted Dawarich on the LAN (location)
+    dawarich_api_key: str = ""
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts
@@ -678,6 +690,10 @@ class BrainConfig:
         d["token"] = "set" if self.token else ""
         d["cloud_api_key"] = "set" if self.cloud_api_key else ""
         d["api_key"] = "set" if self.api_key else ""
+        # LAN-service credentials never leave as plaintext to the panel either
+        d["immich_api_key"] = "set" if self.immich_api_key else ""
+        d["home_assistant_token"] = "set" if self.home_assistant_token else ""
+        d["dawarich_api_key"] = "set" if self.dawarich_api_key else ""
         d["cloud_ready"] = self.cloud_ready()
         d["api_configured"] = self.api_configured()
         d["api_is_local"] = self.api_is_local()

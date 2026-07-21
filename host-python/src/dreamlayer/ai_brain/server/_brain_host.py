@@ -45,6 +45,15 @@ class BrainHost:
         health: HealthLedger
         waypath: WaypathLens
         rc: RealityCompilerV2
+        # -- W3/W5/W6 memory-ingest surface (SourceOps). index + backend are
+        #    built in Brain.__init__/_wire_model; the rest are lazy. --
+        index: Any
+        _backend: Any
+        _graph: Any
+        _graph_built: bool
+        _src_stop: "threading.Event | None"
+        last_sources_sync: float
+        _rehearsal_store: Any
         _store_lock: threading.RLock
         _rc_pending: dict
         _rc_active: str | None
@@ -66,3 +75,5 @@ class BrainHost:
         def ask(self, query: str, no_cloud: bool = False) -> Optional[Answer]: ...
         def sync_contacts(self) -> dict: ...
         def sync_reminders(self) -> dict: ...
+        def rehearse_person(self, name: str,
+                            note: str = "") -> Optional[dict]: ...
