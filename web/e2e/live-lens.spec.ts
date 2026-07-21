@@ -90,9 +90,14 @@ test.describe("Live Lens page in a real browser", () => {
     await expect(page.locator("body")).toHaveAttribute("data-detector", "on", { timeout: 40_000 });
     expect(csp, `CSP blocked the detector:\n${csp.join("\n")}`).toEqual([]);
 
-    // the browser recognizes now, so the Brain AMBIENT loop stays idle
+    // the browser recognizes now, so the Brain AMBIENT loop stays idle FROM HERE.
+    // Snapshot the count at the moment recognition goes live and assert NO NEW
+    // ambient poll fires afterward — not that zero EVER fired, which races the
+    // up-to-40s detector warm-up (one warm-up poll on a slow runner made this
+    // flake red on an otherwise-green merge).
+    const ambientAtReady = looks.filter((l) => l.ambient).length;
     await page.waitForTimeout(2_500);
-    expect(looks.filter((l) => l.ambient).length).toBe(0);
+    expect(looks.filter((l) => l.ambient).length).toBe(ambientAtReady);
 
     // a deliberate tap STILL escalates to the Brain and renders the rich panel
     await page.locator("#lens").click();
