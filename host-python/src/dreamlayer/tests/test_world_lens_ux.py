@@ -24,8 +24,9 @@ class TestPanelConnectUX:
 
     def test_qr_rendered_large_enough_to_scan(self):
         html = render_panel("tok")
-        # the denser Live Lens QR must render at a comfortable scanning size
-        assert ".qrbox.live svg{width:300px" in html
+        # the Live Lens QR (now the sparse short-code payload) must render at a
+        # comfortable scanning size — bigger modules lock on off a glossy screen
+        assert ".qrbox.live svg{width:340px" in html
 
     def test_panel_explains_the_token_cannot_be_typed(self):
         html = render_panel("tok")

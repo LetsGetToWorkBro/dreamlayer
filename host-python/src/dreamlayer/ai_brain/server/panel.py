@@ -287,9 +287,10 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
        border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
   .qrbox svg{display:block;width:232px;height:232px;max-width:100%}
-  /* the Live Lens URL is longer → denser → render it bigger so a phone camera
-     locks on from a comfortable distance (the #1 "the QR won't scan" cause) */
-  .qrbox.live svg{width:300px;height:300px}
+  /* the Live Lens QR now carries the short pairing code (sparse), and renders
+     bigger still, so a phone camera locks on from a comfortable distance off a
+     glossy screen (the #1 "the QR won't scan" cause) */
+  .qrbox.live svg{width:340px;height:340px}
   .livecode{text-align:center;margin:8px 0 4px}
   .livecode .codebig{font:22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:4px;
     color:var(--memory);background:var(--surf);border:1px solid var(--line);

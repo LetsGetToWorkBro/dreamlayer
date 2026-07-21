@@ -384,6 +384,11 @@ _PAGE = r"""<!doctype html>
     display:flex;align-items:center;justify-content:center;text-align:center;
     transition:box-shadow .3s}
   #lens:active{box-shadow:0 0 60px rgba(125,255,168,.3), inset 0 0 60px rgba(125,255,168,.1)}
+  /* the glass itself: a 256px round display, scaled — the device card renderer
+     (renderer.lua) draws HERE, over the camera, inside the circle */
+  #glass{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;
+    pointer-events:none;opacity:0;transition:opacity .35s}
+  #glass.on{opacity:1}
   /* a sweeping ring while a look is in flight — the "it's thinking" tell */
   #lens.scan{animation:pulse 1.1s ease-in-out infinite}
   @keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(125,255,168,.14),inset 0 0 60px rgba(125,255,168,.05)}
@@ -467,6 +472,7 @@ _PAGE = r"""<!doctype html>
 <div id="veilshade"></div>
 <canvas id="overlay" aria-hidden="true"></canvas>
 <div id="lens" role="button" aria-label="Look — recognize what the camera sees" tabindex="0">
+  <canvas id="glass" aria-hidden="true"></canvas>
   <div id="hud" aria-live="polite"></div>
 </div>
 <div id="hint">tap the lens to look</div>
@@ -499,10 +505,16 @@ const LOOP_MS = 1600;               /* continuous-look cadence (Brain round-trip
 
 /* ---- credential: URL fragment -> sessionStorage, then scrubbed ---------- */
 let TOKEN = sessionStorage.getItem("dl-live-token") || "";
+let PENDING_CODE = "";
 if (location.hash.startsWith("#t=")) {
   TOKEN = decodeURIComponent(location.hash.slice(3));
   sessionStorage.setItem("dl-live-token", TOKEN);
   history.replaceState(null, "", location.pathname);   /* never re-shared */
+} else if (location.hash.startsWith("#c=")) {
+  /* the panel's QR carries the SHORT pairing code (a far sparser, easier-to-
+     scan matrix than the 32-char token); redeemed for the token on boot */
+  PENDING_CODE = decodeURIComponent(location.hash.slice(3)).replace(/\D/g, "");
+  history.replaceState(null, "", location.pathname);
 }
 const HDRS = () => TOKEN ? {"X-DreamLayer-Token": TOKEN} : {};
 
@@ -589,6 +601,103 @@ function renderPanel(panel){
   el.classList.add("on");
 }
 
+/* ---- the glass: the DEVICE card renderer, ported ------------------------
+   A recognition on the real glasses is drawn by halo-lua/display/renderer.lua
+   as the object-family card (draw_object_recall, "Meridian Solid": the place a
+   translucent field of light, the object a diamond jewel with orbit arcs, you
+   a dot at the bottom, a gradient trace connecting the two). This is a
+   faithful port of that draw — same 256px space, same geometry constants,
+   same palette.lua colors, same typography.lua sizes — fed by the SAME
+   ObjectPanel the Brain returns, the codebase's four-interpreter pattern
+   (figment.js / figment_stage.lua / interpreter.py / stage.rs) applied to the
+   card renderer. Nothing here is invented UI: layout renderer.lua:596,
+   palette halo-lua/display/palette.lua, type sizes typography.lua. */
+const GP = {                      /* palette.lua, verbatim */
+  text_primary:"#ECF0F1", text_secondary:"#A8B8C0", text_ghost:"#58686F",
+  memory_trace:"#00FFAA", border_subtle:"#2A3C44",
+  confidence_low:"#FFAA00", confidence_med:"#00FFAA", confidence_high:"#B8FFE9"
+};
+const GT = { lg:17, md:13, sm:10 };            /* typography.lua sizes */
+let glassTimer = null;
+function glassCtx(){
+  const cv = $("glass");
+  const px = cv.clientWidth * (window.devicePixelRatio || 1);
+  if (cv.width !== px) { cv.width = px; cv.height = px; }
+  const ctx = cv.getContext("2d");
+  const s = px / 256;                          /* the 256px round display, scaled */
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  ctx.clearRect(0, 0, 256, 256);
+  return ctx;
+}
+function gtext(ctx, str, cx, y, color, size){
+  ctx.font = GT[size || "md"] + "px ui-monospace, Menlo, monospace";
+  ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(str, cx, y);
+}
+function garc(ctx, x, y, r, a0, a1, color){    /* device arc(): degrees, 0=east */
+  ctx.beginPath();
+  ctx.arc(x, y, r, a0 * Math.PI / 180, a1 * Math.PI / 180);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function gdiamond(ctx, x, y, d, color){
+  ctx.beginPath();
+  ctx.moveTo(x, y - d); ctx.lineTo(x + d, y); ctx.lineTo(x, y + d);
+  ctx.lineTo(x - d, y); ctx.closePath();
+  ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function glassClear(){
+  clearTimeout(glassTimer);
+  $("glass").classList.remove("on");
+}
+/* draw_object_recall (renderer.lua:596) — geometry verbatim from the device */
+function glassObjectCard(card){
+  const ctx = glassCtx();
+  /* the device's display is DARK with emissive pixels — the card brings its
+     own glass, else 1-px strokes wash out over a bright live scene */
+  ctx.beginPath(); ctx.arc(128, 128, 128, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(4,8,6,.68)"; ctx.fill();
+  const conf = Number(card.confidence || 0);
+  const jcol = conf >= 0.75 ? GP.confidence_high
+             : conf < 0.40 ? GP.confidence_low : GP.confidence_med;
+  /* the place, as a translucent field: MAT.glass_disc(CX,112,62) */
+  ctx.beginPath(); ctx.arc(128, 112, 62, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.07)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  /* gradient trace you -> object: grad_bezier(128,192, 168,140, 132,102) */
+  const grad = ctx.createLinearGradient(128, 192, 132, 102);
+  grad.addColorStop(0, GP.border_subtle); grad.addColorStop(1, GP.memory_trace);
+  ctx.beginPath(); ctx.moveTo(128, 192);
+  ctx.quadraticCurveTo(168, 140, 132, 102);
+  ctx.strokeStyle = grad; ctx.lineWidth = 1.6; ctx.stroke();
+  /* the object jewel at (128,88): diamonds jd=9 / di=4 + 3 orbit arcs r=14 */
+  ctx.save(); ctx.shadowColor = jcol; ctx.shadowBlur = 7;
+  gdiamond(ctx, 128, 88, 9, jcol);
+  gdiamond(ctx, 128, 88, 4, GP.memory_trace);
+  garc(ctx, 128, 88, 14,   0,  90, jcol);
+  garc(ctx, 128, 88, 14, 120, 210, jcol);
+  garc(ctx, 128, 88, 14, 240, 330, jcol);
+  ctx.restore();
+  /* you, at the bottom of the scene: circle(128,198,3) + bloom */
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.arc(128, 198, 3, 0, 2 * Math.PI);
+  ctx.fillStyle = GP.memory_trace; ctx.fill(); ctx.restore();
+  /* type: time eyebrow, OBJECT label, hero place, [ detail ] bracket */
+  const obj = String(card.label || card.primary || "").toUpperCase();
+  const footer = String(card.footer || "");
+  gtext(ctx, footer, 128, 50, GP.text_ghost, "sm");
+  gtext(ctx, obj, 128, 66, GP.memory_trace, "md");
+  /* place: the memory row carries it when the ring knows one ("last at X") */
+  const memRow = (card.rows || []).find(r => String(r.source||"").startsWith("memory"));
+  const m = memRow && /last at (.+)$/.exec(String(memRow.detail || memRow.value || ""));
+  if (m) gtext(ctx, m[1], 128, 150, GP.text_primary, "lg");
+  let detail = String(((card.rows || [])[0] || {}).label || card.detail || "");
+  if (detail.length > 18) detail = detail.slice(0, 17) + "…";
+  if (detail) gtext(ctx, "[ " + detail + " ]", 128, 176, GP.text_secondary, "md");
+  $("glass").classList.add("on");
+  clearTimeout(glassTimer);
+  glassTimer = setTimeout(glassClear, card.dismiss_ms || 3500);
+}
+
 /* ---- link + tier chips -------------------------------------------------- */
 function setLink(ok, ms){
   $("linkst").textContent = ok ? ("brain " + (ms|0) + "ms") : "no link";
@@ -608,7 +717,7 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); clearOverlayOnce(); }   /* wipe live boxes at once */
+  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); }   /* wipe live surfaces at once */
   if (!o.silent) showHud(on ? "veil down · on-device only" : "veil lifted", {ms:2400});
   if (!on && liveOn) scheduleLoop(500);
 }
@@ -750,10 +859,19 @@ function renderResult(j, auto){
   }
   if (j.label) {
     noHitStreak = 0;
-    showHud(j.lines && j.lines.length ? j.lines : wrapLines(j.label), {persist: liveOn});
     setTier(j.tier || "laptop");
     renderPanel(j.panel);
-    if (!auto) blip();
+    if (!auto && j.panel) {
+      /* a deliberate tap draws the DEVICE card on the glass circle — the same
+         object-family art the glasses render for this panel. The card IS the
+         read, so the flat HUD plate steps aside instead of stacking on it. */
+      $("hud").classList.remove("on");
+      glassObjectCard(j.panel);
+      blip();
+    } else {
+      showHud(j.lines && j.lines.length ? j.lines : wrapLines(j.label), {persist: liveOn});
+      if (!auto) blip();
+    }
   } else {
     noHitStreak++;
     renderPanel(null);
@@ -865,30 +983,38 @@ function needsPairing(){
   input.focus();
 }
 
-/* Exchange the short code for the token, then we're paired — same end state as
-   scanning the QR (token in sessionStorage). */
-async function redeemCode(raw, noticeEl){
+/* Exchange the short code for the token → paired (token in sessionStorage),
+   the same end state as the token link. ONE implementation behind two entry
+   points: the typed-code modal and the QR-carried #c= auto-redeem at boot. */
+async function doRedeem(raw){
   const code = (raw || "").replace(/\D/g, "");
-  const msg = noticeEl.querySelector("#pairMsg");
-  if (code.length < 8) { msg.textContent = "Enter the 8-digit code from the panel."; return; }
-  msg.textContent = "connecting…";
+  if (code.length < 8) return {ok:false, msg:"Enter the 8-digit code from the panel."};
   try {
     const rsp = await fetch("/dreamlayer/live/redeem",
       {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({code})});
-    const j = await rsp.json();
+    let j = {}; try { j = await rsp.json(); } catch (_) {}
     if (rsp.ok && j.token) {
       TOKEN = j.token;
       sessionStorage.setItem("dl-live-token", TOKEN);
-      noticeEl.remove(); _pairNotice = null;
-      showHud("connected · tap the lens", {ms:3000});
       setLink(true, 0);
       if (liveOn) scheduleLoop(600);
-      return;
+      return {ok:true};
     }
-    msg.textContent = rsp.status === 429
+    return {ok:false, msg: rsp.status === 429
       ? "too many tries — wait a minute, then a fresh code from the panel"
-      : "wrong or expired code — get a fresh one from the panel";
-  } catch (e) { msg.textContent = "brain unreachable"; }
+      : "wrong or expired code — get a fresh one from the panel"};
+  } catch (e) { return {ok:false, msg:"brain unreachable"}; }
+}
+async function redeemCode(raw, noticeEl){
+  const msg = noticeEl.querySelector("#pairMsg");
+  msg.textContent = "connecting…";
+  const r = await doRedeem(raw);
+  if (r.ok) {
+    noticeEl.remove(); _pairNotice = null;
+    showHud("connected · tap the lens", {ms:3000});
+    return;
+  }
+  msg.textContent = r.msg || "couldn't connect";
 }
 
 /* ---- optional voice: honest about whose ears these are ------------------ */
@@ -1060,6 +1186,16 @@ setLive(true);
 startCam();
 loadDetector();                       /* progressive enhancement — non-blocking */
 (async () => {                                    /* first link check + posture seed */
+  /* a QR that carried the SHORT pairing code (#c=) redeems for the token
+     BEFORE the status probe — else an about-to-pair phone 401s and pops the
+     pairing modal a beat before it's connected */
+  if (!TOKEN && PENDING_CODE) {
+    try {
+      const r = await doRedeem(PENDING_CODE);
+      if (r.ok) showHud("connected · tap the lens", {ms:2600});
+    } catch (e) { /* fall through to the status probe / pairing modal */ }
+    PENDING_CODE = "";
+  }
   try {
     const t0 = performance.now();
     const rsp = await fetchJSON("/dreamlayer/status", {headers: HDRS()}, 8000);

@@ -104,8 +104,14 @@ class WorldLensHost:
         from ...orchestrator.capability_log import CapabilityLedger
         self.capability_log = CapabilityLedger()
         self.privacy = _LookGate(brain)
-        # host-state the plugin context reads; kept intentionally minimal.
-        self.ring = None
+        # The SAME hot-memory primitive the glasses run (orchestrator.py wires
+        # SemanticRingBuffer(cfg.passive_ring_capacity)): typed MemoryEvents
+        # only, in-memory only, never raw pixels and never disk. Deliberate
+        # looks append the canonical object event (pipelines/ingest.py shape),
+        # so MemoryProvider's "seen before N× · last at …" rows are REAL here —
+        # not a stub — and erase/rebuild drops the ring with the host.
+        from ...memory.ring_buffer import SemanticRingBuffer
+        self.ring = SemanticRingBuffer(64)          # glasses default capacity
         self.mesh = None
         self.perception = None
         self.glance_arbiter = None
@@ -114,17 +120,33 @@ class WorldLensHost:
         self._router = _BrainVisionRouter(brain)
         self._shop_providers: list = []
 
-        from ...object_lens import ObjectLens, AIProvider, DietaryProfile
+        from ...object_lens import (ObjectLens, AIProvider, DietaryProfile,
+                                    LabelProvider, RosettaProvider)
         from ...object_lens.recognizer import ObjectRecognizer
         from ...object_lens.vision_recognizer import VisionSightingRecognizer
         recognizer = ObjectRecognizer(
             classify_fn=VisionSightingRecognizer(
                 self._describe, available=self._router.has_vision))
-        self.object_lens = ObjectLens(recognizer=recognizer, privacy=self.privacy)
+        # ring=… auto-registers MemoryProvider — the SAME built-in provider set
+        # the glasses wire in orchestrator._init_object_lenses (Memory + AI +
+        # Label + Rosetta), so a phone look runs every lens a glance does.
+        # Laptop/Car/Plant stay app-layer seams on both surfaces, by design.
+        self.object_lens = ObjectLens(ring=self.ring, recognizer=recognizer,
+                                      privacy=self.privacy)
         self.object_lens.registry.register(AIProvider(self._router))
 
         from ...orchestrator.taste import TasteLens
         self.dietary = DietaryProfile()
+        # Rosetta exactly as the glasses build it: the offline Argos backend
+        # when installed (extras `platform` — the Operator pack), else the
+        # identical no-op (translate_fn=None) — never a fake translation.
+        from ...rosetta import RosettaLens
+        from ...rosetta_argos import ArgosTranslator, make_translate_fn
+        self.rosetta = RosettaLens(
+            translate_fn=make_translate_fn() if ArgosTranslator.available else None,
+            engine="argos")
+        self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
+        self.object_lens.registry.register(RosettaProvider(self.rosetta))
         self.taste_lens = TasteLens(read_fn=self._taste_read,
                                     profile=self.dietary, shop_fn=self._taste_shop)
 
@@ -255,10 +277,29 @@ class WorldLensHost:
     def veiled(self) -> bool:
         return not self.privacy.allow_capture()
 
+    def _remember_sighting(self, label: str) -> None:
+        """Append the canonical object event (pipelines/ingest.py shape) to the
+        hot ring AFTER the panel builds, so "seen before" counts PRIOR sightings
+        — the same order passive capture feeds the glasses' ring. In-memory
+        only; the veil gate already ran (a veiled look never reaches here)."""
+        key = (label or "").strip().lower()
+        if not key:
+            return
+        try:
+            from ...pipelines.ingest import MemoryEvent
+            self.ring.append(MemoryEvent(kind="object", summary=key,
+                                         confidence=0.90, meta={"object": key},
+                                         source="look"), source="look")
+        except Exception:
+            pass                             # memory is best-effort, a look never dies
+
     def look(self, frame, facet: Optional[str] = None):
         """Recognise the object in a photo and build its panel (or None)."""
         facets = {facet} if facet else None
-        return self.object_lens.look(frame, facets=facets)
+        panel = self.object_lens.look(frame, facets=facets)
+        if panel is not None:
+            self._remember_sighting(getattr(panel.sighting, "label", ""))
+        return panel
 
     def look_sighting(self, sighting, facet: Optional[str] = None):
         """Build a panel for a caller-supplied sighting (deterministic mode: the
@@ -275,7 +316,10 @@ class WorldLensHost:
         if person_guard.defers_person(sighting.label):
             return None                     # a person → Social Lens, never here
         facets = {facet} if facet else None
-        return self.object_lens.registry.build_panel(sighting, facets=facets)
+        panel = self.object_lens.registry.build_panel(sighting, facets=facets)
+        if panel is not None:
+            self._remember_sighting(getattr(sighting, "label", ""))
+        return panel
 
     def taste(self, frame, budget: Optional[float] = None):
         """Read a shelf/menu and rank it against the wearer's rules."""
