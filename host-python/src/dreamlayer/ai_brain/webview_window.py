@@ -72,6 +72,51 @@ def _make_ui_delegate():
         return None
 
 
+def _set_dock_presence(on: bool) -> None:
+    """The app is a menu-bar appliance (LSUIElement) — while the panel window
+    is open it becomes a REGULAR app, which is what puts the white running-dot
+    under the Dock icon and an entry in Cmd-Tab; closing the panel returns it
+    to the quiet menu-bar-only posture. Also stamps the real app icon on the
+    running process so the switcher shows DreamLayer, not a generic tile.
+    Best-effort and off-Mac inert (no AppKit → no-op), like the UI delegate."""
+    try:
+        from AppKit import NSApp, NSImage
+        # 0 = NSApplicationActivationPolicyRegular, 1 = ...Accessory
+        NSApp().setActivationPolicy_(0 if on else 1)
+        if on:
+            from pathlib import Path
+            icon = Path(__file__).resolve().parent / "server" / "assets" / "app_icon.png"
+            if icon.is_file():
+                img = NSImage.alloc().initWithContentsOfFile_(str(icon))
+                if img is not None:
+                    NSApp().setApplicationIconImage_(img)
+    except Exception:
+        pass
+
+
+_close_delegate = None       # retained — NSWindow holds its delegate weakly
+
+
+def _make_close_delegate():
+    """A window delegate that drops Dock presence when the panel closes.
+    Returns None off-Mac (no AppKit), mirroring _make_ui_delegate."""
+    try:
+        import objc
+        from Foundation import NSObject
+
+        class _PanelCloseDelegate(NSObject):
+            @objc.python_method
+            def _noop(self):
+                pass
+
+            def windowWillClose_(self, note):
+                _set_dock_presence(False)
+
+        return _PanelCloseDelegate.alloc().init()
+    except Exception:
+        return None
+
+
 def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
     """Open — or focus, if already open — a native window showing `url`.
 
@@ -96,6 +141,7 @@ def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
             try:
                 _load(_window.contentView(), url)
                 _window.makeKeyAndOrderFront_(None)
+                _set_dock_presence(True)
                 NSApp().activateIgnoringOtherApps_(True)
                 return True
             except Exception:
@@ -122,7 +168,13 @@ def open_panel_window(url: str, title: str = "DreamLayer") -> bool:
         win.setContentView_(web)
         _load(web, url)
 
+        global _close_delegate
+        _close_delegate = _make_close_delegate()
+        if _close_delegate is not None:
+            win.setDelegate_(_close_delegate)
+
         win.makeKeyAndOrderFront_(None)
+        _set_dock_presence(True)
         NSApp().activateIgnoringOtherApps_(True)
         _window = win
         return True
