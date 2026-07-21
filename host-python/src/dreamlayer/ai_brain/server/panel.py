@@ -626,7 +626,7 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   html.midnight .drop.hot{border-color:var(--memory);background:rgba(44,199,154,.07)}
   html.midnight .seg button.on{background:var(--surf)}
   html.midnight .seg button:active{background:#1F2124}
-  html.midnight .mstat,html.midnight .ans,html.midnight .paircode{background:#2E3033}
+  html.midnight .mstat,html.midnight .ans,html.midnight .paircode,html.midnight .capstats{background:#2E3033}
   html.midnight code{background:#1F2124}
   html.midnight .tier{background:rgba(44,199,154,.14);border-color:rgba(44,199,154,.45)}
   html.midnight .shimmer{background:linear-gradient(90deg,#34373B,#43474C,#34373B);background-size:200% 100%}
