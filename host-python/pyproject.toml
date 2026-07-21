@@ -60,6 +60,9 @@ sound-events = ["panns-inference>=0.1,<1"]
 # birdsong recognition (BirdNET — 6,000+ species from sound, Pi-Zero-sized) — the
 # world narrates itself on a walk. Opt-in, not in any profile.
 birds = ["birdnetlib>=0.18,<1"]
+# the "look up" lens (Skyfield) — planets + ISS passes from LOCAL data files
+# (de421.bsp, stations.tle in $DL_SKY_DIR); the lens itself never downloads. Opt-in.
+sky = ["skyfield>=1.45,<2"]
 # temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
 # by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
 memory-graph = ["lightrag-hku>=1,<2"]
