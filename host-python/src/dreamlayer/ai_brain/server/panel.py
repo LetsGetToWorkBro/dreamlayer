@@ -853,6 +853,11 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="row"><input type="text" id="q" placeholder="where's the lease? what does Marcus owe me?"
         onkeydown="if(event.key==='Enter')ask()"><button onclick="ask()">Ask</button></div>
     <div id="answer"></div>
+    <label class="conn" style="border-bottom:0;gap:10px;margin-top:6px;cursor:pointer">
+      <span class="sw"><input type="checkbox" id="voiceTog" onchange="toggleVoice()" disabled><span class="track"></span></span>
+      <div style="flex:1"><div class="conn-t">Juno speaks her answers</div>
+        <div class="conn-s" id="voiceHint">Synthesized on your Brain (Piper, on‑device) — no cloud, no API credits.</div></div>
+    </label>
   </section>
 
   <section>
@@ -1126,6 +1131,25 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
 const TOKEN="__TOKEN__";
 const H={"Content-Type":"application/json"}; if(TOKEN)H["X-DreamLayer-Token"]=TOKEN;
 const api=(p,o={})=>fetch(p,Object.assign({headers:H},o)).then(r=>r.json());
+// Juno's local voice: the Brain synthesizes the WAV (Piper on CPU, no cloud, no
+// API credits) and we play it HERE, where the speaker is. Off unless the wearer
+// turns it on AND the Brain actually has a voice ready. One clip at a time.
+let junoVoiceOn=localStorage.dl_juno_voice==="1", junoVoiceReady=false, _junoAudio=null;
+async function refreshVoice(){try{const r=await api("/dreamlayer/tts");junoVoiceReady=!!(r&&r.ready);}catch(e){junoVoiceReady=false;}
+  const t=$("voiceTog"); if(t){t.checked=junoVoiceOn; t.disabled=!junoVoiceReady;}
+  const h=$("voiceHint"); if(h)h.textContent=junoVoiceReady?"":"Add a voice model to <cfg>/voices/ (or install the voice pack) to hear her.";}
+function toggleVoice(){junoVoiceOn=$("voiceTog").checked; localStorage.dl_juno_voice=junoVoiceOn?"1":"0";
+  if(junoVoiceOn)junoSay("Okay — I'll speak up."); else if(_junoAudio){try{_junoAudio.pause();}catch(e){}}}
+async function junoSay(text){
+  if(!junoVoiceOn||!junoVoiceReady||!text)return;
+  let res; try{res=await fetch("/dreamlayer/tts",{method:"POST",headers:H,body:JSON.stringify({text:String(text).slice(0,600)})});}catch(e){return;}
+  if(!res||res.status!==200)return;                 // 204 = no voice; stay silent
+  let blob; try{blob=await res.blob();}catch(e){return;}
+  try{if(_junoAudio){_junoAudio.pause();}                // one utterance at a time
+    const url=URL.createObjectURL(blob); _junoAudio=new Audio(url);
+    _junoAudio.onended=_junoAudio.onerror=()=>URL.revokeObjectURL(url);
+    _junoAudio.play().catch(()=>{});
+  }catch(e){}}
 // quotes included: esc() output also lands inside single-quoted onclick
 // attributes (Remove buttons), where a stray ' would open an attribute break
 const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1743,7 +1767,7 @@ async function load(){
   if(c.config.email_enabled) loadMessages();
   renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
-  loadContactsSync(); loadReminders(); loadCaps(); loadReceipt();
+  loadContactsSync(); loadReminders(); loadCaps(); loadReceipt(); refreshVoice();
 }
 
 function fmtWhen(ts){if(!ts)return "";const d=new Date(ts*1000);
@@ -2203,13 +2227,15 @@ async function ask(){const q=$("q").value.trim();if(!q)return;
   $("answer").innerHTML=r&&r.text?`<div class="ans">${esc(r.text)}<div class="src">`+
     `<span class="tier">${esc(r.tier||"local")}</span>${esc((r.sources||[]).join(", "))}</div></div>`
     :'<div class="ans" style="border-left-color:var(--ghost);color:var(--muted)">Nothing in your files matches that yet.</div>';
+  if(r&&r.text)junoSay(r.text);
   loadHistory();
 }
 async function brief(){const o=$("briefout");
   o.innerHTML='<div class="ans"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
   const r=await api("/dreamlayer/brief",{method:"POST",body:"{}"});
   const miss=r.missed?`${r.missed.texts} text(s) · ${r.missed.emails} email(s)`:"";
-  o.innerHTML=`<div class="ans">${esc(r.text)}<div class="src">${esc(miss)}</div></div>`;}
+  o.innerHTML=`<div class="ans">${esc(r.text)}<div class="src">${esc(miss)}</div></div>`;
+  if(r&&r.text)junoSay(r.text);}
 async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
   let r;try{r=await api("/dreamlayer/pair");}catch(e){r=null;}
   if(!r||!r.code){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+

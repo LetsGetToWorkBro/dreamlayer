@@ -123,6 +123,11 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="off by default (DL_JUNO_VOICE=1); needs a Piper voice model "
              "($DL_PIPER_VOICE or <cfg>/voices/*.onnx)",
         gain="baseline shows Juno's reply only as text on the glass; this speaks it aloud, offline — no cloud voice, audio never leaves the Brain", impact=4, before=0, after=4.5),
+    Cap("voice_clone", "Juno speaks in HER OWN voice (cloned, offline)", "voice",
+        ("TTS",), "voice-clone", "orchestrator/voice_clone.py",
+        note="opt-in (heavy); clones her timbre from the baked juno_*.mp3 clips "
+             "via XTTS at inference — no training, no cloud",
+        gain="baseline (or local_tts) speaks in a generic voice; this speaks in Juno's own voice, zero-shot cloned on-device from her existing clips", impact=3, before=0, after=4),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
@@ -225,7 +230,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("anyio",), "privacy", "orchestrator/concurrency_anyio.py",
         note="asyncio fallback is always on",
         gain="baseline cancel-all is hand-rolled asyncio; this makes the Veil-stop guarantee structural", impact=2, before=3.5, after=5),
-    Cap("stranger_defense", "Never identify a stranger (name NER)", "privacy",
+    Cap("stranger_defense", "Recognize people you've met; never a stranger", "privacy",
         ("presidio_analyzer",), "privacy", "object_lens/person_guard.py",
         note="deterministic name-shape + person-word guard is ALWAYS on; "
              "`dreamlayer setup models` activates the presidio NER layer; the "

@@ -43,6 +43,55 @@ _NONE = object()
 _analyzer_cache: object = None
 _detector_cache: object = None
 
+# CONSENT roster: the people you've INTRODUCED to the Brain. Recognizing someone
+# you've met is the Social Lens's whole point — "never identify a stranger" was
+# only ever meant to stop us naming someone you HAVEN'T consented to. The Brain
+# wires this to its people.json roster (set_known_people); a name that matches a
+# consented person is therefore allowed through, and only a genuine stranger
+# defers. Left None → the strict, roster-less behaviour (every name defers),
+# so existing call-sites are unchanged until a roster is wired.
+_known_override: Optional[Callable] = None
+
+
+def set_known_people(fn: Optional[Callable]) -> None:
+    """Wire the consented-people roster: `fn() -> iterable[str]` of names you've
+    introduced. Pass None to clear it (back to roster-less, strict deferral)."""
+    global _known_override
+    _known_override = fn
+
+
+def _known_names() -> frozenset:
+    if _known_override is None:
+        return frozenset()
+    try:
+        return frozenset(str(n).strip().lower() for n in (_known_override() or []) if n)
+    except Exception:                                  # noqa: BLE001 — never break a look
+        return frozenset()
+
+
+import re as _re
+_TOK_RE = _re.compile(r"[a-z0-9]+")
+
+
+def is_known_person(label: str, known=None) -> bool:
+    """True when `label` names someone you've CONSENTED to remember. Match is
+    conservative: ALL of a known person's name tokens must appear in the label
+    (so a lone shared first name like "Sarah" does NOT un-defer a stranger named
+    Sarah — recognition of a known person leans on their face/voice, not a
+    first-name badge). `known` overrides the wired roster (tests)."""
+    names = frozenset(str(n).strip().lower() for n in known if n) \
+        if known is not None else _known_names()
+    if not names or not label:
+        return False
+    label_toks = set(_TOK_RE.findall(label.lower()))
+    if not label_toks:
+        return False
+    for name in names:
+        ntoks = set(_TOK_RE.findall(name))
+        if ntoks and ntoks <= label_toks:              # full known name present
+            return True
+    return False
+
 
 def reset_caches() -> None:
     """Drop the lazy-loaded analyzer/detector (tests use this between cases)."""
@@ -166,6 +215,11 @@ def defers_person(label: str, frame=None) -> bool:
     dep or any error in a layer is a no-op, so this can only ADD a deferral."""
     # Import lazily to avoid an import cycle (recognizer imports person_guard).
     from .recognizer import _names_a_person
+    # CONSENT first: someone you've introduced is one you're ALLOWED to
+    # recognize — the Social Lens's reason to exist. Only a stranger (not in your
+    # roster) falls through to the deferral layers below.
+    if is_known_person(label):
+        return False
     if _names_a_person(label):
         return True
     if label_is_a_person(label):
