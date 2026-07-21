@@ -1026,6 +1026,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps):
             store = EmberStore(ember_path)
             n_ember = len(store.engrams(include_burned=True))
             store.purge_all()
+        # The World-lens hot ring holds sighting memory ("seen before N×") —
+        # an explicit erase must drop it too, or pre-erase sightings surface
+        # on the very next look (refute 2026-07-21: purge left the cached
+        # host, and its ring, alive).
+        self._invalidate_world_lens()
         self.activity.add("privacy",
                           f"Erased kept memories ({n} anchor(s), "
                           f"{n_ember} ember(s))")

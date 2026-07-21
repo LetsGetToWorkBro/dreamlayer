@@ -88,7 +88,11 @@ class LabelProvider(PanelProvider):
             if meta.get("private"):
                 continue
             summary = (getattr(ev, "summary", "") or "").lower()
-            if key not in summary and key != str(meta.get("object", "")).lower():
+            # whole-word match — the raw substring test fabricated history
+            # ("cup" in "cupboard"; refute 2026-07-21), same fix as
+            # MemoryProvider
+            from .providers import _mentions
+            if not _mentions(key, summary) and key != str(meta.get("object", "")).lower():
                 continue
             if meta.get("returned"):
                 returned += 1

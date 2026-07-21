@@ -617,6 +617,26 @@ class TestPhoneRunsEveryGlassesLens:
         second = wl.look_sighting(ObjectSighting(label="coffee mug", confidence=0.9))
         assert any("seen before" in r.label for r in second.rows)
 
+    def test_seen_before_never_substring_fabricates(self, tmp_path):
+        # refute 2026-07-21: "cup" must NOT match a prior "cupboard" — a raw
+        # substring test claimed sightings of objects never seen.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        wl = _brain(tmp_path).world_lens()
+        wl.look_sighting(ObjectSighting(label="cupboard", confidence=0.9))
+        p = wl.look_sighting(ObjectSighting(label="cup", confidence=0.9))
+        assert not any("seen before" in r.label for r in p.rows)
+
+    def test_erase_everything_drops_the_sighting_ring(self, tmp_path):
+        # refute 2026-07-21: purge_memories left the cached host (and its
+        # ring) alive — pre-erase sightings surfaced on the next look.
+        from dreamlayer.object_lens.schema import ObjectSighting
+        brain = _brain(tmp_path)
+        brain.world_lens().look_sighting(
+            ObjectSighting(label="coffee mug", confidence=0.9))
+        assert len(brain.world_lens().ring) > 0
+        brain.purge_memories()
+        assert len(brain.world_lens().ring) == 0
+
     def test_veiled_look_leaves_no_ring_trace(self, tmp_path):
         # the veil gate runs BEFORE the ring append — a veiled look must not
         # add a sighting the wearer never agreed to remember.
