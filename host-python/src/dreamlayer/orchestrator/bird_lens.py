@@ -52,7 +52,8 @@ def bird_alert(detections, min_conf: float = _MIN_CONF) -> Optional[Alert]:
     if best is None:
         return None
     name = best[1]
-    return Alert("listen", f"That's a {name}", "singing nearby",
+    article = "an" if name[:1].lower() in "aeiou" else "a"
+    return Alert("listen", f"That's {article} {name}", "singing nearby",
                  f"bird:{name.lower()}")
 
 

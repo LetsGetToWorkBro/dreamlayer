@@ -44,6 +44,14 @@ class TestWeather:
         assert W.parse_weather(b"{not json") is None
         assert W.parse_weather(b"{}") is None
 
+    def test_null_weather_code_keeps_the_temperature(self):
+        # a present-but-null code must not sink a valid forecast (refute 2026-07-21)
+        raw = json.dumps({"current": {"temperature_2m": 18.3,
+                                      "weather_code": None}}).encode()
+        w = W.parse_weather(raw)
+        assert w is not None and w["temp_c"] == 18.3
+        assert w["sky"] == "changing sky"
+
     def test_current_weather_via_seam(self):
         seen = {}
 
@@ -91,6 +99,13 @@ class TestSkywatch:
         assert A.parse_planes(None, 0, 0) == []
         assert A.overhead(0, 0, fetch_fn=lambda u: None) is None
 
+    def test_null_alt_baro_falls_through_to_alt_geom(self):
+        # readsb feeds emit alt_baro:null with a valid alt_geom (refute 2026-07-21)
+        raw = json.dumps({"ac": [{"flight": "TEST1", "lat": 37.8, "lon": -122.4,
+                                  "alt_baro": None, "alt_geom": 34000}]}).encode()
+        planes = A.parse_planes(raw, 37.7749, -122.4194)
+        assert len(planes) == 1 and planes[0]["alt_ft"] == 34000
+
     def test_default_fetch_pins_host(self):
         assert A._default_fetch("https://adsbexchange.com/v2/x") is None
 
@@ -108,6 +123,14 @@ class TestSkyLens:
         assert "Venus is up" in line and "4 minutes" in line
         quiet = say_sky({"planets": [], "iss_minutes": None})
         assert quiet == ""
+
+    def test_say_sky_keeps_proper_nouns_capitalized(self):
+        # str.capitalize() lowercased 'Mars'/'ISS' after char 0 (refute 2026-07-21)
+        line = say_sky({"planets": [("Venus", 20.0, 250.0), ("Mars", 30.0, 120.0)],
+                        "iss_minutes": 10.0})
+        assert "Mars" in line and "ISS" in line and "are up" in line
+        iss_only = say_sky({"planets": [], "iss_minutes": 4.0})
+        assert iss_only.startswith("The ISS crosses")
 
 
 def test_sky_capability_registered():

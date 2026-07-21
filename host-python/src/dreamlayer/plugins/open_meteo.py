@@ -59,7 +59,10 @@ def parse_weather(raw: Optional[bytes]) -> Optional[dict]:
         data = json.loads(raw.decode("utf-8", "replace"))
         cur = data.get("current") or {}
         daily = data.get("daily") or {}
-        code = int(cur.get("weather_code", -1))
+        # a PRESENT-but-null weather_code must not sink a valid temperature
+        # (refute 2026-07-21); and no `or -1` — code 0 is "clear sky" and falsy
+        wc = cur.get("weather_code")
+        code = int(wc) if wc is not None else -1
         out = {
             "temp_c": round(float(cur["temperature_2m"]), 1),
             "wind_kmh": round(float(cur.get("wind_speed_10m", 0) or 0), 1),

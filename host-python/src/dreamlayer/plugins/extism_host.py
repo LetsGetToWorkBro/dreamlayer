@@ -69,7 +69,10 @@ class ExtismHost:
                 "timeout_ms": self.timeout_ms,
                 "allowed_hosts": [],               # explicit: the guest gets NO network
             }
-            with extism.Plugin(manifest, wasi=False) as plugin:
+            # functions=[]: never link the global @host_fn registry — "zero
+            # ambient authority" stays structural even if some future import
+            # registers host functions process-wide.
+            with extism.Plugin(manifest, wasi=False, functions=[]) as plugin:
                 out = plugin.call(func, bytes(input_bytes or b""))
             out = bytes(out or b"")
             return out[:_MAX_OUT] if len(out) <= _MAX_OUT else None

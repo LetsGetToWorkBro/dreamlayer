@@ -45,8 +45,14 @@ class TestBirdAlertPolicy:
     def test_best_bird_becomes_a_gentle_listen(self):
         a = bird_alert([("Song Sparrow", 0.8), ("American Robin", 0.6)])
         assert a is not None and a.level == "listen"
-        assert "Song Sparrow" in a.clue
+        assert "That's a Song Sparrow" in a.clue
         assert a.key == "bird:song sparrow"
+
+    def test_vowel_names_get_an(self):
+        a = bird_alert([("American Robin", 0.9)])
+        assert a is not None and "That's an American Robin" in a.clue
+        o = bird_alert([("Osprey", 0.9)])
+        assert o is not None and "That's an Osprey" in o.clue
 
     def test_below_threshold_or_nan_is_silent(self):
         assert bird_alert([("Song Sparrow", 0.3)]) is None

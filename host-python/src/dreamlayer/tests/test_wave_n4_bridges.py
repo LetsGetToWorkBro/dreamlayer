@@ -38,7 +38,52 @@ class TestMesh:
         b._iface = FakeIface()
         assert b.send("x" * 500, channel=2) is True
         text, ch = b._iface.sent[0]
-        assert len(text) == 200 and ch == 2          # LoRa-sized, channel kept
+        assert len(text.encode("utf-8")) <= 230 and ch == 2   # LoRa BYTES, channel kept
+
+    def test_truncation_counts_bytes_not_chars(self):
+        # 'п' is 2 UTF-8 bytes: 150 chars = 300 bytes would overflow the radio's
+        # 237-byte payload and raise inside sendText (refute 2026-07-21)
+        b = MeshBridge()
+
+        class FakeIface:
+            def __init__(self):
+                self.sent = []
+
+            def sendText(self, text, channelIndex=0):
+                assert len(text.encode("utf-8")) <= 237, "payload overflow"
+                self.sent.append(text)
+        b._iface = FakeIface()
+        assert b.send("п" * 150) is True
+        assert len(b._iface.sent[0].encode("utf-8")) <= 230
+
+    def test_receive_closure_is_strongly_referenced(self):
+        # pypubsub holds listeners by WEAK ref: a bare local closure is GC'd and
+        # the receive half silently never fires (refute 2026-07-21). The bridge
+        # must pin the closure on the instance.
+        import gc
+        b = MeshBridge()
+
+        class FakePub:
+            def __init__(self):
+                self.subscribed = []
+
+            def subscribe(self, fn, topic):
+                import weakref
+                self.subscribed.append((weakref.ref(fn), topic))
+
+        import sys
+        fake = type(sys)("pubsub")
+        fake.pub = FakePub()
+        sys.modules["pubsub"] = fake
+        try:
+            b._subscribe()
+        finally:
+            del sys.modules["pubsub"]
+        gc.collect()
+        assert b._on_receive_fn is not None
+        ref, topic = fake.pub.subscribed[0]
+        assert ref() is b._on_receive_fn             # weakref still alive
+        assert topic == "meshtastic.receive.text"
 
     def test_listener_registry_ignores_non_callables(self):
         b = MeshBridge()
@@ -114,6 +159,11 @@ class TestHomeAssistant:
          "attributes": {"friendly_name": "Hall light"}},          # boring → silent
         {"entity_id": "cover.blinds", "state": "closed",
          "attributes": {"friendly_name": "Blinds"}},
+        {"entity_id": "cover.living_room_blinds", "state": "open",
+         "attributes": {"friendly_name": "Living room blinds",
+                        "device_class": "blind"}},                 # open all day → silent
+        {"entity_id": "cover.shade_kitchen", "state": "open",
+         "attributes": {"friendly_name": "Kitchen shade"}},        # bare cover → silent
         "garbage",                                                 # skipped
     ]
 
@@ -125,6 +175,9 @@ class TestHomeAssistant:
         assert "Garage door is still open" in clues
         assert "Front door lock is unlocked" in clues
         assert "Hall light" not in clues              # a HUD, not a nag
+        # a cover only alerts when it's an OPENING (door/garage/gate/window) —
+        # blinds and shades open all day (refute 2026-07-21)
+        assert "blinds" not in clues.lower() and "shade" not in clues.lower()
 
     def test_policy_never_raises_on_junk(self):
         assert home_alerts(None) == []
@@ -184,11 +237,13 @@ def test_wave_n4_capabilities_registered():
 
 
 def test_syncthing_probe_and_recipe_exist():
-    import inspect
-
     from dreamlayer import capabilities as C
-    src = inspect.getsource(C.probe_service)
-    assert "folder_sync" in src and "8384" in src
+    assert C.has_probe_url("folder_sync")
+    assert "8384" in C._PROBE_URLS["folder_sync"]
+    # configured-base services must NOT have a static probe (they'd be branded
+    # unreachable while live on a base we don't know — refute 2026-07-21)
+    for key in ("immich_people", "home_hud", "location_spine"):
+        assert not C.has_probe_url(key)
     from pathlib import Path
     recipe = Path(__file__).resolve().parents[4] / "docs" / "SYNCTHING.md"
     assert recipe.is_file() and "peer-to-peer" in recipe.read_text()

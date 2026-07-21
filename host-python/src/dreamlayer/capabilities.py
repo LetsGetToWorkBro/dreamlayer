@@ -613,18 +613,27 @@ def pack_requirements(pack_key: str) -> list[str]:
     return out
 
 
-# --- optional live probe for the two external runtimes ---------------------------
+# --- optional live probe for the fixed-port external runtimes --------------------
+
+# Services with a KNOWN local port. Configured-base services (Immich, Home
+# Assistant, Dawarich) are deliberately absent — their base is user config, so
+# a probe here can only lie about them.
+_PROBE_URLS = {
+    "ollama_local": "http://127.0.0.1:11434/api/tags",
+    "exo_cluster": "http://127.0.0.1:52415/v1/models",
+    "screen_memory": "http://127.0.0.1:3030/health",
+    "desk_memory": "http://127.0.0.1:5600/api/0/info",
+    "folder_sync": "http://127.0.0.1:8384/rest/noauth/health",
+}
+
+
+def has_probe_url(key: str) -> bool:
+    return key in _PROBE_URLS
+
 
 def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
     """Best-effort HTTP reachability for a `service` capability. Never raises."""
-    urls = {
-        "ollama_local": "http://127.0.0.1:11434/api/tags",
-        "exo_cluster": "http://127.0.0.1:52415/v1/models",
-        "screen_memory": "http://127.0.0.1:3030/health",
-        "desk_memory": "http://127.0.0.1:5600/api/0/info",
-        "folder_sync": "http://127.0.0.1:8384/rest/noauth/health",
-    }
-    url = urls.get(cap.key)
+    url = _PROBE_URLS.get(cap.key)
     if not url:
         return False
     try:
@@ -701,7 +710,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     if args.probe:
         for r in rows:
             if r["kind"] == "service":
-                r["state"] = "active" if probe_service(_BY_KEY[r["key"]]) else "unreachable"
+                # only services with a FIXED local port are probeable; a
+                # configured-base service (Immich/HA/Dawarich) keeps "external"
+                # rather than being branded unreachable while it's live on a
+                # base we don't know here (refute 2026-07-21).
+                if probe_service(_BY_KEY[r["key"]]):
+                    r["state"] = "active"
+                elif has_probe_url(r["key"]):
+                    r["state"] = "unreachable"
 
     if args.json:
         print(json.dumps({"capabilities": rows, "summary": summary(),

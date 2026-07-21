@@ -78,7 +78,8 @@ class SkyLens:
             from skyfield.api import EarthSatellite  # type: ignore
             lines = tle.read_text(errors="replace").splitlines()
             for i, line in enumerate(lines):
-                if "ISS" in line.upper() and i + 2 < len(lines):
+                # name must START with ISS — 'SWISSCUBE' contains it (refute note)
+                if line.strip().upper().startswith("ISS") and i + 2 < len(lines):
                     self._iss = EarthSatellite(lines[i + 1], lines[i + 2],
                                                line.strip(), self._ts)
                     return
@@ -150,7 +151,12 @@ def say_sky(sky: dict) -> str:
     iss = sky.get("iss_minutes")
     if iss is not None and iss <= 30:
         bits.append(f"the ISS crosses in {iss:g} minutes")
-    return (" — ".join(bits) + ".").capitalize() if bits else ""
+    if not bits:
+        return ""
+    s = " — ".join(bits) + "."
+    # str.capitalize() would lowercase 'Mars'/'ISS' after char 0 (refute
+    # 2026-07-21) — uppercase only the first character
+    return s[:1].upper() + s[1:]
 
 
 def default_sky_lens(data_dir: Optional[str] = None) -> Optional[SkyLens]:

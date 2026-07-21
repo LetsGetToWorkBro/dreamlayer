@@ -19,7 +19,7 @@ from typing import Any, Callable, List, Optional
 
 log = logging.getLogger("dreamlayer.mesh")
 
-_MAX_LEN = 200                   # LoRa payloads are tiny; keep a line a line
+_MAX_BYTES = 230                 # LoRa DATA_PAYLOAD_LEN is 237 BYTES; stay under
 
 
 def _has(name: str) -> bool:
@@ -41,6 +41,7 @@ class MeshBridge:
         self._iface: Any = None
         self._tcp_host = tcp_host
         self._listeners: List[Callable[[str, str], None]] = []
+        self._on_receive_fn: Any = None   # strong ref for pypubsub's weak registry
 
     def connect(self) -> bool:
         """Open the node: serial first (a radio on USB), else tcp to a LAN node
@@ -73,8 +74,12 @@ class MeshBridge:
 
     def send(self, text: str, channel: int = 0) -> bool:
         """Send one short line over the mesh. False when not connected, the text
-        is empty, or the radio errors — the caller's BLE path still stands."""
-        text = (text or "").strip()[:_MAX_LEN]
+        is empty, or the radio errors — the caller's BLE path still stands.
+        Truncation is in BYTES (the radio's ~237-byte payload limit is bytes, so
+        a char slice let non-ASCII lines overflow and raise — refute 2026-07-21),
+        cut at a codepoint boundary."""
+        raw = (text or "").strip().encode("utf-8")[:_MAX_BYTES]
+        text = raw.decode("utf-8", "ignore").strip()
         if not text or self._iface is None:
             return False
         try:
@@ -93,6 +98,12 @@ class MeshBridge:
         try:
             from pubsub import pub  # type: ignore  # meshtastic's event bus
 
+            # pypubsub holds listeners by WEAK reference: a bare local closure is
+            # garbage-collected the moment _subscribe returns and the listener
+            # silently auto-unsubscribes — the receive half never fires (refute
+            # 2026-07-21, reproduced against pypubsub 4.0.7). Pin the closure on
+            # the instance; rebinding on reconnect also kills the old weakref, so
+            # no duplicate delivery either.
             def _on_receive(packet=None, interface=None):  # noqa: ANN001
                 try:
                     decoded = (packet or {}).get("decoded", {})
@@ -104,12 +115,13 @@ class MeshBridge:
                         return
                     for fn in list(self._listeners):
                         try:
-                            fn(sender, text[:_MAX_LEN])
+                            fn(sender, text[:_MAX_BYTES])
                         except Exception:          # noqa: BLE001 — one listener, not the bus
                             pass
                 except Exception:                  # noqa: BLE001
                     pass
-            pub.subscribe(_on_receive, "meshtastic.receive.text")
+            self._on_receive_fn = _on_receive      # strong ref — see note above
+            pub.subscribe(self._on_receive_fn, "meshtastic.receive.text")
         except Exception as exc:                   # noqa: BLE001
             log.debug("[mesh] subscribe failed: %s", exc)
 

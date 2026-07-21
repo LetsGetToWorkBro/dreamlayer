@@ -180,8 +180,13 @@ class SoundEventDetector:
             return
         try:
             model = d / "model.onnx"
-            labels = next(iter(sorted(d.glob("*.csv"))), None) or (d / "labels.txt")
-            if not model.is_file() or not Path(labels).is_file():
+            # prefer the CANONICAL label files by name; a bare csv glob picked a
+            # stray benchmark csv over a valid labels.txt (refute 2026-07-21)
+            labels = next((p for p in (d / "labels.txt",
+                                       d / "class_labels_indices.csv")
+                           if p.is_file()),
+                          next(iter(sorted(d.glob("*.csv"))), None))
+            if labels is None or not model.is_file() or not Path(labels).is_file():
                 return
             import sherpa_onnx  # type: ignore
             cfg = sherpa_onnx.AudioTaggingConfig(

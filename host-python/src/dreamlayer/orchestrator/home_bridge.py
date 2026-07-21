@@ -69,9 +69,15 @@ def home_alerts(states) -> List[Alert]:
                         "gas": "Gas", "moisture": "Water"}[dclass]
                 out.append(Alert("watchout", f"{what} alarm at home", name,
                                  f"home:alarm:{eid}"))
-            # things left open/unlocked
-            elif (domain == "cover" or dclass in ("door", "garage_door",
-                                                  "window", "opening")) \
+            # things left open/unlocked. A bare `cover` domain would nag about
+            # blinds and shades that are open all day (refute 2026-07-21) — a
+            # cover only alerts when its device_class is an OPENING to the
+            # outside (HA covers use "garage", sensors "garage_door" — both kept).
+            elif ((domain == "cover" and dclass in ("door", "garage",
+                                                    "garage_door", "gate",
+                                                    "window"))
+                  or (domain != "cover" and dclass in ("door", "garage_door",
+                                                       "window", "opening"))) \
                     and state in _OPEN_WORDS:
                 out.append(Alert("listen", f"{name} is still open", "at home",
                                  f"home:open:{eid}"))

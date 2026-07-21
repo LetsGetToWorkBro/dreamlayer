@@ -55,7 +55,11 @@ def parse_planes(raw: Optional[bytes], lat: float, lon: float,
         for a in aircraft:
             try:
                 alat, alon = float(a["lat"]), float(a["lon"])
-                alt = a.get("alt_baro", a.get("alt_geom"))
+                # a PRESENT-but-null alt_baro must still fall through to
+                # alt_geom (refute 2026-07-21 — readsb feeds emit nulls)
+                alt = a.get("alt_baro")
+                if alt is None:
+                    alt = a.get("alt_geom")
                 if alt in (None, "ground"):
                     continue
                 alt_ft = int(float(alt))
