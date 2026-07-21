@@ -63,6 +63,11 @@ birds = ["birdnetlib>=0.18,<1"]
 # the "look up" lens (Skyfield) — planets + ISS passes from LOCAL data files
 # (de421.bsp, stations.tle in $DL_SKY_DIR); the lens itself never downloads. Opt-in.
 sky = ["skyfield>=1.45,<2"]
+# off-grid tincan (Meshtastic) — LoRa mesh text via a local node (USB/LAN). Opt-in.
+mesh = ["meshtastic>=2.3,<3"]
+# universal WASM plugin host (Extism) — untrusted plugins in any language, made
+# incapable rather than inspected. Opt-in.
+extism = ["extism>=1,<2"]
 # temporal knowledge-graph recall (LightRAG) — "what's connected, and when", built
 # by your OWN local model + embedder. Opt-in, heavy, so not in any deployment profile.
 memory-graph = ["lightrag-hku>=1,<2"]
