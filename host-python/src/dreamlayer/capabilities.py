@@ -104,6 +104,14 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("social_graph", "Relationship graph algorithms", "memory",
         ("networkx",), "memory", "social_lens/graph.py",
         gain="baseline graph is a dict of names; this adds paths, mutual friends, communities", impact=3, before=2, after=4),
+    Cap("memory_graph", "Temporal knowledge-graph recall (what's connected, and when)", "memory",
+        ("lightrag",), "memory-graph", "memory/graph_recall.py",
+        note="opt-in; built by your own local model + embedder — nothing leaves the Brain",
+        gain="vector recall finds what's similar; this follows entity + time edges, so 'what did the doctor say about my knee in March' resolves by connection, not just cosine", impact=4, before=2.5, after=4.5),
+    Cap("memory_rehearsal", "Never forget a name — scheduled rehearsal (FSRS)", "memory",
+        ("fsrs",), "srs", "memory/rehearsal_fsrs.py",
+        note="the baseline expanding-interval scheduler always works; FSRS sharpens the timing",
+        gain="baseline resurfaces a memory on a fixed doubling schedule; FSRS (the scheduler behind modern Anki) times each rehearsal to the real forgetting curve — names, faces, facts come back right before you'd lose them", impact=3, before=2.5, after=4.5),
 
     # --- voice ------------------------------------------------------------------
     Cap("voice_vad", "Neural speech/noise gating before ASR", "voice",
@@ -123,11 +131,32 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="off by default (DL_JUNO_VOICE=1); needs a Piper voice model "
              "($DL_PIPER_VOICE or <cfg>/voices/*.onnx)",
         gain="baseline shows Juno's reply only as text on the glass; this speaks it aloud, offline — no cloud voice, audio never leaves the Brain", impact=4, before=0, after=4.5),
+    Cap("kokoro_tts", "Juno's natural on-device voice (Kokoro-82M)", "voice",
+        ("kokoro",), "voice", "orchestrator/tts_kokoro.py",
+        note="off by default (DL_JUNO_VOICE=1); Kokoro-82M, Apache-2.0 — pick a voice with $DL_KOKORO_VOICE. Preferred over Piper when installed.",
+        gain="baseline shows Juno's reply only as text; Kokoro-82M speaks it in a strikingly natural voice — tiny, offline, audio never leaves the Brain (far more lifelike than Piper)", impact=5, before=0, after=5),
     Cap("voice_clone", "Juno speaks in HER OWN voice (cloned, offline)", "voice",
         ("TTS",), "voice-clone", "orchestrator/voice_clone.py",
         note="opt-in (heavy); clones her timbre from the baked juno_*.mp3 clips "
              "via XTTS at inference — no training, no cloud",
         gain="baseline (or local_tts) speaks in a generic voice; this speaks in Juno's own voice, zero-shot cloned on-device from her existing clips", impact=3, before=0, after=4),
+    Cap("live_interpret", "A live interpreter in your ear (speech↔speech)", "voice",
+        ("transformers",), "interpreter", "rosetta_seamless.py",
+        note="opt-in (heavy); SeamlessM4T-v2 on-device — audio never leaves the Brain",
+        gain="Rosetta's eye translates text you look at; this translates the conversation you're IN — a foreign speaker's meaning is spoken into your ear, and your reply back in their language, offline", impact=4, before=0, after=4.5),
+    Cap("sound_events", "Hear the world — alarms, doorbell, glass (not speech)", "voice",
+        ("panns_inference", "sherpa_onnx"), "sound-events", "orchestrator/sound_events.py",
+        note="opt-in; classifies sound TYPES, never voiceprints — a smoke alarm has no identity. "
+             "Engine ladder: PANNs, else sherpa-onnx tagging ($DL_AUDIO_TAG_DIR)",
+        gain="baseline hears nothing but speech; this notices the acoustic world — a smoke alarm, a kettle, a doorbell, glass breaking — and taps you (a safety + Deaf/HoH sense that's inherently privacy-safe)", impact=4, before=0, after=4),
+    Cap("asr_moonshine", "Captions-class ASR, wearable-fast (Moonshine)", "voice",
+        ("sherpa_onnx",), "voice", "orchestrator/asr_moonshine.py",
+        note="Moonshine ONNX via sherpa-onnx — drop the model export in $DL_MOONSHINE_DIR",
+        gain="faster-whisper is the accuracy floor; Moonshine beats Whisper-large-v3 at 250M params and runs short windows ~5x faster — the live-caption and voice-ask latency class the glasses need", impact=4, before=3, after=4.5),
+    Cap("bird_song", "The world narrates itself — birdsong recognition", "voice",
+        ("birdnetlib",), "birds", "orchestrator/bird_lens.py",
+        note="opt-in; BirdNET (6,000+ species) on the ambient-audio rung — no human identity in a bird call",
+        gain="the glasses hear alarms and doorbells; with BirdNET they also know the Song Sparrow singing over your walk — fully offline, Pi-Zero-sized, pure delight", impact=2, before=0, after=4),
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
@@ -160,6 +189,10 @@ CAPABILITIES: Tuple[Cap, ...] = (
         "orchestrator/commitment_nlp.py, social_lens/ner_spacy.py",
         note="`dreamlayer setup models` downloads the spaCy model this needs",
         gain="baseline pulls names/promises with regex that breaks on real sentences; this parses them properly", impact=5, before=2, after=5),
+    Cap("commitment_ner", "Sharper commitments in meetings (GLiNER)", "intelligence",
+        ("gliner",), "nlp-extra", "social_lens/commitment_ner.py",
+        note="a tiny zero-shot NER; the deterministic extractor is always on",
+        gain="baseline pulls action items with regex shapes ('I'll …'); this catches the ones a regex can't ('owner: Dana, ship by EOW')", impact=3, before=2.5, after=4),
     Cap("online_learning", "Per-user adaptation in real time", "intelligence",
         ("river",), "intelligence",
         "orchestrator/taste_river.py, dream_mode/weather_river.py",
@@ -193,6 +226,30 @@ CAPABILITIES: Tuple[Cap, ...] = (
         note="decoding is on-device; the Open Food Facts lookup sends only the "
              "numeric code, and only when the Veil is down",
         gain="baseline can't read a barcode at all; this decodes it on-device and checks the product's allergens against your dietary rules — 'contains milk, soy — you avoid dairy'", impact=3, before=0, after=4),
+    Cap("math_ocr", "Read an equation → LaTeX", "vision",
+        ("pix2tex",), "math-ocr", "object_lens/vision_extras.py",
+        gain="baseline can't read maths; this turns an equation on a board into LaTeX, on-device", impact=2, before=0, after=4),
+    Cap("doc_read", "Read a document with its layout (forms, tables)", "vision",
+        ("surya",), "doc-ocr", "object_lens/vision_extras.py",
+        gain="baseline OCR gives loose lines; this reads a form/receipt with reading order and structure", impact=3, before=1.5, after=4),
+    Cap("depth_sense", "A sense of distance from one camera", "vision",
+        ("transformers",), "depth", "object_lens/vision_extras.py",
+        note="relative proximity, not calibrated metres",
+        gain="baseline is flat 2-D; this gives a proximity cue for what's in front of you (mobility, spatial anchoring)", impact=3, before=0, after=4),
+    Cap("openvocab_find", "Find anything you can name (open-vocabulary)", "vision",
+        ("ultralytics",), "vision", "object_lens/vision_extras.py",
+        gain="baseline recognizes a fixed taxonomy; this finds any noun you say — 'my inhaler', 'a fire extinguisher'", impact=3, before=2, after=4.5),
+    Cap("dream_style", "See the world as a painting (neural style transfer)", "vision",
+        ("onnxruntime",), "dream-style", "dream_mode/dream_style.py",
+        note="opt-in neural model on top of the always-on procedural painterly wash; on-device",
+        gain="Dream Mode's built-in wash is a procedural poster filter; this runs a real fast-style-transfer net so your street comes back as a painting", impact=3, before=2.5, after=4),
+    Cap("sky_sense", "Look up — the night sky, named (planets + ISS)", "vision",
+        ("skyfield",), "sky", "object_lens/sky_lens.py",
+        note="opt-in; computes from LOCAL data files in $DL_SKY_DIR (de421.bsp, stations.tle) — never downloads",
+        gain="the glasses know the street but not the sky; this names the planets above the horizon and whispers when the ISS crosses — research-grade astronomy, fully offline", impact=2, before=0, after=4),
+    Cap("scene_segment", "Segment what you're pointing at (FastSAM)", "vision",
+        ("ultralytics",), "vision", "object_lens/vision_extras.py",
+        gain="baseline has boxes only; this gives pixel-accurate masks for the glance target and scene density", impact=1, before=0, after=3.5),
 
     # --- causal ---------------------------------------------------------------------
     Cap("causal_fusion", "Causal inference over credibility channels", "causal",
@@ -289,6 +346,38 @@ CAPABILITIES: Tuple[Cap, ...] = (
         (), None, "ai_brain/exo_cluster.py",
         kind="service", note="http://127.0.0.1:52415",
         gain="single-machine inference only; this runs one bigger model across your machines", impact=2, before=3, after=4),
+    Cap("mesh_range", "Tincan to the horizon — off-grid LoRa mesh", "platform",
+        ("meshtastic",), "mesh", "orchestrator/mesh_bridge.py",
+        note="opt-in; a local Meshtastic node (USB or LAN). Sends only the short tincan lines you typed — never memories or positions",
+        gain="the tincan bond is Bluetooth-range; a $6 LoRa radio makes it miles-range with no wifi, no cell, no internet", impact=2, before=2, after=4),
+    Cap("extism_plugins", "Plugins made incapable, not inspected (Extism)", "platform",
+        ("extism",), "extism", "plugins/extism_host.py",
+        note="opt-in; untrusted WASM guests with no WASI, no hosts, a memory cap and a timeout — write DreamLayer plugins in Rust/Go/JS",
+        gain="baseline trust is capability scanning + subprocess isolation; an Extism guest simply HAS no filesystem/network to misuse — figment budgets, applied to plugins", impact=3, before=3, after=4.5),
+    Cap("immich_people", "Your photo library as memory (Immich)", "services",
+        (), None, "memory/source_immich.py",
+        kind="service", note="self-hosted Immich on your LAN (base URL + API key); public URLs are refused",
+        gain="People and Yesterlight start empty; a self-hosted Immich fills them from the faces, places and dates you already own", impact=3, before=0, after=4),
+    Cap("home_hud", "The glasses become a HUD for your house (Home Assistant)", "services",
+        (), None, "orchestrator/home_bridge.py",
+        kind="service", note="local-first Home Assistant on your LAN (Bearer token); narrow by design — open doors + safety alarms only",
+        gain="leave home blind; with Home Assistant the glass taps you that the garage is still open, or that the smoke alarm is going", impact=3, before=0, after=4),
+    Cap("location_spine", "Where you were, self-hosted (Dawarich)", "services",
+        (), None, "memory/source_dawarich.py",
+        kind="service", note="self-hosted Dawarich on your LAN; location history never transits the internet",
+        gain="memories float free of place; Dawarich pins them — 'you were at the coffee shop on Vine when you said that'", impact=3, before=0, after=4),
+    Cap("folder_sync", "Your memory follows you — device-to-device (Syncthing)", "services",
+        (), None, "docs (SYNCTHING.md recipe)",
+        kind="service", note="http://127.0.0.1:8384 — point Syncthing at the Brain's config dir; encrypted peer-to-peer, no third party ever holds bytes",
+        gain="the Cloud card's biggest promise without the cloud: memories sync across your devices over battle-tested P2P TLS", impact=3, before=0, after=4),
+    Cap("screen_memory", "Your screen becomes memory (screenpipe)", "services",
+        (), None, "memory/source_screenpipe.py",
+        kind="service", note="screenpipe app — read-only from ~/.screenpipe/db.sqlite",
+        gain="the Brain remembers only what you tell it; with screenpipe running it also remembers what was on your screen — a Rewind-style memory before the glasses ship, all on-device", impact=4, before=0, after=4.5),
+    Cap("desk_memory", "What you worked on, remembered (ActivityWatch)", "services",
+        (), None, "memory/source_activitywatch.py",
+        kind="service", note="http://127.0.0.1:5600 — a decade-trusted local tracker",
+        gain="recall has no work-context spine; this indexes app + window-title time so 'what was I doing Tuesday' just answers — a gentler privacy gradient than screen capture", impact=3, before=0, after=3.5),
 )
 
 _BY_KEY = {c.key: c for c in CAPABILITIES}
@@ -524,15 +613,27 @@ def pack_requirements(pack_key: str) -> list[str]:
     return out
 
 
-# --- optional live probe for the two external runtimes ---------------------------
+# --- optional live probe for the fixed-port external runtimes --------------------
+
+# Services with a KNOWN local port. Configured-base services (Immich, Home
+# Assistant, Dawarich) are deliberately absent — their base is user config, so
+# a probe here can only lie about them.
+_PROBE_URLS = {
+    "ollama_local": "http://127.0.0.1:11434/api/tags",
+    "exo_cluster": "http://127.0.0.1:52415/v1/models",
+    "screen_memory": "http://127.0.0.1:3030/health",
+    "desk_memory": "http://127.0.0.1:5600/api/0/info",
+    "folder_sync": "http://127.0.0.1:8384/rest/noauth/health",
+}
+
+
+def has_probe_url(key: str) -> bool:
+    return key in _PROBE_URLS
+
 
 def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
     """Best-effort HTTP reachability for a `service` capability. Never raises."""
-    urls = {
-        "ollama_local": "http://127.0.0.1:11434/api/tags",
-        "exo_cluster": "http://127.0.0.1:52415/v1/models",
-    }
-    url = urls.get(cap.key)
+    url = _PROBE_URLS.get(cap.key)
     if not url:
         return False
     try:
@@ -609,7 +710,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     if args.probe:
         for r in rows:
             if r["kind"] == "service":
-                r["state"] = "active" if probe_service(_BY_KEY[r["key"]]) else "unreachable"
+                # only services with a FIXED local port are probeable; a
+                # configured-base service (Immich/HA/Dawarich) keeps "external"
+                # rather than being branded unreachable while it's live on a
+                # base we don't know here (refute 2026-07-21).
+                if probe_service(_BY_KEY[r["key"]]):
+                    r["state"] = "active"
+                elif has_probe_url(r["key"]):
+                    r["state"] = "unreachable"
 
     if args.json:
         print(json.dumps({"capabilities": rows, "summary": summary(),

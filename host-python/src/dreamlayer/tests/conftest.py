@@ -64,8 +64,13 @@ def _addr_is_local(address) -> bool:
     if not isinstance(address, tuple) or not address:
         return True                          # AF_UNIX path / unknown non-inet
     host = address[0]
+    # a BYTES host in an inet tuple — socket.connect((b"8.8.8.8", 80)) — is real
+    # egress; decode before the check. Anything still not a str inside an inet
+    # tuple is unclassifiable → egress (fail-safe), NOT local (refute 2026-07-21).
+    if isinstance(host, (bytes, bytearray)):
+        host = host.decode("ascii", "replace")
     if not isinstance(host, str):
-        return True
+        return False
     host = host.strip().lower()
     if host in ("", "localhost"):
         return True

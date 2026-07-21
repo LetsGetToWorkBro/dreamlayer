@@ -74,7 +74,13 @@ class SocialOps(BrainHost):
         m = getattr(self, "_meeting_log", None)
         if m is None:
             from ...social_lens.meeting import MeetingLog
-            m = MeetingLog(self.cfg_dir / "meetings.json")
+            ner = None
+            try:                                       # sharper commitments if GLiNER is installed
+                from ...social_lens.commitment_ner import default_commitment_ner
+                ner = default_commitment_ner()
+            except Exception:                          # noqa: BLE001
+                ner = None
+            m = MeetingLog(self.cfg_dir / "meetings.json", ner=ner)
             self._meeting_log = m
         return m
 

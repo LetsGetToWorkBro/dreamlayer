@@ -85,14 +85,19 @@ class RosettaResult:
 
 
 class RosettaLens:
-    """Translate text you look at. Puente handles the voice half."""
+    """Understand any language — the eye (`read` text you look at) and now the ear
+    (`hear` speech you're in). A translation model plugs into `translate_fn`; a
+    live speech interpreter (SeamlessM4T, rosetta_seamless.make_interpret_fn) plugs
+    into `interpret_fn`. Both are optional and no-op cleanly when unwired."""
 
     def __init__(self, translate_fn: Optional[Callable[[str, str], str]] = None,
                  detect_fn: Optional[Callable[[str], str]] = None,
-                 engine: str = "seam"):
+                 engine: str = "seam",
+                 interpret_fn: Optional[Callable[..., str]] = None):
         self._translate = translate_fn
         self._detect = detect_fn or detect_language
         self._engine = engine
+        self._interpret = interpret_fn
 
     def read(self, text: str, target: str = "en") -> RosettaResult:
         src = self._detect(text)
@@ -109,3 +114,22 @@ class RosettaLens:
             log.warning("[rosetta] translate failed (%s→%s): %s", src, target, exc)
             return RosettaResult(text, text, src, target, engine="error")
         return RosettaResult(text, out or text, src, target, engine=self._engine)
+
+    def hear(self, audio, sample_rate: int = 16000,
+             target: str = "en") -> RosettaResult:
+        """The ear: someone's SPEECH → its meaning as text in `target`, via the
+        injected live interpreter (SeamlessM4T). Returns a RosettaResult whose
+        `translated` is what Juno should speak into your ear; `source_text` is left
+        empty because we don't transcribe the source, only carry its meaning across.
+        No interpreter wired, or a failure, degrades to an empty result (engine
+        "none"/"error") so the capture loop never breaks."""
+        if self._interpret is None:
+            return RosettaResult("", "", "", target, engine="none")
+        try:
+            out = self._interpret(audio, sample_rate, target)
+        except Exception as exc:
+            log.warning("[rosetta] interpret failed (→%s): %s", target, exc)
+            return RosettaResult("", "", "", target, engine="error")
+        out = (out or "").strip()
+        return RosettaResult("", out, "", target,
+                             engine=(self._engine if out else "none"))

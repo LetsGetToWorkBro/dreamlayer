@@ -769,15 +769,22 @@ class Orchestrator(
         if not on:
             self._juno_speak = lambda _line: None
             return False
-        try:
-            from .tts_piper import make_speak_fn
-            speak = make_speak_fn()
-        except Exception as exc:                       # noqa: BLE001 — never fail wiring
-            log.debug("[tts] voice unavailable: %s", exc)
-            speak = None
+        # Prefer Kokoro (Kokoro-82M — far more natural than Piper, still on-device),
+        # fall back to Piper, then to silent. Each make_speak_fn returns a callable
+        # whose .ready is True only when that engine's model actually loaded.
+        speak = None
+        for engine in ("tts_kokoro", "tts_piper"):
+            try:
+                mod = __import__("dreamlayer.orchestrator." + engine,
+                                 fromlist=["make_speak_fn"])
+                cand = mod.make_speak_fn()
+            except Exception as exc:                   # noqa: BLE001 — never fail wiring
+                log.debug("[tts] %s unavailable: %s", engine, exc)
+                continue
+            if getattr(cand, "ready", False):
+                speak = cand
+                break
         self._juno_speak = speak or (lambda _line: None)
-        # make_speak_fn always returns a callable; .ready is True only when a
-        # voice model actually loaded (else it's the silent no-op)
         return bool(getattr(speak, "ready", False))
 
     def _juno_say(self, line: str, tone: str, event: str = "juno") -> None:
