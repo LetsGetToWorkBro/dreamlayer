@@ -2114,10 +2114,87 @@ function drawBox(ctx, x, y, w, h, name, score){
   ctx.fillText(label, x + 5, Math.max(11, y - 6));
 }
 
+/* ---- on-device hand gestures — HUD navigation without a tap ------------------
+   The SAME vendored MediaPipe runtime that powers the object detector also ships
+   a GestureRecognizer. It reads hand GEOMETRY only (21 landmarks + a canned
+   gesture enum) — never a face, never identity — entirely in-browser on the
+   phone's <video>, so nothing about the hand leaves the device and it never
+   touches the server look path or person_guard. It drives NAVIGATION, not
+   recognition:
+     point up   → look at what's in front of you   (lookNow)
+     open palm  → clear the HUD                     (glassClear)
+     victory    → toggle dream mode                 (toggleDream)
+   A gesture fires ONCE when a new hand-shape appears (debounced) — never
+   repeatedly while the hand is held. Failure to load is a silent no-op: gestures
+   are a bonus, the tap grammar is always there. */
+let gesturer = null, gRaf = null, gLastRun = 0, gFails = 0;
+let gLastFired = "", gLastFireTs = 0, gStable = "", gStableCount = 0;
+const GESTURE_MS = 120;                /* ~8 fps — lighter than the detector loop */
+const GESTURE_MAX_FAILS = 12;
+const GESTURE_COOLDOWN = 1400;         /* debounce a rapid A->B->A flicker */
+const GESTURE_MIN_SCORE = 0.6;
+const GESTURE_ACTIONS = {
+  Pointing_Up: () => lookNow(false),
+  Open_Palm:   () => { glassClear(); hideDetectorHud(); },
+  Victory:     () => toggleDream()
+};
+async function loadGesture(){
+  try {
+    const vision = await import("/dreamlayer/live/assets/vision_bundle.mjs");
+    const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
+    gesturer = await vision.GestureRecognizer.createFromOptions(fileset, {
+      baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/gesture_recognizer.task"},
+      numHands: 1, runningMode: "VIDEO"});
+    document.body.setAttribute("data-gesture", "on");   /* status (styleable + testable) */
+    gRaf = requestAnimationFrame(gestureTick);
+  } catch (e) {
+    document.body.setAttribute("data-gesture", "off");
+    if (window.console) console.warn("[live] gesture recognizer unavailable:", e);
+  }
+}
+function gestureTick(ts){
+  gRaf = requestAnimationFrame(gestureTick);
+  /* idle guards mirror the detector's — but NOT dreamOn: a Victory must be able
+     to leave dream mode, and lookNow already no-ops while dreaming */
+  if (!gesturer || !liveOn || veil || document.hidden || !camReady() || !booted) return;
+  if (ts - gLastRun < GESTURE_MS) return;
+  gLastRun = ts;
+  let res = null;
+  try { res = gesturer.recognizeForVideo($("cam"), ts); gFails = 0; }
+  catch (e) {
+    if (++gFails >= GESTURE_MAX_FAILS) {           /* runtime death → stop, silently */
+      try { if (gesturer && gesturer.close) gesturer.close(); } catch (_) {}
+      gesturer = null;
+      if (gRaf != null) { cancelAnimationFrame(gRaf); gRaf = null; }
+      document.body.setAttribute("data-gesture", "off");
+    }
+    return;
+  }
+  const g = ((res && res.gestures && res.gestures[0]) || [])[0];
+  const name = (g && g.categoryName) || "None";
+  const score = (g && g.score) || 0;
+  /* require the SAME gesture on two consecutive reads before acting — a hand
+     mid-transition flickers through shapes and shouldn't fire on the flicker */
+  if (name === gStable) gStableCount++; else { gStable = name; gStableCount = 1; }
+  if (gStableCount < 2) return;
+  fireGesture(name, score, ts);
+}
+function fireGesture(name, score, ts){
+  if (name === "None" || score < GESTURE_MIN_SCORE) { gLastFired = ""; return; }
+  const act = GESTURE_ACTIONS[name];
+  if (!act) { gLastFired = name; return; }     /* an unmapped shape still consumes the slot */
+  if (name === gLastFired) return;             /* already fired for this hold — wait till it leaves */
+  if (ts - gLastFireTs < GESTURE_COOLDOWN) return;
+  gLastFired = name; gLastFireTs = ts;
+  showHud("gesture: " + name.replace("_", " ").toLowerCase(), {ms:900});
+  try { act(); } catch (_) {}
+}
+
 /* ---- boot --------------------------------------------------------------- */
 setLive(true);
 startCam();
 loadDetector();                       /* progressive enhancement — non-blocking */
+loadGesture();                        /* on-device hand gestures — same, non-blocking */
 (async () => {                                    /* first link check + posture seed */
   /* a QR that carried the SHORT pairing code (#c=) redeems for the token
      BEFORE the status probe — else an about-to-pair phone 401s and pops the

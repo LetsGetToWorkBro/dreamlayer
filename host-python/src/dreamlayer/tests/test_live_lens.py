@@ -430,12 +430,31 @@ class TestDetectorAssets:
         assert wasm is not None and wasm[1] == "application/wasm"
         model = _live_asset("models/efficientdet_lite0.tflite")
         assert model is not None and model[1] == "application/octet-stream"
+        gesture = _live_asset("models/gesture_recognizer.task")
+        assert gesture is not None and gesture[1] == "application/octet-stream"
         # path traversal, unknown extensions, and misses are all refused
         assert _live_asset("../server.py") is None
         assert _live_asset("../../__init__.py") is None
         assert _live_asset("wasm/../../store.py") is None
         assert _live_asset("secret.txt") is None            # unknown extension
         assert _live_asset("models/nope.tflite") is None    # missing file
+
+    def test_page_ships_on_device_gesture_control(self):
+        page = live.render_live("nonce")
+        # the in-browser gesture loop loads the vendored recognizer + model
+        # (same-origin, so no CSP change) and runs on the phone's own <video>
+        assert "loadGesture()" in page
+        assert "GestureRecognizer" in page
+        assert "/dreamlayer/live/assets/models/gesture_recognizer.task" in page
+        assert 'gesturer.recognizeForVideo($("cam")' in page
+        # navigation, not recognition: mapped shapes call existing HUD actions
+        for shape in ("Pointing_Up", "Open_Palm", "Victory"):
+            assert shape in page
+        assert "lookNow(false)" in page and "toggleDream()" in page
+        # gated like the detector (veil / hidden / camReady) and debounced so a
+        # held hand fires once, not every frame
+        assert "veil || document.hidden || !camReady()" in page
+        assert "GESTURE_COOLDOWN" in page
 
     def test_vendored_assets_match_their_pinned_hashes(self):
         # Enforce the PROVENANCE.md sha256 pins: a swapped or corrupted detector

@@ -93,6 +93,7 @@ dreamlayer = [
     "ai_brain/server/assets/mediapipe/wasm/*.js",
     "ai_brain/server/assets/mediapipe/wasm/*.wasm",
     "ai_brain/server/assets/mediapipe/models/*.tflite",
+    "ai_brain/server/assets/mediapipe/models/*.task",
 
     "models.lock",                    # model_guard sha256 pins (ship with the wheel)
     "plugins/dreamlayer.wit",         # WASM Component Model capability contract

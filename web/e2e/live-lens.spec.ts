@@ -103,6 +103,23 @@ test.describe("Live Lens page in a real browser", () => {
     expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
   });
 
+  test("loads the on-device gesture recognizer under the CSP", async ({ page }) => {
+    const csp: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("console", (m) => {
+      if (/content security|csp|refused to (execute|load|compile|connect)/i.test(m.text())) csp.push(m.text());
+    });
+    page.on("pageerror", (e) => pageErrors.push(String(e)));
+
+    await page.goto("/dreamlayer/live", { waitUntil: "networkidle" });
+
+    // the gesture recognizer loads (module -> WASM -> .task model) under the
+    // SAME strict CSP as the detector — no new origin, no CSP relaxation
+    await expect(page.locator("body")).toHaveAttribute("data-gesture", "on", { timeout: 40_000 });
+    expect(csp, `CSP blocked the gesture recognizer:\n${csp.join("\n")}`).toEqual([]);
+    expect(pageErrors, `page threw:\n${pageErrors.join("\n")}`).toEqual([]);
+  });
+
   // Graceful degradation: if the detector assets can't load (old device / blocked),
   // the Brain ambient loop takes over so recognition still works.
   test("falls back to the Brain ambient loop when the detector can't load", async ({ page }) => {
