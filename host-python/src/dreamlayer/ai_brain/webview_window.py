@@ -85,7 +85,16 @@ def _set_dock_presence(on: bool) -> None:
         NSApp().setActivationPolicy_(0 if on else 1)
         if on:
             from pathlib import Path
-            icon = Path(__file__).resolve().parent / "server" / "assets" / "app_icon.png"
+            # setApplicationIconImage_ shows the bitmap AS IS — macOS does NOT
+            # apply its squircle/safe-area here (unlike the bundle icon). So use
+            # the pre-shaped Dock variant (transparent margin + squircle body)
+            # rather than the full-bleed app_icon.png, which would render
+            # edge-to-edge and dwarf its Dock neighbours. Fall back to the
+            # full-bleed source if the baked variant is missing.
+            assets = Path(__file__).resolve().parent / "server" / "assets"
+            icon = assets / "app_icon_dock.png"
+            if not icon.is_file():
+                icon = assets / "app_icon.png"
             if icon.is_file():
                 img = NSImage.alloc().initWithContentsOfFile_(str(icon))
                 if img is not None:
