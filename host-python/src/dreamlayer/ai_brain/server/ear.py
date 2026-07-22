@@ -138,6 +138,36 @@ class EarHost:
         except Exception:                        # noqa: BLE001
             pass
 
+    def note_acoustic_context(self, tags) -> None:
+        """World-sound hook (CapturePipeline calls it with the tagger's tags): a
+        smoke alarm, glass breaking, a siren, a doorbell, your kettle. Surface the
+        single most important one as a HarkCard pushed to the Live Lens — the
+        safety/attention tap the glasses give you. Categorical only: a sound TYPE,
+        never a voiceprint or any captured content, so a watch-out (smoke alarm)
+        pierces the veil while a mere 'listen' (kettle) stays quiet under it.
+        Best-effort; a hub without the sound-events pack simply gets no tags."""
+        if not tags:
+            return
+        try:
+            from ...orchestrator.sound_events import attention_for
+            alert = attention_for(tags)
+        except Exception:                            # noqa: BLE001
+            return
+        if alert is None:
+            return
+        try:
+            from ...hud import cards
+            urgent = getattr(alert, "level", "") == "watchout"
+            card = cards.hark(
+                clue=getattr(alert, "clue", "") or "There's something here.",
+                detail=getattr(alert, "detail", "") or "heard nearby",
+                importance="urgent" if urgent else "normal")
+            # a watch-out (smoke alarm/glass/siren) is safety — it pierces the
+            # veil (veil_ok); a 'listen' is suppressed under the shield.
+            self.brain.push_event("hark", card, veil_ok=urgent)
+        except Exception:                            # noqa: BLE001
+            return
+
     # -- lifecycle ---------------------------------------------------------
 
     @property

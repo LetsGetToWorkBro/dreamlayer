@@ -1143,6 +1143,51 @@ function glassSkyCard(j){                           /* Sky -> a named star map *
   gend(j.dismiss_ms || 5600);
 }
 
+/* ---- ambient cards the Brain PUSHES (over the /live/events channel) -------
+   Not a reply to a look — the Brain surfaces these on its own: a sound-safety
+   tap, the morning brief, a memory nudge. Same glass, same primitives. */
+function glassHarkCard(c){                          /* Listen! — a sound-safety tap */
+  const ctx = glassCtx(); gback(ctx);
+  const urgent = c.importance === "urgent";
+  const col = urgent ? GP.confidence_low : GP.memory_trace;    /* amber vs phosphor */
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = urgent ? 12 : 7;
+  garc(ctx, 128, 108, 46, 0, 360, col);                        /* the attention ring */
+  garc(ctx, 128, 108, 40, 200, 340, col);
+  ctx.fillStyle = col; ctx.fillRect(126, 88, 4, 24);           /* the ! stroke */
+  ctx.beginPath(); ctx.arc(128, 120, 2.4, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+  gtext(ctx, c.eyebrow || "LISTEN", 128, 50, col, "sm");
+  const lines = gwrap(String(c.primary || "").trim(), 24).slice(0, 2);
+  lines.forEach((ln, i) => gtext(ctx, ln, 128, 168 + i * 15, GP.text_primary, "sm"));
+  if (c.detail) gtext(ctx, String(c.detail).slice(0, 30), 128, 168 + lines.length * 15 + 2, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || (urgent ? 9000 : 6000));
+}
+function glassBriefCard(c){                          /* the morning brief */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 118, 64, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.05)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.2)"; ctx.lineWidth = 1; ctx.stroke();
+  garc(ctx, 128, 96, 20, 180, 360, GP.confidence_high);        /* a rising sun */
+  ctx.strokeStyle = "rgba(184,255,233,.4)"; ctx.lineWidth = 1;
+  [-28, -8, 12, 32].forEach(dx => { ctx.beginPath(); ctx.moveTo(128 + dx, 68); ctx.lineTo(128 + dx, 60); ctx.stroke(); });
+  gtext(ctx, c.eyebrow || "YOUR DAY", 128, 46, GP.memory_trace, "sm");
+  const head = gwrap(String(c.primary || "").trim(), 26).slice(0, 2);
+  head.forEach((ln, i) => gtext(ctx, ln, 128, 120 + i * 15, GP.text_primary, "sm"));
+  const bl = Array.isArray(c.bullets) ? c.bullets : [];
+  bl.slice(0, 2).forEach((b, i) => gtext(ctx, "· " + (gwrap(String(b), 26)[0] || ""), 128, 166 + i * 15, GP.text_secondary, "sm"));
+  gend(c.dismiss_ms || 8000);
+}
+function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 6;
+  gdiamond(ctx, 128, 108, 6, GP.memory_trace); ctx.restore();
+  gtext(ctx, String(c.eyebrow || "JUNO").toUpperCase().slice(0, 18), 128, 50, GP.text_ghost, "sm");
+  const lines = gwrap(String(c.primary || c.text || "").trim(), 24).slice(0, 3);
+  if (lines.length) lines.forEach((ln, i) => gtext(ctx, ln, 128, 150 + i * 15, GP.text_primary, "sm"));
+  else gtext(ctx, "…", 128, 128, GP.text_secondary, "md");
+  gend(c.dismiss_ms || 6000);
+}
+
 /* ---- dream mode: the glasses' double-tap, on the phone ------------------
    The real thing's mechanics, scoped here the way the phone app's
    DreamCanvas already does: DOUBLE-TAP toggles it (orchestrator on_button
@@ -2100,6 +2145,7 @@ async function doRedeem(raw){
       sessionStorage.setItem("dl-live-token", TOKEN);
       setLink(true, 0);
       if (liveOn) scheduleLoop(600);
+      startEvents();                   /* the Brain can now push ambient cards */
       return {ok:true};
     }
     return {ok:false, msg: rsp.status === 429
@@ -2316,6 +2362,35 @@ document.addEventListener("visibilitychange", () => {
   if (!hearOn) return;
   if (document.hidden) _hearClose(); else if (!veil && !hearCtx) _hearOpen();
 });
+
+/* ---- the Brain's push channel: ambient cards it surfaces on its own -------
+   The other half of the HUD — not a reply to a look. Over Server-Sent Events
+   (/dreamlayer/live/events) the Brain PUSHES cards it decides to raise: a
+   sound-safety tap (smoke alarm/glass/siren), the morning brief, a memory
+   nudge. EventSource auto-reconnects; the token rides the query because
+   EventSource can't set headers (the server never logs it). Only cards ride
+   this — no captured audio/pixels — and the Brain veil-gates every non-safety
+   push, so under the shield only a safety alert can arrive. */
+let evSource = null;
+function startEvents(){
+  if (evSource || !TOKEN || !window.EventSource) return;
+  try {
+    evSource = new EventSource("/dreamlayer/live/events?t=" + encodeURIComponent(TOKEN));
+    evSource.onmessage = e => {
+      let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+      if (ev && ev.card) renderEvent(ev);
+    };
+    evSource.onerror = () => {};       /* EventSource retries on its own */
+  } catch (e) { evSource = null; }
+}
+function stopEvents(){ try { if (evSource) evSource.close(); } catch (e) {} evSource = null; }
+function renderEvent(ev){
+  if (dreamOn) return;                 /* never stomp the dream canvas */
+  const c = ev.card, t = c && c.type;
+  if (t === "HarkCard"){ glassHarkCard(c); try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
+  else if (t === "MorningBriefCard") glassBriefCard(c);
+  else glassEventCard(c);              /* any future card type still shows something */
+}
 
 /* ---- privacy receipt: the tamper-evident ledger, VERIFIED on THIS phone ----
    GET /dreamlayer/receipt is the hash-chained, Ed25519-signed activity ledger
@@ -2800,6 +2875,7 @@ loadDetector();                       /* progressive enhancement — non-blockin
   }
   booted = true;                 /* posture known → the loop may start (or stay
                                     paused if unpaired / veiled / hidden) */
+  startEvents();                 /* subscribe to the Brain's push channel (no-op unpaired) */
   startTour(false);              /* first-timers meet Juno; ? replays the tour */
   scheduleLoop(400);
   heartbeat();

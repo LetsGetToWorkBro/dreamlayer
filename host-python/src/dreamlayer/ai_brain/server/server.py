@@ -73,6 +73,7 @@ SOCKET_TIMEOUT_S = 30.0                 # per-connection socket timeout — boun
 MAX_REQUEST_BODY_SECONDS = 30.0         # wall-clock cap on reading a full body (anti slow-POST)
 MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + headers (anti slow-header slowloris)
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
+MAX_EVENT_SUBS = 6                      # concurrent /live/events streams (each holds a worker thread)
 
 # Content-Security-Policy for the token-bearing panel/builder pages. The panel is
 # built on inline event handlers (onclick=/onchange=), so — unlike the Live page,
@@ -299,6 +300,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         self._remote_ear = None        # the phone-fed ear (EarHost over RemoteMicSource)
         self._remote_mic = None        # the push buffer the phone streams into
         self._sync_ear_wired()         # ear caps read 'dormant' until it's running
+        # the Live Lens event bus: the Brain PUSHES ambient cards (a sound-safety
+        # tap, the morning brief, a commitment nudge) to connected phones over SSE
+        self._event_subs: list = []    # one Queue per connected /live/events stream
+        self._event_lock = threading.Lock()
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -856,6 +861,56 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self.activity.add("ear", "Phone stopped being the live mic")
         self._sync_ear_wired()
 
+    # -- the Live Lens event bus (Brain → phone push, over SSE) ------------
+
+    def subscribe_events(self):
+        """Register a new /live/events stream. Returns a bounded Queue the SSE
+        handler drains, or None when the small subscriber cap is reached (a
+        handful of phones — an SSE stream holds a worker thread, so the cap keeps
+        long-lived streams from starving the request pool)."""
+        import queue
+        q: "queue.Queue" = queue.Queue(maxsize=64)
+        with self._event_lock:
+            if len(self._event_subs) >= MAX_EVENT_SUBS:
+                return None
+            self._event_subs.append(q)
+        return q
+
+    def unsubscribe_events(self, q) -> None:
+        with self._event_lock:
+            try:
+                self._event_subs.remove(q)
+            except ValueError:
+                pass
+
+    def push_event(self, kind: str, card=None, veil_ok: bool = False) -> int:
+        """Fan a card out to every connected Live Lens. Veil-gated by default:
+        an ambient push (the morning brief, a memory nudge) is SUPPRESSED while
+        incognito / quiet-hours — the glasses stay quiet under the shield.
+        `veil_ok=True` is for categorical safety alerts (a smoke alarm) that carry
+        no captured content. Fails closed (drops) on an unreadable posture. A slow
+        client's full queue drops the event for that client, never blocks. Returns
+        how many streams it reached."""
+        if not veil_ok:
+            try:
+                if self.incognito_now():
+                    return 0
+            except Exception:                        # noqa: BLE001 — unreadable → drop
+                return 0
+        ev: dict = {"kind": kind}
+        if isinstance(card, dict):
+            ev["card"] = card
+        with self._event_lock:
+            subs = list(self._event_subs)
+        sent = 0
+        for q in subs:
+            try:
+                q.put_nowait(ev)
+                sent += 1
+            except Exception:                        # noqa: BLE001 — full → drop for that client
+                pass
+        return sent
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -1111,6 +1166,14 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         self.last_brief = {"text": b["text"], "bullets": b["bullets"],
                            "ts": time.time()}
         self.activity.add("brief", "Morning brief ready")
+        # push it to any connected Live Lens as a real card (veil-gated: a brief
+        # is memory-derived, so it's suppressed while incognito / quiet-hours)
+        try:
+            from ...hud import cards
+            self.push_event("brief", cards.morning_brief(
+                text=b.get("text", ""), bullets=b.get("bullets") or []))
+        except Exception:                            # noqa: BLE001 — never fail a brief
+            pass
         return True
 
     def start_brief_scheduler(self, interval: float = 60.0) -> None:
@@ -3680,11 +3743,65 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                          "install the soundlink pack (ggwave) to pair by sound; "
                          "the QR and typed code still work")})
 
+        def _get_live_events(self, path, qs):
+            """The Live Lens event stream (Server-Sent Events): the Brain PUSHES
+            ambient cards to the phone — a sound-safety tap, the morning brief, a
+            memory nudge — the half of the HUD that isn't a reply to a look.
+
+            Registered PUBLIC because EventSource can't set headers, so the token
+            rides the query (?t=…); the server never logs it (log_message is a
+            no-op) and the DNS-rebind guard already ran in do_GET. We
+            self-authenticate here with the same throttle as the header path, then
+            hold the connection open and drain the Brain's event bus. No captured
+            content rides this channel — only cards the Brain chose to surface,
+            and push_event veil-gates every non-safety push."""
+            tok = brain.config.token
+            from_local = self._from_localhost()
+            presented = (qs.get("t", [""])[0] or "")
+            ip = self.client_address[0]
+            gated = bool(tok) and not from_local
+            if gated and not _auth_limiter.allow(ip):
+                self._json(429, {"error": "locked out"}); return
+            ok = authorize(tok, presented, from_local)
+            if gated:
+                _auth_limiter.record_success(ip) if ok else _auth_limiter.record_failure(ip)
+            if not ok:
+                self._json(401, {"error": "unauthorised"}); return
+            q = brain.subscribe_events()
+            if q is None:
+                self._json(503, {"error": "too many event streams"}); return
+            import json as _json
+            import queue as _queue
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("X-Accel-Buffering", "no")   # no proxy buffering
+                self.end_headers()
+                self.wfile.write(b": connected\n\n")
+                self.wfile.flush()
+                while True:
+                    try:
+                        ev = q.get(timeout=15)
+                    except _queue.Empty:
+                        self.wfile.write(b": ping\n\n")       # keepalive heartbeat
+                        self.wfile.flush()
+                        continue
+                    body = _json.dumps(ev, separators=(",", ":"))
+                    self.wfile.write(("data: " + body + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass                                          # the phone went away
+            finally:
+                brain.unsubscribe_events(q)
+
         # -- GET route table --------------------------------------------
         # exact-path public routes, resolved BEFORE the auth gate
         _GET_PUBLIC = {
             "/": _get_root,
             "/dreamlayer/live": _get_live,
+            "/dreamlayer/live/events": _get_live_events,
             "/dreamlayer/build": _get_builder,
             "/dreamlayer/build/figment.js": _get_builder_asset,
             "/dreamlayer/build/qr.js": _get_builder_asset,
