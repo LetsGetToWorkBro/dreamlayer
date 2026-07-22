@@ -62,7 +62,7 @@ def test_report_covers_every_cap_with_unique_keys():
     assert len(set(keys)) == len(keys)
     assert sum(C.summary(env={}).values()) == len(C.CAPABILITIES)
     # whatever the machine has installed, states stay within the vocabulary
-    vocab = {"active", "off", "missing", "unsupported", "external"}
+    vocab = {"active", "off", "dormant", "missing", "unsupported", "external"}
     assert {r["state"] for r in rows} <= vocab
 
 

@@ -1482,7 +1482,7 @@ function showPage(id){curPage=id;
    active = real path runs · off = installed, switched off here · missing =
    fallback runs · unsupported = wrong platform · external = a service. */
 const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
-              unsupported:"var(--ghost)",external:"var(--memory)"};
+              dormant:"var(--amber)",unsupported:"var(--ghost)",external:"var(--memory)"};
 let CAPFROZEN=false;
 let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a frozen build carrying pip)
 /* --- info bubble: the exact improvement, as before→after meters --- */
@@ -1522,6 +1522,11 @@ function capRight(it){
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
     return info+`<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+  }
+  if(it.state==="dormant"){
+    // installed, but no live path calls it yet — say so plainly instead of a
+    // green "active" that would be a lie. Being wired up in a coming update.
+    return info+`<span class="sstate" title="The library is installed, but this feature isn't wired into the running app yet — coming in an update.">installed · not active yet</span>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
@@ -1566,7 +1571,7 @@ function renderCapStats(r){
 }
 function renderCaps(r){
   renderCapStats(r);
-  const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
+  const s=r.summary||{}; const order=["active","off","dormant","missing","unsupported","external"];
   $("capsum").textContent=order.filter(k=>s[k]).map(k=>`${s[k]} ${k}`).join(" · ")
     +(r.frozen?"  ·  bundled app (fixed set)":"");
   const blurb={}; (r.tiers||[]).forEach(t=>{blurb[t.key]=t.blurb;});
@@ -2858,7 +2863,7 @@ window.removePlugin=removePlugin;
           'cloud: <b>'+(cfg.model==="api"?"wired":"off")+'</b> \u00b7 veil: <b>'+(term.classList.contains("veiled")?"up":"down")+'</b>\n'+
           '<span class="dim">everything here runs on this machine.</span>'); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
     if(c==="caps"||c==="capabilities"){ var render=function(r){ var s=(r&&r.summary)||{};
-        var order=["active","off","missing","unsupported","external"];
+        var order=["active","off","dormant","missing","unsupported","external"];
         w(order.filter(function(k){return s[k];}).map(function(k){return '<b>'+s[k]+'</b> '+k;}).join(" \u00b7 ")||"no capability data");
         w('<span class="dim">open <b>Capabilities</b> in the sidebar to switch more on.</span>'); };
       if(LASTCAPS) render(LASTCAPS); else api("/dreamlayer/capabilities").then(render).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }

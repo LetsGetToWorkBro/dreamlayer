@@ -874,12 +874,18 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         empty STILL left the device and must be on the ledger. Counting only
         successful answers silently under-reported egress — a real gap for a
         product whose panel promises "every one is logged"."""
-        from .backends import cloud_chat
+        # Route through the litellm unifier when the `llm` extra is installed —
+        # one interface over OpenAI/Anthropic/Gemini/Ollama + ~100 providers with
+        # fallback — else litellm_chat transparently delegates to the built-in
+        # cloud_chat, so this is behaviour-identical with zero new deps. (Before,
+        # the Brain always called cloud_chat directly and the llm_router cap was
+        # dead-on-install — the adapter imported but was never on the live path.)
+        from ..litellm_backend import litellm_chat
         self.bump_cloud_calls()                         # the query is leaving now
         self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
         self.save()
         try:
-            text = cloud_chat(self.config, query)
+            text = litellm_chat(self.config, query)
             self.health.record_ok("cloud")
         except Exception as exc:
             self.health.record_failure("cloud", exc)   # degrade, but on the record

@@ -424,9 +424,47 @@ def supported(cap: Cap) -> bool:
     return cap.kind != "darwin" or sys.platform == "darwin"
 
 
+# Installed-but-not-yet-wired capabilities: the library imports, but no live code
+# path calls the adapter, so installing it gains the user nothing REACHABLE today.
+# The 2026-07-22 reachability audit traced all 74 caps to their call sites and
+# found these light "active" on import while doing nothing you can trigger. They
+# report "dormant" (not "active") and DON'T inflate the awakening meter, so the
+# panel never claims a feature is on when it isn't. As each is genuinely wired
+# into a live path (phased), its key is removed here and it becomes active for
+# real. test_capabilities_wired keeps this list honest against the catalog.
+_NOT_WIRED = frozenset({
+    # memory: adapters built, never consumed on a live path
+    "memory_dedup", "typed_docs", "social_graph",
+    # voice: the entire on-device "ear" — the Orchestrator that runs it is never
+    # instantiated by the shipped Brain (live voice is the phone's browser STT)
+    "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
+    "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
+    "onnx_speech",
+    # vision: the "glance" hub that would fire these lenses is never called live
+    "coreml_ondevice", "math_ocr", "doc_read", "depth_sense", "openvocab_find",
+    "dream_style", "sky_sense", "scene_segment",
+    # intelligence / structured: adapters wired only in tests
+    "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
+    "causal_fusion", "structured_output", "typed_models", "typed_pipeline",
+    # platform / infra: no live loader / surface reaches these
+    "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
+    "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
+    "mesh_range", "extism_plugins", "sound_pairing", "dashboard", "fs_watch",
+    "lan_discovery", "spatial_viz",
+    # privacy: the structural anyio veil-stop is never used (the flag-gate is);
+    # pii_redaction's scrubber has no caller on the memory write path yet (wiring
+    # it needs a narrow entity policy so it never strips the names the product
+    # legitimately remembers — tracked as a dedicated follow-up)
+    "structured_concurrency", "pii_redaction",
+})
+
+
 def state(cap: Cap, env: Optional[dict] = None) -> str:
     """One word a human can act on:
-      active       installed and allowed — the adapter's real path runs
+      active       installed, allowed, AND wired into a live path — really on
+      dormant      installed but not yet wired into the running app (no live
+                   caller) — the honest state for a library that imports but does
+                   nothing reachable; does NOT count toward the awakening meter
       off          installed but DL_DISABLE_* set — fallback runs by choice
       missing      not installed — fallback runs (install cap's extra to flip)
       unsupported  wrong platform (macOS-only capability elsewhere)
@@ -442,6 +480,8 @@ def state(cap: Cap, env: Optional[dict] = None) -> str:
         return "unsupported"
     if not installed(cap):
         return "missing"
+    if cap.key in _NOT_WIRED:
+        return "dormant"        # imports, but nothing live calls it yet
     return "active"
 
 
@@ -562,6 +602,10 @@ def power_stats(env: Optional[dict] = None) -> dict:
             continue
         if st == "unsupported":
             continue                              # can't be had on this machine
+        if st == "dormant":
+            continue                              # installed but not wired to a
+            #                                       live path — must not pad the
+            #                                       meter (it delivers nothing yet)
         total += 1
         power_total += c.impact
         bucket = by_tier.setdefault(
@@ -840,8 +884,8 @@ def _print_rich(rows: list[dict], env: Optional[dict] = None) -> bool:
         from rich.table import Table
     except ImportError:
         return False
-    style = {"active": "green", "off": "yellow", "missing": "dim",
-             "unsupported": "dim", "external": "cyan"}
+    style = {"active": "green", "off": "yellow", "dormant": "yellow",
+             "missing": "dim", "unsupported": "dim", "external": "cyan"}
     t = Table(title="DreamLayer capabilities", title_justify="left")
     for col in ("tier", "capability", "state", "switch on with"):
         t.add_column(col)

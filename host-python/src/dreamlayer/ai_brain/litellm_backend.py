@@ -10,9 +10,16 @@ three-switch architecture keeps working with zero new deps.
 from __future__ import annotations
 import logging
 
-from .server.backends import cloud_chat as _builtin_cloud_chat
+# resolve cloud_chat through the module (not a bound import) so the fallback
+# always calls the CURRENT backends.cloud_chat — respecting a monkeypatch and
+# keeping litellm_chat a true drop-in for it.
+from .server import backends as _be
 
 log = logging.getLogger("dreamlayer.litellm_backend")
+
+
+def _builtin_cloud_chat(config, prompt, **kw):
+    return _be.cloud_chat(config, prompt, **kw)
 
 try:  # optional dep — extras group `llm`
     import litellm  # type: ignore
