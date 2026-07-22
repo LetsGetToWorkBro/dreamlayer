@@ -295,6 +295,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         self.config = BrainConfig.load(self.cfg_dir)
         self._env_disabled: set = set()
         self._sync_disabled_env()      # panel per-cap toggles must reach adapters
+        self._ear = None               # the always-on ear (EarHost), built on demand
+        self._sync_ear_wired()         # ear caps read 'dormant' until it's running
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -736,6 +738,60 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             _os.environ[flag] = "1"
         self._env_disabled = off
 
+    # -- the always-on ear (opt-in voice capture) --------------------------
+
+    def _sync_ear_wired(self) -> None:
+        """Reflect the ear's LIVE state into the capability report: while it's
+        actually listening, set DL_WIRED_<KEY> for each cap it drives so they
+        read 'active' (installed → really on); otherwise clear them so they read
+        the honest 'dormant'. This is what keeps the awakening meter truthful —
+        the voice caps count only while the microphone is genuinely open."""
+        import os as _os
+        from .ear import EAR_CAPS
+        on = bool(self._ear is not None and self._ear.listening)
+        for key in EAR_CAPS:
+            flag = "DL_WIRED_" + key.upper()
+            if on:
+                _os.environ[flag] = "1"
+            else:
+                _os.environ.pop(flag, None)
+
+    def start_ear(self, mic=None) -> dict:
+        """Open the always-on ear IF the wearer has opted in (listen_enabled).
+        Best-effort and non-fatal: a missing engine/mic returns {ok:False,...}
+        and changes nothing. Refreshes the capability report either way."""
+        if not getattr(self.config, "listen_enabled", False):
+            return {"ok": False, "reason": "disabled",
+                    "detail": "turn Listening on first"}
+        if self._ear is None:
+            from .ear import EarHost
+            self._ear = EarHost(self)
+        try:
+            res = self._ear.start(mic)
+        except Exception as exc:                    # noqa: BLE001 — never fatal
+            log.error("[ear] start failed: %s", exc)
+            res = {"ok": False, "reason": "error", "detail": str(exc)}
+        self._sync_ear_wired()
+        if res.get("ok"):
+            self.activity.add("ear", "Listening turned on (on-device voice capture)")
+        return res
+
+    def stop_ear(self) -> None:
+        """Close the ear and mark its capabilities dormant again."""
+        if self._ear is not None:
+            self._ear.stop()
+            self.activity.add("ear", "Listening turned off")
+        self._sync_ear_wired()
+
+    def ear_status(self) -> dict:
+        """Live ear state for the panel: whether it's listening and how much it's
+        heard. Includes `enabled` (the persisted opt-in) so the switch and the
+        runtime state can disagree honestly (opted-in but no mic, say)."""
+        st = self._ear.status() if self._ear is not None else {
+            "listening": False, "heard_count": 0, "last_heard": ""}
+        st["enabled"] = bool(getattr(self.config, "listen_enabled", False))
+        return st
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -755,7 +811,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "contacts_sync", "reminders_sync", "reminder_lists",
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
-                  "dawarich_url", "dawarich_api_key"):
+                  "dawarich_url", "dawarich_api_key", "listen_enabled"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -785,6 +841,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.sync_reminders()
             if updates.get("sources_sync"):
                 self.sync_sources()
+            if "listen_enabled" in updates:
+                # the wearer flipped the always-on ear — honor it immediately
+                if self.config.listen_enabled:
+                    self.start_ear()
+                else:
+                    self.stop_ear()
         except Exception:
             # a failed opportunistic sync must not fail the config write that
             # triggered it (the sync loop retries on schedule); log so a broken
@@ -3219,6 +3281,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Optional-capability install/enable state."""
             self._json(200, _capability_payload(brain))
 
+        def _get_ear(self, path, qs):
+            """Live state of the always-on ear (opt-in voice capture): whether
+            it's enabled, whether the microphone is actually open, and how much
+            it's heard. The panel polls this to show the truthful runtime state
+            alongside the persisted Listening switch."""
+            self._json(200, brain.ear_status())
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -3568,6 +3637,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/backup": _get_backup,
             "/dreamlayer/health": _get_health,
             "/dreamlayer/capabilities": _get_capabilities,
+            "/dreamlayer/ear": _get_ear,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,

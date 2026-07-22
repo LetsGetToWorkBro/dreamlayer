@@ -420,6 +420,19 @@ def disabled(cap: Cap, env: Optional[dict] = None) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def wired_now(cap: Cap, env: Optional[dict] = None) -> bool:
+    """DL_WIRED_<KEY> ∈ {1,true,yes,on} promotes a normally-dormant capability to
+    'active' — set at RUNTIME by the subsystem that actually drives it, and only
+    while it's running. The always-on ear, for example, sets DL_WIRED_VOICE_VAD /
+    _LOCAL_ASR / _MIC_CAPTURE / … the instant it opens the microphone and clears
+    them when it stops. So a cap in _NOT_WIRED stays honestly 'dormant' by default
+    (nothing is driving it), yet reads 'active' precisely when a live path is —
+    no false green, and no permanent under-report of a feature that IS on."""
+    flag = "DL_WIRED_" + cap.key.upper()
+    val = (env if env is not None else os.environ).get(flag, "")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 def supported(cap: Cap) -> bool:
     return cap.kind != "darwin" or sys.platform == "darwin"
 
@@ -435,8 +448,15 @@ def supported(cap: Cap) -> bool:
 _NOT_WIRED = frozenset({
     # memory: adapters built, never consumed on a live path
     "memory_dedup", "typed_docs", "social_graph",
-    # voice: the entire on-device "ear" — the Orchestrator that runs it is never
-    # instantiated by the shipped Brain (live voice is the phone's browser STT)
+    # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
+    # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
+    # driven by the Brain's opt-in ear (ai_brain/server/ear.py) — it sets
+    # DL_WIRED_<KEY> the moment it opens the microphone, so wired_now() promotes
+    # them from "dormant" to "active" precisely while listening is on, and they
+    # fall back to "dormant" (not a false green) when it's off. They stay listed
+    # here so the DEFAULT (ear off) is the honest "dormant". wake_word (no wake
+    # engine yet), live_interpret (the SeamlessM4T interpreter), asr_alignment
+    # and diarization are NOT promoted — they need the full Orchestrator path.
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
     "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
     "onnx_speech",
@@ -480,9 +500,9 @@ def state(cap: Cap, env: Optional[dict] = None) -> str:
         return "unsupported"
     if not installed(cap):
         return "missing"
-    if cap.key in _NOT_WIRED:
+    if cap.key in _NOT_WIRED and not wired_now(cap, env):
         return "dormant"        # imports, but nothing live calls it yet
-    return "active"
+    return "active"             # ...unless a live subsystem set DL_WIRED_<KEY>
 
 
 def enabled(key: str, env: Optional[dict] = None) -> bool:

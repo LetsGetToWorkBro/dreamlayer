@@ -775,6 +775,10 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Incognito</div>
       <div class="conn-s">A private stretch: stays on your LAN, forces cloud off, logs nothing.</div></div>
       <label class="sw"><input type="checkbox" id="incognito" onchange="saveConn()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Listening &middot; the always-on ear</div>
+      <div class="conn-s">Off by default. When on, this Mac's microphone transcribes speech <b>entirely on-device</b> (voice-activity detection → local speech recognition) and folds what it hears into your memory, so you can later ask "what did we decide about the lease?". <b>Nothing is uploaded</b> — audio never leaves this machine. The Veil still wins: while Incognito or in quiet hours it captures nothing. Contact and card numbers are scrubbed before anything is stored; names and places are kept. Needs the <b>Sharp Ears</b> pack (a local speech engine) and a microphone.</div>
+      <div id="earStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="listen" onchange="saveListen()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -1833,6 +1837,7 @@ async function load(){
   pickModel(mm,true);
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
+  if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
   // cloud provider
   $("cprov").value=c.config.cloud_provider||"openai";
   $("cbase").value=c.config.cloud_base_url||"";$("cmodel").value=c.config.cloud_model||"";
@@ -2046,6 +2051,27 @@ async function saveConn(){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
     network_mode:incog?"lan_only":"connected", cloud_enabled:incog?false:cloud})});
   toast(incog?"Incognito on — cloud off, LAN only":(cloud?"Cloud on":"Cloud off")); load();
+}
+async function saveListen(){
+  const on=$("listen").checked;
+  const r=await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({listen_enabled:on})});
+  toast(on?"Listening on — on-device, nothing uploaded":"Listening off");
+  refreshEarStatus();
+}
+async function refreshEarStatus(){
+  const el=$("earStat"); if(!el) return;
+  let s; try{s=await api("/dreamlayer/ear");}catch(e){el.textContent="";return;}
+  if(!s){el.textContent="";return;}
+  if(!s.enabled){el.textContent="Off — the microphone is closed.";return;}
+  if(s.listening){
+    const n=s.heard_count||0;
+    el.innerHTML="<b style='color:var(--success)'>Listening</b> — microphone open, on-device only"+
+      (n?` &middot; ${n} utterance${n===1?"":"s"} remembered`:"");
+  }else{
+    // opted in but not actually capturing → say why (usually no engine/mic)
+    el.innerHTML="<b style='color:var(--amber)'>Listening is on, but not capturing</b> — install the "+
+      "Sharp Ears pack (a local speech engine) and make sure a microphone is available.";
+  }
 }
 async function addFolder(){const el=$("folderPath"),p=el.value.trim();if(!p)return;
   await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"add",path:p})});
