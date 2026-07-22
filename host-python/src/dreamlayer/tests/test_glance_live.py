@@ -110,6 +110,37 @@ def test_reading_teaches_the_read_candidate_not_the_doc_key(brain):
     assert wl.glance_arbiter.priors.boost("text", "doc") == 0      # NOT the run key
 
 
+# --- the learning loop never writes under the veil / with junk scenes ---------
+
+def test_veiled_chooser_pick_teaches_nothing(brain):
+    # a chooser tap while the shield is up must persist NOTHING — the veil
+    # writes nothing to disk, the arbiter's priors included.
+    brain.config.network_mode = "lan_only"          # shield up (incognito)
+    wl = brain.world_lens()
+    before = wl.glance_arbiter.priors.boost("text", "math")
+    live_mod.world_look(brain, _flat_frame(), lens="math", scene="text")
+    assert wl.glance_arbiter.priors.boost("text", "math") == before
+
+
+def test_reinforce_ignores_unknown_scene_keys():
+    # a crafted/oversized scene can't become a top-level key (the file is
+    # rewritten whole on every reinforce, so an unbounded key set is a disk DoS).
+    from dreamlayer.orchestrator.glance import GlancePriors
+    p = GlancePriors()
+    p.reinforce("x" * 5000, "read")                 # junk scene → dropped
+    assert "x" * 5000 not in p.to_dict()["counts"]
+    p.reinforce("text", "read")                     # a real scene still lands
+    assert p.to_dict()["counts"]["text"]["read"] > 0
+
+
+def test_unknown_manual_lens_does_not_reinforce(brain):
+    # only a lens the chooser can post (doc/math) may teach the arbiter; a
+    # crafted ?lens=…&scene=… with any other lens key writes nothing.
+    wl = brain.world_lens()
+    live_mod.world_look(brain, _flat_frame(), lens="totally-made-up", scene="text")
+    assert wl.glance_arbiter.priors.boost("text", "totally-made-up") == 0.0
+
+
 # --- the live candidate set only bids lenses the host can run -----------------
 
 def test_live_candidates_exclude_person_and_scholar():

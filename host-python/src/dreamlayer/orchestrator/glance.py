@@ -238,6 +238,11 @@ class GlancePriors:
         self._load()
 
     def reinforce(self, scene: str, lens: str, amount: float = 1.0) -> None:
+        # Only the fixed vocabulary of scenes may become a key — an unknown
+        # (crafted/oversized) scene must never grow this file, which is rewritten
+        # whole on every reinforce. Bounds the on-disk priors to |SCENES| keys.
+        if scene not in SCENES:
+            return
         self._c.setdefault(scene, {})
         self._c[scene][lens] = self._c[scene].get(lens, 0.0) + amount
         self._save()

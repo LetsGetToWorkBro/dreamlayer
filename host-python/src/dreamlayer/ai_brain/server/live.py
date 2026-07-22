@@ -293,13 +293,25 @@ def world_look(brain, arr, ambient: bool = False,
             return {"ok": False, "lens": lens, "reason": "lens unavailable"}
         # A pick that came from the glance chooser carries the scene it was
         # offered for — teach the arbiter this choice so tomorrow's ambiguous
-        # glance leans your way ("it learns you"). Best-effort.
-        if scene and getattr(wl, "glance_arbiter", None) is not None:
+        # glance leans your way ("it learns you"). Best-effort, and ONLY for a
+        # genuine chooser pick: a lens the chooser actually posts (doc/math →
+        # the read/math candidates), and NEVER under the veil — the shield writes
+        # nothing to disk, priors included. Any other ?lens=…&scene=… is ignored,
+        # so a crafted request can't bloat the priors file or write while blinded.
+        try:
+            from .glance_live import TEACH_LENS
+        except Exception:                           # noqa: BLE001
+            TEACH_LENS = {}
+        if scene and lens in TEACH_LENS and getattr(wl, "glance_arbiter", None) is not None:
             try:
-                from .glance_live import TEACH_LENS
-                wl.glance_arbiter.reinforce(scene, TEACH_LENS.get(lens, lens))
+                may_learn = bool(wl.privacy.allow_capture())
             except Exception:                       # noqa: BLE001
-                pass
+                may_learn = False                   # unreadable posture → fail closed
+            if may_learn:
+                try:
+                    wl.glance_arbiter.reinforce(scene, TEACH_LENS[lens])
+                except Exception:                   # noqa: BLE001
+                    pass
         res = wl.look_lens(arr, lens, lens_args)
         if isinstance(res, dict) and res.get("ok"):
             brain.activity.add("look", f"Looked closer with the {lens} lens")
