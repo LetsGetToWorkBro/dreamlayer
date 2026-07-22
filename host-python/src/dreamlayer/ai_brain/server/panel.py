@@ -794,6 +794,28 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   </section>
 
   <section>
+    <div class="eyebrow">Memory sources</div><h2>Bring in your other memories</h2>
+    <p class="lead">Fold your own <b>local, self-hosted</b> services into the Brain's memory — a
+      self-hosted <b>Immich</b> photo library and a <b>Dawarich</b> location log. Each must be on your
+      own network (a non-local address is refused), the pull is one-way and read-only, and it only runs
+      while the master switch below is on. Screenpipe and ActivityWatch, if you run them, are picked up
+      automatically with no address to set.</p>
+    <div class="conn"><div><div class="conn-t">Fold local sources into memory</div>
+      <div class="conn-s">The master switch — nothing is pulled until this is on.</div></div>
+      <label class="sw"><input type="checkbox" id="srcSync" onchange="saveSources()"><span class="track"></span></label></div>
+    <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+      <input id="immichUrl" type="text" autocomplete="off" placeholder="Immich URL (e.g. http://192.168.1.10:2283)" style="flex:1;min-width:240px">
+      <input id="immichKey" type="password" autocomplete="off" placeholder="Immich API key" style="flex:1;min-width:180px">
+    </div>
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+      <input id="dawUrl" type="text" autocomplete="off" placeholder="Dawarich URL (e.g. http://192.168.1.10:3000)" style="flex:1;min-width:240px">
+      <input id="dawKey" type="password" autocomplete="off" placeholder="Dawarich API key" style="flex:1;min-width:180px">
+    </div>
+    <div class="row" style="margin-top:10px"><button id="srcSave" onclick="saveSources()">Save sources</button>
+      <span id="srcStat" class="conn-s" style="margin-left:10px;color:var(--muted)"></span></div>
+  </section>
+
+  <section>
     <div class="eyebrow">Cloud provider</div><h2>Wire the cloud tier</h2>
     <p class="lead">Pick a provider — OpenAI, Anthropic, Gemini, or OpenRouter — or run a model
       locally with <b>Ollama</b> (free, no key, nothing leaves your Mac). Custom points at any
@@ -1533,8 +1555,10 @@ function capRight(it){
   }
   if(it.state==="dormant"){
     // installed, but no live path calls it yet — say so plainly instead of a
-    // green "active" that would be a lie. Being wired up in a coming update.
-    return info+`<span class="sstate" title="The library is installed, but this feature isn't wired into the running app yet — coming in an update.">installed · not active yet</span>`;
+    // green "active" that would be a lie. The "i" button explains what it will
+    // gain you; the tooltip carries this cap's own note so it self-describes.
+    const why=(it.note?esc(it.note)+" — ":"")+"the library is installed, but this feature isn't wired into the running app yet.";
+    return info+`<span class="sstate" title="${why}">installed · not active yet</span>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
@@ -1838,6 +1862,14 @@ async function load(){
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
+  // memory sources
+  if($("srcSync")){
+    $("srcSync").checked=!!c.config.sources_sync;
+    $("immichUrl").value=c.config.immich_base_url||"";
+    $("dawUrl").value=c.config.dawarich_url||"";
+    $("immichKey").placeholder=c.config.immich_api_key==="set"?"key saved — blank to keep":"Immich API key";
+    $("dawKey").placeholder=c.config.dawarich_api_key==="set"?"key saved — blank to keep":"Dawarich API key";
+  }
   // cloud provider
   $("cprov").value=c.config.cloud_provider||"openai";
   $("cbase").value=c.config.cloud_base_url||"";$("cmodel").value=c.config.cloud_model||"";
@@ -2072,6 +2104,22 @@ async function refreshEarStatus(){
     el.innerHTML="<b style='color:var(--amber)'>Listening is on, but not capturing</b> — install the "+
       "Sharp Ears pack (a local speech engine) and make sure a microphone is available.";
   }
+}
+async function saveSources(){
+  // Fold in the local memory sources. Secret fields round-trip as "set" when
+  // left blank (apply_config keeps the stored key), so a blank box never wipes a
+  // saved key. Non-local URLs are refused server-side (is_local_endpoint).
+  const body={sources_sync:$("srcSync").checked,
+    immich_base_url:$("immichUrl").value.trim(),
+    dawarich_url:$("dawUrl").value.trim()};
+  const ik=$("immichKey").value.trim(); if(ik) body.immich_api_key=ik;
+  const dk=$("dawKey").value.trim(); if(dk) body.dawarich_api_key=dk;
+  const s=$("srcStat"); s.textContent="Saving…";
+  try{await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});}
+  catch(e){s.textContent="Couldn't save"; return;}
+  $("immichKey").value=""; $("dawKey").value="";
+  s.textContent=body.sources_sync?"On — pulling from your local sources":"Saved (off)";
+  toast(body.sources_sync?"Memory sources on":"Memory sources saved"); load();
 }
 async function addFolder(){const el=$("folderPath"),p=el.value.trim();if(!p)return;
   await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"add",path:p})});
