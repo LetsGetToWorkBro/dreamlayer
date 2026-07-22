@@ -2021,11 +2021,13 @@ let detector = null, rafId = null, lastDetect = 0, detectFails = 0, overlayDirty
 const DETECT_MS = 90;                 /* ~11 fps — smooth, easy on the battery */
 const DETECT_MAX_FAILS = 12;          /* ~1s of persistent runtime failure → give up */
 
-/* The MediaPipe module (137 KB) + the SIMD WASM runtime (9.4 MB) are shared by
-   BOTH the object detector and the gesture recognizer. Resolve them ONCE and
-   memoize, so the heavy WASM is fetched + compiled a single time instead of
-   twice (the duplicate compile roughly doubled the boot cost and made the
-   warm-up feel like the stack "never loads"). */
+/* The MediaPipe module (137 KB) + the FilesetResolver are shared by BOTH the
+   object detector and the gesture recognizer — resolve them once and memoize so
+   neither re-imports the bundle. (The heavy 9.4 MB WASM is actually compiled
+   inside each createFromOptions call, so it still compiles twice; the win isn't
+   dedup — it's that we load the two SEQUENTIALLY, below, so their compiles don't
+   contend, the detector reaches ready sooner, and the gesture's WASM fetch then
+   reuses the detector's warm HTTP cache.) */
 let _visionMod = null, _filesetP = null;
 function visionFileset(){
   if (!_filesetP) _filesetP = (async () => {
@@ -2034,6 +2036,18 @@ function visionFileset(){
   })();
   return _filesetP;
 }
+/* A stalled asset fetch (headers sent, stream hangs) never resolves NOR rejects,
+   so without a cap loadDetector's promise chain would hang forever: the page
+   would sit at data-detector="loading" with a "vision loading…" chip that never
+   comes true, and — because gestures start in loadDetector's finally — they'd
+   never load either. Bound the wait so a stall falls back cleanly instead. Kept
+   comfortably above the e2e's 40s detector budget so a slow-but-progressing load
+   is never cut off. */
+const DETECT_LOAD_MS = 60000;
+function withTimeout(p, ms, label){
+  return Promise.race([p, new Promise((_, rej) =>
+    setTimeout(() => rej(new Error((label || "load") + " timed out")), ms))]);
+}
 async function loadDetector(){
   /* a visible "warming up" state so the first seconds aren't mistaken for the
      server just naming objects (the honest answer to "is the stack loaded?") */
@@ -2041,11 +2055,11 @@ async function loadDetector(){
   setVisionChip(true);
   showHud("loading on-device vision…", {ms:2400, _detector:true});
   try {
-    const fileset = await visionFileset();
-    detector = await _visionMod.ObjectDetector.createFromOptions(fileset, {
+    const fileset = await withTimeout(visionFileset(), DETECT_LOAD_MS, "vision runtime");
+    detector = await withTimeout(_visionMod.ObjectDetector.createFromOptions(fileset, {
       baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/efficientdet_lite0.tflite"},
       scoreThreshold: 0.42, maxResults: 6, runningMode: "VIDEO",
-      categoryDenylist: ["person"]});   /* the model itself never even emits a person box */
+      categoryDenylist: ["person"]}), DETECT_LOAD_MS, "detector model");
     detectorActive = true;
     clearTimeout(loopTimer);          /* the browser recognizes now — idle the server loop */
     setVisionChip(false);             /* warm-up done; the tier chip now reads "on-device" */
@@ -2056,10 +2070,12 @@ async function loadDetector(){
   } catch (e) {
     fallBackToServer(e, "unavailable");
   } finally {
-    /* Gestures load only AFTER the detector attempt settles — never alongside
-       its warm-up — so the 8.4 MB gesture model can't steal bandwidth from the
-       detector, the thing that actually stops the server naming loop. They
-       share the memoized fileset, so this adds only the model, not the WASM. */
+    /* Gestures load only AFTER the detector attempt SETTLES — success, error, or
+       the timeout above — never alongside its warm-up, so their WASM compiles
+       don't contend and the detector (the thing that stops the server naming
+       loop) wins the race. The timeout guarantees this finally always runs, so a
+       stalled detector can't strand gestures. They share the memoized fileset +
+       warm HTTP cache, so this stays cheap. */
     startGesture();
   }
 }
@@ -2192,13 +2208,13 @@ function startGesture(){        /* idempotent: fallBackToServer can re-enter loa
 }
 async function loadGesture(){
   try {
-    const fileset = await visionFileset();   /* shared with the detector — no second WASM compile */
-    gesturer = await _visionMod.GestureRecognizer.createFromOptions(fileset, {
+    const fileset = await withTimeout(visionFileset(), DETECT_LOAD_MS, "vision runtime");
+    gesturer = await withTimeout(_visionMod.GestureRecognizer.createFromOptions(fileset, {
       baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/gesture_recognizer.task"},
-      numHands: 1, runningMode: "VIDEO"});
+      numHands: 1, runningMode: "VIDEO"}), DETECT_LOAD_MS, "gesture model");
     document.body.setAttribute("data-gesture", "on");   /* status (styleable + testable) */
     gRaf = requestAnimationFrame(gestureTick);
-  } catch (e) {
+  } catch (e) {           /* a stall or failure settles to "off", never hangs data-gesture unset */
     document.body.setAttribute("data-gesture", "off");
     if (window.console) console.warn("[live] gesture recognizer unavailable:", e);
   }
