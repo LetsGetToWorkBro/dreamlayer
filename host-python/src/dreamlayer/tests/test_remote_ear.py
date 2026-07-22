@@ -93,6 +93,33 @@ def test_decode_audio_drops_a_malformed_chunk():
     assert live_mod.decode_audio(b"\x01", SAMPLE_RATE) == []  # a lone odd byte
 
 
+def test_decode_audio_rejects_an_implausible_sample_rate():
+    # a tiny sr (?sr=1) would upsample a large body to billions of samples and
+    # OOM the Brain — it must be DROPPED, not resampled. A real rate still works.
+    body = struct.pack("<8h", *([1000] * 8))
+    assert live_mod.decode_audio(body, 1) == []
+    assert live_mod.decode_audio(body, 300000) == []         # absurdly high too
+    assert len(live_mod.decode_audio(body, 48000)) > 0       # a real rate is fine
+
+
+def test_decode_audio_upsample_is_bounded():
+    # even at the band floor the output is capped at ~4x the input — never the
+    # unbounded blow-up a hostile sr aimed for.
+    n = 1000
+    body = struct.pack("<%dh" % n, *([500] * n))
+    out = live_mod.decode_audio(body, 4000)
+    assert len(out) <= n * 4 + 1
+
+
+def test_hear_does_not_decode_without_consent(brain):
+    # a ~2 MB body with a malicious sr must not be decoded/allocated when the
+    # phone mic is off: consent is checked BEFORE any decode work (DoS + privacy).
+    big = b"\x01\x00" * 1_000_000                            # ~2 MB of Int16
+    assert brain.config.remote_listen_enabled is False
+    res = live_mod.hear(brain, big, src_rate=1)
+    assert res["ok"] is False and res["reason"] == "disabled"
+
+
 # --- the streamed utterance reaches memory (same pipeline as the local ear) ---
 
 def test_streamed_audio_flows_through_the_pipeline_to_memory(brain):

@@ -423,8 +423,13 @@ def decode_audio(body: bytes, src_rate: int = 0):
         a.byteswap()
     floats = [s / 32768.0 for s in a]
     src = int(src_rate or 0)
-    if src <= 0 or src == SAMPLE_RATE or not floats:
-        return floats
+    if not floats or src == SAMPLE_RATE or src <= 0:
+        return floats            # already 16 kHz / unknown rate → no resample
+    if not (4000 <= src <= 192000):
+        # An implausible sample rate is dropped, NOT resampled: a tiny src (e.g.
+        # ?sr=1) would upsample a ~1M-sample body to billions of samples and OOM
+        # the Brain. The plausible-audio band caps the output at ≤ 4× the input.
+        return []
     n_out = int(len(floats) * SAMPLE_RATE / src)
     if n_out <= 0:
         return []
@@ -448,6 +453,12 @@ def hear(brain, body: bytes, src_rate: int = 0, stop: bool = False) -> dict:
     if stop:
         brain.stop_remote_ear()
         return {"ok": True, "remote_listening": False}
+    # Check consent BEFORE doing any decode/resample work: no audio is parsed for
+    # an install where the phone mic was never enabled (also blunts the DoS above
+    # — nothing is allocated for an un-consented caller). hear_remote re-checks.
+    if not getattr(brain.config, "remote_listen_enabled", False):
+        return {"ok": False, "reason": "disabled",
+                "detail": "turn on Listening on the Live Lens first"}
     pcm = decode_audio(body, src_rate)
     return brain.hear_remote(pcm)
 
@@ -1679,13 +1690,13 @@ function setVeil(on, o){
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
   if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser();
-            if (typeof hearOn !== "undefined" && hearOn) _hearClose();  /* veil deafens the ear (mic released, intent kept) */
+            if (hearOn) _hearClose();     /* veil deafens the ear (mic released, intent kept) */
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
                                              merely ignored */
   if (!o.silent) showHud(on ? "veil down · on-device only" : "veil lifted", {ms:2400});
   if (!on && liveOn) scheduleLoop(500);
-  if (!on && typeof hearOn !== "undefined" && hearOn && !hearCtx) _hearOpen();  /* shield lifted → the ear resumes */
+  if (!on && hearOn && !hearCtx) _hearOpen();  /* shield lifted → the ear resumes */
 }
 $("veilbtn").onclick = () => setVeil(!veil);
 $("veilbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") setVeil(!veil); };
@@ -2247,7 +2258,10 @@ function _hearOpen(){                                /* acquire mic + tap the PC
   navigator.mediaDevices.getUserMedia(
     {audio: {echoCancellation: true, noiseSuppression: true, channelCount: 1}})
     .then(stream => {
-      if (!hearOn){ stream.getTracks().forEach(t => t.stop()); return; }
+      // re-check the FULL posture on resolution: the veil could have gone up (or
+      // the page been backgrounded) while getUserMedia was in flight — never
+      // open an AudioContext under the shield (the mic must stay released)
+      if (!hearOn || veil || document.hidden){ stream.getTracks().forEach(t => t.stop()); return; }
       hearStream = stream;
       hearCtx = new (window.AudioContext || window.webkitAudioContext)();
       const src = hearCtx.createMediaStreamSource(stream);

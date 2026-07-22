@@ -841,7 +841,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self._sync_ear_wired()
             self.activity.add("ear", "Phone became the live mic (on-device voice)")
         if pcm:
-            self._remote_mic.push(pcm)
+            try:
+                self._remote_mic.push(pcm)
+            except Exception:                        # noqa: BLE001 — never 500 a look
+                pass
         return {"ok": True, "remote_listening": True,
                 **self._remote_ear.status()}
 
