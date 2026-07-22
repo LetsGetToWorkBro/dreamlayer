@@ -585,6 +585,24 @@ _PAGE = r"""<!doctype html>
     border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
     backdrop-filter:blur(5px);display:none}
   #confcard.on{display:block}
+  /* the glance chooser — a glass dialog of one-tap lens options */
+  #chooser{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
+    transform:translateX(-50%);z-index:9;width:min(84vw,320px);display:none;
+    background:rgba(5,10,8,.86);border:1px solid rgba(125,255,168,.35);
+    border-radius:16px;padding:12px;backdrop-filter:blur(6px);text-align:center;
+    box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(125,255,168,.12);
+    animation:chooserIn .22s ease-out both}
+  #chooser.show{display:block}
+  @keyframes chooserIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}
+    to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  #chooserq{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--phos-dim);margin-bottom:9px}
+  #chooseropts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .choosebtn{appearance:none;border:1px solid rgba(125,255,168,.45);
+    background:rgba(125,255,168,.08);color:#EAFBF0;font-size:13.5px;font-weight:600;
+    padding:9px 15px;border-radius:11px;cursor:pointer;transition:transform .1s,background .15s}
+  .choosebtn:hover,.choosebtn:focus{background:rgba(125,255,168,.18);transform:translateY(-1px)}
+  .choosebtn:active{transform:scale(.96)}
   #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
     text-transform:uppercase;margin-bottom:8px}
   #confcard p{font-size:12.5px;color:#DDEFE4;line-height:1.5;margin:6px 0}
@@ -653,17 +671,20 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
-  <label class="chip" id="lenschip" title="Pick what a tap looks for">&#128269;
-    <select id="lenssel" aria-label="Look closer with">
-      <option value="">Objects</option>
+  <label class="chip" id="lenschip" title="Auto picks the lens for you — or force one">&#128269;
+    <select id="lenssel" aria-label="Lens">
+      <option value="">Auto</option>
       <option value="doc">Read text</option>
       <option value="math">Math &rarr; LaTeX</option>
-      <option value="depth">How close</option>
+      <option value="depth">Distance</option>
       <option value="find">Find&hellip;</option>
       <option value="segment">Segment</option>
       <option value="sky">Name the sky</option>
-      <option value="dream">Dream</option>
     </select></label>
+</div>
+<div id="chooser" role="dialog" aria-label="Pick a lens">
+  <div id="chooserq">What do you want?</div>
+  <div id="chooseropts"></div>
 </div>
 <div id="controls">
   <button id="torch" type="button" hidden aria-pressed="false" aria-label="Flashlight" title="Flashlight">&#128161;</button>
@@ -905,9 +926,137 @@ function glassObjectCard(card){
   let detail = String((grows[0] || {}).label || card.detail || "");
   if (detail.length > 18) detail = detail.slice(0, 17) + "…";
   if (detail) gtext(ctx, "[ " + detail + " ]", 128, 176, GP.text_secondary, "md");
+  gend(card.dismiss_ms || 3500);
+}
+
+/* ---- the frontier lens cards, on the SAME glass engine ------------------
+   Each is a bespoke draw in the 256px space (renderer.lua idiom) reusing the
+   object card's primitives — the dark glass disc, gtext/garc/gdiamond, the
+   palette.lua colors, the .on fade + glassTimer dismiss — so a Read / Math /
+   Distance / Find / Scene / Sky look renders as a native card, not a text
+   plate. Shared helpers first. */
+function gback(ctx){                              /* the dark emissive disc */
+  ctx.beginPath(); ctx.arc(128, 128, 128, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(4,8,6,.68)"; ctx.fill();
+}
+function gend(ms){                                /* fade the card on + auto-dismiss */
   $("glass").classList.add("on");
   clearTimeout(glassTimer);
-  glassTimer = setTimeout(glassClear, card.dismiss_ms || 3500);
+  glassTimer = setTimeout(glassClear, ms || 4200);
+}
+function gwrap(str, n){                           /* soft-wrap to lines of ~n chars */
+  const words = String(str || "").split(/\s+/).filter(Boolean);
+  const out = []; let line = "";
+  for (const w of words){
+    if ((line + " " + w).trim().length > n){ if (line) out.push(line); line = w; }
+    else line = (line ? line + " " : "") + w;
+  }
+  if (line) out.push(line);
+  return out.length ? out : (str ? [String(str).slice(0, n)] : []);
+}
+function groundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function glassMathCard(j){                        /* Math -> LaTeX, a lit slate */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 122, 66, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.06)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.save(); ctx.shadowColor = GP.confidence_high; ctx.shadowBlur = 8;
+  garc(ctx, 128, 84, 15, 205, 335, GP.confidence_high);
+  gtext(ctx, "∑", 128, 84, GP.confidence_high, "lg");   /* summation glyph jewel */
+  ctx.restore();
+  gtext(ctx, "MATH", 128, 50, GP.text_ghost, "sm");
+  const lines = gwrap(String(j.latex || "").trim(), 22).slice(0, 3);
+  if (lines.length) lines.forEach((ln, i) => gtext(ctx, ln, 128, 118 + i * 18, GP.text_primary, i ? "sm" : "md"));
+  else gtext(ctx, "no equation in view", 128, 122, GP.text_secondary, "sm");
+  gtext(ctx, "[ LaTeX ]", 128, 192, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 5200);
+}
+function glassDocCard(j){                          /* Read -> a page reading in */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.save(); ctx.strokeStyle = "rgba(168,184,192,.5)"; ctx.lineWidth = 1.4;
+  groundRect(ctx, 94, 64, 68, 92, 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(148, 64); ctx.lineTo(162, 78); ctx.lineTo(148, 78);
+  ctx.closePath(); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 4;
+  ctx.strokeStyle = GP.memory_trace; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 6; i++){ const y = 80 + i * 11;
+    ctx.beginPath(); ctx.moveTo(102, y); ctx.lineTo(102 + (i % 3 === 2 ? 32 : 50), y); ctx.stroke(); }
+  ctx.restore();
+  gtext(ctx, "READ", 128, 50, GP.text_ghost, "sm");
+  const lines = gwrap(String(j.text || "").trim(), 26).slice(0, 2);
+  if (lines.length) lines.forEach((ln, i) => gtext(ctx, ln, 128, 178 + i * 15, GP.text_primary, "sm"));
+  else gtext(ctx, "no text in view", 128, 184, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 5600);
+}
+function glassDepthCard(j){                        /* Distance -> a proximity gauge */
+  const ctx = glassCtx(); gback(ctx);
+  const c = (j.closeness == null) ? null : Math.max(0, Math.min(1, Number(j.closeness)));
+  ctx.strokeStyle = "rgba(44,199,154,.16)"; ctx.lineWidth = 1;
+  [26, 46, 66].forEach(r => { ctx.beginPath(); ctx.arc(128, 112, r, 0, 2 * Math.PI); ctx.stroke(); });
+  gtext(ctx, "DISTANCE", 128, 50, GP.text_ghost, "sm");
+  if (c != null){
+    const col = c >= 0.66 ? GP.confidence_low : c >= 0.33 ? GP.confidence_med : GP.confidence_high;
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(128, 112, 66, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * c);
+    ctx.strokeStyle = col; ctx.lineWidth = 3.4; ctx.stroke(); ctx.restore();
+    gtext(ctx, Math.round(c * 100) + "%", 128, 108, col, "lg");
+    gtext(ctx, c >= 0.66 ? "very close" : c >= 0.33 ? "nearby" : "far off", 128, 128, GP.text_secondary, "sm");
+  } else gtext(ctx, "—", 128, 112, GP.text_secondary, "lg");
+  gtext(ctx, "[ relative depth ]", 128, 192, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 4600);
+}
+function glassFindCard(j){                          /* Find -> a reticle + hits */
+  const ctx = glassCtx(); gback(ctx);
+  const found = Array.isArray(j.found) ? j.found : [];
+  garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
+  ctx.strokeStyle = GP.memory_trace; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(128, 58); ctx.lineTo(128, 72); ctx.moveTo(128, 144); ctx.lineTo(128, 158);
+  ctx.moveTo(76, 108); ctx.lineTo(90, 108); ctx.moveTo(166, 108); ctx.lineTo(180, 108); ctx.stroke();
+  gtext(ctx, "FIND", 128, 50, GP.text_ghost, "sm");
+  if (found.length){
+    ctx.save(); ctx.shadowColor = GP.confidence_high; ctx.shadowBlur = 7;
+    gdiamond(ctx, 128, 108, 7, GP.confidence_high); ctx.restore();
+    found.slice(0, 3).forEach((f, i) =>
+      gtext(ctx, (f.term || "") + "  " + Math.round((f.confidence || 0) * 100) + "%",
+            128, 150 + i * 16, GP.text_primary, "sm"));
+  } else gtext(ctx, "not in view", 128, 108, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 4600);
+}
+function glassSegmentCard(j){                       /* Scene -> lit region wedges */
+  const ctx = glassCtx(); gback(ctx);
+  const n = (j.regions == null) ? 0 : Math.max(0, Math.min(12, Math.round(Number(j.regions))));
+  const k = Math.max(1, n);
+  for (let i = 0; i < k; i++){
+    const a0 = (i / k) * 2 * Math.PI - Math.PI / 2, a1 = ((i + 1) / k) * 2 * Math.PI - Math.PI / 2;
+    ctx.beginPath(); ctx.moveTo(128, 110); ctx.arc(128, 110, 60, a0, a1); ctx.closePath();
+    ctx.fillStyle = "rgba(44,199,154," + (0.05 + 0.035 * (i % 3)) + ")"; ctx.fill();
+    ctx.strokeStyle = "rgba(44,199,154,.3)"; ctx.lineWidth = 1; ctx.stroke();
+  }
+  gtext(ctx, "SCENE", 128, 50, GP.text_ghost, "sm");
+  gtext(ctx, String(n), 128, 106, GP.memory_trace, "lg");
+  gtext(ctx, n === 1 ? "region" : "regions", 128, 128, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 4200);
+}
+function glassSkyCard(j){                           /* Sky -> a named star map */
+  const ctx = glassCtx(); gback(ctx);
+  const pts = [[96, 80], [150, 72], [120, 100], [170, 110], [88, 120], [138, 130], [112, 150], [160, 146]];
+  ctx.strokeStyle = "rgba(184,255,233,.25)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(96, 80); ctx.lineTo(120, 100); ctx.lineTo(150, 72);
+  ctx.moveTo(120, 100); ctx.lineTo(138, 130); ctx.lineTo(160, 146); ctx.stroke();
+  pts.forEach((p, i) => { ctx.save(); ctx.shadowColor = GP.confidence_high; ctx.shadowBlur = (i % 2 ? 6 : 3);
+    ctx.fillStyle = GP.text_primary; ctx.beginPath();
+    ctx.arc(p[0], p[1], (i % 3 === 0 ? 2 : 1.3), 0, 2 * Math.PI); ctx.fill(); ctx.restore(); });
+  gtext(ctx, "SKY", 128, 50, GP.text_ghost, "sm");
+  const lines = gwrap(String(j.line || "").trim(), 26).slice(0, 2);
+  if (lines.length) lines.forEach((ln, i) => gtext(ctx, ln, 128, 180 + i * 16, GP.text_primary, "sm"));
+  else gtext(ctx, "the sky, named", 128, 186, GP.text_secondary, "sm");
+  gend(j.dismiss_ms || 5600);
 }
 
 /* ---- dream mode: the glasses' double-tap, on the phone ------------------
@@ -1600,24 +1749,66 @@ function renderLens(j){
   if (dreamOn) return;
   if (!j) { showHud("look failed", {ms:2600}); return; }
   if (j.veiled) { showHud("the veil is down — turn it off to look closer", {ms:2800}); return; }
-  if (j.need) { showHud("install the " + (j.pack || "required") + " pack to use this lens", {ms:3600}); return; }
+  if (j.need) { showHud("install the " + (j.pack || "required") + " pack for this lens", {ms:3600}); return; }
   if (j.need_location) { showHud("the sky lens needs your location", {ms:2800}); return; }
-  let msg;
+  /* a lens result draws its own glass card on the circle — the flat plate steps
+     aside, exactly like the object card does (renderResult). */
+  $("hud").classList.remove("on");
   switch (j.lens) {
-    case "math": msg = j.latex ? ["Math", j.latex] : "no equation in view"; break;
-    case "doc": msg = j.text ? wrapLines(j.text) : "no text in view"; break;
-    case "depth": msg = (j.closeness != null)
-      ? ["Closeness", Math.round(j.closeness * 100) + "% (1 = very close)"] : "couldn’t gauge distance"; break;
-    case "find": msg = (j.found && j.found.length)
-      ? ["Found"].concat(j.found.map(f => f.term + " " + Math.round(f.confidence * 100) + "%"))
-      : "didn’t find that in view"; break;
-    case "segment": msg = (j.regions != null)
-      ? ["Scene", j.regions + " region" + (j.regions === 1 ? "" : "s")] : "couldn’t segment"; break;
-    case "dream": msg = j.styled ? ["Dream", j.neural ? "neural painter" : "painterly wash"] : "couldn’t stylize"; break;
-    default: msg = (j.ok === false) ? (j.reason || "look failed") : "done";
+    case "math": glassMathCard(j); break;
+    case "doc": glassDocCard(j); break;
+    case "depth": glassDepthCard(j); break;
+    case "find": glassFindCard(j); break;
+    case "segment": glassSegmentCard(j); break;
+    case "sky": glassSkyCard(j); break;
+    default:
+      if (j.ok === false) { showHud(j.reason || "look failed", {ms:2600}); return; }
+      showHud("done", {ms:1600}); return;
   }
-  showHud(msg, {persist: liveOn}); blip();
+  blip();
 }
+/* Render an auto-glance decision: fire draws the chosen lens's card, offer pops
+   the one-tap chooser. The manual picker path uses renderLens directly. */
+function renderGlance(j){
+  if (dreamOn || !j) return;
+  if (j.glance === "offer") { showChooser(j.card, j.scene); return; }
+  if (j.glance === "fire") {
+    const c = j.card || {};
+    $("hud").classList.remove("on");
+    if (c.type === "ObjectPanelCard") glassObjectCard(c);   /* translate / taste */
+    else if (c.lens === "math") glassMathCard(c);
+    else if (c.lens === "doc") glassDocCard(c);
+    else { renderLens(c); return; }
+    blip();
+  }
+}
+/* the glance chooser — a small glass dialog of 2–3 one-tap lens options, shown
+   only when the look is genuinely ambiguous (e.g. text you could read OR solve).
+   A pick runs that lens AND teaches the arbiter (scene→lens), so it leans your
+   way next time. DOM (not canvas) because it's interactive, like the receipt
+   and confluence dialogs. */
+const LENS_FOR_ACTION = { read: "doc", math: "math", taste: "", translate: "", juno: "" };
+function showChooser(card, scene){
+  const box = $("chooser"); if (!box || dreamOn) return;
+  const opts = (card && card.options) || [];
+  $("chooserq").textContent = (card && card.eyebrow) || "What do you want?";
+  const wrap = $("chooseropts"); wrap.textContent = "";
+  opts.slice(0, 3).forEach(o => {
+    const b = document.createElement("button");
+    b.className = "choosebtn"; b.textContent = o.label || o.lens || "This";
+    b.onclick = (ev) => {
+      ev.stopPropagation(); hideChooser();
+      const key = (o.action in LENS_FOR_ACTION) ? LENS_FOR_ACTION[o.action] : o.action;
+      pickLens(key, scene);
+    };
+    wrap.appendChild(b);
+  });
+  box.classList.add("show");
+  clearTimeout(window._chooserT);
+  window._chooserT = setTimeout(hideChooser, (card && card.dismiss_ms) || 6000);
+}
+function hideChooser(){ const b = $("chooser"); if (b) b.classList.remove("show"); clearTimeout(window._chooserT); }
+function pickLens(lensKey, scene){ lookNow(false, lensKey || "", scene || ""); }
 /* choosing the Find lens asks once for what to look for; the Sky lens needs a
    one-time location grant (used only for the local ephemeris — never sent up) */
 if ($("lenssel")) $("lenssel").onchange = () => {
@@ -1665,10 +1856,11 @@ function renderResult(j, auto){
     else if (noHitStreak >= 4) { showHud("looking for something to recognize…", {ms:2400}); noHitStreak = 0; }
   }
 }
-async function lookNow(auto){
+async function lookNow(auto, forceLens, forceScene){
   if (veil) { if (!auto) showHud("the veil is down", {ms:2200}); return; }
   if (!camReady()) { if (!auto) showHud("camera not ready…", {ms:1800}); return; }
   if (looking) return;
+  if (!auto) hideChooser();                 /* a fresh look dismisses a stale chooser */
   looking = true; scan(true);
   if (!auto) showHud("looking…", {persist:true});
   try {
@@ -1688,19 +1880,26 @@ async function lookNow(auto){
        deliberate tap escalates to the full lens (VLM/plugins/memory/ledger).
        A deliberate tap with a frontier lens selected (Read/Math/Depth/…) routes
        through ?lens=… instead of object recognition — ambient stays object-only. */
-    const sel = (!auto && $("lenssel")) ? ($("lenssel").value || "") : "";
+    /* the lens: a forced pick (from the chooser), else the picker's value.
+       Empty = Auto — a deliberate tap lets the glance arbiter decide the lens
+       from what's in view; ambient always stays plain object recognition. */
+    const sel = (forceLens != null) ? forceLens
+              : ((!auto && $("lenssel")) ? ($("lenssel").value || "") : "");
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
     if (sel) {
       const qp = new URLSearchParams({lens: sel});
       if (sel === "find" && window._findTerms) qp.set("terms", window._findTerms);
       if (sel === "sky" && window._geo) { qp.set("lat", window._geo.lat); qp.set("lon", window._geo.lon); }
+      if (forceScene) qp.set("scene", forceScene);   /* teach the arbiter this pick */
       url = "/dreamlayer/live/look?" + qp.toString();
     }
     const rsp = await fetchJSON(url,
       {method: "POST", headers: HDRS(), body: blob}, auto ? 6000 : 9000);
     setLink(rsp.ok, performance.now() - t0);
     if (rsp.status === 401) { needsPairing(); return; }
-    if (sel) renderLens(rsp.json); else renderResult(rsp.json, auto);
+    if (sel) renderLens(rsp.json);                         /* manual / chosen lens */
+    else if (rsp.json && rsp.json.glance) renderGlance(rsp.json);  /* auto: fire / chooser */
+    else renderResult(rsp.json, auto);                    /* object floor / ambient */
   } catch (e) {
     if (e && e.name === "AbortError") { if (!auto) showHud("timed out · try again", {ms:2600}); }
     else { setLink(false, 0); if (!auto) showHud("brain unreachable", {ms:3000}); }
