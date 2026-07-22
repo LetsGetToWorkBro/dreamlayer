@@ -61,11 +61,11 @@ class EarHost:
 
     def hear(self, text: str) -> None:
         """Wake / command path. The minimal ear ships no wake-word engine (that
-        is the full Orchestrator's job — wake_word stays dormant), so this only
-        leaves a debug breadcrumb. Present so CapturePipeline._route's contract
-        is satisfied without raising."""
-        if text:
-            log.debug("[ear] heard (no wake engine wired): %s", text[:60])
+        is the full Orchestrator's job — wake_word stays dormant), so this is a
+        no-op. Present so CapturePipeline._route's contract is satisfied without
+        raising. Deliberately logs NOTHING here: the transcript is sensitive and
+        must never be interpolated into a log message (logging-discipline seam)."""
+        return
 
     def ingest_caption(self, text: str, speaker=None) -> None:
         """Fold a transcribed utterance into the Brain's memory — Veil-gated and
