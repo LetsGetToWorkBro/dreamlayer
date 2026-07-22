@@ -20,6 +20,7 @@ thread, matching the `start_message_polling` idiom (see docs/CONCURRENCY.md).
 """
 from __future__ import annotations
 
+import collections
 import threading
 import time
 
@@ -412,3 +413,53 @@ class SoundDeviceMic(MicSource):
         if self._stream is not None:
             self._stream.stop(); self._stream.close()
             self._stream = None
+
+
+class RemoteMicSource(MicSource):
+    """A push-fed microphone: the audio arrives from somewhere ELSE — the phone
+    streaming what it hears to the Brain over the LAN — instead of a local sound
+    card. `push(samples)` appends mono float PCM (already at SAMPLE_RATE); the
+    CapturePipeline's pull loop takes fixed `frames`-sized windows off the front
+    with `read()`, and gets None (idle) whenever the phone hasn't sent enough yet.
+
+    This is the seam that lets the *wearable* be the ear: the glasses (or the
+    phone standing in for them pre-hardware) capture, the Brain transcribes and
+    remembers — all on-device, all behind the same Veil + consent gates as the
+    local mic. Thread-safe (the HTTP thread pushes while the capture thread
+    reads) and bounded: if the reader stalls, the oldest audio is dropped rather
+    than growing memory without limit."""
+
+    def __init__(self, max_seconds: float = 8.0):
+        self._buf: "collections.deque[float]" = collections.deque()
+        self._lock = threading.Lock()
+        self._frames = 0
+        self._cap = int(SAMPLE_RATE * max_seconds)
+        self._max_seconds = float(max_seconds)
+
+    def open(self, sample_rate: int, frames: int) -> None:
+        with self._lock:
+            self._frames = int(frames)
+            self._cap = int(sample_rate * self._max_seconds)
+            self._buf.clear()
+
+    def push(self, samples) -> None:
+        """Append streamed PCM (an iterable of floats in [-1, 1]). Safe to call
+        before open() — it just buffers until the pull loop starts reading."""
+        if samples is None:
+            return
+        with self._lock:
+            self._buf.extend(float(s) for s in samples)
+            over = len(self._buf) - self._cap        # drop-oldest past the cap
+            for _ in range(over if over > 0 else 0):
+                self._buf.popleft()
+
+    def read(self):
+        with self._lock:
+            n = self._frames
+            if n <= 0 or len(self._buf) < n:
+                return None                          # not enough buffered yet → idle
+            return [self._buf.popleft() for _ in range(n)]
+
+    def close(self) -> None:
+        with self._lock:
+            self._buf.clear()

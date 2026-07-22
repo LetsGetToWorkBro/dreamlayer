@@ -523,6 +523,12 @@ class BrainConfig:
     # every write, and PII is scrubbed before anything is stored. All audio
     # stays on this machine — nothing is uploaded.
     listen_enabled: bool = False
+    # The SAME opt-in, but for the phone as the live mic (the Live Lens "Listen"
+    # switch) instead of the Mac's own microphone. Kept separate so turning the
+    # phone into the ear never opens the Mac's mic, and vice-versa — each surface
+    # owns its own consent. OFF by default; every other gate (the Veil, on-device
+    # transcription, PII scrub, nothing-uploaded) is identical to listen_enabled.
+    remote_listen_enabled: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

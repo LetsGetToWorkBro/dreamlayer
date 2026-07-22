@@ -295,7 +295,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         self.config = BrainConfig.load(self.cfg_dir)
         self._env_disabled: set = set()
         self._sync_disabled_env()      # panel per-cap toggles must reach adapters
-        self._ear = None               # the always-on ear (EarHost), built on demand
+        self._ear = None               # the always-on ear (EarHost, the Mac's own mic)
+        self._remote_ear = None        # the phone-fed ear (EarHost over RemoteMicSource)
+        self._remote_mic = None        # the push buffer the phone streams into
         self._sync_ear_wired()         # ear caps read 'dormant' until it's running
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
@@ -752,8 +754,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # them in active_caps — e.g. faster-whisper → local_asr, not moonshine/
         # onnx; a tagger only when one built). A blanket promotion would lie about
         # engines that aren't running (audit finding).
-        active = self._ear.active_caps if (self._ear is not None
-                                           and self._ear.listening) else frozenset()
+        # Either ear counts — the Mac's own mic (self._ear) OR the phone streaming
+        # in (self._remote_ear). Union the caps each is genuinely driving right now.
+        active: frozenset = frozenset()
+        for _e in (self._ear, self._remote_ear):
+            if _e is not None and _e.listening:
+                active = active | _e.active_caps
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
@@ -795,7 +801,60 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         st = self._ear.status() if self._ear is not None else {
             "listening": False, "heard_count": 0, "last_heard": ""}
         st["enabled"] = bool(getattr(self.config, "listen_enabled", False))
+        # the phone can be the live mic instead of (or besides) the Mac's own —
+        # report whether a phone stream is currently driving an ear
+        st["remote_listening"] = bool(self._remote_ear is not None
+                                      and self._remote_ear.listening)
+        st["remote_enabled"] = bool(getattr(self.config,
+                                            "remote_listen_enabled", False))
         return st
+
+    def hear_remote(self, pcm) -> dict:
+        """The phone is the live mic: feed a chunk of the audio it captured
+        on-device into the ear. The wearable hears the room you're in, not the
+        room the Mac sits in — that's the point.
+
+        Same gates as the local ear, by construction: OFF unless the wearer
+        opted in (listen_enabled); the Veil wins (EarHost drops every utterance
+        while incognito/quiet-hours — nothing is stored); PII is scrubbed before
+        any write; transcription is on-device; nothing is uploaded. Lazily opens
+        a remote-fed ear on the first chunk and pushes `pcm` (mono floats already
+        at SAMPLE_RATE) into it; the phone ends it by toggling off (stop_remote_
+        ear) or going silent (the endpoint times it out). Never raises."""
+        if not getattr(self.config, "remote_listen_enabled", False):
+            return {"ok": False, "reason": "disabled",
+                    "detail": "turn on Listening on the Live Lens first"}
+        if self._remote_ear is None:
+            from .ear import EarHost
+            self._remote_ear = EarHost(self)
+        if self._remote_mic is None:
+            from ...orchestrator.capture import RemoteMicSource
+            self._remote_mic = RemoteMicSource()
+        if not self._remote_ear.listening:
+            try:
+                res = self._remote_ear.start(self._remote_mic)
+            except Exception as exc:                 # noqa: BLE001 — never fatal
+                log.error("[ear] remote start failed: %s", exc)
+                return {"ok": False, "reason": "error", "detail": str(exc)}
+            if not res.get("ok"):
+                return res                           # e.g. no on-device ASR engine
+            self._sync_ear_wired()
+            self.activity.add("ear", "Phone became the live mic (on-device voice)")
+        if pcm:
+            try:
+                self._remote_mic.push(pcm)
+            except Exception:                        # noqa: BLE001 — never 500 a look
+                pass
+        return {"ok": True, "remote_listening": True,
+                **self._remote_ear.status()}
+
+    def stop_remote_ear(self) -> None:
+        """Stop the phone-fed ear (the phone toggled Listening off or went away)
+        and mark its capabilities dormant again if no other ear is running."""
+        if self._remote_ear is not None:
+            self._remote_ear.stop()
+            self.activity.add("ear", "Phone stopped being the live mic")
+        self._sync_ear_wired()
 
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
@@ -816,7 +875,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "contacts_sync", "reminders_sync", "reminder_lists",
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
-                  "dawarich_url", "dawarich_api_key", "listen_enabled"):
+                  "dawarich_url", "dawarich_api_key", "listen_enabled",
+                  "remote_listen_enabled"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -852,6 +912,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     self.start_ear()
                 else:
                     self.stop_ear()
+            if "remote_listen_enabled" in updates and not self.config.remote_listen_enabled:
+                # opting the phone-mic out stops the phone-fed ear at once (it
+                # can't self-start again without the phone streaming AND consent)
+                self.stop_remote_ear()
         except Exception:
             # a failed opportunistic sync must not fail the config write that
             # triggered it (the sync loop retries on schedule); log so a broken
@@ -3865,6 +3929,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, live_mod.look(brain, data, ambient=ambient,
                                           lens=lens, lens_args=lens_args, scene=scene))
 
+        def _post_live_hear(self, path, qs):
+            """The phone is the live mic: a chunk of on-device Int16 PCM in, ear
+            status out. The audio the PHONE hears (the room you're in) is streamed
+            to the Brain, transcribed on-device (VAD → ASR ladder) and folded into
+            memory — nothing is uploaded past the Brain. Consent-gated
+            (remote_listen_enabled) and Veil-gated inside the ear: incognito /
+            quiet-hours drops every utterance. ``?sr=<rate>`` is the phone's
+            sample rate (resampled to 16 kHz); ``?stop=1`` ends the ear. The body
+            rides the same 413-before-read cap as every other post."""
+            from . import live as live_mod
+            stop = qs.get("stop", ["0"])[0] in ("1", "true")
+            try:
+                sr = int(qs.get("sr", ["0"])[0])
+            except (ValueError, TypeError):
+                sr = 0
+            body = b"" if stop else self._raw(live_mod.MAX_AUDIO_BYTES)
+            self._json(200, live_mod.hear(brain, body, src_rate=sr, stop=stop))
+
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL
             SynesthesiaCard (six-word phrase + gestural sprite) and — when a
@@ -4454,6 +4536,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/message/draft": _post_message_draft,
             "/dreamlayer/message/send": _post_message_send,
             "/dreamlayer/live/look": _post_live_look,
+            "/dreamlayer/live/hear": _post_live_hear,
             "/dreamlayer/live/dream/scene": _post_live_dream_scene,
             "/dreamlayer/rehearsal/review": _post_rehearsal,
             "/dreamlayer/recall/sealed": _post_sealed_recall,

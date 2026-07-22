@@ -397,6 +397,72 @@ def look(brain, data: bytes, ambient: bool = False,
                       lens=lens, lens_args=lens_args, scene=scene)
 
 
+# The phone as the live mic: it streams raw mono Int16 PCM chunks (already
+# downsampled to 16 kHz in the browser) and the Brain transcribes them on-device.
+MAX_AUDIO_BYTES = 2_000_000          # ~1 MB is ~30 s of 16k int16; a chunk is <1 s
+
+
+def decode_audio(body: bytes, src_rate: int = 0):
+    """Decode a streamed chunk of little-endian mono Int16 PCM into float samples
+    at :data:`capture.SAMPLE_RATE`. The browser normally sends 16 kHz already;
+    if a client's AudioContext ran at another rate (iOS/Android are 44.1/48 kHz)
+    it is linearly resampled here. A malformed chunk decodes to [] — dropped,
+    never fatal."""
+    import array
+    import sys
+    from ...orchestrator.capture import SAMPLE_RATE
+    if not body:
+        return []
+    a = array.array("h")
+    usable = len(body) - (len(body) % 2)         # whole 16-bit samples only
+    try:
+        a.frombytes(bytes(body[:usable]))
+    except Exception:                            # noqa: BLE001
+        return []
+    if sys.byteorder == "big":                   # the wire is little-endian
+        a.byteswap()
+    floats = [s / 32768.0 for s in a]
+    src = int(src_rate or 0)
+    if not floats or src == SAMPLE_RATE or src <= 0:
+        return floats            # already 16 kHz / unknown rate → no resample
+    if not (4000 <= src <= 192000):
+        # An implausible sample rate is dropped, NOT resampled: a tiny src (e.g.
+        # ?sr=1) would upsample a ~1M-sample body to billions of samples and OOM
+        # the Brain. The plausible-audio band caps the output at ≤ 4× the input.
+        return []
+    n_out = int(len(floats) * SAMPLE_RATE / src)
+    if n_out <= 0:
+        return []
+    ratio = src / float(SAMPLE_RATE)
+    last = len(floats) - 1
+    out = []
+    for i in range(n_out):                       # linear resample src → 16 kHz
+        pos = i * ratio
+        i0 = int(pos)
+        frac = pos - i0
+        i1 = i0 + 1 if i0 < last else last
+        out.append(floats[i0] * (1.0 - frac) + floats[i1] * frac)
+    return out
+
+
+def hear(brain, body: bytes, src_rate: int = 0, stop: bool = False) -> dict:
+    """The phone-as-live-mic endpoint body: a chunk of on-device Int16 PCM in,
+    ear status out. ``stop=True`` ends the phone-fed ear. Every consent/Veil/PII/
+    on-device gate lives inside :meth:`Brain.hear_remote` / ``stop_remote_ear`` —
+    this is only the decode + resample seam."""
+    if stop:
+        brain.stop_remote_ear()
+        return {"ok": True, "remote_listening": False}
+    # Check consent BEFORE doing any decode/resample work: no audio is parsed for
+    # an install where the phone mic was never enabled (also blunts the DoS above
+    # — nothing is allocated for an un-consented caller). hear_remote re-checks.
+    if not getattr(brain.config, "remote_listen_enabled", False):
+        return {"ok": False, "reason": "disabled",
+                "detail": "turn on Listening on the Live Lens first"}
+    pcm = decode_audio(body, src_rate)
+    return brain.hear_remote(pcm)
+
+
 def render_live(nonce: str = "") -> str:
     """The Live Lens page. Served PUBLIC (like the builder) because it holds no
     secrets: the token arrives in the URL fragment from the panel's link/QR and
@@ -682,6 +748,7 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="veilbtn" role="switch" aria-checked="false" tabindex="0">veil <b id="veilst">off</b></span>
   <span class="chip" id="confbtn" role="button" tabindex="0" title="Share the sky with someone">entangle</span>
   <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
+  <span class="chip" id="hearbtn" role="switch" aria-checked="false" tabindex="0" title="Let the Brain hear and remember — the phone is the mic, transcribed on-device">&#127908; <b id="hearst">listen</b></span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
   <label class="chip" id="lenschip" title="Auto picks the lens for you — or force one">&#128269;
@@ -1623,11 +1690,13 @@ function setVeil(on, o){
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
   if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser();
+            if (hearOn) _hearClose();     /* veil deafens the ear (mic released, intent kept) */
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
                                              merely ignored */
   if (!o.silent) showHud(on ? "veil down · on-device only" : "veil lifted", {ms:2400});
   if (!on && liveOn) scheduleLoop(500);
+  if (!on && hearOn && !hearCtx) _hearOpen();  /* shield lifted → the ear resumes */
 }
 $("veilbtn").onclick = () => setVeil(!veil);
 $("veilbtn").onkeydown = e => { if (e.key===" "||e.key==="Enter") setVeil(!veil); };
@@ -2138,6 +2207,115 @@ function stopCaptions(keepFlag){
 function toggleCaptions(){ if (captionsOn) stopCaptions(); else startCaptions(); }
 $("ccbtn").onclick = toggleCaptions;
 $("ccbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") toggleCaptions(); };
+
+/* ---- the phone as the live mic: hear + remember --------------------------
+   The wearable's always-on ear, living on the PHONE (not the Mac). Tap it and
+   grant mic permission and the phone streams what the room says to your paired
+   Brain over the LAN; the Brain transcribes it ON-DEVICE (VAD → ASR ladder) and
+   folds it into memory. Distinct from CC above: CC draws the phone's own speech
+   on the glass and stores nothing; THIS remembers, and the audio is transcribed
+   on the Brain and uploaded nowhere past it. OFF until you tap it (a real opt-in
+   the Brain persists as remote_listen_enabled); deaf under the veil and while
+   backgrounded — the mic is released, never held hot; the raw PCM is downsampled
+   to 16 kHz on the phone and posted in short chunks, never buffered to disk. */
+let hearOn = false, hearCtx = null, hearStream = null, hearProc = null;
+let hearChunks = [], hearFlush = null;
+const HEAR_SR = 16000, HEAR_POST_MS = 320;
+function _hearAvailable(){
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+            (window.AudioContext || window.webkitAudioContext));
+}
+if (_hearAvailable()) $("hearbtn").hidden = false; else $("hearbtn").hidden = true;
+function _downTo16k(input, inRate){                 /* Float32 @inRate → Int16 @16k */
+  const ratio = inRate / HEAR_SR;
+  const outLen = Math.max(0, Math.floor(input.length / ratio));
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++){
+    const start = Math.floor(i * ratio), end = Math.floor((i + 1) * ratio);
+    let sum = 0, c = 0;
+    for (let j = start; j < end && j < input.length; j++){ sum += input[j]; c++; }
+    let v = c ? sum / c : 0;
+    v = v < -1 ? -1 : v > 1 ? 1 : v;
+    out[i] = (v * 32767) | 0;
+  }
+  return out;
+}
+function _flushHear(){
+  if (!hearOn) return;
+  if (veil || document.hidden){ hearChunks = []; return; }  /* never stream veiled/bg */
+  if (!hearChunks.length) return;
+  let total = 0; for (const a of hearChunks) total += a.length;
+  const merged = new Int16Array(total); let off = 0;
+  for (const a of hearChunks){ merged.set(a, off); off += a.length; }
+  hearChunks = [];
+  fetch("/dreamlayer/live/hear?sr=" + HEAR_SR,
+        {method: "POST", headers: Object.assign(
+          {"Content-Type": "application/octet-stream"}, HDRS()),
+         body: merged.buffer}).catch(() => {});
+}
+function _hearOpen(){                                /* acquire mic + tap the PCM */
+  if (hearCtx || veil) return;
+  navigator.mediaDevices.getUserMedia(
+    {audio: {echoCancellation: true, noiseSuppression: true, channelCount: 1}})
+    .then(stream => {
+      // re-check the FULL posture on resolution: the veil could have gone up (or
+      // the page been backgrounded) while getUserMedia was in flight — never
+      // open an AudioContext under the shield (the mic must stay released)
+      if (!hearOn || veil || document.hidden){ stream.getTracks().forEach(t => t.stop()); return; }
+      hearStream = stream;
+      hearCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = hearCtx.createMediaStreamSource(stream);
+      hearProc = hearCtx.createScriptProcessor(4096, 1, 1);
+      hearProc.onaudioprocess = e => {
+        if (!hearOn || veil || document.hidden) return;
+        hearChunks.push(_downTo16k(e.inputBuffer.getChannelData(0), hearCtx.sampleRate));
+      };
+      src.connect(hearProc); hearProc.connect(hearCtx.destination);
+      hearFlush = setInterval(_flushHear, HEAR_POST_MS);
+    })
+    .catch(() => { showHud("microphone permission is needed to listen", {ms:2800});
+                   stopHearing(); });
+}
+function _hearClose(){                               /* release the mic + timers */
+  if (hearFlush){ clearInterval(hearFlush); hearFlush = null; }
+  try { if (hearProc){ hearProc.onaudioprocess = null; hearProc.disconnect(); } } catch (e) {}
+  try { if (hearCtx) hearCtx.close(); } catch (e) {}
+  try { if (hearStream) hearStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  hearProc = null; hearCtx = null; hearStream = null; hearChunks = [];
+  fetch("/dreamlayer/live/hear?stop=1", {method: "POST", headers: HDRS()}).catch(() => {});
+}
+async function startHearing(){
+  if (hearOn || veil || !_hearAvailable()) return;
+  hearOn = true;
+  $("hearbtn").classList.add("on"); $("hearbtn").setAttribute("aria-checked", "true");
+  $("hearst").textContent = "listening";
+  try {                                             /* persist the opt-in first */
+    await fetch("/dreamlayer/config",
+      {method: "POST", headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+       body: JSON.stringify({remote_listen_enabled: true})});
+  } catch (e) {}
+  _hearOpen();
+}
+function stopHearing(keep){
+  if (!keep){                                       /* full off → revoke consent */
+    hearOn = false;
+    $("hearbtn").classList.remove("on"); $("hearbtn").setAttribute("aria-checked", "false");
+    $("hearst").textContent = "listen";
+    fetch("/dreamlayer/config",
+      {method: "POST", headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+       body: JSON.stringify({remote_listen_enabled: false})}).catch(() => {});
+  }
+  _hearClose();
+}
+function toggleHearing(){ if (hearOn) stopHearing(); else startHearing(); }
+$("hearbtn").onclick = toggleHearing;
+$("hearbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") toggleHearing(); };
+/* veil + backgrounding release the mic but KEEP the intent, so it resumes when
+   the shield lifts / the page returns (mirrors the caption discipline) */
+document.addEventListener("visibilitychange", () => {
+  if (!hearOn) return;
+  if (document.hidden) _hearClose(); else if (!veil && !hearCtx) _hearOpen();
+});
 
 /* ---- privacy receipt: the tamper-evident ledger, VERIFIED on THIS phone ----
    GET /dreamlayer/receipt is the hash-chained, Ed25519-signed activity ledger
