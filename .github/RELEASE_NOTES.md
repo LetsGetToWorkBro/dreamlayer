@@ -1,4 +1,4 @@
-A cleanup pass on 0.8.0: a triple-audit of the Live Lens plus a batch of reported-bug fixes. Nothing new to learn here, just things that should have worked already, working.
+An audit of ourselves. We traced every one of the 74 capabilities on the Capabilities page back to its actual call site and found some of them lit up green the moment you installed the library — without a single line of running code ever using them. This release fixes both halves of that: the honesty of the report, and the reality behind it.
 
 ## Install (macOS 12+)
 
@@ -10,15 +10,17 @@ Download `DreamLayer-Setup.exe` below and run it. Per-user install, no admin pro
 
 Same two first-launch clicks as before: SmartScreen "More info, Run anyway" because this build isn't code signed yet, and the firewall "allow on private networks" so the phone can reach the panel on `:7777`. Uninstalling leaves `~/.dreamlayer` alone.
 
-## Fixed since 0.8.0
+## What changed since 0.8.1
 
-- **Live Lens QR pairing** — the pairing QR scans reliably now.
-- **Honest warm-up state** — while the on-device vision model is loading, the Live Lens now says so ("vision loading…") instead of looking like it's just slow to recognize things; and a stalled asset load can no longer hang the page forever — it falls back cleanly instead.
-- **Download All** actually queues everything now, and the packs page reflects real state as installs complete.
-- **App icon** is full-bleed on both platforms — the padded/boxed look some setups showed is gone.
-- **Lens Builder 404s** — its theme, fonts, and script assets used to 404 as siblings of the page; they're served from one consistent path now.
-- **Closing the panel window doesn't quit the Brain.** DreamLayer is a menu-bar appliance — the red button / Cmd-W now tucks the window away and drops back to the tray, the same posture as minimizing, instead of ending the process.
-- **Update checks are quieter and safer.** A one-time check a few seconds after launch, off the main thread — never a background poll, never a silent install. If something newer exists, the menu badges itself; you still choose when to install.
+- **The Capabilities meter tells the truth now.** A capability that only imports cleanly — with nothing in the running app actually calling it — now reports "dormant" instead of "active," and dormant ones no longer count toward the awakening percent. If your number dropped after this update, that's the honesty landing, not a regression: it was never real to begin with.
+- **The always-on ear is real now, and it's off by default.** Sharp Ears and World Sense installed a full listening stack in 0.8.0 that the Brain never actually switched on. There's now a "Listening" toggle in the panel — you flip it, plainly explained, and it stays off until you do. The Veil still wins over it completely: incognito or quiet hours means nothing is captured, full stop. Everything stays on-device.
+- **Six frontier lenses you can actually pick.** The Live Lens grew a "look closer with" menu — Objects, Read text, Math → LaTeX, Depth, Find anything, Segment, Night sky, Dream-stylize — each a genuine on-device engine, each honestly telling you which pack to install if it isn't there yet.
+- **PII scrubbing runs on every memory write**, not just when you happened to trigger the code path that used it before.
+- **Sound-pairing is reachable from the panel** — a "pair by sound" button that plays the chirp for real, with an honest fallback message (and the typed code) when the capability isn't installed.
+- **Memory-source bridges (Immich, Dawarich) are configurable in the panel** — URLs and keys, saved locally, secret fields that never blank out a saved key by accident.
+- A batch of smaller capabilities that were sitting orphaned outside every pack got folded into one, so installing a pack actually gets you everything it claims.
+
+Triple-audited for correctness, privacy, and honesty; every finding closed with a test that fails if it comes back.
 
 ## Good to know
 
