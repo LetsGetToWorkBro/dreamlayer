@@ -451,11 +451,11 @@ _NOT_WIRED = frozenset({
     "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
     "mesh_range", "extism_plugins", "sound_pairing", "dashboard", "fs_watch",
     "lan_discovery", "spatial_viz",
-    # privacy: the structural anyio veil-stop is never used (the flag-gate is);
-    # pii_redaction's scrubber has no caller on the memory write path yet (wiring
-    # it needs a narrow entity policy so it never strips the names the product
-    # legitimately remembers — tracked as a dedicated follow-up)
-    "structured_concurrency", "pii_redaction",
+    # privacy: the structural anyio veil-stop is never used (the flag-gate is).
+    # (pii_redaction IS wired now — MemoryDB.add_memory runs default_redactor() on
+    # every summary before the row is written, with a narrow contact/financial-only
+    # entity policy so it never strips the names the product legitimately remembers.)
+    "structured_concurrency",
 })
 
 

@@ -293,6 +293,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # (audit 2026-07-17). Touch the counter only via ``bump_cloud_calls``.
         self._egress_lock = threading.Lock()
         self.config = BrainConfig.load(self.cfg_dir)
+        self._env_disabled: set = set()
+        self._sync_disabled_env()      # panel per-cap toggles must reach adapters
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -711,6 +713,28 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         just the increment; the surrounding activity-log + save stay outside."""
         with self._egress_lock:
             self.config.cloud_calls += n
+
+    def _sync_disabled_env(self) -> None:
+        """Mirror config.disabled_caps into os.environ as DL_DISABLE_<KEY>=1, so
+        the panel's per-capability toggle actually reaches the ADAPTERS (they read
+        the env flag via capabilities.enabled/disabled), not merely the report.
+        Before this the toggle only rewrote the report's local env copy, so
+        "Turn off" was cosmetic at runtime. We only ever clear flags WE set (via
+        _env_disabled), so a deploy-time DL_DISABLE_* the operator exported by
+        hand — the documented ops-level override — is never stepped on."""
+        import os as _os
+        try:
+            from ...capabilities import CAPABILITIES
+        except Exception:
+            return
+        off = {c.flag_env for c in CAPABILITIES
+               if c.key in set(self.config.disabled_caps or [])}
+        for flag in self._env_disabled - off:      # re-enabled → clear only our own
+            if _os.environ.get(flag) == "1":
+                _os.environ.pop(flag, None)
+        for flag in off:
+            _os.environ[flag] = "1"
+        self._env_disabled = off
 
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
@@ -3662,6 +3686,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             (off.add if b.get("disabled") else off.discard)(key)
             brain.config.disabled_caps = sorted(off)
             brain.save()
+            brain._sync_disabled_env()      # make the toggle actually reach the adapter
             brain.activity.add("config", f"Capability {key} "
                                + ("switched off" if b.get("disabled") else "switched on"))
             self._json(200, _capability_payload(brain))
