@@ -24,6 +24,7 @@ blind, never a guess), identical to the on-device gate.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
@@ -113,8 +114,23 @@ class WorldLensHost:
         from ...memory.ring_buffer import SemanticRingBuffer
         self.ring = SemanticRingBuffer(64)          # glasses default capacity
         self.mesh = None
-        self.perception = None
-        self.glance_arbiter = None
+        # The auto-lens-selector: the SAME PerceptionRouter + GlanceArbiter the
+        # glasses run, so a look decides its own lens (fire the clear winner,
+        # offer a chooser when ambiguous) instead of making you pick. Built here
+        # rather than left None so the live path gets the arbiter, not a dropdown.
+        _perception = None
+        _arbiter = None
+        try:
+            from ..perception import PerceptionRouter
+            from .glance_live import build_live_arbiter
+            _perception = PerceptionRouter()
+            _cfg = getattr(brain, "cfg_dir", None)
+            _priors = os.path.join(str(_cfg), "glance_priors.json") if _cfg else None
+            _arbiter = build_live_arbiter(_priors)
+        except Exception as exc:                 # noqa: BLE001 — auto-glance is optional
+            log.warning("[glance] arbiter unavailable: %s; manual lenses only", exc)
+        self.perception = _perception
+        self.glance_arbiter = _arbiter
         self.plugin_events = None
         self.db = None                      # per-plugin settings stay in-memory
         self._router = _BrainVisionRouter(brain)
@@ -477,6 +493,90 @@ class WorldLensHost:
             log.warning("[lens] %s failed: %s", lens, exc)
             return {"ok": False, "lens": lens, "reason": "error"}
         return {"ok": False, "lens": lens, "reason": "unknown-lens"}
+
+    # -- automatic lens selection (the glance arbiter) ---------------------
+
+    def glance(self, frame, dwell_ms: float = 0.0) -> dict:
+        """Decide the lens FOR the wearer from what's in view — the "you never
+        pick a mode" path. Reads cheap on-device signals (PerceptionRouter),
+        classifies the scene, lets the lenses bid (GlanceArbiter), and returns:
+
+          {"kind": "fire", "lens", "action", "card", "scene"}  a lens won → its card
+          {"kind": "offer", "scene", "card"}                   ambiguous → chooser
+          {"kind": "object"}                                   let the object path run
+          {"kind": "veiled"}                                   incognito
+
+        Kind "object" (the arbiter fired Juno, produced nothing, or abstained)
+        hands back to the caller's normal object-recognition floor, so that path
+        keeps all its behaviour and never runs twice. Never raises."""
+        if not self.privacy.allow_capture():
+            return {"kind": "veiled"}
+        if self.glance_arbiter is None or self.perception is None:
+            return {"kind": "object"}          # arbiter absent → object floor
+        from ...orchestrator.glance import GlanceContext, classify_coarse
+        try:
+            signals = self.perception.perceive(frame).as_signals()
+        except Exception as exc:               # noqa: BLE001
+            if self.health is not None:
+                self.health.record_failure("vision", exc)
+            signals = {}
+        reading = classify_coarse(signals, user_language="en")
+        ctx = GlanceContext(dwell_ms=float(dwell_ms or 0.0), veiled=False)
+        try:
+            decision = self.glance_arbiter.arbitrate(reading, ctx)
+        except Exception as exc:               # noqa: BLE001
+            log.warning("[glance] arbitrate failed: %s", exc)
+            return {"kind": "object"}
+        if decision.kind == "offer":
+            return {"kind": "offer", "scene": reading.scene, "card": decision.card}
+        if decision.kind == "fire" and decision.winner is not None:
+            action = decision.winner.action
+            if action == "juno":               # object → the normal floor owns it
+                return {"kind": "object"}
+            card = self._run_glance_lens(action, frame, decision.winner.args or {})
+            if not card:
+                return {"kind": "object"}       # lens found nothing → object floor
+            return {"kind": "fire", "lens": decision.winner.lens,
+                    "action": action, "card": card, "scene": reading.scene}
+        return {"kind": "object"}
+
+    def _run_glance_lens(self, action: str, frame, args: dict):
+        """Run the lens the arbiter chose and return a card dict (or None to fall
+        back to the object floor). Only the actions the live candidates can bid."""
+        try:
+            if action == "read":
+                r = self.look_lens(frame, "doc")
+                return r if isinstance(r, dict) and r.get("ok") else None
+            if action == "math":
+                r = self.look_lens(frame, "math")
+                return r if isinstance(r, dict) and r.get("ok") else None
+            if action == "translate":
+                panel = self.look(frame, facet="ai")
+                return panel.to_hud_card() if panel is not None else None
+            if action == "taste":
+                res = self.taste(frame)
+                thc = getattr(res, "to_hud_card", None)
+                return thc() if callable(thc) else None
+        except Exception as exc:               # noqa: BLE001 — a lens never crashes a look
+            log.warning("[glance] lens %s failed: %s", action, exc)
+        return None
+
+    def choose_glance(self, action: str, frame, args: dict, scene: str = "") -> dict:
+        """The wearer tapped a chooser option: teach the arbiter this pick for
+        this scene, then run the chosen lens. Returns the lens card (or an
+        {ok:False} lens dict). Mirrors orchestrator.choose_glance's learning."""
+        if scene and action and self.glance_arbiter is not None:
+            lens_key = {"read": "read", "math": "math", "translate": "rosetta",
+                        "taste": "taste", "juno": "juno"}.get(action, action)
+            try:
+                self.glance_arbiter.reinforce(scene, lens_key)
+            except Exception:                  # noqa: BLE001
+                pass
+        if action == "juno":
+            panel = self.look(frame)
+            return panel.to_hud_card() if panel is not None else {"ok": False}
+        card = self._run_glance_lens(action, frame, args or {})
+        return card if card else {"ok": False, "action": action}
 
 
 def build_world_lens(brain, isolate: str = "untrusted") -> WorldLensHost:
