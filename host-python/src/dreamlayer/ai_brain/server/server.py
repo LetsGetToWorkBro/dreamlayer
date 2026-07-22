@@ -3767,11 +3767,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 _auth_limiter.record_success(ip) if ok else _auth_limiter.record_failure(ip)
             if not ok:
                 self._json(401, {"error": "unauthorised"}); return
+            if gated:
+                brain._last_phone_ts = time.time()        # an authed off-box stream is the phone
             q = brain.subscribe_events()
             if q is None:
                 self._json(503, {"error": "too many event streams"}); return
             import json as _json
             import queue as _queue
+            import socket as _socket
+            try:                                          # detect a half-open peer (no FIN)
+                self.connection.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
+            except Exception:                             # noqa: BLE001
+                pass
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -3785,7 +3792,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     try:
                         ev = q.get(timeout=15)
                     except _queue.Empty:
-                        self.wfile.write(b": ping\n\n")       # keepalive heartbeat
+                        # heartbeat — AND re-check the token so rotating it (to
+                        # revoke a lost phone) cuts an already-open stream within
+                        # ~15 s, not only on its next reconnect (refute LOW-1).
+                        if gated and not authorize(brain.config.token, presented, from_local):
+                            break
+                        self.wfile.write(b": ping\n\n")
                         self.wfile.flush()
                         continue
                     body = _json.dumps(ev, separators=(",", ":"))
