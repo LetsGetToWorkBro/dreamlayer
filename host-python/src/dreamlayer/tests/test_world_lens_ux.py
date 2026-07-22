@@ -14,6 +14,16 @@ from __future__ import annotations
 from dreamlayer.ai_brain.server.panel import render_panel
 
 
+class TestPanelChrome:
+    def test_refresh_button_reloads_the_chromeless_window(self):
+        # the native window is a WKWebView with no browser reload button, so the
+        # panel carries its own refresh in the top bar next to help + theme
+        html = render_panel("tok")
+        assert 'id="refreshBtn"' in html and 'onclick="refreshPanel()"' in html
+        assert "function refreshPanel(" in html
+        assert "location.reload()" in html          # a real reload, not a no-op
+
+
 class TestPanelConnectUX:
     def test_live_qr_loads_on_demand_from_a_collapsible(self):
         html = render_panel("tok")

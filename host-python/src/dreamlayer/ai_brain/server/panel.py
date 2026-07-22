@@ -152,6 +152,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     align-items:center;justify-content:center;border-radius:0;
     background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#141414;border:1px solid var(--frame);
     box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);font:14px/1 var(--chi);cursor:pointer}
+  #refreshBtn.spin{animation:dlspin .6s linear infinite}
+  @keyframes dlspin{to{transform:rotate(360deg)}}
   .themetog:hover{filter:brightness(1.03)}
   .themetog:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in);filter:none}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,138,61,.5)}70%{box-shadow:0 0 0 7px rgba(31,138,61,0)}100%{box-shadow:0 0 0 0 rgba(31,138,61,0)}}
@@ -664,6 +666,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
       width="16" height="16" alt=""><span id="livetext">connecting…</span></span>
+    <button class="themetog" id="refreshBtn" type="button" aria-label="Refresh"
+      title="Refresh" onclick="refreshPanel()">⟳</button>
     <button class="themetog" id="helpBtn" type="button" aria-label="Help and report a bug"
       title="Help &amp; report a bug" onclick="gotoReport()">?</button>
     <button class="themetog" id="themeTog" type="button" aria-label="Appearance"
@@ -1193,6 +1197,14 @@ function applyTheme(dark){document.documentElement.classList.toggle("midnight",!
 function toggleTheme(){const dark=!document.documentElement.classList.contains("midnight");
   applyTheme(dark);try{localStorage.setItem("dltheme",dark?"midnight":"platinum");}catch(e){}
   toast(dark?"Midnight Platinum":"Platinum");}
+// Reload the panel from the Brain. The native window is a chrome-less WKWebView
+// with no browser reload button, so this is the app's refresh: a hard reload
+// re-pulls status, capabilities, health — everything — in one predictable step.
+function refreshPanel(){
+  const b=$("refreshBtn"); if(b)b.classList.add("spin");
+  try{toast("Refreshing…");}catch(e){}
+  setTimeout(()=>{try{location.reload();}catch(e){window.location.href=location.pathname;}},150);
+}
 applyTheme(document.documentElement.classList.contains("midnight"));
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",e=>{
   let saved=null;try{saved=localStorage.getItem("dltheme");}catch(_){}
