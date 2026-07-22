@@ -293,6 +293,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # (audit 2026-07-17). Touch the counter only via ``bump_cloud_calls``.
         self._egress_lock = threading.Lock()
         self.config = BrainConfig.load(self.cfg_dir)
+        self._env_disabled: set = set()
+        self._sync_disabled_env()      # panel per-cap toggles must reach adapters
+        self._ear = None               # the always-on ear (EarHost), built on demand
+        self._sync_ear_wired()         # ear caps read 'dormant' until it's running
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -712,6 +716,87 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         with self._egress_lock:
             self.config.cloud_calls += n
 
+    def _sync_disabled_env(self) -> None:
+        """Mirror config.disabled_caps into os.environ as DL_DISABLE_<KEY>=1, so
+        the panel's per-capability toggle actually reaches the ADAPTERS (they read
+        the env flag via capabilities.enabled/disabled), not merely the report.
+        Before this the toggle only rewrote the report's local env copy, so
+        "Turn off" was cosmetic at runtime. We only ever clear flags WE set (via
+        _env_disabled), so a deploy-time DL_DISABLE_* the operator exported by
+        hand — the documented ops-level override — is never stepped on."""
+        import os as _os
+        try:
+            from ...capabilities import CAPABILITIES
+        except Exception:
+            return
+        off = {c.flag_env for c in CAPABILITIES
+               if c.key in set(self.config.disabled_caps or [])}
+        for flag in self._env_disabled - off:      # re-enabled → clear only our own
+            if _os.environ.get(flag) == "1":
+                _os.environ.pop(flag, None)
+        for flag in off:
+            _os.environ[flag] = "1"
+        self._env_disabled = off
+
+    # -- the always-on ear (opt-in voice capture) --------------------------
+
+    def _sync_ear_wired(self) -> None:
+        """Reflect the ear's LIVE state into the capability report: while it's
+        actually listening, set DL_WIRED_<KEY> for each cap it drives so they
+        read 'active' (installed → really on); otherwise clear them so they read
+        the honest 'dormant'. This is what keeps the awakening meter truthful —
+        the voice caps count only while the microphone is genuinely open."""
+        import os as _os
+        from .ear import EAR_CAPS
+        # Promote ONLY the caps the ear is genuinely driving right now (it tracks
+        # them in active_caps — e.g. faster-whisper → local_asr, not moonshine/
+        # onnx; a tagger only when one built). A blanket promotion would lie about
+        # engines that aren't running (audit finding).
+        active = self._ear.active_caps if (self._ear is not None
+                                           and self._ear.listening) else frozenset()
+        for key in EAR_CAPS:
+            flag = "DL_WIRED_" + key.upper()
+            if key in active:
+                _os.environ[flag] = "1"
+            else:
+                _os.environ.pop(flag, None)
+
+    def start_ear(self, mic=None) -> dict:
+        """Open the always-on ear IF the wearer has opted in (listen_enabled).
+        Best-effort and non-fatal: a missing engine/mic returns {ok:False,...}
+        and changes nothing. Refreshes the capability report either way."""
+        if not getattr(self.config, "listen_enabled", False):
+            return {"ok": False, "reason": "disabled",
+                    "detail": "turn Listening on first"}
+        if self._ear is None:
+            from .ear import EarHost
+            self._ear = EarHost(self)
+        try:
+            res = self._ear.start(mic)
+        except Exception as exc:                    # noqa: BLE001 — never fatal
+            log.error("[ear] start failed: %s", exc)
+            res = {"ok": False, "reason": "error", "detail": str(exc)}
+        self._sync_ear_wired()
+        if res.get("ok"):
+            self.activity.add("ear", "Listening turned on (on-device voice capture)")
+        return res
+
+    def stop_ear(self) -> None:
+        """Close the ear and mark its capabilities dormant again."""
+        if self._ear is not None:
+            self._ear.stop()
+            self.activity.add("ear", "Listening turned off")
+        self._sync_ear_wired()
+
+    def ear_status(self) -> dict:
+        """Live ear state for the panel: whether it's listening and how much it's
+        heard. Includes `enabled` (the persisted opt-in) so the switch and the
+        runtime state can disagree honestly (opted-in but no mic, say)."""
+        st = self._ear.status() if self._ear is not None else {
+            "listening": False, "heard_count": 0, "last_heard": ""}
+        st["enabled"] = bool(getattr(self.config, "listen_enabled", False))
+        return st
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -731,7 +816,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "contacts_sync", "reminders_sync", "reminder_lists",
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
-                  "dawarich_url", "dawarich_api_key"):
+                  "dawarich_url", "dawarich_api_key", "listen_enabled"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -761,6 +846,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.sync_reminders()
             if updates.get("sources_sync"):
                 self.sync_sources()
+            if "listen_enabled" in updates:
+                # the wearer flipped the always-on ear — honor it immediately
+                if self.config.listen_enabled:
+                    self.start_ear()
+                else:
+                    self.stop_ear()
         except Exception:
             # a failed opportunistic sync must not fail the config write that
             # triggered it (the sync loop retries on schedule); log so a broken
@@ -874,12 +965,18 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         empty STILL left the device and must be on the ledger. Counting only
         successful answers silently under-reported egress — a real gap for a
         product whose panel promises "every one is logged"."""
-        from .backends import cloud_chat
+        # Route through the litellm unifier when the `llm` extra is installed —
+        # one interface over OpenAI/Anthropic/Gemini/Ollama + ~100 providers with
+        # fallback — else litellm_chat transparently delegates to the built-in
+        # cloud_chat, so this is behaviour-identical with zero new deps. (Before,
+        # the Brain always called cloud_chat directly and the llm_router cap was
+        # dead-on-install — the adapter imported but was never on the live path.)
+        from ..litellm_backend import litellm_chat
         self.bump_cloud_calls()                         # the query is leaving now
         self.activity.add("cloud-egress", f"Asked the cloud: {query[:70]}")
         self.save()
         try:
-            text = cloud_chat(self.config, query)
+            text = litellm_chat(self.config, query)
             self.health.record_ok("cloud")
         except Exception as exc:
             self.health.record_failure("cloud", exc)   # degrade, but on the record
@@ -3189,6 +3286,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Optional-capability install/enable state."""
             self._json(200, _capability_payload(brain))
 
+        def _get_ear(self, path, qs):
+            """Live state of the always-on ear (opt-in voice capture): whether
+            it's enabled, whether the microphone is actually open, and how much
+            it's heard. The panel polls this to show the truthful runtime state
+            alongside the persisted Listening switch."""
+            self._json(200, brain.ear_status())
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -3538,6 +3642,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/backup": _get_backup,
             "/dreamlayer/health": _get_health,
             "/dreamlayer/capabilities": _get_capabilities,
+            "/dreamlayer/ear": _get_ear,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -3656,6 +3761,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             (off.add if b.get("disabled") else off.discard)(key)
             brain.config.disabled_caps = sorted(off)
             brain.save()
+            brain._sync_disabled_env()      # make the toggle actually reach the adapter
             brain.activity.add("config", f"Capability {key} "
                                + ("switched off" if b.get("disabled") else "switched on"))
             self._json(200, _capability_payload(brain))
@@ -3738,8 +3844,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             A deliberate tap (no ambient flag) escalates to the full world lens."""
             from . import live as live_mod
             ambient = qs.get("ambient", ["0"])[0] in ("1", "true")
+            # ?lens=math|doc|depth|find|segment|sky|dream routes the frame
+            # through a single frontier lens instead of object recognition;
+            # lens_args ride the query (terms for find, lat/lon for sky).
+            lens = (qs.get("lens", [""])[0] or "").strip().lower()
+            lens_args = None
+            if lens:
+                lens_args = {}
+                if qs.get("terms"):
+                    lens_args["terms"] = [t.strip() for t in qs["terms"][0].split(",") if t.strip()]
+                for k in ("lat", "lon"):
+                    if qs.get(k):
+                        try:
+                            lens_args[k] = float(qs[k][0])
+                        except ValueError:
+                            pass
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data, ambient=ambient))
+            self._json(200, live_mod.look(brain, data, ambient=ambient,
+                                          lens=lens, lens_args=lens_args))
 
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL

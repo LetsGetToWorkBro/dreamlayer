@@ -55,6 +55,12 @@ def test_frozen_appliance_mints_128bit_token(tmp_path, monkeypatch):
         def start_calendar_sync(self):
             pass
 
+        def start_source_sync(self):
+            pass
+
+        def start_ear(self):
+            pass
+
     captured: dict = {}
 
     class _FakeServer:

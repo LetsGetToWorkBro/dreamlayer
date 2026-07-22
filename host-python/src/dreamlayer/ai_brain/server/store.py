@@ -514,6 +514,15 @@ class BrainConfig:
     home_assistant_token: str = ""
     dawarich_url: str = ""          # self-hosted Dawarich on the LAN (location)
     dawarich_api_key: str = ""
+    # -- the always-on ear (voice capture) ---------------------------------
+    # OFF by default and never flips itself on: capturing what a microphone
+    # hears is the single most sensitive thing the Brain can do, so it waits
+    # for an explicit, informed opt-in from the wearer (the panel's "Listening"
+    # switch). When on, speech is transcribed on-device (VAD → ASR ladder) and
+    # folded into memory; the Veil (incognito / quiet-hours) still suppresses
+    # every write, and PII is scrubbed before anything is stored. All audio
+    # stays on this machine — nothing is uploaded.
+    listen_enabled: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

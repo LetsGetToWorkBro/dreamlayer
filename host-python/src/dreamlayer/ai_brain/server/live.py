@@ -253,7 +253,8 @@ def _with_min_panel(out: dict) -> dict:
     return out
 
 
-def world_look(brain, arr, ambient: bool = False) -> dict:
+def world_look(brain, arr, ambient: bool = False,
+               lens: str = "", lens_args: "dict | None" = None) -> dict:
     """One unified Look — the single pipeline behind BOTH the browser's tap and
     the phone app's shutter, so the two surfaces are one thing.
 
@@ -274,6 +275,25 @@ def world_look(brain, arr, ambient: bool = False) -> dict:
     if arr is None:
         return {"ok": False,
                 "reason": "not an image I can decode (the Brain needs Pillow)"}
+    if lens and not ambient:
+        # A deliberate "look closer" through ONE named frontier lens (read math,
+        # read a document, sense depth, find a named thing, segment, name the
+        # sky, dream-stylize). These live on WorldLensHost.look_lens, are all
+        # on-device, and self-describe when their pack isn't installed. Veil is
+        # enforced inside look_lens (a veiled look is blind). A frontier lens is
+        # a DELIBERATE tap only — an ambient (passive-loop) frame ignores it, so
+        # the several-a-minute loop never runs a heavy lens or writes a trace.
+        try:
+            wl = brain.world_lens()
+        except Exception as exc:                    # noqa: BLE001
+            log.warning("[live] world lens unavailable for lens %s: %s", lens, exc)
+            wl = None
+        if wl is None:
+            return {"ok": False, "lens": lens, "reason": "lens unavailable"}
+        res = wl.look_lens(arr, lens, lens_args)
+        if isinstance(res, dict) and res.get("ok"):
+            brain.activity.add("look", f"Looked closer with the {lens} lens")
+        return res if isinstance(res, dict) else {"ok": False, "lens": lens}
     try:
         incognito = bool(brain.incognito_now())
     except Exception:
@@ -323,13 +343,17 @@ def world_look(brain, arr, ambient: bool = False) -> dict:
             "panel": card, "lines": panel_lines(card)}
 
 
-def look(brain, data: bytes, ambient: bool = False) -> dict:
+def look(brain, data: bytes, ambient: bool = False,
+         lens: str = "", lens_args: "dict | None" = None) -> dict:
     """One browser Look: decode the posted frame in memory, run the unified
     pipeline (:func:`world_look`). Frames never touch disk; the wearer's
     egress shield makes the look local-only; a plugin row is built from the
     extracted label/fields, never the pixels. ``ambient`` marks a passive
-    continuous-loop frame (local-only, no ledger, no egress)."""
-    return world_look(brain, decode_frame(data), ambient=ambient)
+    continuous-loop frame (local-only, no ledger, no egress). ``lens`` routes
+    the frame through a single named frontier lens (math/doc/depth/find/
+    segment/sky/dream) instead of object recognition."""
+    return world_look(brain, decode_frame(data), ambient=ambient,
+                      lens=lens, lens_args=lens_args)
 
 
 def render_live(nonce: str = "") -> str:
@@ -601,6 +625,17 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
+  <label class="chip" id="lenschip" title="Pick what a tap looks for">&#128269;
+    <select id="lenssel" aria-label="Look closer with">
+      <option value="">Objects</option>
+      <option value="doc">Read text</option>
+      <option value="math">Math &rarr; LaTeX</option>
+      <option value="depth">How close</option>
+      <option value="find">Find&hellip;</option>
+      <option value="segment">Segment</option>
+      <option value="sky">Name the sky</option>
+      <option value="dream">Dream</option>
+    </select></label>
 </div>
 <div id="controls">
   <button id="torch" type="button" hidden aria-pressed="false" aria-label="Flashlight" title="Flashlight">&#128161;</button>
@@ -1531,6 +1566,46 @@ async function fetchJSON(url, opts, timeoutMs){
 
 /* ---- look: frame -> YOUR brain -> label (never during the veil) --------- */
 let noHitStreak = 0;
+/* Render a frontier-lens result (math/doc/depth/find/segment/dream) on the HUD.
+   Kept separate from renderResult so the default object flow is untouched. */
+function renderLens(j){
+  if (dreamOn) return;
+  if (!j) { showHud("look failed", {ms:2600}); return; }
+  if (j.veiled) { showHud("the veil is down — turn it off to look closer", {ms:2800}); return; }
+  if (j.need) { showHud("install the " + (j.pack || "required") + " pack to use this lens", {ms:3600}); return; }
+  if (j.need_location) { showHud("the sky lens needs your location", {ms:2800}); return; }
+  let msg;
+  switch (j.lens) {
+    case "math": msg = j.latex ? ["Math", j.latex] : "no equation in view"; break;
+    case "doc": msg = j.text ? wrapLines(j.text) : "no text in view"; break;
+    case "depth": msg = (j.closeness != null)
+      ? ["Closeness", Math.round(j.closeness * 100) + "% (1 = very close)"] : "couldn’t gauge distance"; break;
+    case "find": msg = (j.found && j.found.length)
+      ? ["Found"].concat(j.found.map(f => f.term + " " + Math.round(f.confidence * 100) + "%"))
+      : "didn’t find that in view"; break;
+    case "segment": msg = (j.regions != null)
+      ? ["Scene", j.regions + " region" + (j.regions === 1 ? "" : "s")] : "couldn’t segment"; break;
+    case "dream": msg = j.styled ? ["Dream", j.neural ? "neural painter" : "painterly wash"] : "couldn’t stylize"; break;
+    default: msg = (j.ok === false) ? (j.reason || "look failed") : "done";
+  }
+  showHud(msg, {persist: liveOn}); blip();
+}
+/* choosing the Find lens asks once for what to look for; the Sky lens needs a
+   one-time location grant (used only for the local ephemeris — never sent up) */
+if ($("lenssel")) $("lenssel").onchange = () => {
+  const v = $("lenssel").value;
+  if (v === "find") {
+    const t = prompt("Find what? (comma-separated, e.g. my keys, a fire extinguisher)");
+    window._findTerms = (t || "").trim();
+    if (!window._findTerms) $("lenssel").value = "";
+  } else if (v === "sky" && !window._geo) {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        p => { window._geo = {lat: p.coords.latitude, lon: p.coords.longitude}; showHud("sky lens ready — tap to name what's above", {ms:2600}); },
+        () => { showHud("the sky lens needs location access", {ms:2800}); $("lenssel").value = ""; });
+    } else { showHud("this browser can't share location for the sky lens", {ms:2800}); $("lenssel").value = ""; }
+  }
+};
 function renderResult(j, auto){
   if (dreamOn) return;             /* a look in flight when dream began must not
                                       stomp the shared glass canvas, then hide it
@@ -1582,13 +1657,22 @@ async function lookNow(auto){
     if (auto && (detectorActive || !liveOn || document.hidden || dreamOn || veil)) return;
     const t0 = performance.now();
     /* auto (ambient) frames stay local-only + leave no trace server-side; a
-       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger) */
-    const url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
+       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger).
+       A deliberate tap with a frontier lens selected (Read/Math/Depth/…) routes
+       through ?lens=… instead of object recognition — ambient stays object-only. */
+    const sel = (!auto && $("lenssel")) ? ($("lenssel").value || "") : "";
+    let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
+    if (sel) {
+      const qp = new URLSearchParams({lens: sel});
+      if (sel === "find" && window._findTerms) qp.set("terms", window._findTerms);
+      if (sel === "sky" && window._geo) { qp.set("lat", window._geo.lat); qp.set("lon", window._geo.lon); }
+      url = "/dreamlayer/live/look?" + qp.toString();
+    }
     const rsp = await fetchJSON(url,
       {method: "POST", headers: HDRS(), body: blob}, auto ? 6000 : 9000);
     setLink(rsp.ok, performance.now() - t0);
     if (rsp.status === 401) { needsPairing(); return; }
-    renderResult(rsp.json, auto);
+    if (sel) renderLens(rsp.json); else renderResult(rsp.json, auto);
   } catch (e) {
     if (e && e.name === "AbortError") { if (!auto) showHud("timed out · try again", {ms:2600}); }
     else { setLink(false, 0); if (!auto) showHud("brain unreachable", {ms:3000}); }

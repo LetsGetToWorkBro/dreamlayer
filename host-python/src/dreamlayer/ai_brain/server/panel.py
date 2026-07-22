@@ -775,14 +775,44 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Incognito</div>
       <div class="conn-s">A private stretch: stays on your LAN, forces cloud off, logs nothing.</div></div>
       <label class="sw"><input type="checkbox" id="incognito" onchange="saveConn()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Listening &middot; the always-on ear</div>
+      <div class="conn-s">Off by default. When on, this Mac's microphone transcribes speech <b>entirely on-device</b> (voice-activity detection → local speech recognition) and folds what it hears into your memory, so you can later ask "what did we decide about the lease?". <b>Nothing is uploaded</b> — audio never leaves this machine. The Veil still wins: while Incognito or in quiet hours it captures nothing. Phone numbers, emails, cards and SSNs are scrubbed before anything is stored (install the <b>Guardian</b> pack for deeper scrubbing of IBANs, passports and the like); names and places are kept. <b>It hears everyone in range</b>, not just you — so use it with consent. Needs the <b>Sharp Ears</b> pack (a local speech engine) and a microphone.</div>
+      <div id="earStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="listen" onchange="saveListen()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
     <div id="pairout"></div>
+    <div class="conn"><div><div class="conn-t">Pair by sound <span class="conn-s" style="font-weight:400">· QR-free</span></div>
+      <div class="conn-s">No camera? The Brain <b>sings</b> the same one-time code as a near-ultrasonic chirp your phone catches with its mic. It carries only the 5-minute pairing code — never the token.</div></div>
+      <button id="chirpbtn" onclick="chirp()">Chirp the code</button></div>
+    <div id="chirpout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
       <button id="livebtn" onclick="toggleLive()">Connect a phone</button></div>
     <div id="liveout"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Memory sources</div><h2>Bring in your other memories</h2>
+    <p class="lead">Fold your own <b>local, self-hosted</b> services into the Brain's memory — a
+      self-hosted <b>Immich</b> photo library and a <b>Dawarich</b> location log. Each must be on your
+      own network (a non-local address is refused), the pull is one-way and read-only, and it only runs
+      while the master switch below is on. Screenpipe and ActivityWatch, if you run them, are picked up
+      automatically with no address to set.</p>
+    <div class="conn"><div><div class="conn-t">Fold local sources into memory</div>
+      <div class="conn-s">The master switch — nothing is pulled until this is on.</div></div>
+      <label class="sw"><input type="checkbox" id="srcSync" onchange="saveSources()"><span class="track"></span></label></div>
+    <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+      <input id="immichUrl" type="text" autocomplete="off" placeholder="Immich URL (e.g. http://192.168.1.10:2283)" style="flex:1;min-width:240px">
+      <input id="immichKey" type="password" autocomplete="off" placeholder="Immich API key" style="flex:1;min-width:180px">
+    </div>
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+      <input id="dawUrl" type="text" autocomplete="off" placeholder="Dawarich URL (e.g. http://192.168.1.10:3000)" style="flex:1;min-width:240px">
+      <input id="dawKey" type="password" autocomplete="off" placeholder="Dawarich API key" style="flex:1;min-width:180px">
+    </div>
+    <div class="row" style="margin-top:10px"><button id="srcSave" onclick="saveSources()">Save sources</button>
+      <span id="srcStat" class="conn-s" style="margin-left:10px;color:var(--muted)"></span></div>
   </section>
 
   <section>
@@ -1482,7 +1512,7 @@ function showPage(id){curPage=id;
    active = real path runs · off = installed, switched off here · missing =
    fallback runs · unsupported = wrong platform · external = a service. */
 const CAPDOT={active:"var(--success)",off:"var(--amber)",missing:"var(--ghost)",
-              unsupported:"var(--ghost)",external:"var(--memory)"};
+              dormant:"var(--amber)",unsupported:"var(--ghost)",external:"var(--memory)"};
 let CAPFROZEN=false;
 let CAPINSTALL=true;   // can this Brain actually install a pack? (source, or a frozen build carrying pip)
 /* --- info bubble: the exact improvement, as before→after meters --- */
@@ -1522,6 +1552,13 @@ function capRight(it){
   if(it.state==="active"||it.state==="off"){
     const off=it.state==="off";
     return info+`<button class="ghost sm" onclick="toggleCap(${esc(JSON.stringify(it.key))},${off?"false":"true"})">${off?"Turn on":"Turn off"}</button>`;
+  }
+  if(it.state==="dormant"){
+    // installed, but no live path calls it yet — say so plainly instead of a
+    // green "active" that would be a lie. The "i" button explains what it will
+    // gain you; the tooltip carries this cap's own note so it self-describes.
+    const why=(it.note?esc(it.note)+" — ":"")+"the library is installed, but this feature isn't wired into the running app yet.";
+    return info+`<span class="sstate" title="${why}">installed · not active yet</span>`;
   }
   if(it.state==="missing"){
     const cmd=it.extra?`pip install "dreamlayer[${it.extra}]"`:(it.note||"manual install");
@@ -1566,7 +1603,7 @@ function renderCapStats(r){
 }
 function renderCaps(r){
   renderCapStats(r);
-  const s=r.summary||{}; const order=["active","off","missing","unsupported","external"];
+  const s=r.summary||{}; const order=["active","off","dormant","missing","unsupported","external"];
   $("capsum").textContent=order.filter(k=>s[k]).map(k=>`${s[k]} ${k}`).join(" · ")
     +(r.frozen?"  ·  bundled app (fixed set)":"");
   const blurb={}; (r.tiers||[]).forEach(t=>{blurb[t.key]=t.blurb;});
@@ -1824,6 +1861,15 @@ async function load(){
   pickModel(mm,true);
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
+  if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
+  // memory sources
+  if($("srcSync")){
+    $("srcSync").checked=!!c.config.sources_sync;
+    $("immichUrl").value=c.config.immich_base_url||"";
+    $("dawUrl").value=c.config.dawarich_url||"";
+    $("immichKey").placeholder=c.config.immich_api_key==="set"?"key saved — blank to keep":"Immich API key";
+    $("dawKey").placeholder=c.config.dawarich_api_key==="set"?"key saved — blank to keep":"Dawarich API key";
+  }
   // cloud provider
   $("cprov").value=c.config.cloud_provider||"openai";
   $("cbase").value=c.config.cloud_base_url||"";$("cmodel").value=c.config.cloud_model||"";
@@ -2037,6 +2083,43 @@ async function saveConn(){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
     network_mode:incog?"lan_only":"connected", cloud_enabled:incog?false:cloud})});
   toast(incog?"Incognito on — cloud off, LAN only":(cloud?"Cloud on":"Cloud off")); load();
+}
+async function saveListen(){
+  const on=$("listen").checked;
+  const r=await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({listen_enabled:on})});
+  toast(on?"Listening on — on-device, nothing uploaded":"Listening off");
+  refreshEarStatus();
+}
+async function refreshEarStatus(){
+  const el=$("earStat"); if(!el) return;
+  let s; try{s=await api("/dreamlayer/ear");}catch(e){el.textContent="";return;}
+  if(!s){el.textContent="";return;}
+  if(!s.enabled){el.textContent="Off — the microphone is closed.";return;}
+  if(s.listening){
+    const n=s.heard_count||0;
+    el.innerHTML="<b style='color:var(--success)'>Listening</b> — microphone open, on-device only"+
+      (n?` &middot; ${n} utterance${n===1?"":"s"} remembered`:"");
+  }else{
+    // opted in but not actually capturing → say why (usually no engine/mic)
+    el.innerHTML="<b style='color:var(--amber)'>Listening is on, but not capturing</b> — install the "+
+      "Sharp Ears pack (a local speech engine) and make sure a microphone is available.";
+  }
+}
+async function saveSources(){
+  // Fold in the local memory sources. Secret fields round-trip as "set" when
+  // left blank (apply_config keeps the stored key), so a blank box never wipes a
+  // saved key. Non-local URLs are refused server-side (is_local_endpoint).
+  const body={sources_sync:$("srcSync").checked,
+    immich_base_url:$("immichUrl").value.trim(),
+    dawarich_url:$("dawUrl").value.trim()};
+  const ik=$("immichKey").value.trim(); if(ik) body.immich_api_key=ik;
+  const dk=$("dawKey").value.trim(); if(dk) body.dawarich_api_key=dk;
+  const s=$("srcStat"); s.textContent="Saving…";
+  try{await api("/dreamlayer/config",{method:"POST",body:JSON.stringify(body)});}
+  catch(e){s.textContent="Couldn't save"; return;}
+  $("immichKey").value=""; $("dawKey").value="";
+  s.textContent=body.sources_sync?"On — pulling from your local sources":"Saved (off)";
+  toast(body.sources_sync?"Memory sources on":"Memory sources saved"); load();
 }
 async function addFolder(){const el=$("folderPath"),p=el.value.trim();if(!p)return;
   await api("/dreamlayer/folders",{method:"POST",body:JSON.stringify({action:"add",path:p})});
@@ -2321,6 +2404,35 @@ async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode
   out.innerHTML=`<div class="paircode">${qr}<div class="code" id="thecode">${esc(r.code)}</div>`+
     `<div class="foot"><span class="url">${esc(r.url)}</span><button class="sm" onclick="copyPair()">Copy code</button></div></div>`;
   toast("Pairing code ready");
+}
+async function chirp(){
+  // Pair-by-sound: ask the Brain for the WAV of the sung pairing code and play
+  // it through the speakers. The endpoint (/dreamlayer/pair/sound) reuses the
+  // same 5-minute live-vault code the QR carries; it returns base64 WAV bytes
+  // (ggwave, near-ultrasonic) plus the plain code as a fallback to read aloud.
+  const out=$("chirpout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
+  let r;try{r=await api("/dreamlayer/pair/sound");}catch(e){r=null;}
+  if(!r){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
+    'Pair-by-sound is offered only from the Brain itself. Open <b>http://localhost:7777/</b> on this machine and try again.</div></div>';return;}
+  if(!r.available||!r.wav_b64){
+    // no chirp available (ggwave absent, or loopback-only w/ no token) → be
+    // honest with the server's own reason and fall back to the plain code.
+    const why=r.note||r.reason||"Sound pairing needs the soundlink capability (install the Operator pack).";
+    const code=r.code?`<div class="conn-s" style="margin-top:6px">Meanwhile, type this code on the phone:</div><div class="code">${esc(r.code)}</div>`:"";
+    out.innerHTML=`<div class="paircode"><div class="conn-s">${esc(why)}</div>${code}</div>`;return;}
+  try{
+    const bytes=Uint8Array.from(atob(r.wav_b64),c=>c.charCodeAt(0));
+    const blob=new Blob([bytes],{type:"audio/wav"});
+    const url=URL.createObjectURL(blob);
+    const a=new Audio(url); a.onended=()=>URL.revokeObjectURL(url);
+    await a.play();
+    const band=r.ultrasound?"a near-ultrasonic chirp (you may not hear it)":"an audible chirp";
+    out.innerHTML=`<div class="paircode"><div class="conn-s">Playing ${band} — hold the phone close, in the app tap <b>Brain → Pair a device → Listen</b>.</div>`+
+      `<div class="code">${esc(r.code||"")}</div><div class="foot"><button class="sm" onclick="chirp()">Play again</button></div></div>`;
+    toast("Singing the pairing code");
+  }catch(e){
+    out.innerHTML=`<div class="paircode"><div class="conn-s">Couldn't play audio here (${esc(String(e))}). Type this code on the phone instead:</div><div class="code">${esc(r.code||"")}</div></div>`;
+  }
 }
 function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.clipboard.writeText(c).then(()=>toast("Copied"));}
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
@@ -2858,7 +2970,7 @@ window.removePlugin=removePlugin;
           'cloud: <b>'+(cfg.model==="api"?"wired":"off")+'</b> \u00b7 veil: <b>'+(term.classList.contains("veiled")?"up":"down")+'</b>\n'+
           '<span class="dim">everything here runs on this machine.</span>'); }).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }
     if(c==="caps"||c==="capabilities"){ var render=function(r){ var s=(r&&r.summary)||{};
-        var order=["active","off","missing","unsupported","external"];
+        var order=["active","off","dormant","missing","unsupported","external"];
         w(order.filter(function(k){return s[k];}).map(function(k){return '<b>'+s[k]+'</b> '+k;}).join(" \u00b7 ")||"no capability data");
         w('<span class="dim">open <b>Capabilities</b> in the sidebar to switch more on.</span>'); };
       if(LASTCAPS) render(LASTCAPS); else api("/dreamlayer/capabilities").then(render).catch(function(){ w('<span class="coral">brain unreachable</span>'); }); return; }

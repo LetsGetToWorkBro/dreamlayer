@@ -23,6 +23,22 @@ class MemoryDB:
             self.conn.commit()
     def _now(self): return datetime.now(UTC).isoformat()
     def add_memory(self, kind, summary, embedding=None, confidence=0.5, place_id=None, meta=None) -> int:
+        # PII scrub before the row is written — this is the single write chokepoint
+        # every capture path funnels through, so redacting here (rather than at each
+        # caller) is what actually delivers the Guardian pack's "PII scrubbed before
+        # write" promise. default_redactor() returns None when the pii_redaction cap
+        # is toggled off (DL_DISABLE_PII_REDACTION, set by the panel switch), so this
+        # is on by default yet fully switch-off-able. It only strips verbatim
+        # contact/financial identifiers (card, SSN, phone, email) — never names or
+        # places — so name-recall, the product's whole point, is untouched.
+        if isinstance(summary, str) and summary:
+            from .pii_presidio import default_redactor
+            _red = default_redactor()
+            if _red is not None:
+                try:
+                    summary = _red.redact(summary)
+                except Exception:                 # never let redaction break a write
+                    pass
         # embeddings persist as packed float32 BLOBs (embeddings.pack_embedding);
         # readers accept legacy JSON-text rows too, so no migration pass is needed
         from .embeddings import pack_embedding

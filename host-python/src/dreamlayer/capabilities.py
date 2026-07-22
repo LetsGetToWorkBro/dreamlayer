@@ -283,7 +283,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("presidio_analyzer",), "privacy", "memory/pii_presidio.py",
         note="regex fallback is always on; `dreamlayer setup models` downloads the "
              "spaCy model that activates the presidio path",
-        gain="baseline scrubs emails/phones by regex; this catches names, addresses, cards in context", impact=4, before=2.5, after=4.5),
+        gain="baseline scrubs emails/phones/cards/SSNs by regex; presidio adds robust detection of IBANs, crypto wallets, passports and licences in context — deliberately NOT names or places, so recall stays intact", impact=4, before=2.5, after=4.5),
     Cap("asym_signing", "Ed25519 provenance signatures", "privacy",
         ("cryptography",), "privacy", "reality_compiler/sign_crypto.py",
         note="HMAC fallback is always on",
@@ -420,13 +420,78 @@ def disabled(cap: Cap, env: Optional[dict] = None) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def wired_now(cap: Cap, env: Optional[dict] = None) -> bool:
+    """DL_WIRED_<KEY> ∈ {1,true,yes,on} promotes a normally-dormant capability to
+    'active' — set at RUNTIME by the subsystem that actually drives it, and only
+    while it's running. The always-on ear, for example, sets DL_WIRED_VOICE_VAD /
+    _LOCAL_ASR / _MIC_CAPTURE / … the instant it opens the microphone and clears
+    them when it stops. So a cap in _NOT_WIRED stays honestly 'dormant' by default
+    (nothing is driving it), yet reads 'active' precisely when a live path is —
+    no false green, and no permanent under-report of a feature that IS on."""
+    flag = "DL_WIRED_" + cap.key.upper()
+    val = (env if env is not None else os.environ).get(flag, "")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 def supported(cap: Cap) -> bool:
     return cap.kind != "darwin" or sys.platform == "darwin"
 
 
+# Installed-but-not-yet-wired capabilities: the library imports, but no live code
+# path calls the adapter, so installing it gains the user nothing REACHABLE today.
+# The 2026-07-22 reachability audit traced all 74 caps to their call sites and
+# found these light "active" on import while doing nothing you can trigger. They
+# report "dormant" (not "active") and DON'T inflate the awakening meter, so the
+# panel never claims a feature is on when it isn't. As each is genuinely wired
+# into a live path (phased), its key is removed here and it becomes active for
+# real. test_capabilities_wired keeps this list honest against the catalog.
+_NOT_WIRED = frozenset({
+    # memory: adapters built, never consumed on a live path
+    "memory_dedup", "typed_docs", "social_graph",
+    # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
+    # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
+    # driven by the Brain's opt-in ear (ai_brain/server/ear.py) — it sets
+    # DL_WIRED_<KEY> the moment it opens the microphone, so wired_now() promotes
+    # them from "dormant" to "active" precisely while listening is on, and they
+    # fall back to "dormant" (not a false green) when it's off. They stay listed
+    # here so the DEFAULT (ear off) is the honest "dormant". wake_word (no wake
+    # engine yet), live_interpret (the SeamlessM4T interpreter), asr_alignment
+    # and diarization are NOT promoted — they need the full Orchestrator path.
+    "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
+    "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
+    "onnx_speech",
+    # vision: six frontier lenses (math_ocr, doc_read, depth_sense,
+    # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
+    # Live Lens via WorldLensHost.look_lens (?lens=…), each an on-device engine
+    # that self-describes when its pack isn't installed — so they report "active"
+    # once installed rather than "dormant". dream_style stays DORMANT: the reach-
+    # able ?lens=dream path only ever runs the dependency-free painterly wash
+    # (no caller constructs the neural stylizer with a model unless DL_DREAM_MODEL
+    # is set), so onnxruntime being importable must NOT light the neural cap green.
+    # coreml_ondevice likewise (a macOS Vision classify backend not on the live path).
+    "coreml_ondevice", "dream_style",
+    # intelligence / structured: adapters wired only in tests
+    "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
+    "causal_fusion", "structured_output", "typed_models", "typed_pipeline",
+    # platform / infra: no live loader / surface reaches these
+    "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
+    "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
+    "mesh_range", "extism_plugins", "dashboard", "fs_watch",
+    "lan_discovery", "spatial_viz",
+    # privacy: the structural anyio veil-stop is never used (the flag-gate is).
+    # (pii_redaction IS wired now — MemoryDB.add_memory runs default_redactor() on
+    # every summary before the row is written, with a narrow contact/financial-only
+    # entity policy so it never strips the names the product legitimately remembers.)
+    "structured_concurrency",
+})
+
+
 def state(cap: Cap, env: Optional[dict] = None) -> str:
     """One word a human can act on:
-      active       installed and allowed — the adapter's real path runs
+      active       installed, allowed, AND wired into a live path — really on
+      dormant      installed but not yet wired into the running app (no live
+                   caller) — the honest state for a library that imports but does
+                   nothing reachable; does NOT count toward the awakening meter
       off          installed but DL_DISABLE_* set — fallback runs by choice
       missing      not installed — fallback runs (install cap's extra to flip)
       unsupported  wrong platform (macOS-only capability elsewhere)
@@ -442,7 +507,9 @@ def state(cap: Cap, env: Optional[dict] = None) -> str:
         return "unsupported"
     if not installed(cap):
         return "missing"
-    return "active"
+    if cap.key in _NOT_WIRED and not wired_now(cap, env):
+        return "dormant"        # imports, but nothing live calls it yet
+    return "active"             # ...unless a live subsystem set DL_WIRED_<KEY>
 
 
 def enabled(key: str, env: Optional[dict] = None) -> bool:
@@ -562,6 +629,10 @@ def power_stats(env: Optional[dict] = None) -> dict:
             continue
         if st == "unsupported":
             continue                              # can't be had on this machine
+        if st == "dormant":
+            continue                              # installed but not wired to a
+            #                                       live path — must not pad the
+            #                                       meter (it delivers nothing yet)
         total += 1
         power_total += c.impact
         bucket = by_tier.setdefault(
@@ -618,17 +689,17 @@ PACKS: Tuple[Pack, ...] = (
          "Semantic memory that actually understands — indexed, deduped, searchable by meaning, fully offline.",
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
-         "Local speech: neural voice detection and on-device transcription. Audio never leaves this Mac.",
-         ("voice", "asr-extra"), "~1–2 GB", 4),
+         "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
+         ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing.",
-         ("vision", "intelligence", "causal"), "~3–5 GB", 4),
+         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing, and a painterly dream-mode lens.",
+         ("vision", "intelligence", "causal", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
          "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
-         "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
-         ("infra", "llm", "platform", "sync"), "~200 MB", 2),
+         "Operations toolkit: pair a phone by sound and route across any LLM provider — working today — plus the libraries for LAN discovery, live dashboards, a sandboxed WASM plugin host, off-grid mesh and conflict-free sync as those surfaces come online.",
+         ("infra", "llm", "platform", "sync", "soundlink", "mesh", "extism"), "~250 MB", 2),
     Pack("interpreter", "Interpreter",
          "A live interpreter in your ear: a foreign speaker's meaning spoken to you, and your reply back in their language — SeamlessM4T on-device, audio never leaves this Mac.",
          ("interpreter",), "~2–4 GB", 4),
@@ -639,8 +710,8 @@ PACKS: Tuple[Pack, ...] = (
          "Look up and know the sky — planets, stars, and constellations named from your place and time, fully offline.",
          ("sky",), "~50 MB", 2),
     Pack("mind-palace", "Mind Palace",
-         "Deeper memory: a temporal knowledge graph that answers what's connected and when, plus spaced rehearsal that resurfaces a name right before you'd lose it.",
-         ("memory-graph", "srs"), "~500 MB", 3),
+         "Deeper memory: a temporal knowledge graph that answers what's connected and when, sharper commitment extraction from real meeting speech, plus spaced rehearsal that resurfaces a name right before you'd lose it.",
+         ("memory-graph", "srs", "nlp-extra"), "~500 MB", 3),
 )
 
 _PACK_BY_KEY = {p.key: p for p in PACKS}
@@ -840,8 +911,8 @@ def _print_rich(rows: list[dict], env: Optional[dict] = None) -> bool:
         from rich.table import Table
     except ImportError:
         return False
-    style = {"active": "green", "off": "yellow", "missing": "dim",
-             "unsupported": "dim", "external": "cyan"}
+    style = {"active": "green", "off": "yellow", "dormant": "yellow",
+             "missing": "dim", "unsupported": "dim", "external": "cyan"}
     t = Table(title="DreamLayer capabilities", title_justify="left")
     for col in ("tier", "capability", "state", "switch on with"):
         t.add_column(col)

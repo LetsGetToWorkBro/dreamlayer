@@ -348,6 +348,136 @@ class WorldLensHost:
             return None
         return self.taste_lens.look(frame, budget=budget)
 
+    # -- deliberate "look closer" lenses -----------------------------------
+    # These are the frontier lenses that always lived on the Orchestrator's
+    # glance hub, which the shipped Brain never ran — so they were unreachable
+    # from the phone/Live Lens. look_lens() routes a look to the on-device
+    # engine for the chosen lens (each a lazy adapter with a neutral fallback),
+    # so the feature is REACHABLE the moment its pack is installed. Readers are
+    # cached on the host (the host itself is cached per-Brain and rebuilt on
+    # config change), so a heavy model loads once, not per look.
+
+    def _extra(self, name: str):
+        """Lazily build + cache a vision_extras reader by name."""
+        cache: dict = getattr(self, "_extras_cache", None) or {}
+        self._extras_cache = cache
+        if name not in cache:
+            from ...object_lens import vision_extras as vx
+            builders = {
+                "math": vx.MathOcrReader, "doc": vx.DocReader,
+                "depth": vx.DepthReader, "find": vx.YoloWorldFinder,
+                "segment": vx.FastSamSegmenter,
+            }
+            try:
+                cache[name] = builders[name]()
+            except Exception as exc:                 # noqa: BLE001
+                # value via extra={} (the scrubbed path), not the message string,
+                # so the pii-in-log rule never trips on the `name` variable — it's
+                # a lens key ("math"/"doc"…), never a person's name, but keep the
+                # message literal to stay clear of the heuristic either way.
+                log.info("[lens] reader unavailable",
+                         extra={"reader": name, "err": str(exc)})
+                cache[name] = None
+        return cache[name]
+
+    # lens key -> (capability key, human pack name) for the honest "install X"
+    _LENS_NEEDS = {
+        "math": ("math_ocr", "World Sense"),
+        "doc": ("doc_read", "World Sense"),
+        "depth": ("depth_sense", "World Sense"),
+        "find": ("openvocab_find", "Clear Eyes"),
+        "segment": ("scene_segment", "Clear Eyes"),
+        "sky": ("sky_sense", "Stargazer"),
+        "dream": ("dream_style", "Clear Eyes"),
+    }
+
+    def look_lens(self, frame, lens: str, args: Optional[dict] = None) -> dict:
+        """Run a deliberate look through ONE named lens. Veil-gated (a veiled
+        look is blind). Returns {ok, lens, ...} — on a missing model, ok is
+        False with `need` (the pack to install) rather than an error, so the
+        lens is always reachable and honestly self-describes what it needs."""
+        lens = (lens or "").strip().lower()
+        args = args or {}
+        if lens not in self._LENS_NEEDS:
+            return {"ok": False, "lens": lens, "reason": "unknown-lens"}
+        cap, pack = self._LENS_NEEDS[lens]
+        if not self.privacy.allow_capture():
+            return {"ok": False, "lens": lens, "veiled": True,
+                    "note": "a veiled look is blind — turn off Incognito"}
+
+        def _need():
+            return {"ok": False, "lens": lens, "need": cap, "pack": pack,
+                    "note": f"install the {pack} pack to use this lens"}
+        try:
+            if lens == "math":
+                r = self._extra("math")
+                if r is None or not getattr(r, "available", False):
+                    return _need()
+                tex = r.read_math(frame)
+                return {"ok": bool(tex), "lens": "math", "latex": tex}
+            if lens == "doc":
+                r = self._extra("doc")
+                if r is None or not getattr(r, "available", False):
+                    return _need()
+                d = r.read_doc(frame)
+                return {"ok": bool(d.get("text")), "lens": "doc", **d}
+            if lens == "depth":
+                r = self._extra("depth")
+                if r is None or not getattr(r, "available", False):
+                    return _need()
+                near = r.nearest_relative(frame)
+                return {"ok": near is not None, "lens": "depth",
+                        "closeness": near}
+            if lens == "find":
+                r = self._extra("find")
+                if r is None or not getattr(r, "available", False):
+                    return _need()
+                terms = args.get("terms") or []
+                hits = r.find(frame, terms)
+                return {"ok": bool(hits), "lens": "find",
+                        "found": [{"term": t, "confidence": round(c, 3)}
+                                  for t, c in (hits or [])]}
+            if lens == "segment":
+                r = self._extra("segment")
+                if r is None or not getattr(r, "available", False):
+                    return _need()
+                n = r.segment(frame)
+                return {"ok": n is not None, "lens": "segment", "regions": n}
+            if lens == "sky":
+                from ...object_lens.sky_lens import default_sky_lens, say_sky
+                sky = default_sky_lens()
+                if sky is None:                      # ephemeris not installed
+                    return _need()
+                lat, lon = args.get("lat"), args.get("lon")
+                if lat is None or lon is None:
+                    return {"ok": False, "lens": "sky", "need_location": True,
+                            "note": "the sky lens needs your latitude/longitude"}
+                data = sky.night_sky(float(lat), float(lon),
+                                     args.get("when_ts")) or {}
+                return {"ok": bool(data), "lens": "sky", "sky": data,
+                        "line": say_sky(data)}
+            if lens == "dream":
+                # default_stylizer is never None — the neural painter when a MODEL
+                # is provided (DL_DREAM_MODEL → the dream_style cap), else an
+                # always-on painterly wash. So the lens always works; `neural`
+                # tells the caller which ran, and dream_style stays honestly
+                # dormant until a model is actually wired.
+                import os as _os
+                from ...dream_mode.dream_style import default_stylizer
+                st = default_stylizer(_os.environ.get("DL_DREAM_MODEL") or None)
+                out = None
+                try:
+                    out = st.stylize(frame)
+                except Exception:                    # noqa: BLE001
+                    out = None
+                return {"ok": out is not None, "lens": "dream",
+                        "styled": out is not None,
+                        "neural": bool(getattr(st, "ready", False))}
+        except Exception as exc:                     # noqa: BLE001 — a lens never crashes a look
+            log.warning("[lens] %s failed: %s", lens, exc)
+            return {"ok": False, "lens": lens, "reason": "error"}
+        return {"ok": False, "lens": lens, "reason": "unknown-lens"}
+
 
 def build_world_lens(brain, isolate: str = "untrusted") -> WorldLensHost:
     return WorldLensHost(brain, isolate=isolate)

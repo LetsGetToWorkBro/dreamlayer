@@ -10,6 +10,46 @@ from __future__ import annotations
 from dreamlayer import capabilities as C
 
 
+# ---- honesty: installed-but-not-wired caps read "dormant", not "active" ----
+
+def test_not_wired_keys_are_all_real_caps():
+    keys = {c.key for c in C.CAPABILITIES}
+    unknown = C._NOT_WIRED - keys
+    assert not unknown, f"_NOT_WIRED names caps that don't exist: {unknown}"
+
+
+def test_dormant_state_for_installed_but_unwired(monkeypatch):
+    # a cap in _NOT_WIRED that IS importable must report "dormant", never "active"
+    dead = next(c for c in C.CAPABILITIES
+                if c.key in C._NOT_WIRED and c.kind in ("python", "darwin"))
+    monkeypatch.setattr(C, "installed", lambda cap: True)
+    monkeypatch.setattr(C, "supported", lambda cap: True)
+    assert C.state(dead) == "dormant"
+    # a wired cap under the same conditions is genuinely active
+    live = next(c for c in C.CAPABILITIES
+                if c.key not in C._NOT_WIRED and c.kind in ("python", "darwin"))
+    assert C.state(live) == "active"
+
+
+def test_dormant_caps_do_not_inflate_the_awakening_meter(monkeypatch):
+    # with EVERYTHING importable, the meter must credit only wired caps — a
+    # dormant cap delivers nothing, so it can't pad power/percent.
+    monkeypatch.setattr(C, "installed", lambda cap: True)
+    monkeypatch.setattr(C, "supported", lambda cap: True)
+    stats = C.power_stats()
+    wired_installable = [c for c in C.CAPABILITIES
+                         if c.kind in ("python", "darwin") and c.key not in C._NOT_WIRED]
+    assert stats["total"] == len(wired_installable)          # denominator excludes dormant
+    assert stats["unlocked"] == len(wired_installable)       # all wired are active here
+    assert stats["power"] == sum(c.impact for c in wired_installable)
+
+
+def test_llm_router_is_wired_now():
+    # it was dead (Brain called cloud_chat directly); the litellm_chat swap makes
+    # it a real live path, so it must not be listed dormant
+    assert "llm_router" not in C._NOT_WIRED
+
+
 # ---- pack ordering -------------------------------------------------------
 
 def test_packs_report_is_ordered_most_impact_first():
@@ -85,10 +125,12 @@ def test_only_pack_installable_caps_gate_the_meter():
     s = C.power_stats(env={})
     # power_total counts only installable caps this machine supports (<= all installable)
     assert s["power_total"] <= installable
-    # and never includes a manual cap's impact
+    # and never includes a manual cap's impact — nor a dormant (installed but
+    # not-yet-wired) cap's, which delivers nothing and must not pad the meter
     assert s["power_total"] == sum(
         c.impact for c in C.CAPABILITIES
-        if c.kind in ("python", "darwin") and C.state(c, env={}) != "unsupported")
+        if c.kind in ("python", "darwin")
+        and C.state(c, env={}) not in ("unsupported", "dormant"))
 
 
 def test_level_climbs_monotonically_with_percent():
