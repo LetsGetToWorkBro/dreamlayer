@@ -40,6 +40,46 @@ def _clear_wired_env():
         os.environ.pop("DL_WIRED_" + key.upper(), None)
 
 
+# --- the pipeline path: the ear must have a privacy gate ----------------------
+# Regression for the dead-ear bug: CapturePipeline reads orch.privacy at its
+# door (push_pcm -> _veiled -> orch.privacy.allow_capture). If EarHost has no
+# `privacy`, _veiled() fails closed and EVERY window is dropped — the mic opens
+# but nothing is ever transcribed or stored. These tests drive a real utterance
+# THROUGH the pipeline (not around it, as the ingest_caption tests do).
+
+class _FixedASR:
+    def __init__(self, text): self._t = text
+    def transcribe(self, segment): return self._t
+
+
+def test_ear_exposes_a_working_privacy_gate(brain):
+    ear = EarHost(brain)
+    assert hasattr(ear, "privacy")
+    assert ear.privacy.allow_capture() is True          # not incognito → open
+
+
+def test_utterance_flows_through_the_pipeline_to_memory(brain):
+    from dreamlayer.orchestrator.capture import CapturePipeline
+    ear = EarHost(brain)
+    pipe = CapturePipeline(ear, vad=None, asr=_FixedASR("ship the beta on Friday"))
+    assert pipe._veiled() is False                      # the door is open
+    pipe.push_pcm([0.1] * 320)                           # a speech window
+    pipe.flush()                                         # endpoint → asr → ingest
+    assert ear.heard_count >= 1
+    assert "friday" in ear.last_heard.lower()
+
+
+def test_pipeline_door_is_veiled_while_incognito(brain):
+    from dreamlayer.orchestrator.capture import CapturePipeline
+    brain.config.network_mode = "lan_only"              # incognito
+    ear = EarHost(brain)
+    pipe = CapturePipeline(ear, vad=None, asr=_FixedASR("a secret"))
+    assert pipe._veiled() is True                        # gate closed at the door
+    pipe.push_pcm([0.1] * 320)
+    pipe.flush()
+    assert ear.heard_count == 0                          # nothing accumulated
+
+
 # --- ingest: the value path ---------------------------------------------------
 
 def test_heard_utterance_lands_in_memory(brain):

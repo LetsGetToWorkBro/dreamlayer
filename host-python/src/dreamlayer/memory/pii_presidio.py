@@ -31,6 +31,14 @@ except BaseException:  # ImportError, or a broken native dep (pyo3 PanicExceptio
 
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 _PHONE = re.compile(r"\b(?:\+?\d[\d\-\s().]{7,}\d)\b")
+# grouped card (4x4 with space/dash) and US SSN (nnn-nn-nnnn) BEFORE the bare
+# long-digit run, so their separators don't slip past _LONGNUM. These are the
+# common separator-delimited identifiers the regex fallback can strip with a low
+# false-positive rate; deeper alphanumeric IDs (IBAN, crypto, passport, license)
+# still need presidio (the Guardian pack) — the fallback can't reliably catch
+# them without over-scrubbing ordinary words.
+_CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+_SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _LONGNUM = re.compile(r"\b\d{6,}\b")
 
 
@@ -65,6 +73,8 @@ class PiiRedactor:
             except Exception as exc:
                 log.warning("[pii] presidio analyze failed: %s; regex", exc)
         text = _EMAIL.sub("<EMAIL>", text)
+        text = _SSN.sub("<SSN>", text)
+        text = _CARD.sub("<CARD>", text)
         text = _PHONE.sub("<PHONE>", text)
         text = _LONGNUM.sub("<NUM>", text)
         return text

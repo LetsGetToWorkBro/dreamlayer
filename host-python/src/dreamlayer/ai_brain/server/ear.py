@@ -40,6 +40,29 @@ EAR_CAPS = ("voice_vad", "local_asr", "mic_capture", "asr_moonshine",
             "onnx_speech", "sound_events", "bird_song")
 
 
+class _EarGate:
+    """The privacy gate the CapturePipeline reads at its door (push_pcm →
+    _veiled → orch.privacy.allow_capture). Mirrors WorldLensHost._LookGate:
+    allow_capture() is False while the Brain is incognito / in quiet hours, so a
+    veiled stretch accumulates NO audio at all — not even in the ring. Fails
+    CLOSED (returns False) when the posture can't be read, so an unreadable trust
+    signal veils rather than opens the mic. WITHOUT this attribute the pipeline's
+    _veiled() raises AttributeError and (fail-closed) drops every window, so the
+    ear would open the mic yet capture nothing — this gate is load-bearing."""
+
+    def __init__(self, brain):
+        self._brain = brain
+
+    def allow_capture(self) -> bool:
+        try:
+            return not bool(self._brain.incognito_now())
+        except Exception:                        # noqa: BLE001 — unreadable → veiled
+            return False
+
+    def allow_recall(self) -> bool:
+        return self.allow_capture()
+
+
 class EarHost:
     """Drives a CapturePipeline over a microphone and remembers what it hears.
 
@@ -50,6 +73,9 @@ class EarHost:
 
     def __init__(self, brain):
         self.brain = brain
+        # The CapturePipeline reads self.privacy at its door on every window —
+        # this MUST exist or _veiled() fails closed and the ear captures nothing.
+        self.privacy = _EarGate(brain)
         self._pipe = None
         self._lock = threading.RLock()
         self._bird = None
@@ -74,11 +100,15 @@ class EarHost:
         if not text:
             return
         # The Veil: incognito / quiet-hours means "logs nothing" — drop it.
+        # FAIL CLOSED: if the posture can't be read, treat it as veiled and drop
+        # the utterance rather than store it (an unreadable trust signal must
+        # never resolve to "capture" — matches _LookGate on the vision path).
         try:
-            if self.brain.incognito_now():
-                return
-        except Exception:                        # noqa: BLE001 — defensive
-            pass
+            veiled = bool(self.brain.incognito_now())
+        except Exception:                        # noqa: BLE001 — unreadable → veiled
+            veiled = True
+        if veiled:
+            return
         # PII scrub before any write (same narrow policy as the memory write
         # path: strip contact/financial identifiers, keep names and places).
         try:
@@ -173,6 +203,8 @@ class EarHost:
                 pass
 
     def status(self) -> dict:
+        # Deliberately does NOT echo the last transcript: a status endpoint has
+        # no need to hand captured content back over the wire (even to a token
+        # holder), and the Live Lens credential IS the Brain token. Counts only.
         return {"listening": self.listening,
-                "heard_count": self.heard_count,
-                "last_heard": self.last_heard}
+                "heard_count": self.heard_count}

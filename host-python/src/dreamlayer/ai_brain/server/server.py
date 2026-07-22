@@ -3847,7 +3847,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if lens:
                 lens_args = {}
                 if qs.get("terms"):
-                    lens_args["terms"] = [t for t in qs["terms"][0].split(",") if t.strip()]
+                    lens_args["terms"] = [t.strip() for t in qs["terms"][0].split(",") if t.strip()]
                 for k in ("lat", "lon"):
                     if qs.get(k):
                         try:
