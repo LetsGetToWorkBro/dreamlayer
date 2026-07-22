@@ -115,7 +115,21 @@ def _make_close_delegate():
             def _noop(self):
                 pass
 
+            def windowShouldClose_(self, sender):
+                # Hide, don't quit. DreamLayer is a menu-bar appliance: closing
+                # the panel (red button / Cmd-W) must tuck the window away and
+                # drop back to the quiet tray posture — the Brain keeps running
+                # and the menu-bar arrow stays lit. Returning NO keeps the window
+                # object alive so the tray / Dock-click reopens it instantly.
+                try:
+                    sender.orderOut_(None)
+                except Exception:
+                    pass
+                _set_dock_presence(False)
+                return False
+
             def windowWillClose_(self, note):
+                # a genuine close (not via the red button) still drops to tray
                 _set_dock_presence(False)
 
         _close_delegate_cls = _PanelCloseDelegate
@@ -227,6 +241,23 @@ def install_reopen_handler(open_cb) -> bool:
             objc.selector(_reopen,
                           selector=b"applicationShouldHandleReopen:hasVisibleWindows:",
                           signature=b"c@:@c"))
+
+        # Never terminate just because the last window closed — the tray icon IS
+        # the app's presence. macOS's default for an unimplemented delegate is
+        # already NO, but a menu-bar appliance flips itself to a regular (Dock)
+        # app while the panel is open, so make the keep-alive explicit and not
+        # dependent on that default. Only add it once (classAddMethod on an
+        # already-decorated class raises).
+        if type(delegate).instancesRespondToSelector_(
+                b"applicationShouldTerminateAfterLastWindowClosed:") is False:
+            def _no_terminate(self, sender):
+                return False
+            objc.classAddMethod(
+                type(delegate),
+                b"applicationShouldTerminateAfterLastWindowClosed:",
+                objc.selector(_no_terminate,
+                              selector=b"applicationShouldTerminateAfterLastWindowClosed:",
+                              signature=b"c@:@"))
         _reopen_installed = True
         return True
     except Exception:

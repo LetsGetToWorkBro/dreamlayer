@@ -674,12 +674,15 @@ def pack_state(pack: Pack, env: Optional[dict] = None) -> str:
 
 
 def packs_report(env: Optional[dict] = None) -> list[dict]:
+    # Most impactful first — the packs a new Brain gains the most from lead the
+    # page. Stable, so equal-impact packs keep their curated definition order.
+    ordered = sorted(PACKS, key=lambda p: -p.impact)
     return [{
         "key": p.key, "name": p.name, "tagline": p.tagline, "size": p.size,
         "impact": p.impact, "recommended": p.recommended,
         "extras": list(p.extras), "state": pack_state(p, env),
         "caps": [c.key for c in p.caps()],
-    } for p in PACKS]
+    } for p in ordered]
 
 
 def extras_requirements(extra: str) -> list[str]:

@@ -316,13 +316,13 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .paircode .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
-       border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:300px;height:300px;max-width:100%}
-  /* the Live Lens QR now carries the short pairing code (sparse), and renders
-     bigger still, so a phone camera locks on from a comfortable distance off a
-     glossy screen (the #1 "the QR won't scan" cause). The http fallback carries
-     the long token and is the densest, so even the base size is generous. */
-  .qrbox.live svg{width:380px;height:380px}
+       border-radius:0;padding:10px;width:max-content;max-width:100%;margin:0 auto 4px}
+  /* Compact — about a half-dollar on screen. The QR used to render huge to
+     compensate for the encoder laying the format bits down reversed (nothing
+     could scan it, so bigger seemed to "help"); that bug is fixed now, so a
+     modern phone camera locks onto this small, correct code instantly. */
+  .qrbox svg{display:block;width:150px;height:150px;max-width:100%}
+  .qrbox.live svg{width:170px;height:170px}   /* short pairing code — sparse, reads easily small */
   /* the pairing container is a disclosure: collapsed until you need it, and it
      folds away again so a big scannable QR never permanently eats the panel. */
   #liveout{overflow:hidden;transition:max-height .28s ease;max-height:0}

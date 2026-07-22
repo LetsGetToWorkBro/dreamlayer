@@ -77,6 +77,23 @@ jobs:
           gen icon.png       1024 512x512@2x
           iconutil -c icns DreamLayer.iconset -o dreamlayer.icns
 
+      - name: Stage the lens builder into the package
+        run: |
+          # The packaged .app has no landing/ dir, so _builder_dir() would find
+          # nothing and "Build a lens" would 404. Bundle the no-code builder (its
+          # HTML + the assets it references) into the package where _builder_dir()
+          # looks first. Keep it lean — skip the 20 MB of marketing media in
+          # landing/assets that the builder never loads.
+          DEST="host-python/src/dreamlayer/ai_brain/server/assets/build"
+          rm -rf "$DEST"; mkdir -p "$DEST/assets/juno"
+          cp landing/lens-builder.html "$DEST/"
+          cp -R landing/assets/lens "$DEST/assets/"
+          cp -R landing/assets/platinum "$DEST/assets/"
+          cp -R landing/assets/fonts "$DEST/assets/"
+          cp landing/assets/logo.png "$DEST/assets/"
+          cp landing/assets/juno/juno.js landing/assets/juno/juno_da_still.png "$DEST/assets/juno/"
+          echo "staged builder:"; find "$DEST" -type f | sort
+
       - name: Build the .app (py2app)
         run: |
           cd host-python/packaging

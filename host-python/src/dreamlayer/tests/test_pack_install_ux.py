@@ -325,3 +325,20 @@ class TestWebviewDelegate:
         # the real assertion: calling it doesn't raise, and the module keeps a
         # slot to retain the delegate (WKWebView holds it weakly)
         assert hasattr(wv, "_ui_delegate")
+
+    def test_close_and_reopen_lifecycle_helpers_are_inert_off_mac(self):
+        """Closing the panel must never quit the app: the close delegate hides
+        the window and the reopen/terminate guards keep the tray alive. Off-Mac
+        these are inert (no AppKit) — they must return cleanly, never raise, so
+        the appliance keeps running as a menu-bar-only process."""
+        from dreamlayer.ai_brain import webview_window as wv
+        assert wv._make_close_delegate() is None      # no objc → no delegate
+        assert wv.install_reopen_handler(lambda: None) is False
+        wv._set_dock_presence(True); wv._set_dock_presence(False)  # no raise
+        # the close delegate carries a hide-on-close (windowShouldClose_) handler
+        import inspect
+        src = inspect.getsource(wv._make_close_delegate)
+        assert "windowShouldClose_" in src and "orderOut_" in src
+        # and the keep-alive guard is wired in the reopen installer
+        assert "applicationShouldTerminateAfterLastWindowClosed" in \
+            inspect.getsource(wv.install_reopen_handler)

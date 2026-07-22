@@ -160,6 +160,19 @@ def check_for_update(current: str | None = None, fetch_fn=None,
             "current": cur, "latest": latest, "url": url}
 
 
+def update_banner(res: dict | None) -> str | None:
+    """The one-line 'an update is ready' line for a LAUNCH-time check, or None
+    when there's nothing to announce. A launch check only NOTIFIES — it never
+    installs behind the user's back — so this is the whole surface of that
+    posture, kept pure so the notifier is testable offline."""
+    if not res or res.get("status") != "update":
+        return None
+    latest = str(res.get("latest") or "").strip()
+    tail = "open the menu bar → Check for Updates to install"
+    return (f"DreamLayer {latest} is available — {tail}" if latest
+            else f"A DreamLayer update is available — {tail}")
+
+
 # menu-bar sprites, keyed by the status_summary icon (same semantics as the
 # Windows tray's DOT_COLORS): pixel Juno tinted head-to-wing in the status
 # color. At menu-bar size (16–22px) a corner badge shrinks to a few pixels,
@@ -545,6 +558,13 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
             # on a one-shot timer tick (off-Mac inert inside the helper).
             self._reopen_timer = rumps.Timer(self._install_reopen, 2)
             self._reopen_timer.start()
+            # Launch-time update check: once, a few seconds in (let the network
+            # settle), OFF the UI thread. If a newer release exists we NOTIFY and
+            # badge the menu item — never a silent background install; the user
+            # taps "Check for Updates" to actually install. This is a one-shot,
+            # not a poll, so it stays true to "network fetch is not on the timer".
+            self._upd_timer = rumps.Timer(self._launch_update_check, 6)
+            self._upd_timer.start()
 
         def _install_reopen(self, timer):
             # keep trying until the app delegate exists (bounded) — a one-shot
@@ -561,6 +581,42 @@ def run_menubar(directory: str | None = None, port: int = DEFAULT_PORT,
                     timer.stop()
                 except Exception:
                     pass
+
+        def _launch_update_check(self, timer):
+            # one-shot: stop the repeating timer immediately, then check once on a
+            # worker thread so a slow fetch never stalls the menu bar
+            try:
+                timer.stop()
+            except Exception:
+                pass
+            if getattr(self, "_launch_checked", False):
+                return
+            self._launch_checked = True
+
+            def _work():
+                try:
+                    res = check_for_update()
+                except Exception:
+                    return
+                msg = update_banner(res)
+                if not msg:
+                    return                    # up to date / couldn't check → stay quiet
+
+                def announce():
+                    try:                      # badge the menu item so it's actionable
+                        self.menu["Check for Updates"].title = "Update available — install"
+                    except Exception:
+                        pass
+                    try:                      # rumps.notification raises in a source run
+                        rumps.notification("DreamLayer", "Update available", msg)
+                    except Exception:
+                        pass
+                try:
+                    from PyObjCTools import AppHelper
+                    AppHelper.callAfter(announce)   # touch AppKit on the main thread
+                except Exception:
+                    announce()
+            threading.Thread(target=_work, daemon=True).start()
 
         def _api(self, path, method="GET", body=b"{}"):
             # _authed_api carries the cached token and, on a 401/403, invalidates

@@ -549,6 +549,40 @@ class TestBuildRouteHttp:
         finally:
             lb.stop()
 
+    def test_relative_sub_assets_resolve_under_the_build_mount(self, tmp_path):
+        # The page's theme CSS / fonts / images used to 404 as siblings of
+        # /dreamlayer/build. A <base> anchors them at /dreamlayer/build/ and a
+        # generic static handler serves them, so the builder renders fully
+        # instead of loading bare (the "Build a lens is 404 / broken" report).
+        import urllib.error, urllib.request
+        lb = self._live(tmp_path)
+        try:
+            page = urllib.request.urlopen(lb.url + "/dreamlayer/build").read().decode()
+            assert '<base href="/dreamlayer/build/">' in page
+            # the theme stylesheet now resolves + serves with a real CSS type
+            css = urllib.request.urlopen(lb.url + "/dreamlayer/build/assets/platinum/platinum.css")
+            assert css.status == 200
+            assert "text/css" in css.headers.get("Content-Type", "")
+            # a font too (font-src 'self' in the builder CSP)
+            font = urllib.request.urlopen(
+                lb.url + "/dreamlayer/build/assets/fonts/SpaceGrotesk-latin.woff2")
+            assert font.status == 200 and "font/woff2" in font.headers.get("Content-Type", "")
+            # the builder CSP must permit the same-origin <base>
+            assert "base-uri 'self'" in \
+                urllib.request.urlopen(lb.url + "/dreamlayer/build").headers.get(
+                    "Content-Security-Policy", "")
+
+            # traversal out of assets/ is refused, and unknown types 404
+            def code(path):
+                try:
+                    return urllib.request.urlopen(lb.url + path).status
+                except urllib.error.HTTPError as e:
+                    return e.code
+            assert code("/dreamlayer/build/assets/..%2f..%2fserver.py") == 404
+            assert code("/dreamlayer/build/assets/lens/figment.js") == 200
+        finally:
+            lb.stop()
+
     def test_feed_and_emit_routes_close_the_loop_over_http(self, tmp_path):
         import json as _json, urllib.error, urllib.request
         lb = self._live(tmp_path)
