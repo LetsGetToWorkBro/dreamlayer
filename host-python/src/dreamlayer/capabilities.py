@@ -449,7 +449,7 @@ _NOT_WIRED = frozenset({
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
     "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
-    "mesh_range", "extism_plugins", "sound_pairing", "dashboard", "fs_watch",
+    "mesh_range", "extism_plugins", "dashboard", "fs_watch",
     "lan_discovery", "spatial_viz",
     # privacy: the structural anyio veil-stop is never used (the flag-gate is).
     # (pii_redaction IS wired now — MemoryDB.add_memory runs default_redactor() on
@@ -662,17 +662,17 @@ PACKS: Tuple[Pack, ...] = (
          "Semantic memory that actually understands — indexed, deduped, searchable by meaning, fully offline.",
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
-         "Local speech: neural voice detection and on-device transcription. Audio never leaves this Mac.",
-         ("voice", "asr-extra"), "~1–2 GB", 4),
+         "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
+         ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing.",
-         ("vision", "intelligence", "causal"), "~3–5 GB", 4),
+         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing, and a painterly dream-mode lens.",
+         ("vision", "intelligence", "causal", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
          "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
-         "Operations polish: LAN auto-discovery, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
-         ("infra", "llm", "platform", "sync"), "~200 MB", 2),
+         "Operations polish: LAN auto-discovery, pair-by-sound, off-grid mesh, a sandboxed WASM plugin host, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
+         ("infra", "llm", "platform", "sync", "soundlink", "mesh", "extism"), "~250 MB", 2),
     Pack("interpreter", "Interpreter",
          "A live interpreter in your ear: a foreign speaker's meaning spoken to you, and your reply back in their language — SeamlessM4T on-device, audio never leaves this Mac.",
          ("interpreter",), "~2–4 GB", 4),
@@ -683,8 +683,8 @@ PACKS: Tuple[Pack, ...] = (
          "Look up and know the sky — planets, stars, and constellations named from your place and time, fully offline.",
          ("sky",), "~50 MB", 2),
     Pack("mind-palace", "Mind Palace",
-         "Deeper memory: a temporal knowledge graph that answers what's connected and when, plus spaced rehearsal that resurfaces a name right before you'd lose it.",
-         ("memory-graph", "srs"), "~500 MB", 3),
+         "Deeper memory: a temporal knowledge graph that answers what's connected and when, sharper commitment extraction from real meeting speech, plus spaced rehearsal that resurfaces a name right before you'd lose it.",
+         ("memory-graph", "srs", "nlp-extra"), "~500 MB", 3),
 )
 
 _PACK_BY_KEY = {p.key: p for p in PACKS}

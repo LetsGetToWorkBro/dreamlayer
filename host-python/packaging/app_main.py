@@ -108,6 +108,11 @@ def _serve(cfg_dir: str, port: int, status: dict | None = None) -> None:
     brain.start_watching()                         # reindex watched folders on change
     brain.start_brief_scheduler()                  # morning brief at brief_hour
     brain.start_calendar_sync()                    # calendar → agenda (per-platform source)
+    brain.start_source_sync()                      # memory sources (immich/dawarich/…) poll
+    # ^ the dev CLI (ai_brain.server.__main__) starts this too; the bundled app
+    # omitted it, so a user who enabled a memory source in the panel got a one-time
+    # pull on the next reindex but never the periodic refresh. Idempotent + gated
+    # on config.sources_sync inside, so it's a no-op until a source is configured.
     # Auto-start the https sibling the Live Lens camera needs. This appliance
     # binds 0.0.0.0 (the phone must reach it), and a phone browser opens its
     # camera only on a SECURE context — so http-only made scanning the Live Lens

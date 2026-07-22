@@ -779,6 +779,10 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
     <div id="pairout"></div>
+    <div class="conn"><div><div class="conn-t">Pair by sound <span class="conn-s" style="font-weight:400">· QR-free</span></div>
+      <div class="conn-s">No camera? The Brain <b>sings</b> the same one-time code as a near-ultrasonic chirp your phone catches with its mic. It carries only the 5-minute pairing code — never the token.</div></div>
+      <button id="chirpbtn" onclick="chirp()">Chirp the code</button></div>
+    <div id="chirpout"></div>
     <div class="conn"><div><div class="conn-t">Live Lens &middot; no app</div>
       <div class="conn-s">Any phone's browser becomes the glasses: camera in, the real HUD out, answered by this Brain on your LAN. Nothing to install.</div></div>
       <button id="livebtn" onclick="toggleLive()">Connect a phone</button></div>
@@ -2326,6 +2330,35 @@ async function pair(){const out=$("pairout");out.innerHTML='<div class="paircode
   out.innerHTML=`<div class="paircode">${qr}<div class="code" id="thecode">${esc(r.code)}</div>`+
     `<div class="foot"><span class="url">${esc(r.url)}</span><button class="sm" onclick="copyPair()">Copy code</button></div></div>`;
   toast("Pairing code ready");
+}
+async function chirp(){
+  // Pair-by-sound: ask the Brain for the WAV of the sung pairing code and play
+  // it through the speakers. The endpoint (/dreamlayer/pair/sound) reuses the
+  // same 5-minute live-vault code the QR carries; it returns base64 WAV bytes
+  // (ggwave, near-ultrasonic) plus the plain code as a fallback to read aloud.
+  const out=$("chirpout");out.innerHTML='<div class="paircode"><div class="shimmer"></div></div>';
+  let r;try{r=await api("/dreamlayer/pair/sound");}catch(e){r=null;}
+  if(!r){out.innerHTML='<div class="paircode" style="border-color:var(--line)"><div class="conn-s">'+
+    'Pair-by-sound is offered only from the Brain itself. Open <b>http://localhost:7777/</b> on this machine and try again.</div></div>';return;}
+  if(!r.available||!r.wav_b64){
+    // no chirp available (ggwave absent, or loopback-only w/ no token) → be
+    // honest with the server's own reason and fall back to the plain code.
+    const why=r.note||r.reason||"Sound pairing needs the soundlink capability (install the Operator pack).";
+    const code=r.code?`<div class="conn-s" style="margin-top:6px">Meanwhile, type this code on the phone:</div><div class="code">${esc(r.code)}</div>`:"";
+    out.innerHTML=`<div class="paircode"><div class="conn-s">${esc(why)}</div>${code}</div>`;return;}
+  try{
+    const bytes=Uint8Array.from(atob(r.wav_b64),c=>c.charCodeAt(0));
+    const blob=new Blob([bytes],{type:"audio/wav"});
+    const url=URL.createObjectURL(blob);
+    const a=new Audio(url); a.onended=()=>URL.revokeObjectURL(url);
+    await a.play();
+    const band=r.ultrasound?"a near-ultrasonic chirp (you may not hear it)":"an audible chirp";
+    out.innerHTML=`<div class="paircode"><div class="conn-s">Playing ${band} — hold the phone close, in the app tap <b>Brain → Pair a device → Listen</b>.</div>`+
+      `<div class="code">${esc(r.code||"")}</div><div class="foot"><button class="sm" onclick="chirp()">Play again</button></div></div>`;
+    toast("Singing the pairing code");
+  }catch(e){
+    out.innerHTML=`<div class="paircode"><div class="conn-s">Couldn't play audio here (${esc(String(e))}). Type this code on the phone instead:</div><div class="code">${esc(r.code||"")}</div></div>`;
+  }
 }
 function copyPair(){const c=window._pc||"";if(navigator.clipboard){navigator.clipboard.writeText(c).then(()=>toast("Copied"));}
   else{const r=document.createRange();r.selectNode($("thecode"));getSelection().removeAllRanges();getSelection().addRange(r);toast("Selected — ⌘C");}}
