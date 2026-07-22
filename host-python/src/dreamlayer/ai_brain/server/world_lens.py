@@ -359,9 +359,8 @@ class WorldLensHost:
 
     def _extra(self, name: str):
         """Lazily build + cache a vision_extras reader by name."""
-        cache = getattr(self, "_extras_cache", None)
-        if cache is None:
-            cache = self._extras_cache = {}
+        cache: dict = getattr(self, "_extras_cache", None) or {}
+        self._extras_cache = cache
         if name not in cache:
             from ...object_lens import vision_extras as vx
             builders = {
