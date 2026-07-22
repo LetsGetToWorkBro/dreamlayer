@@ -363,7 +363,8 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("sound_pairing", "Pair by sound — the Brain sings the code (ggwave)", "platform",
         ("ggwave",), "soundlink", "soundlink.py",
         note="opt-in; a QR-free fallback — the Brain sings the short single-use pairing code as a near-ultrasonic chirp a phone catches. Carries only the same 5-minute code the QR does, never the token",
-        gain="pairing needs a camera to scan the QR or a keypad to type the code; this hands the code over the air — a phone in earshot catches it, no camera, no typing (a real accessibility + hands-free win)", impact=2, before=0, after=4),
+        gain="pairing needs a camera to scan the QR or a keypad to type the code; this hands the code over the air — a phone in earshot catches it, no camera, no typing (a real accessibility + hands-free win)", impact=2, before=0, after=4,
+        optional=True),   # ggwave is a C++ ext with no universal wheel — needs a compiler; QR pairing is the primary path, so a machine without build tools skips it gracefully instead of failing the pack
     Cap("immich_people", "Your photo library as memory (Immich)", "services",
         (), None, "memory/source_immich.py",
         kind="service", note="self-hosted Immich on your LAN (base URL + API key); public URLs are refused",
@@ -723,9 +724,10 @@ _PACK_BY_KEY = {p.key: p for p in PACKS}
 # pack whose only gap is a build-only extra reads installed, and "Retry the rest"
 # doesn't loop forever re-attempting a dep that deterministically can't build.
 # These are the pip distribution names for the caps marked optional=True
-# (frame_glasses→frame-sdk, bird_song→birdnetlib); test_pack_optional_reqs keeps
-# the two in lockstep so a newly-optional cap can't silently fall through.
-PACK_OPTIONAL_REQS = frozenset({"frame-sdk", "birdnetlib"})
+# (frame_glasses→frame-sdk, bird_song→birdnetlib, sound_pairing→ggwave);
+# test_pack_optional_reqs keeps these in lockstep so a newly-optional cap can't
+# silently fall through.
+PACK_OPTIONAL_REQS = frozenset({"frame-sdk", "birdnetlib", "ggwave"})
 
 
 def pack_state(pack: Pack, env: Optional[dict] = None) -> str:
