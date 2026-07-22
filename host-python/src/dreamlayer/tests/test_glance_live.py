@@ -96,8 +96,18 @@ def test_choosing_a_lens_teaches_the_arbiter(brain):
     before = wl.glance_arbiter.priors.boost("text", "math")
     # simulate the chooser tap: manual lens=math with the scene it was offered for
     live_mod.world_look(brain, _flat_frame(), lens="math", scene="text")
-    after = wl2 = brain.world_lens()               # same cached host
+    after = brain.world_lens()                      # same cached host
     assert after.glance_arbiter.priors.boost("text", "math") > before
+
+
+def test_reading_teaches_the_read_candidate_not_the_doc_key(brain):
+    # the chooser runs the "doc" lens but the arbiter learns the "read" CANDIDATE
+    # key — reinforcing "doc" would be a dead no-op (the read candidate never
+    # gets boosted). Teaching must land on "read".
+    wl = brain.world_lens()
+    live_mod.world_look(brain, _flat_frame(), lens="doc", scene="text")
+    assert wl.glance_arbiter.priors.boost("text", "read") > 0      # the candidate key
+    assert wl.glance_arbiter.priors.boost("text", "doc") == 0      # NOT the run key
 
 
 # --- the live candidate set only bids lenses the host can run -----------------

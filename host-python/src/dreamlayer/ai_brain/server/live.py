@@ -296,7 +296,8 @@ def world_look(brain, arr, ambient: bool = False,
         # glance leans your way ("it learns you"). Best-effort.
         if scene and getattr(wl, "glance_arbiter", None) is not None:
             try:
-                wl.glance_arbiter.reinforce(scene, lens)
+                from .glance_live import TEACH_LENS
+                wl.glance_arbiter.reinforce(scene, TEACH_LENS.get(lens, lens))
             except Exception:                       # noqa: BLE001
                 pass
         res = wl.look_lens(arr, lens, lens_args)

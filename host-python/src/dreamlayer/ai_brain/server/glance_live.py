@@ -57,6 +57,13 @@ class MathCandidate(LensCandidate):
         return None
 
 
+# Map a RUN lens (the key look_lens executes) back to the CANDIDATE lens key the
+# arbiter learns on, so a chooser pick reinforces the right candidate. The Read
+# candidate's key is "read" but it runs the "doc" lens — without this, teaching
+# "doc" would never boost the "read" candidate and the learning would be dead.
+TEACH_LENS = {"doc": "read", "math": "math"}
+
+
 # The live arbiter's candidates — only lenses WorldLensHost can run.
 LIVE_CANDIDATES = [
     TasteLensCandidate(),   # a shelf / menu → compare
