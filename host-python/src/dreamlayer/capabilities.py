@@ -460,9 +460,13 @@ _NOT_WIRED = frozenset({
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
     "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
     "onnx_speech",
-    # vision: the "glance" hub that would fire these lenses is never called live
-    "coreml_ondevice", "math_ocr", "doc_read", "depth_sense", "openvocab_find",
-    "dream_style", "sky_sense", "scene_segment",
+    # vision: seven frontier lenses (math_ocr, doc_read, depth_sense,
+    # openvocab_find, scene_segment, sky_sense, dream_style) are now reachable
+    # from the phone / Live Lens via WorldLensHost.look_lens (?lens=…), each an
+    # on-device engine that self-describes when its pack isn't installed — so
+    # they report "active" once installed rather than "dormant". coreml_ondevice
+    # stays dormant (a macOS Vision classify backend not on the live path yet).
+    "coreml_ondevice",
     # intelligence / structured: adapters wired only in tests
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
     "causal_fusion", "structured_output", "typed_models", "typed_pipeline",

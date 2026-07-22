@@ -3839,8 +3839,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             A deliberate tap (no ambient flag) escalates to the full world lens."""
             from . import live as live_mod
             ambient = qs.get("ambient", ["0"])[0] in ("1", "true")
+            # ?lens=math|doc|depth|find|segment|sky|dream routes the frame
+            # through a single frontier lens instead of object recognition;
+            # lens_args ride the query (terms for find, lat/lon for sky).
+            lens = (qs.get("lens", [""])[0] or "").strip().lower()
+            lens_args = None
+            if lens:
+                lens_args = {}
+                if qs.get("terms"):
+                    lens_args["terms"] = [t for t in qs["terms"][0].split(",") if t.strip()]
+                for k in ("lat", "lon"):
+                    if qs.get(k):
+                        try:
+                            lens_args[k] = float(qs[k][0])
+                        except ValueError:
+                            pass
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data, ambient=ambient))
+            self._json(200, live_mod.look(brain, data, ambient=ambient,
+                                          lens=lens, lens_args=lens_args))
 
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL
