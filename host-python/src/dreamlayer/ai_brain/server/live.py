@@ -633,6 +633,7 @@ _PAGE = r"""<!doctype html>
       <option value="depth">How close</option>
       <option value="find">Find&hellip;</option>
       <option value="segment">Segment</option>
+      <option value="sky">Name the sky</option>
       <option value="dream">Dream</option>
     </select></label>
 </div>
@@ -1589,12 +1590,20 @@ function renderLens(j){
   }
   showHud(msg, {persist: liveOn}); blip();
 }
-/* choosing the Find lens asks once for what to look for */
+/* choosing the Find lens asks once for what to look for; the Sky lens needs a
+   one-time location grant (used only for the local ephemeris — never sent up) */
 if ($("lenssel")) $("lenssel").onchange = () => {
-  if ($("lenssel").value === "find") {
+  const v = $("lenssel").value;
+  if (v === "find") {
     const t = prompt("Find what? (comma-separated, e.g. my keys, a fire extinguisher)");
     window._findTerms = (t || "").trim();
     if (!window._findTerms) $("lenssel").value = "";
+  } else if (v === "sky" && !window._geo) {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        p => { window._geo = {lat: p.coords.latitude, lon: p.coords.longitude}; showHud("sky lens ready — tap to name what's above", {ms:2600}); },
+        () => { showHud("the sky lens needs location access", {ms:2800}); $("lenssel").value = ""; });
+    } else { showHud("this browser can't share location for the sky lens", {ms:2800}); $("lenssel").value = ""; }
   }
 };
 function renderResult(j, auto){
@@ -1656,6 +1665,7 @@ async function lookNow(auto){
     if (sel) {
       const qp = new URLSearchParams({lens: sel});
       if (sel === "find" && window._findTerms) qp.set("terms", window._findTerms);
+      if (sel === "sky" && window._geo) { qp.set("lat", window._geo.lat); qp.set("lon", window._geo.lon); }
       url = "/dreamlayer/live/look?" + qp.toString();
     }
     const rsp = await fetchJSON(url,

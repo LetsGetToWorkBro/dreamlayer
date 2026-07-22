@@ -82,6 +82,7 @@ class EarHost:
         self._bird_built = False
         self.last_heard = ""
         self.heard_count = 0
+        self.active_caps = frozenset()          # the caps THIS run genuinely drives
 
     # -- CapturePipeline host contract -------------------------------------
 
@@ -165,7 +166,7 @@ class EarHost:
                     return {"ok": False, "reason": "no-mic",
                             "detail": "no microphone backend (sounddevice) "
                                       "available on this machine"}
-            from ...orchestrator.capture import CapturePipeline
+            from ...orchestrator.capture import CapturePipeline, SoundDeviceMic
             from ...orchestrator.vad_gate import default_vad
             try:
                 from ...orchestrator.sound_events import default_sound_detector
@@ -179,7 +180,8 @@ class EarHost:
                     self._bird = default_bird_lens()
                 except Exception:                # noqa: BLE001
                     self._bird = None
-            pipe = CapturePipeline(self, vad=default_vad(), asr=asr,
+            vad = default_vad()
+            pipe = CapturePipeline(self, vad=vad, asr=asr,
                                    tagger=tagger, bird=self._bird)
             try:
                 pipe.start(mic)
@@ -187,15 +189,36 @@ class EarHost:
                 log.error("[ear] mic open failed: %s", exc)
                 return {"ok": False, "reason": "mic-error", "detail": str(exc)}
             self._pipe = pipe
-            return {"ok": True, "engine": asr_engine_name(asr),
+            # Promote ONLY the caps this run genuinely drives — not the whole
+            # EAR_CAPS set. make_asr picks Moonshine XOR faster-whisper (never
+            # sherpa/onnx), so onnx_speech is never on the ear's path; VAD /
+            # sound-events / birds / a real mic are each conditional on having
+            # actually built. This keeps the capability report and the meter
+            # honest (the audit's finding: a blanket promotion lied about the
+            # engines that weren't running).
+            engine = asr_engine_name(asr)
+            caps = set()
+            caps.add("asr_moonshine" if engine == "moonshine" else "local_asr")
+            if vad is not None:
+                caps.add("voice_vad")
+            if tagger is not None:
+                caps.add("sound_events")
+            if self._bird is not None:
+                caps.add("bird_song")
+            if isinstance(mic, SoundDeviceMic):   # a real mic, not a test fixture
+                caps.add("mic_capture")
+            self.active_caps = frozenset(caps & set(EAR_CAPS))
+            return {"ok": True, "engine": engine,
                     "sound_events": tagger is not None,
                     "birds": self._bird is not None,
+                    "active_caps": sorted(self.active_caps),
                     **self.status()}
 
     def stop(self) -> None:
         """Close the microphone and tear the loop down. Safe when not listening."""
         with self._lock:
             pipe, self._pipe = self._pipe, None
+            self.active_caps = frozenset()       # nothing is driven once stopped
         if pipe is not None:
             try:
                 pipe.stop()

@@ -132,9 +132,14 @@ def test_start_and_stop_flip_the_capability_report(brain, monkeypatch):
     res = brain.start_ear(mic=SyntheticMicSource(pcm=[0.0] * 320))
     assert res["ok"] is True
     assert brain.ear_status()["listening"] is True
-    # while listening, each ear cap is promoted out of dormancy via DL_WIRED
-    for key in EAR_CAPS:
-        assert os.environ.get("DL_WIRED_" + key.upper()) == "1"
+    # ONLY the genuinely-driven caps are promoted. The fake engine is not
+    # Moonshine → local_asr, not asr_moonshine; make_asr never selects sherpa →
+    # onnx_speech is NEVER promoted; a SyntheticMicSource is not the sounddevice
+    # mic → mic_capture is not promoted; no tagger/bird built here either.
+    assert os.environ.get("DL_WIRED_LOCAL_ASR") == "1"
+    for key in ("asr_moonshine", "onnx_speech", "mic_capture",
+                "sound_events", "bird_song"):
+        assert "DL_WIRED_" + key.upper() not in os.environ, key
     brain.stop_ear()
     assert brain.ear_status()["listening"] is False
     for key in EAR_CAPS:

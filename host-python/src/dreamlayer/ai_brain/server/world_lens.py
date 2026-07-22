@@ -453,11 +453,14 @@ class WorldLensHost:
                 return {"ok": bool(data), "lens": "sky", "sky": data,
                         "line": say_sky(data)}
             if lens == "dream":
-                # default_stylizer is never None — the neural painter when a model
-                # is installed (the dream_style cap), else an always-on painterly
-                # wash. So the lens always works; the cap just marks the upgrade.
+                # default_stylizer is never None — the neural painter when a MODEL
+                # is provided (DL_DREAM_MODEL → the dream_style cap), else an
+                # always-on painterly wash. So the lens always works; `neural`
+                # tells the caller which ran, and dream_style stays honestly
+                # dormant until a model is actually wired.
+                import os as _os
                 from ...dream_mode.dream_style import default_stylizer
-                st = default_stylizer()
+                st = default_stylizer(_os.environ.get("DL_DREAM_MODEL") or None)
                 out = None
                 try:
                     out = st.stylize(frame)

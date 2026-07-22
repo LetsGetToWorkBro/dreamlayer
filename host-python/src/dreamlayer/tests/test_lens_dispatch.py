@@ -82,7 +82,15 @@ def test_lens_caps_are_no_longer_dormant():
     # with the live dispatch wired, the frontier lenses report on install-state,
     # not the honest-but-hidden "dormant"
     for key in ("math_ocr", "doc_read", "depth_sense", "openvocab_find",
-                "scene_segment", "sky_sense", "dream_style"):
+                "scene_segment", "sky_sense"):
         assert key not in C._NOT_WIRED
         st = C.state(C._BY_KEY[key], env={})
         assert st in ("active", "missing", "off", "unsupported")   # never dormant
+
+
+def test_dream_style_stays_dormant_the_neural_path_needs_a_model():
+    # the reachable ?lens=dream path only runs the dependency-free painterly wash;
+    # the neural cap must NOT light green just because onnxruntime is importable
+    assert "dream_style" in C._NOT_WIRED
+    cap = C._BY_KEY["dream_style"]
+    assert C.state(cap, env={}) in ("dormant", "missing", "off", "unsupported")

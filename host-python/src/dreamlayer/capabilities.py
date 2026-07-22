@@ -283,7 +283,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("presidio_analyzer",), "privacy", "memory/pii_presidio.py",
         note="regex fallback is always on; `dreamlayer setup models` downloads the "
              "spaCy model that activates the presidio path",
-        gain="baseline scrubs emails/phones by regex; this catches names, addresses, cards in context", impact=4, before=2.5, after=4.5),
+        gain="baseline scrubs emails/phones/cards/SSNs by regex; presidio adds robust detection of IBANs, crypto wallets, passports and licences in context — deliberately NOT names or places, so recall stays intact", impact=4, before=2.5, after=4.5),
     Cap("asym_signing", "Ed25519 provenance signatures", "privacy",
         ("cryptography",), "privacy", "reality_compiler/sign_crypto.py",
         note="HMAC fallback is always on",
@@ -460,13 +460,16 @@ _NOT_WIRED = frozenset({
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
     "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
     "onnx_speech",
-    # vision: seven frontier lenses (math_ocr, doc_read, depth_sense,
-    # openvocab_find, scene_segment, sky_sense, dream_style) are now reachable
-    # from the phone / Live Lens via WorldLensHost.look_lens (?lens=…), each an
-    # on-device engine that self-describes when its pack isn't installed — so
-    # they report "active" once installed rather than "dormant". coreml_ondevice
-    # stays dormant (a macOS Vision classify backend not on the live path yet).
-    "coreml_ondevice",
+    # vision: six frontier lenses (math_ocr, doc_read, depth_sense,
+    # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
+    # Live Lens via WorldLensHost.look_lens (?lens=…), each an on-device engine
+    # that self-describes when its pack isn't installed — so they report "active"
+    # once installed rather than "dormant". dream_style stays DORMANT: the reach-
+    # able ?lens=dream path only ever runs the dependency-free painterly wash
+    # (no caller constructs the neural stylizer with a model unless DL_DREAM_MODEL
+    # is set), so onnxruntime being importable must NOT light the neural cap green.
+    # coreml_ondevice likewise (a macOS Vision classify backend not on the live path).
+    "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
     "causal_fusion", "structured_output", "typed_models", "typed_pipeline",
@@ -695,7 +698,7 @@ PACKS: Tuple[Pack, ...] = (
          "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
-         "Operations polish: LAN auto-discovery, pair-by-sound, off-grid mesh, a sandboxed WASM plugin host, live dashboards, provider routing, pip-installable plugins, and conflict-free repertoire sync across your devices.",
+         "Operations toolkit: pair a phone by sound and route across any LLM provider — working today — plus the libraries for LAN discovery, live dashboards, a sandboxed WASM plugin host, off-grid mesh and conflict-free sync as those surfaces come online.",
          ("infra", "llm", "platform", "sync", "soundlink", "mesh", "extism"), "~250 MB", 2),
     Pack("interpreter", "Interpreter",
          "A live interpreter in your ear: a foreign speaker's meaning spoken to you, and your reply back in their language — SeamlessM4T on-device, audio never leaves this Mac.",

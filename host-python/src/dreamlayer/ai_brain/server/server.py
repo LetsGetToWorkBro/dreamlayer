@@ -748,10 +748,15 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         the voice caps count only while the microphone is genuinely open."""
         import os as _os
         from .ear import EAR_CAPS
-        on = bool(self._ear is not None and self._ear.listening)
+        # Promote ONLY the caps the ear is genuinely driving right now (it tracks
+        # them in active_caps — e.g. faster-whisper → local_asr, not moonshine/
+        # onnx; a tagger only when one built). A blanket promotion would lie about
+        # engines that aren't running (audit finding).
+        active = self._ear.active_caps if (self._ear is not None
+                                           and self._ear.listening) else frozenset()
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
-            if on:
+            if key in active:
                 _os.environ[flag] = "1"
             else:
                 _os.environ.pop(flag, None)
