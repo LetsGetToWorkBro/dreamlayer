@@ -254,7 +254,8 @@ def _with_min_panel(out: dict) -> dict:
 
 
 def world_look(brain, arr, ambient: bool = False,
-               lens: str = "", lens_args: "dict | None" = None) -> dict:
+               lens: str = "", lens_args: "dict | None" = None,
+               scene: str = "") -> dict:
     """One unified Look — the single pipeline behind BOTH the browser's tap and
     the phone app's shutter, so the two surfaces are one thing.
 
@@ -290,6 +291,14 @@ def world_look(brain, arr, ambient: bool = False,
             wl = None
         if wl is None:
             return {"ok": False, "lens": lens, "reason": "lens unavailable"}
+        # A pick that came from the glance chooser carries the scene it was
+        # offered for — teach the arbiter this choice so tomorrow's ambiguous
+        # glance leans your way ("it learns you"). Best-effort.
+        if scene and getattr(wl, "glance_arbiter", None) is not None:
+            try:
+                wl.glance_arbiter.reinforce(scene, lens)
+            except Exception:                       # noqa: BLE001
+                pass
         res = wl.look_lens(arr, lens, lens_args)
         if isinstance(res, dict) and res.get("ok"):
             brain.activity.add("look", f"Looked closer with the {lens} lens")
@@ -315,6 +324,25 @@ def world_look(brain, arr, ambient: bool = False,
     except Exception as exc:
         log.warning("[live] world lens unavailable: %s", exc)
         degraded = True
+    # Auto lens selection: on a deliberate tap (shield down) the glance arbiter
+    # decides the lens from what's in view — you never pick a mode. It fires the
+    # clear winner, or offers a one-tap chooser when it's genuinely ambiguous
+    # (text that could be read OR solved). "object"/veiled/none hands back to the
+    # object-recognition floor below, which keeps all its behaviour.
+    if wl is not None:
+        try:
+            g = wl.glance(arr)
+        except Exception as exc:                # noqa: BLE001 — never break a look
+            log.warning("[live] glance failed: %s", exc)
+            g = None
+        if isinstance(g, dict) and g.get("kind") == "offer":
+            brain.activity.add("look", "Offered a lens choice")
+            return {"ok": True, "glance": "offer", "scene": g.get("scene"),
+                    "card": g.get("card")}
+        if isinstance(g, dict) and g.get("kind") == "fire":
+            brain.activity.add("look", f"Auto lens · {g.get('lens')}")
+            return {"ok": True, "glance": "fire", "lens": g.get("lens"),
+                    "card": g.get("card"), "action": g.get("action")}
     panel = None
     if wl is not None:
         try:
@@ -344,7 +372,7 @@ def world_look(brain, arr, ambient: bool = False,
 
 
 def look(brain, data: bytes, ambient: bool = False,
-         lens: str = "", lens_args: "dict | None" = None) -> dict:
+         lens: str = "", lens_args: "dict | None" = None, scene: str = "") -> dict:
     """One browser Look: decode the posted frame in memory, run the unified
     pipeline (:func:`world_look`). Frames never touch disk; the wearer's
     egress shield makes the look local-only; a plugin row is built from the
@@ -353,7 +381,7 @@ def look(brain, data: bytes, ambient: bool = False,
     the frame through a single named frontier lens (math/doc/depth/find/
     segment/sky/dream) instead of object recognition."""
     return world_look(brain, decode_frame(data), ambient=ambient,
-                      lens=lens, lens_args=lens_args)
+                      lens=lens, lens_args=lens_args, scene=scene)
 
 
 def render_live(nonce: str = "") -> str:

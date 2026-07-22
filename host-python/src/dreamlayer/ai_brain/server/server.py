@@ -3848,6 +3848,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # through a single frontier lens instead of object recognition;
             # lens_args ride the query (terms for find, lat/lon for sky).
             lens = (qs.get("lens", [""])[0] or "").strip().lower()
+            # a chooser-tap carries the scene it was offered for → teach the arbiter
+            scene = (qs.get("scene", [""])[0] or "").strip().lower()
             lens_args = None
             if lens:
                 lens_args = {}
@@ -3861,7 +3863,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                             pass
             data = self._raw(live_mod.MAX_FRAME_BYTES)
             self._json(200, live_mod.look(brain, data, ambient=ambient,
-                                          lens=lens, lens_args=lens_args))
+                                          lens=lens, lens_args=lens_args, scene=scene))
 
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL
