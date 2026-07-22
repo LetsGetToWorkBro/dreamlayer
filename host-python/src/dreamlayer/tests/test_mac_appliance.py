@@ -358,6 +358,24 @@ def _fake_release(tag, url="https://example/rel"):
     return _fetch
 
 
+def test_launch_update_banner_only_announces_a_real_update():
+    # The launch-time auto-check NOTIFIES, never installs. update_banner is that
+    # whole surface: a one-line message when (and only when) a newer release
+    # exists, naming the version, and steering the user to the install action.
+    up = menubar.check_for_update(current="0.2.0", fetch_fn=_fake_release("v9.9.9"))
+    banner = menubar.update_banner(up)
+    assert banner and "9.9.9" in banner and "Check for Updates" in banner
+
+    current = menubar.check_for_update(current="9.9.9", fetch_fn=_fake_release("v9.9.9"))
+    assert menubar.update_banner(current) is None      # up to date → silent
+
+    def boom(url, timeout):
+        raise ConnectionError("offline")
+    err = menubar.check_for_update(current="0.2.0", fetch_fn=boom)
+    assert menubar.update_banner(err) is None          # couldn't check → silent
+    assert menubar.update_banner(None) is None
+
+
 def test_check_for_update_reports_available_current_and_error():
     up = menubar.check_for_update(current="0.2.0", fetch_fn=_fake_release("v9.9.9"))
     assert up["status"] == "update" and "9.9.9" in up["message"]

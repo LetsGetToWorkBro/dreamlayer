@@ -10,6 +10,23 @@ from __future__ import annotations
 from dreamlayer import capabilities as C
 
 
+# ---- pack ordering -------------------------------------------------------
+
+def test_packs_report_is_ordered_most_impact_first():
+    impacts = [p["impact"] for p in C.packs_report()]
+    assert impacts == sorted(impacts, reverse=True), (
+        f"packs must lead with the highest impact, got {impacts}")
+
+
+def test_pack_ordering_is_stable_within_equal_impact():
+    # equal-impact packs keep their curated definition order (stable sort)
+    report = C.packs_report()
+    for impact in {p["impact"] for p in report}:
+        same = [p["key"] for p in report if p["impact"] == impact]
+        defn = [p.key for p in C.PACKS if p.impact == impact]
+        assert same == defn, f"impact {impact} packs reordered: {same} vs {defn}"
+
+
 # ---- grouping + consolidation --------------------------------------------
 
 def test_every_cap_tier_is_a_known_display_group():

@@ -14,6 +14,16 @@ from __future__ import annotations
 from dreamlayer.ai_brain.server.panel import render_panel
 
 
+class TestPanelChrome:
+    def test_refresh_button_reloads_the_chromeless_window(self):
+        # the native window is a WKWebView with no browser reload button, so the
+        # panel carries its own refresh in the top bar next to help + theme
+        html = render_panel("tok")
+        assert 'id="refreshBtn"' in html and 'onclick="refreshPanel()"' in html
+        assert "function refreshPanel(" in html
+        assert "location.reload()" in html          # a real reload, not a no-op
+
+
 class TestPanelConnectUX:
     def test_live_qr_loads_on_demand_from_a_collapsible(self):
         html = render_panel("tok")
@@ -25,11 +35,15 @@ class TestPanelConnectUX:
         assert "_liveOpen" in html and "_liveAutoLoaded" in html
         assert "liveLink()" in html
 
-    def test_qr_rendered_large_enough_to_scan(self):
+    def test_qr_rendered_at_a_compact_scannable_size(self):
         html = render_panel("tok")
-        # the Live Lens QR (now the sparse short-code payload) must render at a
-        # comfortable scanning size — bigger modules lock on off a glossy screen
-        assert ".qrbox.live svg{width:380px" in html
+        # Compact — about a half-dollar on screen. The old 380px giant existed
+        # only to compensate for the encoder laying the format bits down reversed
+        # (so nothing could scan it); that bug is fixed, so a small, correct QR
+        # reads instantly. Guard the new size AND that the giant is gone.
+        assert ".qrbox.live svg{width:170px" in html
+        assert ".qrbox svg{display:block;width:150px" in html
+        assert "width:380px" not in html
 
     def test_panel_explains_the_token_cannot_be_typed(self):
         html = render_panel("tok")

@@ -593,6 +593,7 @@ _PAGE = r"""<!doctype html>
 <div id="panel" aria-live="polite"></div>
 <div id="chips">
   <span class="chip" id="link">&#9679; <b id="linkst">linking&hellip;</b></span>
+  <span class="chip" id="vision" hidden><b id="visionst"></b></span>
   <span class="chip" id="tier" hidden><b id="tiertx"></b></span>
   <span class="chip on" id="livebtn" role="switch" aria-checked="true" tabindex="0">&#9673; <b id="livest">live</b></span>
   <span class="chip" id="veilbtn" role="switch" aria-checked="false" tabindex="0">veil <b id="veilst">off</b></span>
@@ -1375,6 +1376,15 @@ function setTier(t){
   $("tier").hidden = false;
   $("tier").classList.toggle("warn", t === "cloud");
 }
+/* a persistent warm-up chip — the HUD gets overwritten by ambient results, so
+   the honest "the on-device stack is still loading" signal lives here, next to
+   the link chip, until the detector is on (tier chip takes over) or it falls
+   back to the Brain loop */
+function setVisionChip(on){
+  const c = $("vision"); if (!c) return;
+  if (on) { $("visionst").textContent = "vision loading…"; c.hidden = false; }
+  else { c.hidden = true; }
+}
 
 /* ---- veil: the wearer's posture, mirrored here -------------------------- */
 function setVeil(on, o){
@@ -1563,6 +1573,13 @@ async function lookNow(auto){
     if (!c) throw new Error("no frame");
     const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
     if (!blob) throw new Error("no frame");
+    /* The on-device detector can come online WHILE we were capturing this frame
+       (toBlob yields). An ambient look must not fire its Brain round-trip once
+       the browser is recognizing locally — that stray poll is the "it's just
+       naming objects again" server hop, and it's the exact frame that laps the
+       e2e idle check. Re-check right before the network call, not only at the
+       top, so the race is actually closed. */
+    if (auto && (detectorActive || !liveOn || document.hidden || dreamOn || veil)) return;
     const t0 = performance.now();
     /* auto (ambient) frames stay local-only + leave no trace server-side; a
        deliberate tap escalates to the full lens (VLM/plugins/memory/ledger) */
@@ -2004,22 +2021,62 @@ let detector = null, rafId = null, lastDetect = 0, detectFails = 0, overlayDirty
 const DETECT_MS = 90;                 /* ~11 fps — smooth, easy on the battery */
 const DETECT_MAX_FAILS = 12;          /* ~1s of persistent runtime failure → give up */
 
+/* The MediaPipe module (137 KB) + the FilesetResolver are shared by BOTH the
+   object detector and the gesture recognizer — resolve them once and memoize so
+   neither re-imports the bundle. (The heavy 9.4 MB WASM is actually compiled
+   inside each createFromOptions call, so it still compiles twice; the win isn't
+   dedup — it's that we load the two SEQUENTIALLY, below, so their compiles don't
+   contend, the detector reaches ready sooner, and the gesture's WASM fetch then
+   reuses the detector's warm HTTP cache.) */
+let _visionMod = null, _filesetP = null;
+function visionFileset(){
+  if (!_filesetP) _filesetP = (async () => {
+    _visionMod = await import("/dreamlayer/live/assets/vision_bundle.mjs");
+    return _visionMod.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
+  })();
+  return _filesetP;
+}
+/* A stalled asset fetch (headers sent, stream hangs) never resolves NOR rejects,
+   so without a cap loadDetector's promise chain would hang forever: the page
+   would sit at data-detector="loading" with a "vision loading…" chip that never
+   comes true, and — because gestures start in loadDetector's finally — they'd
+   never load either. Bound the wait so a stall falls back cleanly instead. Kept
+   comfortably above the e2e's 40s detector budget so a slow-but-progressing load
+   is never cut off. */
+const DETECT_LOAD_MS = 60000;
+function withTimeout(p, ms, label){
+  return Promise.race([p, new Promise((_, rej) =>
+    setTimeout(() => rej(new Error((label || "load") + " timed out")), ms))]);
+}
 async function loadDetector(){
+  /* a visible "warming up" state so the first seconds aren't mistaken for the
+     server just naming objects (the honest answer to "is the stack loaded?") */
+  document.body.setAttribute("data-detector", "loading");
+  setVisionChip(true);
+  showHud("loading on-device vision…", {ms:2400, _detector:true});
   try {
-    const vision = await import("/dreamlayer/live/assets/vision_bundle.mjs");
-    const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
-    detector = await vision.ObjectDetector.createFromOptions(fileset, {
+    const fileset = await withTimeout(visionFileset(), DETECT_LOAD_MS, "vision runtime");
+    detector = await withTimeout(_visionMod.ObjectDetector.createFromOptions(fileset, {
       baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/efficientdet_lite0.tflite"},
       scoreThreshold: 0.42, maxResults: 6, runningMode: "VIDEO",
-      categoryDenylist: ["person"]});   /* the model itself never even emits a person box */
+      categoryDenylist: ["person"]}), DETECT_LOAD_MS, "detector model");
     detectorActive = true;
     clearTimeout(loopTimer);          /* the browser recognizes now — idle the server loop */
+    setVisionChip(false);             /* warm-up done; the tier chip now reads "on-device" */
     setTier("laptop");
     showHud("on-device vision ✨", {ms:1800});
     document.body.setAttribute("data-detector", "on");   /* status (styleable + testable) */
     startDetectLoop();
   } catch (e) {
     fallBackToServer(e, "unavailable");
+  } finally {
+    /* Gestures load only AFTER the detector attempt SETTLES — success, error, or
+       the timeout above — never alongside its warm-up, so their WASM compiles
+       don't contend and the detector (the thing that stops the server naming
+       loop) wins the race. The timeout guarantees this finally always runs, so a
+       stalled detector can't strand gestures. They share the memoized fileset +
+       warm HTTP cache, so this stays cheap. */
+    startGesture();
   }
 }
 /* Load OR runtime failure → stop the detector and hand recognition back to the
@@ -2031,7 +2088,7 @@ function fallBackToServer(e, why){
   try { if (detector && detector.close) detector.close(); } catch (_) {}
   detector = null;
   if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
-  clearOverlayOnce(); hideDetectorHud();
+  clearOverlayOnce(); hideDetectorHud(); setVisionChip(false);
   document.body.setAttribute("data-detector", "off");
   if (window.console)
     console.warn("[live] on-device detector " + (why || "failed") + " — using Brain looks:", e);
@@ -2143,16 +2200,21 @@ const GESTURE_ACTIONS = {
   Open_Palm:   () => { glassClear(); hideDetectorHud(); },
   Victory:     () => toggleDream()
 };
+let _gestureStarted = false;
+function startGesture(){        /* idempotent: fallBackToServer can re-enter loadDetector's finally */
+  if (_gestureStarted) return;
+  _gestureStarted = true;
+  loadGesture();
+}
 async function loadGesture(){
   try {
-    const vision = await import("/dreamlayer/live/assets/vision_bundle.mjs");
-    const fileset = await vision.FilesetResolver.forVisionTasks("/dreamlayer/live/assets/wasm");
-    gesturer = await vision.GestureRecognizer.createFromOptions(fileset, {
+    const fileset = await withTimeout(visionFileset(), DETECT_LOAD_MS, "vision runtime");
+    gesturer = await withTimeout(_visionMod.GestureRecognizer.createFromOptions(fileset, {
       baseOptions: {modelAssetPath: "/dreamlayer/live/assets/models/gesture_recognizer.task"},
-      numHands: 1, runningMode: "VIDEO"});
+      numHands: 1, runningMode: "VIDEO"}), DETECT_LOAD_MS, "gesture model");
     document.body.setAttribute("data-gesture", "on");   /* status (styleable + testable) */
     gRaf = requestAnimationFrame(gestureTick);
-  } catch (e) {
+  } catch (e) {           /* a stall or failure settles to "off", never hangs data-gesture unset */
     document.body.setAttribute("data-gesture", "off");
     if (window.console) console.warn("[live] gesture recognizer unavailable:", e);
   }
@@ -2203,8 +2265,9 @@ function gestureTick(ts){
 /* ---- boot --------------------------------------------------------------- */
 setLive(true);
 startCam();
-loadDetector();                       /* progressive enhancement — non-blocking */
-loadGesture();                        /* on-device hand gestures — same, non-blocking */
+loadDetector();                       /* progressive enhancement — non-blocking; it
+                                         loads the on-device gestures once it settles,
+                                         so the two never contend during warm-up */
 (async () => {                                    /* first link check + posture seed */
   /* a QR that carried the SHORT pairing code (#c=) redeems for the token
      BEFORE the status probe — else an about-to-pair phone 401s and pops the

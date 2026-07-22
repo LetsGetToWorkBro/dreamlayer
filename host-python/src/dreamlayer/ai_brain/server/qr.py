@@ -306,7 +306,12 @@ def _apply_mask(matrix: _Matrix, mask: int) -> List[List[int]]:
 def _place_format(grid: List[List[int]], mask: int) -> None:
     n = len(grid)
     fmt = _FORMAT_M[mask]
-    bits = [(fmt >> i) & 1 for i in range(14, -1, -1)]          # 15 bits, MSB first
+    # Format info is placed LSB-first: coords1[i]/coords2[i] carry format bit i,
+    # matching the QR spec (ISO/IEC 18004) and every conforming decoder — iPhone
+    # Camera, OpenCV, zxing. Emitting these bits reversed (MSB-first) lays down a
+    # valid-looking symbol whose BCH format word decodes to garbage, so no real
+    # camera can read it even though the modules otherwise round-trip internally.
+    bits = [(fmt >> i) & 1 for i in range(15)]                  # 15 bits, LSB first
     # top-left
     coords1 = [(0, 8), (1, 8), (2, 8), (3, 8), (4, 8), (5, 8), (7, 8), (8, 8),
                (8, 7), (8, 5), (8, 4), (8, 3), (8, 2), (8, 1), (8, 0)]
@@ -401,9 +406,10 @@ def _read_mask(grid: List[List[int]]) -> int:
     """Recover the mask index from the top-left format bits."""
     bits = [grid[r][8] for r in (0, 1, 2, 3, 4, 5, 7, 8)] + \
            [grid[8][c] for c in (7, 5, 4, 3, 2, 1, 0)]
+    # bits[i] is format bit i (LSB-first), matching _place_format's layout.
     fmt = 0
-    for b in bits:
-        fmt = (fmt << 1) | b
+    for i, b in enumerate(bits):
+        fmt |= (b & 1) << i
     # match against the known BCH format strings (exact; no error correction)
     for mask, code in _FORMAT_M.items():
         if code == fmt:

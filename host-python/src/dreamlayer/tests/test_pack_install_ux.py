@@ -195,6 +195,61 @@ class TestResilientInstall:
         finally:
             srv._PACK_JOBS.clear()
 
+    def test_build_only_dep_is_skipped_so_the_pack_completes(self):
+        """A build-only extra (frame-sdk / birdnetlib) can't install without a
+        compiler and fails deterministically. If it's the ONLY failure the pack
+        must read installed — not partial — so 'Retry the rest' can't loop on a
+        dep that can never build here."""
+        def once(subset):
+            if len(subset) > 1:
+                return False, "pip exited 1"
+            return ("frame-sdk" not in subset[0], "done")
+        reqs = ["fastapi<1", "aiohttp<4", "frame-sdk>=1,<2", "pylsl<2"]
+        ok, detail = srv._install_resilient(reqs, None, once)
+        assert ok is True                                  # complete, not partial
+        assert "skipped" in detail and "frame-sdk" in detail
+        assert not detail.startswith("PARTIAL:")
+
+    def test_hard_failure_alongside_a_skip_is_still_partial_and_names_only_the_hard_one(self):
+        """A genuine (non-build-only) failure keeps the pack partial and names
+        only the real problem — the build-only extra is skipped silently."""
+        def once(subset):
+            if len(subset) > 1:
+                return False, "pip exited 1"
+            r = subset[0]
+            return ("frame-sdk" not in r and "pylsl" not in r, "done")
+        reqs = ["fastapi<1", "frame-sdk>=1,<2", "pylsl<2,>=1"]
+        ok, detail = srv._install_resilient(reqs, None, once)
+        assert ok is False
+        assert detail.startswith("PARTIAL:")
+        assert "pylsl" in detail          # the real gap is named…
+        assert "frame-sdk" not in detail  # …the build-only one is not
+
+
+class TestBuildOnlyOptionalCaps:
+    """frame-sdk / birdnetlib have no universal wheel; they must never keep a
+    pack pinned 'partial' forever nor be re-attempted on every retry."""
+
+    def test_optional_reqs_cover_every_optional_cap(self):
+        from dreamlayer.capabilities import CAPABILITIES, PACK_OPTIONAL_REQS
+        for c in CAPABILITIES:
+            if not c.optional:
+                continue
+            forms = ({m.lower() for m in c.modules}
+                     | {m.lower().replace("_", "-") for m in c.modules})
+            assert forms & PACK_OPTIONAL_REQS, (
+                f"{c.key} is optional=True but its dist name is not in "
+                "PACK_OPTIONAL_REQS — the installer would keep retrying it")
+
+    def test_pack_state_ignores_build_only_optional_caps(self, monkeypatch):
+        import dreamlayer.capabilities as cap
+        ws = cap._PACK_BY_KEY["world-sense"]           # contains bird_song (optional)
+        assert any(c.optional for c in ws.caps()), "fixture drifted: no optional cap"
+        # everything installable is in; only the build-only optional cap is missing
+        monkeypatch.setattr(cap, "supported", lambda c: True)
+        monkeypatch.setattr(cap, "installed", lambda c: not c.optional)
+        assert cap.pack_state(ws) == "installed"       # complete despite the skip
+
 
 class TestPipProcessCleanup:
     def test_run_pip_kills_the_orphan_on_timeout(self, monkeypatch):
@@ -270,3 +325,20 @@ class TestWebviewDelegate:
         # the real assertion: calling it doesn't raise, and the module keeps a
         # slot to retain the delegate (WKWebView holds it weakly)
         assert hasattr(wv, "_ui_delegate")
+
+    def test_close_and_reopen_lifecycle_helpers_are_inert_off_mac(self):
+        """Closing the panel must never quit the app: the close delegate hides
+        the window and the reopen/terminate guards keep the tray alive. Off-Mac
+        these are inert (no AppKit) — they must return cleanly, never raise, so
+        the appliance keeps running as a menu-bar-only process."""
+        from dreamlayer.ai_brain import webview_window as wv
+        assert wv._make_close_delegate() is None      # no objc → no delegate
+        assert wv.install_reopen_handler(lambda: None) is False
+        wv._set_dock_presence(True); wv._set_dock_presence(False)  # no raise
+        # the close delegate carries a hide-on-close (windowShouldClose_) handler
+        import inspect
+        src = inspect.getsource(wv._make_close_delegate)
+        assert "windowShouldClose_" in src and "orderOut_" in src
+        # and the keep-alive guard is wired in the reopen installer
+        assert "applicationShouldTerminateAfterLastWindowClosed" in \
+            inspect.getsource(wv.install_reopen_handler)

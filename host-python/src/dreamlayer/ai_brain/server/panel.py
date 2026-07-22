@@ -152,6 +152,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     align-items:center;justify-content:center;border-radius:0;
     background:linear-gradient(180deg,#F6F6F6,#D2D2D2);color:#141414;border:1px solid var(--frame);
     box-shadow:var(--bev-out),1px 1px 0 rgba(0,0,0,.18);font:14px/1 var(--chi);cursor:pointer}
+  #refreshBtn.spin{animation:dlspin .6s linear infinite}
+  @keyframes dlspin{to{transform:rotate(360deg)}}
   .themetog:hover{filter:brightness(1.03)}
   .themetog:active{background:#8E8E8E;color:#fff;box-shadow:var(--bev-in);filter:none}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,138,61,.5)}70%{box-shadow:0 0 0 7px rgba(31,138,61,0)}100%{box-shadow:0 0 0 0 rgba(31,138,61,0)}}
@@ -316,13 +318,13 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   .paircode .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
   .paircode .url{font:12px ui-monospace,Menlo,monospace;color:var(--ghost)}
   .qrbox{background:#fff;border:1px solid var(--frame);box-shadow:var(--bev-out),2px 2px 0 rgba(0,0,0,.18);
-       border-radius:0;padding:12px;width:max-content;max-width:100%;margin:0 auto 4px}
-  .qrbox svg{display:block;width:300px;height:300px;max-width:100%}
-  /* the Live Lens QR now carries the short pairing code (sparse), and renders
-     bigger still, so a phone camera locks on from a comfortable distance off a
-     glossy screen (the #1 "the QR won't scan" cause). The http fallback carries
-     the long token and is the densest, so even the base size is generous. */
-  .qrbox.live svg{width:380px;height:380px}
+       border-radius:0;padding:10px;width:max-content;max-width:100%;margin:0 auto 4px}
+  /* Compact — about a half-dollar on screen. The QR used to render huge to
+     compensate for the encoder laying the format bits down reversed (nothing
+     could scan it, so bigger seemed to "help"); that bug is fixed now, so a
+     modern phone camera locks onto this small, correct code instantly. */
+  .qrbox svg{display:block;width:150px;height:150px;max-width:100%}
+  .qrbox.live svg{width:170px;height:170px}   /* short pairing code — sparse, reads easily small */
   /* the pairing container is a disclosure: collapsed until you need it, and it
      folds away again so a big scannable QR never permanently eats the panel. */
   #liveout{overflow:hidden;transition:max-height .28s ease;max-height:0}
@@ -664,6 +666,8 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
   <div class="bar"><span class="brand"><b>Dream</b>Layer</span>
     <span class="live"><img class="dot" id="liveJuno" src="/panel-assets/juno_status_offline.png"
       width="16" height="16" alt=""><span id="livetext">connecting…</span></span>
+    <button class="themetog" id="refreshBtn" type="button" aria-label="Refresh"
+      title="Refresh" onclick="refreshPanel()">⟳</button>
     <button class="themetog" id="helpBtn" type="button" aria-label="Help and report a bug"
       title="Help &amp; report a bug" onclick="gotoReport()">?</button>
     <button class="themetog" id="themeTog" type="button" aria-label="Appearance"
@@ -1193,6 +1197,14 @@ function applyTheme(dark){document.documentElement.classList.toggle("midnight",!
 function toggleTheme(){const dark=!document.documentElement.classList.contains("midnight");
   applyTheme(dark);try{localStorage.setItem("dltheme",dark?"midnight":"platinum");}catch(e){}
   toast(dark?"Midnight Platinum":"Platinum");}
+// Reload the panel from the Brain. The native window is a chrome-less WKWebView
+// with no browser reload button, so this is the app's refresh: a hard reload
+// re-pulls status, capabilities, health — everything — in one predictable step.
+function refreshPanel(){
+  const b=$("refreshBtn"); if(b)b.classList.add("spin");
+  try{toast("Refreshing…");}catch(e){}
+  setTimeout(()=>{try{location.reload();}catch(e){window.location.href=location.pathname;}},150);
+}
 applyTheme(document.documentElement.classList.contains("midnight"));
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",e=>{
   let saved=null;try{saved=localStorage.getItem("dltheme");}catch(_){}
@@ -1520,8 +1532,12 @@ function capRight(it){
   if(it.state==="external") return info+`<span class="sstate">${esc(it.note||"external service")}</span>`;
   return info+`<span class="sstate">macOS only</span>`;
 }
+function applyCaps(r){   // paint a capabilities payload; no polling side-effects
+  if(!r||!r.items)return false;
+  LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false;
+  renderCaps(r); renderPacks(r.packs); return true;}
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
-  if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
+  if(!applyCaps(r))return;
   if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
 /* --- the awakening meter: a percent + level that climbs as caps install --- */
 function renderCapStats(r){
@@ -1624,7 +1640,7 @@ async function downloadAll(){
   let items=[]; try{items=JSON.parse(el.dataset.items||"[]");}catch(e){}
   if(!items.length)return;
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",{items:items});
+    await api("/dreamlayer/downloads/enqueue",{method:"POST",body:JSON.stringify({items:items})});
     toast("Queued "+items.length+" download"+(items.length>1?"s":""));
     pollDownloads();
   }catch(e){toast("Couldn't queue downloads");}
@@ -1633,12 +1649,12 @@ async function downloadAll(){
 // model, or plugin lands in the same visible queue as "Download all"
 async function queueDownload(kind,key){
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",{kind:kind,key:key});
+    await api("/dreamlayer/downloads/enqueue",{method:"POST",body:JSON.stringify({kind:kind,key:key})});
     toast("Queued "+key); pollDownloads();
   }catch(e){toast("Couldn't queue "+key);}
 }
 async function cancelDownload(id){
-  try{await api("/dreamlayer/downloads/cancel","POST",{id:id});}catch(e){}
+  try{await api("/dreamlayer/downloads/cancel",{method:"POST",body:JSON.stringify({id:id})});}catch(e){}
   pollDownloads();
 }
 async function pollDownloads(){
@@ -1658,7 +1674,16 @@ async function pollDownloads(){
               i.state==="done"?"style=\"color:var(--memory)\"":"";
     return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;
   }).join("");
-  if(live.length){_dlPoll=setTimeout(pollDownloads,1500);}
+  if(live.length){
+    // While packs are still in line, repaint the caps page each tick so every
+    // pack card shows its own bar — the running one streams pip percent, the
+    // rest read "queued" — matching "all the bars show, one at a time." Single
+    // loop: no schedulePackPoll kick, so we don't stack a second poller.
+    if(live.some(i=>i.kind==="pack")){
+      try{const c=await api("/dreamlayer/capabilities");applyCaps(c);}catch(e){}
+    }
+    _dlPoll=setTimeout(pollDownloads,1500);
+  }
   else{                       // queue drained → refresh whatever it touched
     loadCaps();
     if(q.some(i=>i.kind==="plugin")){loadPlugins();refreshStore();}

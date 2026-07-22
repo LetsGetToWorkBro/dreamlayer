@@ -97,6 +97,12 @@ PANEL_CSP = (
     "object-src 'none'; base-uri 'none'; form-action 'self'; "
     "frame-ancestors 'none'")
 
+# The builder page carries the SAME policy but permits a same-origin <base> — it
+# injects "<base href='/dreamlayer/build/'>" so its relative assets resolve under
+# the builder mount. base-uri 'self' still forbids pointing the base off-origin,
+# so the same-origin, no-off-origin-fetch guarantees hold.
+BUILDER_CSP = PANEL_CSP.replace("base-uri 'none'", "base-uri 'self'")
+
 
 class _RequestTooLarge(Exception):
     """A request body exceeded its size cap → mapped to HTTP 413. Carries the
@@ -1753,16 +1759,64 @@ def _builder_page(token: str) -> "Optional[str]":
     if d is None:
         return None
     html = (d / "lens-builder.html").read_text(encoding="utf-8")
+    # A same-origin <base> so EVERY relative asset resolves under the builder
+    # mount (/dreamlayer/build/assets/…) and one static handler serves them —
+    # the theme CSS/JS, fonts and images used to 404 as siblings of the page.
+    # Must come first in <head>, before any asset ref. The deploy calls are
+    # ABSOLUTE (/dreamlayer/rc/*) so <base> never touches them; it needs the
+    # builder CSP to allow base-uri 'self' (BUILDER_CSP).
+    base = '<base href="/dreamlayer/build/">'
+    if "<head>" in html:
+        html = html.replace("<head>", "<head>\n" + base, 1)
+    else:                                          # tolerate <head attrs> / no head
+        html = base + html
+    # The lens engine + Juno sprite keep their explicit same-origin rewrites (a
+    # flat, cache-stable path served pre-<base>); everything else rides the base.
     html = html.replace("./assets/lens/figment.js", "/dreamlayer/build/figment.js")
     html = html.replace("./assets/lens/qr.js", "/dreamlayer/build/qr.js")
     html = html.replace("./assets/lens/icons.js", "/dreamlayer/build/icons.js")
-    # Juno's sprite script lives under a different served path; rewrite it so
-    # the Ask-Juno avatar loads (any ?v= cache-buster rides along untouched).
     html = html.replace("./assets/juno/juno.js", "/dreamlayer/build/juno/juno.js")
     inject = ("<script>window.__DL_BUILD__="
               + json.dumps({"token": token, "sameOrigin": True})
               + ";</script>")
     return html.replace("</head>", inject + "</head>", 1)
+
+
+_BUILDER_CTYPES = {
+    "html": "text/html; charset=utf-8", "css": "text/css; charset=utf-8",
+    "js": "application/javascript; charset=utf-8",
+    "mjs": "application/javascript; charset=utf-8",
+    "json": "application/json; charset=utf-8",
+    "woff2": "font/woff2", "woff": "font/woff", "ttf": "font/ttf",
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif", "svg": "image/svg+xml",
+    "ico": "image/x-icon", "mp4": "video/mp4", "webm": "video/webm",
+    "mp3": "audio/mpeg", "map": "application/json",
+}
+
+
+def _builder_static(relpath: str) -> "Optional[tuple[bytes, str]]":
+    """Serve any file under the builder's ``assets/`` dir (theme CSS/JS, fonts,
+    images, the lens engine) so the same-origin builder page renders fully.
+    Returns (bytes, content_type), or None for missing / unknown-type / a path
+    that escapes ``assets/`` (traversal-safe: the resolved file must stay inside).
+    """
+    d = _builder_dir()
+    if d is None:
+        return None
+    root = (d / "assets").resolve()
+    try:
+        fp = (root / relpath).resolve()
+    except Exception:
+        return None
+    if fp != root and root not in fp.parents:      # no ../ escape out of assets/
+        return None
+    if not fp.is_file():
+        return None
+    ctype = _BUILDER_CTYPES.get(fp.suffix.lower().lstrip("."))
+    if ctype is None:
+        return None
+    return (fp.read_bytes(), ctype)
 
 
 def _brain_view_payload(brain: Brain) -> dict:
@@ -2008,7 +2062,23 @@ def _install_resilient(reqs: list, on_line, once) -> tuple:
         (installed if o else failed).append(r)
     if not failed:
         return True, "installed"
-    names = ", ".join(_req_name(r) for r in failed)
+    # Some extras are build-only (no universal wheel — frame-sdk, birdnetlib):
+    # they fail deterministically on a machine without a compiler. Skip those
+    # from the failure accounting so a pack whose ONLY gaps are build-only deps
+    # completes instead of re-looping "Retry the rest" forever on a dep that can
+    # never install here. We still ATTEMPTED them above, so a machine that CAN
+    # build them gets them.
+    from ...capabilities import PACK_OPTIONAL_REQS
+    hard = [r for r in failed if _req_name(r).lower() not in PACK_OPTIONAL_REQS]
+    skipped = [r for r in failed if _req_name(r).lower() in PACK_OPTIONAL_REQS]
+    if not hard:
+        if skipped:
+            sn = ", ".join(_req_name(r) for r in skipped)
+            return True, ("installed — skipped %d build-only extra%s (%s: needs a "
+                          "compiler; the rest of the pack is active)"
+                          % (len(skipped), "" if len(skipped) == 1 else "s", sn))
+        return True, "installed"
+    names = ", ".join(_req_name(r) for r in hard)
     if installed:
         return False, ("PARTIAL:added %d of %d — couldn't add %s (needs a build "
                        "tool or a wheel this machine doesn't have; the rest of "
@@ -2400,8 +2470,10 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
         detail = detail or ""
         if ok:
             job["state"], job["percent"] = "done", 100
-            job["detail"] = ("installed — reload the panel; restart the Brain if a "
-                             "capability stays dark")
+            tail = " — reload the panel; restart the Brain if a capability stays dark"
+            # keep the honest "skipped a build-only extra" note when there was one
+            job["detail"] = (detail + tail) if detail.startswith("installed — skipped") \
+                else ("installed" + tail)
         elif detail.startswith("PARTIAL:"):     # some installed, a few couldn't —
             job["state"], job["percent"] = "partial", 100   # the pack is still usable
             job["detail"] = detail[len("PARTIAL:"):]
@@ -2875,7 +2947,23 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Security-Policy", PANEL_CSP)
+            self.send_header("Content-Security-Policy", BUILDER_CSP)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _get_builder_static(self, path, qs):
+            """Any file under the builder's assets/ dir — theme CSS/JS, fonts,
+            images, the lens engine — served same-origin so the <base>-anchored
+            builder page renders fully. Public + read-only + traversal-safe."""
+            res = _builder_static(path[len("/dreamlayer/build/assets/"):])
+            if res is None:
+                self._json(404, {"error": "not found"}); return
+            body, ctype = res
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "public, max-age=3600")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -3436,6 +3524,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         }
         # prefix/dynamic public routes (ordered fallback, still pre-auth)
         _GET_PUBLIC_PREFIX = [
+            ("/dreamlayer/build/assets/", _get_builder_static),
             ("/dreamlayer/build/juno/", _get_juno_asset),
             ("/dreamlayer/live/assets/", _get_live_asset),
             ("/panel-assets/", _get_panel_asset),

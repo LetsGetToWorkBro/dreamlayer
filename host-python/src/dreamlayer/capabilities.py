@@ -73,6 +73,10 @@ class Cap:
     # both out of 5 (halves allowed; 0 = the fallback simply can't do it).
     before: float = 0.0
     after: float = 0.0
+    # A build-only extra with no universal wheel (needs a compiler on the user's
+    # machine). The rest of its pack is fully usable without it, so it must not
+    # keep a pack pinned "partial" forever nor make "Retry the rest" loop.
+    optional: bool = False
 
     @property
     def flag_env(self) -> str:
@@ -156,7 +160,8 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("bird_song", "The world narrates itself — birdsong recognition", "voice",
         ("birdnetlib",), "birds", "orchestrator/bird_lens.py",
         note="opt-in; BirdNET (6,000+ species) on the ambient-audio rung — no human identity in a bird call",
-        gain="the glasses hear alarms and doorbells; with BirdNET they also know the Song Sparrow singing over your walk — fully offline, Pi-Zero-sized, pure delight", impact=2, before=0, after=4),
+        gain="the glasses hear alarms and doorbells; with BirdNET they also know the Song Sparrow singing over your walk — fully offline, Pi-Zero-sized, pure delight", impact=2, before=0, after=4,
+        optional=True),   # birdnetlib has no universal wheel — needs a compiler
     Cap("asr_alignment", "Word-level timestamps for prosody", "voice",
         ("whisperx",), "asr-extra", "truth_lens/prosody_whisperx.py",
         gain="baseline has no word timing; this timestamps every word so tone becomes readable", impact=3, before=0, after=3.5),
@@ -316,7 +321,8 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline stdlib server works; this adds async handlers + websockets alongside it", impact=2, before=3.5, after=4),
     Cap("frame_glasses", "Brilliant Frame as a second display", "platform",
         ("frame_sdk",), "platform", "bridge/frame_sdk.py",
-        gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2, before=0, after=3.5),
+        gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2, before=0, after=3.5,
+        optional=True),   # frame-sdk has no universal wheel — needs a compiler
     Cap("lsl_streams", "Lab Streaming Layer sensor export", "platform",
         ("pylsl",), "platform", "pipelines/lsl_transport.py",
         gain="baseline has no research export; this syncs sensors with lab tooling", impact=1, before=0, after=3),
@@ -639,10 +645,26 @@ PACKS: Tuple[Pack, ...] = (
 
 _PACK_BY_KEY = {p.key: p for p in PACKS}
 
+# Distribution names (as pip sees them, hyphenated) of the build-only extras
+# that have no universal wheel: installing them needs a C/C++ toolchain the user
+# may not have. The installer skips these instead of failing the whole pack, and
+# pack_state excludes their caps from the "is this pack complete?" tally — so a
+# pack whose only gap is a build-only extra reads installed, and "Retry the rest"
+# doesn't loop forever re-attempting a dep that deterministically can't build.
+# These are the pip distribution names for the caps marked optional=True
+# (frame_glasses→frame-sdk, bird_song→birdnetlib); test_pack_optional_reqs keeps
+# the two in lockstep so a newly-optional cap can't silently fall through.
+PACK_OPTIONAL_REQS = frozenset({"frame-sdk", "birdnetlib"})
+
 
 def pack_state(pack: Pack, env: Optional[dict] = None) -> str:
-    """installed / partial / available — from the pack's python capabilities."""
-    caps = [c for c in pack.caps() if c.kind in ("python", "darwin") and supported(c)]
+    """installed / partial / available — from the pack's python capabilities.
+
+    Build-only optional caps (no universal wheel) don't count toward the tally:
+    a pack is "installed" once everything installable is in, even if a compiler
+    was missing for an optional extra."""
+    caps = [c for c in pack.caps()
+            if c.kind in ("python", "darwin") and supported(c) and not c.optional]
     have = [c for c in caps if installed(c)]
     if not caps:
         return "available"
@@ -652,12 +674,15 @@ def pack_state(pack: Pack, env: Optional[dict] = None) -> str:
 
 
 def packs_report(env: Optional[dict] = None) -> list[dict]:
+    # Most impactful first — the packs a new Brain gains the most from lead the
+    # page. Stable, so equal-impact packs keep their curated definition order.
+    ordered = sorted(PACKS, key=lambda p: -p.impact)
     return [{
         "key": p.key, "name": p.name, "tagline": p.tagline, "size": p.size,
         "impact": p.impact, "recommended": p.recommended,
         "extras": list(p.extras), "state": pack_state(p, env),
         "caps": [c.key for c in p.caps()],
-    } for p in PACKS]
+    } for p in ordered]
 
 
 def extras_requirements(extra: str) -> list[str]:

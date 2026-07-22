@@ -139,7 +139,11 @@ def test_payload_includes_packs_and_gains(tmp_path):
     try:
         _, body = _req(lb.url + "/dreamlayer/capabilities", headers=lb.h)
         packs = body["packs"]
-        assert [p["key"] for p in packs] == [p.key for p in PACKS]
+        # packs lead with the highest impact (not raw definition order), and all
+        # of them are present
+        assert [p["impact"] for p in packs] == sorted(
+            (p["impact"] for p in packs), reverse=True)
+        assert {p["key"] for p in packs} == {p.key for p in PACKS}
         for p in packs:
             assert {"name", "tagline", "size", "impact", "state", "caps"} <= set(p)
             assert p["state"] in ("installed", "partial", "available")
