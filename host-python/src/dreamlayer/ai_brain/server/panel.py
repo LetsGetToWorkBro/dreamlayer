@@ -1520,8 +1520,12 @@ function capRight(it){
   if(it.state==="external") return info+`<span class="sstate">${esc(it.note||"external service")}</span>`;
   return info+`<span class="sstate">macOS only</span>`;
 }
+function applyCaps(r){   // paint a capabilities payload; no polling side-effects
+  if(!r||!r.items)return false;
+  LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false;
+  renderCaps(r); renderPacks(r.packs); return true;}
 async function loadCaps(){let r;try{r=await api("/dreamlayer/capabilities");}catch(e){return;}
-  if(!r||!r.items)return; LASTCAPS=r; CAPFROZEN=!!r.frozen; CAPINSTALL=r.pack_installable!==false; renderCaps(r); renderPacks(r.packs);
+  if(!applyCaps(r))return;
   if((r.packs||[]).some(p=>p.install&&p.install.state==="installing"))schedulePackPoll();}
 /* --- the awakening meter: a percent + level that climbs as caps install --- */
 function renderCapStats(r){
@@ -1624,7 +1628,7 @@ async function downloadAll(){
   let items=[]; try{items=JSON.parse(el.dataset.items||"[]");}catch(e){}
   if(!items.length)return;
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",{items:items});
+    await api("/dreamlayer/downloads/enqueue",{method:"POST",body:JSON.stringify({items:items})});
     toast("Queued "+items.length+" download"+(items.length>1?"s":""));
     pollDownloads();
   }catch(e){toast("Couldn't queue downloads");}
@@ -1633,12 +1637,12 @@ async function downloadAll(){
 // model, or plugin lands in the same visible queue as "Download all"
 async function queueDownload(kind,key){
   try{
-    await api("/dreamlayer/downloads/enqueue","POST",{kind:kind,key:key});
+    await api("/dreamlayer/downloads/enqueue",{method:"POST",body:JSON.stringify({kind:kind,key:key})});
     toast("Queued "+key); pollDownloads();
   }catch(e){toast("Couldn't queue "+key);}
 }
 async function cancelDownload(id){
-  try{await api("/dreamlayer/downloads/cancel","POST",{id:id});}catch(e){}
+  try{await api("/dreamlayer/downloads/cancel",{method:"POST",body:JSON.stringify({id:id})});}catch(e){}
   pollDownloads();
 }
 async function pollDownloads(){
@@ -1658,7 +1662,16 @@ async function pollDownloads(){
               i.state==="done"?"style=\"color:var(--memory)\"":"";
     return `<div class="conn-s" ${cls}>${esc(i.kind)} · ${esc(i.key)} — ${esc(i.state)}${pct}${pos}${cancel}</div>`;
   }).join("");
-  if(live.length){_dlPoll=setTimeout(pollDownloads,1500);}
+  if(live.length){
+    // While packs are still in line, repaint the caps page each tick so every
+    // pack card shows its own bar — the running one streams pip percent, the
+    // rest read "queued" — matching "all the bars show, one at a time." Single
+    // loop: no schedulePackPoll kick, so we don't stack a second poller.
+    if(live.some(i=>i.kind==="pack")){
+      try{const c=await api("/dreamlayer/capabilities");applyCaps(c);}catch(e){}
+    }
+    _dlPoll=setTimeout(pollDownloads,1500);
+  }
   else{                       // queue drained → refresh whatever it touched
     loadCaps();
     if(q.some(i=>i.kind==="plugin")){loadPlugins();refreshStore();}

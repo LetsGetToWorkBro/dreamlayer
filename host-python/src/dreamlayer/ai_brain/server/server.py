@@ -2008,7 +2008,23 @@ def _install_resilient(reqs: list, on_line, once) -> tuple:
         (installed if o else failed).append(r)
     if not failed:
         return True, "installed"
-    names = ", ".join(_req_name(r) for r in failed)
+    # Some extras are build-only (no universal wheel — frame-sdk, birdnetlib):
+    # they fail deterministically on a machine without a compiler. Skip those
+    # from the failure accounting so a pack whose ONLY gaps are build-only deps
+    # completes instead of re-looping "Retry the rest" forever on a dep that can
+    # never install here. We still ATTEMPTED them above, so a machine that CAN
+    # build them gets them.
+    from ...capabilities import PACK_OPTIONAL_REQS
+    hard = [r for r in failed if _req_name(r).lower() not in PACK_OPTIONAL_REQS]
+    skipped = [r for r in failed if _req_name(r).lower() in PACK_OPTIONAL_REQS]
+    if not hard:
+        if skipped:
+            sn = ", ".join(_req_name(r) for r in skipped)
+            return True, ("installed — skipped %d build-only extra%s (%s: needs a "
+                          "compiler; the rest of the pack is active)"
+                          % (len(skipped), "" if len(skipped) == 1 else "s", sn))
+        return True, "installed"
+    names = ", ".join(_req_name(r) for r in hard)
     if installed:
         return False, ("PARTIAL:added %d of %d — couldn't add %s (needs a build "
                        "tool or a wheel this machine doesn't have; the rest of "
@@ -2400,8 +2416,10 @@ def _install_pack(brain: Brain, pack_key: str) -> dict:
         detail = detail or ""
         if ok:
             job["state"], job["percent"] = "done", 100
-            job["detail"] = ("installed — reload the panel; restart the Brain if a "
-                             "capability stays dark")
+            tail = " — reload the panel; restart the Brain if a capability stays dark"
+            # keep the honest "skipped a build-only extra" note when there was one
+            job["detail"] = (detail + tail) if detail.startswith("installed — skipped") \
+                else ("installed" + tail)
         elif detail.startswith("PARTIAL:"):     # some installed, a few couldn't —
             job["state"], job["percent"] = "partial", 100   # the pack is still usable
             job["detail"] = detail[len("PARTIAL:"):]
