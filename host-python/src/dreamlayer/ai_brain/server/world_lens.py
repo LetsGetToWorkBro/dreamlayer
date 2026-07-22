@@ -371,7 +371,12 @@ class WorldLensHost:
             try:
                 cache[name] = builders[name]()
             except Exception as exc:                 # noqa: BLE001
-                log.info("[lens] %s reader unavailable: %s", name, exc)
+                # value via extra={} (the scrubbed path), not the message string,
+                # so the pii-in-log rule never trips on the `name` variable — it's
+                # a lens key ("math"/"doc"…), never a person's name, but keep the
+                # message literal to stay clear of the heuristic either way.
+                log.info("[lens] reader unavailable",
+                         extra={"reader": name, "err": str(exc)})
                 cache[name] = None
         return cache[name]
 
