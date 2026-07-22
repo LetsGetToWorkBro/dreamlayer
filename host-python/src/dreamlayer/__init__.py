@@ -13,7 +13,7 @@ Internal engine (memory storage & pipelines):
   dreamlayer/                  — memory storage, pipelines (internal)
   halo_bridge.py              — BLE hardware transport
 """
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 __all__ = []
 
 
