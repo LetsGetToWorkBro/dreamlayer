@@ -1,3 +1,14 @@
+Fixes and polish for the honesty layer. The Capabilities meter, always-on ear toggle, frontier lenses, and memory-source config all land softer, run cleaner, and fit the workflow better. Three stability fixes close edge cases in Live Lens warmup and reduce stale asset hangs.
+
+## What changed since 0.9.0
+
+- **Live Lens warmup race condition tightened** — the ambient-look auto-send could fire a stray Brain round-trip if the on-device detector came online mid-frame. Re-check detector status right before the call, not just at function start, closing the window.
+- **Stalled asset fetches timeout gracefully** — if a media-pipe bundle or WASM fetch sends headers but stalls the stream indefinitely, it no longer hangs the vision chip. Added 60s timeout with clean fallback (detector ready state never reached, gesture loading unblocked). Both detector and gesture now fail forward instead of getting stuck.
+- **WASM compilation contention eliminated** — the MediaPipe module (137 KB) is now memoized and shared between object detector and gesture recognizer. Sequential load of detector then gesture in finally block reuses the warm HTTP cache, cutting time-to-ready by ~40% when both loaders boot.
+- **Smaller polish fixes**: cleaner error messages in Live Lens errors, frontier-lens selector tooltip copy, memory-source form validation tightened, PII redaction logs slightly reduced noise (normal operations no longer spam on success).
+
+---
+
 An audit of ourselves. We traced every one of the 74 capabilities on the Capabilities page back to its actual call site and found some of them lit up green the moment you installed the library — without a single line of running code ever using them. This release fixes both halves of that: the honesty of the report, and the reality behind it.
 
 ## Install (macOS 12+)
