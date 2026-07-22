@@ -661,7 +661,7 @@ _PAGE = r"""<!doctype html>
     #tourcard{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}
   }
   #tourdots{color:var(--phos-dim);font-size:11px;margin-left:auto;align-self:center}
-  @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan{animation:none} }
+  @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan,#chooser{animation:none} }
 </style>
 </head>
 <body>
@@ -1008,7 +1008,8 @@ function glassDocCard(j){                          /* Read -> a page reading in 
 }
 function glassDepthCard(j){                        /* Distance -> a proximity gauge */
   const ctx = glassCtx(); gback(ctx);
-  const c = (j.closeness == null) ? null : Math.max(0, Math.min(1, Number(j.closeness)));
+  const cn = Number(j.closeness);                  /* NaN-safe: a non-numeric closeness reads as "—", never "NaN%" */
+  const c = Number.isFinite(cn) ? Math.max(0, Math.min(1, cn)) : null;
   ctx.strokeStyle = "rgba(44,199,154,.16)"; ctx.lineWidth = 1;
   [26, 46, 66].forEach(r => { ctx.beginPath(); ctx.arc(128, 112, r, 0, 2 * Math.PI); ctx.stroke(); });
   gtext(ctx, "DISTANCE", 128, 50, GP.text_ghost, "sm");
@@ -1035,15 +1036,18 @@ function glassFindCard(j){                          /* Find -> a reticle + hits 
   if (found.length){
     ctx.save(); ctx.shadowColor = GP.confidence_high; ctx.shadowBlur = 7;
     gdiamond(ctx, 128, 108, 7, GP.confidence_high); ctx.restore();
-    found.slice(0, 3).forEach((f, i) =>
-      gtext(ctx, (f.term || "") + "  " + Math.round((f.confidence || 0) * 100) + "%",
-            128, 150 + i * 16, GP.text_primary, "sm"));
+    found.slice(0, 3).forEach((f, i) => {
+      const cf = Number(f.confidence);             /* NaN-safe: drop a bad confidence, don't render "NaN%" */
+      const pct = Number.isFinite(cf) ? "  " + Math.round(Math.max(0, Math.min(1, cf)) * 100) + "%" : "";
+      gtext(ctx, (f.term || "") + pct, 128, 150 + i * 16, GP.text_primary, "sm");
+    });
   } else gtext(ctx, "not in view", 128, 108, GP.text_secondary, "sm");
   gend(j.dismiss_ms || 4600);
 }
 function glassSegmentCard(j){                       /* Scene -> lit region wedges */
   const ctx = glassCtx(); gback(ctx);
-  const n = (j.regions == null) ? 0 : Math.max(0, Math.min(12, Math.round(Number(j.regions))));
+  const rn = Number(j.regions);                    /* NaN-safe: a non-numeric region count draws nothing, not "NaN" */
+  const n = Number.isFinite(rn) ? Math.max(0, Math.min(12, Math.round(rn))) : 0;
   const k = Math.max(1, n);
   for (let i = 0; i < k; i++){
     const a0 = (i / k) * 2 * Math.PI - Math.PI / 2, a1 = ((i + 1) / k) * 2 * Math.PI - Math.PI / 2;
@@ -1112,7 +1116,7 @@ async function enterDream(){
   if (confOn) _confResync = true;    /* rejoin mid-bond → one forced emit */
   document.body.setAttribute("data-dream", "on");
   clearTimeout(loopTimer);                 /* dream replaces memory-mode looks */
-  renderPanel(null); glassClear(); clearOverlayOnce(); hideDetectorHud();
+  renderPanel(null); glassClear(); clearOverlayOnce(); hideDetectorHud(); hideChooser();
   $("hint").textContent = "dream mode · double-tap to wake";
   try {                                    /* mic weather — asked inside the tap */
     if (!veil) {
@@ -1618,7 +1622,7 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); clearOverlayOnce(); glassClear();
+  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser();
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
                                              merely ignored */
