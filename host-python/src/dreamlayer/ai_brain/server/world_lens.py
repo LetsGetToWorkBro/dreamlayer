@@ -541,24 +541,42 @@ class WorldLensHost:
         return {"kind": "object"}
 
     def _run_glance_lens(self, action: str, frame, args: dict):
-        """Run the lens the arbiter chose and return a card dict (or None to fall
-        back to the object floor). Only the actions the live candidates can bid."""
+        """Run the lens the arbiter chose and return a card dict, or None to fall
+        back to the object floor. A lens that self-describes a MISSING PACK
+        ({need:...}) is returned AS-IS (not None), so the auto-fire path surfaces
+        "install the pack" honestly — exactly as the manual chooser does — instead
+        of silently dropping to object-naming (audit 2026-07-23)."""
         try:
             if action == "read":
-                r = self.look_lens(frame, "doc")
-                return r if isinstance(r, dict) and r.get("ok") else None
+                return self._glance_lens_result(self.look_lens(frame, "doc"))
             if action == "math":
-                r = self.look_lens(frame, "math")
-                return r if isinstance(r, dict) and r.get("ok") else None
+                return self._glance_lens_result(self.look_lens(frame, "math"))
             if action == "translate":
                 panel = self.look(frame, facet="ai")
                 return panel.to_hud_card() if panel is not None else None
             if action == "taste":
+                from ...hud import cards
                 res = self.taste(frame)
-                thc = getattr(res, "to_hud_card", None)
-                return thc() if callable(thc) else None
+                # cards.taste renders the ranking — NOT a nonexistent
+                # TasteRanking.to_hud_card, which silently returned None and
+                # dropped every shelf/menu to object-naming (audit 2026-07-23).
+                # An unavailable/empty ranking hands back to the object floor
+                # rather than drawing a hollow "nothing to compare" card.
+                if getattr(res, "unavailable", False) or not getattr(res, "items", None):
+                    return None
+                return cards.taste(res, unavailable=False)
         except Exception as exc:               # noqa: BLE001 — a lens never crashes a look
             log.warning("[glance] lens %s failed: %s", action, exc)
+        return None
+
+    @staticmethod
+    def _glance_lens_result(r):
+        """A look_lens result → a glance card: the real card when the look
+        succeeded, the honest {need:...}/{need_location:...} self-description when
+        a pack is missing (so auto-fire says "install the pack"), else None → the
+        object floor (a genuine "nothing in view", never a swallowed missing-pack)."""
+        if isinstance(r, dict) and (r.get("ok") or r.get("need") or r.get("need_location")):
+            return r
         return None
 
     def choose_glance(self, action: str, frame, args: dict, scene: str = "") -> dict:
