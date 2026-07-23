@@ -517,12 +517,18 @@ _PAGE = r"""<!doctype html>
 <title>DreamLayer &middot; Live Lens</title>
 <style__NONCE__>
   :root{
-    --phos:#7DFFA8; --phos-dim:#3F8F5C; --amber:#FFC46B; --bg:#050807;
-    --plate:rgba(5,10,8,.72); --lens: min(80vmin, 560px);
+    /* palette.lua, verbatim — the glasses' teal-on-black system, not a phosphor
+       terminal. Teal is the ACCENT (rails, labels, chrome); the answer itself is
+       near-white (--ink), exactly the renderer.lua hierarchy. */
+    --teal:#2CC79A; --teal-bright:#00FFAA; --teal-dim:#1A7A60;
+    --ink:#ECF0F1; --ink2:#A8B8C0; --ghost:#58686F;
+    --amber:#FFAA00; --attention:#E06B52; --border:#2A3C44; --bg:#000000;
+    --plate:rgba(6,10,11,.72); --lens: min(80vmin, 560px);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100dvh;min-height:100%;background:var(--bg);overflow:hidden;
-    font:14px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--phos)}
+    font:14px/1.45 -apple-system,"SF Pro Text","Helvetica Neue","Segoe UI",system-ui,Roboto,sans-serif;
+    color:var(--ink)}
   video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
     filter:saturate(.9) brightness(.94)}
   /* the on-device detector paints boxes here, over the video, under the chrome */
@@ -533,11 +539,11 @@ _PAGE = r"""<!doctype html>
       rgba(5,8,7,0) 60%, rgba(5,8,7,.66) 100%);}
   #lens{position:fixed;left:50%;top:46%;width:var(--lens);height:var(--lens);
     transform:translate(-50%,-50%);border-radius:50%;cursor:pointer;
-    border:1px solid rgba(125,255,168,.5);
-    box-shadow:0 0 44px rgba(125,255,168,.16), inset 0 0 60px rgba(125,255,168,.05);
+    border:1px solid rgba(44,199,154,.5);
+    box-shadow:0 0 44px rgba(44,199,154,.16), inset 0 0 60px rgba(44,199,154,.05);
     display:flex;align-items:center;justify-content:center;text-align:center;
     transition:box-shadow .3s}
-  #lens:active{box-shadow:0 0 60px rgba(125,255,168,.3), inset 0 0 60px rgba(125,255,168,.1)}
+  #lens:active{box-shadow:0 0 60px rgba(44,199,154,.3), inset 0 0 60px rgba(44,199,154,.1)}
   /* the glass itself: a 256px round display, scaled — the device card renderer
      (renderer.lua) draws HERE, over the camera, inside the circle */
   #glass{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;
@@ -545,45 +551,45 @@ _PAGE = r"""<!doctype html>
   #glass.on{opacity:1}
   /* a sweeping ring while a look is in flight — the "it's thinking" tell */
   #lens.scan{animation:pulse 1.1s ease-in-out infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(125,255,168,.14),inset 0 0 60px rgba(125,255,168,.05)}
-    50%{box-shadow:0 0 72px rgba(125,255,168,.42),inset 0 0 70px rgba(125,255,168,.12)}}
-  #hud{white-space:pre;letter-spacing:.05em;font-size:clamp(13px,2.6vmin,19px);
-    text-shadow:0 0 10px rgba(125,255,168,.6);opacity:0;transition:opacity .28s;
+  @keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(44,199,154,.14),inset 0 0 60px rgba(44,199,154,.05)}
+    50%{box-shadow:0 0 72px rgba(44,199,154,.42),inset 0 0 70px rgba(44,199,154,.12)}}
+  #hud{white-space:pre;letter-spacing:.03em;font-size:clamp(13px,2.6vmin,19px);
+    color:var(--ink);text-shadow:0 0 10px rgba(0,255,170,.45);opacity:0;transition:opacity .28s;
     max-width:82%;padding:10px 14px;border-radius:10px;background:var(--plate);
     backdrop-filter:blur(3px)}
   #hud:empty{padding:0;background:none}
   #hud.on{opacity:1}
   #hint{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
-    transform:translateX(-50%);color:var(--phos-dim);font-size:12px;
+    transform:translateX(-50%);color:var(--teal-dim);font-size:12px;
     letter-spacing:.1em;text-transform:uppercase;transition:opacity .3s;text-align:center}
   /* the rich object panel — provider rows the glass would draw */
   #panel{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 92px);
     transform:translateX(-50%);width:min(88vw,440px);opacity:0;pointer-events:none;
-    transition:opacity .3s;background:var(--plate);border:1px solid rgba(125,255,168,.28);
+    transition:opacity .3s;background:var(--plate);border:1px solid rgba(44,199,154,.28);
     border-radius:12px;padding:12px 14px;backdrop-filter:blur(4px)}
   #panel.on{opacity:1}
-  #panel .ptitle{font-size:15px;color:var(--phos);letter-spacing:.02em;margin-bottom:6px}
+  #panel .ptitle{font-size:15px;color:var(--teal);letter-spacing:.02em;margin-bottom:6px}
   #panel .prow{display:flex;justify-content:space-between;gap:10px;font-size:13px;
-    color:#DDEFE4;padding:3px 0;border-top:1px solid rgba(125,255,168,.1)}
-  #panel .prow .psrc{color:var(--phos-dim);font-size:11px;text-transform:uppercase;
+    color:#ECF0F1;padding:3px 0;border-top:1px solid rgba(44,199,154,.1)}
+  #panel .prow .psrc{color:var(--teal-dim);font-size:11px;text-transform:uppercase;
     letter-spacing:.08em;white-space:nowrap}
-  #panel .pfoot{margin-top:6px;color:var(--phos-dim);font-size:11px;letter-spacing:.06em}
+  #panel .pfoot{margin-top:6px;color:var(--teal-dim);font-size:11px;letter-spacing:.06em}
   /* status chips */
   #chips{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:0;right:0;
     display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
-  .chip{border:1px solid rgba(125,255,168,.35);border-radius:3px;padding:3px 9px;
-    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--phos-dim);
+  .chip{border:1px solid rgba(44,199,154,.35);border-radius:3px;padding:3px 9px;
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dim);
     background:rgba(5,8,7,.6);backdrop-filter:blur(2px);cursor:default}
-  .chip b{color:var(--phos);font-weight:normal}
+  .chip b{color:var(--teal);font-weight:normal}
   .chip.warn{color:var(--amber);border-color:rgba(255,196,107,.45)}
   #veilbtn,#livebtn{cursor:pointer;user-select:none}
   #veilbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
-  #livebtn.on b{color:var(--phos)}
+  #livebtn.on b{color:var(--teal)}
   /* right-edge camera controls: torch + zoom (shown only when supported) */
   #controls{position:fixed;right:calc(env(safe-area-inset-right,0px) + 10px);top:50%;
     transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;align-items:center}
   #controls button{width:46px;height:46px;border-radius:50%;font-size:18px;
-    background:rgba(5,8,7,.66);border:1px solid rgba(125,255,168,.4);color:var(--phos);
+    background:rgba(5,8,7,.66);border:1px solid rgba(44,199,154,.4);color:var(--teal);
     backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;cursor:pointer}
   #controls button[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
   #zoomwrap{display:flex;flex-direction:column;gap:6px;align-items:center}
@@ -591,13 +597,13 @@ _PAGE = r"""<!doctype html>
   #bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;
     padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
     background:linear-gradient(transparent, rgba(5,8,7,.9) 42%)}
-  #q{flex:1;background:rgba(5,8,7,.82);border:1px solid rgba(125,255,168,.4);
-    border-radius:3px;color:var(--phos);padding:11px 12px;font:inherit;min-width:0}
-  #q::placeholder{color:var(--phos-dim)}
-  #q:focus{outline:none;border-color:var(--phos)}
-  button{background:rgba(5,8,7,.8);border:1px solid rgba(125,255,168,.5);
-    border-radius:3px;color:var(--phos);font:inherit;padding:11px 14px;cursor:pointer}
-  button:active{background:rgba(125,255,168,.15)}
+  #q{flex:1;background:rgba(5,8,7,.82);border:1px solid rgba(44,199,154,.4);
+    border-radius:3px;color:var(--teal);padding:11px 12px;font:inherit;min-width:0}
+  #q::placeholder{color:var(--teal-dim)}
+  #q:focus{outline:none;border-color:var(--teal)}
+  button{background:rgba(5,8,7,.8);border:1px solid rgba(44,199,154,.5);
+    border-radius:3px;color:var(--teal);font:inherit;padding:11px 14px;cursor:pointer}
+  button:active{background:rgba(44,199,154,.15)}
   #mic[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
   /* full-screen notices (no camera / no token / no link) */
   .notice{position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);
@@ -605,18 +611,18 @@ _PAGE = r"""<!doctype html>
     background:rgba(5,8,7,.94);color:var(--amber);padding:16px 18px;font-size:13px;z-index:9}
   .notice h2{font-size:13px;letter-spacing:.14em;margin-bottom:8px}
   .notice p{color:#CDBB96;margin-top:6px}
-  .notice code{color:var(--phos)}
+  .notice code{color:var(--teal)}
   .notice .act{margin-top:12px;display:flex;gap:8px}
   .notice .act button{font:12px inherit;letter-spacing:.06em;padding:8px 14px;border-radius:4px}
   .codein{display:flex;gap:8px;margin-top:8px}
   .codein input{flex:1;min-width:0;font:18px ui-monospace,Menlo,monospace;letter-spacing:3px;
-    text-align:center;padding:8px;border:1px solid var(--phos-dim);border-radius:4px;
-    background:#05100D;color:var(--phos)}
+    text-align:center;padding:8px;border:1px solid var(--teal-dim);border-radius:4px;
+    background:#0E1416;color:var(--teal)}
   .codein button{font:13px inherit;letter-spacing:.06em;padding:0 14px;border-radius:4px;
-    border:1px solid var(--phos);background:transparent;color:var(--phos);cursor:pointer}
+    border:1px solid var(--teal);background:transparent;color:var(--teal);cursor:pointer}
   .pairmsg{min-height:1.1em;color:var(--amber)}
   #privacy{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);
-    left:0;right:0;text-align:center;color:var(--phos-dim);font-size:10.5px;
+    left:0;right:0;text-align:center;color:var(--teal-dim);font-size:10.5px;
     letter-spacing:.06em;padding:0 16px;pointer-events:none;transition:opacity .3s}
   #privacy.hide{opacity:0}
   /* live captions — the room's speech on the glass (the glasses' Live Caption
@@ -627,33 +633,33 @@ _PAGE = r"""<!doctype html>
     display:flex;justify-content:center;padding:0 14px;pointer-events:none;
     opacity:0;transition:opacity .3s;z-index:3}
   #captions.on{opacity:1}
-  #captions .cc{max-width:min(92vw,560px);background:rgba(5,10,8,.76);
-    border-radius:10px;padding:7px 13px;font:14px/1.45 ui-monospace,Menlo,monospace;
-    color:#EAF6EE;text-align:center;backdrop-filter:blur(3px);white-space:pre-wrap}
-  #captions .cc .iim{color:var(--phos-dim)}
-  #captions .cc .csrc{display:block;font-size:9.5px;color:var(--phos-dim);
+  #captions .cc{max-width:min(92vw,560px);background:rgba(6,10,11,.76);
+    border-radius:10px;padding:7px 13px;font:15px/1.5 inherit;
+    color:var(--ink);text-align:center;backdrop-filter:blur(3px);white-space:pre-wrap}
+  #captions .cc .iim{color:var(--teal-dim)}
+  #captions .cc .csrc{display:block;font-size:9.5px;color:var(--teal-dim);
     letter-spacing:.11em;text-transform:uppercase;margin-top:4px}
   /* Juno's first-run tour: anchored coach marks over the REAL controls.
      The card owns pointer events; the spotlight ring never does — the lens,
      veil, and ask bar stay clickable throughout (the e2e clicks them). */
   #tour{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .4s}
   #tour.on{opacity:1}
-  #tourring{position:fixed;border:2px solid rgba(125,255,168,.85);border-radius:14px;
-    pointer-events:none;box-shadow:0 0 0 6000px rgba(3,6,5,.45), 0 0 24px rgba(125,255,168,.5);
+  #tourring{position:fixed;border:2px solid rgba(44,199,154,.85);border-radius:14px;
+    pointer-events:none;box-shadow:0 0 0 6000px rgba(3,6,5,.45), 0 0 24px rgba(44,199,154,.5);
     transition:all .35s ease;display:none}
   #tourcard{position:fixed;left:50%;transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom,0px) + 96px);width:min(88vw,420px);
-    pointer-events:auto;background:rgba(5,10,8,.94);border:1px solid rgba(125,255,168,.4);
+    pointer-events:auto;background:rgba(5,10,8,.94);border:1px solid rgba(44,199,154,.4);
     border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;
     backdrop-filter:blur(5px)}
   #tourcard img{width:44px;height:44px;image-rendering:pixelated;flex:none;margin-top:2px}
   #tourcard .tourbody{flex:1}
-  #tourtext b{color:var(--phos);font-weight:normal;display:block;font-size:13px;
+  #tourtext b{color:var(--teal);font-weight:normal;display:block;font-size:13px;
     letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-  #tourtext{font-size:13px;line-height:1.5;color:#DDEFE4}
+  #tourtext{font-size:13px;line-height:1.5;color:#ECF0F1}
   #touracts{display:flex;gap:8px;margin-top:9px}
   #touracts button{padding:6px 14px;border-radius:16px;font-size:12px}
-  #touracts .ghost{border-color:rgba(125,255,168,.25);color:var(--phos-dim)}
+  #touracts .ghost{border-color:rgba(44,199,154,.25);color:var(--teal-dim)}
   /* confluence: the chip lives only in dream mode; the code card is the one
      piece of chrome — the three words two humans speak to each other */
   #confbtn{display:none}
@@ -661,35 +667,35 @@ _PAGE = r"""<!doctype html>
   #confbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
   #confcard{position:fixed;left:50%;top:24%;transform:translateX(-50%);
     width:min(86vw,360px);z-index:8;background:rgba(5,10,8,.95);
-    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    border:1px solid rgba(44,199,154,.4);border-radius:14px;padding:14px 16px;
     backdrop-filter:blur(5px);display:none}
   #confcard.on{display:block}
   /* the glance chooser — a glass dialog of one-tap lens options */
   #chooser{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
     transform:translateX(-50%);z-index:9;width:min(84vw,320px);display:none;
-    background:rgba(5,10,8,.86);border:1px solid rgba(125,255,168,.35);
+    background:rgba(5,10,8,.86);border:1px solid rgba(44,199,154,.35);
     border-radius:16px;padding:12px;backdrop-filter:blur(6px);text-align:center;
-    box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(125,255,168,.12);
+    box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(44,199,154,.12);
     animation:chooserIn .22s ease-out both}
   #chooser.show{display:block}
   @keyframes chooserIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}
     to{opacity:1;transform:translateX(-50%) translateY(0)}}
   #chooserq{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--phos-dim);margin-bottom:9px}
+    color:var(--teal-dim);margin-bottom:9px}
   #chooseropts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-  .choosebtn{appearance:none;border:1px solid rgba(125,255,168,.45);
-    background:rgba(125,255,168,.08);color:#EAFBF0;font-size:13.5px;font-weight:600;
+  .choosebtn{appearance:none;border:1px solid rgba(44,199,154,.45);
+    background:rgba(44,199,154,.08);color:#ECF0F1;font-size:13.5px;font-weight:600;
     padding:9px 15px;border-radius:11px;cursor:pointer;transition:transform .1s,background .15s}
-  .choosebtn:hover,.choosebtn:focus{background:rgba(125,255,168,.18);transform:translateY(-1px)}
+  .choosebtn:hover,.choosebtn:focus{background:rgba(44,199,154,.18);transform:translateY(-1px)}
   .choosebtn:active{transform:scale(.96)}
-  #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+  #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--teal);
     text-transform:uppercase;margin-bottom:8px}
-  #confcard p{font-size:12.5px;color:#DDEFE4;line-height:1.5;margin:6px 0}
+  #confcard p{font-size:12.5px;color:#ECF0F1;line-height:1.5;margin:6px 0}
   #confcard .code{font-size:20px;letter-spacing:2px;color:var(--amber);
     text-align:center;margin:10px 0;user-select:all}
   #confcard input{width:100%;font:15px ui-monospace,Menlo,monospace;
     letter-spacing:1px;text-align:center;padding:9px;border-radius:8px;
-    border:1px solid var(--phos-dim);background:#05100D;color:var(--phos)}
+    border:1px solid var(--teal-dim);background:#0E1416;color:var(--teal)}
   #confcard .acts{display:flex;gap:8px;margin-top:11px}
   #confcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
   #confmsg{min-height:1.1em;color:var(--amber);font-size:12px;margin-top:6px}
@@ -698,35 +704,35 @@ _PAGE = r"""<!doctype html>
      THIS browser re-checked the Ed25519 chain and it held. */
   #rcptcard{position:fixed;left:50%;top:16%;transform:translateX(-50%);
     width:min(90vw,400px);max-height:74vh;z-index:8;background:rgba(5,10,8,.96);
-    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    border:1px solid rgba(44,199,154,.4);border-radius:14px;padding:14px 16px;
     backdrop-filter:blur(5px);display:none;flex-direction:column}
   #rcptcard.on{display:flex}
-  #rcptcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+  #rcptcard h3{font-size:12px;letter-spacing:.14em;color:var(--teal);
     text-transform:uppercase;margin-bottom:8px}
-  #rcptverdict{border-left:3px solid var(--phos-dim);padding-left:9px;margin:2px 0 8px}
-  #rcptverdict.ok{border-left-color:var(--phos)}
+  #rcptverdict{border-left:3px solid var(--teal-dim);padding-left:9px;margin:2px 0 8px}
+  #rcptverdict.ok{border-left-color:var(--teal)}
   #rcptverdict.bad{border-left-color:var(--amber)}
   #rcpthead{font-size:13px;color:#EAF6EE;line-height:1.4}
-  #rcptsub{font-size:11.5px;color:var(--phos-dim);line-height:1.45;margin-top:3px}
+  #rcptsub{font-size:11.5px;color:var(--teal-dim);line-height:1.45;margin-top:3px}
   #rcptlist{list-style:none;overflow-y:auto;margin:4px 0 2px;
     border-top:1px solid rgba(42,60,68,.5)}
   #rcptlist li{display:flex;gap:8px;align-items:baseline;padding:6px 0;
     border-bottom:1px solid rgba(42,60,68,.35)}
   #rcptlist li.bad{border-left:2px solid var(--amber);padding-left:7px}
   #rcptlist .rk{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--phos-dim);flex:none;width:60px}
-  #rcptlist .rt{flex:1;min-width:0;font-size:12px;color:#DDEFE4;
+    color:var(--teal-dim);flex:none;width:60px}
+  #rcptlist .rt{flex:1;min-width:0;font-size:12px;color:#ECF0F1;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #rcptlist .rs{flex:none;font:10px ui-monospace,Menlo,monospace;color:var(--phos-dim)}
+  #rcptlist .rs{flex:none;font:10px ui-monospace,Menlo,monospace;color:var(--teal-dim)}
   #rcptcard .acts{display:flex;gap:8px;margin-top:10px}
   #rcptcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
-  #rcptbtn.on{color:var(--phos);border-color:rgba(125,255,168,.6)}
+  #rcptbtn.on{color:var(--teal);border-color:rgba(44,199,154,.6)}
   /* short viewports (landscape phones, split view): the card moves to the TOP
      so it can never sit over the lens it is pointing at (refute 2026-07-21) */
   @media (max-height: 540px){
     #tourcard{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}
   }
-  #tourdots{color:var(--phos-dim);font-size:11px;margin-left:auto;align-self:center}
+  #tourdots{color:var(--teal-dim);font-size:11px;margin-left:auto;align-self:center}
   @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan,#chooser{animation:none} }
 </style>
 </head>
@@ -932,7 +938,9 @@ function glassCtx(){
   return ctx;
 }
 function gtext(ctx, str, cx, y, color, size){
-  ctx.font = GT[size || "md"] + "px ui-monospace, Menlo, monospace";
+  /* the device face is DejaVuSans-Bold (typography.lua) — a clean weighted sans,
+     never a monospace terminal font. Mirror it on the glass card. */
+  ctx.font = "600 " + (GT[size || "md"]) + 'px -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif';
   ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(str, cx, y);
 }
@@ -1554,7 +1562,7 @@ function drawConfluence(ctx){
     const a = 0.10 + (confState.tg / 100) * 0.25;
     ctx.save();
     ctx.beginPath(); ctx.arc(128, 128, 120, 0, 2 * Math.PI);
-    let col = "rgba(125,255,168," + a.toFixed(3) + ")";
+    let col = "rgba(44,199,154," + a.toFixed(3) + ")";
     if (confBlend) {
       const skySlot = confBlend.find(c => (c.idx | 0) === 1);
       if (skySlot) col = slotRgb(skySlot);
@@ -2717,8 +2725,8 @@ function drawFocus(ctx, x, y, w, h){
      single held focus, never a wall of boxes. */
   const c = Math.max(10, Math.min(26, w / 4, h / 4));
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "rgba(125,255,168,.72)";
-  ctx.shadowColor = "rgba(125,255,168,.5)"; ctx.shadowBlur = 10;
+  ctx.strokeStyle = "rgba(44,199,154,.72)";
+  ctx.shadowColor = "rgba(44,199,154,.5)"; ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.moveTo(x, y + c); ctx.lineTo(x, y); ctx.lineTo(x + c, y);
   ctx.moveTo(x + w - c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + c);
