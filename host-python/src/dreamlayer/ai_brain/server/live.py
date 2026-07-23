@@ -751,16 +751,6 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="hearbtn" role="switch" aria-checked="false" tabindex="0" title="Let the Brain hear and remember — the phone is the mic, transcribed on-device">&#127908; <b id="hearst">listen</b></span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
-  <label class="chip" id="lenschip" title="Auto picks the lens for you — or force one">&#128269;
-    <select id="lenssel" aria-label="Lens">
-      <option value="">Auto</option>
-      <option value="doc">Read text</option>
-      <option value="math">Math &rarr; LaTeX</option>
-      <option value="depth">Distance</option>
-      <option value="find">Find&hellip;</option>
-      <option value="segment">Segment</option>
-      <option value="sky">Name the sky</option>
-    </select></label>
 </div>
 <div id="chooser" role="dialog" aria-label="Pick a lens">
   <div id="chooserq">What do you want?</div>
@@ -1940,22 +1930,6 @@ function showChooser(card, scene){
 }
 function hideChooser(){ const b = $("chooser"); if (b) b.classList.remove("show"); clearTimeout(window._chooserT); }
 function pickLens(lensKey, scene){ lookNow(false, lensKey || "", scene || ""); }
-/* choosing the Find lens asks once for what to look for; the Sky lens needs a
-   one-time location grant (used only for the local ephemeris — never sent up) */
-if ($("lenssel")) $("lenssel").onchange = () => {
-  const v = $("lenssel").value;
-  if (v === "find") {
-    const t = prompt("Find what? (comma-separated, e.g. my keys, a fire extinguisher)");
-    window._findTerms = (t || "").trim();
-    if (!window._findTerms) $("lenssel").value = "";
-  } else if (v === "sky" && !window._geo) {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        p => { window._geo = {lat: p.coords.latitude, lon: p.coords.longitude}; showHud("sky lens ready — tap to name what's above", {ms:2600}); },
-        () => { showHud("the sky lens needs location access", {ms:2800}); $("lenssel").value = ""; });
-    } else { showHud("this browser can't share location for the sky lens", {ms:2800}); $("lenssel").value = ""; }
-  }
-};
 function renderResult(j, auto){
   if (dreamOn) return;             /* a look in flight when dream began must not
                                       stomp the shared glass canvas, then hide it
@@ -2008,19 +1982,18 @@ async function lookNow(auto, forceLens, forceScene){
     if (auto && (detectorActive || !liveOn || document.hidden || dreamOn || veil)) return;
     const t0 = performance.now();
     /* auto (ambient) frames stay local-only + leave no trace server-side; a
-       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger).
-       A deliberate tap with a frontier lens selected (Read/Math/Depth/…) routes
-       through ?lens=… instead of object recognition — ambient stays object-only. */
-    /* the lens: a forced pick (from the chooser), else the picker's value.
-       Empty = Auto — a deliberate tap lets the glance arbiter decide the lens
-       from what's in view; ambient always stays plain object recognition. */
-    const sel = (forceLens != null) ? forceLens
-              : ((!auto && $("lenssel")) ? ($("lenssel").value || "") : "");
+       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger),
+       where the glance arbiter reads the scene and fires the right lens on its
+       own — no mode is ever picked by hand — while ambient stays object-only. */
+    /* The lens is NEVER chosen by hand — DreamLayer adapts. A plain look lets the
+       glance arbiter read the scene and fire the right lens on its own (or offer a
+       one-tap chooser when it's genuinely ambiguous — text you could read OR
+       solve). The ONLY non-empty `sel` is a lens the arbiter's OWN chooser posted
+       back, which also teaches it (scene→lens) so it leans your way next time. */
+    const sel = (forceLens != null) ? forceLens : "";
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
     if (sel) {
       const qp = new URLSearchParams({lens: sel});
-      if (sel === "find" && window._findTerms) qp.set("terms", window._findTerms);
-      if (sel === "sky" && window._geo) { qp.set("lat", window._geo.lat); qp.set("lon", window._geo.lon); }
       if (forceScene) qp.set("scene", forceScene);   /* teach the arbiter this pick */
       url = "/dreamlayer/live/look?" + qp.toString();
     }
@@ -2717,14 +2690,20 @@ function paintDetections(res){
                 score: ((d.categories && d.categories[0]) || {}).score || 0,
                 box: d.boundingBox}))
     .filter(d => d.name && d.name !== "person" && d.box);   /* NEVER a person */
+  /* The glasses don't box the room — they hold ONE focus. Pick the dominant
+     thing in view (largest × most-confident) and mark just that; everything else
+     stays unadorned, so the passive HUD reads like the glass, not a detector
+     demo. The name rides the single HUD line below, never a label plate. */
   let top = null, topA = 0;
   for (const d of dets) {
-    const x = d.box.originX * scale + ox, y = d.box.originY * scale + oy;
-    drawBox(ctx, x, y, d.box.width * scale, d.box.height * scale, d.name, d.score);
     const a = d.box.width * d.box.height * d.score;
     if (a > topA) { topA = a; top = d; }
   }
-  overlayDirty = dets.length > 0;
+  if (top) {
+    const x = top.box.originX * scale + ox, y = top.box.originY * scale + oy;
+    drawFocus(ctx, x, y, top.box.width * scale, top.box.height * scale);
+  }
+  overlayDirty = !!top;
   /* update the live label only when no tap/ask result is holding the HUD */
   if (performance.now() >= hudHoldUntil && !looking && !asking && !veil) {
     if (top) showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
@@ -2732,24 +2711,20 @@ function paintDetections(res){
     else hideDetectorHud();           /* nothing in view → drop the stale live label */
   }
 }
-function drawBox(ctx, x, y, w, h, name, score){
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(125,255,168,.9)";
-  ctx.shadowColor = "rgba(125,255,168,.55)"; ctx.shadowBlur = 8;
-  const c = Math.max(6, Math.min(20, w / 4, h / 4));   /* corner brackets, not a full box */
+function drawFocus(ctx, x, y, w, h){
+  /* one quiet focus mark on the dominant object — corner ticks in the phosphor,
+     no label plate (the HUD line carries the name). The glass's language: a
+     single held focus, never a wall of boxes. */
+  const c = Math.max(10, Math.min(26, w / 4, h / 4));
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(125,255,168,.72)";
+  ctx.shadowColor = "rgba(125,255,168,.5)"; ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.moveTo(x, y + c); ctx.lineTo(x, y); ctx.lineTo(x + c, y);
   ctx.moveTo(x + w - c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + c);
   ctx.moveTo(x + w, y + h - c); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - c, y + h);
   ctx.moveTo(x + c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - c);
   ctx.stroke(); ctx.shadowBlur = 0;
-  const label = name + "  " + Math.round(score * 100) + "%";
-  ctx.font = "12px ui-monospace, Menlo, monospace";
-  const tw = ctx.measureText(label).width + 10;
-  ctx.fillStyle = "rgba(5,10,8,.72)";
-  ctx.fillRect(x, Math.max(0, y - 18), tw, 16);
-  ctx.fillStyle = "rgba(125,255,168,.95)";
-  ctx.fillText(label, x + 5, Math.max(11, y - 6));
 }
 
 /* ---- on-device hand gestures — HUD navigation without a tap ------------------
