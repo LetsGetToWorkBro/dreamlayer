@@ -1144,6 +1144,21 @@ function glassSkyCard(j){                           /* Sky -> a named star map *
 /* ---- ambient cards the Brain PUSHES (over the /live/events channel) -------
    Not a reply to a look — the Brain surfaces these on its own: a sound-safety
    tap, the morning brief, a memory nudge. Same glass, same primitives. */
+function glassTasteCard(j){                          /* TasteLens — the pick + the why */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 116, 66, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.06)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "BEST PICK", 128, 52, GP.text_ghost, "sm");
+  const pick = String(j.primary || "").trim();
+  if (pick) gtext(ctx, gwrap(pick, 18)[0] || pick, 128, 92, GP.text_primary, "lg");
+  else gtext(ctx, "nothing to compare", 128, 108, GP.text_secondary, "sm");
+  const why = String(j.detail || "").trim();
+  if (why) gtext(ctx, gwrap(why, 28)[0] || "", 128, 116, GP.memory_trace, "sm");
+  const items = Array.isArray(j.items) ? j.items.slice(0, 3) : [];
+  items.forEach((it, i) => gtext(ctx, gwrap(String(it), 30)[0] || "", 128, 146 + i * 16, GP.text_secondary, "sm"));
+  gend(j.dismiss_ms || 6000);
+}
 function glassHarkCard(c){                          /* Listen! — a sound-safety tap */
   const ctx = glassCtx(); gback(ctx);
   const urgent = c.importance === "urgent";
@@ -1903,8 +1918,13 @@ function renderGlance(j){
   if (j.glance === "offer") { showChooser(j.card, j.scene); return; }
   if (j.glance === "fire") {
     const c = j.card || {};
+    /* the arbiter fired a lens whose pack is missing: the card self-describes
+       ({need:…}) — surface "install the pack" honestly instead of silently
+       dropping to object-naming (audit 2026-07-23). renderLens owns that copy. */
+    if (c.need || c.need_location || c.ok === false) { renderLens(c); return; }
     $("hud").classList.remove("on");
-    if (c.type === "ObjectPanelCard") glassObjectCard(c);   /* translate / taste */
+    if (c.type === "ObjectPanelCard") glassObjectCard(c);   /* translate */
+    else if (c.type === "TasteCard") glassTasteCard(c);      /* shelf/menu pick */
     else if (c.lens === "math") glassMathCard(c);
     else if (c.lens === "doc") glassDocCard(c);
     else { renderLens(c); return; }
@@ -2171,9 +2191,14 @@ if (SR) {
    The glasses' Live Caption feature, on the phone through the phone's OWN
    speech service (said plainly, like the ask mic). A continuous recognizer
    streams interim + final text into a budget-clamped strip. It is deaf under
-   the veil and while backgrounded (the mic is never held hot), auto-restarts
-   when the browser ends a segment, and never leaves the phone — recognition
-   is the browser's, the transcript is drawn locally and posted nowhere. */
+   the veil and while backgrounded (the mic is never held hot), and auto-restarts
+   when the browser ends a segment. HONEST SCOPE: the transcript is drawn locally
+   and never sent to the Brain — but the browser's Web Speech API processes the
+   AUDIO in ITS OWN cloud (Chrome→Google, Safari→Apple), so captions are NOT
+   offline and are NOT covered by the Brain's LAN-only guarantee. The on-glass
+   source label names "your phone's speech service" so the wearer knows whose ear
+   it is — this is deliberately distinct from the Brain's on-device ear (the
+   Listen button), which never leaves the LAN. */
 let captionsOn = false, captionRec = null, captionFinal = "";
 function ccAvailable(){ return !!SR; }
 if (ccAvailable()) $("ccbtn").hidden = false;
@@ -2267,6 +2292,7 @@ function _downTo16k(input, inRate){                 /* Float32 @inRate → Int16
   }
   return out;
 }
+let hearWarned = false;   /* one-shot: the Brain has no ASR to transcribe with */
 function _flushHear(){
   if (!hearOn) return;
   if (veil || document.hidden){ hearChunks = []; return; }  /* never stream veiled/bg */
@@ -2275,10 +2301,23 @@ function _flushHear(){
   const merged = new Int16Array(total); let off = 0;
   for (const a of hearChunks){ merged.set(a, off); off += a.length; }
   hearChunks = [];
+  /* READ the response — the ear is honest about its own limits. If the Brain has
+     no speech-to-text (no Sharp Ears pack), holding the mic hot while nothing is
+     transcribed is a lie the "listening" chip tells. Say so once and release the
+     mic instead of pretending to listen (audit 2026-07-23). */
   fetch("/dreamlayer/live/hear?sr=" + HEAR_SR,
         {method: "POST", headers: Object.assign(
           {"Content-Type": "application/octet-stream"}, HDRS()),
-         body: merged.buffer}).catch(() => {});
+         body: merged.buffer})
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (j && j.ok === false && j.reason === "no-asr" && !hearWarned){
+        hearWarned = true;
+        showHud(j.detail || "the Brain can't transcribe yet — install the Sharp Ears pack to let it hear", {ms:4600});
+        stopHearing();     /* don't keep the mic hot for a pipeline that can't hear */
+      }
+    })
+    .catch(() => {});
 }
 function _hearOpen(){                                /* acquire mic + tap the PCM */
   if (hearCtx || veil) return;
@@ -2313,7 +2352,7 @@ function _hearClose(){                               /* release the mic + timers
 }
 async function startHearing(){
   if (hearOn || veil || !_hearAvailable()) return;
-  hearOn = true;
+  hearOn = true; hearWarned = false;   /* re-check ASR each fresh start (pack may now be installed) */
   $("hearbtn").classList.add("on"); $("hearbtn").setAttribute("aria-checked", "true");
   $("hearst").textContent = "listening";
   try {                                             /* persist the opt-in first */
