@@ -39,8 +39,13 @@ def _parse_scene_reply(text: str):
     m = re.search(r"scene\s*[:\-]?\s*([a-z_]+)", t, re.IGNORECASE)
     scene = (m.group(1).lower() if m else "")
     if scene not in SCENES:
-        # fall back to the first known scene word anywhere in the reply
-        scene = next((w for w in re.findall(r"[a-z_]+", t.lower()) if w in SCENES), "unknown")
+        # Fall back to the first known scene word anywhere in the reply — but not
+        # "sky", which unlike "form"/"shelf"/"menu" is ordinary scenery language: a
+        # vision tier describing "a clear sky above a person" or "sky and a shelf of
+        # bottles" means the PERSON and the SHELF, and this loose scan was hijacking
+        # both into a scene the reply never classified.
+        loose = {s for s in SCENES if s != "sky"}
+        scene = next((w for w in re.findall(r"[a-z_]+", t.lower()) if w in loose), "unknown")
     signals: dict = {}
     d = re.search(r"density\s*=\s*([0-9.]+)", t, re.IGNORECASE)
     if d:

@@ -116,7 +116,9 @@ class WorldLensOps(OpsHost):
             lens = {"scholar_answer": "scholar_answer", "scholar_form": "scholar_form",
                     "scholar_explain": "scholar_explain", "translate": "rosetta",
                     "juno": "juno", "person": "person"}.get(action, action)
-            self.glance_arbiter.reinforce(scene, lens)
+            import time as _t
+            self.glance_arbiter.reinforce(scene, lens,
+                                          hour=int(_t.localtime().tm_hour))
         return self._run_glance_action(action, frame, args or {})
 
 

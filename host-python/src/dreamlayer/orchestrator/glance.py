@@ -95,6 +95,21 @@ class GlanceContext:
     tilt_deg: float = 0.0
     hour: int = -1
 
+    def __post_init__(self):
+        # This is a shared dataclass at a public seam and `hour` is compared with
+        # `>=` inside arbitrate(), so a caller passing a string ("8" from a query
+        # param, say) raised a TypeError from the middle of arbitration. Coerce
+        # once here; anything uninterpretable becomes "unknown", which every
+        # consumer already treats as "don't infer from the clock".
+        try:
+            self.hour = int(self.hour)
+        except (TypeError, ValueError):
+            self.hour = -1
+        try:
+            self.tilt_deg = float(self.tilt_deg)
+        except (TypeError, ValueError):
+            self.tilt_deg = 0.0
+
 
 @dataclass
 class LensBid:
@@ -194,6 +209,15 @@ class JunoCandidate(LensCandidate):
         if reading.scene == "object":
             return LensBid(self.lens, self.label, 0.75, "juno",
                            reason="an object is in view")
+        # `sky` was added to SCENES for the live path, which has a SkyCandidate.
+        # The default (glasses) candidate set has none — so the new scene made a
+        # dark frame resolve to something NOTHING could bid on, and a look that
+        # used to identify what was in front of you started doing nothing at all.
+        # Identify owns it here: naming what's in view is always a valid answer,
+        # and a set that grows a scene must never lose an owner for it.
+        if reading.scene == "sky":
+            return LensBid(self.lens, self.label, 0.45, "juno",
+                           reason="name what's above you")
         if reading.scene in ("text", "screen") and not _q(reading):
             # a weak default so a bare look at text still has a fallback owner
             return LensBid(self.lens, self.label, 0.32, "juno",
@@ -215,12 +239,15 @@ class TasteLensCandidate(LensCandidate):
     lens, label = "taste", "Compare"
 
     def bid(self, reading, ctx):
+        # Only a real shelf/menu. There used to be an `items >= 2` fallback that
+        # bid on any two detections at all, which is how a desk became something to
+        # comparison-shop. Several DIFFERENT things is clutter, and clutter is
+        # SegmentCandidate's business, not this lens's.
+        if reading.scene not in ("shelf", "menu"):
+            return None
         items = reading.sig("items", 0) or 0
-        if reading.scene in ("shelf", "menu") or items >= 2:
-            s = 0.88 if reading.scene in ("shelf", "menu") else 0.6
-            return LensBid(self.lens, self.label, s, "taste",
-                           reason=f"{items} items to compare" if items else "a shelf/menu")
-        return None
+        return LensBid(self.lens, self.label, 0.88, "taste",
+                       reason=f"{items} items to compare" if items else "a shelf/menu")
 
 
 DEFAULT_CANDIDATES = [
@@ -242,10 +269,19 @@ INTENT_LENS = {
 
 # --- learned per-scene priors ("it learns you") ------------------------------
 
+MAX_PRIOR_LENSES = 12       # distinct lens keys one scene row may ever hold
+PRIOR_DECAY = 0.9           # each new pick fades the older ones by this much
+
+
 class GlancePriors:
     """A tiny online preference model: for each scene kind, how often you've
-    chosen each lens. Reinforced when you pick from a chooser (or don't dismiss
-    a fired lens).
+    chosen each lens. Reinforced when you pick from a chooser.
+
+    Counts DECAY as they accumulate (`PRIOR_DECAY`), which does two things. It
+    bounds every row — the total converges on 1/(1-decay) = 10 instead of growing
+    forever — and, more importantly, it makes a habit revisable: four contrary
+    picks pull a fully-formed preference back below the confidence share, where
+    unbounded counters would have needed hundreds.
 
     Persisted as a small JSON on the hub, beside the vault, exactly like the
     UserModel: read once at start, rewritten (atomically) on each reinforce, and
@@ -275,17 +311,20 @@ class GlancePriors:
         forgetting the general one."""
         self.reinforce(scene, lens, amount)
         if part and part in DAYPARTS and scene in SCENES:
-            k = self._key(scene, part)
-            self._c.setdefault(k, {})
-            self._c[k][lens] = self._c[k].get(lens, 0.0) + amount
+            self._bump(self._key(scene, part), lens, amount)
             self._save()
 
     def boost_at(self, scene: str, lens: str, part: str = "") -> float:
         """The stronger of the general and the time-of-day prior."""
         b = self.boost(scene, lens)
         if part and part in DAYPARTS:
-            b = max(b, self.boost(self._key(scene, part)) if False else
-                    self._boost_key(self._key(scene, part), lens))
+            # This was `self.boost(key) if False else self._boost_key(key, lens)`.
+            # The dead operand called the two-argument `boost` with one argument, so
+            # anything that simplified the constant condition — a refactor, a
+            # linter — would have made every arbitrate() raise a TypeError, which
+            # world_lens.glance swallows into "kind: object": the whole automatic
+            # lens silently gone. Removed rather than left as a tripwire.
+            b = max(b, self._boost_key(self._key(scene, part), lens))
         return b
 
     def _boost_key(self, key: str, lens: str) -> float:
@@ -314,9 +353,26 @@ class GlancePriors:
         # whole on every reinforce. Bounds the on-disk priors to |SCENES| keys.
         if scene not in SCENES:
             return
-        self._c.setdefault(scene, {})
-        self._c[scene][lens] = self._c[scene].get(lens, 0.0) + amount
+        self._bump(scene, lens, amount)
         self._save()
+
+    def _bump(self, key: str, lens: str, amount: float) -> None:
+        """Decay the row, then credit `lens`. The LENS side is bounded here too:
+        `scene` was validated against SCENES but `lens` was taken verbatim, so a
+        crafted 100 000-character lens name grew this file — which is rewritten
+        whole on every pick — to 107 KB, and 500 distinct names to 115 KB. A lens
+        key is a short identifier or it is not a lens key."""
+        lens = str(lens or "")[:48]
+        if not lens:
+            return
+        row = self._c.setdefault(key, {})
+        if lens not in row and len(row) >= MAX_PRIOR_LENSES:
+            return
+        for k in list(row):
+            row[k] = round(row[k] * PRIOR_DECAY, 6)
+            if row[k] < 1e-3:
+                del row[k]
+        row[lens] = round(row.get(lens, 0.0) + amount, 6)
 
     def boost(self, scene: str, lens: str) -> float:
         """Salience nudge in [0, weight] for `lens` given past picks for `scene`."""
@@ -429,10 +485,12 @@ class GlanceArbiter:
             return GlanceDecision("none", reading)
 
         bids: list[LensBid] = []
+        raw: dict = {}                 # salience BEFORE the learned prior nudge
         for cand in self.candidates:
             b = cand.bid(reading, ctx)
             if b is None:
                 continue
+            raw[b.lens] = b.salience
             # learned prior nudge for this scene — and for this scene at this
             # time of day, which is the sharper signal (Tier 4)
             part = daypart(ctx.hour) if ctx.hour is not None and ctx.hour >= 0 else ""
@@ -455,30 +513,58 @@ class GlanceArbiter:
             return self._remember(reading, GlanceDecision("none", reading))
 
         runner = bids[1].salience if len(bids) > 1 else 0.0
-        forced = bool(ctx.recent_intent and INTENT_LENS.get(ctx.recent_intent) == top.lens)
+        spoken = bool(ctx.recent_intent and INTENT_LENS.get(ctx.recent_intent) == top.lens)
         # Tier 4 — "it learns you" means it also stops ASKING you. Once you have
         # picked this lens for this scene dominantly and often enough, a close call
         # fires instead of offering a chooser you would answer the same way again.
         _part = daypart(ctx.hour) if ctx.hour is not None and ctx.hour >= 0 else ""
-        if not forced and self.priors.confident(reading.scene, top.lens, _part):
-            forced = True
+        learned = (not spoken) and self.priors.confident(reading.scene, top.lens, _part)
+        forced = spoken or learned
 
         # hysteresis: if we just decided this same scene→winner, keep it steady
         held = self._held(reading.scene, top.lens)
         if held is not None:
             return held
 
+        close = [b for b in bids if (top.salience - b.salience) < self.gap][:3]
         if forced or (top.salience - runner) >= self.gap or len(bids) == 1:
-            return self._remember(reading, GlanceDecision("fire", reading, winner=top))
+            # A fire the PRIORS forced still carries the alternatives it chose not
+            # to ask about. Not asking is the point; making them UNREACHABLE was a
+            # bug — on a scene it had learned, the chooser was the only route to the
+            # other lens, so a habit (once even a mistaken one) locked that lens out
+            # for good, on disk. Offering them without a dialog keeps both halves:
+            # it fires straight away, and the other lens is still one tap off.
+            #
+            # The alternatives are judged on the UNBOOSTED bids: the habit's own
+            # nudge is often what opened the gap, so measuring closeness after
+            # applying it made the runner-up disappear exactly when the habit was
+            # strongest. The question to ask is "would this have been a close call
+            # without the habit?", which is what `raw` answers.
+            alts = ([b for b in bids[1:]
+                     if (raw.get(top.lens, top.salience)
+                         - raw.get(b.lens, b.salience)) < self.gap][:2]
+                    if learned else [])
+            return self._remember(reading, GlanceDecision(
+                "fire", reading, winner=top, options=alts))
 
-        options = [b for b in bids if (top.salience - b.salience) < self.gap][:3]
-        card = _choice_card(reading, options)
+        card = _choice_card(reading, close)
         return self._remember(reading, GlanceDecision("offer", reading,
-                                                      options=options, card=card))
+                                                      options=close, card=card))
 
-    def reinforce(self, scene: str, lens: str) -> None:
-        """Teach the arbiter which lens you chose for this kind of scene."""
-        self.priors.reinforce(scene, lens)
+    def reinforce(self, scene: str, lens: str, hour: int = -1) -> None:
+        """Teach the arbiter which lens you chose for this kind of scene — and, when
+        the local `hour` is known, for this scene at this time of day.
+
+        `hour` is what makes the daypart tier real. `reinforce_at` existed and was
+        tested, but nothing in production ever called it: every teach path came
+        through here and wrote the bare scene key, so `boost_at` and
+        `confident(part=…)` were reading keys that could not exist. The two tests
+        that claimed to cover it passed off the general key's fallback."""
+        try:
+            h = int(hour)
+        except (TypeError, ValueError):
+            h = -1
+        self.priors.reinforce_at(scene, lens, daypart(h) if h >= 0 else "")
 
     # -- hysteresis bookkeeping ------------------------------------------
 
@@ -512,12 +598,16 @@ def classify_coarse(signals: dict, user_language: str = "en") -> GlanceReading:
     lang = (s.get("language") or "").lower()
     foreign = bool(lang and lang != (user_language or "en").lower())
 
-    items = int(s.get("items", 0) or 0)
     if has_face and density < 0.3:
         return GlanceReading("person", 0.7, s)
     if s.get("menu"):
         return GlanceReading("menu", 0.65, s)
-    if s.get("shelf") or items >= 2:
+    # A shelf needs the SHELF cue, not merely a couple of detections. `items >= 2`
+    # made a mug beside a laptop into "a shelf", which fired the compare lens at
+    # 0.88 — above identify — on any desk. Two different objects are clutter; a
+    # comparison needs several of the SAME kind of thing, which is what `shelf`
+    # means (the phone seeing a repeated label).
+    if s.get("shelf"):
         return GlanceReading("shelf", 0.65, s)
     if fields >= 2:
         return GlanceReading("form", 0.65, s)
@@ -529,9 +619,11 @@ def classify_coarse(signals: dict, user_language: str = "en") -> GlanceReading:
         return GlanceReading("text", 0.5, s)
     if density > 0.1:
         return GlanceReading("text", 0.4, s)
-    # Looking UP at a dark field with a few point lights is the one scene where
-    # the intent IS the sky — resolved after text so a lit sign never becomes it.
-    if s.get("sky") and density < 0.12:
+    # Looking UP at a dark field of point lights is the one scene where the intent
+    # IS the sky — resolved after text so a lit sign never becomes it. No density
+    # clause: the `density > 0.1` branch above already returned, so anything
+    # reaching here is at most 0.1 and a `< 0.12` test could never fail.
+    if s.get("sky"):
         return GlanceReading("sky", 0.6, s)
     if s.get("object") or s.get("has_object"):
         return GlanceReading("object", 0.55, s)

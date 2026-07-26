@@ -126,10 +126,17 @@ class EarHost:
             # Tier 3: the words also steer the LENS. Whatever you just said is
             # parsed for an intent ("where are my keys" → find) that the next look
             # obeys instead of guessing. Best-effort; never breaks ingestion.
-            try:
-                self.brain.note_spoken_intent(text)
-            except Exception:                        # noqa: BLE001
-                pass
+            #
+            # Only YOUR words. An utterance carrying a `speaker` is attributed to
+            # someone else in the room, and letting it arm the intent meant a
+            # bystander saying "how far is that" redirected the wearer's next look.
+            # It is still indexed as memory — that is the ear's job — it just does
+            # not get to drive the glasses.
+            if not speaker:
+                try:
+                    self.brain.note_spoken_intent(text)
+                except Exception:                    # noqa: BLE001
+                    pass
             self.brain.index.add_documents([(name, text)])
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] index ingest failed: %s", exc)

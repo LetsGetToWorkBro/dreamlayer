@@ -1064,9 +1064,23 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         return {"ok": True, "intent": parsed["intent"], "terms": parsed["terms"]}
 
     def pending_intent(self) -> "dict | None":
-        """The fresh spoken intent, or None. Consumed by the next look."""
+        """The fresh spoken intent, or None. Consumed by the next look.
+
+        Veil-gated on the way OUT as well as in. `note_spoken_intent` refuses to
+        remember under the shield, but raising the shield after an utterance left
+        the transcript readable here — only the accident of `world_lens.glance`
+        checking the posture first kept it off the veiled path, and one new caller
+        would have undone that. Reading it while veiled also DROPS it, so the
+        shield actively clears speech rather than merely declining to serve it."""
         got = getattr(self, "_spoken_intent", None)
         if not got:
+            return None
+        try:
+            veiled = bool(self.incognito_now())
+        except Exception:                            # noqa: BLE001 — unreadable → closed
+            veiled = True
+        if veiled:
+            self._spoken_intent = None
             return None
         parsed, ts = got
         if (time.monotonic() - ts) > self.INTENT_TTL_S:
@@ -3363,7 +3377,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             raw = self._read_capped(MAX_JSON_BODY)
             try:
                 parsed = json.loads(raw.decode("utf-8")) if raw else {}
-            except (ValueError, UnicodeDecodeError):
+            # RecursionError belongs here: json.loads recurses per nesting
+            # level, so a deeply nested body raised straight out of the
+            # handler and the connection died with no response at all.
+            except (ValueError, UnicodeDecodeError, RecursionError):
                 return {}
             # Every caller does _body().get(...); a non-object JSON body
             # (list/str/int/null) would AttributeError and, since do_POST only
@@ -4297,7 +4314,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if lens:
                 lens_args = {}
                 if qs.get("terms"):
-                    lens_args["terms"] = [t.strip() for t in qs["terms"][0].split(",") if t.strip()]
+                    # Bounded the way the spoken path is: each term becomes a
+                    # YOLO-World class that is CLIP text-encoded on a freshly
+                    # built model, so 5000 of them from one query string was a
+                    # free way to pin the CPU. Same caps as spoken_intent.
+                    from .spoken_intent import MAX_TERMS
+                    lens_args["terms"] = [
+                        t.strip()[:48] for t in qs["terms"][0][:512].split(",")
+                        if t.strip()][:MAX_TERMS]
                 for k in ("lat", "lon"):
                     if qs.get(k):
                         try:

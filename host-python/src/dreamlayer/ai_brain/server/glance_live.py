@@ -95,7 +95,12 @@ class SkyCandidate(LensCandidate):
     lens, label = "sky", "Name the sky"
 
     def bid(self, reading, ctx):
-        night = ctx.hour < 0 or ctx.hour >= 19 or ctx.hour < 6
+        # An UNKNOWN hour is not night. `ctx.hour < 0` is the "we don't know"
+        # sentinel (GlanceContext defaults to -1, and not every caller sets it), so
+        # treating it as night was a fail-OPEN in a codebase that fails closed
+        # everywhere else — it handed the astronomy lens a free pass whenever the
+        # clock was unavailable.
+        night = 0 <= ctx.hour and (ctx.hour >= 19 or ctx.hour < 6)
         up = ctx.tilt_deg >= 30.0            # Tier 2: the head is pointed UP
         if reading.scene == "sky":
             # tilting up at night is about as unambiguous as intent gets
@@ -103,11 +108,18 @@ class SkyCandidate(LensCandidate):
             return LensBid(self.lens, self.label, s, "sky",
                            reason="you looked up at the night sky" if up
                                   else "the night sky is in view")
-        # a dark frame the cue engine wasn't sure about, but you ARE looking up,
-        # at night — trust the posture over the pixels
-        if up and night and (reading.sig("text_density", 0.0) or 0.0) < 0.12:
-            return LensBid(self.lens, self.label, 0.5, "sky",
-                           reason="you looked up")
+        # Looking up at night at a DARK frame. Posture alone is not enough: with
+        # only "up + night + not much text" this bid claimed a dark ceiling, a
+        # blank wall and a keyboard, and because it was then the ONLY bidder the
+        # arbiter fired it outright (a single bid is an automatic fire) — so the
+        # wearer got "install the Stargazer pack" instead of the object label, and
+        # the object floor never ran. It now requires the frame to actually be dark
+        # and bids 0.3: enough to earn a place in the chooser, never enough to
+        # outrank identify (0.75) on its own.
+        if up and night and reading.sig("dark") \
+                and (reading.sig("text_density", 0.0) or 0.0) < 0.12:
+            return LensBid(self.lens, self.label, 0.3, "sky",
+                           reason="you looked up into the dark")
         return None
 
 

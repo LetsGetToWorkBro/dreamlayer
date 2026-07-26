@@ -35,6 +35,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import math
 import re
 import threading
 
@@ -310,18 +311,30 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
             from .glance_live import TEACH_LENS
         except Exception:                           # noqa: BLE001
             TEACH_LENS = {}
-        if scene and lens in TEACH_LENS and getattr(wl, "glance_arbiter", None) is not None:
+        res = wl.look_lens(arr, lens, lens_args)
+        ok = isinstance(res, dict) and bool(res.get("ok"))
+        # Learn only from a pick that WORKED. Teaching before running meant a lens
+        # whose pack isn't installed still earned credit: three taps of a card that
+        # answered {"need": "doc_read"} made the arbiter "confident", which forces a
+        # fire and REMOVES the chooser — the only route to the other lens on that
+        # scene — permanently, on disk. A preference has to be learned from an
+        # answer you actually got, not from a button you pressed.
+        if (ok and scene and lens in TEACH_LENS
+                and getattr(wl, "glance_arbiter", None) is not None):
             try:
                 may_learn = bool(wl.privacy.allow_capture())
             except Exception:                       # noqa: BLE001
                 may_learn = False                   # unreadable posture → fail closed
             if may_learn:
                 try:
-                    wl.glance_arbiter.reinforce(scene, TEACH_LENS[lens])
+                    # pass the local hour so the pick also lands on the
+                    # scene@daypart key — the tier that had no caller
+                    import time as _t
+                    wl.glance_arbiter.reinforce(scene, TEACH_LENS[lens],
+                                                hour=int(_t.localtime().tm_hour))
                 except Exception:                   # noqa: BLE001
                     pass
-        res = wl.look_lens(arr, lens, lens_args)
-        if isinstance(res, dict) and res.get("ok"):
+        if ok:
             brain.activity.add("look", f"Looked closer with the {lens} lens")
         return res if isinstance(res, dict) else {"ok": False, "lens": lens}
     try:
@@ -408,15 +421,23 @@ def parse_cues(qs: dict) -> dict:
             out["items"] = max(0, min(24, n))
     except (TypeError, ValueError):
         pass
-    raw = (qs.get("objs") or [""])[0][:160]
-    labels = [w for w in re.split(r"[^a-z ]+", raw.lower()) if w.strip()][:6]
-    if labels:
-        out["objs"] = labels
+    if out.get("items"):
         out["has_object"] = True
-        # the same label two or more times IS a shelf: several comparable things
-        # side by side, which is exactly what TasteLens exists for
-        if len(labels) - len(set(labels)) >= 1 and len(labels) >= 2:
-            out["shelf"] = True
+    # A repeated label IS a shelf: several comparable things side by side, which is
+    # exactly what TasteLens exists for. The phone computes that itself and sends
+    # one bit, because the LABELS were a behavioural profile ("syringe", "pill
+    # bottle", "pride flag") that nothing on the Brain ever read — every consumer
+    # wants `items`/`shelf`/`has_object`, never the words. A cached older page may
+    # still send ?objs=; derive the same bit from it and keep none of the strings.
+    dup = (qs.get("dup") or ["0"])[0] in ("1", "true")
+    if not dup:
+        raw = (qs.get("objs") or [""])[0][:160]
+        labels = [w for w in re.split(r"[^a-z ]+", raw.lower()) if w.strip()][:6]
+        if labels:
+            out["has_object"] = True
+            dup = len(labels) >= 2 and len(labels) != len(set(labels))
+    if dup and (out.get("items") or 0) >= 2:
+        out["shelf"] = True
     # Tier 2: head pitch (+up/-down) and how long the focus held. Cheap,
     # on-device, and they never leave the wearer's own Brain.
     for key, lo, hi in (("tilt", -90.0, 90.0), ("dwell", 0.0, 30000.0)):
@@ -426,12 +447,18 @@ def parse_cues(qs: dict) -> dict:
                 out[key] = max(lo, min(hi, v))
         except (TypeError, ValueError):
             pass
-    for key in ("lat", "lon"):
+    # A coordinate is only a coordinate inside the range one can exist in. These
+    # reach skyfield's wgs84.latlon() through the sky lens, and `inf` / 999 /
+    # -1e30 all used to sail straight through where tilt and dwell were clamped.
+    for key, lo, hi in (("lat", -90.0, 90.0), ("lon", -180.0, 180.0)):
         try:
-            out[key] = float((qs.get(key) or ["nan"])[0])
+            v = float((qs.get(key) or ["nan"])[0])
         except (TypeError, ValueError):
-            pass
-    out = {k: v for k, v in out.items() if not (isinstance(v, float) and v != v)}
+            continue
+        if math.isfinite(v) and lo <= v <= hi:
+            out[key] = v
+    out = {k: v for k, v in out.items()
+           if not (isinstance(v, float) and not math.isfinite(v))}
     if (qs.get("face") or ["0"])[0] in ("1", "true"):
         out["has_face"] = True             # scene only; the look still DEFERS faces
     return out
@@ -1964,12 +1991,36 @@ async function fetchJSON(url, opts, timeoutMs){
 let noHitStreak = 0;
 /* Render a frontier-lens result (math/doc/depth/find/segment/dream) on the HUD.
    Kept separate from renderResult so the default object flow is untouched. */
+/* Which patch of sky is above YOU depends on where you are, so the sky lens needs
+   a coarse latitude/longitude — and it had no way to get one: the page never asked,
+   so every sky look ended in "needs your location" no matter what. Asked for only
+   at the moment a lens actually needs it (the browser's own permission dialog IS
+   the consent step, and it never appears unprompted), kept for the session only,
+   and used entirely on your own Brain — the sky is computed locally from an
+   ephemeris, so the coordinates go from your phone to your machine and stop. */
+let GEO = null, _geoAsked = false;
+function askGeoOnce(){
+  if (GEO) { showHud("looking again with your location", {ms:1600}); lookNow(false); return; }
+  if (_geoAsked || veil || !navigator.geolocation) {
+    showHud("the sky lens needs your location", {ms:2800}); return;
+  }
+  _geoAsked = true;
+  showHud("the sky depends on where you are — allow location to name it", {ms:3200});
+  navigator.geolocation.getCurrentPosition(pos => {
+    if (!pos || !pos.coords) return;
+    GEO = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+    showHud("got it — looking again", {ms:1600});
+    lookNow(false);
+  }, () => {
+    showHud("no location — the sky lens can't name what's above you", {ms:3200});
+  }, {enableHighAccuracy: false, timeout: 8000, maximumAge: 600000});
+}
 function renderLens(j){
   if (dreamOn) return;
   if (!j) { showHud("look failed", {ms:2600}); return; }
   if (j.veiled) { showHud("the veil is down — turn it off to look closer", {ms:2800}); return; }
   if (j.need) { showHud("install the " + (j.pack || "required") + " pack for this lens", {ms:3600}); return; }
-  if (j.need_location) { showHud("the sky lens needs your location", {ms:2800}); return; }
+  if (j.need_location) { askGeoOnce(); return; }
   /* a lens result draws its own glass card on the circle — the flat plate steps
      aside, exactly like the object card does (renderResult). */
   $("hud").classList.remove("on");
@@ -2103,18 +2154,22 @@ async function lookNow(auto, forceLens, forceScene){
        solve). The ONLY non-empty `sel` is a lens the arbiter's OWN chooser posted
        back, which also teaches it (scene→lens) so it leans your way next time. */
     const sel = (forceLens != null) ? forceLens : "";
-    /* the phone's cues, fresh only (a 4s-old read describes a scene you left) */
-    let cue = "";
+    const q = new URLSearchParams();
+    /* the DETECTOR's cues, fresh only — a 4s-old read describes a scene you left */
     if (LASTDETS && (performance.now() - LASTDETS.ts) < 4000) {
-      const q = new URLSearchParams();
       if (LASTDETS.n) q.set("ndet", String(LASTDETS.n));
-      if (LASTDETS.objs && LASTDETS.objs.length) q.set("objs", LASTDETS.objs.join(","));
+      if (LASTDETS.dup) q.set("dup", "1");   /* several of the same thing = a shelf */
       if (LASTDETS.face) q.set("face", "1");
-      if (TILTOK) q.set("tilt", TILT.toFixed(0));   /* never fake a posture */
-      const dw = dwellMs();
-      if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
-      cue = q.toString();
     }
+    /* Posture and place are NOT detector cues and must not share its gate. They
+       used to sit inside the block above, so on a phone with no MediaPipe — or in
+       the seconds before it warms up — the whole Tier-2 tier went silent even
+       though the sensor was reporting fine. */
+    if (TILTOK) q.set("tilt", TILT.toFixed(0));     /* never fake a posture */
+    const dw = dwellMs();
+    if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
+    if (GEO) { q.set("lat", GEO.lat.toFixed(4)); q.set("lon", GEO.lon.toFixed(4)); }
+    const cue = q.toString();
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
     if (cue) url += (url.indexOf("?") >= 0 ? "&" : "?") + cue;
     if (sel) {
@@ -2159,19 +2214,30 @@ $("lens").onkeydown = e => {
    browser recognizes locally every frame and this server loop stays idle. */
 let loopTimer = null, booted = false, detectorActive = false;
 let LASTDETS = null;          /* the phone's own scene cues for the next look */
-/* Tier 2: head pitch and focus dwell. `beta` is front-back tilt: ~0 upright,
-   negative when you tip the phone back to look UP, positive tipping down. We
-   report +up/-down so the Brain reads it the way a person would describe it. */
+/* Tier 2: where the camera is pointed, and how long you've held a focus. */
 let TILT = 0, FOCUS = {name: "", since: 0}, TILTOK = false;
 function onTilt(e){
-  /* `beta` is front-back pitch: 90 = held upright facing you, 0 = flat face-up,
-     negative = tipped back past flat. A phone raised toward the SKY approaches 0
-     and goes negative; held down over a page it exceeds 90. Report +up/-down
-     relative to the natural ~60° reading pose so the Brain reads it the way a
-     person would describe it. */
+  /* Where the CAMERA is pointed, in degrees of elevation: +90 straight up, 0 dead
+     ahead, -90 at the floor. That is the only quantity the arbiter's posture cues
+     mean, so compute it exactly rather than guessing an offset from `beta`.
+
+     Per the DeviceOrientation spec the device frame is R = Rz(alpha)Rx(beta)Ry(gamma),
+     so the screen normal's world-UP component is cos(beta)cos(gamma). The camera
+     looks out the BACK, along -z, so its up-component is -cos(beta)cos(gamma) and
+     its elevation is the arcsine of that. Two things fall out for free: it needs
+     no alpha (no compass, so it works indoors and without magnetometer consent),
+     and because gamma is in it the reading is correct in LANDSCAPE too — with a
+     beta-only formula, turning the phone sideways silently reported a steep tilt
+     while the camera was level.
+
+     Sanity: flat on a table screen-up, the camera faces the table -> -90. Held
+     upright with the screen toward you, it faces the room -> 0. Screen flat facing
+     down, it faces the sky -> +90. */
   if (typeof e.beta !== "number") return;
+  const b = e.beta * Math.PI / 180, g = (typeof e.gamma === "number" ? e.gamma : 0) * Math.PI / 180;
+  const up = Math.max(-1, Math.min(1, -Math.cos(b) * Math.cos(g)));
   TILTOK = true;
-  TILT = Math.max(-90, Math.min(90, 60 - e.beta));
+  TILT = Math.max(-90, Math.min(90, Math.asin(up) * 180 / Math.PI));
 }
 function startTilt(){
   /* iOS 13+ gates DeviceOrientationEvent behind a USER-GESTURE permission call.
@@ -2338,6 +2404,17 @@ if (SR) {
    it is — this is deliberately distinct from the Brain's on-device ear (the
    Listen button), which never leaves the LAN. */
 let captionsOn = false, captionRec = null, captionFinal = "";
+/* Tier 3: what you just SAID steers the next look. ONE finished phrase goes to
+   your own Brain, which parses it for a lens intent ("where are my keys" → find)
+   and holds it ~20s. Only the transcript crosses, and only when captions are on. */
+function noteIntent(phrase){
+  const p = String(phrase || "").trim();
+  if (!p || veil || p === window._lastIntentSaid) return;
+  window._lastIntentSaid = p;
+  fetch("/dreamlayer/live/intent", {method: "POST",
+    headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+    body: JSON.stringify({text: p.split(/\s+/).slice(0, 24).join(" ")})}).catch(() => {});
+}
 function ccAvailable(){ return !!SR; }
 if (ccAvailable()) $("ccbtn").hidden = false;
 function renderCaptions(finalText, interim){
@@ -2348,16 +2425,6 @@ function renderCaptions(finalText, interim){
   if (interim) {
     const s = document.createElement("span"); s.className = "iim";
     s.textContent = interim; box.appendChild(s);
-  }
-  /* Tier 3: what you just SAID steers the next look. The phrase goes to your own
-     Brain, which parses it for a lens intent ("where are my keys" → find) and
-     holds it ~20s. Only the transcript crosses, and only when captions are on. */
-  if (finalText && finalText !== window._lastIntentSaid) {
-    window._lastIntentSaid = finalText;
-    const phrase = finalText.split(/\s+/).slice(-12).join(" ");
-    fetch("/dreamlayer/live/intent", {method: "POST",
-      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
-      body: JSON.stringify({text: phrase})}).catch(() => {});
   }
   const src = document.createElement("span"); src.className = "csrc";
   src.textContent = "live caption · your phone's speech service";
@@ -2376,11 +2443,22 @@ function startCaptions(){
     captionRec.continuous = true;
     captionRec.interimResults = true;
     captionRec.onresult = e => {
-      let interim = "";
+      let interim = "", fresh = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) captionFinal = (captionFinal + " " + r[0].transcript).trim();
+        if (r.isFinal) fresh = (fresh + " " + r[0].transcript).trim();
         else interim += r[0].transcript;
+      }
+      if (fresh) {
+        captionFinal = (captionFinal + " " + fresh).trim();
+        /* The on-screen tail accumulated for the whole session and was never
+           trimmed. That was also the intent bug: the POST below used to send the
+           last twelve words of EVERYTHING said so far, so "where are my keys"
+           followed by "the weather is nice today" re-armed find with terms the
+           wearer never offered — and kept refreshing its 20s life. Only the NEW
+           final phrase is an utterance; only that is sent. */
+        if (captionFinal.length > 600) captionFinal = captionFinal.slice(-600);
+        noteIntent(fresh);
       }
       renderCaptions(captionFinal, interim);
     };
@@ -2975,9 +3053,17 @@ function paintDetections(res){
   /* Remember what the detector just saw so a deliberate look can TELL the Brain.
      Coarse categories + a count only — never a box, never a crop, never pixels.
      This is what lets the arbiter pick the right lens instead of re-guessing from
-     image statistics (Tier 1, 2026-07-23). */
-  LASTDETS = {objs: dets.slice(0, 6).map(d => d.name), face: sawPerson,
-              n: dets.length, ts: performance.now()};
+     image statistics (Tier 1, 2026-07-23).
+
+     The label STRINGS stay on the phone. Nothing on the Brain ever read them —
+     every consumer wants the count, the person flag, or "are several of the same
+     thing side by side" — and a stream of category names ("syringe", "pill
+     bottle", "pride flag") is a behavioural profile of the wearer for no
+     functional gain. So the one thing the labels were needed for, a repeated
+     label meaning a shelf, is computed HERE and crosses as a single bit. */
+  const names = dets.slice(0, 6).map(d => d.name);
+  LASTDETS = {dup: names.length >= 2 && new Set(names).size < names.length,
+              face: sawPerson, n: dets.length, ts: performance.now()};
   /* dwell = how long the SAME thing has held the frame. A long hold is stronger
      intent than a passing glance, which is exactly how the arbiter reads it. */
   const fname = top ? top.name : "";

@@ -30,6 +30,25 @@ from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
 
+
+def _spoken_miss(spoken: dict) -> str:
+    """What to say when a lens the wearer ASKED for ran and found nothing.
+
+    A spoken request deserves an answer about the request. Falling through to the
+    object floor meant "where did I leave my keys" was answered with "mug" — as if
+    they had never spoken."""
+    terms = [str(t) for t in (spoken.get("terms") or []) if t]
+    if spoken.get("intent") == "find":
+        what = " or ".join(terms[:2]) if terms else "that"
+        return f"no {what} in view"
+    return {"depth": "can't judge the distance here",
+            "sky": "nothing recognisable in the sky",
+            "read": "no readable text in view",
+            "math": "no equation in view",
+            "segment": "nothing distinct enough to isolate",
+            }.get(str(spoken.get("intent") or ""), "nothing found")
+
+
 # the shelf/menu read prompt — mirrors orchestrator.ops_world_lenses._taste_read
 _TASTE_PROMPT = (
     "List the products or dishes in view for a shopping assistant, one per "
@@ -541,21 +560,36 @@ class WorldLensHost:
             spoken = self.brain.pending_intent()
         except Exception:                        # noqa: BLE001
             spoken = None
+        if spoken:
+            # ONE utterance steers ONE look. This used to be inside the
+            # `spoken.get("lens")` branch below, but compare/translate/object map to
+            # no runnable lens ("" — they steer the arbiter's bidding instead), so
+            # for those three the intent was never cleared: one "which of these is
+            # healthier" force-steered EVERY look for the full 20s window.
+            try:
+                self.brain.clear_intent()
+            except Exception:                    # noqa: BLE001
+                pass
         if spoken and spoken.get("lens"):
             args = {"terms": spoken["terms"]} if spoken.get("terms") else {}
             for k in ("lat", "lon"):             # the sky lens still needs a place
                 if h.get(k) is not None:
                     args[k] = h[k]
-            card = self._glance_lens_result(
-                self.look_lens(frame, spoken["lens"], args or None))
-            try:
-                self.brain.clear_intent()        # one utterance steers one look
-            except Exception:                    # noqa: BLE001
-                pass
+            res = self.look_lens(frame, spoken["lens"], args or None)
+            card = self._glance_lens_result(res)
             if card:
                 return {"kind": "fire", "lens": spoken["lens"],
                         "action": spoken["intent"], "card": card,
                         "scene": reading.scene, "said": spoken.get("said", "")}
+            # The lens RAN and honestly found nothing. Falling through to the object
+            # floor here answered a question with a label — the wearer asked "where
+            # did I leave my keys" and got told "mug", with no sign the search ever
+            # happened. Say what happened instead.
+            return {"kind": "fire", "lens": spoken["lens"],
+                    "action": spoken["intent"], "scene": reading.scene,
+                    "said": spoken.get("said", ""),
+                    "card": {"ok": True, "lens": spoken["lens"],
+                             "lines": [_spoken_miss(spoken)]}}
         # Tier 2: where the head is pointed, how long it held, and what time it is
         try:
             hour = int(time.localtime().tm_hour)
@@ -577,7 +611,15 @@ class WorldLensHost:
             action = decision.winner.action
             if action == "juno":               # object → the normal floor owns it
                 return {"kind": "object"}
-            card = self._run_glance_lens(action, frame, decision.winner.args or {})
+            # Carry the wearer's place through to the lens. Only the SPOKEN path
+            # did this, and no candidate sets args, so an auto-fired sky lens
+            # always answered "the sky lens needs your latitude/longitude" — the
+            # one thing the arbiter was proud of reaching was a nag every time.
+            wargs = dict(decision.winner.args or {})
+            for k in ("lat", "lon"):
+                if h.get(k) is not None:
+                    wargs.setdefault(k, h[k])
+            card = self._run_glance_lens(action, frame, wargs)
             if not card:
                 return {"kind": "object"}       # lens found nothing → object floor
             return {"kind": "fire", "lens": decision.winner.lens,
@@ -636,7 +678,8 @@ class WorldLensHost:
             lens_key = {"read": "read", "math": "math", "translate": "rosetta",
                         "taste": "taste", "juno": "juno"}.get(action, action)
             try:
-                self.glance_arbiter.reinforce(scene, lens_key)
+                self.glance_arbiter.reinforce(
+                    scene, lens_key, hour=int(time.localtime().tm_hour))
             except Exception:                  # noqa: BLE001
                 pass
         if action == "juno":
