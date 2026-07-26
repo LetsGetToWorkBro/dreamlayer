@@ -375,8 +375,15 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
                     "card": g.get("card")}
         if isinstance(g, dict) and g.get("kind") == "fire":
             brain.activity.add("look", f"Auto lens · {g.get('lens')}")
-            return {"ok": True, "glance": "fire", "lens": g.get("lens"),
-                    "card": g.get("card"), "action": g.get("action")}
+            out = {"ok": True, "glance": "fire", "lens": g.get("lens"),
+                   "card": g.get("card"), "action": g.get("action")}
+            # `alts` only appears when a LEARNED habit fired without asking. It
+            # carries the scene too, because tapping an alternative is a chooser
+            # pick and has to teach the arbiter the same way one does.
+            if g.get("alts"):
+                out["alts"] = g["alts"]
+                out["scene"] = g.get("scene")
+            return out
     panel = None
     if wl is not None:
         try:
@@ -758,6 +765,18 @@ _PAGE = r"""<!doctype html>
     box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(44,199,154,.12);
     animation:chooserIn .22s ease-out both}
   #chooser.show{display:block}
+  /* The "or …" aside on a learned fire. Quieter than the chooser on purpose: the
+     arbiter already answered, this is only the door it left open. */
+  #alts{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
+    transform:translateX(-50%);z-index:8;display:none;gap:8px;
+    justify-content:center;flex-wrap:wrap;width:min(84vw,320px)}
+  #alts.show{display:flex}
+  .altbtn{appearance:none;border:1px solid rgba(44,199,154,.28);
+    background:rgba(5,10,8,.72);color:var(--ink2);font-size:12.5px;font-weight:600;
+    padding:7px 13px;border-radius:10px;cursor:pointer;backdrop-filter:blur(4px);
+    transition:color .15s,border-color .15s}
+  .altbtn:hover,.altbtn:focus{color:var(--ink);border-color:rgba(44,199,154,.6)}
+  .altbtn:active{transform:scale(.96)}
   @keyframes chooserIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}
     to{opacity:1;transform:translateX(-50%) translateY(0)}}
   #chooserq{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
@@ -844,6 +863,7 @@ _PAGE = r"""<!doctype html>
   <div id="chooserq">What do you want?</div>
   <div id="chooseropts"></div>
 </div>
+<div id="alts" aria-label="Other lenses for this scene"></div>
 <div id="controls">
   <button id="torch" type="button" hidden aria-pressed="false" aria-label="Flashlight" title="Flashlight">&#128161;</button>
   <div id="zoomwrap" hidden>
@@ -1849,7 +1869,7 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser();
+  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser(); hideAlts();
             if (hearOn) _hearClose();     /* veil deafens the ear (mic released, intent kept) */
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
@@ -2055,7 +2075,36 @@ function renderGlance(j){
     else if (c.lens === "doc") glassDocCard(c);
     else { renderLens(c); return; }
     blip();
+    showAlts(j.alts, j.scene);
   }
+}
+/* When a LEARNED habit fires without asking, the alternative it declined to ask
+   about rides along — one small chip, no dialog. "It stops asking you" is the
+   feature; making the other lens unreachable was a bug, and on a scene the arbiter
+   had learned the chooser was the only route to it. Tapping the chip goes through
+   pickLens, so it runs that lens AND teaches the arbiter the correction. */
+function showAlts(alts, scene){
+  const row = $("alts"); if (!row) return;
+  row.textContent = "";
+  if (!alts || !alts.length || veil) { row.classList.remove("show"); return; }
+  alts.slice(0, 2).forEach(o => {
+    const b = document.createElement("button");
+    b.className = "altbtn";
+    b.textContent = "or " + (o.label || o.lens);
+    b.onclick = ev => {
+      ev.stopPropagation(); hideAlts();
+      const key = (o.action in LENS_FOR_ACTION) ? LENS_FOR_ACTION[o.action] : o.action;
+      pickLens(key, scene || "");
+    };
+    row.appendChild(b);
+  });
+  row.classList.add("show");
+  clearTimeout(window._altsT);
+  window._altsT = setTimeout(hideAlts, 7000);
+}
+function hideAlts(){
+  const r = $("alts"); if (r) { r.classList.remove("show"); r.textContent = ""; }
+  clearTimeout(window._altsT);
 }
 /* the glance chooser — a small glass dialog of 2–3 one-tap lens options, shown
    only when the look is genuinely ambiguous (e.g. text you could read OR solve).
@@ -2078,6 +2127,7 @@ function showChooser(card, scene){
     };
     wrap.appendChild(b);
   });
+  hideAlts();                               /* never both at once */
   box.classList.add("show");
   clearTimeout(window._chooserT);
   window._chooserT = setTimeout(hideChooser, (card && card.dismiss_ms) || 6000);
@@ -2128,7 +2178,7 @@ async function lookNow(auto, forceLens, forceScene){
   if (veil) { if (!auto) showHud("the veil is down", {ms:2200}); return; }
   if (!camReady()) { if (!auto) showHud("camera not ready…", {ms:1800}); return; }
   if (looking) return;
-  if (!auto) hideChooser();                 /* a fresh look dismisses a stale chooser */
+  if (!auto) { hideChooser(); hideAlts(); }  /* a fresh look drops stale offers */
   looking = true; scan(true);
   if (!auto) showHud("looking…", {persist:true});
   try {

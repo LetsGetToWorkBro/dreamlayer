@@ -963,3 +963,50 @@ def test_the_spoken_transcript_never_survives_the_veil(brain):
     assert brain.pending_intent() is None
     brain.config.network_mode = "local"                 # and it is GONE, not hidden
     assert brain.pending_intent() is None
+
+
+def test_the_alternative_TRAVELS_all_the_way_to_the_phone(brain, monkeypatch):
+    """The arbiter computing the alternatives is not the same as the wearer being
+    able to reach them. `world_lens.glance` dropped `decision.options` on the
+    floor and the live response had no field for it, so "the other lens stays one
+    tap away" was true inside the arbiter and false everywhere else. Pin the whole
+    chain: arbiter → glance() → world_look() → the JSON the phone renders."""
+    wl = brain.world_lens()
+    monkeypatch.setattr(wl, "look_lens",
+                        lambda frame, lens, args=None: {"ok": True, "lens": lens,
+                                                        "line": "answer"})
+    monkeypatch.setattr(Brain, "world_lens", lambda self: wl)
+    for _ in range(5):                                  # a formed habit: text → read
+        wl.glance_arbiter.reinforce("text", "read", hour=9)
+    g = wl.glance(_text_frame())
+    assert g["kind"] == "fire" and g["lens"] == "read"
+    assert [a["lens"] for a in g["alts"]] == ["math"], g
+    out = live_mod.world_look(brain, _text_frame())
+    assert out["glance"] == "fire"
+    assert [a["lens"] for a in out["alts"]] == ["math"], out
+    # the scene rides along, because tapping an alternative is a chooser pick and
+    # has to teach the arbiter the same way one does
+    assert out["scene"] == "text"
+
+
+def test_an_UNLEARNED_fire_carries_no_alternatives(brain, monkeypatch):
+    """The aside is only for a fire the priors forced. A fire that won on a clear
+    salience gap was never a question, so offering "or …" there would be noise."""
+    wl = brain.world_lens()
+    monkeypatch.setattr(wl, "look_lens",
+                        lambda frame, lens, args=None: {"ok": True, "lens": lens})
+    monkeypatch.setattr(Brain, "world_lens", lambda self: wl)
+    g = wl.glance(_night_sky(), hints={"sky": True})     # unambiguous, no habit
+    assert g["kind"] == "fire" and "alts" not in g, g
+
+
+def test_the_alts_row_exists_in_the_page_and_is_wired(brain):
+    """A response field nothing renders is the same bug one level up."""
+    page = live_mod._PAGE
+    assert 'id="alts"' in page
+    assert "function showAlts(" in page and "function hideAlts(" in page
+    assert "showAlts(j.alts, j.scene)" in page          # called on a fired glance
+    assert ".altbtn{" in page and "#alts.show{" in page  # and actually styled
+    # it must never be on screen at the same time as the chooser, and the veil
+    # must tear it down like every other live surface
+    assert page.count("hideAlts()") >= 4

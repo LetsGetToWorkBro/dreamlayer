@@ -622,8 +622,16 @@ class WorldLensHost:
             card = self._run_glance_lens(action, frame, wargs)
             if not card:
                 return {"kind": "object"}       # lens found nothing → object floor
-            return {"kind": "fire", "lens": decision.winner.lens,
-                    "action": action, "card": card, "scene": reading.scene}
+            out = {"kind": "fire", "lens": decision.winner.lens,
+                   "action": action, "card": card, "scene": reading.scene}
+            # A fire the LEARNED PRIORS forced carries the alternatives it chose not
+            # to ask about, so "it stops asking you" never means "the other lens is
+            # unreachable". The arbiter computes them; they have to actually travel,
+            # or the promise is only true inside the arbiter.
+            if decision.options:
+                out["alts"] = [{"lens": o.lens, "label": o.label,
+                                "action": o.action} for o in decision.options]
+            return out
         return {"kind": "object"}
 
     def _run_glance_lens(self, action: str, frame, args: dict):
