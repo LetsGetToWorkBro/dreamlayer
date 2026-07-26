@@ -54,6 +54,12 @@ def _parse_scene_reply(text: str):
     f = re.search(r"fields?\s*=\s*(\d+)", t, re.IGNORECASE)
     if f:
         signals["form_fields"] = int(f.group(1))
+    # `items` is now asked for in the prompt, because on the glasses the vision tier
+    # is the ONLY witness for a shelf — image statistics are not allowed to claim
+    # one, and there is no phone detector on this path.
+    it = re.search(r"items?\s*=\s*(\d+)", t, re.IGNORECASE)
+    if it:
+        signals["items"] = max(0, min(24, int(it.group(1))))
     lg = re.search(r"lang\w*\s*=\s*([a-z\-]+)", t, re.IGNORECASE)
     if lg:
         signals["language"] = lg.group(1).lower()

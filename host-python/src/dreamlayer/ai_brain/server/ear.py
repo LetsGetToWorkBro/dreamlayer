@@ -122,21 +122,24 @@ class EarHost:
         self.last_heard = text
         self.heard_count += 1
         name = "heard" if not speaker else f"heard:{speaker}"
+        # The room ear does NOT steer the lens, and cannot be made to safely.
+        #
+        # It used to call brain.note_spoken_intent() for every utterance it heard,
+        # so a bystander saying "how far is that" redirected the wearer's next look.
+        # The obvious guard — skip utterances attributed to someone else — is
+        # worthless here: nothing in this product ever populates `speaker`. No
+        # production CapturePipeline is built with a `speaker` or a
+        # `speaker_resolver`, so the attribution is always empty and a guard on it
+        # can never fire. Knowing who spoke would mean voiceprinting everyone in
+        # earshot, which is exactly what voice_guard exists to forbid without
+        # consent — so this is a limit to state, not a check to fake.
+        #
+        # The lens is steered only from the deliberate path: the wearer holding the
+        # Live Lens with captions on, which POSTs its own phrase to /live/intent.
+        # That is an action, not an overheard sentence. The ear still remembers
+        # everything it is allowed to — that is its job — it just does not get to
+        # point the camera.
         try:
-            # Tier 3: the words also steer the LENS. Whatever you just said is
-            # parsed for an intent ("where are my keys" → find) that the next look
-            # obeys instead of guessing. Best-effort; never breaks ingestion.
-            #
-            # Only YOUR words. An utterance carrying a `speaker` is attributed to
-            # someone else in the room, and letting it arm the intent meant a
-            # bystander saying "how far is that" redirected the wearer's next look.
-            # It is still indexed as memory — that is the ear's job — it just does
-            # not get to drive the glasses.
-            if not speaker:
-                try:
-                    self.brain.note_spoken_intent(text)
-                except Exception:                    # noqa: BLE001
-                    pass
             self.brain.index.add_documents([(name, text)])
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] index ingest failed: %s", exc)

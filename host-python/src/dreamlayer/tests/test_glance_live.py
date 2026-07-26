@@ -228,15 +228,22 @@ def _act(frame, hints=None):
     return reading.scene, d.kind, (w.action if w else None)
 
 
-def _page():
+def _page(size=720, sigma=1.5, pt=11):
+    """Prose, WITH SENSOR NOISE, at the resolution the client actually posts
+    (captureFrame(720)). The previous fixture was a 10x6 block grid at 240 px —
+    coarse enough to read as a ruled table, which is what it measured as. Every
+    threshold in the cue engine has to be judged on frames like this one; fitting
+    them to noiseless synthetics is how they came to describe no real page."""
     import numpy as np
     rng = np.random.default_rng(3)
-    a = np.full((240, 240), 225, np.uint8)
-    for y in range(20, 220, 10):
-        for x in range(20, 220, 6):
-            if rng.random() > 0.25:
-                a[y:y + 5, x:x + 4] = rng.integers(20, 70)
-    return a
+    h = int(size * 0.75)
+    a = np.full((h, size), 242.0)
+    step, th = max(5, pt), max(2, pt // 3)
+    for y in range(step, h - step, step):
+        for x in range(int(size * 0.08), int(size * 0.92), max(3, pt // 2)):
+            if rng.random() > 0.22:
+                a[y:y + th, x:x + th] = rng.integers(15, 55)
+    return (a + rng.normal(0, sigma, a.shape)).clip(0, 255).astype(np.uint8)
 
 
 def _shelf():
@@ -372,11 +379,20 @@ def test_a_page_of_prose_is_never_a_form_to_fill_in():
     assert classify_coarse(sig, "en").scene != "form"
 
 
-def test_the_night_sky_fires_the_sky_lens():
+def test_the_sky_needs_the_PIXELS_AND_THE_POSTURE_to_fire():
+    """Rain on a dark window is many tiny bright points scattered over the whole
+    frame — which is the definition of a starfield too, and no count, size or
+    spread separates them (measured: droplets 597 lights of mean length 2.0 over
+    99% of the frame; a starfield 91 of length 1.0 over 97%). So the pixels earn a
+    CHOOSER, and only a camera actually pointed up at night fires the lens."""
     from dreamlayer.ai_brain.perception import HeuristicPerceptor
     assert HeuristicPerceptor().perceive(_night_sky()).sky is True   # the CUE
-    scene, kind, action = _act(_night_sky())
-    assert scene == "sky" and kind == "fire" and action == "sky"
+    scene, kind, _action = _act(_night_sky())
+    assert scene == "sky" and kind == "offer"                        # asks
+    _d, up = _fresh(_night_sky(), tilt_deg=55.0, hour=23)
+    assert up is not None and up.action == "sky"                     # then runs
+    _d2, midday = _fresh(_night_sky(), tilt_deg=55.0, hour=13)
+    assert midday is None or midday.action != "sky"
 
 
 def test_only_a_scattered_field_of_TINY_lights_is_the_sky():
@@ -765,30 +781,59 @@ def test_boost_at_has_no_dead_branch_left_to_trip_over():
     assert p.boost_at("text", "read", "morning") > p.boost("text", "read")
 
 
-def test_moving_means_blurred_WITH_a_scene_in_it():
-    """`sharp` was computed after a STRIDING downsample while density was computed
-    full-resolution, so the two gates were mutually exclusive: real motion blur
-    never set `moving` (density collapsed first) and a crisp fine grating aliased
-    to flat and did. Box-averaging cannot alias, and `contrast` is what separates a
-    blurred street from a blank wall — density cannot, both measure ~0.005."""
+def test_moving_is_never_claimed_and_depth_is_reached_by_ASKING():
+    """One frame cannot tell you the wearer is walking. Blur removes high-frequency
+    SIGNAL, but sensor noise is added after the blur and is itself pure high
+    frequency, so a sharpness measure measures the noise floor: a still street at
+    1.5 DN of noise reads 0.0121 and the same street blurred 24 px at 3 DN reads
+    0.0198 — the BLURRED one scores higher. Normalising by contrast does not
+    separate them either (0.70 still vs 0.99 walking). The cue never fired on a real
+    frame, and where it did fire it told a stationary wearer they were moving.
+
+    So `moving` is not produced at all, and depth is reachable the honest way — the
+    same arrangement `find` has, because both are intents no frame can justify."""
     import numpy as np
     from PIL import Image, ImageDraw, ImageFilter
     from dreamlayer.ai_brain.perception import HeuristicPerceptor
-    def scene(blur):
-        im = Image.new("L", (480, 360), 200)
+    from dreamlayer.orchestrator.glance import GlanceContext, classify_coarse
+    from dreamlayer.ai_brain.server.glance_live import DepthCandidate
+
+    def street(blur, sigma):
+        rng = np.random.default_rng(4)
+        im = Image.new("L", (640, 480), 90)
         d = ImageDraw.Draw(im)
-        for i in range(6):
-            d.ellipse([30 + i * 70, 110, 90 + i * 70, 250], fill=60 + i * 20)
-        return np.asarray(im.filter(ImageFilter.GaussianBlur(blur)))
+        for i in range(7):
+            d.rectangle([i * 91 + 8, 160, i * 91 + 71, 460], fill=40 + i * 22)
+        a = np.asarray(im.filter(ImageFilter.GaussianBlur(blur), ), dtype=float)
+        return (a + rng.normal(0, sigma, a.shape)).clip(0, 255).astype(np.uint8)
+
     P = HeuristicPerceptor()
-    assert P.perceive(scene(0)).moving is not True        # in focus → standing still
-    for radius in (8, 16, 24):
-        assert P.perceive(scene(radius)).moving is True, radius
-    blank = np.full((360, 480), 128, np.uint8)
-    assert P.perceive(blank).moving is not True           # blank is not "walking"
-    grating = np.zeros((360, 480), np.uint8)
-    grating[:, ::6] = 255
-    assert P.perceive(grating).moving is not True         # sharp detail, not blur
+    for blur in (0, 8, 14, 24):
+        for sigma in (1.5, 3.0):
+            sig = P.perceive(street(blur, sigma))
+            assert sig.moving is None, f"moving must not be claimed (blur={blur})"
+            assert "moving" not in sig.as_signals()
+    # depth bids ONLY on a spoken request
+    reading = classify_coarse({"text_density": 0.05, "has_object": True}, "en")
+    c = DepthCandidate()
+    assert c.bid(reading, GlanceContext()) is None
+    assert c.bid(reading, GlanceContext(recent_intent="read")) is None
+    bid = c.bid(reading, GlanceContext(recent_intent="depth"))
+    assert bid is not None and bid.lens == "depth"
+
+
+def test_a_page_of_prose_still_fires_read_at_the_size_the_client_posts():
+    """The band cue counted rows above a MULTIPLE OF THE MEDIAN, which collapses on
+    exactly the frame it exists for: where most rows ARE text the median rises with
+    them, so one page measured 96 bands at 240 px and none at 720 — the resolution
+    captureFrame() uses. Counted against the strongest row instead."""
+    from dreamlayer.ai_brain.perception import frame_cues
+    for size in (240, 480, 720, 1080):
+        assert frame_cues(_page(size))["rows"] >= 10, size
+    scene, kind, action = _act(_page())
+    assert scene == "text" and kind in ("fire", "offer")
+    if kind == "fire":
+        assert action == "read"
 
 
 def test_a_blank_wall_reports_no_repetition():
@@ -876,16 +921,26 @@ def test_find_takes_its_nouns_only_from_what_was_said():
         assert parse_spoken_intent(idiom) is None, idiom
 
 
-def test_only_YOUR_words_steer_the_lens(brain, monkeypatch):
-    """`note_spoken_intent` was called for every ingested utterance including ones
-    attributed to another speaker, so a bystander saying "how far is that"
-    redirected the wearer's next look. Other people's speech is still remembered —
-    that is the ear's job — it just does not get to drive the glasses."""
+def test_the_ROOM_EAR_never_steers_the_lens(brain):
+    """The always-on ear used to arm the lens intent for every utterance it heard,
+    so a bystander saying "how far is that" redirected the wearer's next look. The
+    obvious guard — skip utterances attributed to someone else — is worthless here:
+    nothing in this product ever populates `speaker`, because knowing who spoke
+    would mean voiceprinting everyone in earshot, which voice_guard exists to
+    forbid without consent. A guard that cannot fire is not a fix, so the ear
+    simply does not steer: only the deliberate phone path does.
+
+    Asserted against the REAL pipeline shape, not by passing a speaker the
+    production code never sets."""
     from dreamlayer.ai_brain.server.ear import EarHost
     ear = EarHost(brain)
-    ear.ingest_caption("where are my keys", speaker="Sam")   # someone else
-    assert brain.pending_intent() is None
-    ear.ingest_caption("where are my keys")                 # you
+    for said in ("where are my keys", "how far is that", "read this"):
+        ear.ingest_caption(said)
+        assert brain.pending_intent() is None, f"the room ear steered on {said!r}"
+    # the ear still REMEMBERS — that is its job
+    assert ear.heard_count == 3
+    # and the deliberate path does steer
+    brain.note_spoken_intent("where are my keys")
     got = brain.pending_intent()
     assert got is not None and got["intent"] == "find"
 
@@ -946,7 +1001,10 @@ def test_the_wearers_place_reaches_an_AUTO_fired_lens(brain, monkeypatch):
         return {"ok": True, "lens": lens}
     monkeypatch.setattr(wl, "look_lens", _spy)
     monkeypatch.setattr(Brain, "world_lens", lambda self: wl)
-    wl.glance(_night_sky(), hints={"sky": True, "lat": 51.5074, "lon": -0.1278})
+    # tilt AND night, because the sky lens only FIRES when the camera is pointed up
+    _at_night(monkeypatch)
+    wl.glance(_night_sky(), hints={"sky": True, "tilt": 55.0,
+                                   "lat": 51.5074, "lon": -0.1278})
     assert "sky" in seen, seen
     assert round(seen["sky"]["lat"], 3) == 51.507
     assert round(seen["sky"]["lon"], 3) == -0.128
@@ -963,6 +1021,21 @@ def test_the_spoken_transcript_never_survives_the_veil(brain):
     assert brain.pending_intent() is None
     brain.config.network_mode = "local"                 # and it is GONE, not hidden
     assert brain.pending_intent() is None
+
+
+def _at_night(monkeypatch):
+    """Pin the clock inside world_lens. `glance()` reads time.localtime() for the
+    daypart and the sky gate, so a test that needs "night" must say so — otherwise
+    it passes or fails depending on when the suite runs."""
+    import time as _time
+    from dreamlayer.ai_brain.server import world_lens as wl_mod
+    real_localtime = _time.localtime
+
+    class _Clock:
+        @staticmethod
+        def localtime(*a):
+            return real_localtime(0).__class__((2026, 7, 26, 23, 0, 0, 6, 207, 0))
+    monkeypatch.setattr(wl_mod, "time", _Clock)
 
 
 def test_the_alternative_TRAVELS_all_the_way_to_the_phone(brain, monkeypatch):
@@ -996,7 +1069,9 @@ def test_an_UNLEARNED_fire_carries_no_alternatives(brain, monkeypatch):
     monkeypatch.setattr(wl, "look_lens",
                         lambda frame, lens, args=None: {"ok": True, "lens": lens})
     monkeypatch.setattr(Brain, "world_lens", lambda self: wl)
-    g = wl.glance(_night_sky(), hints={"sky": True})     # unambiguous, no habit
+    # unambiguous (posture agrees with the pixels), and no habit taught
+    _at_night(monkeypatch)
+    g = wl.glance(_night_sky(), hints={"sky": True, "tilt": 55.0})
     assert g["kind"] == "fire" and "alts" not in g, g
 
 
@@ -1010,3 +1085,50 @@ def test_the_alts_row_exists_in_the_page_and_is_wired(brain):
     # it must never be on screen at the same time as the chooser, and the veil
     # must tear it down like every other live surface
     assert page.count("hideAlts()") >= 4
+
+
+def test_a_sub_floor_bid_is_never_lifted_over_the_floor_by_DWELL():
+    """The posture-only sky bid is 0.30 precisely so it cannot carry a look — but a
+    generic +0.05 "held gaze" boost lifted it to exactly 0.35, and the floor test is
+    a strict `<`, so holding still for 700ms auto-ran an astronomy lens at a dark
+    ceiling. The dark-ceiling test could not see it because it never passed a dwell
+    at all. Dwell strengthens a real candidate; it does not create one."""
+    import numpy as np
+    flat_dark = np.full((240, 240), 10, np.uint8)
+    for dwell in (0.0, 699.0, 700.0, 900.0, 5000.0):
+        d, w = _fresh(flat_dark, tilt_deg=55.0, hour=23, dwell_ms=dwell)
+        assert d.kind != "fire", f"dwell={dwell} must not auto-run the sky lens"
+        assert w is None
+    # a bid that was ALREADY viable still gets the boost
+    from dreamlayer.orchestrator.glance import (GlanceArbiter, GlanceContext,
+                                                GlanceReading, LensBid, LensCandidate)
+
+    class Strong(LensCandidate):
+        lens, label = "s", "S"
+
+        def bid(self, reading, ctx):
+            return LensBid("s", "S", 0.50, "s")
+    a = GlanceArbiter(candidates=[Strong()])
+    r = GlanceReading("text", 0.9, {})
+    quick = a.arbitrate(r, GlanceContext(dwell_ms=0.0))
+    a2 = GlanceArbiter(candidates=[Strong()])
+    held = a2.arbitrate(r, GlanceContext(dwell_ms=900.0))
+    assert held.winner.salience > quick.winner.salience
+
+
+def test_the_LIVE_set_also_has_an_owner_for_every_scene_it_can_see():
+    """The orphan test iterated DEFAULT_CANDIDATES only, so it structurally could not
+    see that the PHONE set left form, question and person with nobody willing to bid
+    — a photographed form simply did nothing. Person is the one deliberate silence:
+    every face defers to the Social Lens."""
+    from dreamlayer.orchestrator.glance import (SCENES, GlanceContext, GlanceReading,
+                                                LensBid)
+    from dreamlayer.ai_brain.server.glance_live import LIVE_CANDIDATES
+    orphans = []
+    for scene in SCENES:
+        reading = GlanceReading(scene, 0.7, {"text_density": 0.25, "has_object": True,
+                                             "items": 4, "bands": 12})
+        bids = [c.bid(reading, GlanceContext()) for c in LIVE_CANDIDATES]
+        if not [b for b in bids if isinstance(b, LensBid)]:
+            orphans.append(scene)
+    assert orphans == ["person", "unknown"], f"scenes with no bidder: {orphans}"

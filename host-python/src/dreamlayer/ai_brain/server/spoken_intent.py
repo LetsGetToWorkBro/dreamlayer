@@ -70,6 +70,9 @@ _STOP = {
     "him", "them", "us", "she", "he", "they", "myself", "yourself", "so",
     "completely", "totally", "entirely", "already", "almost", "really", "just",
     "quite", "somehow", "utterly", "today", "yesterday", "earlier",
+    # bare adjectives are never the head noun, and leaving them in front of it
+    # defeated the head test: "have you seen the NEW season" made "new" the head
+    "new", "old", "next", "one", "another", "other", "same", "whole", "very",
 }
 
 # "I lost my ___" is an idiom far more often than a search. When every noun the
@@ -81,70 +84,129 @@ _ABSTRACT = {
     "confidence", "interest", "point", "words", "breath", "sleep",
 }
 
-# What makes an utterance a command rather than talk: it points at something.
+# --- what makes an utterance a COMMAND rather than talk ----------------------
+# Three structural tests, applied to every rule rather than to four of them:
+#
+#   1. ONE CLAUSE. Only the first clause is considered, for matching AND for the
+#      nouns. "where are my keys. the weather is nice" used to hand the search
+#      "weather"; "i can't find my notes from the standup" used to match because
+#      "find" and "my" both appeared SOMEWHERE in it.
+#   2. THE TARGET IS THE VERB'S OBJECT. `find … my` anywhere in a sentence is not
+#      a request; `find my <thing>` is. Every cue now names its determiner
+#      directly, so "did you find my email" cannot match on proximity.
+#   3. IT IS ADDRESSED TO THE GLASSES. An imperative starts the utterance, and a
+#      leading second-person or narrative subject ("did you", "let me", "i'll",
+#      "i read") means the wearer is talking to a person about a thing, not
+#      asking to look at it.
 _DEIC = r"(?:this|that|these|those|it)"
+_DET = r"(?:my|our|the)"
 _MINE = r"(?:my|our)"
-_END = r"\s*[.?!]*\s*$"        # …and often stops right there
+_END = r"\s*[.?!]*\s*$"
+# Things you say TO an assistant. Anything else trailing the object means the
+# sentence was going somewhere else: "translate this FOR ME" is a request,
+# "translate that FOR THE BOARD" is an instruction to a colleague.
+_TAIL = (r"(?:\s+(?:for me|to me|out to me|out loud|aloud|please|now|again|"
+         r"quick|quickly|will you|would you))*" + _END)
+# Fillers a speech service leaves in the middle of a phrase.
+_FILLER = re.compile(r"[,\s]*\b(?:uh|um+|er+|erm|hmm+|like|you know|i mean)\b[,\s]*",
+                     re.I)
+# A leading subject that makes the sentence about a PERSON doing something.
+_NOT_ADDRESSED = re.compile(
+    r"^(?:"
+    r"(?:did|do|does|can|could|would|will|should) (?:you|we|he|she|they)\b"
+    r"|let'?s\b|let me\b|(?:i|you|we|they|he|she)'?(?:ll|d|ve|re)\b"
+    r"|i (?:read|already|just|once|never|always|think|thought|love|hate)\b"
+    r"|we'?ve\b|it'?s\b"
+    r")", re.I)
+
+# A camera searches the VISIBLE WORLD. These are things it can never find, and
+# every one of them was a live false search: people ("where is my son", "have you
+# seen my wife"), abstractions ("where is my motivation"), the body ("where's my
+# head today"), and things that live inside a screen ("did you find my email").
+_UNFINDABLE = {
+    # people
+    "son", "daughter", "wife", "husband", "partner", "mother", "father", "mum",
+    "mom", "dad", "kid", "kids", "child", "children", "baby", "men", "women",
+    "family", "friend", "friends", "boss", "team", "boy", "girl", "brother",
+    "sister", "grandma", "grandpa", "people", "man", "woman",
+    # the body
+    "head", "hand", "hands", "foot", "feet", "hair", "face", "eyes", "leg",
+    # abstractions and idioms
+    "motivation", "dignity", "temper", "train", "thought", "thoughts", "mind",
+    "way", "patience", "cool", "place", "appetite", "voice", "marbles", "nerve",
+    "touch", "edge", "faith", "hope", "count", "track", "focus", "rhythm",
+    "grip", "composure", "bearings", "confidence", "interest", "point", "words",
+    "breath", "sleep", "life", "job", "mojo", "things", "stuff", "money",
+    # inside a screen, not in the room
+    "email", "emails", "message", "messages", "text", "texts", "notes", "note",
+    "file", "files", "folder", "password", "wifi", "calendar", "inbox", "photo",
+    "photos", "playlist", "contact", "contacts", "number", "address", "link",
+    # what a "find" phrasing means when it is really about work or media
+    "difference", "problem", "problems", "issue", "bug", "reason", "answer",
+    "solution", "cause", "error", "season", "episode", "film", "movie", "show",
+    "news", "weather", "forecast", "price", "meaning", "word", "name", "time",
+    "date", "flight", "train", "bus", "route", "recipe", "song", "video",
+}
 
 # Ordered: the FIRST pattern that matches wins, so a specific phrase ("how far")
 # is never swallowed by a general one ("what is").
 _RULES: tuple[tuple[str, str], ...] = (
     # --- find: the intent that cannot exist without your words --------------
-    # Always about something of YOURS. Without that clause, "where do you see
-    # yourself in five years" and "let's find out" were searches.
-    (rf"\bwhere(?:'?s| is| are| did| do)\b[^.?!]*\b{_MINE}\b", "find"),
-    (rf"\b(?:find|locate|look for|help me find)\b[^.?!]*\b{_MINE}\b", "find"),
-    (rf"\bi (?:can'?t find|cannot find|lost|misplaced)\b[^.?!]*\b{_MINE}\b", "find"),
-    (rf"\bhave you seen\b[^.?!]*\b{_MINE}\b", "find"),
+    (rf"^where(?:'?s| is| are| was| were| did i (?:leave|put)| ?'?d i (?:leave|put)|"
+     rf" do i keep)\s+{_DET}\s+\S+(?:\s+\S+){{0,2}}{_TAIL}", "find"),
+    (rf"^(?:find|locate|look for|spot|help me find)\s+{_DET}\s+"
+     rf"\S+(?:\s+\S+){{0,3}}{_TAIL}", "find"),
+    (rf"^i (?:can'?t|cannot) find\s+{_DET}\s+\S+(?:\s+\S+){{0,2}}{_TAIL}", "find"),
+    (rf"^i (?:lost|misplaced)\s+{_MINE}\s+\S+(?:\s+\S+){{0,1}}{_TAIL}", "find"),
+    (rf"^have you seen\s+{_DET}\s+\S+(?:\s+\S+){{0,1}}{_TAIL}", "find"),
     # --- distance -----------------------------------------------------------
-    # "how far is THAT", not "how far we've come" / "how tall was your father".
-    (rf"\bhow (?:far|close|deep|near|tall|high|big|wide)\b[^.?!]*"
-     rf"\b(?:{_DEIC}|away)\b", "depth"),
-    (rf"\bhow many (?:feet|metres|meters|steps|paces)\b[^.?!]*"
-     rf"\b(?:{_DEIC}|away)\b", "depth"),
-    (rf"\b(?:what(?:'?s| is) the )?distance to {_DEIC}\b", "depth"),
+    # "how far is THAT", not "how far we've come" / "how far is that from done".
+    (rf"^how (?:far|close|deep|near|tall|high|big|wide)\s+"
+     rf"(?:away\s+)?(?:is|are)\s+(?:{_DEIC}|the)\s*\S*{_TAIL}", "depth"),
+    (rf"^how many (?:feet|metres|meters|steps|paces)\s+(?:to|away)"
+     rf"(?:\s+{_DEIC})?{_TAIL}", "depth"),
+    (rf"^(?:what(?:'?s| is) the )?distance to {_DEIC}{_TAIL}", "depth"),
     # --- the sky ------------------------------------------------------------
-    (rf"\b(?:what|which) (?:star|planet|constellation)\b[^.?!]*\b{_DEIC}\b", "sky"),
-    (r"\bwhat(?:'?s| is) that (?:star|planet|constellation)\b", "sky"),
-    # anchored to the END, so "is that a satellite OFFICE" is not the heavens
-    (rf"\bis that (?:a |the )?(?:star|planet|satellite|iss|space station){_END}", "sky"),
-    (r"\bname (?:the sky|that star|the constellation)\b", "sky"),
-    (r"\bwhat am i looking at up there\b", "sky"),
+    (rf"^(?:what|which) (?:star|stars|planet|constellation)\s+(?:is|are)\s+"
+     rf"(?:{_DEIC}){_TAIL}", "sky"),
+    (rf"^what(?:'?s| is) (?:that|this) (?:star|planet|constellation){_TAIL}", "sky"),
+    (rf"^is that (?:a |the )?(?:star|planet|satellite|iss|space station){_TAIL}", "sky"),
+    (rf"^name (?:the sky|that star|the constellation){_TAIL}", "sky"),
+    (rf"^what am i looking at up there{_TAIL}", "sky"),
     # --- translate ----------------------------------------------------------
-    # "translate this" / "translate that sign" — but "translate that for the
-    # board" is an instruction to a person, so the object has to be a thing in
-    # view or the utterance has to stop there.
-    (rf"\btranslate {_DEIC}{_END}", "translate"),
-    (rf"\btranslate (?:{_DEIC}|the) (?:sign|menu|label|text|page|line|word)\b",
-     "translate"),
-    (rf"\bwhat does {_DEIC} (?:mean|say) in \w+", "translate"),
-    (rf"\b(?:say|read) {_DEIC} in english\b", "translate"),
+    (rf"^translate {_DEIC}{_TAIL}", "translate"),
+    (rf"^translate (?:{_DEIC}|the) "
+     rf"(?:sign|menu|label|text|page|line|word){_TAIL}", "translate"),
+    (rf"^what does {_DEIC} (?:mean|say) in \w+{_TAIL}", "translate"),
+    (rf"^(?:say|read) {_DEIC} in english{_TAIL}", "translate"),
     # --- compare (TasteLens) ------------------------------------------------
-    (rf"\bcompare (?:{_DEIC}|them|the two)\b", "compare"),
-    # "which of these is healthier", "which one has less sugar", "which is better"
-    (r"\bwhich\b.{0,24}\b(?:better|best|healthier|cheaper|stronger|worse|"
-     r"less|more|fresher|safer)\b", "compare"),
-    (r"\bwhich (?:of (?:these|them|those)|one)\b", "compare"),
-    (r"\bwhat should i (?:pick|choose|buy|get)\b", "compare"),
+    (rf"^compare (?:{_DEIC}|them|the two){_TAIL}", "compare"),
+    (rf"^which (?:of (?:these|them|those)|one)\b.{{0,30}}?"
+     rf"\b(?:better|best|healthier|cheaper|stronger|worse|less|more|fresher|"
+     rf"safer|should i)\b.{{0,12}}{_TAIL}", "compare"),
+    (rf"^which of (?:these|them|those){_TAIL}", "compare"),
+    (rf"^what should i (?:pick|choose|buy|get)(?: here)?{_TAIL}", "compare"),
     # --- maths --------------------------------------------------------------
-    # "solve this", "work it out" — but not "calculate the risk of telling her"
-    # or "work it out between yourselves", which is advice to a person.
-    (rf"\b(?:solve|calculate|compute) {_DEIC}\b", "math"),
-    (rf"\bwork {_DEIC} out{_END}", "math"),
-    (rf"\bwhat(?:'?s| is) the answer{_END}", "math"),
-    (rf"\bwhat does {_DEIC} (?:equal|come to|add up to)\b", "math"),
+    (rf"^(?:solve|calculate|compute) {_DEIC}{_TAIL}", "math"),
+    (rf"^work {_DEIC} out{_TAIL}", "math"),
+    (rf"^what(?:'?s| is) the answer{_TAIL}", "math"),
+    (rf"^what does {_DEIC} (?:equal|come to|add up to){_TAIL}", "math"),
     # --- read ---------------------------------------------------------------
-    # Never a bare "read the ___": "read the room" is not a document.
-    (rf"\bread {_DEIC}\b", "read"),
-    (rf"\bwhat does {_DEIC} say\b", "read"),
-    (r"\bwhat(?:'?s| is) (?:written|printed) (?:here|there|on (?:this|that))\b", "read"),
-    (r"\bread (?:the )?(?:sign|menu|label|page|screen)\b", "read"),
+    # Never a bare "read the ___": "read the room" is not a document. And always
+    # utterance-initial, so "i read this book and it changed nothing" is not one.
+    (rf"^read {_DEIC}{_TAIL}", "read"),
+    (rf"^read (?:{_DEIC}|the) "
+     rf"(?:sign|menu|label|page|screen|text|line|number){_TAIL}", "read"),
+    (rf"^what does {_DEIC} say{_TAIL}", "read"),
+    (rf"^what(?:'?s| is) {_DEIC} say{_TAIL}", "read"),
+    (rf"^what(?:'?s| is) (?:written|printed) "
+     rf"(?:here|there|on (?:this|that)){_TAIL}", "read"),
     # --- isolate ------------------------------------------------------------
-    (rf"\b(?:isolate|separate) {_DEIC}\b", "segment"),
-    (r"\bjust (?:this|that) one\b", "segment"),
+    (rf"^(?:isolate|separate) {_DEIC}(?: one)?{_TAIL}", "segment"),
+    (rf"^just (?:this|that) one{_TAIL}", "segment"),
     # --- identify (the weakest, so it never steals a specific phrase) -------
-    (r"\bwhat(?:'?s| is| are)? (?:this|that|these|those)\b", "object"),
-    (rf"\b(?:identify|name) {_DEIC}\b", "object"),
+    (rf"^what(?:'?s| is| are)? (?:this|that|these|those){_TAIL}", "object"),
+    (rf"^(?:identify|name) {_DEIC}{_TAIL}", "object"),
 )
 
 _COMPILED = tuple((re.compile(p, re.I), intent) for p, intent in _RULES)
@@ -164,10 +226,24 @@ MAX_TEXT = 240          # a spoken phrase, not a document
 MAX_TERMS = 4
 
 
+def _first_clause(text: str) -> str:
+    """The first clause only. A request is one clause; everything after a comma or
+    a full stop belongs to a different thought, and treating the whole utterance as
+    one gave the search nouns from sentences the wearer never pointed at
+    ("where are my keys. the weather is nice" → keys, weather, nice)."""
+    t = _FILLER.sub(" ", str(text or ""))
+    t = " ".join(t.split())
+    for i, ch in enumerate(t):
+        if ch in ".?!,;":
+            return t[:i].strip()
+    return t
+
+
 def _terms(text: str) -> list:
     """The nouns being hunted, taken from what was actually said after the cue —
     never invented. Stopwords and the cue phrase itself are dropped."""
-    t = re.sub(r"(?i)\b(?:where(?:'?s| is| are| did| do)?|find|locate|look for|"
+    t = re.sub(r"(?i)^(?:where(?:'?s| is| are| was| were| did i (?:leave|put)|"
+               r"'?d i (?:leave|put)| do i keep)?|find|locate|look for|spot|"
                r"i (?:can'?t|cannot) find|i lost|i misplaced|have you seen|"
                r"help me find)\b", " ", text)
     words = [w for w in re.split(r"[^A-Za-z0-9'-]+", t.lower()) if w]
@@ -176,7 +252,7 @@ def _terms(text: str) -> list:
         if w in _STOP or len(w) < 2:
             continue
         if w not in out:
-            out.append(w)
+            out.append(w[:48])
         if len(out) >= MAX_TERMS:
             break
     return out
@@ -187,9 +263,18 @@ def parse_spoken_intent(text: str) -> "dict | None":
 
     ``lens`` is the lens to RUN directly ("" when the intent should merely boost
     the arbiter's own bidding). ``terms`` is only ever populated from words the
-    wearer actually said."""
-    said = " ".join(str(text or "").split())[:MAX_TEXT]
+    wearer actually said.
+
+    English only, deliberately and knowably: every rule is an English pattern, so
+    a French or Japanese request returns None and the arbiter guesses from the
+    frame instead. That is the honest failure, but it IS a limit — the ear is
+    multilingual and this is not."""
+    raw = " ".join(str(text or "").split())[:MAX_TEXT]
+    said = _first_clause(raw)
     if len(said) < 3:
+        return None
+    # Addressed to a person, not to the glasses.
+    if _NOT_ADDRESSED.search(said):
         return None
     for rx, intent in _COMPILED:
         if rx.search(said):
@@ -197,8 +282,8 @@ def parse_spoken_intent(text: str) -> "dict | None":
             if intent == "find":
                 if not terms:
                     return None      # "where is it" names nothing — don't guess
-                if all(t in _ABSTRACT for t in terms):
-                    return None      # "I lost my train of thought" is not a search
+                if terms[0] in _UNFINDABLE:
+                    return None      # a camera cannot find a person or a feeling
             return {"intent": intent, "lens": INTENT_RUN_LENS.get(intent, ""),
                     "terms": terms, "said": said}
     return None

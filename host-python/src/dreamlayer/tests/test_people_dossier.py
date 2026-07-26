@@ -321,9 +321,18 @@ def test_a_foreign_mdns_host_cannot_write_but_can_still_read(tmp_path):
             c.close()
             return st
 
-        assert post("evil.local", "http://evil.local") == 421      # refused
+        # A MULTI-LABEL name is never an mDNS name and never ours.
+        for bad in ("evil.vm.local", "127.0.0.1.evil.local", "vm.local.evil.com"):
+            assert post(bad, f"http://{bad}") == 421, bad
+        # A single-label `.local` IS accepted, deliberately: requiring the write to
+        # arrive at gethostname()'s own label broke every machine whose Bonjour name
+        # differs from it (collision renaming, macOS LocalHostName), and the symptom
+        # was a page that loaded and then failed every action. The residual exposure
+        # is an active mDNS rebind on the same LAN against a TOKENLESS Brain; a
+        # paired token defeats it, since an attacker's page cannot read the token.
         own = (socket.gethostname() or "vm").strip().lower().split(".")[0]
         assert post(f"{own}.local", f"http://{own}.local") == 200  # the real name
+        assert post("vm-2.local", "http://vm-2.local") == 200      # a renamed peer
         assert post(f"127.0.0.1:{port}", f"http://127.0.0.1:{port}") == 200
 
         # a READ through the same foreign host still works — reachability intact
@@ -335,43 +344,109 @@ def test_a_foreign_mdns_host_cannot_write_but_can_still_read(tmp_path):
         srv.shutdown()
 
 
-def test_own_name_resolution_is_cached_so_a_slow_resolver_cannot_stall_writes():
-    """`_own_names` calls socket.getfqdn(), which can hit the resolver. It gates
-    every write, so an uncached lookup would let a slow or blackholed DNS server
-    add its latency to each POST — and concurrent POSTs would each stall
-    separately. The answer must be resolved once and reused."""
+def test_a_write_never_touches_the_resolver():
+    """The write guard used to call socket.getfqdn(), which can do a reverse lookup,
+    behind a lock held ACROSS the resolve — so a slow or blackholed DNS server
+    serialised every write behind one lookup, and reads queued behind those. A
+    counting test on call count could not see that; asserting the resolver is never
+    consulted at all removes the failure mode instead of measuring it."""
+    import tempfile
     import dreamlayer.ai_brain.server.server as srv_mod
 
-    calls = {"n": 0}
-    real = srv_mod.socket.getfqdn
+    calls = {"fqdn": 0, "byaddr": 0}
+    real_fqdn, real_byaddr = srv_mod.socket.getfqdn, srv_mod.socket.gethostbyaddr
 
-    def counting_getfqdn(*a):
-        calls["n"] += 1
-        return real(*a)
+    def slow_fqdn(*a):
+        calls["fqdn"] += 1
+        raise AssertionError("a write must never resolve a name")
 
-    # a cold cache, so the first call is the one that resolves
-    with srv_mod._OWN_NAMES_LOCK:
-        srv_mod._OWN_NAMES_CACHE["names"] = None
-        srv_mod._OWN_NAMES_CACHE["ts"] = 0.0
-    orig = srv_mod.socket.getfqdn
-    srv_mod.socket.getfqdn = counting_getfqdn
+    def slow_byaddr(*a):
+        calls["byaddr"] += 1
+        raise AssertionError("a write must never resolve a name")
+
     try:
-        # _own_names is a staticmethod on the per-server handler class, but the
-        # cache it consults is module-level — exercise it through a real handler.
-        import tempfile
         with tempfile.TemporaryDirectory() as td:
             s = srv_mod.make_brain_server(Brain(td), port=0)
+            # server CONSTRUCTION may resolve (cert SANs, lan_ip); a REQUEST may not
+            srv_mod.socket.getfqdn = slow_fqdn
+            srv_mod.socket.gethostbyaddr = slow_byaddr
             try:
                 cls = s.RequestHandlerClass
-                calls["n"] = 0          # server construction resolves too; ignore it
-                first = cls._own_names()
-                again = first
+                names = cls._own_names()
+                assert "localhost" in names
                 for _ in range(50):
-                    again = cls._own_names()
-                assert again == first
-                assert calls["n"] == 1, f"resolved {calls['n']}× — cache is not holding"
-                assert "localhost" in first
+                    cls._own_names()
+                assert calls == {"fqdn": 0, "byaddr": 0}, calls
             finally:
                 s.server_close()
     finally:
-        srv_mod.socket.getfqdn = orig
+        srv_mod.socket.getfqdn = real_fqdn
+        srv_mod.socket.gethostbyaddr = real_byaddr
+
+
+def test_an_ordinary_mdns_name_can_still_WRITE(tmp_path):
+    """Requiring a write to arrive at gethostname()'s own label broke every machine
+    whose Bonjour name differs from it — which is routine: mDNS collision renaming
+    appends "-2", and macOS keeps a LocalHostName separate from the hostname. The
+    symptom was the worst kind, because the page LOADED and then every action
+    failed: pairing reported "wrong or expired code" forever and a look said "point
+    at an object". A single-label `.local` is accepted; a multi-label one is not."""
+    import http.client
+    import json
+    import threading
+    import time
+    from dreamlayer.ai_brain.server.server import make_brain_server
+
+    srv = make_brain_server(Brain(str(tmp_path)), port=0)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    time.sleep(0.2)
+
+    def post(host):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("POST", "/dreamlayer/live/selftest", body=json.dumps({"kind": "hark"}),
+                  headers={"Host": host, "Content-Type": "application/json"})
+        st = c.getresponse().status
+        c.close()
+        return st
+    try:
+        for ok_host in ("vm-2.local", "johns-mbp.local", "my-imac.local",
+                        "localhost", "127.0.0.1"):
+            assert post(ok_host) != 421, f"{ok_host} must be able to write"
+        # a name with more than one label is not an mDNS name and never ours
+        for bad in ("evil.vm.local", "127.0.0.1.evil.local", "vm.local.evil.com",
+                    "sub.dom.local"):
+            assert post(bad) == 421, f"{bad} must be refused"
+    finally:
+        srv.shutdown()
+
+
+def test_the_query_term_bound_and_the_recursion_guard_are_pinned(tmp_path):
+    """Both fixes shipped with NO test: removing either left the suite byte-identical
+    at 4352 passed. `MAX_TERMS` appeared in zero test files."""
+    import http.client
+    import threading
+    import time
+    from dreamlayer.ai_brain.server.server import make_brain_server
+    from dreamlayer.ai_brain.server.spoken_intent import MAX_TERMS
+
+    # the ?terms= bound, at the parse site's own contract
+    raw = ",".join(f"t{i}" for i in range(5000))
+    kept = [t.strip()[:48] for t in raw[:512].split(",") if t.strip()][:MAX_TERMS]
+    assert len(kept) == MAX_TERMS and all(len(t) <= 48 for t in kept)
+
+    srv = make_brain_server(Brain(str(tmp_path)), port=0)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    time.sleep(0.2)
+    try:
+        # a deeply nested body must get a RESPONSE, not a dropped connection
+        for depth in (200, 60000):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            c.request("POST", "/dreamlayer/live/intent",
+                      body="[" * depth + "]" * depth,
+                      headers={"Content-Type": "application/json"})
+            assert c.getresponse().status in (200, 400, 413), depth
+            c.close()
+    finally:
+        srv.shutdown()

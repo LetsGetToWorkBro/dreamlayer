@@ -350,6 +350,15 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
         out = _local_look(brain, arr, ledger=not ambient)
         if incognito:
             out["local_only"] = True            # the shield is up — say so
+            # And the shield DROPS any speech still waiting to steer a look.
+            # pending_intent() refuses to serve a transcript while veiled, but this
+            # branch returns before anything calls it — so raising the shield used
+            # to leave the words in memory, ready to steer the first look after it
+            # came down. The veil has to act, not just decline.
+            try:
+                brain.clear_intent()
+            except Exception:                   # noqa: BLE001
+                pass
         return _with_min_panel(out)
     wl = None
     degraded = False        # the smart path ERRORED (vs. legitimately found nothing)
@@ -450,20 +459,30 @@ def parse_cues(qs: dict) -> dict:
     for key, lo, hi in (("tilt", -90.0, 90.0), ("dwell", 0.0, 30000.0)):
         try:
             v = float((qs.get(key) or ["nan"])[0])
-            if v == v:                     # not NaN
+            # isfinite, not just "not NaN": `tilt=1e400` clamped to 90.0, i.e. a
+            # claim that the wearer is staring at the zenith, in the same function
+            # that was hardened against exactly this for lat/lon.
+            if math.isfinite(v):
                 out[key] = max(lo, min(hi, v))
         except (TypeError, ValueError):
             pass
     # A coordinate is only a coordinate inside the range one can exist in. These
     # reach skyfield's wgs84.latlon() through the sky lens, and `inf` / 999 /
     # -1e30 all used to sail straight through where tilt and dwell were clamped.
+    # A coordinate is only meaningful as a PAIR. Validating them independently
+    # forwarded half of one — {lat: 999, lon: 1} kept the longitude — and
+    # world_lens hands whatever is present to every auto-fired lens, so Compare and
+    # Translate were receiving a stray number justified only for Sky.
+    geo = {}
     for key, lo, hi in (("lat", -90.0, 90.0), ("lon", -180.0, 180.0)):
         try:
             v = float((qs.get(key) or ["nan"])[0])
         except (TypeError, ValueError):
             continue
         if math.isfinite(v) and lo <= v <= hi:
-            out[key] = v
+            geo[key] = v
+    if len(geo) == 2:
+        out.update(geo)
     out = {k: v for k, v in out.items()
            if not (isinstance(v, float) and not math.isfinite(v))}
     if (qs.get("face") or ["0"])[0] in ("1", "true"):
@@ -1870,6 +1889,7 @@ function setVeil(on, o){
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
   if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser(); hideAlts();
+            GEO = null; _geoAsked = false;   /* the shield drops your position too */
             if (hearOn) _hearClose();     /* veil deafens the ear (mic released, intent kept) */
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
@@ -2027,8 +2047,14 @@ function askGeoOnce(){
   _geoAsked = true;
   showHud("the sky depends on where you are — allow location to name it", {ms:3200});
   navigator.geolocation.getCurrentPosition(pos => {
-    if (!pos || !pos.coords) return;
-    GEO = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+    /* Re-check the shield HERE, not only when we asked: the permission dialog can
+       sit open for a minute, and a grant that lands after the veil went up must
+       not capture a position. */
+    if (!pos || !pos.coords || veil) return;
+    /* One decimal place. Which constellations are overhead changes over degrees,
+       not over metres, so 4 dp (~11m) was sending the wearer's street for no gain. */
+    GEO = {lat: Math.round(pos.coords.latitude * 10) / 10,
+           lon: Math.round(pos.coords.longitude * 10) / 10};
     showHud("got it — looking again", {ms:1600});
     lookNow(false);
   }, () => {
@@ -2041,6 +2067,12 @@ function renderLens(j){
   if (j.veiled) { showHud("the veil is down — turn it off to look closer", {ms:2800}); return; }
   if (j.need) { showHud("install the " + (j.pack || "required") + " pack for this lens", {ms:3600}); return; }
   if (j.need_location) { askGeoOnce(); return; }
+  /* A lens that RAN and honestly found nothing carries `lines`. Every renderer
+     below dispatches on j.lens and reads found/closeness/line/regions — none of
+     them reads `lines` — so the miss was drawn as a successful card: the sky lens
+     said "the sky, named" and segment said "0 regions". Say the actual sentence,
+     which also carries the wearer's own noun ("no keys in view"). */
+  if (j.lines && j.lines.length) { showHud(j.lines, {ms:3600}); return; }
   /* a lens result draws its own glass card on the circle — the flat plate steps
      aside, exactly like the object card does (renderResult). */
   $("hud").classList.remove("on");
@@ -2218,7 +2250,11 @@ async function lookNow(auto, forceLens, forceScene){
     if (TILTOK) q.set("tilt", TILT.toFixed(0));     /* never fake a posture */
     const dw = dwellMs();
     if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
-    if (GEO) { q.set("lat", GEO.lat.toFixed(4)); q.set("lon", GEO.lon.toFixed(4)); }
+    /* Never on an AMBIENT frame. The passive loop egresses nothing and leaves no
+       trace; attaching a position to it would have made the one surface that is
+       meant to be silent the one that reports where you are, several times a
+       minute. A deliberate look is the only thing that carries it. */
+    if (GEO && !auto) { q.set("lat", GEO.lat.toFixed(1)); q.set("lon", GEO.lon.toFixed(1)); }
     const cue = q.toString();
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
     if (cue) url += (url.indexOf("?") >= 0 ? "&" : "?") + cue;
@@ -2230,6 +2266,7 @@ async function lookNow(auto, forceLens, forceScene){
     const rsp = await fetchJSON(url,
       {method: "POST", headers: HDRS(), body: blob}, auto ? 6000 : 9000);
     setLink(rsp.ok, performance.now() - t0);
+    if (rsp.status === 421) { hostRefused(); return; }
     if (rsp.status === 401) { needsPairing(); return; }
     if (sel) renderLens(rsp.json);                         /* manual / chosen lens */
     else if (rsp.json && rsp.json.glance) renderGlance(rsp.json);  /* auto: fire / chooser */
@@ -2339,6 +2376,7 @@ async function ask(){
       headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
       body: JSON.stringify({query: q, no_cloud: veil})}, 20000);
     setLink(rsp.ok, performance.now() - t0);
+    if (rsp.status === 421) { hostRefused(); return; }
     if (rsp.status === 401) { needsPairing(); return; }
     const j = rsp.json;
     /* "who is Sarah" answers with a real dossier CARD on the glass (built from
@@ -2359,6 +2397,19 @@ $("send").onclick = ask;
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 
 let _pairNotice = null;
+/* A 421 means the Brain refused the NAME this page was opened under, not the
+   pairing code. Without this branch the phone showed "wrong or expired code — get
+   a fresh one from the panel" and the wearer chased codes forever, or on a look
+   simply "point at an object · move closer", as if the camera were at fault. Say
+   the true thing and give the two names that always work. */
+let _hostNotice = false;
+function hostRefused(){
+  if (_hostNotice) return;
+  _hostNotice = true;
+  $("hud").classList.remove("on");
+  showHud(["this address can't make changes",
+           "open the Live Lens by IP, or use the QR on the panel"], {ms: 7000});
+}
 function needsPairing(){
   if (_pairNotice) return;                         /* don't stack notices */
   $("hud").classList.remove("on");                 /* drop any stuck "looking…" */
@@ -2678,6 +2729,7 @@ async function selfTest(){
     const rsp = await fetchJSON("/dreamlayer/live/selftest", {method: "POST",
       headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
       body: JSON.stringify({kind: "hark"})}, 6000);
+    if (rsp.status === 421) { hostRefused(); return; }
     if (rsp.status === 401) { needsPairing(); return; }
     const j = rsp.json || {};
     if (j.ok === false) showHud(j.error || "self-test refused", {ms:2600});

@@ -528,7 +528,10 @@ class WorldLensHost:
 
         Kind "object" (the arbiter fired Juno, produced nothing, or abstained)
         hands back to the caller's normal object-recognition floor, so that path
-        keeps all its behaviour and never runs twice. Never raises."""
+        keeps all its behaviour and never runs twice.
+
+        Never raises: every lens call is wrapped, including the spoken-intent one,
+        which used to sit outside the guard and could take a whole look down."""
         if not self.privacy.allow_capture():
             return {"kind": "veiled"}
         if self.glance_arbiter is None or self.perception is None:
@@ -575,21 +578,33 @@ class WorldLensHost:
             for k in ("lat", "lon"):             # the sky lens still needs a place
                 if h.get(k) is not None:
                     args[k] = h[k]
-            res = self.look_lens(frame, spoken["lens"], args or None)
+            try:
+                res = self.look_lens(frame, spoken["lens"], args or None)
+            except Exception as exc:             # noqa: BLE001 — a lens never kills a look
+                log.warning("[glance] spoken lens %s failed: %s", spoken["lens"], exc)
+                res = {"ok": False, "lens": spoken["lens"], "reason": "error"}
             card = self._glance_lens_result(res)
             if card:
                 return {"kind": "fire", "lens": spoken["lens"],
                         "action": spoken["intent"], "card": card,
                         "scene": reading.scene, "said": spoken.get("said", "")}
-            # The lens RAN and honestly found nothing. Falling through to the object
-            # floor here answered a question with a label — the wearer asked "where
-            # did I leave my keys" and got told "mug", with no sign the search ever
-            # happened. Say what happened instead.
+            # The lens ran and produced nothing. Falling through to the object floor
+            # answered a question with a label — the wearer asked "where did I leave
+            # my keys" and got told "mug", with no sign the search happened. Say
+            # what happened instead — and distinguish "I looked and it isn't there"
+            # from "I couldn't look", because reporting a CRASH or a raised veil as
+            # an empty result is a different lie in the same shape.
+            r = res if isinstance(res, dict) else {}
+            if r.get("veiled"):
+                line = "the veil is down — nothing was looked at"
+            elif r.get("reason"):
+                line = "the search didn't run"
+            else:
+                line = _spoken_miss(spoken)
             return {"kind": "fire", "lens": spoken["lens"],
                     "action": spoken["intent"], "scene": reading.scene,
                     "said": spoken.get("said", ""),
-                    "card": {"ok": True, "lens": spoken["lens"],
-                             "lines": [_spoken_miss(spoken)]}}
+                    "card": {"ok": True, "lens": spoken["lens"], "lines": [line]}}
         # Tier 2: where the head is pointed, how long it held, and what time it is
         try:
             hour = int(time.localtime().tm_hour)

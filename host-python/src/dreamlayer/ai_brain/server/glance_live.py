@@ -17,13 +17,22 @@ Person is deliberately NOT a candidate here: the live path defers every face to
 the Social Lens (person_guard), exactly as the phone look does — the arbiter
 must never try to identify a stranger.
 
-Depth / sky / segment became candidates in the Tier-1 perception pass
-(2026-07-23). They were unreachable before for a real reason and it wasn't
-policy: the live perceptor emitted only text_density + has_object, so no scene
-could ever justify them. Now that the frame yields repetition, bands, darkness,
-point-lights and blur — and the phone forwards what its own detector already
-sees — each has an honest cue to bid on. `find` is still NOT a candidate: it
-needs the nouns you're hunting, which no bare frame supplies.
+Sky and segment became candidates in the Tier-1 perception pass: the live
+perceptor used to emit only text_density + has_object, so no scene could justify
+them. Now the frame yields repetition, banding, darkness and point-lights, and
+the phone forwards what its own detector already sees, so each has a real cue.
+
+What a frame CANNOT justify is kept out, which is the whole discipline here:
+
+  find    needs the nouns you are hunting, and no frame supplies them.
+  depth   bid on motion blur as a proxy for walking. Sensor noise is itself high
+          frequency, so that measurement is of the noise floor — a still frame can
+          score "blurrier" than a moving one. Spoken only.
+  sky     the pixels of rain on a dark window and of a starfield are the same
+          picture, so pixels alone put it in the CHOOSER; only pixels plus a
+          camera pointed up at night fire it.
+  shelf   a bookshelf and a radiator are one picture to a gradient profile, so it
+          comes from the phone's detector seeing several of the same thing.
 """
 from __future__ import annotations
 
@@ -74,19 +83,28 @@ class MathCandidate(LensCandidate):
 
 
 class DepthCandidate(LensCandidate):
-    """How far is that. Bids when the wearer is MOVING (a blurred frame is the
-    honest signal for walking) and something is in front of them — the mobility
-    moment, where distance is the question and reading is not."""
+    """How far is that — reached by ASKING, like `find`.
+
+    It bid on a `moving` cue, on the theory that motion blur is the honest signal
+    for walking. It is not, once a real sensor is in the loop: blur removes
+    high-frequency signal, but sensor noise is added after the blur and is itself
+    pure high frequency, so the measurement is of the noise floor. Measured on
+    directionally-blurred street frames, a still one at low noise scores HIGHER
+    than the same frame blurred 24 px at ISO 800, and normalising by contrast does
+    not separate them either. The cue never fired on a real frame, and where it did
+    it told a stationary wearer they were walking.
+
+    So it is not a frame bidder at all. It keeps a bid only when the wearer SAID
+    so — "how far is that" — which the spoken path executes directly, and which is
+    the same honest arrangement `find` has: an intent no frame can justify becomes
+    available the moment you say it."""
     lens, label = "depth", "How far"
 
     def bid(self, reading, ctx):
-        if not reading.sig("moving"):
+        if ctx.recent_intent != "depth":
             return None
-        density = reading.sig("text_density", 0.0) or 0.0
-        if reading.scene in ("object", "unknown") and density < 0.28:
-            return LensBid(self.lens, self.label, 0.58, "depth",
-                           reason="you're moving — distance matters")
-        return None
+        return LensBid(self.lens, self.label, 0.7, "depth",
+                       reason="you asked how far")
 
 
 class SkyCandidate(LensCandidate):
@@ -103,11 +121,25 @@ class SkyCandidate(LensCandidate):
         night = 0 <= ctx.hour and (ctx.hour >= 19 or ctx.hour < 6)
         up = ctx.tilt_deg >= 30.0            # Tier 2: the head is pointed UP
         if reading.scene == "sky":
-            # tilting up at night is about as unambiguous as intent gets
-            s = 0.9 if (up and night) else 0.8
-            return LensBid(self.lens, self.label, s, "sky",
-                           reason="you looked up at the night sky" if up
-                                  else "the night sky is in view")
+            # PIXELS ALONE OFFER; PIXELS PLUS POSTURE FIRE.
+            #
+            # Rain on a dark window is many tiny bright points scattered over the
+            # whole frame — which is also the definition of a starfield, and there
+            # is no count, size or spread that separates them. Measured on noisy
+            # JPEG frames: droplets give 597 lights of mean length 2.0 across 99% of
+            # the frame; a real starfield gives 91 of length 1.0 across 97%. Firing
+            # an astronomy lens at 0.8 on that was a guess wearing a decimal point.
+            #
+            # So the frame earns a place in the chooser (0.55, a hair over identify's
+            # 0.45 but inside the 0.2 gap, so the wearer is asked). Only when the
+            # CAMERA IS ALSO POINTED UP, at night, is it unambiguous enough to run
+            # without asking — because nobody photographs their window at 45 degrees
+            # of elevation.
+            if up and night:
+                return LensBid(self.lens, self.label, 0.9, "sky",
+                               reason="you looked up at the night sky")
+            return LensBid(self.lens, self.label, 0.55, "sky",
+                           reason="this could be the night sky")
         # Looking up at night at a DARK frame. Posture alone is not enough: with
         # only "up + night + not much text" this bid claimed a dark ceiling, a
         # blank wall and a keyboard, and because it was then the ONLY bidder the

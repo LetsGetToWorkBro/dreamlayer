@@ -218,6 +218,14 @@ class JunoCandidate(LensCandidate):
         if reading.scene == "sky":
             return LensBid(self.lens, self.label, 0.45, "juno",
                            reason="name what's above you")
+        # Identify is the fallback owner for scenes whose specialist lens this
+        # candidate set cannot run. On the LIVE (phone) set there is no form or
+        # question lens, so a photographed form used to resolve to `form` and then
+        # find nobody willing to bid — the look simply did nothing. Naming what is
+        # in view is always a valid answer; silence never is.
+        if reading.scene in ("form", "question"):
+            return LensBid(self.lens, self.label, 0.4, "juno",
+                           reason="fallback: name what's here")
         if reading.scene in ("text", "screen") and not _q(reading):
             # a weak default so a bare look at text still has a fallback owner
             return LensBid(self.lens, self.label, 0.32, "juno",
@@ -500,8 +508,15 @@ class GlanceArbiter:
             # a matching spoken intent is a strong, deliberate steer
             if ctx.recent_intent and INTENT_LENS.get(ctx.recent_intent) == b.lens:
                 b = b.boosted(0.4, f"you asked to {ctx.recent_intent}")
-            # a long dwell reads as stronger intent overall
-            if ctx.dwell_ms >= 700:
+            # A long dwell reads as stronger intent overall — but only for a
+            # candidate that was already viable. A bid deliberately placed BELOW the
+            # floor ("enough for a chooser, never enough to carry a look") was being
+            # lifted over it by this generic +0.05: the posture-only sky bid of 0.30
+            # became 0.35, and since the floor test is a strict `<` and it was the
+            # only bidder, holding still for 700ms auto-ran an astronomy lens at a
+            # dark ceiling. Dwell strengthens a real candidate; it does not create
+            # one.
+            if ctx.dwell_ms >= 700 and b.salience >= self.floor:
                 b = b.boosted(0.05, "held gaze")
             bids.append(b)
 

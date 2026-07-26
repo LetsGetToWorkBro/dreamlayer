@@ -75,12 +75,6 @@ MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + h
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 MAX_EVENT_SUBS = 6                      # concurrent /live/events streams (each holds a worker thread)
 
-# The names this machine answers to, resolved once and reused (see _own_names).
-# socket.getfqdn() can hit the resolver, and this is consulted on every write —
-# uncached, a slow or unreachable DNS server would stall POSTs one by one.
-_OWN_NAMES_TTL_S = 300.0
-_OWN_NAMES_LOCK = threading.Lock()
-_OWN_NAMES_CACHE: dict = {"names": None, "ts": 0.0}
 
 # Content-Security-Policy for the token-bearing panel/builder pages. The panel is
 # built on inline event handlers (onclick=/onchange=), so — unlike the Live page,
@@ -311,6 +305,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # tap, the morning brief, a commitment nudge) to connected phones over SSE
         self._event_subs: list = []    # one Queue per connected /live/events stream
         self._event_lock = threading.Lock()
+        # guards _spoken_intent, so a look POPS it in one step (concurrent
+        # looks otherwise both saw the same utterance)
+        self._intent_lock = threading.Lock()
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -1072,24 +1069,30 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         checking the posture first kept it off the veiled path, and one new caller
         would have undone that. Reading it while veiled also DROPS it, so the
         shield actively clears speech rather than merely declining to serve it."""
-        got = getattr(self, "_spoken_intent", None)
-        if not got:
-            return None
-        try:
-            veiled = bool(self.incognito_now())
-        except Exception:                            # noqa: BLE001 — unreadable → closed
-            veiled = True
-        if veiled:
+        # POP, not peek. The caller used to read here and clear afterwards, and
+        # ThreadingHTTPServer serves concurrent looks — with two looks in flight the
+        # window between the two steps let one utterance steer both. Measured at
+        # 18-34% under a shortened switch interval. Taking it out under the lock, in
+        # one step, removes the window rather than narrowing it.
+        with self._intent_lock:
+            got = getattr(self, "_spoken_intent", None)
             self._spoken_intent = None
-            return None
-        parsed, ts = got
-        if (time.monotonic() - ts) > self.INTENT_TTL_S:
-            self._spoken_intent = None
-            return None
-        return parsed
+            if not got:
+                return None
+            try:
+                veiled = bool(self.incognito_now())
+            except Exception:                        # noqa: BLE001 — unreadable → closed
+                veiled = True
+            if veiled:
+                return None
+            parsed, ts = got
+            if (time.monotonic() - ts) > self.INTENT_TTL_S:
+                return None
+            return parsed
 
     def clear_intent(self) -> None:
-        self._spoken_intent = None
+        with self._intent_lock:
+            self._spoken_intent = None
 
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
@@ -3209,37 +3212,28 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         @staticmethod
         def _own_names() -> set:
-            """Every name this machine legitimately answers to: localhost and its
-            own hostname, with and without the mDNS ``.local`` suffix.
+            """Every name this machine answers to, WITHOUT touching the resolver.
 
-            Cached behind a lock because ``socket.getfqdn()`` can do a reverse-DNS
-            lookup: uncached, a machine with a slow or unreachable resolver would
-            stall on every POST, and concurrent POSTs would each stall separately.
-            One resolve is in flight at most, and the answer is reused for
-            ``_OWN_NAMES_TTL_S`` — long enough to be free, short enough that a
-            hostname change is picked up without a restart."""
-            now = time.time()
-            with _OWN_NAMES_LOCK:
-                cached = _OWN_NAMES_CACHE.get("names")
-                if cached is not None and (now - _OWN_NAMES_CACHE["ts"]) < _OWN_NAMES_TTL_S:
-                    return cached
-                names = {"localhost", "localhost.local"}
-                for fn in (socket.gethostname, socket.getfqdn):
-                    try:
-                        n = (fn() or "").strip().lower().rstrip(".")
-                    except OSError:
-                        continue
-                    if not n:
-                        continue
-                    names.add(n)
-                    base = n.split(".")[0]
-                    if base:
-                        names.update({base, base + ".local"})
-                    if not n.endswith(".local"):
-                        names.add(n + ".local")
-                _OWN_NAMES_CACHE["names"] = names
-                _OWN_NAMES_CACHE["ts"] = now
+            This used to call socket.getfqdn(), which can do a reverse lookup, and
+            cached it behind a lock — but the lock was held across the resolve, so a
+            slow or blackholed DNS server serialised every write behind one lookup
+            (measured: 64 concurrent POSTs each took the full 3s, and a plain GET
+            queued 7.1s behind a POST burst). gethostname() is a syscall against a
+            local string and cannot block, so the cache and its failure mode are
+            both gone."""
+            names = {"localhost", "localhost.local"}
+            try:
+                n = (socket.gethostname() or "").strip().lower().rstrip(".")
+            except OSError:
                 return names
+            if n:
+                names.add(n)
+                base = n.split(".")[0]
+                if base:
+                    names.update({base, base + ".local"})
+                if not n.endswith(".local"):
+                    names.add(n + ".local")
+            return names
 
         def _write_host_ok(self) -> bool:
             """A stricter Host test than the rebind guard, applied to WRITES only.
@@ -3271,7 +3265,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 return True                    # an IP literal is not a claimed name
             except ValueError:
                 pass
-            return hostname in self._own_names()
+            if hostname in self._own_names():
+                return True
+            # A SINGLE-LABEL mDNS name. This is the concession that keeps the phone
+            # working: requiring the write to arrive at gethostname()'s own label
+            # broke every machine whose Bonjour name differs from it, which is
+            # routine — mDNS collision renaming appends "-2", and macOS keeps a
+            # LocalHostName separate from the hostname. The symptom was the worst
+            # kind: the page loaded and then every action failed, with pairing
+            # reporting "wrong or expired code" forever.
+            #
+            # It is still strictly tighter than the read guard, which takes ANY
+            # `.local`: a multi-label name is refused, so `evil.vm.local`,
+            # `127.0.0.1.evil.local` and `vm.local.evil.com` cannot slip through, and
+            # neither can a non-mDNS name like `evil.example`. What remains is an
+            # active mDNS rebind on the same LAN against a TOKENLESS Brain — a real
+            # but much narrower attack than the one this closed, and one a paired
+            # token defeats outright, since an attacker's page cannot read it.
+            return hostname.endswith(".local") and hostname.count(".") == 1
 
         def _same_origin_write(self) -> bool:
             """CSRF guard for state-changing (POST) requests.

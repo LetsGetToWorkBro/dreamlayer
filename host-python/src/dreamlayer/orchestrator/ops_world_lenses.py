@@ -92,10 +92,21 @@ class WorldLensOps(OpsHost):
             return GlanceDecision("none", GlanceReading())
         reading = self._classify_glance(frame)
         hint, hts = self._recent_glance_intent
+        # The clock, so the daypart priors and the sky gate can read it. This ctx
+        # never set `hour`, so the WRITE side of the daypart tier landed on disk
+        # (scene@morning) while the READ side always saw the "unknown" sentinel and
+        # fell back to the general row — doubled rows for zero behaviour. `tilt_deg`
+        # stays 0 here honestly: the glasses IMU is not plumbed to this seam yet.
+        import time as _t
+        try:
+            _hour = int(_t.localtime().tm_hour)
+        except Exception:                          # noqa: BLE001
+            _hour = -1
         ctx = GlanceContext(
             recent_intent=hint if (self._clock() - hts) < 6.0 else "",
             user_language=getattr(self.config, "user_language", "en") or "en",
             dwell_ms=dwell_ms, focus=self.focus_active(),
+            hour=_hour,
             veiled=not self.privacy.allow_capture())
         decision = self.glance_arbiter.arbitrate(reading, ctx)
         self.publish_plugin_event("glance", {"scene": getattr(reading, "scene", ""),
@@ -103,6 +114,18 @@ class WorldLensOps(OpsHost):
         if decision.kind == "fire" and decision.winner is not None:
             self._run_glance_action(decision.winner.action, frame,
                                     decision.winner.args)
+            # A fire the learned priors forced still offers the alternative it chose
+            # not to ask about. The live path grew this; the glasses dropped
+            # decision.options on the floor, so on a scene the wearer had taught,
+            # the other lens stayed unreachable — the bug this was meant to close.
+            if decision.options:
+                from .glance import _choice_card
+                try:
+                    card = _choice_card(reading, decision.options)
+                    card["eyebrow"] = "OR"
+                    self.bridge.send_card(card, event="glance_alt")
+                except Exception:                  # noqa: BLE001 — never break a look
+                    pass
         elif decision.kind == "offer" and decision.card is not None:
             self.bridge.send_card(decision.card, event="glance")
         return decision
@@ -174,10 +197,15 @@ class WorldLensOps(OpsHost):
         """Fine scene classification via the Brain's vision tier (Mac / cloud).
         Returns a GlanceReading or None. The vision model is the seam Ollama
         plugs into; offline this simply returns None and the coarse read stands."""
+        # `shelf` and `menu` are in this list on purpose. The vision tier is the
+        # only witness the GLASSES have for them: the phone's object detector is
+        # what supplies them on the live path, and image statistics are not allowed
+        # to (a bookshelf and a radiator are one picture to a gradient profile).
+        # Without them here the compare lens had no route on this path at all.
         prompt = ("Classify what is in this image for a glasses assistant. Reply "
                   "on one line: SCENE: <object|text|form|question|foreign_text|"
-                  "person|screen> — then optional tags density=<0-1> "
-                  "lang=<iso> fields=<n> question=<yes|no>. Nothing else.")
+                  "person|screen|shelf|menu> — then optional tags density=<0-1> "
+                  "lang=<iso> fields=<n> items=<n> question=<yes|no>. Nothing else.")
         try:
             ans = self.brain.explain(frame, prompt, want="more")
         except Exception:

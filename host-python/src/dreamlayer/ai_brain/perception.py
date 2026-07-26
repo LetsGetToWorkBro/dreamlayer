@@ -231,15 +231,21 @@ def frame_cues(frame) -> dict:
     # (things side by side). Taking max() of the two made every page a shelf.
     out["col_reps"] = int(_peaks(gx.mean(axis=0)))
     out["row_reps"] = int(_peaks(gy.mean(axis=1)))
+    # Banding, as a share of the STRONGEST row rather than a multiple of the
+    # median. Median-relative counting collapses on exactly the frame the cue
+    # exists for: on a page where most rows ARE text the median rises with them,
+    # so the same page measured 96 bands at 240 px and none at all at 720 — the
+    # resolution the client actually posts.
     rowe = gy.mean(axis=1)
-    med = float(np.median(rowe))
-    out["rows"] = int(np.count_nonzero(rowe > (med * 2.5 + 1e-6)))
+    peak = float(rowe.max())
+    out["rows"] = int(np.count_nonzero(rowe > peak * 0.45)) if peak > 0.004 else 0
     # How much luminance VARIES. A blurred street and a blank wall both have
     # almost no high-frequency energy and almost no gradient, so neither sharpness
     # nor text-density can tell them apart — but the street still has large shapes
     # in it and the wall does not. Measured: a wall 0.003 (0.027 with a lighting
     # gradient), motion-blurred scenes 0.11-0.14.
-    out["contrast"] = round(float(g.std()), 5)
+    # (measured on the box-averaged frame below, not the strided one — striding
+    # aliases a fine grating to the blank-wall value of 0.004)
     # The light cues need REAL pixels. A star is 1-2 px wide, so the strided
     # downsample above deletes most of a starfield and keeps whatever happens to
     # land on the stride — which is why a single LED in a dark room used to look
@@ -249,8 +255,15 @@ def frame_cues(frame) -> dict:
     gf = gf / (255.0 if float(gf.max()) > 1.0 else 1.0)
     mean_l = float(gf.mean())
     out["dark"] = bool(mean_l < 0.28)
+    out["contrast"] = round(float(gf.std()), 5)
     if out["dark"]:
-        mask = gf > max(0.55, mean_l + 0.35)
+        # A star is not 250/255. Requiring 55% of full scale only ever caught
+        # near-saturated ones, so a real sparse sky (magnitudes 80-170, dimmed
+        # again by noise and JPEG) registered 5 lights out of 12 and failed every
+        # count test. Take the brightest tail of THIS frame instead — whatever is
+        # far above its own floor is a light in it.
+        hi = float(np.percentile(gf, 99.5))
+        mask = gf > max(mean_l + 6.0 * max(float(gf.std()), 0.004), hi * 0.55, 0.12)
         nbright = int(np.count_nonzero(mask))
         out["light_frac"] = round(nbright / float(mask.size), 5)
         if nbright:
@@ -336,8 +349,19 @@ class HeuristicPerceptor:
             # photographed page of prose claimed 12 form fields and the glasses
             # offered to fill it in. A form has on the order of six to twenty rows;
             # a page of prose has forty to seventy, and no column rules.
-            if 6 <= bands <= 24 and d >= 0.20 and int(c.get("col_reps", 0) or 0) >= 2:
-                sig.form_fields = min(12, bands // 2)
+            # Measured on ruled forms: 9 rows → 17 bands at density 0.072, and 16
+            # rows → the high thirties. The old `d >= 0.20` floor described no real
+            # form at all — a ruled sheet is mostly white space — while the [6,24]
+            # ceiling excluded anything bigger than a short table. Prose is kept out
+            # by the band count instead (a page measures 100), which is the cue that
+            # actually distinguishes them, plus the column rules a form has and
+            # prose does not.
+            # …and on PAPER. A night skyline is a grid of lit windows: 31 bands,
+            # column rules, the right density — a form in every statistic except
+            # that it is a dark frame, and paper never is.
+            if (6 <= bands <= 60 and d >= 0.03 and not c.get("dark")
+                    and int(c.get("col_reps", 0) or 0) >= 2):
+                sig.form_fields = min(12, max(2, bands // 2))
             # THE SKY: a dark field, almost no text, and MANY tiny bright points
             # spread across the frame. All three clauses are load-bearing, and the
             # earlier "small bright fraction" test was none of them: a dark room
@@ -353,14 +377,23 @@ class HeuristicPerceptor:
                     and float(c.get("light_spany", 0.0) or 0.0) >= 0.4
                     and float(c.get("light_spanx", 0.0) or 0.0) >= 0.4):
                 sig.sky = True
-            # MOVING: the frame is smeared but there IS a scene in it. `contrast`
-            # is what makes that second half real — a blank wall is not "walking",
-            # it is just blank, and text_density cannot tell the two apart because
-            # blur destroys density too (a blurred street measures 0.005, the same
-            # as a painted wall). Set only when true, never as a claimed negative.
-            sharp, con = c.get("sharp"), float(c.get("contrast", 0.0) or 0.0)
-            if sharp is not None and con >= 0.08 and float(sharp) < 0.003:
-                sig.moving = True
+            # MOVING is NOT claimed, and `sharp` is reported raw for anything that
+            # wants it. One frame cannot tell you the wearer is walking.
+            #
+            # The idea was that motion blur is the honest signal for walking. It
+            # isn't, once a real sensor is in the loop: blur removes high-frequency
+            # SIGNAL, but sensor noise is added after the blur and is itself pure
+            # high frequency, so `sharp` measures the noise floor. Measured on
+            # directionally-blurred street frames — the thing walking actually
+            # produces — a still frame at σ=1.5 DN reads 0.0121 and the same frame
+            # blurred 24 px at σ=3 reads 0.0198: the BLURRED one scores higher.
+            # Normalising by contrast does not save it either (0.70 still vs 0.99
+            # walking), so no threshold separates them across noise levels. It
+            # never fired on a real frame, and where it did fire it told a
+            # stationary wearer they were moving.
+            #
+            # So DepthCandidate is reachable the honest way instead: by asking.
+            # "how far is that" runs it, exactly as `find` needs its nouns spoken.
         # NOTE: `menu` is deliberately never claimed from image statistics — a menu
         # and a page of prose are not separable this way. It stays available for the
         # phone's detector / a VLM tier to supply.
