@@ -911,6 +911,63 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 pass
         return sent
 
+    # Self-test kinds → the card the real publisher would push, built by the SAME
+    # hud.cards builders and rendered by the SAME phone renderers. Every one is
+    # stamped selftest=True so it can never be mistaken for the real event.
+    SELFTEST_KINDS = ("hark", "brief", "nudge")
+
+    def push_selftest(self, kind: str = "hark") -> dict:
+        """Push ONE clearly-labelled self-test card to every connected Live Lens.
+
+        This exists because the ambient half of the HUD was undemonstrable: a
+        sound-safety tap needs a real smoke alarm (plus the sound-events pack) and
+        the brief only self-pushes at its configured hour, so there was no way to
+        prove the push channel and the card renderers actually work end to end.
+
+        Honesty rules this deliberately obeys:
+          * the card is stamped ``selftest: True`` and carries a SELF-TEST eyebrow,
+            so it never masquerades as a real alarm or a real brief;
+          * it is **never** ``veil_ok`` — a self-test must not borrow a real safety
+            alert's privilege to pierce the shield, and being suppressed under the
+            veil is itself the proof the shield works;
+          * it invents no data: the brief self-test carries no memory content and
+            the hark self-test names itself as a test tone, not a detected sound.
+        Returns {ok, kind, delivered} — delivered==0 means nothing is listening
+        (or the veil is up), which is a true answer, not a failure."""
+        k = str(kind or "hark").strip().lower()
+        if k not in self.SELFTEST_KINDS:
+            return {"ok": False, "error": "unknown self-test kind",
+                    "kinds": list(self.SELFTEST_KINDS)}
+        from ...hud import cards
+        if k == "hark":
+            card = cards.hark(clue="Self-test — the tap works.",
+                              detail="a test tone, not a real alert",
+                              importance="normal")
+        elif k == "brief":
+            card = cards.morning_brief(
+                text="Self-test — your brief would appear here.",
+                bullets=["this card is a self-test", "no memories were read"])
+        else:
+            card = {"type": "NudgeCard", "primary": "Self-test — a nudge lands here.",
+                    "detail": "no memory was read", "dismiss_ms": 6000}
+        card = dict(card)
+        card["selftest"] = True
+        card["eyebrow"] = "SELF-TEST"
+        delivered = self.push_event(k, card)            # never veil_ok
+        try:
+            self.activity.add("selftest", f"Pushed a {k} self-test card")
+        except Exception:                               # noqa: BLE001
+            pass
+        return {"ok": True, "kind": k, "delivered": delivered,
+                "veiled": delivered == 0 and bool(self._veiled_quiet())}
+
+    def _veiled_quiet(self) -> bool:
+        """True when the shield is up — so a 0-delivery self-test can say WHY."""
+        try:
+            return bool(self.incognito_now())
+        except Exception:                               # noqa: BLE001
+            return True                                 # unreadable → assume shielded
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -4018,6 +4075,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "tier": "local", "sources": [], "confidence": 1.0,
                                  "intent": "introduce", "enrolled": intro})
                 return
+            # "who is Sarah" / "what do I know about Marcus" → the person dossier
+            # card, built from YOUR records (roster + mirror + your own memory).
+            # Roster-gated: it only fires for someone you introduced, so a general
+            # question ("who is the mayor") falls through to normal recall below.
+            try:
+                dq = brain.dossier_query(query)
+            except Exception:                          # noqa: BLE001
+                dq = None
+            if dq:
+                self._json(200, {"text": dq.get("say", ""), "tier": "local",
+                                 "sources": [], "confidence": 1.0,
+                                 "intent": "dossier", "who": dq.get("who"),
+                                 "card": dq.get("card"),
+                                 "dossier": dq.get("dossier")})
+                return
             ans = brain.ask(query, no_cloud=bool(b.get("no_cloud")))
             self._json(200, _answer_json(ans))
 
@@ -4295,7 +4367,28 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                               memories=b.get("memories"))
             if out.get("depth") == "long":     # keep the last long brief for the phone
                 brain.last_long_brief = {**out, "ts": time.time()}
+            # An explicit "brief me now" must also reach the GLASS, not just the
+            # caller: the panel button used to return JSON while any connected Live
+            # Lens got nothing (audit 2026-07-23). push_event is veil-gated, so the
+            # shield still suppresses it.
+            if b.get("push") is not False:
+                try:
+                    from ...hud import cards
+                    brain.push_event("brief", cards.morning_brief(
+                        text=out.get("text", ""), bullets=out.get("bullets") or []))
+                except Exception:              # noqa: BLE001 — never fail the brief
+                    pass
             self._json(200, out)
+
+        def _post_live_selftest(self, path, qs):
+            """Prove the ambient push channel + card renderers work, without a real
+            smoke alarm and without waiting for the brief hour. Authed like every
+            other write; the card is stamped SELF-TEST and is never veil_ok, so it
+            can't be used to spoof a safety alert (nor to pierce the shield)."""
+            b = self._body() if self.headers.get("Content-Length") else {}
+            kind = str((b or {}).get("kind") or qs.get("kind", ["hark"])[0])
+            out = brain.push_selftest(kind)
+            self._json(200 if out.get("ok") else 400, out)
 
         def _post_replies(self, path, qs):
             """Suggest quick replies to a message."""
@@ -4643,6 +4736,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,
+            "/dreamlayer/live/selftest": _post_live_selftest,
             "/dreamlayer/replies": _post_replies,
             "/dreamlayer/voice": _post_voice,
             "/dreamlayer/calendar": _post_calendar,

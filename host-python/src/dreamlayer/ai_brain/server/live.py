@@ -228,8 +228,13 @@ def _local_look(brain, arr, ledger: bool = True) -> dict:
     # ledger write so no person observation is recorded either.
     from ...object_lens import person_guard
     if person_guard.defers_person(label, frame=arr):
+        # Say the honest thing, and say what DOES work: this Brain has no
+        # face-recognition model, so a face is never turned into a name here. The
+        # wearer names people instead ("this is Sarah") and recalls them by name
+        # ("who is Sarah" → the dossier card). Never imply a failed match.
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
-                "lines": wrap_hud_lines("a person — the Social Lens handles people")}
+                "lines": wrap_hud_lines(
+                    "a person — I don't put names to faces; ask me who they are")}
     try:                                      # incognito/ambient ⇒ no on-disk trace;
         trace = ledger and not brain.incognito_now()   # unreadable posture ⇒ no trace
     except Exception:
@@ -1144,6 +1149,26 @@ function glassSkyCard(j){                           /* Sky -> a named star map *
 /* ---- ambient cards the Brain PUSHES (over the /live/events channel) -------
    Not a reply to a look — the Brain surfaces these on its own: a sound-safety
    tap, the morning brief, a memory nudge. Same glass, same primitives. */
+function glassDossierCard(c){                        /* YOU KNOW — someone you introduced */
+  const ctx = glassCtx(); gback(ctx);
+  /* the person as a lit field (the device's social material family) */
+  ctx.beginPath(); ctx.arc(128, 112, 62, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.07)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 7;
+  garc(ctx, 128, 84, 15, 200, 340, GP.memory_trace);   /* a shoulders-and-head cue */
+  ctx.beginPath(); ctx.arc(128, 72, 7, 0, 2 * Math.PI);
+  ctx.strokeStyle = GP.memory_trace; ctx.lineWidth = 1.4; ctx.stroke(); ctx.restore();
+  gtext(ctx, c.eyebrow || "YOU KNOW", 128, 48, GP.text_ghost, "sm");
+  gtext(ctx, String(c.person || c.primary || "").slice(0, 22), 128, 112, GP.text_primary, "lg");
+  if (c.headline) gtext(ctx, gwrap(String(c.headline), 28)[0] || "", 128, 134, GP.memory_trace, "sm");
+  if (c.detail) gtext(ctx, gwrap(String(c.detail), 30)[0] || "", 128, 150, GP.text_secondary, "sm");
+  const notes = Array.isArray(c.notes) ? c.notes.slice(0, 2) : [];
+  notes.forEach((n, i) => gtext(ctx, gwrap(String(n), 32)[0] || "", 128, 168 + i * 15, GP.text_secondary, "sm"));
+  const debts = Array.isArray(c.debts) ? c.debts.slice(0, 1) : [];
+  debts.forEach(d => gtext(ctx, String(d).slice(0, 28), 128, 168 + notes.length * 15 + 2, GP.confidence_low, "sm"));
+  gend(c.dismiss_ms || 7000);
+}
 function glassTasteCard(j){                          /* TasteLens — the pick + the why */
   const ctx = glassCtx(); gback(ctx);
   ctx.beginPath(); ctx.arc(128, 116, 66, 0, 2 * Math.PI);
@@ -2094,6 +2119,13 @@ async function ask(){
     setLink(rsp.ok, performance.now() - t0);
     if (rsp.status === 401) { needsPairing(); return; }
     const j = rsp.json;
+    /* "who is Sarah" answers with a real dossier CARD on the glass (built from
+       your roster + your own memory), not a text line — the same card family the
+       glasses draw when they know someone. */
+    if (j.card && j.card.type === "PersonDossierCard") {
+      setTier(j.tier); $("hud").classList.remove("on");
+      glassDossierCard(j.card); blip(); return;
+    }
     if (j.text) { showHud(j.text, {ms:9000}); setTier(j.tier); }
     else showHud(veil ? "nothing on-device" : "no answer", {ms:4000});
   } catch (e) {
@@ -2407,6 +2439,9 @@ function stopEvents(){ try { if (evSource) evSource.close(); } catch (e) {} evSo
 function renderEvent(ev){
   if (dreamOn) return;                 /* never stomp the dream canvas */
   const c = ev.card, t = c && c.type;
+  /* a self-test card announces itself — it must never read as a real alarm or a
+     real brief (the Brain stamps selftest + a SELF-TEST eyebrow; we keep it) */
+  if (c && c.selftest) c.eyebrow = "SELF-TEST";
   if (t === "HarkCard"){ glassHarkCard(c); try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
   else if (t === "MorningBriefCard") glassBriefCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
