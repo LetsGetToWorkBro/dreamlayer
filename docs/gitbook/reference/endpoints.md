@@ -58,7 +58,9 @@ the seams marked.
 | `/dreamlayer/brain/ask` | token | `{query}` → `Answer {text, tier, sources, confidence}`; logged; may cross to cloud under the gate |
 | `/dreamlayer/brain/explain` | token | `{label, image?, want?}` → object `Answer` |
 | `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall/brief answered inline; timers/intervals/clock compiled and deployed (`rc_native`); notes/meet/debts/settle applied to the people mirror (`voice_social`); locate/stash answered from Waypath; missed and reply handled in place; others returned as `{intent, ...args}` |
-| `/dreamlayer/brief` | token | `{agenda?, since?, depth?, commitments?, memories?}` → `{text, bullets, missed}`; `depth: "long"` adds `sections` and is cached for `brief/long/latest` |
+| `/dreamlayer/brief` | token | `{agenda?, since?, depth?, commitments?, memories?}` → `{text, bullets, missed}`; `depth: "long"` adds `sections` and is cached for `brief/long/latest`. Add `push: true` to ALSO push the brief as a card to every connected Live Lens (veil-gated; the response then carries `pushed`, the delivery count) |
+| `/dreamlayer/live/selftest` | token | `{kind?}` (`hark`\|`brief`) → push ONE clearly-labelled SELF-TEST card to every connected Live Lens, so the ambient channel and the card renderers can be proven without a real smoke alarm. Never `veil_ok` — a test must not borrow a safety alert's privilege to pierce the shield, and being suppressed under the veil is itself the proof it works. Rate-limited (6/min). Returns `{ok, kind, delivered, listeners, reason}` |
+| `/dreamlayer/live/intent` | token | `{text}` → parse a SPOKEN phrase into a lens intent the next look obeys ("where are my keys" → the find lens with `terms:["keys"]`). Veil-gated; the intent expires after ~20 s and steers exactly one look. Speech that names nothing returns `{intent:""}` rather than guessing |
 | `/dreamlayer/replies` | token | `{text}` → `{replies: [three short replies]}` |
 | `/dreamlayer/folders` | token | `{action: add\|remove, path}` → save + reindex |
 | `/dreamlayer/config` | token | partial config patch (whitelisted keys) → apply + reindex |

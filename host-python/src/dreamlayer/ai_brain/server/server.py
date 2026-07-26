@@ -75,6 +75,13 @@ MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + h
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 MAX_EVENT_SUBS = 6                      # concurrent /live/events streams (each holds a worker thread)
 
+# The names this machine answers to, resolved once and reused (see _own_names).
+# socket.getfqdn() can hit the resolver, and this is consulted on every write —
+# uncached, a slow or unreachable DNS server would stall POSTs one by one.
+_OWN_NAMES_TTL_S = 300.0
+_OWN_NAMES_LOCK = threading.Lock()
+_OWN_NAMES_CACHE: dict = {"names": None, "ts": 0.0}
+
 # Content-Security-Policy for the token-bearing panel/builder pages. The panel is
 # built on inline event handlers (onclick=/onchange=), so — unlike the Live page,
 # which nonces its one inline block and can forbid inline entirely — it must keep
@@ -3186,6 +3193,72 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 pass
             return False
 
+        @staticmethod
+        def _own_names() -> set:
+            """Every name this machine legitimately answers to: localhost and its
+            own hostname, with and without the mDNS ``.local`` suffix.
+
+            Cached behind a lock because ``socket.getfqdn()`` can do a reverse-DNS
+            lookup: uncached, a machine with a slow or unreachable resolver would
+            stall on every POST, and concurrent POSTs would each stall separately.
+            One resolve is in flight at most, and the answer is reused for
+            ``_OWN_NAMES_TTL_S`` — long enough to be free, short enough that a
+            hostname change is picked up without a restart."""
+            now = time.time()
+            with _OWN_NAMES_LOCK:
+                cached = _OWN_NAMES_CACHE.get("names")
+                if cached is not None and (now - _OWN_NAMES_CACHE["ts"]) < _OWN_NAMES_TTL_S:
+                    return cached
+                names = {"localhost", "localhost.local"}
+                for fn in (socket.gethostname, socket.getfqdn):
+                    try:
+                        n = (fn() or "").strip().lower().rstrip(".")
+                    except OSError:
+                        continue
+                    if not n:
+                        continue
+                    names.add(n)
+                    base = n.split(".")[0]
+                    if base:
+                        names.update({base, base + ".local"})
+                    if not n.endswith(".local"):
+                        names.add(n + ".local")
+                _OWN_NAMES_CACHE["names"] = names
+                _OWN_NAMES_CACHE["ts"] = now
+                return names
+
+        def _write_host_ok(self) -> bool:
+            """A stricter Host test than the rebind guard, applied to WRITES only.
+
+            `_host_allowed` accepts ANY ``.local`` name, because an mDNS name is not
+            remotely rebindable — fine for reads. But it means a LAN attacker running
+            an mDNS responder for ``evil.local`` pointed at this Brain gets a Host
+            AND an Origin that match each other, satisfying the CSRF guard: a page
+            the wearer merely visits could then POST as a same-origin caller. So a
+            write must additionally arrive at a name we ACTUALLY answer to — an IP
+            literal, localhost, or this machine's own (m)DNS name. Reads are
+            untouched, so nothing about phone reachability changes."""
+            import ipaddress
+            raw = self.headers.get("Host")
+            if not raw:
+                return True                    # non-browser client; no CSRF vector
+            host = raw.strip()
+            if host.startswith("["):
+                hostname = host[1:host.index("]")] if "]" in host else host[1:]
+            elif host.count(":") == 1:
+                hostname = host.rsplit(":", 1)[0]
+            else:
+                hostname = host
+            hostname = hostname.strip().lower().rstrip(".")
+            if not hostname:
+                return False
+            try:
+                ipaddress.ip_address(hostname)
+                return True                    # an IP literal is not a claimed name
+            except ValueError:
+                pass
+            return hostname in self._own_names()
+
         def _same_origin_write(self) -> bool:
             """CSRF guard for state-changing (POST) requests.
 
@@ -4917,6 +4990,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # CSRF guard first: a forged cross-origin write must be refused even
             # when it would otherwise be authorized (tokenless loopback trusts
             # any local caller). Native/CLI callers carry no Origin and pass.
+            if not self._write_host_ok():
+                self._json(421, {"error": "host not allowed for writes"}); return
             if not self._same_origin_write():
                 self._json(403, {"error": "cross-origin write refused"}); return
             # PUBLIC POSTs (only /live/redeem) resolve BEFORE the auth gate — the

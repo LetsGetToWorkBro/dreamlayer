@@ -809,6 +809,8 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
   <span class="chip" id="hearbtn" role="switch" aria-checked="false" tabindex="0" title="Let the Brain hear and remember — the phone is the mic, transcribed on-device">&#127908; <b id="hearst">listen</b></span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
+  <span class="chip" id="speakbtn" role="switch" aria-checked="false" tabindex="0" title="Let Juno speak her replies aloud (on-device voice; needs a voice model)">&#128266; <b id="speakst">voice</b></span>
+  <span class="chip" id="testbtn" role="button" tabindex="0" title="Push a clearly-labelled SELF-TEST card, to prove the ambient channel works">&#9889; test</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
 </div>
 <div id="chooser" role="dialog" aria-label="Pick a lens">
@@ -2108,7 +2110,7 @@ async function lookNow(auto, forceLens, forceScene){
       if (LASTDETS.n) q.set("ndet", String(LASTDETS.n));
       if (LASTDETS.objs && LASTDETS.objs.length) q.set("objs", LASTDETS.objs.join(","));
       if (LASTDETS.face) q.set("face", "1");
-      if (TILT) q.set("tilt", TILT.toFixed(0));
+      if (TILTOK) q.set("tilt", TILT.toFixed(0));   /* never fake a posture */
       const dw = dwellMs();
       if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
       cue = q.toString();
@@ -2137,6 +2139,7 @@ async function lookNow(auto, forceLens, forceScene){
    single look waits one double-tap window so the gestures never collide. */
 let _tapT = 0, _tapTimer = null;
 $("lens").onclick = () => {
+  startTilt();                      /* iOS: a gesture is required to grant this */
   const now = performance.now();
   if (now - _tapT < 300) {
     clearTimeout(_tapTimer); _tapT = 0;
@@ -2159,10 +2162,34 @@ let LASTDETS = null;          /* the phone's own scene cues for the next look */
 /* Tier 2: head pitch and focus dwell. `beta` is front-back tilt: ~0 upright,
    negative when you tip the phone back to look UP, positive tipping down. We
    report +up/-down so the Brain reads it the way a person would describe it. */
-let TILT = 0, FOCUS = {name: "", since: 0};
-window.addEventListener("deviceorientation", e => {
-  if (typeof e.beta === "number") TILT = Math.max(-90, Math.min(90, -(e.beta - 45)));
-}, {passive: true});
+let TILT = 0, FOCUS = {name: "", since: 0}, TILTOK = false;
+function onTilt(e){
+  /* `beta` is front-back pitch: 90 = held upright facing you, 0 = flat face-up,
+     negative = tipped back past flat. A phone raised toward the SKY approaches 0
+     and goes negative; held down over a page it exceeds 90. Report +up/-down
+     relative to the natural ~60° reading pose so the Brain reads it the way a
+     person would describe it. */
+  if (typeof e.beta !== "number") return;
+  TILTOK = true;
+  TILT = Math.max(-90, Math.min(90, 60 - e.beta));
+}
+function startTilt(){
+  /* iOS 13+ gates DeviceOrientationEvent behind a USER-GESTURE permission call.
+     Without it the event never fires and Tier 2's posture cues are silently dead
+     on iPhone — the primary device. Ask once, on the first tap, and fall back to
+     no-tilt (0) rather than pretending. */
+  try {
+    const DOE = window.DeviceOrientationEvent;
+    if (!DOE) return;
+    if (typeof DOE.requestPermission === "function") {
+      DOE.requestPermission().then(r => {
+        if (r === "granted") window.addEventListener("deviceorientation", onTilt, {passive:true});
+      }).catch(() => {});
+    } else {
+      window.addEventListener("deviceorientation", onTilt, {passive:true});
+    }
+  } catch (e) {}
+}
 function dwellMs(){ return FOCUS.since ? (performance.now() - FOCUS.since) : 0; }
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
@@ -2203,9 +2230,9 @@ async function ask(){
        glasses draw when they know someone. */
     if (j.card && j.card.type === "PersonDossierCard") {
       setTier(j.tier); $("hud").classList.remove("on");
-      glassDossierCard(j.card); blip(); return;
+      glassDossierCard(j.card); blip(); speak(j.text); return;
     }
-    if (j.text) { showHud(j.text, {ms:9000}); setTier(j.tier); }
+    if (j.text) { showHud(j.text, {ms:9000}); setTier(j.tier); speak(j.text); }
     else showHud(veil ? "nothing on-device" : "no answer", {ms:4000});
   } catch (e) {
     if (e && e.name === "AbortError") showHud("timed out · try again", {ms:2600});
@@ -2513,6 +2540,65 @@ document.addEventListener("visibilitychange", () => {
    this — no captured audio/pixels — and the Brain veil-gates every non-safety
    push, so under the shield only a safety alert can arrive. */
 let evSource = null;
+/* The ambient half of the HUD had no trigger at all — a safety tap needs a real
+   smoke alarm and the brief only self-pushes at its hour, so the only way to prove
+   the channel worked was curl. This button pushes ONE clearly-labelled SELF-TEST
+   card through the real path, and reports honestly when nothing is listening or
+   the veil suppressed it. */
+async function selfTest(){
+  try {
+    const rsp = await fetchJSON("/dreamlayer/live/selftest", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({kind: "hark"})}, 6000);
+    if (rsp.status === 401) { needsPairing(); return; }
+    const j = rsp.json || {};
+    if (j.ok === false) showHud(j.error || "self-test refused", {ms:2600});
+    else if (!j.delivered) showHud(j.reason === "veiled"
+        ? "the veil suppressed it — that IS the shield working"
+        : "nothing is listening for pushed cards yet", {ms:3200});
+  } catch (e) { showHud("brain unreachable", {ms:2400}); }
+}
+$("testbtn").onclick = selfTest;
+$("testbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") selfTest(); };
+
+/* Juno speaking on the GLASS. /dreamlayer/tts was panel-only, so on the phone she
+   never spoke at all. Off by default and honest about why it can't: a 204 means no
+   engine or no voice model is installed, and we say so once instead of silently
+   doing nothing. */
+let speakOn = false, _speakWarned = false, _audio = null;
+function setSpeak(on){
+  speakOn = !!on;
+  $("speakbtn").classList.toggle("on", speakOn);
+  $("speakbtn").setAttribute("aria-checked", speakOn ? "true" : "false");
+  $("speakst").textContent = speakOn ? "speaking" : "voice";
+  if (!speakOn) { try { if (_audio) _audio.pause(); } catch (e) {} }
+}
+$("speakbtn").onclick = () => setSpeak(!speakOn);
+$("speakbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") setSpeak(!speakOn); };
+async function speak(text){
+  const t = String(text || "").trim();
+  if (!speakOn || !t || veil) return;          /* never speak under the shield */
+  try {
+    const r = await fetch("/dreamlayer/tts", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({text: t.slice(0, 400)})});
+    if (r.status === 204) {
+      if (!_speakWarned) { _speakWarned = true;
+        showHud("no voice model installed — add one to hear Juno", {ms:3600});
+        setSpeak(false); }
+      return;
+    }
+    if (!r.ok) return;
+    const buf = await r.blob();
+    try { if (_audio) { _audio.pause(); if (_audio._url) URL.revokeObjectURL(_audio._url); } } catch (e) {}
+    /* revoke the blob URL when the clip ends, else every spoken reply leaks one
+       for the life of the page — a long session would hold every audio buffer. */
+    const url = URL.createObjectURL(buf);
+    _audio = new Audio(url); _audio._url = url;
+    _audio.addEventListener("ended", () => { try { URL.revokeObjectURL(url); } catch (e) {} });
+    _audio.play().catch(() => { try { URL.revokeObjectURL(url); } catch (e) {} });
+  } catch (e) {}
+}
 function startEvents(){
   if (evSource || !TOKEN || !window.EventSource) return;
   try {

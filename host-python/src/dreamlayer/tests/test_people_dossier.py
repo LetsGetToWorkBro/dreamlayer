@@ -288,3 +288,90 @@ def test_the_hark_selftest_is_not_dressed_as_a_real_alert(brain):
     # a real watch-out is "urgent"; a test tone must not claim that weight
     assert card.get("importance") != "urgent"
     assert "not a real alert" in str(card.get("detail", ""))
+
+
+# --- the .local write-guard gap (pre-existing, found by the refute audit) -----
+
+def test_a_foreign_mdns_host_cannot_write_but_can_still_read(tmp_path):
+    """`_host_allowed` accepts ANY .local name because mDNS isn't remotely
+    rebindable — fine for reads. But a LAN attacker running a responder for
+    `evil.local` aimed at this Brain gets a Host AND Origin that match each other,
+    satisfying the CSRF guard. Writes now additionally require a name we actually
+    answer to; reads are untouched so phone reachability is unchanged."""
+    import http.client
+    import json
+    import socket
+    import threading
+    import time
+    from dreamlayer.ai_brain.server.server import make_brain_server
+
+    b = Brain(str(tmp_path))
+    srv = make_brain_server(b, port=0)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    time.sleep(0.2)
+    try:
+        def post(host, origin):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            c.request("POST", "/dreamlayer/live/selftest",
+                      body=json.dumps({"kind": "hark"}),
+                      headers={"Host": host, "Origin": origin,
+                               "Content-Type": "application/json"})
+            st = c.getresponse().status
+            c.close()
+            return st
+
+        assert post("evil.local", "http://evil.local") == 421      # refused
+        own = (socket.gethostname() or "vm").strip().lower().split(".")[0]
+        assert post(f"{own}.local", f"http://{own}.local") == 200  # the real name
+        assert post(f"127.0.0.1:{port}", f"http://127.0.0.1:{port}") == 200
+
+        # a READ through the same foreign host still works — reachability intact
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("GET", "/dreamlayer/status", headers={"Host": "evil.local"})
+        assert c.getresponse().status == 200
+        c.close()
+    finally:
+        srv.shutdown()
+
+
+def test_own_name_resolution_is_cached_so_a_slow_resolver_cannot_stall_writes():
+    """`_own_names` calls socket.getfqdn(), which can hit the resolver. It gates
+    every write, so an uncached lookup would let a slow or blackholed DNS server
+    add its latency to each POST — and concurrent POSTs would each stall
+    separately. The answer must be resolved once and reused."""
+    import dreamlayer.ai_brain.server.server as srv_mod
+
+    calls = {"n": 0}
+    real = srv_mod.socket.getfqdn
+
+    def counting_getfqdn(*a):
+        calls["n"] += 1
+        return real(*a)
+
+    # a cold cache, so the first call is the one that resolves
+    with srv_mod._OWN_NAMES_LOCK:
+        srv_mod._OWN_NAMES_CACHE["names"] = None
+        srv_mod._OWN_NAMES_CACHE["ts"] = 0.0
+    orig = srv_mod.socket.getfqdn
+    srv_mod.socket.getfqdn = counting_getfqdn
+    try:
+        # _own_names is a staticmethod on the per-server handler class, but the
+        # cache it consults is module-level — exercise it through a real handler.
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            s = srv_mod.make_brain_server(Brain(td), port=0)
+            try:
+                cls = s.RequestHandlerClass
+                calls["n"] = 0          # server construction resolves too; ignore it
+                first = cls._own_names()
+                again = first
+                for _ in range(50):
+                    again = cls._own_names()
+                assert again == first
+                assert calls["n"] == 1, f"resolved {calls['n']}× — cache is not holding"
+                assert "localhost" in first
+            finally:
+                s.server_close()
+    finally:
+        srv_mod.socket.getfqdn = orig
