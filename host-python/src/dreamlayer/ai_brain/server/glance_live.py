@@ -10,13 +10,20 @@ with a candidate set restricted to the lenses that host can actually run.
 
 Only lenses WorldLensHost can execute may bid:
   juno (identify) · taste (compare a shelf/menu) · translate (foreign text) ·
-  read (read text aloud/plain) · math (an equation → LaTeX).
+  read (read text) · math (an equation → LaTeX) · sky (name what's above) ·
+  depth (how far) · segment (isolate one thing).
 
 Person is deliberately NOT a candidate here: the live path defers every face to
 the Social Lens (person_guard), exactly as the phone look does — the arbiter
-must never try to identify a stranger. Depth / find / sky stay DELIBERATE lenses
-(they need a distance intent, search terms, or your location), reached through
-the manual override, not auto-fired from a bare frame.
+must never try to identify a stranger.
+
+Depth / sky / segment became candidates in the Tier-1 perception pass
+(2026-07-23). They were unreachable before for a real reason and it wasn't
+policy: the live perceptor emitted only text_density + has_object, so no scene
+could ever justify them. Now that the frame yields repetition, bands, darkness,
+point-lights and blur — and the phone forwards what its own detector already
+sees — each has an honest cue to bid on. `find` is still NOT a candidate: it
+needs the nouns you're hunting, which no bare frame supplies.
 """
 from __future__ import annotations
 
@@ -35,9 +42,13 @@ class ReadCandidate(LensCandidate):
 
     def bid(self, reading, ctx) -> Optional[LensBid]:
         density = reading.sig("text_density", 0.0) or 0.0
-        if reading.scene in ("text", "screen") and density >= 0.2:
-            # stronger the denser the text; a clear default owner of a page.
-            s = 0.62 if density >= 0.5 else 0.55
+        # Strong horizontal banding IS print, even at a modest density score: the
+        # density metric is a mean gradient, so fine type on white under-reads
+        # relative to how readable it is. Using the band cue too is what lets a
+        # photographed page fire Read instead of falling through (Tier 1).
+        banded = (reading.sig("bands", 0) or 0) >= 10
+        if reading.scene in ("text", "screen") and (density >= 0.2 or (banded and density >= 0.1)):
+            s = 0.62 if (density >= 0.5 or banded) else 0.55
             return LensBid(self.lens, self.label, s, "read",
                            reason="text to read")
         return None
@@ -57,21 +68,71 @@ class MathCandidate(LensCandidate):
         return None
 
 
+class DepthCandidate(LensCandidate):
+    """How far is that. Bids when the wearer is MOVING (a blurred frame is the
+    honest signal for walking) and something is in front of them — the mobility
+    moment, where distance is the question and reading is not."""
+    lens, label = "depth", "How far"
+
+    def bid(self, reading, ctx):
+        if not reading.sig("moving"):
+            return None
+        density = reading.sig("text_density", 0.0) or 0.0
+        if reading.scene in ("object", "unknown") and density < 0.28:
+            return LensBid(self.lens, self.label, 0.58, "depth",
+                           reason="you're moving — distance matters")
+        return None
+
+
+class SkyCandidate(LensCandidate):
+    """Look up and the sky is the whole intent. Bids high because the scene cue
+    (a dark field with a few point lights and no text) is unambiguous."""
+    lens, label = "sky", "Name the sky"
+
+    def bid(self, reading, ctx):
+        if reading.scene == "sky":
+            return LensBid(self.lens, self.label, 0.8, "sky",
+                           reason="the night sky is in view")
+        return None
+
+
+class SegmentCandidate(LensCandidate):
+    """What exactly am I pointing at. A deliberately WEAK bidder: it earns a place
+    in the chooser on a cluttered scene but should never outrank identify — the
+    mask is a refinement of a look, not usually the point of one."""
+    lens, label = "segment", "Isolate it"
+
+    def bid(self, reading, ctx):
+        items = reading.sig("items", 0) or 0
+        if reading.scene in ("shelf", "object") and items >= 3:
+            return LensBid(self.lens, self.label, 0.3, "segment",
+                           reason="a cluttered scene to separate")
+        return None
+
+
 # Map a RUN lens (the key look_lens executes) back to the CANDIDATE lens key the
 # arbiter learns on, so a chooser pick reinforces the right candidate. The Read
 # candidate's key is "read" but it runs the "doc" lens — without this, teaching
 # "doc" would never boost the "read" candidate and the learning would be dead.
-TEACH_LENS = {"doc": "read", "math": "math"}
+TEACH_LENS = {"doc": "read", "math": "math", "depth": "depth",
+              "sky": "sky", "segment": "segment"}
 
 
 # The live arbiter's candidates — only lenses WorldLensHost can run.
 LIVE_CANDIDATES = [
-    TasteLensCandidate(),   # a shelf / menu → compare
+    TasteLensCandidate(),   # a shelf / menu → compare      (now reachable: `items`)
     RosettaCandidate(),     # foreign text → translate
     ReadCandidate(),        # text → read
     MathCandidate(),        # text → an equation
+    SkyCandidate(),         # a dark field + point lights → name the sky
+    DepthCandidate(),       # you're moving, something ahead → how far
+    SegmentCandidate(),     # a cluttered scene → isolate (weak; chooser-only)
     JunoCandidate(),        # an object → identify (and the weak text fallback)
 ]
+# NOT a candidate, on purpose: `find`. It needs the NOUNS you're looking for, and
+# nothing in a bare frame supplies them — auto-firing it would be guessing. It
+# becomes reachable when spoken intent lands ("where are my keys" → find, with the
+# terms taken from what you actually said), which is the next tier of this work.
 
 
 def build_live_arbiter(priors_path: Optional[str] = None) -> GlanceArbiter:

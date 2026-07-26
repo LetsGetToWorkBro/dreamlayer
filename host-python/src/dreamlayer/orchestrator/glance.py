@@ -450,6 +450,10 @@ def classify_coarse(signals: dict, user_language: str = "en") -> GlanceReading:
         return GlanceReading("text", 0.5, s)
     if density > 0.1:
         return GlanceReading("text", 0.4, s)
+    # Looking UP at a dark field with a few point lights is the one scene where
+    # the intent IS the sky — resolved after text so a lit sign never becomes it.
+    if s.get("sky") and density < 0.12:
+        return GlanceReading("sky", 0.6, s)
     if s.get("object") or s.get("has_object"):
         return GlanceReading("object", 0.55, s)
     return GlanceReading("unknown", 0.2, s)

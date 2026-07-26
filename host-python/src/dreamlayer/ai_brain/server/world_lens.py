@@ -496,7 +496,7 @@ class WorldLensHost:
 
     # -- automatic lens selection (the glance arbiter) ---------------------
 
-    def glance(self, frame, dwell_ms: float = 0.0) -> dict:
+    def glance(self, frame, dwell_ms: float = 0.0, hints: dict | None = None) -> dict:
         """Decide the lens FOR the wearer from what's in view — the "you never
         pick a mode" path. Reads cheap on-device signals (PerceptionRouter),
         classifies the scene, lets the lenses bid (GlanceArbiter), and returns:
@@ -516,6 +516,16 @@ class WorldLensHost:
         from ...orchestrator.glance import GlanceContext, classify_coarse
         try:
             signals = self.perception.perceive(frame).as_signals()
+            # The phone runs its OWN on-device detector every frame and already
+            # knows what's in view (labels, how many, whether a person is there) —
+            # a far better witness than image statistics. Merging it is what makes
+            # the arbiter feel like it read your mind rather than guessed
+            # (Tier-1, 2026-07-23). Client cues never DOWNGRADE a server cue.
+            for k, v in (hints or {}).items():
+                if k == "items":
+                    signals["items"] = max(int(signals.get("items", 0) or 0), int(v))
+                elif v:
+                    signals[k] = v
         except Exception as exc:               # noqa: BLE001
             if self.health is not None:
                 self.health.record_failure("vision", exc)
@@ -551,6 +561,11 @@ class WorldLensHost:
                 return self._glance_lens_result(self.look_lens(frame, "doc"))
             if action == "math":
                 return self._glance_lens_result(self.look_lens(frame, "math"))
+            if action in ("depth", "sky", "segment"):
+                # the frontier lenses the arbiter can now justify; each
+                # self-describes when its pack (or a location) is missing
+                return self._glance_lens_result(
+                    self.look_lens(frame, action, args or None))
             if action == "translate":
                 panel = self.look(frame, facet="ai")
                 return panel.to_hud_card() if panel is not None else None

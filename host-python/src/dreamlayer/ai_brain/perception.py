@@ -38,6 +38,15 @@ class PerceptSignals:
     question: Optional[bool] = None
     has_object: Optional[bool] = None
     language: Optional[str] = None
+    # Tier-1 scene cues (2026-07-23): the arbiter always consumed items/shelf/menu
+    # but nothing produced them, so a shelf could never be recognised. `sky` and
+    # `moving` are new scene inputs the arbiter learned to read alongside them.
+    items: Optional[int] = None
+    shelf: Optional[bool] = None
+    menu: Optional[bool] = None
+    sky: Optional[bool] = None
+    moving: Optional[bool] = None
+    bands: Optional[int] = None      # horizontal text/table bands
     tier: str = ""
 
     def as_signals(self) -> dict:
@@ -56,6 +65,18 @@ class PerceptSignals:
             out["has_object"] = bool(self.has_object)
         if self.language:
             out["language"] = self.language
+        if self.items is not None:
+            out["items"] = int(self.items)
+        if self.shelf is not None:
+            out["shelf"] = bool(self.shelf)
+        if self.menu is not None:
+            out["menu"] = bool(self.menu)
+        if self.sky is not None:
+            out["sky"] = bool(self.sky)
+        if self.moving is not None:
+            out["moving"] = bool(self.moving)
+        if self.bands is not None:
+            out["bands"] = int(self.bands)
         return out
 
 
@@ -111,6 +132,83 @@ def text_density(frame) -> float:
     return max(0.0, min(1.0, 1.5 * (gx + gy) / full))
 
 
+def _downs(a: np.ndarray, target: int = 128) -> np.ndarray:
+    """Cheap nearest-neighbour downsample so every cue below is O(128²)."""
+    h, w = a.shape[:2]
+    if max(h, w) <= target:
+        return a
+    step = max(1, int(max(h, w) / target))
+    return a[::step, ::step]
+
+
+def _peaks(prof: np.ndarray, min_prom: float = 0.18, min_gap: int = 3) -> int:
+    """Count prominent, well-separated peaks in a 1-D profile. The repetition
+    detector: a shelf of bottles or a menu's rows put regular spikes in the
+    gradient profile, a single mug does not."""
+    if prof.size < 8:
+        return 0
+    p = prof - prof.min()
+    rng = float(p.max())
+    if rng <= 1e-6:
+        return 0
+    p = p / rng
+    n, last = 0, -min_gap - 1
+    for i in range(1, len(p) - 1):
+        if p[i] >= min_prom and p[i] >= p[i - 1] and p[i] >= p[i + 1] and (i - last) > min_gap:
+            n += 1
+            last = i
+    return n
+
+
+def frame_cues(frame) -> dict:
+    """Model-free scene cues the Glance Arbiter can act on, from one frame.
+
+    The arbiter was built to read ten signals but the live path only ever fed it
+    two (text_density, has_object), so every scene in the world collapsed to
+    "text" or "object" and shelf/menu/sky could never be resolved — the arbiter
+    was blind, not indecisive (audit 2026-07-23). These are deliberately cheap,
+    deterministic, numpy-only cues with honest names:
+
+      repeats   regular structure across the frame — a shelf of items, a menu's
+                rows — counted as gradient-profile peaks on both axes
+      rows      strong horizontal bands, the signature of a form/table
+      dark      overall luminance is low (dusk, indoors-dim, night sky)
+      lights    a few small bright maxima on a dark field — the sky's signature
+      sharp     high-frequency energy; LOW means the frame is blurred, which on a
+                phone means the wearer is MOVING (walking), not studying something
+
+    Everything here is a heuristic and is reported as such: absent/uncertain cues
+    are simply omitted so they never masquerade as a negative."""
+    out: dict = {}
+    a = _as_gray(frame)
+    if a.size == 0 or a.shape[0] < 8 or a.shape[1] < 8:
+        return out
+    a = _downs(a)
+    full = 255.0 if float(a.max()) > 1.0 else 1.0
+    g = a / full
+    gx = np.abs(np.diff(g, axis=1))
+    gy = np.abs(np.diff(g, axis=0))
+    # Repetition, PER AXIS — this separation is the whole trick. A printed page
+    # repeats along ROWS (text lines); a shelf of items repeats along COLUMNS
+    # (things side by side). Taking max() of the two made every page a shelf.
+    out["col_reps"] = int(_peaks(gx.mean(axis=0)))
+    out["row_reps"] = int(_peaks(gy.mean(axis=1)))
+    rowe = gy.mean(axis=1)
+    med = float(np.median(rowe))
+    out["rows"] = int(np.count_nonzero(rowe > (med * 2.5 + 1e-6)))
+    mean_l = float(g.mean())
+    out["dark"] = bool(mean_l < 0.28)
+    if out["dark"]:
+        # point lights as a FRACTION of the frame, not a pixel count: stars are a
+        # few tiny maxima, a lit room is a large bright area
+        thr = max(0.55, mean_l + 0.35)
+        out["light_frac"] = round(float(np.count_nonzero(g > thr)) / float(g.size), 5)
+    if g.shape[0] > 4 and g.shape[1] > 4:
+        lap = np.abs(np.diff(g, n=2, axis=0)).mean() + np.abs(np.diff(g, n=2, axis=1)).mean()
+        out["sharp"] = round(float(lap), 5)
+    return out
+
+
 # --- Tier 0 today: a heuristic, no model ------------------------------------
 
 class HeuristicPerceptor:
@@ -134,6 +232,47 @@ class HeuristicPerceptor:
         # a mid-contrast, not-text-dense scene reads as "an object is here"
         if self._obj_lo <= d < self._obj_hi:
             sig.has_object = True
+        # Tier-1 cues: turn the cheap frame statistics into the scene inputs the
+        # arbiter has always been able to read (audit 2026-07-23). Deliberately
+        # conservative — a cue we can't justify is left unset, never guessed.
+        try:
+            c = frame_cues(frame)
+        except Exception:                    # noqa: BLE001 — a cue never breaks a look
+            c = {}
+        if c:
+            col = int(c.get("col_reps", 0) or 0)
+            row = int(c.get("row_reps", 0) or 0)
+            # A SHELF: several vertical divisions, NOT strongly banded, and not
+            # text-dense — several comparable things side by side, which is
+            # exactly what TasteLens exists for.
+            # each item contributes ~2 profile peaks (its left and right edge), so
+            # the peak count is ~2× the thing count — measured on real shelves
+            if 4 <= col <= 26 and col >= row * 1.5 and d < 0.30:
+                sig.shelf = True
+                sig.items = max(2, min(12, col // 2))
+            # Horizontal banding is the signature of PRINT. Exposed on its own so
+            # a lens can recognise a page even when the single-number density
+            # metric under-reads thin type (it measures mean gradient, so fine
+            # print on white scores lower than its legibility suggests).
+            bands = int(c.get("rows", 0) or 0)
+            if bands:
+                sig.bands = min(99, bands)
+            # A FORM/table: strong horizontal bands over text.
+            if bands >= 6 and d >= 0.20:
+                sig.form_fields = min(12, bands // 2)
+            # THE SKY: a dark field, almost no text, and a few TINY bright maxima.
+            # A lit room fails the fraction test; a street sign fails on density.
+            lf = c.get("light_frac")
+            if c.get("dark") and d < 0.12 and lf is not None and 0.0 < lf <= 0.02:
+                sig.sky = True
+            # MOVING: the frame is smeared but there IS content — a blank wall is
+            # not "walking", it's just blank, so density gates this.
+            sharp = c.get("sharp")
+            if sharp is not None and d >= 0.05:
+                sig.moving = bool(float(sharp) < 0.012)
+        # NOTE: `menu` is deliberately never claimed from image statistics — a menu
+        # and a page of prose are not separable this way. It stays available for the
+        # phone's detector / a VLM tier to supply.
         if self._hint is not None:
             try:
                 self._merge(sig, self._hint(frame) or {})
@@ -155,6 +294,16 @@ class HeuristicPerceptor:
             sig.text_density = float(hints["text_density"])
         if hints.get("has_object") or hints.get("object"):
             sig.has_object = True
+        # the phone's own on-device detector is a far better witness than image
+        # statistics — let its cues override ours when it supplies them
+        if "items" in hints:
+            try:
+                sig.items = max(int(sig.items or 0), int(hints["items"]))
+            except (TypeError, ValueError):
+                pass
+        for k in ("shelf", "menu", "sky", "moving"):
+            if hints.get(k):
+                setattr(sig, k, True)
 
     def listen(self, audio) -> AudioPercept:
         return AudioPercept(tier=self.tier)   # no model: never wakes on its own

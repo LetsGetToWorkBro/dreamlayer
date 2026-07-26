@@ -4192,8 +4192,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                             lens_args[k] = float(qs[k][0])
                         except ValueError:
                             pass
+            # the phone's own on-device scene cues (coarse labels + a count +
+            # person-present) ride the query so the arbiter decides from what the
+            # PHONE can already see, not just image statistics (Tier 1)
+            cues = live_mod.parse_cues(qs)
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data, ambient=ambient,
+            self._json(200, live_mod.look(brain, data, ambient=ambient, cues=cues,
                                           lens=lens, lens_args=lens_args, scene=scene))
 
         def _post_live_hear(self, path, qs):

@@ -146,4 +146,118 @@ def test_unknown_manual_lens_does_not_reinforce(brain):
 def test_live_candidates_exclude_person_and_scholar():
     lenses = {c.lens for c in glance_live.LIVE_CANDIDATES}
     assert "person" not in lenses                  # faces defer to the Social Lens
-    assert lenses <= {"taste", "rosetta", "read", "math", "juno"}
+    # depth/sky/segment joined in the Tier-1 perception pass — they were absent
+    # because no scene cue could justify them, not as policy. `find` is still out:
+    # it needs the nouns you're hunting, which no bare frame supplies.
+    assert lenses <= {"taste", "rosetta", "read", "math", "juno",
+                      "depth", "sky", "segment"}
+    assert "find" not in lenses
+
+
+# --- Tier 1: the arbiter can finally SEE (2026-07-23) -------------------------
+# It was built to read ten signals and the live path fed it two, so every scene
+# collapsed to "text" or "object" — shelf/menu/sky were unreachable and taste and
+# translate could never bid. These pin the cues → scene → lens chain on synthetic
+# frames, so a regression in the cue maths shows up as a wrong LENS, not a silent
+# drift back to guessing.
+
+def _act(frame, hints=None):
+    """(scene, decision kind, fired action) for one frame + optional phone cues."""
+    import numpy as np  # noqa: F401
+    from dreamlayer.ai_brain.perception import HeuristicPerceptor
+    from dreamlayer.orchestrator.glance import classify_coarse, GlanceContext
+    from dreamlayer.ai_brain.server.glance_live import build_live_arbiter
+    sig = HeuristicPerceptor().perceive(frame).as_signals()
+    for k, v in (hints or {}).items():
+        sig[k] = v
+    reading = classify_coarse(sig, "en")
+    d = build_live_arbiter(None).arbitrate(
+        reading, GlanceContext(dwell_ms=400.0, veiled=False))
+    w = getattr(d, "winner", None)
+    return reading.scene, d.kind, (w.action if w else None)
+
+
+def _page():
+    import numpy as np
+    rng = np.random.default_rng(3)
+    a = np.full((240, 240), 225, np.uint8)
+    for y in range(20, 220, 10):
+        for x in range(20, 220, 6):
+            if rng.random() > 0.25:
+                a[y:y + 5, x:x + 4] = rng.integers(20, 70)
+    return a
+
+
+def _shelf():
+    import numpy as np
+    a = np.full((240, 240), 150, np.uint8)
+    for x in range(15, 225, 26):
+        a[70:180, x:x + 16] = 60
+    return a
+
+
+def _night_sky():
+    import numpy as np
+    rng = np.random.default_rng(11)
+    a = np.full((240, 240), 8, np.uint8)
+    for _ in range(12):
+        y, x = rng.integers(5, 235, 2)
+        a[y, x] = 250
+    return a
+
+
+def test_a_photographed_page_fires_read():
+    scene, kind, action = _act(_page())
+    assert scene == "text" and kind == "fire" and action == "read"
+
+
+def test_a_shelf_of_items_fires_taste():
+    """Impossible before Tier 1: nothing produced `items`/`shelf`, so TasteLens
+    could never bid no matter what you pointed at."""
+    scene, kind, action = _act(_shelf())
+    assert scene == "shelf" and kind == "fire" and action == "taste"
+
+
+def test_the_night_sky_fires_the_sky_lens():
+    scene, kind, action = _act(_night_sky())
+    assert scene == "sky" and kind == "fire" and action == "sky"
+
+
+def test_a_lit_room_is_not_mistaken_for_the_sky():
+    import numpy as np
+    a = np.full((240, 240), 20, np.uint8)
+    a[60:180, 60:180] = 200                 # one big bright area, not point lights
+    assert _act(a)[0] != "sky"
+
+
+def test_foreign_text_fires_translate():
+    """Also impossible before: `language` was never produced on the live path."""
+    scene, kind, action = _act(_page(), {"language": "fr"})
+    assert scene == "foreign_text" and kind == "fire" and action == "translate"
+
+
+def test_a_person_in_frame_never_fires_a_reading_lens():
+    scene, _kind, action = _act(_page(), {"has_face": True})
+    assert scene == "person"
+    assert action not in ("read", "math", "taste")    # and never "person"
+
+
+def test_the_phones_own_detections_reach_the_arbiter():
+    from dreamlayer.ai_brain.server import live as live_mod
+    cues = live_mod.parse_cues({"ndet": ["4"], "objs": ["bottle,bottle,cup"],
+                                "face": ["1"]})
+    assert cues["items"] == 4
+    assert cues["shelf"] is True          # a repeated label IS several comparables
+    assert cues["has_face"] is True
+    assert "box" not in cues and "crop" not in cues
+
+
+def test_client_cues_are_sanitised():
+    from dreamlayer.ai_brain.server import live as live_mod
+    hostile = {"ndet": ["not-a-number"], "objs": ["<script>alert(1)</script>,../../etc"]}
+    cues = live_mod.parse_cues(hostile)
+    assert "items" not in cues
+    for label in cues.get("objs", []):
+        assert label.replace(" ", "").isalpha()
+    assert live_mod.parse_cues({}) == {}
+    assert live_mod.parse_cues({"ndet": ["999999"]})["items"] <= 24

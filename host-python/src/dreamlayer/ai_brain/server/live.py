@@ -35,6 +35,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import re
 import threading
 
 from ...reality_compiler.v2.figment import MAX_LINES, MAX_TEXT_LEN
@@ -260,7 +261,7 @@ def _with_min_panel(out: dict) -> dict:
     return out
 
 
-def world_look(brain, arr, ambient: bool = False,
+def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
                lens: str = "", lens_args: "dict | None" = None,
                scene: str = "") -> dict:
     """One unified Look — the single pipeline behind BOTH the browser's tap and
@@ -351,7 +352,7 @@ def world_look(brain, arr, ambient: bool = False,
     # object-recognition floor below, which keeps all its behaviour.
     if wl is not None:
         try:
-            g = wl.glance(arr)
+            g = wl.glance(arr, hints=cues or {})
         except Exception as exc:                # noqa: BLE001 — never break a look
             log.warning("[live] glance failed: %s", exc)
             g = None
@@ -391,7 +392,37 @@ def world_look(brain, arr, ambient: bool = False,
             "panel": card, "lines": panel_lines(card)}
 
 
-def look(brain, data: bytes, ambient: bool = False,
+def parse_cues(qs: dict) -> dict:
+    """The phone's own on-device scene cues, off the query string, sanitised.
+
+    The Live Lens runs MediaPipe every frame and already knows what it is looking
+    at — labels, how many, whether a person is present. Before Tier 1 it threw
+    that away on every look and the Brain re-guessed from image statistics, which
+    is why the lens felt like it was picking at random. Only COARSE, non-identifying
+    cues cross: category labels, a count, and a person-present flag. Never a box,
+    never a crop, never pixels."""
+    out: dict = {}
+    try:
+        n = int((qs.get("ndet") or ["0"])[0])
+        if n > 0:
+            out["items"] = max(0, min(24, n))
+    except (TypeError, ValueError):
+        pass
+    raw = (qs.get("objs") or [""])[0][:160]
+    labels = [w for w in re.split(r"[^a-z ]+", raw.lower()) if w.strip()][:6]
+    if labels:
+        out["objs"] = labels
+        out["has_object"] = True
+        # the same label two or more times IS a shelf: several comparable things
+        # side by side, which is exactly what TasteLens exists for
+        if len(labels) - len(set(labels)) >= 1 and len(labels) >= 2:
+            out["shelf"] = True
+    if (qs.get("face") or ["0"])[0] in ("1", "true"):
+        out["has_face"] = True             # scene only; the look still DEFERS faces
+    return out
+
+
+def look(brain, data: bytes, ambient: bool = False, cues: "dict | None" = None,
          lens: str = "", lens_args: "dict | None" = None, scene: str = "") -> dict:
     """One browser Look: decode the posted frame in memory, run the unified
     pipeline (:func:`world_look`). Frames never touch disk; the wearer's
@@ -400,7 +431,7 @@ def look(brain, data: bytes, ambient: bool = False,
     continuous-loop frame (local-only, no ledger, no egress). ``lens`` routes
     the frame through a single named frontier lens (math/doc/depth/find/
     segment/sky/dream) instead of object recognition."""
-    return world_look(brain, decode_frame(data), ambient=ambient,
+    return world_look(brain, decode_frame(data), ambient=ambient, cues=cues,
                       lens=lens, lens_args=lens_args, scene=scene)
 
 
@@ -2055,11 +2086,21 @@ async function lookNow(auto, forceLens, forceScene){
        solve). The ONLY non-empty `sel` is a lens the arbiter's OWN chooser posted
        back, which also teaches it (scene→lens) so it leans your way next time. */
     const sel = (forceLens != null) ? forceLens : "";
+    /* the phone's cues, fresh only (a 4s-old read describes a scene you left) */
+    let cue = "";
+    if (LASTDETS && (performance.now() - LASTDETS.ts) < 4000) {
+      const q = new URLSearchParams();
+      if (LASTDETS.n) q.set("ndet", String(LASTDETS.n));
+      if (LASTDETS.objs && LASTDETS.objs.length) q.set("objs", LASTDETS.objs.join(","));
+      if (LASTDETS.face) q.set("face", "1");
+      cue = q.toString();
+    }
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
+    if (cue) url += (url.indexOf("?") >= 0 ? "&" : "?") + cue;
     if (sel) {
       const qp = new URLSearchParams({lens: sel});
       if (forceScene) qp.set("scene", forceScene);   /* teach the arbiter this pick */
-      url = "/dreamlayer/live/look?" + qp.toString();
+      url = "/dreamlayer/live/look?" + qp.toString() + (cue ? "&" + cue : "");
     }
     const rsp = await fetchJSON(url,
       {method: "POST", headers: HDRS(), body: blob}, auto ? 6000 : 9000);
@@ -2096,6 +2137,7 @@ $("lens").onkeydown = e => {
    detector isn't available. When the detector IS running (detectorActive), the
    browser recognizes locally every frame and this server loop stays idle. */
 let loopTimer = null, booted = false, detectorActive = false;
+let LASTDETS = null;          /* the phone's own scene cues for the next look */
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
   /* don't run while: paused, unpaired (behind the pairing modal — else we burn
@@ -2785,11 +2827,15 @@ function paintDetections(res){
   if (!vw || !vh) { overlayDirty = false; return; }
   const scale = Math.max(cw / vw, ch / vh);            /* object-fit: cover */
   const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
-  const dets = ((res && res.detections) || [])
+  let dets = ((res && res.detections) || [])
     .map(d => ({name: ((d.categories && d.categories[0]) || {}).categoryName || "",
                 score: ((d.categories && d.categories[0]) || {}).score || 0,
                 box: d.boundingBox}))
-    .filter(d => d.name && d.name !== "person" && d.box);   /* NEVER a person */
+    .filter(d => d.name && d.box);
+  /* a person in frame is a SCENE cue (it stops Read/Math firing on someone) — the
+     flag never leaves as a box or a crop, and the look still defers every face */
+  const sawPerson = dets.some(d => d.name === "person");
+  dets = dets.filter(d => d.name !== "person");            /* NEVER draw a person */
   /* The glasses don't box the room — they hold ONE focus. Pick the dominant
      thing in view (largest × most-confident) and mark just that; everything else
      stays unadorned, so the passive HUD reads like the glass, not a detector
@@ -2804,6 +2850,12 @@ function paintDetections(res){
     drawFocus(ctx, x, y, top.box.width * scale, top.box.height * scale);
   }
   overlayDirty = !!top;
+  /* Remember what the detector just saw so a deliberate look can TELL the Brain.
+     Coarse categories + a count only — never a box, never a crop, never pixels.
+     This is what lets the arbiter pick the right lens instead of re-guessing from
+     image statistics (Tier 1, 2026-07-23). */
+  LASTDETS = {objs: dets.slice(0, 6).map(d => d.name), face: sawPerson,
+              n: dets.length, ts: performance.now()};
   /* update the live label only when no tap/ask result is holding the HUD */
   if (performance.now() >= hudHoldUntil && !looking && !asking && !veil) {
     if (top) showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
