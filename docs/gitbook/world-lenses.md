@@ -96,9 +96,15 @@ each isolated so one failing connector cannot break the read.
 
 ### Routing and gating
 
-The arbiter's TasteLens candidate bids 0.88 on a `shelf` or `menu` scene
-(0.6 when at least two items are visible in any scene). Veil-gated;
-unavailable state when nothing reads. Tests: `test_taste.py` and
+The arbiter's TasteLens candidate bids 0.88 on a `shelf` or `menu` scene, and on
+nothing else. It used to add 0.6 whenever at least two items were visible in any
+scene, which made a mug beside a laptop something to comparison-shop — above
+identify — on any desk. Several *different* things is clutter, not a comparison.
+
+Both `shelf` and `menu` come from a detector that actually saw several of the
+**same** kind of thing, never from image statistics: to a gradient profile a
+bookshelf, a radiator, a picket fence and a venetian blind are one picture. Veil
+-gated; unavailable state when nothing reads. Tests: `test_taste.py` and
 `test_taste_connector.py`.
 
 ## Docent — the venue speaks
