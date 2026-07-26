@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
@@ -531,7 +532,40 @@ class WorldLensHost:
                 self.health.record_failure("vision", exc)
             signals = {}
         reading = classify_coarse(signals, user_language="en")
-        ctx = GlanceContext(dwell_ms=float(dwell_ms or 0.0), veiled=False)
+        h = (hints or {})
+        # Tier 3 FIRST: if the wearer SAID what they want, there is nothing left to
+        # infer. A spoken intent that names a runnable lens is executed outright —
+        # including `find`, which no frame cue could ever justify on its own.
+        spoken = None
+        try:
+            spoken = self.brain.pending_intent()
+        except Exception:                        # noqa: BLE001
+            spoken = None
+        if spoken and spoken.get("lens"):
+            args = {"terms": spoken["terms"]} if spoken.get("terms") else {}
+            for k in ("lat", "lon"):             # the sky lens still needs a place
+                if h.get(k) is not None:
+                    args[k] = h[k]
+            card = self._glance_lens_result(
+                self.look_lens(frame, spoken["lens"], args or None))
+            try:
+                self.brain.clear_intent()        # one utterance steers one look
+            except Exception:                    # noqa: BLE001
+                pass
+            if card:
+                return {"kind": "fire", "lens": spoken["lens"],
+                        "action": spoken["intent"], "card": card,
+                        "scene": reading.scene, "said": spoken.get("said", "")}
+        # Tier 2: where the head is pointed, how long it held, and what time it is
+        try:
+            hour = int(time.localtime().tm_hour)
+        except Exception:                        # noqa: BLE001
+            hour = -1
+        ctx = GlanceContext(dwell_ms=float(h.get("dwell") or dwell_ms or 0.0),
+                            veiled=False,
+                            recent_intent=(spoken or {}).get("intent", ""),
+                            tilt_deg=float(h.get("tilt") or 0.0),
+                            hour=hour)
         try:
             decision = self.glance_arbiter.arbitrate(reading, ctx)
         except Exception as exc:               # noqa: BLE001

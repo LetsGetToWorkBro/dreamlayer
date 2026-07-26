@@ -1031,6 +1031,45 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception:                               # noqa: BLE001
             return True                                 # unreadable → assume shielded
 
+    # Tier 3: a spoken intent is only "yours" for a few seconds. Long enough to
+    # say "where are my keys" and raise the phone; short enough that it never
+    # steers a look you take minutes later.
+    INTENT_TTL_S = 20.0
+
+    def note_spoken_intent(self, text: str) -> dict:
+        """Parse a spoken phrase into a lens intent and hold it briefly.
+
+        Fed by BOTH ears: the Brain's own on-device transcript (the Sharp Ears
+        pack, via EarHost) and the phone's speech service (POST /live/intent), so
+        whichever ear you have, the words steer the lens. Veil-gated: under the
+        shield nothing is remembered, not even for a second."""
+        from .spoken_intent import parse_spoken_intent
+        try:
+            if self.incognito_now():
+                return {"ok": False, "reason": "veiled"}
+        except Exception:                            # noqa: BLE001 — unreadable → closed
+            return {"ok": False, "reason": "veiled"}
+        parsed = parse_spoken_intent(text)
+        if not parsed:
+            self._spoken_intent = None
+            return {"ok": True, "intent": ""}        # heard, matched nothing — honest
+        self._spoken_intent = (parsed, time.monotonic())
+        return {"ok": True, "intent": parsed["intent"], "terms": parsed["terms"]}
+
+    def pending_intent(self) -> "dict | None":
+        """The fresh spoken intent, or None. Consumed by the next look."""
+        got = getattr(self, "_spoken_intent", None)
+        if not got:
+            return None
+        parsed, ts = got
+        if (time.monotonic() - ts) > self.INTENT_TTL_S:
+            self._spoken_intent = None
+            return None
+        return parsed
+
+    def clear_intent(self) -> None:
+        self._spoken_intent = None
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -4455,6 +4494,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                     out["push_error"] = str(exc)[:120]
             self._json(200, out)
 
+        def _post_live_intent(self, path, qs):
+            """The phone heard you speak. Turn the words into a lens intent that
+            the NEXT look obeys — the difference between guessing what you want
+            and being told. Only the transcript crosses (the phone's own speech
+            service produced it); it is length-capped, parsed, and dropped after
+            20s. Veil-gated inside note_spoken_intent."""
+            b = self._body() or {}
+            said = str((b.get("text") if isinstance(b, dict) else "") or "")[:240]
+            self._json(200, brain.note_spoken_intent(said))
+
         def _post_live_selftest(self, path, qs):
             """Prove the ambient push channel + card renderers work, without a real
             smoke alarm and without waiting for the brief hour. Authed like every
@@ -4819,6 +4868,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,
             "/dreamlayer/live/selftest": _post_live_selftest,
+            "/dreamlayer/live/intent": _post_live_intent,
             "/dreamlayer/replies": _post_replies,
             "/dreamlayer/voice": _post_voice,
             "/dreamlayer/calendar": _post_calendar,

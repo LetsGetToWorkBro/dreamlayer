@@ -49,8 +49,13 @@ class ReadCandidate(LensCandidate):
         banded = (reading.sig("bands", 0) or 0) >= 10
         if reading.scene in ("text", "screen") and (density >= 0.2 or (banded and density >= 0.1)):
             s = 0.62 if (density >= 0.5 or banded) else 0.55
+            # Tier 2: head tipped DOWN over text is someone reading something in
+            # their hands — the clearest non-verbal "read this" there is.
+            down = ctx.tilt_deg <= -20.0
+            if down:
+                s = min(1.0, s + 0.12)
             return LensBid(self.lens, self.label, s, "read",
-                           reason="text to read")
+                           reason="text in your hands" if down else "text to read")
         return None
 
 
@@ -90,9 +95,19 @@ class SkyCandidate(LensCandidate):
     lens, label = "sky", "Name the sky"
 
     def bid(self, reading, ctx):
+        night = ctx.hour < 0 or ctx.hour >= 19 or ctx.hour < 6
+        up = ctx.tilt_deg >= 30.0            # Tier 2: the head is pointed UP
         if reading.scene == "sky":
-            return LensBid(self.lens, self.label, 0.8, "sky",
-                           reason="the night sky is in view")
+            # tilting up at night is about as unambiguous as intent gets
+            s = 0.9 if (up and night) else 0.8
+            return LensBid(self.lens, self.label, s, "sky",
+                           reason="you looked up at the night sky" if up
+                                  else "the night sky is in view")
+        # a dark frame the cue engine wasn't sure about, but you ARE looking up,
+        # at night — trust the posture over the pixels
+        if up and night and (reading.sig("text_density", 0.0) or 0.0) < 0.12:
+            return LensBid(self.lens, self.label, 0.5, "sky",
+                           reason="you looked up")
         return None
 
 

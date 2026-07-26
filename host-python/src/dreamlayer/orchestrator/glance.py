@@ -49,7 +49,22 @@ from typing import Callable, Optional
 
 # scene kinds the classifier may return. Kept small and concrete.
 SCENES = ("object", "text", "form", "question", "foreign_text", "person",
-          "screen", "shelf", "menu", "unknown")
+          "screen", "shelf", "menu", "sky", "unknown")
+# Tier 4: priors are learned PER TIME OF DAY as well as per scene — the lens you
+# want from a page of text at 8am (brief/read) is not the one you want at 11pm.
+# A fixed vocabulary, so the on-disk priors stay bounded to |SCENES|×|DAYPARTS|.
+DAYPARTS = ("morning", "afternoon", "evening", "night")
+
+
+def daypart(hour: int) -> str:
+    h = int(hour) % 24
+    if 5 <= h < 12:
+        return "morning"
+    if 12 <= h < 17:
+        return "afternoon"
+    if 17 <= h < 22:
+        return "evening"
+    return "night"
 
 
 @dataclass
@@ -74,6 +89,11 @@ class GlanceContext:
     dwell_ms: float = 0.0            # gaze dwell — longer = stronger intent
     focus: bool = False
     veiled: bool = False
+    # Tier 2: where the head is pointed and when it is. Tilt is degrees, + is UP
+    # (looking at the sky), - is DOWN (looking at a page in your hands); hour is
+    # the wearer's LOCAL hour. Both are cheap, on-device, and never leave.
+    tilt_deg: float = 0.0
+    hour: int = -1
 
 
 @dataclass
@@ -214,6 +234,9 @@ INTENT_LENS = {
     "answer": "scholar_answer", "form": "scholar_form",
     "explain": "scholar_explain", "translate": "rosetta",
     "object": "juno", "person": "person", "compare": "taste",
+    # Tier 3 — what you SAY is not a guess about your intent, it IS your intent
+    "read": "read", "math": "math", "find": "find", "depth": "depth",
+    "sky": "sky", "segment": "segment",
 }
 
 
@@ -236,6 +259,54 @@ class GlancePriors:
         self.weight = float(weight)          # max salience nudge from a strong prior
         self.path = path
         self._load()
+
+    @staticmethod
+    def _key(scene: str, part: str = "") -> str:
+        """scene, or scene@daypart — both drawn from fixed vocabularies so a
+        crafted value can never grow the file (it is rewritten whole)."""
+        if part and part in DAYPARTS:
+            return f"{scene}@{part}"
+        return scene
+
+    def reinforce_at(self, scene: str, lens: str, part: str = "",
+                     amount: float = 1.0) -> None:
+        """Learn the pick for this scene AND for this scene-at-this-time-of-day,
+        so the arbiter can grow a habit that is specific to your mornings without
+        forgetting the general one."""
+        self.reinforce(scene, lens, amount)
+        if part and part in DAYPARTS and scene in SCENES:
+            k = self._key(scene, part)
+            self._c.setdefault(k, {})
+            self._c[k][lens] = self._c[k].get(lens, 0.0) + amount
+            self._save()
+
+    def boost_at(self, scene: str, lens: str, part: str = "") -> float:
+        """The stronger of the general and the time-of-day prior."""
+        b = self.boost(scene, lens)
+        if part and part in DAYPARTS:
+            b = max(b, self.boost(self._key(scene, part)) if False else
+                    self._boost_key(self._key(scene, part), lens))
+        return b
+
+    def _boost_key(self, key: str, lens: str) -> float:
+        row = self._c.get(key)
+        if not row:
+            return 0.0
+        total = sum(row.values())
+        if total <= 0:
+            return 0.0
+        return self.weight * (row.get(lens, 0.0) / total)
+
+    def confident(self, scene: str, lens: str, part: str = "",
+                  share: float = 0.7, floor: float = 3.0) -> bool:
+        """True when you have picked `lens` for this scene enough times, and
+        dominantly enough, that asking again would be pestering you."""
+        for key in ([self._key(scene, part)] if part else []) + [scene]:
+            row = self._c.get(key) or {}
+            total = sum(row.values())
+            if total >= floor and (row.get(lens, 0.0) / total) >= share:
+                return True
+        return False
 
     def reinforce(self, scene: str, lens: str, amount: float = 1.0) -> None:
         # Only the fixed vocabulary of scenes may become a key — an unknown
@@ -362,8 +433,10 @@ class GlanceArbiter:
             b = cand.bid(reading, ctx)
             if b is None:
                 continue
-            # learned prior nudge for this scene
-            pboost = self.priors.boost(reading.scene, b.lens)
+            # learned prior nudge for this scene — and for this scene at this
+            # time of day, which is the sharper signal (Tier 4)
+            part = daypart(ctx.hour) if ctx.hour is not None and ctx.hour >= 0 else ""
+            pboost = self.priors.boost_at(reading.scene, b.lens, part)
             if pboost:
                 b = b.boosted(pboost, "you often pick this here")
             # a matching spoken intent is a strong, deliberate steer
@@ -383,6 +456,12 @@ class GlanceArbiter:
 
         runner = bids[1].salience if len(bids) > 1 else 0.0
         forced = bool(ctx.recent_intent and INTENT_LENS.get(ctx.recent_intent) == top.lens)
+        # Tier 4 — "it learns you" means it also stops ASKING you. Once you have
+        # picked this lens for this scene dominantly and often enough, a close call
+        # fires instead of offering a chooser you would answer the same way again.
+        _part = daypart(ctx.hour) if ctx.hour is not None and ctx.hour >= 0 else ""
+        if not forced and self.priors.confident(reading.scene, top.lens, _part):
+            forced = True
 
         # hysteresis: if we just decided this same scene→winner, keep it steady
         held = self._held(reading.scene, top.lens)

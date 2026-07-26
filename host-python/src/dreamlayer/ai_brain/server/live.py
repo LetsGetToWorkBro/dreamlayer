@@ -417,6 +417,21 @@ def parse_cues(qs: dict) -> dict:
         # side by side, which is exactly what TasteLens exists for
         if len(labels) - len(set(labels)) >= 1 and len(labels) >= 2:
             out["shelf"] = True
+    # Tier 2: head pitch (+up/-down) and how long the focus held. Cheap,
+    # on-device, and they never leave the wearer's own Brain.
+    for key, lo, hi in (("tilt", -90.0, 90.0), ("dwell", 0.0, 30000.0)):
+        try:
+            v = float((qs.get(key) or ["nan"])[0])
+            if v == v:                     # not NaN
+                out[key] = max(lo, min(hi, v))
+        except (TypeError, ValueError):
+            pass
+    for key in ("lat", "lon"):
+        try:
+            out[key] = float((qs.get(key) or ["nan"])[0])
+        except (TypeError, ValueError):
+            pass
+    out = {k: v for k, v in out.items() if not (isinstance(v, float) and v != v)}
     if (qs.get("face") or ["0"])[0] in ("1", "true"):
         out["has_face"] = True             # scene only; the look still DEFERS faces
     return out
@@ -2093,6 +2108,9 @@ async function lookNow(auto, forceLens, forceScene){
       if (LASTDETS.n) q.set("ndet", String(LASTDETS.n));
       if (LASTDETS.objs && LASTDETS.objs.length) q.set("objs", LASTDETS.objs.join(","));
       if (LASTDETS.face) q.set("face", "1");
+      if (TILT) q.set("tilt", TILT.toFixed(0));
+      const dw = dwellMs();
+      if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
       cue = q.toString();
     }
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
@@ -2138,6 +2156,14 @@ $("lens").onkeydown = e => {
    browser recognizes locally every frame and this server loop stays idle. */
 let loopTimer = null, booted = false, detectorActive = false;
 let LASTDETS = null;          /* the phone's own scene cues for the next look */
+/* Tier 2: head pitch and focus dwell. `beta` is front-back tilt: ~0 upright,
+   negative when you tip the phone back to look UP, positive tipping down. We
+   report +up/-down so the Brain reads it the way a person would describe it. */
+let TILT = 0, FOCUS = {name: "", since: 0};
+window.addEventListener("deviceorientation", e => {
+  if (typeof e.beta === "number") TILT = Math.max(-90, Math.min(90, -(e.beta - 45)));
+}, {passive: true});
+function dwellMs(){ return FOCUS.since ? (performance.now() - FOCUS.since) : 0; }
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
   /* don't run while: paused, unpaired (behind the pairing modal — else we burn
@@ -2295,6 +2321,16 @@ function renderCaptions(finalText, interim){
   if (interim) {
     const s = document.createElement("span"); s.className = "iim";
     s.textContent = interim; box.appendChild(s);
+  }
+  /* Tier 3: what you just SAID steers the next look. The phrase goes to your own
+     Brain, which parses it for a lens intent ("where are my keys" → find) and
+     holds it ~20s. Only the transcript crosses, and only when captions are on. */
+  if (finalText && finalText !== window._lastIntentSaid) {
+    window._lastIntentSaid = finalText;
+    const phrase = finalText.split(/\s+/).slice(-12).join(" ");
+    fetch("/dreamlayer/live/intent", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({text: phrase})}).catch(() => {});
   }
   const src = document.createElement("span"); src.className = "csrc";
   src.textContent = "live caption · your phone's speech service";
@@ -2856,6 +2892,10 @@ function paintDetections(res){
      image statistics (Tier 1, 2026-07-23). */
   LASTDETS = {objs: dets.slice(0, 6).map(d => d.name), face: sawPerson,
               n: dets.length, ts: performance.now()};
+  /* dwell = how long the SAME thing has held the frame. A long hold is stronger
+     intent than a passing glance, which is exactly how the arbiter reads it. */
+  const fname = top ? top.name : "";
+  if (fname !== FOCUS.name) FOCUS = {name: fname, since: fname ? performance.now() : 0};
   /* update the live label only when no tap/ask result is holding the HUD */
   if (performance.now() >= hudHoldUntil && !looking && !asking && !veil) {
     if (top) showHud([top.name + " · " + Math.round(top.score * 100) + "%"],

@@ -261,3 +261,143 @@ def test_client_cues_are_sanitised():
         assert label.replace(" ", "").isalpha()
     assert live_mod.parse_cues({}) == {}
     assert live_mod.parse_cues({"ndet": ["999999"]})["items"] <= 24
+
+
+# --- Tiers 2-4: posture, spoken intent, and learning -------------------------
+
+def _fresh(frame, **ctxkw):
+    """A FRESH arbiter per call: the shared one deliberately holds a decision for
+    a debounce window (hysteresis), which would mask a changed bid."""
+    from dreamlayer.ai_brain.perception import HeuristicPerceptor
+    from dreamlayer.orchestrator.glance import classify_coarse, GlanceContext
+    from dreamlayer.ai_brain.server.glance_live import build_live_arbiter
+    sig = HeuristicPerceptor().perceive(frame).as_signals()
+    for k in list(ctxkw.get("signals", {})):
+        sig[k] = ctxkw["signals"][k]
+    ctxkw.pop("signals", None)
+    reading = classify_coarse(sig, "en")
+    d = build_live_arbiter(None).arbitrate(
+        reading, GlanceContext(veiled=False, **ctxkw))
+    return d, getattr(d, "winner", None)
+
+
+# Tier 2 — where the head is pointed
+
+def test_tipping_the_head_down_over_text_strengthens_read():
+    _d, level = _fresh(_page())
+    _d2, down = _fresh(_page(), tilt_deg=-35.0)
+    assert level.action == down.action == "read"
+    assert down.salience > level.salience
+    assert "in your hands" in down.reason
+
+
+def test_looking_up_at_night_reaches_the_sky_even_when_the_pixels_are_unsure():
+    import numpy as np
+    flat_dark = np.full((240, 240), 10, np.uint8)      # no point lights at all
+    _d, none_level = _fresh(flat_dark, tilt_deg=0.0, hour=12)
+    _d2, up_night = _fresh(flat_dark, tilt_deg=45.0, hour=23)
+    assert none_level is None                          # noon, level → not the sky
+    assert up_night is not None and up_night.action == "sky"
+
+
+def test_the_daypart_vocabulary_is_fixed():
+    from dreamlayer.orchestrator.glance import daypart, DAYPARTS
+    assert daypart(8) == "morning" and daypart(14) == "afternoon"
+    assert daypart(20) == "evening" and daypart(2) == "night"
+    assert all(daypart(h) in DAYPARTS for h in range(-48, 72))
+
+
+# Tier 3 — what you said IS the intent
+
+def test_spoken_intent_maps_speech_to_the_right_lens():
+    from dreamlayer.ai_brain.server.spoken_intent import parse_spoken_intent as P
+    assert P("where did I leave my keys")["intent"] == "find"
+    assert P("where did I leave my keys")["terms"] == ["keys"]
+    assert P("find my inhaler")["terms"] == ["inhaler"]
+    assert P("what does this say")["intent"] == "read"
+    assert P("what does this say")["lens"] == "doc"      # candidate read → lens doc
+    assert P("how far is that fence")["intent"] == "depth"
+    assert P("what star is that")["intent"] == "sky"
+    assert P("which of these is healthier")["intent"] == "compare"
+    assert P("what's the answer")["intent"] == "math"
+
+
+def test_speech_that_names_nothing_is_never_turned_into_a_search():
+    """"where is it" identifies no object — guessing a search would be inventing
+    intent, so it falls through to the arbiter."""
+    from dreamlayer.ai_brain.server.spoken_intent import parse_spoken_intent as P
+    assert P("where is it") is None
+    assert P("the weather is nice today") is None
+    assert P("") is None and P(None) is None
+    assert P("hm") is None
+
+
+def test_spoken_intent_is_capped_and_never_raises():
+    from dreamlayer.ai_brain.server.spoken_intent import parse_spoken_intent as P, MAX_TEXT
+    r = P("find my " + "x" * 5000)
+    assert r is None or len(r["said"]) <= MAX_TEXT
+    for junk in (12345, 3.14, ["a"], {"b": 1}, True):
+        P(junk)
+
+
+def test_a_spoken_intent_expires_and_is_veil_gated():
+    import tempfile
+    from dreamlayer.ai_brain.server.server import Brain
+    b = Brain(tempfile.mkdtemp())
+    assert b.note_spoken_intent("where are my keys")["intent"] == "find"
+    assert b.pending_intent()["terms"] == ["keys"]
+    b.clear_intent()
+    assert b.pending_intent() is None
+    # one utterance steers ONE look, then it's gone
+    b.note_spoken_intent("find my wallet")
+    b.INTENT_TTL_S = -1.0                              # force expiry
+    assert b.pending_intent() is None
+    # under the shield nothing is remembered, not even briefly
+    b.INTENT_TTL_S = 20.0
+    b.config.network_mode = "lan_only"
+    assert b.note_spoken_intent("where are my keys")["ok"] is False
+    assert b.pending_intent() is None
+
+
+# Tier 4 — it learns you, and stops asking
+
+def test_a_learned_habit_makes_a_close_call_fire_instead_of_asking():
+    from dreamlayer.orchestrator.glance import GlancePriors, GlanceArbiter, \
+        GlanceReading, GlanceContext, LensBid, LensCandidate
+
+    class A(LensCandidate):
+        lens, label = "a", "A"
+        def bid(self, reading, ctx):
+            return LensBid("a", "A", 0.60, "a")
+
+    class B(LensCandidate):
+        lens, label = "b", "B"
+        def bid(self, reading, ctx):
+            return LensBid("b", "B", 0.55, "b")      # within the 0.2 gap → offer
+
+    reading = GlanceReading("text", 0.9, {})
+    naive = GlanceArbiter(candidates=[A(), B()], priors=GlancePriors())
+    assert naive.arbitrate(reading, GlanceContext()).kind == "offer"
+
+    priors = GlancePriors()
+    for _ in range(5):                                # you always pick A here
+        priors.reinforce_at("text", "a", "morning")
+    taught = GlanceArbiter(candidates=[A(), B()], priors=priors)
+    d = taught.arbitrate(reading, GlanceContext(hour=8))
+    assert d.kind == "fire" and d.winner.lens == "a"
+
+
+def test_priors_are_learned_per_time_of_day_and_stay_bounded():
+    from dreamlayer.orchestrator.glance import GlancePriors, SCENES, DAYPARTS
+    p = GlancePriors()
+    p.reinforce_at("text", "read", "morning")
+    assert p.boost_at("text", "read", "morning") > 0
+    assert p.boost_at("text", "read", "night") > 0     # the general prior still counts
+    # a crafted scene or daypart can never grow the file
+    p.reinforce_at("../../etc/passwd", "read", "morning")
+    p.reinforce_at("text", "read", "not-a-daypart")
+    for key in p._c:
+        base = key.split("@")[0]
+        assert base in SCENES
+        if "@" in key:
+            assert key.split("@")[1] in DAYPARTS

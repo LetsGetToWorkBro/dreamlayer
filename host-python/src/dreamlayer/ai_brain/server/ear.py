@@ -123,6 +123,13 @@ class EarHost:
         self.heard_count += 1
         name = "heard" if not speaker else f"heard:{speaker}"
         try:
+            # Tier 3: the words also steer the LENS. Whatever you just said is
+            # parsed for an intent ("where are my keys" → find) that the next look
+            # obeys instead of guessing. Best-effort; never breaks ingestion.
+            try:
+                self.brain.note_spoken_intent(text)
+            except Exception:                        # noqa: BLE001
+                pass
             self.brain.index.add_documents([(name, text)])
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] index ingest failed: %s", exc)
