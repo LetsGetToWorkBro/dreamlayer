@@ -37,3 +37,6 @@ host-python/packaging/dmg-background*.png
 host-python/packaging/dmg-background.tiff
 host-python/packaging/dreamlayer.icns
 host-python/packaging/DreamLayer.iconset/
+
+# agent scratch worktrees — never content
+.claude/worktrees/
