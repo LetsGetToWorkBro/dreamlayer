@@ -117,6 +117,140 @@ def test_the_dossier_never_runs_face_recognition(brain):
         assert banned not in src
 
 
+# --- the 2026-07-23 security/privacy refute-audit findings -------------------
+
+def test_an_unrelated_private_note_is_never_surfaced_as_a_mention(tmp_path):
+    """HIGH: the index matches on ANY shared keyword, so an unfiltered lookup
+    turned roster 'Bill' into 'Electric bill ... card ending 4412', captioned as
+    being about Bill. A mention must NAME them, case-sensitively."""
+    notes = tmp_path / "notes"
+    notes.mkdir()
+    (notes / "a.txt").write_text("Electric bill 340 dollars paid with card ending 4412\n")
+    (notes / "b.txt").write_text("Bill said he would bring the ladder on Saturday\n")
+    b = Brain(str(tmp_path))
+    b.config.folders = [str(notes)]
+    b.index.reindex()
+    b.add_person("Bill", note="neighbour")
+    d = b.person_dossier("Bill")
+    assert not any("4412" in m for m in d["mentions"])
+    assert any("ladder" in m for m in d["mentions"])
+    # the caption is your own note, never a keyword-matched passage
+    assert d["card"]["footer"] == "neighbour"
+
+
+def test_the_veil_stops_the_brain_recording_who_you_asked_about(brain):
+    brain.config.network_mode = "lan_only"           # incognito
+    before = len(brain.activity.recent(50))
+    assert brain.dossier_query("who is Sarah")["who"] == "Sarah Chen"
+    assert len(brain.activity.recent(50)) == before   # nothing written
+
+
+def test_a_real_safety_card_survives_a_queue_full_of_ambient_events(brain):
+    """A stalled reader is exactly when a smoke alarm matters most, and the queue
+    drops the NEWEST event — so a burst of ambient cards could bury it."""
+    q = brain.subscribe_events()
+    for i in range(q.maxsize):
+        q.put_nowait({"kind": "ambient", "safety": False, "n": i})
+    assert brain.push_event("hark", {"type": "HarkCard"}, veil_ok=True) == 1
+    items = [q.get_nowait() for _ in range(q.qsize())]
+    assert any(i.get("safety") for i in items)       # the alarm got through
+    assert not any(i.get("n") == 0 for i in items)   # the oldest ambient made room
+
+
+def test_the_selftest_is_rate_limited(brain):
+    brain.subscribe_events()
+    oks = [brain.push_selftest("hark").get("ok") for _ in range(brain.MAX_SELFTEST_PER_MIN + 2)]
+    assert oks.count(True) == brain.MAX_SELFTEST_PER_MIN
+    assert oks[-1] is False
+
+
+def test_the_selftest_marker_survives_the_device_card_path(brain):
+    """The glasses' own renderers hard-code the eyebrow and drop unknown fields,
+    so the marker has to ride the fields they DO render — and a test must not
+    borrow a real tap's earcon/haptic/flash."""
+    q = brain.subscribe_events()
+    brain.push_selftest("hark")
+    card = q.get_nowait()["card"]
+    assert card["lines"][0] == "SELF-TEST"
+    assert not any(k in card for k in ("earcon", "haptic", "flash"))
+
+
+def test_a_large_roster_does_not_make_a_question_expensive(brain):
+    """Cost is O(question), not O(roster): sync_contacts can put an entire address
+    book in people.json, and the old per-name regex loop also evicted Python's
+    global re cache."""
+    import re as _re
+    import time as _time
+    for i in range(400):
+        brain.add_person(f"Person{i} Sur{i}")
+    _re._cache.clear()
+    t0 = _time.perf_counter()
+    for _ in range(20):
+        brain.dossier_query("who is Sarah Chen")
+    assert (_time.perf_counter() - t0) / 20 < 0.05    # was ~52 ms at N=800
+    assert len(_re._cache) < 64                       # no global cache thrash
+
+
+def test_a_trailing_punctuation_name_is_reachable(brain):
+    brain.add_person("Smith Jr.", note="the elder")
+    assert brain.dossier_query("who is Smith Jr.")["who"] == "Smith Jr."
+
+
+def test_a_lowercase_roster_name_still_cannot_surface_a_private_note(tmp_path):
+    """The case-sensitivity guard was useless for a lowercase roster entry —
+    add_person/sync_contacts store the name verbatim (audit 3, HIGH)."""
+    notes = tmp_path / "n"
+    notes.mkdir()
+    (notes / "a.txt").write_text("Electric bill 340 dollars paid with card ending 4412\n")
+    b = Brain(str(tmp_path))
+    b.config.folders = [str(notes)]
+    b.index.reindex()
+    b.add_person("bill")                              # lowercase, not "Bill"
+    assert b.person_dossier("bill")["mentions"] == []
+
+
+def test_a_mention_is_never_another_person_with_the_same_first_name(tmp_path):
+    """Probing a bare first name attributed Sarah Okafor's debt to Sarah Chen
+    (audit 3, HIGH)."""
+    notes = tmp_path / "n"
+    notes.mkdir()
+    (notes / "a.txt").write_text(
+        "Sarah Chen signed the Q3 renewal.\n"
+        "Sarah Okafor owes me 200 dollars from the trip.\n")
+    b = Brain(str(tmp_path))
+    b.config.folders = [str(notes)]
+    b.index.reindex()
+    b.add_person("Sarah Chen")
+    m = b.person_dossier("Sarah Chen")["mentions"]
+    assert any("Q3 renewal" in x for x in m)
+    assert not any("Okafor" in x for x in m)
+
+
+def test_an_unvalidated_phone_mirror_cannot_break_the_dossier(brain):
+    """receive_people stores the phone's payload unvalidated; a bad row used to
+    raise and kill People lookups for everyone (audit 3)."""
+    brain.add_person("Zed")
+    brain.social_people = [None, {"name": None}, "junk",
+                           {"name": "Zed", "notes": ["real note"], "debts": 7}]
+    d = brain.person_dossier("Zed")
+    assert d["known"] is True
+    assert d["notes"] == ["real note"]                 # the string/int rows ignored
+    assert d["debts"] == []
+    brain.social_people = [{"name": "Zed", "notes": "hello"}]
+    assert brain.person_dossier("Zed")["notes"] == []  # never char-split
+
+
+def test_a_typographic_apostrophe_matches_a_straight_one(brain):
+    """Contacts stores ’ while a typed ' is common — they must be the same name."""
+    brain.add_person("O'Brien", note="the landlord")
+    assert brain.dossier_query("who is O’Brien")["who"] == "O'Brien"
+
+
+def test_a_non_string_query_never_raises(brain):
+    for q in (12345, 3.14, True, ["x"], None):
+        brain.dossier_query(q)
+
+
 # --- the ambient-push self-test ---------------------------------------------
 
 def test_every_selftest_kind_pushes_a_card_that_announces_itself(brain):
@@ -136,7 +270,7 @@ def test_a_selftest_never_pierces_the_veil(brain):
     q = brain.subscribe_events()
     out = brain.push_selftest("hark")
     assert out["delivered"] == 0
-    assert out["veiled"] is True
+    assert out["reason"] == "veiled"      # says WHY, not just "0 delivered"
     assert q.empty()
 
 

@@ -228,13 +228,15 @@ def _local_look(brain, arr, ledger: bool = True) -> dict:
     # ledger write so no person observation is recorded either.
     from ...object_lens import person_guard
     if person_guard.defers_person(label, frame=arr):
-        # Say the honest thing, and say what DOES work: this Brain has no
-        # face-recognition model, so a face is never turned into a name here. The
-        # wearer names people instead ("this is Sarah") and recalls them by name
-        # ("who is Sarah" → the dossier card). Never imply a failed match.
+        # Say the honest thing, and say what DOES work. This Brain has no
+        # face-recognition model, so a face is never turned into a name here — and
+        # the copy must not invite the wearer to ask about a STRANGER (the dossier
+        # only knows someone already introduced), nor imply a failed match. The
+        # renderer draws these lines even though there's no label (refute 2026-07-23).
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
                 "lines": wrap_hud_lines(
-                    "a person — I don't put names to faces; ask me who they are")}
+                    'a person — I can\'t recognize faces. Say "this is <name>" '
+                    'to introduce them')}
     try:                                      # incognito/ambient ⇒ no on-disk trace;
         trace = ledger and not brain.incognito_now()   # unreadable posture ⇒ no trace
     except Exception:
@@ -1991,6 +1993,15 @@ function renderResult(j, auto){
     if (!auto) showHud(j && j.reason ? j.reason : "look failed", {ms:3000});
     return;
   }
+  /* A DEFERRAL (a person in frame) carries honest lines and NO label. Without
+     this it fell to the miss branch below and said "point at an object · move
+     closer" — telling the wearer to reframe, as if the look had failed, which is
+     exactly what the deferral must never imply (audit 2026-07-23, HIGH). */
+  if (!j.label && j.lines && j.lines.length) {
+    noHitStreak = 0; renderPanel(null);
+    showHud(j.lines, {ms: auto ? 2600 : 4600});
+    return;
+  }
   if (j.label) {
     noHitStreak = 0;
     setTier(j.tier || "laptop");
@@ -2441,9 +2452,16 @@ function renderEvent(ev){
   const c = ev.card, t = c && c.type;
   /* a self-test card announces itself — it must never read as a real alarm or a
      real brief (the Brain stamps selftest + a SELF-TEST eyebrow; we keep it) */
-  if (c && c.selftest) c.eyebrow = "SELF-TEST";
-  if (t === "HarkCard"){ glassHarkCard(c); try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
+  const test = !!(c && c.selftest);
+  if (test) c.eyebrow = "SELF-TEST";
+  if (t === "HarkCard"){
+    glassHarkCard(c);
+    /* a self-test must not SOUND like a safety tap either — the Brain strips the
+       card's earcon/haptic, so the client must not re-add them here (audit 3) */
+    if (!test) { try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
+  }
   else if (t === "MorningBriefCard") glassBriefCard(c);
+  else if (t === "PersonDossierCard") glassDossierCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

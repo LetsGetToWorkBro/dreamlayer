@@ -21,6 +21,25 @@ _DOSSIER_ASK = re.compile(
     r"catch\s+me\s+up\s+on|brief\s+me\s+on)\b")
 
 
+# Word tokens, lowercased, keeping an apostrophe/hyphen INSIDE a token so
+# "O'Brien" and "Anne-Marie" stay whole — and so a possessive ("Sarah's") is a
+# DIFFERENT token than the name, which is what makes "who is Sarah's manager"
+# fall through to normal recall for free. Unicode-aware, and it drops trailing
+# punctuation so "Smith Jr." is reachable (audit 2026-07-23).
+_TOKEN_RE = re.compile(r"[^\W_]+(?:['’\-][^\W_]+)*", re.UNICODE)
+# Cost guards: matching is O(question), never O(roster), and the question itself
+# is capped — /brain/ask accepts a 16 MiB body and sync_contacts can put an entire
+# address book in people.json (audit: 800 names × an unbounded query = 0.7 s CPU).
+_MAX_MATCH_CHARS = 512
+_MAX_MATCH_TOKENS = 64
+_MAX_NAME_TOKENS = 5
+
+
+def _norm_tokens(s, limit: int = _MAX_MATCH_TOKENS) -> list:
+    t = str(s or "")[:_MAX_MATCH_CHARS].lower().replace("\u2019", "'")
+    return _TOKEN_RE.findall(t)[:limit]
+
+
 def _ago(ts: float, now: float | None = None) -> str:
     """A coarse, honest relative time ('3d ago'); '' when there's no timestamp."""
     try:
@@ -34,7 +53,7 @@ def _ago(ts: float, now: float | None = None) -> str:
         return "just now"
     if d < 5400:
         return f"{int(d // 60)} min ago"
-    if d < 172800:
+    if d < 86400:
         return f"{int(d // 3600)}h ago"
     return f"{int(d // 86400)}d ago"
 
@@ -158,9 +177,17 @@ class SocialOps(BrainHost):
         tags = [t for t in (tags or []) if t]
         with self._store_lock:
             cur = self._load_json("people.json", [])
+            prior = next((e for e in cur if e.get("name") == name), None)
             cur = [e for e in cur if e.get("name") != name]     # replace existing
-            cur.append({"name": name, "note": note or "", "tags": tags,
-                        "ts": time.time(), "source": "manual"})
+            # Keep the FIRST-introduced time and the wearer's own note. Re-adding
+            # used to reset ts (so a friend of 400 days read "introduced just now")
+            # and overwrite the note — "start a meeting with Marcus" replaced
+            # "climbing partner" with "met in a meeting" (audit 2026-07-23).
+            first_ts = float((prior or {}).get("ts") or 0.0) or time.time()
+            keep_note = note or str((prior or {}).get("note") or "")
+            cur.append({"name": name, "note": keep_note, "tags": tags,
+                        "ts": first_ts, "updated": time.time(),
+                        "source": "manual"})
             self._save_json("people.json", cur)
             self.activity.add("people", f"Introduced {name}")
         # W6: start rehearsing the name — the moment right after you meet someone
@@ -287,38 +314,52 @@ class SocialOps(BrainHost):
         general question: "who is the will of the people" leaves the object as
         "the will of the people", which starts with "the", so nothing matches and
         it falls through to normal recall (audit 2026-07-23)."""
-        t = " ".join(str(text or "").lower().split())
-        if not t:
+        toks = _norm_tokens(text)
+        if not toks:
             return None
-        names = [n for n in self.known_names() if n and n.strip()]
+        full, firsts = self._roster_lookup()
+        if anchored:
+            # The object must be EXACTLY a name you hold — a whole-object match, not
+            # a prefix. Prefix matching was the bug behind every misidentification
+            # the refute audit executed: with "Grace" in the roster, "who is Grace
+            # Hopper" answered about your book-club friend (and returned before the
+            # general answer could render). Likewise "tell me about will power",
+            # "who is may 5th", "who was Marcus Garvey". If the question supplies
+            # anything the roster doesn't, we don't claim to know who they mean —
+            # normal recall gets it (audit 2026-07-23, HIGH).
+            joined = " ".join(toks)
+            if joined in full:
+                return full[joined]
+            if len(toks) == 1:                 # a bare first name, unambiguous only
+                group = firsts.get(toks[0]) or []
+                if len(group) == 1:
+                    return group[0]
+            return None
+        return None
 
-        def _hit(pat: str) -> bool:
-            if anchored:
-                return re.match(pat + r"\b", t) is not None
-            return re.search(r"\b" + pat + r"\b", t) is not None
+    def _roster_lookup(self):
+        """``({"sarah chen": "Sarah Chen"}, {"sarah": ["Sarah Chen"]})`` for the
+        consented roster, cached against the roster itself.
 
-        for n in sorted(names, key=lambda s: -len(s)):
-            if _hit(re.escape(n.strip().lower())):
-                return n
+        Token maps rather than a regex per name: a dossier-shaped question then
+        costs O(question) instead of O(roster). The audit measured the old loop at
+        52 ms/question with 800 names — and worse, it built 2N patterns that
+        filled Python's global 512-entry ``re`` cache and evicted every other
+        compiled pattern in the process (audit 2026-07-23)."""
+        names = tuple(sorted(n for n in self.known_names() if n and n.strip()))
+        cache = getattr(self, "_roster_lookup_cache", None)
+        if cache is not None and cache[0] == names:
+            return cache[1], cache[2]
+        full: dict = {}
         firsts: dict = {}
         for n in names:
-            parts = n.strip().lower().split()
-            if parts:
-                firsts.setdefault(parts[0], []).append(n)
-        hits = [ns for f, ns in firsts.items() if _hit(re.escape(f))]
-        if len(hits) == 1 and len(hits[0]) == 1:
-            cand = hits[0][0]
-            # Don't answer about the wrong person of the same first name: when the
-            # question supplies a surname AND the roster entry has a DIFFERENT one,
-            # refuse ("who is Sarah Chen" must not return Sarah Okafor). A roster
-            # entry with no surname still answers — the card shows the name we
-            # actually hold, so there is nothing to mistake (audit 2026-07-23).
-            asked = t.split()
-            held = cand.strip().lower().split()
-            if anchored and len(asked) > 1 and len(held) > 1 and asked[1] != held[1]:
-                return None
-            return cand
-        return None
+            toks = _norm_tokens(n, _MAX_NAME_TOKENS)
+            if not toks:
+                continue
+            full[" ".join(toks)] = n
+            firsts.setdefault(toks[0], []).append(n)
+        self._roster_lookup_cache = (names, full, firsts)
+        return full, firsts
 
     def person_dossier(self, name: str, now: float | None = None) -> dict:
         """Everything the Brain honestly knows about ONE person you introduced.
@@ -341,36 +382,80 @@ class SocialOps(BrainHost):
         if target is None and not mirror:
             return {"known": False, "name": raw}       # never introduced → say so
         full = str((target or {}).get("name") or mirror.get("name") or raw).strip()
+        # _find_person accepts a unique FIRST-name match, so a roster "Marcus" and a
+        # mirror "Marcus Vogel" are different people whose records would otherwise
+        # merge into one card — the audit executed a climbing partner shown as a
+        # landlord, carrying the other man's "you owe 2400". Only merge an exact
+        # name match (audit 2026-07-23).
+        if str(mirror.get("name", "")).strip().lower() != full.lower():
+            mirror = {}
         note = str((target or {}).get("note") or "")
         tags = [str(t) for t in ((target or {}).get("tags") or []) if str(t).strip()]
         relation = str(mirror.get("relation") or "").strip()
         company = str(mirror.get("company") or "").strip()
         role = str(mirror.get("role") or "").strip()
-        notes = [str(n).strip() for n in (mirror.get("notes") or []) if str(n).strip()]
-        debts = [str(d).strip() for d in (mirror.get("debts") or []) if str(d).strip()]
-        topics = [str(t).strip() for t in (mirror.get("topics") or []) if str(t).strip()]
+        # receive_people stores whatever the phone pushed with no validation, so a
+        # non-list (or a string, which would char-split into ['h','e','l','l','o'])
+        # must not raise or corrupt the card (audit 3)
+        def _strlist(v):
+            return ([str(x).strip() for x in v if str(x).strip()]
+                    if isinstance(v, list) else [])
+        notes = _strlist(mirror.get("notes"))
+        debts = _strlist(mirror.get("debts"))
+        topics = _strlist(mirror.get("topics"))
         if note and note not in notes:
             notes = [note] + notes
         introduced = _ago((target or {}).get("ts") or 0.0, now)
-        # what YOU wrote that mentions them — your own memory, never a lookup
+        # Passages from your INDEXED FILES whose text actually names them (not
+        # necessarily written by you — config.folders can hold anything you watch,
+        # so the provenance goes out in `sources` rather than being asserted as
+        # theirs). The index matches on any shared
+        # keyword, so an unfiltered result turns a name lookup into a random
+        # private-note disclosure labelled as being about that person — the audit
+        # measured roster "Bill" surfacing "Electric bill 340 dollars paid with card
+        # ending 4412". So every passage must contain the name as a whole word AND
+        # case-sensitively, which is what separates the person "Bill" from the noun
+        # "bill" (audit 2026-07-23, HIGH).
         mentions: list = []
+        sources: list = []
         try:
-            for _p, passage, _h in (self.index.search(full, k=3) or []):
+            # CAPITALISED probes only: a lowercase roster entry ("bill", which
+            # add_person/sync_contacts store verbatim) made the case-sensitive
+            # guard useless and re-surfaced "Electric bill … card ending 4412".
+            # And the FULL name only: probing a bare first name attributed
+            # "Sarah Okafor owes me 200" to Sarah Chen (audit 3, both HIGH).
+            probes = [p for p in dict.fromkeys((full, full.title()))
+                      if p and p[:1].isupper()]
+            pats = [re.compile(r"(?<!\w)" + re.escape(p) + r"(?!\w)") for p in probes[:2]]
+            for path, passage, _h in ((self.index.search(full, k=8) or []) if pats else []):
                 s = " ".join(str(passage).split())
-                if s:
+                if s and any(pat.search(s) for pat in pats):
                     mentions.append(s[:160])
+                    if path and path not in sources:   # keep provenance, don't erase it
+                        sources.append(str(path))
+                if len(mentions) >= 3:
+                    break
         except Exception:                              # noqa: BLE001
-            mentions = []
-        bits = [b for b in (relation, role, company) if b]
+            mentions, sources = [], []
+        # dedupe: relation and role are often the same word, and "landlord ·
+        # landlord" renders one fact as two (audit 2026-07-23)
+        bits = list(dict.fromkeys(b for b in (relation, role, company) if b))
         headline = (" · ".join(bits[:2]) if bits
-                    else (f"introduced {introduced}" if introduced else "in your People"))
+                    else (f"in your People · {introduced}" if introduced
+                          else "in your People"))
         detail = (("about " + ", ".join(topics[:3])) if topics
                   else (" · ".join(tags[:3]) if tags else ""))
-        footer = (notes[0] if notes else (mentions[0] if mentions else ""))[:80]
+        # the caption is YOUR OWN note about them, never a keyword-matched passage:
+        # the card's most prominent line must not be a heuristic (audit 2026-07-23)
+        footer = (notes[0] if notes else "")[:80]
         from ...hud import cards
         card = cards.person_dossier({
             "person": full, "last_seen_ago": "", "last_line": footer,
-            "topics": topics[:3], "exchanges": len(mentions),
+            "topics": topics[:3],
+            # 0, not len(mentions): "exchanges" means conversation turns everywhere
+            # else in this codebase (ConversationLedger.dossier), so counting matched
+            # passages would assert conversations that never happened (audit).
+            "exchanges": 0,
         })
         # the honest copy for a NAME-keyed recall (the device card's default
         # headline assumes a conversation ledger; ours is the roster + memory)
@@ -381,7 +466,8 @@ class SocialOps(BrainHost):
         return {"known": True, "name": full, "relation": relation,
                 "company": company, "role": role, "note": note, "tags": tags,
                 "notes": notes, "debts": debts, "topics": topics,
-                "introduced_ago": introduced, "mentions": mentions, "card": card}
+                "introduced_ago": introduced, "mentions": mentions,
+                "sources": sources, "card": card}
 
     def dossier_query(self, text: str, now: float | None = None):
         """'who is Sarah' / 'what do I know about Marcus' → the person dossier.
@@ -389,7 +475,7 @@ class SocialOps(BrainHost):
         Returns None when the text isn't a dossier question OR names nobody you
         introduced — so the caller falls through to normal recall and a general
         question still gets a general answer."""
-        t = (text or "").strip()
+        t = str(text or "").strip()
         if not t:
             return None
         m = _DOSSIER_ASK.search(t)
@@ -418,24 +504,35 @@ class SocialOps(BrainHost):
         say_bits = [b for b in (card.get("headline"), card.get("detail"),
                                 (d.get("notes") or [""])[0]) if b]
         say = (f"{d['name']} — " + " · ".join(say_bits[:2])) if say_bits else d["name"]
+        # Under the shield, DON'T record who you asked about: the look path already
+        # refuses to trace while incognito (live.py `trace = ledger and not
+        # incognito_now()`), and a signed permanent record of "Recalled Sarah Chen"
+        # is exactly the kind of thing the veil exists to prevent. Fails closed —
+        # an unreadable posture writes nothing (audit 2026-07-23).
         try:
-            self.activity.add("people", f"Recalled {d['name']}")
+            if not self.incognito_now():
+                self.activity.add("people", f"Recalled {d['name']}")
         except Exception:                              # noqa: BLE001
             pass
         return {"intent": "dossier", "who": d["name"], "say": say, "card": card,
                 "dossier": {k: v for k, v in d.items() if k != "card"}}
 
     def _find_person(self, name: str):
-        nl = (name or "").strip().lower()
+        nl = str(name or "").strip().lower()
         if not nl:
             return None
-        exact = next((p for p in self.social_people
-                      if p.get("name", "").lower() == nl), None)
+        # receive_people stores the phone's payload unvalidated, so an entry may be
+        # None or a non-dict — which used to raise here and kill People lookups for
+        # EVERY person, not just the bad row (audit 3)
+        people = [p for p in (self.social_people or []) if isinstance(p, dict)]
+
+        def _nm(p) -> str:
+            return str(p.get("name") or "").lower()
+
+        exact = next((p for p in people if _nm(p) == nl), None)
         if exact:
             return exact
-        # unique first-name match
-        starts = [p for p in self.social_people
-                  if p.get("name", "").lower().split()[:1] == [nl]]
+        starts = [p for p in people if _nm(p).split()[:1] == [nl]]   # unique first name
         return starts[0] if len(starts) == 1 else None
 
     def voice_social(self, intent: str, args: dict) -> dict:

@@ -897,7 +897,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     return 0
             except Exception:                        # noqa: BLE001 — unreadable → drop
                 return 0
-        ev: dict = {"kind": kind}
+        ev: dict = {"kind": kind, "safety": bool(veil_ok)}
         if isinstance(card, dict):
             ev["card"] = card
         with self._event_lock:
@@ -907,14 +907,56 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             try:
                 q.put_nowait(ev)
                 sent += 1
-            except Exception:                        # noqa: BLE001 — full → drop for that client
-                pass
+            except Exception:                        # noqa: BLE001 — full
+                # A stalled reader (backgrounded phone, TCP zero-window) is exactly
+                # the state in which a smoke alarm matters most, and the default
+                # policy drops the NEWEST event — so a burst of ambient cards could
+                # bury the one that matters. A SAFETY push instead evicts the oldest
+                # non-safety event to make room, and only gives up if the queue is
+                # somehow all safety (audit 2026-07-23).
+                if not veil_ok:
+                    continue
+                if self._evict_for_safety(q):
+                    try:
+                        q.put_nowait(ev)
+                        sent += 1
+                    except Exception:                # noqa: BLE001
+                        pass
         return sent
+
+    @staticmethod
+    def _evict_for_safety(q) -> bool:
+        """Drop the oldest non-safety event from a full queue. True if room was
+        made. Order is preserved for everything kept."""
+        kept = []
+        dropped = False
+        try:
+            while True:
+                try:
+                    item = q.get_nowait()
+                except Exception:                    # noqa: BLE001 — empty
+                    break
+                if not dropped and not (isinstance(item, dict) and item.get("safety")):
+                    dropped = True                   # this one makes the room
+                    continue
+                kept.append(item)
+            for item in kept:                        # put the survivors back in order
+                try:
+                    q.put_nowait(item)
+                except Exception:                    # noqa: BLE001
+                    break
+        except Exception:                            # noqa: BLE001 — never break a push
+            return False
+        return dropped
 
     # Self-test kinds → the card the real publisher would push, built by the SAME
     # hud.cards builders and rendered by the SAME phone renderers. Every one is
     # stamped selftest=True so it can never be mistaken for the real event.
-    SELFTEST_KINDS = ("hark", "brief", "nudge")
+    # "nudge" was removed: NudgeCard had no cards.py builder, no bespoke renderer
+    # and no publisher anywhere, so self-testing it demonstrated a card the Brain
+    # never emits (audit 2026-07-23).
+    SELFTEST_KINDS = ("hark", "brief")
+    MAX_SELFTEST_PER_MIN = 6
 
     def push_selftest(self, kind: str = "hark") -> dict:
         """Push ONE clearly-labelled self-test card to every connected Live Lens.
@@ -939,27 +981,48 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             return {"ok": False, "error": "unknown self-test kind",
                     "kinds": list(self.SELFTEST_KINDS)}
         from ...hud import cards
-        if k == "hark":
-            card = cards.hark(clue="Self-test — the tap works.",
-                              detail="a test tone, not a real alert",
-                              importance="normal")
-        elif k == "brief":
+        if k == "brief":
             card = cards.morning_brief(
                 text="Self-test — your brief would appear here.",
                 bullets=["this card is a self-test", "no memories were read"])
         else:
-            card = {"type": "NudgeCard", "primary": "Self-test — a nudge lands here.",
-                    "detail": "no memory was read", "dismiss_ms": 6000}
+            card = cards.hark(clue="Self-test — the tap works.",
+                              detail="a test tone, not a real alert",
+                              importance="normal")
+        # Rate-limited: without this an authed caller can flood the bounded event
+        # queues (burying a real safety card) and pump the signed ledger, scrubbing
+        # the panel's audit window — measured at 1804 pushes/s (audit 2026-07-23).
+        now = time.monotonic()
+        recent = [t for t in getattr(self, "_selftest_hits", []) if now - t < 60.0]
+        if len(recent) >= self.MAX_SELFTEST_PER_MIN:
+            self._selftest_hits = recent
+            return {"ok": False, "error": "self-test is rate-limited",
+                    "retry_after_s": int(60 - (now - recent[0])) + 1}
+        recent.append(now)
+        self._selftest_hits = recent
         card = dict(card)
         card["selftest"] = True
         card["eyebrow"] = "SELF-TEST"
+        # The device renderers hard-code the eyebrow and drop unknown fields, so the
+        # marker would vanish on the glasses' own card path — carry it in the fields
+        # they DO render, and never borrow a real tap's earcon/haptic/flash.
+        lines = [x for x in (card.get("lines") or []) if x]
+        card["lines"] = ["SELF-TEST"] + [ln for ln in lines[1:]] if lines else ["SELF-TEST"]
+        for borrowed in ("earcon", "haptic", "flash"):
+            card.pop(borrowed, None)
         delivered = self.push_event(k, card)            # never veil_ok
         try:
             self.activity.add("selftest", f"Pushed a {k} self-test card")
         except Exception:                               # noqa: BLE001
             pass
+        with self._event_lock:
+            listeners = len(self._event_subs)
+        reason = ""
+        if delivered == 0:
+            reason = "veiled" if self._veiled_quiet() else (
+                "no listeners" if listeners == 0 else "queues full")
         return {"ok": True, "kind": k, "delivered": delivered,
-                "veiled": delivered == 0 and bool(self._veiled_quiet())}
+                "listeners": listeners, "reason": reason}
 
     def _veiled_quiet(self) -> bool:
         """True when the shield is up — so a 0-delivery self-test can say WHY."""
@@ -4084,8 +4147,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             except Exception:                          # noqa: BLE001
                 dq = None
             if dq:
+                # carry the provenance of any file passage the dossier used, rather
+                # than reporting certainty with empty sources (audit 2026-07-23)
                 self._json(200, {"text": dq.get("say", ""), "tier": "local",
-                                 "sources": [], "confidence": 1.0,
+                                 "sources": (dq.get("dossier") or {}).get("sources") or [],
+                                 "confidence": 1.0,
                                  "intent": "dossier", "who": dq.get("who"),
                                  "card": dq.get("card"),
                                  "dossier": dq.get("dossier")})
@@ -4367,17 +4433,22 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                               memories=b.get("memories"))
             if out.get("depth") == "long":     # keep the last long brief for the phone
                 brain.last_long_brief = {**out, "ts": time.time()}
-            # An explicit "brief me now" must also reach the GLASS, not just the
-            # caller: the panel button used to return JSON while any connected Live
-            # Lens got nothing (audit 2026-07-23). push_event is veil-gated, so the
-            # shield still suppresses it.
-            if b.get("push") is not False:
+            # "brief me now" can also reach the GLASS — the panel button used to
+            # return JSON while any connected Live Lens got nothing. OPT-IN
+            # (`push: true`) on purpose: brief() echoes the caller's own `agenda`
+            # into the text, so a default-on push would make this route an
+            # arbitrary-text-onto-every-glass primitive as a side effect of merely
+            # fetching a brief (audit 2026-07-23). push_event stays veil-gated.
+            if b.get("push") is True:
+                # report the delivery count: a silently-swallowed push would
+                # reproduce the very bug this fixes (200 OK, nothing on the glass)
                 try:
                     from ...hud import cards
-                    brain.push_event("brief", cards.morning_brief(
+                    out["pushed"] = brain.push_event("brief", cards.morning_brief(
                         text=out.get("text", ""), bullets=out.get("bullets") or []))
-                except Exception:              # noqa: BLE001 — never fail the brief
-                    pass
+                except Exception as exc:       # noqa: BLE001 — never fail the brief
+                    out["pushed"] = 0
+                    out["push_error"] = str(exc)[:120]
             self._json(200, out)
 
         def _post_live_selftest(self, path, qs):
@@ -4385,8 +4456,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             smoke alarm and without waiting for the brief hour. Authed like every
             other write; the card is stamped SELF-TEST and is never veil_ok, so it
             can't be used to spoof a safety alert (nor to pierce the shield)."""
-            b = self._body() if self.headers.get("Content-Length") else {}
-            kind = str((b or {}).get("kind") or qs.get("kind", ["hark"])[0])
+            # Call _body() bare. It already returns {} for an absent/empty/non-JSON
+            # body, and its exceptions (_RequestTooLarge/_BadContentLength/
+            # _LengthRequired/_RequestTimeout) are what do_POST maps to 413/400/411/
+            # 408 — catching them here answered 200 to a malformed request and left
+            # an undrained chunked body that desynced the keep-alive connection
+            # (audit 3, HIGH).
+            b = self._body() or {}
+            kind = str((b.get("kind") if isinstance(b, dict) else None)
+                       or qs.get("kind", ["hark"])[0])
             out = brain.push_selftest(kind)
             self._json(200 if out.get("ok") else 400, out)
 
