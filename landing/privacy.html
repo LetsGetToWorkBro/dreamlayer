@@ -151,7 +151,14 @@
           <li>The phone talks to your Brain over your home network, or over a relay you host, using a pairing token.
             This traffic goes between your own devices, not to us.</li>
           <li>The glasses capture is on-device; DreamLayer deliberately does <strong>not</strong> perform stranger
-            facial recognition, keep a face database, clone voices, or record covertly.</li>
+            facial recognition, keep a face database, or record covertly. The shipped face embedder
+            cannot return an identity at all — with no face model present it declines every frame
+            rather than guessing, so there is no setting that turns stranger recognition on.</li>
+          <li>DreamLayer <strong>never clones your voice, or anyone else's.</strong> It does synthesise
+            <em>Juno's</em> voice — an optional offline engine lets her speak in her own voice rather
+            than a stock one, and the only reference clips it is ever given are her own pre-recorded
+            takes, hard-coded in the app. No microphone audio, and no recording of you or of anyone
+            near you, is ever used as a voice reference.</li>
         </ul>
 
         <h2>3. Optional cloud AI (opt-in)</h2>
