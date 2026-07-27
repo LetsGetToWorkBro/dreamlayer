@@ -35,6 +35,8 @@ from __future__ import annotations
 import io
 import json
 import logging
+import math
+import re
 import threading
 
 from ...reality_compiler.v2.figment import MAX_LINES, MAX_TEXT_LEN
@@ -228,8 +230,15 @@ def _local_look(brain, arr, ledger: bool = True) -> dict:
     # ledger write so no person observation is recorded either.
     from ...object_lens import person_guard
     if person_guard.defers_person(label, frame=arr):
+        # Say the honest thing, and say what DOES work. This Brain has no
+        # face-recognition model, so a face is never turned into a name here — and
+        # the copy must not invite the wearer to ask about a STRANGER (the dossier
+        # only knows someone already introduced), nor imply a failed match. The
+        # renderer draws these lines even though there's no label (refute 2026-07-23).
         return {"ok": True, "label": "", "confidence": 0.0, "tier": "laptop",
-                "lines": wrap_hud_lines("a person — the Social Lens handles people")}
+                "lines": wrap_hud_lines(
+                    'a person — I can\'t recognize faces. Say "this is <name>" '
+                    'to introduce them')}
     try:                                      # incognito/ambient ⇒ no on-disk trace;
         trace = ledger and not brain.incognito_now()   # unreadable posture ⇒ no trace
     except Exception:
@@ -253,7 +262,7 @@ def _with_min_panel(out: dict) -> dict:
     return out
 
 
-def world_look(brain, arr, ambient: bool = False,
+def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
                lens: str = "", lens_args: "dict | None" = None,
                scene: str = "") -> dict:
     """One unified Look — the single pipeline behind BOTH the browser's tap and
@@ -302,18 +311,30 @@ def world_look(brain, arr, ambient: bool = False,
             from .glance_live import TEACH_LENS
         except Exception:                           # noqa: BLE001
             TEACH_LENS = {}
-        if scene and lens in TEACH_LENS and getattr(wl, "glance_arbiter", None) is not None:
+        res = wl.look_lens(arr, lens, lens_args)
+        ok = isinstance(res, dict) and bool(res.get("ok"))
+        # Learn only from a pick that WORKED. Teaching before running meant a lens
+        # whose pack isn't installed still earned credit: three taps of a card that
+        # answered {"need": "doc_read"} made the arbiter "confident", which forces a
+        # fire and REMOVES the chooser — the only route to the other lens on that
+        # scene — permanently, on disk. A preference has to be learned from an
+        # answer you actually got, not from a button you pressed.
+        if (ok and scene and lens in TEACH_LENS
+                and getattr(wl, "glance_arbiter", None) is not None):
             try:
                 may_learn = bool(wl.privacy.allow_capture())
             except Exception:                       # noqa: BLE001
                 may_learn = False                   # unreadable posture → fail closed
             if may_learn:
                 try:
-                    wl.glance_arbiter.reinforce(scene, TEACH_LENS[lens])
+                    # pass the local hour so the pick also lands on the
+                    # scene@daypart key — the tier that had no caller
+                    import time as _t
+                    wl.glance_arbiter.reinforce(scene, TEACH_LENS[lens],
+                                                hour=int(_t.localtime().tm_hour))
                 except Exception:                   # noqa: BLE001
                     pass
-        res = wl.look_lens(arr, lens, lens_args)
-        if isinstance(res, dict) and res.get("ok"):
+        if ok:
             brain.activity.add("look", f"Looked closer with the {lens} lens")
         return res if isinstance(res, dict) else {"ok": False, "lens": lens}
     try:
@@ -329,6 +350,15 @@ def world_look(brain, arr, ambient: bool = False,
         out = _local_look(brain, arr, ledger=not ambient)
         if incognito:
             out["local_only"] = True            # the shield is up — say so
+            # And the shield DROPS any speech still waiting to steer a look.
+            # pending_intent() refuses to serve a transcript while veiled, but this
+            # branch returns before anything calls it — so raising the shield used
+            # to leave the words in memory, ready to steer the first look after it
+            # came down. The veil has to act, not just decline.
+            try:
+                brain.clear_intent()
+            except Exception:                   # noqa: BLE001
+                pass
         return _with_min_panel(out)
     wl = None
     degraded = False        # the smart path ERRORED (vs. legitimately found nothing)
@@ -344,7 +374,7 @@ def world_look(brain, arr, ambient: bool = False,
     # object-recognition floor below, which keeps all its behaviour.
     if wl is not None:
         try:
-            g = wl.glance(arr)
+            g = wl.glance(arr, hints=cues or {})
         except Exception as exc:                # noqa: BLE001 — never break a look
             log.warning("[live] glance failed: %s", exc)
             g = None
@@ -354,8 +384,15 @@ def world_look(brain, arr, ambient: bool = False,
                     "card": g.get("card")}
         if isinstance(g, dict) and g.get("kind") == "fire":
             brain.activity.add("look", f"Auto lens · {g.get('lens')}")
-            return {"ok": True, "glance": "fire", "lens": g.get("lens"),
-                    "card": g.get("card"), "action": g.get("action")}
+            out = {"ok": True, "glance": "fire", "lens": g.get("lens"),
+                   "card": g.get("card"), "action": g.get("action")}
+            # `alts` only appears when a LEARNED habit fired without asking. It
+            # carries the scene too, because tapping an alternative is a chooser
+            # pick and has to teach the arbiter the same way one does.
+            if g.get("alts"):
+                out["alts"] = g["alts"]
+                out["scene"] = g.get("scene")
+            return out
     panel = None
     if wl is not None:
         try:
@@ -384,7 +421,76 @@ def world_look(brain, arr, ambient: bool = False,
             "panel": card, "lines": panel_lines(card)}
 
 
-def look(brain, data: bytes, ambient: bool = False,
+def parse_cues(qs: dict) -> dict:
+    """The phone's own on-device scene cues, off the query string, sanitised.
+
+    The Live Lens runs MediaPipe every frame and already knows what it is looking
+    at — labels, how many, whether a person is present. Before Tier 1 it threw
+    that away on every look and the Brain re-guessed from image statistics, which
+    is why the lens felt like it was picking at random. Only COARSE, non-identifying
+    cues cross: category labels, a count, and a person-present flag. Never a box,
+    never a crop, never pixels."""
+    out: dict = {}
+    try:
+        n = int((qs.get("ndet") or ["0"])[0])
+        if n > 0:
+            out["items"] = max(0, min(24, n))
+    except (TypeError, ValueError):
+        pass
+    if out.get("items"):
+        out["has_object"] = True
+    # A repeated label IS a shelf: several comparable things side by side, which is
+    # exactly what TasteLens exists for. The phone computes that itself and sends
+    # one bit, because the LABELS were a behavioural profile ("syringe", "pill
+    # bottle", "pride flag") that nothing on the Brain ever read — every consumer
+    # wants `items`/`shelf`/`has_object`, never the words. A cached older page may
+    # still send ?objs=; derive the same bit from it and keep none of the strings.
+    dup = (qs.get("dup") or ["0"])[0] in ("1", "true")
+    if not dup:
+        raw = (qs.get("objs") or [""])[0][:160]
+        labels = [w for w in re.split(r"[^a-z ]+", raw.lower()) if w.strip()][:6]
+        if labels:
+            out["has_object"] = True
+            dup = len(labels) >= 2 and len(labels) != len(set(labels))
+    if dup and (out.get("items") or 0) >= 2:
+        out["shelf"] = True
+    # Tier 2: head pitch (+up/-down) and how long the focus held. Cheap,
+    # on-device, and they never leave the wearer's own Brain.
+    for key, lo, hi in (("tilt", -90.0, 90.0), ("dwell", 0.0, 30000.0)):
+        try:
+            v = float((qs.get(key) or ["nan"])[0])
+            # isfinite, not just "not NaN": `tilt=1e400` clamped to 90.0, i.e. a
+            # claim that the wearer is staring at the zenith, in the same function
+            # that was hardened against exactly this for lat/lon.
+            if math.isfinite(v):
+                out[key] = max(lo, min(hi, v))
+        except (TypeError, ValueError):
+            pass
+    # A coordinate is only a coordinate inside the range one can exist in. These
+    # reach skyfield's wgs84.latlon() through the sky lens, and `inf` / 999 /
+    # -1e30 all used to sail straight through where tilt and dwell were clamped.
+    # A coordinate is only meaningful as a PAIR. Validating them independently
+    # forwarded half of one — {lat: 999, lon: 1} kept the longitude — and
+    # world_lens hands whatever is present to every auto-fired lens, so Compare and
+    # Translate were receiving a stray number justified only for Sky.
+    geo = {}
+    for key, lo, hi in (("lat", -90.0, 90.0), ("lon", -180.0, 180.0)):
+        try:
+            v = float((qs.get(key) or ["nan"])[0])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(v) and lo <= v <= hi:
+            geo[key] = v
+    if len(geo) == 2:
+        out.update(geo)
+    out = {k: v for k, v in out.items()
+           if not (isinstance(v, float) and not math.isfinite(v))}
+    if (qs.get("face") or ["0"])[0] in ("1", "true"):
+        out["has_face"] = True             # scene only; the look still DEFERS faces
+    return out
+
+
+def look(brain, data: bytes, ambient: bool = False, cues: "dict | None" = None,
          lens: str = "", lens_args: "dict | None" = None, scene: str = "") -> dict:
     """One browser Look: decode the posted frame in memory, run the unified
     pipeline (:func:`world_look`). Frames never touch disk; the wearer's
@@ -393,7 +499,7 @@ def look(brain, data: bytes, ambient: bool = False,
     continuous-loop frame (local-only, no ledger, no egress). ``lens`` routes
     the frame through a single named frontier lens (math/doc/depth/find/
     segment/sky/dream) instead of object recognition."""
-    return world_look(brain, decode_frame(data), ambient=ambient,
+    return world_look(brain, decode_frame(data), ambient=ambient, cues=cues,
                       lens=lens, lens_args=lens_args, scene=scene)
 
 
@@ -517,12 +623,18 @@ _PAGE = r"""<!doctype html>
 <title>DreamLayer &middot; Live Lens</title>
 <style__NONCE__>
   :root{
-    --phos:#7DFFA8; --phos-dim:#3F8F5C; --amber:#FFC46B; --bg:#050807;
-    --plate:rgba(5,10,8,.72); --lens: min(80vmin, 560px);
+    /* palette.lua, verbatim — the glasses' teal-on-black system, not a phosphor
+       terminal. Teal is the ACCENT (rails, labels, chrome); the answer itself is
+       near-white (--ink), exactly the renderer.lua hierarchy. */
+    --teal:#2CC79A; --teal-bright:#00FFAA; --teal-dim:#1A7A60;
+    --ink:#ECF0F1; --ink2:#A8B8C0; --ghost:#58686F;
+    --amber:#FFAA00; --attention:#E06B52; --border:#2A3C44; --bg:#000000;
+    --plate:rgba(6,10,11,.72); --lens: min(80vmin, 560px);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100dvh;min-height:100%;background:var(--bg);overflow:hidden;
-    font:14px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--phos)}
+    font:14px/1.45 -apple-system,"SF Pro Text","Helvetica Neue","Segoe UI",system-ui,Roboto,sans-serif;
+    color:var(--ink)}
   video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
     filter:saturate(.9) brightness(.94)}
   /* the on-device detector paints boxes here, over the video, under the chrome */
@@ -533,11 +645,11 @@ _PAGE = r"""<!doctype html>
       rgba(5,8,7,0) 60%, rgba(5,8,7,.66) 100%);}
   #lens{position:fixed;left:50%;top:46%;width:var(--lens);height:var(--lens);
     transform:translate(-50%,-50%);border-radius:50%;cursor:pointer;
-    border:1px solid rgba(125,255,168,.5);
-    box-shadow:0 0 44px rgba(125,255,168,.16), inset 0 0 60px rgba(125,255,168,.05);
+    border:1px solid rgba(44,199,154,.5);
+    box-shadow:0 0 44px rgba(44,199,154,.16), inset 0 0 60px rgba(44,199,154,.05);
     display:flex;align-items:center;justify-content:center;text-align:center;
     transition:box-shadow .3s}
-  #lens:active{box-shadow:0 0 60px rgba(125,255,168,.3), inset 0 0 60px rgba(125,255,168,.1)}
+  #lens:active{box-shadow:0 0 60px rgba(44,199,154,.3), inset 0 0 60px rgba(44,199,154,.1)}
   /* the glass itself: a 256px round display, scaled — the device card renderer
      (renderer.lua) draws HERE, over the camera, inside the circle */
   #glass{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;
@@ -545,45 +657,45 @@ _PAGE = r"""<!doctype html>
   #glass.on{opacity:1}
   /* a sweeping ring while a look is in flight — the "it's thinking" tell */
   #lens.scan{animation:pulse 1.1s ease-in-out infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(125,255,168,.14),inset 0 0 60px rgba(125,255,168,.05)}
-    50%{box-shadow:0 0 72px rgba(125,255,168,.42),inset 0 0 70px rgba(125,255,168,.12)}}
-  #hud{white-space:pre;letter-spacing:.05em;font-size:clamp(13px,2.6vmin,19px);
-    text-shadow:0 0 10px rgba(125,255,168,.6);opacity:0;transition:opacity .28s;
+  @keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(44,199,154,.14),inset 0 0 60px rgba(44,199,154,.05)}
+    50%{box-shadow:0 0 72px rgba(44,199,154,.42),inset 0 0 70px rgba(44,199,154,.12)}}
+  #hud{white-space:pre;letter-spacing:.03em;font-size:clamp(13px,2.6vmin,19px);
+    color:var(--ink);text-shadow:0 0 10px rgba(0,255,170,.45);opacity:0;transition:opacity .28s;
     max-width:82%;padding:10px 14px;border-radius:10px;background:var(--plate);
     backdrop-filter:blur(3px)}
   #hud:empty{padding:0;background:none}
   #hud.on{opacity:1}
   #hint{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
-    transform:translateX(-50%);color:var(--phos-dim);font-size:12px;
+    transform:translateX(-50%);color:var(--teal-dim);font-size:12px;
     letter-spacing:.1em;text-transform:uppercase;transition:opacity .3s;text-align:center}
   /* the rich object panel — provider rows the glass would draw */
   #panel{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 92px);
     transform:translateX(-50%);width:min(88vw,440px);opacity:0;pointer-events:none;
-    transition:opacity .3s;background:var(--plate);border:1px solid rgba(125,255,168,.28);
+    transition:opacity .3s;background:var(--plate);border:1px solid rgba(44,199,154,.28);
     border-radius:12px;padding:12px 14px;backdrop-filter:blur(4px)}
   #panel.on{opacity:1}
-  #panel .ptitle{font-size:15px;color:var(--phos);letter-spacing:.02em;margin-bottom:6px}
+  #panel .ptitle{font-size:15px;color:var(--teal);letter-spacing:.02em;margin-bottom:6px}
   #panel .prow{display:flex;justify-content:space-between;gap:10px;font-size:13px;
-    color:#DDEFE4;padding:3px 0;border-top:1px solid rgba(125,255,168,.1)}
-  #panel .prow .psrc{color:var(--phos-dim);font-size:11px;text-transform:uppercase;
+    color:#ECF0F1;padding:3px 0;border-top:1px solid rgba(44,199,154,.1)}
+  #panel .prow .psrc{color:var(--teal-dim);font-size:11px;text-transform:uppercase;
     letter-spacing:.08em;white-space:nowrap}
-  #panel .pfoot{margin-top:6px;color:var(--phos-dim);font-size:11px;letter-spacing:.06em}
+  #panel .pfoot{margin-top:6px;color:var(--teal-dim);font-size:11px;letter-spacing:.06em}
   /* status chips */
   #chips{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:0;right:0;
     display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
-  .chip{border:1px solid rgba(125,255,168,.35);border-radius:3px;padding:3px 9px;
-    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--phos-dim);
+  .chip{border:1px solid rgba(44,199,154,.35);border-radius:3px;padding:3px 9px;
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dim);
     background:rgba(5,8,7,.6);backdrop-filter:blur(2px);cursor:default}
-  .chip b{color:var(--phos);font-weight:normal}
+  .chip b{color:var(--teal);font-weight:normal}
   .chip.warn{color:var(--amber);border-color:rgba(255,196,107,.45)}
   #veilbtn,#livebtn{cursor:pointer;user-select:none}
   #veilbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
-  #livebtn.on b{color:var(--phos)}
+  #livebtn.on b{color:var(--teal)}
   /* right-edge camera controls: torch + zoom (shown only when supported) */
   #controls{position:fixed;right:calc(env(safe-area-inset-right,0px) + 10px);top:50%;
     transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;align-items:center}
   #controls button{width:46px;height:46px;border-radius:50%;font-size:18px;
-    background:rgba(5,8,7,.66);border:1px solid rgba(125,255,168,.4);color:var(--phos);
+    background:rgba(5,8,7,.66);border:1px solid rgba(44,199,154,.4);color:var(--teal);
     backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;cursor:pointer}
   #controls button[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
   #zoomwrap{display:flex;flex-direction:column;gap:6px;align-items:center}
@@ -591,13 +703,13 @@ _PAGE = r"""<!doctype html>
   #bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;
     padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
     background:linear-gradient(transparent, rgba(5,8,7,.9) 42%)}
-  #q{flex:1;background:rgba(5,8,7,.82);border:1px solid rgba(125,255,168,.4);
-    border-radius:3px;color:var(--phos);padding:11px 12px;font:inherit;min-width:0}
-  #q::placeholder{color:var(--phos-dim)}
-  #q:focus{outline:none;border-color:var(--phos)}
-  button{background:rgba(5,8,7,.8);border:1px solid rgba(125,255,168,.5);
-    border-radius:3px;color:var(--phos);font:inherit;padding:11px 14px;cursor:pointer}
-  button:active{background:rgba(125,255,168,.15)}
+  #q{flex:1;background:rgba(5,8,7,.82);border:1px solid rgba(44,199,154,.4);
+    border-radius:3px;color:var(--teal);padding:11px 12px;font:inherit;min-width:0}
+  #q::placeholder{color:var(--teal-dim)}
+  #q:focus{outline:none;border-color:var(--teal)}
+  button{background:rgba(5,8,7,.8);border:1px solid rgba(44,199,154,.5);
+    border-radius:3px;color:var(--teal);font:inherit;padding:11px 14px;cursor:pointer}
+  button:active{background:rgba(44,199,154,.15)}
   #mic[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
   /* full-screen notices (no camera / no token / no link) */
   .notice{position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);
@@ -605,18 +717,18 @@ _PAGE = r"""<!doctype html>
     background:rgba(5,8,7,.94);color:var(--amber);padding:16px 18px;font-size:13px;z-index:9}
   .notice h2{font-size:13px;letter-spacing:.14em;margin-bottom:8px}
   .notice p{color:#CDBB96;margin-top:6px}
-  .notice code{color:var(--phos)}
+  .notice code{color:var(--teal)}
   .notice .act{margin-top:12px;display:flex;gap:8px}
   .notice .act button{font:12px inherit;letter-spacing:.06em;padding:8px 14px;border-radius:4px}
   .codein{display:flex;gap:8px;margin-top:8px}
   .codein input{flex:1;min-width:0;font:18px ui-monospace,Menlo,monospace;letter-spacing:3px;
-    text-align:center;padding:8px;border:1px solid var(--phos-dim);border-radius:4px;
-    background:#05100D;color:var(--phos)}
+    text-align:center;padding:8px;border:1px solid var(--teal-dim);border-radius:4px;
+    background:#0E1416;color:var(--teal)}
   .codein button{font:13px inherit;letter-spacing:.06em;padding:0 14px;border-radius:4px;
-    border:1px solid var(--phos);background:transparent;color:var(--phos);cursor:pointer}
+    border:1px solid var(--teal);background:transparent;color:var(--teal);cursor:pointer}
   .pairmsg{min-height:1.1em;color:var(--amber)}
   #privacy{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);
-    left:0;right:0;text-align:center;color:var(--phos-dim);font-size:10.5px;
+    left:0;right:0;text-align:center;color:var(--teal-dim);font-size:10.5px;
     letter-spacing:.06em;padding:0 16px;pointer-events:none;transition:opacity .3s}
   #privacy.hide{opacity:0}
   /* live captions — the room's speech on the glass (the glasses' Live Caption
@@ -627,33 +739,33 @@ _PAGE = r"""<!doctype html>
     display:flex;justify-content:center;padding:0 14px;pointer-events:none;
     opacity:0;transition:opacity .3s;z-index:3}
   #captions.on{opacity:1}
-  #captions .cc{max-width:min(92vw,560px);background:rgba(5,10,8,.76);
-    border-radius:10px;padding:7px 13px;font:14px/1.45 ui-monospace,Menlo,monospace;
-    color:#EAF6EE;text-align:center;backdrop-filter:blur(3px);white-space:pre-wrap}
-  #captions .cc .iim{color:var(--phos-dim)}
-  #captions .cc .csrc{display:block;font-size:9.5px;color:var(--phos-dim);
+  #captions .cc{max-width:min(92vw,560px);background:rgba(6,10,11,.76);
+    border-radius:10px;padding:7px 13px;font:15px/1.5 inherit;
+    color:var(--ink);text-align:center;backdrop-filter:blur(3px);white-space:pre-wrap}
+  #captions .cc .iim{color:var(--teal-dim)}
+  #captions .cc .csrc{display:block;font-size:9.5px;color:var(--teal-dim);
     letter-spacing:.11em;text-transform:uppercase;margin-top:4px}
   /* Juno's first-run tour: anchored coach marks over the REAL controls.
      The card owns pointer events; the spotlight ring never does — the lens,
      veil, and ask bar stay clickable throughout (the e2e clicks them). */
   #tour{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .4s}
   #tour.on{opacity:1}
-  #tourring{position:fixed;border:2px solid rgba(125,255,168,.85);border-radius:14px;
-    pointer-events:none;box-shadow:0 0 0 6000px rgba(3,6,5,.45), 0 0 24px rgba(125,255,168,.5);
+  #tourring{position:fixed;border:2px solid rgba(44,199,154,.85);border-radius:14px;
+    pointer-events:none;box-shadow:0 0 0 6000px rgba(3,6,5,.45), 0 0 24px rgba(44,199,154,.5);
     transition:all .35s ease;display:none}
   #tourcard{position:fixed;left:50%;transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom,0px) + 96px);width:min(88vw,420px);
-    pointer-events:auto;background:rgba(5,10,8,.94);border:1px solid rgba(125,255,168,.4);
+    pointer-events:auto;background:rgba(5,10,8,.94);border:1px solid rgba(44,199,154,.4);
     border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;
     backdrop-filter:blur(5px)}
   #tourcard img{width:44px;height:44px;image-rendering:pixelated;flex:none;margin-top:2px}
   #tourcard .tourbody{flex:1}
-  #tourtext b{color:var(--phos);font-weight:normal;display:block;font-size:13px;
+  #tourtext b{color:var(--teal);font-weight:normal;display:block;font-size:13px;
     letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-  #tourtext{font-size:13px;line-height:1.5;color:#DDEFE4}
+  #tourtext{font-size:13px;line-height:1.5;color:#ECF0F1}
   #touracts{display:flex;gap:8px;margin-top:9px}
   #touracts button{padding:6px 14px;border-radius:16px;font-size:12px}
-  #touracts .ghost{border-color:rgba(125,255,168,.25);color:var(--phos-dim)}
+  #touracts .ghost{border-color:rgba(44,199,154,.25);color:var(--teal-dim)}
   /* confluence: the chip lives only in dream mode; the code card is the one
      piece of chrome — the three words two humans speak to each other */
   #confbtn{display:none}
@@ -661,35 +773,47 @@ _PAGE = r"""<!doctype html>
   #confbtn.on{color:var(--amber);border-color:rgba(255,196,107,.6)}
   #confcard{position:fixed;left:50%;top:24%;transform:translateX(-50%);
     width:min(86vw,360px);z-index:8;background:rgba(5,10,8,.95);
-    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    border:1px solid rgba(44,199,154,.4);border-radius:14px;padding:14px 16px;
     backdrop-filter:blur(5px);display:none}
   #confcard.on{display:block}
   /* the glance chooser — a glass dialog of one-tap lens options */
   #chooser{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
     transform:translateX(-50%);z-index:9;width:min(84vw,320px);display:none;
-    background:rgba(5,10,8,.86);border:1px solid rgba(125,255,168,.35);
+    background:rgba(5,10,8,.86);border:1px solid rgba(44,199,154,.35);
     border-radius:16px;padding:12px;backdrop-filter:blur(6px);text-align:center;
-    box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(125,255,168,.12);
+    box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 30px rgba(44,199,154,.12);
     animation:chooserIn .22s ease-out both}
   #chooser.show{display:block}
+  /* The "or …" aside on a learned fire. Quieter than the chooser on purpose: the
+     arbiter already answered, this is only the door it left open. */
+  #alts{position:fixed;left:50%;top:calc(46% + var(--lens)/2 + 14px);
+    transform:translateX(-50%);z-index:8;display:none;gap:8px;
+    justify-content:center;flex-wrap:wrap;width:min(84vw,320px)}
+  #alts.show{display:flex}
+  .altbtn{appearance:none;border:1px solid rgba(44,199,154,.28);
+    background:rgba(5,10,8,.72);color:var(--ink2);font-size:12.5px;font-weight:600;
+    padding:7px 13px;border-radius:10px;cursor:pointer;backdrop-filter:blur(4px);
+    transition:color .15s,border-color .15s}
+  .altbtn:hover,.altbtn:focus{color:var(--ink);border-color:rgba(44,199,154,.6)}
+  .altbtn:active{transform:scale(.96)}
   @keyframes chooserIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}
     to{opacity:1;transform:translateX(-50%) translateY(0)}}
   #chooserq{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--phos-dim);margin-bottom:9px}
+    color:var(--teal-dim);margin-bottom:9px}
   #chooseropts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-  .choosebtn{appearance:none;border:1px solid rgba(125,255,168,.45);
-    background:rgba(125,255,168,.08);color:#EAFBF0;font-size:13.5px;font-weight:600;
+  .choosebtn{appearance:none;border:1px solid rgba(44,199,154,.45);
+    background:rgba(44,199,154,.08);color:#ECF0F1;font-size:13.5px;font-weight:600;
     padding:9px 15px;border-radius:11px;cursor:pointer;transition:transform .1s,background .15s}
-  .choosebtn:hover,.choosebtn:focus{background:rgba(125,255,168,.18);transform:translateY(-1px)}
+  .choosebtn:hover,.choosebtn:focus{background:rgba(44,199,154,.18);transform:translateY(-1px)}
   .choosebtn:active{transform:scale(.96)}
-  #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+  #confcard h3{font-size:12px;letter-spacing:.14em;color:var(--teal);
     text-transform:uppercase;margin-bottom:8px}
-  #confcard p{font-size:12.5px;color:#DDEFE4;line-height:1.5;margin:6px 0}
+  #confcard p{font-size:12.5px;color:#ECF0F1;line-height:1.5;margin:6px 0}
   #confcard .code{font-size:20px;letter-spacing:2px;color:var(--amber);
     text-align:center;margin:10px 0;user-select:all}
   #confcard input{width:100%;font:15px ui-monospace,Menlo,monospace;
     letter-spacing:1px;text-align:center;padding:9px;border-radius:8px;
-    border:1px solid var(--phos-dim);background:#05100D;color:var(--phos)}
+    border:1px solid var(--teal-dim);background:#0E1416;color:var(--teal)}
   #confcard .acts{display:flex;gap:8px;margin-top:11px}
   #confcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
   #confmsg{min-height:1.1em;color:var(--amber);font-size:12px;margin-top:6px}
@@ -698,35 +822,35 @@ _PAGE = r"""<!doctype html>
      THIS browser re-checked the Ed25519 chain and it held. */
   #rcptcard{position:fixed;left:50%;top:16%;transform:translateX(-50%);
     width:min(90vw,400px);max-height:74vh;z-index:8;background:rgba(5,10,8,.96);
-    border:1px solid rgba(125,255,168,.4);border-radius:14px;padding:14px 16px;
+    border:1px solid rgba(44,199,154,.4);border-radius:14px;padding:14px 16px;
     backdrop-filter:blur(5px);display:none;flex-direction:column}
   #rcptcard.on{display:flex}
-  #rcptcard h3{font-size:12px;letter-spacing:.14em;color:var(--phos);
+  #rcptcard h3{font-size:12px;letter-spacing:.14em;color:var(--teal);
     text-transform:uppercase;margin-bottom:8px}
-  #rcptverdict{border-left:3px solid var(--phos-dim);padding-left:9px;margin:2px 0 8px}
-  #rcptverdict.ok{border-left-color:var(--phos)}
+  #rcptverdict{border-left:3px solid var(--teal-dim);padding-left:9px;margin:2px 0 8px}
+  #rcptverdict.ok{border-left-color:var(--teal)}
   #rcptverdict.bad{border-left-color:var(--amber)}
   #rcpthead{font-size:13px;color:#EAF6EE;line-height:1.4}
-  #rcptsub{font-size:11.5px;color:var(--phos-dim);line-height:1.45;margin-top:3px}
+  #rcptsub{font-size:11.5px;color:var(--teal-dim);line-height:1.45;margin-top:3px}
   #rcptlist{list-style:none;overflow-y:auto;margin:4px 0 2px;
     border-top:1px solid rgba(42,60,68,.5)}
   #rcptlist li{display:flex;gap:8px;align-items:baseline;padding:6px 0;
     border-bottom:1px solid rgba(42,60,68,.35)}
   #rcptlist li.bad{border-left:2px solid var(--amber);padding-left:7px}
   #rcptlist .rk{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--phos-dim);flex:none;width:60px}
-  #rcptlist .rt{flex:1;min-width:0;font-size:12px;color:#DDEFE4;
+    color:var(--teal-dim);flex:none;width:60px}
+  #rcptlist .rt{flex:1;min-width:0;font-size:12px;color:#ECF0F1;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #rcptlist .rs{flex:none;font:10px ui-monospace,Menlo,monospace;color:var(--phos-dim)}
+  #rcptlist .rs{flex:none;font:10px ui-monospace,Menlo,monospace;color:var(--teal-dim)}
   #rcptcard .acts{display:flex;gap:8px;margin-top:10px}
   #rcptcard .acts button{flex:1;padding:8px 0;border-radius:16px;font-size:12px}
-  #rcptbtn.on{color:var(--phos);border-color:rgba(125,255,168,.6)}
+  #rcptbtn.on{color:var(--teal);border-color:rgba(44,199,154,.6)}
   /* short viewports (landscape phones, split view): the card moves to the TOP
      so it can never sit over the lens it is pointing at (refute 2026-07-21) */
   @media (max-height: 540px){
     #tourcard{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}
   }
-  #tourdots{color:var(--phos-dim);font-size:11px;margin-left:auto;align-self:center}
+  #tourdots{color:var(--teal-dim);font-size:11px;margin-left:auto;align-self:center}
   @media (prefers-reduced-motion: reduce){ #hud,#panel,#tour,#tourring{transition:none} #lens.scan,#chooser{animation:none} }
 </style>
 </head>
@@ -750,22 +874,15 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="ccbtn" role="switch" aria-checked="false" tabindex="0" title="Live captions (your phone's speech service)" hidden>CC</span>
   <span class="chip" id="hearbtn" role="switch" aria-checked="false" tabindex="0" title="Let the Brain hear and remember — the phone is the mic, transcribed on-device">&#127908; <b id="hearst">listen</b></span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
+  <span class="chip" id="speakbtn" role="switch" aria-checked="false" tabindex="0" title="Let Juno speak her replies aloud (on-device voice; needs a voice model)">&#128266; <b id="speakst">voice</b></span>
+  <span class="chip" id="testbtn" role="button" tabindex="0" title="Push a clearly-labelled SELF-TEST card, to prove the ambient channel works">&#9889; test</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
-  <label class="chip" id="lenschip" title="Auto picks the lens for you — or force one">&#128269;
-    <select id="lenssel" aria-label="Lens">
-      <option value="">Auto</option>
-      <option value="doc">Read text</option>
-      <option value="math">Math &rarr; LaTeX</option>
-      <option value="depth">Distance</option>
-      <option value="find">Find&hellip;</option>
-      <option value="segment">Segment</option>
-      <option value="sky">Name the sky</option>
-    </select></label>
 </div>
 <div id="chooser" role="dialog" aria-label="Pick a lens">
   <div id="chooserq">What do you want?</div>
   <div id="chooseropts"></div>
 </div>
+<div id="alts" aria-label="Other lenses for this scene"></div>
 <div id="controls">
   <button id="torch" type="button" hidden aria-pressed="false" aria-label="Flashlight" title="Flashlight">&#128161;</button>
   <div id="zoomwrap" hidden>
@@ -942,7 +1059,9 @@ function glassCtx(){
   return ctx;
 }
 function gtext(ctx, str, cx, y, color, size){
-  ctx.font = GT[size || "md"] + "px ui-monospace, Menlo, monospace";
+  /* the device face is DejaVuSans-Bold (typography.lua) — a clean weighted sans,
+     never a monospace terminal font. Mirror it on the glass card. */
+  ctx.font = "600 " + (GT[size || "md"]) + 'px -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif';
   ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(str, cx, y);
 }
@@ -1146,6 +1265,41 @@ function glassSkyCard(j){                           /* Sky -> a named star map *
 /* ---- ambient cards the Brain PUSHES (over the /live/events channel) -------
    Not a reply to a look — the Brain surfaces these on its own: a sound-safety
    tap, the morning brief, a memory nudge. Same glass, same primitives. */
+function glassDossierCard(c){                        /* YOU KNOW — someone you introduced */
+  const ctx = glassCtx(); gback(ctx);
+  /* the person as a lit field (the device's social material family) */
+  ctx.beginPath(); ctx.arc(128, 112, 62, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.07)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 7;
+  garc(ctx, 128, 84, 15, 200, 340, GP.memory_trace);   /* a shoulders-and-head cue */
+  ctx.beginPath(); ctx.arc(128, 72, 7, 0, 2 * Math.PI);
+  ctx.strokeStyle = GP.memory_trace; ctx.lineWidth = 1.4; ctx.stroke(); ctx.restore();
+  gtext(ctx, c.eyebrow || "YOU KNOW", 128, 48, GP.text_ghost, "sm");
+  gtext(ctx, String(c.person || c.primary || "").slice(0, 22), 128, 112, GP.text_primary, "lg");
+  if (c.headline) gtext(ctx, gwrap(String(c.headline), 28)[0] || "", 128, 134, GP.memory_trace, "sm");
+  if (c.detail) gtext(ctx, gwrap(String(c.detail), 30)[0] || "", 128, 150, GP.text_secondary, "sm");
+  const notes = Array.isArray(c.notes) ? c.notes.slice(0, 2) : [];
+  notes.forEach((n, i) => gtext(ctx, gwrap(String(n), 32)[0] || "", 128, 168 + i * 15, GP.text_secondary, "sm"));
+  const debts = Array.isArray(c.debts) ? c.debts.slice(0, 1) : [];
+  debts.forEach(d => gtext(ctx, String(d).slice(0, 28), 128, 168 + notes.length * 15 + 2, GP.confidence_low, "sm"));
+  gend(c.dismiss_ms || 7000);
+}
+function glassTasteCard(j){                          /* TasteLens — the pick + the why */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 116, 66, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.06)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "BEST PICK", 128, 52, GP.text_ghost, "sm");
+  const pick = String(j.primary || "").trim();
+  if (pick) gtext(ctx, gwrap(pick, 18)[0] || pick, 128, 92, GP.text_primary, "lg");
+  else gtext(ctx, "nothing to compare", 128, 108, GP.text_secondary, "sm");
+  const why = String(j.detail || "").trim();
+  if (why) gtext(ctx, gwrap(why, 28)[0] || "", 128, 116, GP.memory_trace, "sm");
+  const items = Array.isArray(j.items) ? j.items.slice(0, 3) : [];
+  items.forEach((it, i) => gtext(ctx, gwrap(String(it), 30)[0] || "", 128, 146 + i * 16, GP.text_secondary, "sm"));
+  gend(j.dismiss_ms || 6000);
+}
 function glassHarkCard(c){                          /* Listen! — a sound-safety tap */
   const ctx = glassCtx(); gback(ctx);
   const urgent = c.importance === "urgent";
@@ -1564,7 +1718,7 @@ function drawConfluence(ctx){
     const a = 0.10 + (confState.tg / 100) * 0.25;
     ctx.save();
     ctx.beginPath(); ctx.arc(128, 128, 120, 0, 2 * Math.PI);
-    let col = "rgba(125,255,168," + a.toFixed(3) + ")";
+    let col = "rgba(44,199,154," + a.toFixed(3) + ")";
     if (confBlend) {
       const skySlot = confBlend.find(c => (c.idx | 0) === 1);
       if (skySlot) col = slotRgb(skySlot);
@@ -1734,7 +1888,8 @@ function setVeil(on, o){
   $("veilst").textContent = on ? "on" : "off";
   $("veilbtn").classList.toggle("on", on);
   $("veilbtn").setAttribute("aria-checked", String(on));
-  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser();
+  if (on) { renderPanel(null); clearOverlayOnce(); glassClear(); hideChooser(); hideAlts();
+            GEO = null; _geoAsked = false;   /* the shield drops your position too */
             if (hearOn) _hearClose();     /* veil deafens the ear (mic released, intent kept) */
             if (dreamOn) exitDream(); }   /* wipe live surfaces; veil wakes the
                                              dream so the mic is RELEASED, not
@@ -1811,6 +1966,15 @@ function initControls(){
     const s = $("cam").srcObject;
     track = s && s.getVideoTracks ? s.getVideoTracks()[0] : null;
     caps = (track && track.getCapabilities) ? (track.getCapabilities() || {}) : {};
+    /* Which camera did we actually GET? facingMode is requested as an ideal, so a
+       device with no rear camera silently hands over the selfie one — and every
+       elevation the posture cue derives would then be inverted (flat on a table
+       would read "pointed at the ceiling"). Confirm it, and if we cannot, report no
+       posture rather than a confident opposite. */
+    try {
+      const fm = (track && track.getSettings) ? (track.getSettings().facingMode || "") : "";
+      REARCAM = fm ? (fm === "environment") : null;
+    } catch (e) { REARCAM = null; }
     if (caps.torch) $("torch").hidden = false;
     if (caps.zoom) {
       $("zoomwrap").hidden = false;
@@ -1876,12 +2040,48 @@ async function fetchJSON(url, opts, timeoutMs){
 let noHitStreak = 0;
 /* Render a frontier-lens result (math/doc/depth/find/segment/dream) on the HUD.
    Kept separate from renderResult so the default object flow is untouched. */
+/* Which patch of sky is above YOU depends on where you are, so the sky lens needs
+   a coarse latitude/longitude — and it had no way to get one: the page never asked,
+   so every sky look ended in "needs your location" no matter what. Asked for only
+   at the moment a lens actually needs it (the browser's own permission dialog IS
+   the consent step, and it never appears unprompted), kept for the session only,
+   and used entirely on your own Brain — the sky is computed locally from an
+   ephemeris, so the coordinates go from your phone to your machine and stop. */
+let GEO = null, _geoAsked = false;
+function askGeoOnce(){
+  if (GEO) { showHud("looking again with your location", {ms:1600}); lookNow(false); return; }
+  if (_geoAsked || veil || !navigator.geolocation) {
+    showHud("the sky lens needs your location", {ms:2800}); return;
+  }
+  _geoAsked = true;
+  showHud("the sky depends on where you are — allow location to name it", {ms:3200});
+  navigator.geolocation.getCurrentPosition(pos => {
+    /* Re-check the shield HERE, not only when we asked: the permission dialog can
+       sit open for a minute, and a grant that lands after the veil went up must
+       not capture a position. */
+    if (!pos || !pos.coords || veil) return;
+    /* One decimal place. Which constellations are overhead changes over degrees,
+       not over metres, so 4 dp (~11m) was sending the wearer's street for no gain. */
+    GEO = {lat: Math.round(pos.coords.latitude * 10) / 10,
+           lon: Math.round(pos.coords.longitude * 10) / 10};
+    showHud("got it — looking again", {ms:1600});
+    lookNow(false);
+  }, () => {
+    showHud("no location — the sky lens can't name what's above you", {ms:3200});
+  }, {enableHighAccuracy: false, timeout: 8000, maximumAge: 600000});
+}
 function renderLens(j){
   if (dreamOn) return;
   if (!j) { showHud("look failed", {ms:2600}); return; }
   if (j.veiled) { showHud("the veil is down — turn it off to look closer", {ms:2800}); return; }
   if (j.need) { showHud("install the " + (j.pack || "required") + " pack for this lens", {ms:3600}); return; }
-  if (j.need_location) { showHud("the sky lens needs your location", {ms:2800}); return; }
+  if (j.need_location) { askGeoOnce(); return; }
+  /* A lens that RAN and honestly found nothing carries `lines`. Every renderer
+     below dispatches on j.lens and reads found/closeness/line/regions — none of
+     them reads `lines` — so the miss was drawn as a successful card: the sky lens
+     said "the sky, named" and segment said "0 regions". Say the actual sentence,
+     which also carries the wearer's own noun ("no keys in view"). */
+  if (j.lines && j.lines.length) { showHud(j.lines, {ms:3600}); return; }
   /* a lens result draws its own glass card on the circle — the flat plate steps
      aside, exactly like the object card does (renderResult). */
   $("hud").classList.remove("on");
@@ -1905,13 +2105,47 @@ function renderGlance(j){
   if (j.glance === "offer") { showChooser(j.card, j.scene); return; }
   if (j.glance === "fire") {
     const c = j.card || {};
+    /* the arbiter fired a lens whose pack is missing: the card self-describes
+       ({need:…}) — surface "install the pack" honestly instead of silently
+       dropping to object-naming (audit 2026-07-23). renderLens owns that copy. */
+    if (c.need || c.need_location || c.ok === false) { renderLens(c); return; }
     $("hud").classList.remove("on");
-    if (c.type === "ObjectPanelCard") glassObjectCard(c);   /* translate / taste */
+    if (c.type === "ObjectPanelCard") glassObjectCard(c);   /* translate */
+    else if (c.type === "TasteCard") glassTasteCard(c);      /* shelf/menu pick */
     else if (c.lens === "math") glassMathCard(c);
     else if (c.lens === "doc") glassDocCard(c);
     else { renderLens(c); return; }
     blip();
+    showAlts(j.alts, j.scene);
   }
+}
+/* When a LEARNED habit fires without asking, the alternative it declined to ask
+   about rides along — one small chip, no dialog. "It stops asking you" is the
+   feature; making the other lens unreachable was a bug, and on a scene the arbiter
+   had learned the chooser was the only route to it. Tapping the chip goes through
+   pickLens, so it runs that lens AND teaches the arbiter the correction. */
+function showAlts(alts, scene){
+  const row = $("alts"); if (!row) return;
+  row.textContent = "";
+  if (!alts || !alts.length || veil) { row.classList.remove("show"); return; }
+  alts.slice(0, 2).forEach(o => {
+    const b = document.createElement("button");
+    b.className = "altbtn";
+    b.textContent = "or " + (o.label || o.lens);
+    b.onclick = ev => {
+      ev.stopPropagation(); hideAlts();
+      const key = (o.action in LENS_FOR_ACTION) ? LENS_FOR_ACTION[o.action] : o.action;
+      pickLens(key, scene || "");
+    };
+    row.appendChild(b);
+  });
+  row.classList.add("show");
+  clearTimeout(window._altsT);
+  window._altsT = setTimeout(hideAlts, 7000);
+}
+function hideAlts(){
+  const r = $("alts"); if (r) { r.classList.remove("show"); r.textContent = ""; }
+  clearTimeout(window._altsT);
 }
 /* the glance chooser — a small glass dialog of 2–3 one-tap lens options, shown
    only when the look is genuinely ambiguous (e.g. text you could read OR solve).
@@ -1934,34 +2168,28 @@ function showChooser(card, scene){
     };
     wrap.appendChild(b);
   });
+  hideAlts();                               /* never both at once */
   box.classList.add("show");
   clearTimeout(window._chooserT);
   window._chooserT = setTimeout(hideChooser, (card && card.dismiss_ms) || 6000);
 }
 function hideChooser(){ const b = $("chooser"); if (b) b.classList.remove("show"); clearTimeout(window._chooserT); }
 function pickLens(lensKey, scene){ lookNow(false, lensKey || "", scene || ""); }
-/* choosing the Find lens asks once for what to look for; the Sky lens needs a
-   one-time location grant (used only for the local ephemeris — never sent up) */
-if ($("lenssel")) $("lenssel").onchange = () => {
-  const v = $("lenssel").value;
-  if (v === "find") {
-    const t = prompt("Find what? (comma-separated, e.g. my keys, a fire extinguisher)");
-    window._findTerms = (t || "").trim();
-    if (!window._findTerms) $("lenssel").value = "";
-  } else if (v === "sky" && !window._geo) {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        p => { window._geo = {lat: p.coords.latitude, lon: p.coords.longitude}; showHud("sky lens ready — tap to name what's above", {ms:2600}); },
-        () => { showHud("the sky lens needs location access", {ms:2800}); $("lenssel").value = ""; });
-    } else { showHud("this browser can't share location for the sky lens", {ms:2800}); $("lenssel").value = ""; }
-  }
-};
 function renderResult(j, auto){
   if (dreamOn) return;             /* a look in flight when dream began must not
                                       stomp the shared glass canvas, then hide it
                                       3.5s later via glassTimer (refute F10) */
   if (!j || j.ok === false) {
     if (!auto) showHud(j && j.reason ? j.reason : "look failed", {ms:3000});
+    return;
+  }
+  /* A DEFERRAL (a person in frame) carries honest lines and NO label. Without
+     this it fell to the miss branch below and said "point at an object · move
+     closer" — telling the wearer to reframe, as if the look had failed, which is
+     exactly what the deferral must never imply (audit 2026-07-23, HIGH). */
+  if (!j.label && j.lines && j.lines.length) {
+    noHitStreak = 0; renderPanel(null);
+    showHud(j.lines, {ms: auto ? 2600 : 4600});
     return;
   }
   if (j.label) {
@@ -1991,7 +2219,7 @@ async function lookNow(auto, forceLens, forceScene){
   if (veil) { if (!auto) showHud("the veil is down", {ms:2200}); return; }
   if (!camReady()) { if (!auto) showHud("camera not ready…", {ms:1800}); return; }
   if (looking) return;
-  if (!auto) hideChooser();                 /* a fresh look dismisses a stale chooser */
+  if (!auto) { hideChooser(); hideAlts(); }  /* a fresh look drops stale offers */
   looking = true; scan(true);
   if (!auto) showHud("looking…", {persist:true});
   try {
@@ -2008,25 +2236,46 @@ async function lookNow(auto, forceLens, forceScene){
     if (auto && (detectorActive || !liveOn || document.hidden || dreamOn || veil)) return;
     const t0 = performance.now();
     /* auto (ambient) frames stay local-only + leave no trace server-side; a
-       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger).
-       A deliberate tap with a frontier lens selected (Read/Math/Depth/…) routes
-       through ?lens=… instead of object recognition — ambient stays object-only. */
-    /* the lens: a forced pick (from the chooser), else the picker's value.
-       Empty = Auto — a deliberate tap lets the glance arbiter decide the lens
-       from what's in view; ambient always stays plain object recognition. */
-    const sel = (forceLens != null) ? forceLens
-              : ((!auto && $("lenssel")) ? ($("lenssel").value || "") : "");
+       deliberate tap escalates to the full lens (VLM/plugins/memory/ledger),
+       where the glance arbiter reads the scene and fires the right lens on its
+       own — no mode is ever picked by hand — while ambient stays object-only. */
+    /* The lens is NEVER chosen by hand — DreamLayer adapts. A plain look lets the
+       glance arbiter read the scene and fire the right lens on its own (or offer a
+       one-tap chooser when it's genuinely ambiguous — text you could read OR
+       solve). The ONLY non-empty `sel` is a lens the arbiter's OWN chooser posted
+       back, which also teaches it (scene→lens) so it leans your way next time. */
+    const sel = (forceLens != null) ? forceLens : "";
+    const q = new URLSearchParams();
+    /* the DETECTOR's cues, fresh only — a 4s-old read describes a scene you left */
+    if (LASTDETS && (performance.now() - LASTDETS.ts) < 4000) {
+      if (LASTDETS.n) q.set("ndet", String(LASTDETS.n));
+      if (LASTDETS.dup) q.set("dup", "1");   /* several of the same thing = a shelf */
+      if (LASTDETS.face) q.set("face", "1");
+    }
+    /* Posture and place are NOT detector cues and must not share its gate. They
+       used to sit inside the block above, so on a phone with no MediaPipe — or in
+       the seconds before it warms up — the whole Tier-2 tier went silent even
+       though the sensor was reporting fine. */
+    if (TILTOK) q.set("tilt", TILT.toFixed(0));     /* never fake a posture */
+    const dw = dwellMs();
+    if (dw > 250) q.set("dwell", Math.min(30000, dw).toFixed(0));
+    /* Never on an AMBIENT frame. The passive loop egresses nothing and leaves no
+       trace; attaching a position to it would have made the one surface that is
+       meant to be silent the one that reports where you are, several times a
+       minute. A deliberate look is the only thing that carries it. */
+    if (GEO && !auto) { q.set("lat", GEO.lat.toFixed(1)); q.set("lon", GEO.lon.toFixed(1)); }
+    const cue = q.toString();
     let url = auto ? "/dreamlayer/live/look?ambient=1" : "/dreamlayer/live/look";
+    if (cue) url += (url.indexOf("?") >= 0 ? "&" : "?") + cue;
     if (sel) {
       const qp = new URLSearchParams({lens: sel});
-      if (sel === "find" && window._findTerms) qp.set("terms", window._findTerms);
-      if (sel === "sky" && window._geo) { qp.set("lat", window._geo.lat); qp.set("lon", window._geo.lon); }
       if (forceScene) qp.set("scene", forceScene);   /* teach the arbiter this pick */
-      url = "/dreamlayer/live/look?" + qp.toString();
+      url = "/dreamlayer/live/look?" + qp.toString() + (cue ? "&" + cue : "");
     }
     const rsp = await fetchJSON(url,
       {method: "POST", headers: HDRS(), body: blob}, auto ? 6000 : 9000);
     setLink(rsp.ok, performance.now() - t0);
+    if (rsp.status === 421) { hostRefused(); return; }
     if (rsp.status === 401) { needsPairing(); return; }
     if (sel) renderLens(rsp.json);                         /* manual / chosen lens */
     else if (rsp.json && rsp.json.glance) renderGlance(rsp.json);  /* auto: fire / chooser */
@@ -2041,6 +2290,7 @@ async function lookNow(auto, forceLens, forceScene){
    single look waits one double-tap window so the gestures never collide. */
 let _tapT = 0, _tapTimer = null;
 $("lens").onclick = () => {
+  startTilt();                      /* iOS: a gesture is required to grant this */
   const now = performance.now();
   if (now - _tapT < 300) {
     clearTimeout(_tapTimer); _tapT = 0;
@@ -2059,6 +2309,62 @@ $("lens").onkeydown = e => {
    detector isn't available. When the detector IS running (detectorActive), the
    browser recognizes locally every frame and this server loop stays idle. */
 let loopTimer = null, booted = false, detectorActive = false;
+let LASTDETS = null;          /* the phone's own scene cues for the next look */
+/* Tier 2: where the camera is pointed, and how long you've held a focus. */
+let TILT = 0, FOCUS = {name: "", since: 0}, TILTOK = false;
+/* null = not yet known, true = confirmed environment-facing, false = it is the
+   selfie camera, so every elevation would be inverted. `facingMode` is requested
+   as an IDEAL, not a constraint, so a device without a rear camera silently
+   returns the front one. */
+let REARCAM = null;
+function onTilt(e){
+  /* Where the CAMERA is pointed, in degrees of elevation: +90 straight up, 0 dead
+     ahead, -90 at the floor. That is the only quantity the arbiter's posture cues
+     mean, so compute it exactly rather than guessing an offset from `beta`.
+
+     Per the DeviceOrientation spec the device frame is R = Rz(alpha)Rx(beta)Ry(gamma),
+     so the screen normal's world-UP component is cos(beta)cos(gamma). The camera
+     looks out the BACK, along -z, so its up-component is -cos(beta)cos(gamma) and
+     its elevation is the arcsine of that. Two things fall out for free: it needs
+     no alpha (no compass, so it works indoors and without magnetometer consent),
+     and because gamma is in it the reading is correct in LANDSCAPE too — with a
+     beta-only formula, turning the phone sideways silently reported a steep tilt
+     while the camera was level.
+
+     Sanity: flat on a table screen-up, the camera faces the table -> -90. Held
+     upright with the screen toward you, it faces the room -> 0. Screen flat facing
+     down, it faces the sky -> +90. */
+  /* Both angles or neither. Substituting gamma=0 while still declaring the reading
+     valid silently reverted to the portrait-only formula — which is the exact case
+     gamma was added to fix, so a landscape phone held level would have reported a
+     steep tilt and been believed. And a FRONT camera inverts the whole sign, so a
+     stream we could not confirm is rear-facing reports no posture at all rather
+     than a confident opposite. */
+  if (typeof e.beta !== "number" || typeof e.gamma !== "number") return;
+  if (REARCAM === false) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  const up = Math.max(-1, Math.min(1, -Math.cos(b) * Math.cos(g)));
+  TILTOK = true;
+  TILT = Math.max(-90, Math.min(90, Math.asin(up) * 180 / Math.PI));
+}
+function startTilt(){
+  /* iOS 13+ gates DeviceOrientationEvent behind a USER-GESTURE permission call.
+     Without it the event never fires and Tier 2's posture cues are silently dead
+     on iPhone — the primary device. Ask once, on the first tap, and fall back to
+     no-tilt (0) rather than pretending. */
+  try {
+    const DOE = window.DeviceOrientationEvent;
+    if (!DOE) return;
+    if (typeof DOE.requestPermission === "function") {
+      DOE.requestPermission().then(r => {
+        if (r === "granted") window.addEventListener("deviceorientation", onTilt, {passive:true});
+      }).catch(() => {});
+    } else {
+      window.addEventListener("deviceorientation", onTilt, {passive:true});
+    }
+  } catch (e) {}
+}
+function dwellMs(){ return FOCUS.since ? (performance.now() - FOCUS.since) : 0; }
 function scheduleLoop(delay){
   clearTimeout(loopTimer);
   /* don't run while: paused, unpaired (behind the pairing modal — else we burn
@@ -2091,9 +2397,17 @@ async function ask(){
       headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
       body: JSON.stringify({query: q, no_cloud: veil})}, 20000);
     setLink(rsp.ok, performance.now() - t0);
+    if (rsp.status === 421) { hostRefused(); return; }
     if (rsp.status === 401) { needsPairing(); return; }
     const j = rsp.json;
-    if (j.text) { showHud(j.text, {ms:9000}); setTier(j.tier); }
+    /* "who is Sarah" answers with a real dossier CARD on the glass (built from
+       your roster + your own memory), not a text line — the same card family the
+       glasses draw when they know someone. */
+    if (j.card && j.card.type === "PersonDossierCard") {
+      setTier(j.tier); $("hud").classList.remove("on");
+      glassDossierCard(j.card); blip(); speak(j.text); return;
+    }
+    if (j.text) { showHud(j.text, {ms:9000}); setTier(j.tier); speak(j.text); }
     else showHud(veil ? "nothing on-device" : "no answer", {ms:4000});
   } catch (e) {
     if (e && e.name === "AbortError") showHud("timed out · try again", {ms:2600});
@@ -2104,6 +2418,19 @@ $("send").onclick = ask;
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 
 let _pairNotice = null;
+/* A 421 means the Brain refused the NAME this page was opened under, not the
+   pairing code. Without this branch the phone showed "wrong or expired code — get
+   a fresh one from the panel" and the wearer chased codes forever, or on a look
+   simply "point at an object · move closer", as if the camera were at fault. Say
+   the true thing and give the two names that always work. */
+let _hostNotice = false;
+function hostRefused(){
+  if (_hostNotice) return;
+  _hostNotice = true;
+  $("hud").classList.remove("on");
+  showHud(["this address can't make changes",
+           "open the Live Lens by IP, or use the QR on the panel"], {ms: 7000});
+}
 function needsPairing(){
   if (_pairNotice) return;                         /* don't stack notices */
   $("hud").classList.remove("on");                 /* drop any stuck "looking…" */
@@ -2190,10 +2517,26 @@ if (SR) {
    The glasses' Live Caption feature, on the phone through the phone's OWN
    speech service (said plainly, like the ask mic). A continuous recognizer
    streams interim + final text into a budget-clamped strip. It is deaf under
-   the veil and while backgrounded (the mic is never held hot), auto-restarts
-   when the browser ends a segment, and never leaves the phone — recognition
-   is the browser's, the transcript is drawn locally and posted nowhere. */
+   the veil and while backgrounded (the mic is never held hot), and auto-restarts
+   when the browser ends a segment. HONEST SCOPE: the transcript is drawn locally
+   and never sent to the Brain — but the browser's Web Speech API processes the
+   AUDIO in ITS OWN cloud (Chrome→Google, Safari→Apple), so captions are NOT
+   offline and are NOT covered by the Brain's LAN-only guarantee. The on-glass
+   source label names "your phone's speech service" so the wearer knows whose ear
+   it is — this is deliberately distinct from the Brain's on-device ear (the
+   Listen button), which never leaves the LAN. */
 let captionsOn = false, captionRec = null, captionFinal = "";
+/* Tier 3: what you just SAID steers the next look. ONE finished phrase goes to
+   your own Brain, which parses it for a lens intent ("where are my keys" → find)
+   and holds it ~20s. Only the transcript crosses, and only when captions are on. */
+function noteIntent(phrase){
+  const p = String(phrase || "").trim();
+  if (!p || veil || p === window._lastIntentSaid) return;
+  window._lastIntentSaid = p;
+  fetch("/dreamlayer/live/intent", {method: "POST",
+    headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+    body: JSON.stringify({text: p.split(/\s+/).slice(0, 24).join(" ")})}).catch(() => {});
+}
 function ccAvailable(){ return !!SR; }
 if (ccAvailable()) $("ccbtn").hidden = false;
 function renderCaptions(finalText, interim){
@@ -2222,11 +2565,22 @@ function startCaptions(){
     captionRec.continuous = true;
     captionRec.interimResults = true;
     captionRec.onresult = e => {
-      let interim = "";
+      let interim = "", fresh = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) captionFinal = (captionFinal + " " + r[0].transcript).trim();
+        if (r.isFinal) fresh = (fresh + " " + r[0].transcript).trim();
         else interim += r[0].transcript;
+      }
+      if (fresh) {
+        captionFinal = (captionFinal + " " + fresh).trim();
+        /* The on-screen tail accumulated for the whole session and was never
+           trimmed. That was also the intent bug: the POST below used to send the
+           last twelve words of EVERYTHING said so far, so "where are my keys"
+           followed by "the weather is nice today" re-armed find with terms the
+           wearer never offered — and kept refreshing its 20s life. Only the NEW
+           final phrase is an utterance; only that is sent. */
+        if (captionFinal.length > 600) captionFinal = captionFinal.slice(-600);
+        noteIntent(fresh);
       }
       renderCaptions(captionFinal, interim);
     };
@@ -2286,6 +2640,7 @@ function _downTo16k(input, inRate){                 /* Float32 @inRate → Int16
   }
   return out;
 }
+let hearWarned = false;   /* one-shot: the Brain has no ASR to transcribe with */
 function _flushHear(){
   if (!hearOn) return;
   if (veil || document.hidden){ hearChunks = []; return; }  /* never stream veiled/bg */
@@ -2294,10 +2649,23 @@ function _flushHear(){
   const merged = new Int16Array(total); let off = 0;
   for (const a of hearChunks){ merged.set(a, off); off += a.length; }
   hearChunks = [];
+  /* READ the response — the ear is honest about its own limits. If the Brain has
+     no speech-to-text (no Sharp Ears pack), holding the mic hot while nothing is
+     transcribed is a lie the "listening" chip tells. Say so once and release the
+     mic instead of pretending to listen (audit 2026-07-23). */
   fetch("/dreamlayer/live/hear?sr=" + HEAR_SR,
         {method: "POST", headers: Object.assign(
           {"Content-Type": "application/octet-stream"}, HDRS()),
-         body: merged.buffer}).catch(() => {});
+         body: merged.buffer})
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (j && j.ok === false && j.reason === "no-asr" && !hearWarned){
+        hearWarned = true;
+        showHud(j.detail || "the Brain can't transcribe yet — install the Sharp Ears pack to let it hear", {ms:4600});
+        stopHearing();     /* don't keep the mic hot for a pipeline that can't hear */
+      }
+    })
+    .catch(() => {});
 }
 function _hearOpen(){                                /* acquire mic + tap the PCM */
   if (hearCtx || veil) return;
@@ -2332,7 +2700,7 @@ function _hearClose(){                               /* release the mic + timers
 }
 async function startHearing(){
   if (hearOn || veil || !_hearAvailable()) return;
-  hearOn = true;
+  hearOn = true; hearWarned = false;   /* re-check ASR each fresh start (pack may now be installed) */
   $("hearbtn").classList.add("on"); $("hearbtn").setAttribute("aria-checked", "true");
   $("hearst").textContent = "listening";
   try {                                             /* persist the opt-in first */
@@ -2372,6 +2740,66 @@ document.addEventListener("visibilitychange", () => {
    this — no captured audio/pixels — and the Brain veil-gates every non-safety
    push, so under the shield only a safety alert can arrive. */
 let evSource = null;
+/* The ambient half of the HUD had no trigger at all — a safety tap needs a real
+   smoke alarm and the brief only self-pushes at its hour, so the only way to prove
+   the channel worked was curl. This button pushes ONE clearly-labelled SELF-TEST
+   card through the real path, and reports honestly when nothing is listening or
+   the veil suppressed it. */
+async function selfTest(){
+  try {
+    const rsp = await fetchJSON("/dreamlayer/live/selftest", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({kind: "hark"})}, 6000);
+    if (rsp.status === 421) { hostRefused(); return; }
+    if (rsp.status === 401) { needsPairing(); return; }
+    const j = rsp.json || {};
+    if (j.ok === false) showHud(j.error || "self-test refused", {ms:2600});
+    else if (!j.delivered) showHud(j.reason === "veiled"
+        ? "the veil suppressed it — that IS the shield working"
+        : "nothing is listening for pushed cards yet", {ms:3200});
+  } catch (e) { showHud("brain unreachable", {ms:2400}); }
+}
+$("testbtn").onclick = selfTest;
+$("testbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") selfTest(); };
+
+/* Juno speaking on the GLASS. /dreamlayer/tts was panel-only, so on the phone she
+   never spoke at all. Off by default and honest about why it can't: a 204 means no
+   engine or no voice model is installed, and we say so once instead of silently
+   doing nothing. */
+let speakOn = false, _speakWarned = false, _audio = null;
+function setSpeak(on){
+  speakOn = !!on;
+  $("speakbtn").classList.toggle("on", speakOn);
+  $("speakbtn").setAttribute("aria-checked", speakOn ? "true" : "false");
+  $("speakst").textContent = speakOn ? "speaking" : "voice";
+  if (!speakOn) { try { if (_audio) _audio.pause(); } catch (e) {} }
+}
+$("speakbtn").onclick = () => setSpeak(!speakOn);
+$("speakbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") setSpeak(!speakOn); };
+async function speak(text){
+  const t = String(text || "").trim();
+  if (!speakOn || !t || veil) return;          /* never speak under the shield */
+  try {
+    const r = await fetch("/dreamlayer/tts", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({text: t.slice(0, 400)})});
+    if (r.status === 204) {
+      if (!_speakWarned) { _speakWarned = true;
+        showHud("no voice model installed — add one to hear Juno", {ms:3600});
+        setSpeak(false); }
+      return;
+    }
+    if (!r.ok) return;
+    const buf = await r.blob();
+    try { if (_audio) { _audio.pause(); if (_audio._url) URL.revokeObjectURL(_audio._url); } } catch (e) {}
+    /* revoke the blob URL when the clip ends, else every spoken reply leaks one
+       for the life of the page — a long session would hold every audio buffer. */
+    const url = URL.createObjectURL(buf);
+    _audio = new Audio(url); _audio._url = url;
+    _audio.addEventListener("ended", () => { try { URL.revokeObjectURL(url); } catch (e) {} });
+    _audio.play().catch(() => { try { URL.revokeObjectURL(url); } catch (e) {} });
+  } catch (e) {}
+}
 function startEvents(){
   if (evSource || !TOKEN || !window.EventSource) return;
   try {
@@ -2387,8 +2815,18 @@ function stopEvents(){ try { if (evSource) evSource.close(); } catch (e) {} evSo
 function renderEvent(ev){
   if (dreamOn) return;                 /* never stomp the dream canvas */
   const c = ev.card, t = c && c.type;
-  if (t === "HarkCard"){ glassHarkCard(c); try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
+  /* a self-test card announces itself — it must never read as a real alarm or a
+     real brief (the Brain stamps selftest + a SELF-TEST eyebrow; we keep it) */
+  const test = !!(c && c.selftest);
+  if (test) c.eyebrow = "SELF-TEST";
+  if (t === "HarkCard"){
+    glassHarkCard(c);
+    /* a self-test must not SOUND like a safety tap either — the Brain strips the
+       card's earcon/haptic, so the client must not re-add them here (audit 3) */
+    if (!test) { try { blip(); } catch (e) {} scan(true); setTimeout(() => scan(false), 500); }
+  }
   else if (t === "MorningBriefCard") glassBriefCard(c);
+  else if (t === "PersonDossierCard") glassDossierCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 
@@ -2712,19 +3150,47 @@ function paintDetections(res){
   if (!vw || !vh) { overlayDirty = false; return; }
   const scale = Math.max(cw / vw, ch / vh);            /* object-fit: cover */
   const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
-  const dets = ((res && res.detections) || [])
+  let dets = ((res && res.detections) || [])
     .map(d => ({name: ((d.categories && d.categories[0]) || {}).categoryName || "",
                 score: ((d.categories && d.categories[0]) || {}).score || 0,
                 box: d.boundingBox}))
-    .filter(d => d.name && d.name !== "person" && d.box);   /* NEVER a person */
+    .filter(d => d.name && d.box);
+  /* a person in frame is a SCENE cue (it stops Read/Math firing on someone) — the
+     flag never leaves as a box or a crop, and the look still defers every face */
+  const sawPerson = dets.some(d => d.name === "person");
+  dets = dets.filter(d => d.name !== "person");            /* NEVER draw a person */
+  /* The glasses don't box the room — they hold ONE focus. Pick the dominant
+     thing in view (largest × most-confident) and mark just that; everything else
+     stays unadorned, so the passive HUD reads like the glass, not a detector
+     demo. The name rides the single HUD line below, never a label plate. */
   let top = null, topA = 0;
   for (const d of dets) {
-    const x = d.box.originX * scale + ox, y = d.box.originY * scale + oy;
-    drawBox(ctx, x, y, d.box.width * scale, d.box.height * scale, d.name, d.score);
     const a = d.box.width * d.box.height * d.score;
     if (a > topA) { topA = a; top = d; }
   }
-  overlayDirty = dets.length > 0;
+  if (top) {
+    const x = top.box.originX * scale + ox, y = top.box.originY * scale + oy;
+    drawFocus(ctx, x, y, top.box.width * scale, top.box.height * scale);
+  }
+  overlayDirty = !!top;
+  /* Remember what the detector just saw so a deliberate look can TELL the Brain.
+     Coarse categories + a count only — never a box, never a crop, never pixels.
+     This is what lets the arbiter pick the right lens instead of re-guessing from
+     image statistics (Tier 1, 2026-07-23).
+
+     The label STRINGS stay on the phone. Nothing on the Brain ever read them —
+     every consumer wants the count, the person flag, or "are several of the same
+     thing side by side" — and a stream of category names ("syringe", "pill
+     bottle", "pride flag") is a behavioural profile of the wearer for no
+     functional gain. So the one thing the labels were needed for, a repeated
+     label meaning a shelf, is computed HERE and crosses as a single bit. */
+  const names = dets.slice(0, 6).map(d => d.name);
+  LASTDETS = {dup: names.length >= 2 && new Set(names).size < names.length,
+              face: sawPerson, n: dets.length, ts: performance.now()};
+  /* dwell = how long the SAME thing has held the frame. A long hold is stronger
+     intent than a passing glance, which is exactly how the arbiter reads it. */
+  const fname = top ? top.name : "";
+  if (fname !== FOCUS.name) FOCUS = {name: fname, since: fname ? performance.now() : 0};
   /* update the live label only when no tap/ask result is holding the HUD */
   if (performance.now() >= hudHoldUntil && !looking && !asking && !veil) {
     if (top) showHud([top.name + " · " + Math.round(top.score * 100) + "%"],
@@ -2732,24 +3198,20 @@ function paintDetections(res){
     else hideDetectorHud();           /* nothing in view → drop the stale live label */
   }
 }
-function drawBox(ctx, x, y, w, h, name, score){
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(125,255,168,.9)";
-  ctx.shadowColor = "rgba(125,255,168,.55)"; ctx.shadowBlur = 8;
-  const c = Math.max(6, Math.min(20, w / 4, h / 4));   /* corner brackets, not a full box */
+function drawFocus(ctx, x, y, w, h){
+  /* one quiet focus mark on the dominant object — corner ticks in the phosphor,
+     no label plate (the HUD line carries the name). The glass's language: a
+     single held focus, never a wall of boxes. */
+  const c = Math.max(10, Math.min(26, w / 4, h / 4));
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(44,199,154,.72)";
+  ctx.shadowColor = "rgba(44,199,154,.5)"; ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.moveTo(x, y + c); ctx.lineTo(x, y); ctx.lineTo(x + c, y);
   ctx.moveTo(x + w - c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + c);
   ctx.moveTo(x + w, y + h - c); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - c, y + h);
   ctx.moveTo(x + c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - c);
   ctx.stroke(); ctx.shadowBlur = 0;
-  const label = name + "  " + Math.round(score * 100) + "%";
-  ctx.font = "12px ui-monospace, Menlo, monospace";
-  const tw = ctx.measureText(label).width + 10;
-  ctx.fillStyle = "rgba(5,10,8,.72)";
-  ctx.fillRect(x, Math.max(0, y - 18), tw, 16);
-  ctx.fillStyle = "rgba(125,255,168,.95)";
-  ctx.fillText(label, x + 5, Math.max(11, y - 6));
 }
 
 /* ---- on-device hand gestures — HUD navigation without a tap ------------------

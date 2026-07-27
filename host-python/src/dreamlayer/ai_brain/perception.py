@@ -38,6 +38,18 @@ class PerceptSignals:
     question: Optional[bool] = None
     has_object: Optional[bool] = None
     language: Optional[str] = None
+    # Tier-1 scene cues (2026-07-23). `items`/`shelf`/`menu` were always consumed
+    # by the arbiter and never produced; they now come from a real detector rather
+    # than from image statistics, which cannot tell a bookshelf from a radiator.
+    # `moving` is declared but NO LONGER PRODUCED by any tier here: single-frame
+    # blur measures the sensor noise floor, not the wearer's motion. It stays in the
+    # shape because a real IMU or a frame-to-frame differ could honestly supply it.
+    items: Optional[int] = None
+    shelf: Optional[bool] = None
+    menu: Optional[bool] = None
+    sky: Optional[bool] = None
+    moving: Optional[bool] = None
+    bands: Optional[int] = None      # horizontal text/table bands
     tier: str = ""
 
     def as_signals(self) -> dict:
@@ -56,6 +68,18 @@ class PerceptSignals:
             out["has_object"] = bool(self.has_object)
         if self.language:
             out["language"] = self.language
+        if self.items is not None:
+            out["items"] = int(self.items)
+        if self.shelf is not None:
+            out["shelf"] = bool(self.shelf)
+        if self.menu is not None:
+            out["menu"] = bool(self.menu)
+        if self.sky is not None:
+            out["sky"] = bool(self.sky)
+        if self.moving is not None:
+            out["moving"] = bool(self.moving)
+        if self.bands is not None:
+            out["bands"] = int(self.bands)
         return out
 
 
@@ -111,6 +135,199 @@ def text_density(frame) -> float:
     return max(0.0, min(1.0, 1.5 * (gx + gy) / full))
 
 
+def _downs(a: np.ndarray, target: int = 128) -> np.ndarray:
+    """Cheap nearest-neighbour downsample so every cue below is O(128²)."""
+    h, w = a.shape[:2]
+    if max(h, w) <= target:
+        return a
+    step = max(1, int(max(h, w) / target))
+    return a[::step, ::step]
+
+
+def _boxds(a: np.ndarray, target: int = 512) -> np.ndarray:
+    """Box-AVERAGE downsample — used where striding would lie.
+
+    `_downs` strides, which is fine for structural cues but catastrophic for a
+    sharpness measure: any detail commensurate with the stride aliases straight
+    through, so a crisp fine grating reads as flat (= "blurred = the wearer is
+    walking") while genuine motion blur, whose energy is spread, reads however the
+    stride happens to land. Averaging into blocks cannot alias — a blurred frame
+    stays blurred and a sharp one stays sharp at any input size. Frames already
+    at or below `target` are returned untouched, so the common 512-px look path
+    measures the real pixels."""
+    h, w = a.shape[:2]
+    k = max(1, int(max(h, w) // target))
+    if k <= 1:
+        return a.astype(np.float64, copy=False)
+    hh, ww = (h // k) * k, (w // k) * k
+    if hh < k or ww < k:
+        return a.astype(np.float64, copy=False)
+    b = a[:hh, :ww].astype(np.float64)
+    return b.reshape(hh // k, k, ww // k, k).mean(axis=(1, 3))
+
+
+def _boxmax(a: np.ndarray, target: int = 512) -> np.ndarray:
+    """Box-MAXIMUM downsample — for cues about small bright things.
+
+    Averaging destroys them: a star is one or two pixels, so a 4x4 mean at 2160 px
+    divides it by sixteen and a whole sky measures zero lights. Pooling by maximum
+    keeps a point light at any input size, which is what the light cues need."""
+    h, w = a.shape[:2]
+    k = max(1, int(max(h, w) // target))
+    if k <= 1:
+        return a.astype(np.float64, copy=False)
+    hh, ww = (h // k) * k, (w // k) * k
+    if hh < k or ww < k:
+        return a.astype(np.float64, copy=False)
+    b = a[:hh, :ww].astype(np.float64)
+    return b.reshape(hh // k, k, ww // k, k).max(axis=(1, 3))
+
+
+def _peaks(prof: np.ndarray, min_prom: float = 0.18, min_gap: int = 3,
+           min_range: float = 0.008) -> int:
+    """Count prominent, well-separated peaks in a 1-D profile. The repetition
+    detector: a shelf of bottles or a menu's rows put regular spikes in the
+    gradient profile, a single mug does not.
+
+    `min_range` is what makes it a structure detector rather than a noise meter.
+    Prominence is measured RELATIVE to the profile's own range, so on a flat frame
+    — a blank wall with a little sensor noise — the noise IS the range and roughly
+    every other sample cleared the bar: a painted wall reported ~25 repetitions
+    out of nothing. Measured, in profile units of full-scale gradient: a blank
+    wall's range is ~0.002, a wall with a lighting gradient ~0.003, while real
+    structure is an order of magnitude up (a radiator 0.14, a shelf 0.31, a
+    printed page 0.51). Below `min_range` there is no structure to count.
+
+    The floor is 0.008, not the 0.02 first chosen: those reference values are all
+    HIGH-contrast synthetics, and the real world has pale things against pale
+    backgrounds. A foggy street measures 0.010-0.017 and a grey filing cabinet
+    0.011-0.021 — both real structure, both silently uncounted at 0.02, and the
+    cabinet flipped between 0 and 4 peaks with resolution. 0.008 still sits well
+    clear of the 0.0037 a gradient-lit wall produces."""
+    if prof.size < 8:
+        return 0
+    p = prof - prof.min()
+    rng = float(p.max())
+    if rng < min_range:
+        return 0
+    p = p / rng
+    n, last = 0, -min_gap - 1
+    for i in range(1, len(p) - 1):
+        if p[i] >= min_prom and p[i] >= p[i - 1] and p[i] >= p[i + 1] and (i - last) > min_gap:
+            n += 1
+            last = i
+    return n
+
+
+def frame_cues(frame) -> dict:
+    """Model-free scene cues the Glance Arbiter can act on, from one frame.
+
+    The arbiter was built to read ten signals but the live path only ever fed it
+    two (text_density, has_object), so every scene in the world collapsed to
+    "text" or "object" and shelf/menu/sky could never be resolved — the arbiter
+    was blind, not indecisive (audit 2026-07-23). These are deliberately cheap,
+    deterministic, numpy-only cues with honest names:
+
+      col_reps    repetition along COLUMNS — things side by side, e.g. a shelf
+      row_reps    repetition along ROWS — text lines
+      rows        strong horizontal bands, the signature of a form/table
+      contrast    spread of luminance; distinguishes a blurred SCENE from a
+                  featureless wall, which no sharpness measure can
+      dark        overall luminance is low (dusk, indoors-dim, night sky)
+      light_frac  bright pixels as a fraction of the frame
+      lights      how many separate bright runs there are
+      light_len   their mean length — stars are tiny, a lamp or a screen is not
+      light_spanx how far the lights are SCATTERED across each axis, as their
+      light_spany bounding box; stars cover the frame, an LED cluster does not
+      sharp       high-frequency energy; LOW means the frame is blurred, which on
+                  a phone means the wearer is MOVING (walking)
+
+    Everything here is a heuristic and is reported as such: absent/uncertain cues
+    are simply omitted so they never masquerade as a negative."""
+    out: dict = {}
+    a0 = _as_gray(frame)
+    if a0.size == 0 or a0.shape[0] < 8 or a0.shape[1] < 8:
+        return out
+    a = _downs(a0)
+    full = 255.0 if float(a.max()) > 1.0 else 1.0
+    g = a / full
+    gx = np.abs(np.diff(g, axis=1))
+    gy = np.abs(np.diff(g, axis=0))
+    # Repetition, PER AXIS — this separation is the whole trick. A printed page
+    # repeats along ROWS (text lines); a shelf of items repeats along COLUMNS
+    # (things side by side). Taking max() of the two made every page a shelf.
+    out["col_reps"] = int(_peaks(gx.mean(axis=0)))
+    out["row_reps"] = int(_peaks(gy.mean(axis=1)))
+    # Banding, as a share of the STRONGEST row rather than a multiple of the
+    # median. Median-relative counting collapses on exactly the frame the cue
+    # exists for: on a page where most rows ARE text the median rises with them,
+    # so the same page measured 96 bands at 240 px and none at all at 720 — the
+    # resolution the client actually posts.
+    rowe = gy.mean(axis=1)
+    peak = float(rowe.max())
+    out["rows"] = int(np.count_nonzero(rowe > peak * 0.45)) if peak > 0.004 else 0
+    # How much luminance VARIES. A blurred street and a blank wall both have
+    # almost no high-frequency energy and almost no gradient, so neither sharpness
+    # nor text-density can tell them apart — but the street still has large shapes
+    # in it and the wall does not. Measured: a wall 0.003 (0.027 with a lighting
+    # gradient), motion-blurred scenes 0.11-0.14.
+    # (measured on the box-averaged frame below, not the strided one — striding
+    # aliases a fine grating to the blank-wall value of 0.004)
+    # The light cues need REAL pixels. A star is 1-2 px wide, so the strided
+    # downsample above deletes most of a starfield and keeps whatever happens to
+    # land on the stride — which is why a single LED in a dark room used to look
+    # exactly like the Milky Way. Box-average instead, and only below 512 px is
+    # that a no-op, so the common look path measures the frame as decoded.
+    # Box-averaging is right for sharpness and wrong for stars: at 2160 px the
+    # block is 4x4, which averages a 1-px star down below any threshold — measured,
+    # a starfield went from 91 lights at 1080 to ZERO at 2160, so the sky simply
+    # vanished above the size the phone happens to post. Take the block MAXIMUM for
+    # the light cues instead. A point light survives pooling by maximum at any input
+    # size, and nothing else in the frame is brightened by it.
+    gf = _boxds(a0)
+    gl = _boxmax(a0)
+    gf = gf / (255.0 if float(gf.max()) > 1.0 else 1.0)
+    mean_l = float(gf.mean())
+    out["dark"] = bool(mean_l < 0.28)
+    out["contrast"] = round(float(gf.std()), 5)
+    if out["dark"]:
+        gf = gl                      # the light cues below read the max-pooled frame
+        # A star is not 250/255. Requiring 55% of full scale only ever caught
+        # near-saturated ones, so a real sparse sky (magnitudes 80-170, dimmed
+        # again by noise and JPEG) registered 5 lights out of 12 and failed every
+        # count test. Take the brightest tail of THIS frame instead — whatever is
+        # far above its own floor is a light in it.
+        hi = float(np.percentile(gf, 99.5))
+        mask = gf > max(mean_l + 6.0 * max(float(gf.std()), 0.004), hi * 0.55, 0.12)
+        nbright = int(np.count_nonzero(mask))
+        out["light_frac"] = round(nbright / float(mask.size), 5)
+        if nbright:
+            # count separate bright RUNS and their mean length: a sky is many tiny
+            # ones spread over the frame, a lamp or a phone screen is a few long
+            # ones in one place. This is what separates the two, not the total.
+            p = np.zeros((mask.shape[0], mask.shape[1] + 2), dtype=np.int8)
+            p[:, 1:-1] = mask
+            runs = int(np.count_nonzero(np.diff(p, axis=1) == 1))
+            out["lights"] = runs
+            out["light_len"] = round(nbright / float(runs), 3) if runs else 0.0
+            # How far across the frame they are SCATTERED, as the bright pixels'
+            # bounding box on each axis. Stars are spread over the whole view; an
+            # LED, a phone screen or a row of streetlamps occupies one patch. The
+            # fraction of ROWS containing a light looked like the same measure but
+            # is not — a real, sparse starfield of a dozen points touches only 5%
+            # of the rows while still covering the entire frame.
+            rows_hit = np.flatnonzero(mask.any(axis=1))
+            cols_hit = np.flatnonzero(mask.any(axis=0))
+            out["light_spany"] = round(
+                float(rows_hit[-1] - rows_hit[0] + 1) / float(mask.shape[0]), 4)
+            out["light_spanx"] = round(
+                float(cols_hit[-1] - cols_hit[0] + 1) / float(mask.shape[1]), 4)
+    if gf.shape[0] > 4 and gf.shape[1] > 4:
+        lap = np.abs(np.diff(gf, n=2, axis=0)).mean() + np.abs(np.diff(gf, n=2, axis=1)).mean()
+        out["sharp"] = round(float(lap), 5)
+    return out
+
+
 # --- Tier 0 today: a heuristic, no model ------------------------------------
 
 class HeuristicPerceptor:
@@ -134,6 +351,87 @@ class HeuristicPerceptor:
         # a mid-contrast, not-text-dense scene reads as "an object is here"
         if self._obj_lo <= d < self._obj_hi:
             sig.has_object = True
+        # Tier-1 cues: turn the cheap frame statistics into the scene inputs the
+        # arbiter has always been able to read (audit 2026-07-23). Deliberately
+        # conservative — a cue we can't justify is left unset, never guessed.
+        try:
+            c = frame_cues(frame)
+        except Exception:                    # noqa: BLE001 — a cue never breaks a look
+            c = {}
+        if c:
+            # A SHELF is deliberately NOT claimed from image statistics, for the
+            # same reason `menu` never was: to a gradient profile a bookshelf, a
+            # radiator, a picket fence and a venetian blind are one picture. The
+            # earlier version claimed "12 items to compare" on a radiator and on a
+            # motion-blurred street, and still missed a real 4-bottle shelf — a
+            # detector that is wrong in both directions is worse than no detector.
+            # `shelf`/`items` come from the phone's own object detector instead
+            # (several detections, and several of the SAME label), which is a real
+            # witness to "comparable things side by side" rather than an inference
+            # from periodicity. Repetition is still reported raw, as col_reps /
+            # row_reps, for cues where periodicity alone is the honest signal.
+            # Horizontal banding is the signature of PRINT. Exposed on its own so
+            # a lens can recognise a page even when the single-number density
+            # metric under-reads thin type (it measures mean gradient, so fine
+            # print on white scores lower than its legibility suggests).
+            bands = int(c.get("rows", 0) or 0)
+            if bands:
+                sig.bands = min(99, bands)
+            # A FORM/table: a FEW strong horizontal bands over text, with vertical
+            # rules crossing them. Both extra clauses are corrections: `bands >= 6
+            # and d >= 0.20` alone is satisfied by any densely-set page, because
+            # text lines ARE horizontal bands — the same cue Read depends on — so a
+            # photographed page of prose claimed 12 form fields and the glasses
+            # offered to fill it in. A form has on the order of six to twenty rows;
+            # a page of prose has forty to seventy, and no column rules.
+            # Measured on ruled forms: 9 rows → 17 bands at density 0.072, and 16
+            # rows → the high thirties. The old `d >= 0.20` floor described no real
+            # form at all — a ruled sheet is mostly white space — while the [6,24]
+            # ceiling excluded anything bigger than a short table. Prose is kept out
+            # by the band count instead (a page measures 100), which is the cue that
+            # actually distinguishes them, plus the column rules a form has and
+            # prose does not.
+            # …and on PAPER. A night skyline is a grid of lit windows: 31 bands,
+            # column rules, the right density — a form in every statistic except
+            # that it is a dark frame, and paper never is.
+            if (6 <= bands <= 60 and d >= 0.03 and not c.get("dark")
+                    and int(c.get("col_reps", 0) or 0) >= 2):
+                sig.form_fields = min(12, max(2, bands // 2))
+            # THE SKY: a dark field, almost no text, and MANY tiny bright points
+            # spread across the frame. All three clauses are load-bearing, and the
+            # earlier "small bright fraction" test was none of them: a dark room
+            # with one LED, a night street under lamps, and a dim room lit by a
+            # phone screen all claimed the night sky and fired an astronomy lens.
+            # Measured on JPEG round-tripped frames: a starfield gives many runs of
+            # mean length 1-2 scattered over ~99% of both axes; one LED 6 runs of
+            # length 6 inside 1% of the frame; three streetlamps 54 runs of length
+            # 16 across 4% of the rows; a lit wall one run per row of length 120.
+            if (c.get("dark") and d < 0.12
+                    and int(c.get("lights", 0) or 0) >= 8
+                    and 0.0 < float(c.get("light_len", 0.0) or 0.0) <= 4.0
+                    and float(c.get("light_spany", 0.0) or 0.0) >= 0.4
+                    and float(c.get("light_spanx", 0.0) or 0.0) >= 0.4):
+                sig.sky = True
+            # MOVING is NOT claimed, and `sharp` is reported raw for anything that
+            # wants it. One frame cannot tell you the wearer is walking.
+            #
+            # The idea was that motion blur is the honest signal for walking. It
+            # isn't, once a real sensor is in the loop: blur removes high-frequency
+            # SIGNAL, but sensor noise is added after the blur and is itself pure
+            # high frequency, so `sharp` measures the noise floor. Measured on
+            # directionally-blurred street frames — the thing walking actually
+            # produces — a still frame at σ=1.5 DN reads 0.0121 and the same frame
+            # blurred 24 px at σ=3 reads 0.0198: the BLURRED one scores higher.
+            # Normalising by contrast does not save it either (0.70 still vs 0.99
+            # walking), so no threshold separates them across noise levels. It
+            # never fired on a real frame, and where it did fire it told a
+            # stationary wearer they were moving.
+            #
+            # So DepthCandidate is reachable the honest way instead: by asking.
+            # "how far is that" runs it, exactly as `find` needs its nouns spoken.
+        # NOTE: `menu` is deliberately never claimed from image statistics — a menu
+        # and a page of prose are not separable this way. It stays available for the
+        # phone's detector / a VLM tier to supply.
         if self._hint is not None:
             try:
                 self._merge(sig, self._hint(frame) or {})
@@ -155,6 +453,16 @@ class HeuristicPerceptor:
             sig.text_density = float(hints["text_density"])
         if hints.get("has_object") or hints.get("object"):
             sig.has_object = True
+        # the phone's own on-device detector is a far better witness than image
+        # statistics — let its cues override ours when it supplies them
+        if "items" in hints:
+            try:
+                sig.items = max(int(sig.items or 0), int(hints["items"]))
+            except (TypeError, ValueError):
+                pass
+        for k in ("shelf", "menu", "sky", "moving"):
+            if hints.get(k):
+                setattr(sig, k, True)
 
     def listen(self, audio) -> AudioPercept:
         return AudioPercept(tier=self.tier)   # no model: never wakes on its own

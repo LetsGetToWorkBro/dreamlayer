@@ -39,8 +39,13 @@ def _parse_scene_reply(text: str):
     m = re.search(r"scene\s*[:\-]?\s*([a-z_]+)", t, re.IGNORECASE)
     scene = (m.group(1).lower() if m else "")
     if scene not in SCENES:
-        # fall back to the first known scene word anywhere in the reply
-        scene = next((w for w in re.findall(r"[a-z_]+", t.lower()) if w in SCENES), "unknown")
+        # Fall back to the first known scene word anywhere in the reply — but not
+        # "sky", which unlike "form"/"shelf"/"menu" is ordinary scenery language: a
+        # vision tier describing "a clear sky above a person" or "sky and a shelf of
+        # bottles" means the PERSON and the SHELF, and this loose scan was hijacking
+        # both into a scene the reply never classified.
+        loose = {s for s in SCENES if s != "sky"}
+        scene = next((w for w in re.findall(r"[a-z_]+", t.lower()) if w in loose), "unknown")
     signals: dict = {}
     d = re.search(r"density\s*=\s*([0-9.]+)", t, re.IGNORECASE)
     if d:
@@ -49,6 +54,12 @@ def _parse_scene_reply(text: str):
     f = re.search(r"fields?\s*=\s*(\d+)", t, re.IGNORECASE)
     if f:
         signals["form_fields"] = int(f.group(1))
+    # `items` is now asked for in the prompt, because on the glasses the vision tier
+    # is the ONLY witness for a shelf — image statistics are not allowed to claim
+    # one, and there is no phone detector on this path.
+    it = re.search(r"items?\s*=\s*(\d+)", t, re.IGNORECASE)
+    if it:
+        signals["items"] = max(0, min(24, int(it.group(1))))
     lg = re.search(r"lang\w*\s*=\s*([a-z\-]+)", t, re.IGNORECASE)
     if lg:
         signals["language"] = lg.group(1).lower()

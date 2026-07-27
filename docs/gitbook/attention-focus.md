@@ -88,34 +88,62 @@ providers declare `matches(sighting)` and the registry merges rows into a
 panel; here, candidates declare `bid(reading, ctx)` and the registry ranks them
 into one decision.
 
-- **Two-tier read.** A free coarse pass (`classify_coarse` over cheap
-  on-device cues — a face flag, a text-density estimate, a form grid, a
-  question mark, a language guess) runs first; only when it can't tell a form
-  from a question from prose (`is_ambiguous`) does the hub spend the Brain's
-  vision tier for a fine read. The big model is used *when it changes the
-  answer*, not on every glance.
+- **Two-tier read.** A free coarse pass (`classify_coarse` over cheap on-device
+  cues) runs first; only when it can't tell a form from a question from prose
+  (`is_ambiguous`) does the hub spend the Brain's vision tier for a fine read.
+  The big model is used *when it changes the answer*, not on every glance.
+- **What the coarse pass can honestly see.** Text density, horizontal banding,
+  per-axis repetition, overall darkness, scattered point-lights, contrast, and
+  high-frequency energy (blur) — plus, from the wearer's own device, where the
+  camera is pointed, how long a focus has held, the local hour, and whatever the
+  phone's own object detector already saw. Some cues are deliberately *not*
+  inferred from pixels: a menu, and a shelf of comparable things, are claimed
+  only when a detector genuinely saw several of the same kind of thing, because
+  to a gradient profile a bookshelf and a radiator are the same picture. A cue
+  that can't be justified is left unset rather than guessed — an absent cue never
+  masquerades as a negative.
 - **Fire vs offer.** The top bid fires outright when it beats the runner-up by
   the gap (or a spoken intent forced it, or it's the only bidder); otherwise a
   **GlanceChoiceCard** offers the close contenders ("Answer it · Fill it in ·
   Translate"). A pick runs that lens *and* teaches the arbiter.
 - **It learns you.** Per-scene priors (`GlancePriors`) reinforce the lens you
-  keep choosing for a kind of scene, so tomorrow's ambiguous look leans your
-  way. They persist as a small JSON on the hub beside the vault
-  (`glancepriors.json`, the same pattern as the user model) — read once at
-  start, rewritten on each pick, in-memory only when there's no vault. The
-  local file stays the source of truth so a glance never waits on the network;
-  the dict is still serialisable, so a Mac Brain can later mirror it across
-  hubs.
-- **Spoken steer.** A recent "what's the answer / how do I fill this / explain
-  this" biases the very next look to that lens for a few seconds — say it, then
-  look.
+  keep choosing for a kind of scene — and for that scene *at that time of day* —
+  so tomorrow's ambiguous look leans your way. They persist as a small JSON on
+  the hub beside the vault (`glancepriors.json`, the same pattern as the user
+  model) — read once at start, rewritten on each pick, in-memory only when
+  there's no vault. The local file stays the source of truth so a glance never
+  waits on the network; the dict is still serialisable, so a Mac Brain can later
+  mirror it across hubs.
+- **Only from answers you actually got.** A pick teaches the arbiter only when
+  the lens it ran *worked*. Crediting the tap instead of the result meant a lens
+  whose pack wasn't installed still built a habit out of three "install the pack"
+  cards.
+- **A habit is never a cage.** Counts decay as they accumulate, so a row
+  converges rather than growing without bound and a few contrary picks revise a
+  formed preference. And once the arbiter is confident enough to stop asking, the
+  fire it makes still carries the alternatives it *chose* not to ask about — it
+  answers instantly, and the other lens stays one tap away. Not asking is the
+  feature; making the alternative unreachable was a bug.
+- **Spoken steer.** A recent "read this / how far is that / where are my keys"
+  steers the very next look — one utterance, one look. What you said is not a
+  guess about your intent, it *is* your intent, so a request that names a lens
+  runs it outright. The parser only accepts a **directed** phrase: one that
+  points at something ("this", "that", "my keys") and usually stops there.
+  Keying on bare verbs instead meant "how far we've come" ran the depth lens and
+  "read the room" ran the document lens.
 - **Calm.** Hysteresis holds a fresh decision through a debounce window, so a
   glance wandering across a page doesn't flip lenses. Veiled ⇒ nothing.
 
 The candidate lenses today: Person (a face → Social Lens), Scholar (answer /
 form / plain-words), TasteLens (a shelf or menu → the pick), Rosetta (foreign
-text → translate), and Juno (an object, or a weak fallback to name what's
-here). The chooser, when a look is genuinely ambiguous:
+text → translate), and Juno (an object, the sky, or a weak fallback to name
+what's here). The live path — the phone in the browser — runs its own set, since
+it may only bid lenses that host can actually execute: Read, Math, TasteLens,
+Rosetta, Sky, Depth, Segment and Juno. Person is deliberately absent there; every
+face defers to the Social Lens, which is the only thing allowed to name anyone.
+`find` is absent from both, because it needs the nouns you are hunting and no
+bare frame supplies them — it becomes reachable the moment you say what you're
+looking for. The chooser, when a look is genuinely ambiguous:
 
 ![GlanceChoiceCard — a pick runs the lens and teaches the arbiter](assets/cards/glance_choice.webp)
 

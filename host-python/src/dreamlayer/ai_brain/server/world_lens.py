@@ -25,9 +25,29 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
+
+
+def _spoken_miss(spoken: dict) -> str:
+    """What to say when a lens the wearer ASKED for ran and found nothing.
+
+    A spoken request deserves an answer about the request. Falling through to the
+    object floor meant "where did I leave my keys" was answered with "mug" — as if
+    they had never spoken."""
+    terms = [str(t) for t in (spoken.get("terms") or []) if t]
+    if spoken.get("intent") == "find":
+        what = " or ".join(terms[:2]) if terms else "that"
+        return f"no {what} in view"
+    return {"depth": "can't judge the distance here",
+            "sky": "nothing recognisable in the sky",
+            "read": "no readable text in view",
+            "math": "no equation in view",
+            "segment": "nothing distinct enough to isolate",
+            }.get(str(spoken.get("intent") or ""), "nothing found")
+
 
 # the shelf/menu read prompt — mirrors orchestrator.ops_world_lenses._taste_read
 _TASTE_PROMPT = (
@@ -496,7 +516,7 @@ class WorldLensHost:
 
     # -- automatic lens selection (the glance arbiter) ---------------------
 
-    def glance(self, frame, dwell_ms: float = 0.0) -> dict:
+    def glance(self, frame, dwell_ms: float = 0.0, hints: dict | None = None) -> dict:
         """Decide the lens FOR the wearer from what's in view — the "you never
         pick a mode" path. Reads cheap on-device signals (PerceptionRouter),
         classifies the scene, lets the lenses bid (GlanceArbiter), and returns:
@@ -508,7 +528,10 @@ class WorldLensHost:
 
         Kind "object" (the arbiter fired Juno, produced nothing, or abstained)
         hands back to the caller's normal object-recognition floor, so that path
-        keeps all its behaviour and never runs twice. Never raises."""
+        keeps all its behaviour and never runs twice.
+
+        Never raises: every lens call is wrapped, including the spoken-intent one,
+        which used to sit outside the guard and could take a whole look down."""
         if not self.privacy.allow_capture():
             return {"kind": "veiled"}
         if self.glance_arbiter is None or self.perception is None:
@@ -516,12 +539,82 @@ class WorldLensHost:
         from ...orchestrator.glance import GlanceContext, classify_coarse
         try:
             signals = self.perception.perceive(frame).as_signals()
+            # The phone runs its OWN on-device detector every frame and already
+            # knows what's in view (labels, how many, whether a person is there) —
+            # a far better witness than image statistics. Merging it is what makes
+            # the arbiter feel like it read your mind rather than guessed
+            # (Tier-1, 2026-07-23). Client cues never DOWNGRADE a server cue.
+            for k, v in (hints or {}).items():
+                if k == "items":
+                    signals["items"] = max(int(signals.get("items", 0) or 0), int(v))
+                elif v:
+                    signals[k] = v
         except Exception as exc:               # noqa: BLE001
             if self.health is not None:
                 self.health.record_failure("vision", exc)
             signals = {}
         reading = classify_coarse(signals, user_language="en")
-        ctx = GlanceContext(dwell_ms=float(dwell_ms or 0.0), veiled=False)
+        h = (hints or {})
+        # Tier 3 FIRST: if the wearer SAID what they want, there is nothing left to
+        # infer. A spoken intent that names a runnable lens is executed outright —
+        # including `find`, which no frame cue could ever justify on its own.
+        spoken = None
+        try:
+            spoken = self.brain.pending_intent()
+        except Exception:                        # noqa: BLE001
+            spoken = None
+        if spoken:
+            # ONE utterance steers ONE look. This used to be inside the
+            # `spoken.get("lens")` branch below, but compare/translate/object map to
+            # no runnable lens ("" — they steer the arbiter's bidding instead), so
+            # for those three the intent was never cleared: one "which of these is
+            # healthier" force-steered EVERY look for the full 20s window.
+            try:
+                self.brain.clear_intent()
+            except Exception:                    # noqa: BLE001
+                pass
+        if spoken and spoken.get("lens"):
+            args = {"terms": spoken["terms"]} if spoken.get("terms") else {}
+            for k in ("lat", "lon"):             # the sky lens still needs a place
+                if h.get(k) is not None:
+                    args[k] = h[k]
+            try:
+                res = self.look_lens(frame, spoken["lens"], args or None)
+            except Exception as exc:             # noqa: BLE001 — a lens never kills a look
+                log.warning("[glance] spoken lens %s failed: %s", spoken["lens"], exc)
+                res = {"ok": False, "lens": spoken["lens"], "reason": "error"}
+            card = self._glance_lens_result(res)
+            if card:
+                return {"kind": "fire", "lens": spoken["lens"],
+                        "action": spoken["intent"], "card": card,
+                        "scene": reading.scene, "said": spoken.get("said", "")}
+            # The lens ran and produced nothing. Falling through to the object floor
+            # answered a question with a label — the wearer asked "where did I leave
+            # my keys" and got told "mug", with no sign the search happened. Say
+            # what happened instead — and distinguish "I looked and it isn't there"
+            # from "I couldn't look", because reporting a CRASH or a raised veil as
+            # an empty result is a different lie in the same shape.
+            r = res if isinstance(res, dict) else {}
+            if r.get("veiled"):
+                line = "the veil is down — nothing was looked at"
+            elif r.get("reason"):
+                line = "the search didn't run"
+            else:
+                line = _spoken_miss(spoken)
+            return {"kind": "fire", "lens": spoken["lens"],
+                    "action": spoken["intent"], "scene": reading.scene,
+                    "said": spoken.get("said", ""),
+                    "card": {"ok": True, "lens": spoken["lens"], "lines": [line]}}
+        # Tier 2: where the head is pointed, how long it held, and what time it is
+        try:
+            hour = int(time.localtime().tm_hour)
+        except Exception:                        # noqa: BLE001
+            hour = -1
+        ctx = GlanceContext(dwell_ms=float(h.get("dwell") or dwell_ms or 0.0),
+                            veiled=False,
+                            recent_intent=(spoken or {}).get("intent", ""),
+                            tilt_deg=float(h.get("tilt") or 0.0),
+                            hour=hour)
         try:
             decision = self.glance_arbiter.arbitrate(reading, ctx)
         except Exception as exc:               # noqa: BLE001
@@ -533,32 +626,71 @@ class WorldLensHost:
             action = decision.winner.action
             if action == "juno":               # object → the normal floor owns it
                 return {"kind": "object"}
-            card = self._run_glance_lens(action, frame, decision.winner.args or {})
+            # Carry the wearer's place through to the lens. Only the SPOKEN path
+            # did this, and no candidate sets args, so an auto-fired sky lens
+            # always answered "the sky lens needs your latitude/longitude" — the
+            # one thing the arbiter was proud of reaching was a nag every time.
+            wargs = dict(decision.winner.args or {})
+            for k in ("lat", "lon"):
+                if h.get(k) is not None:
+                    wargs.setdefault(k, h[k])
+            card = self._run_glance_lens(action, frame, wargs)
             if not card:
                 return {"kind": "object"}       # lens found nothing → object floor
-            return {"kind": "fire", "lens": decision.winner.lens,
-                    "action": action, "card": card, "scene": reading.scene}
+            out = {"kind": "fire", "lens": decision.winner.lens,
+                   "action": action, "card": card, "scene": reading.scene}
+            # A fire the LEARNED PRIORS forced carries the alternatives it chose not
+            # to ask about, so "it stops asking you" never means "the other lens is
+            # unreachable". The arbiter computes them; they have to actually travel,
+            # or the promise is only true inside the arbiter.
+            if decision.options:
+                out["alts"] = [{"lens": o.lens, "label": o.label,
+                                "action": o.action} for o in decision.options]
+            return out
         return {"kind": "object"}
 
     def _run_glance_lens(self, action: str, frame, args: dict):
-        """Run the lens the arbiter chose and return a card dict (or None to fall
-        back to the object floor). Only the actions the live candidates can bid."""
+        """Run the lens the arbiter chose and return a card dict, or None to fall
+        back to the object floor. A lens that self-describes a MISSING PACK
+        ({need:...}) is returned AS-IS (not None), so the auto-fire path surfaces
+        "install the pack" honestly — exactly as the manual chooser does — instead
+        of silently dropping to object-naming (audit 2026-07-23)."""
         try:
             if action == "read":
-                r = self.look_lens(frame, "doc")
-                return r if isinstance(r, dict) and r.get("ok") else None
+                return self._glance_lens_result(self.look_lens(frame, "doc"))
             if action == "math":
-                r = self.look_lens(frame, "math")
-                return r if isinstance(r, dict) and r.get("ok") else None
+                return self._glance_lens_result(self.look_lens(frame, "math"))
+            if action in ("depth", "sky", "segment"):
+                # the frontier lenses the arbiter can now justify; each
+                # self-describes when its pack (or a location) is missing
+                return self._glance_lens_result(
+                    self.look_lens(frame, action, args or None))
             if action == "translate":
                 panel = self.look(frame, facet="ai")
                 return panel.to_hud_card() if panel is not None else None
             if action == "taste":
+                from ...hud import cards
                 res = self.taste(frame)
-                thc = getattr(res, "to_hud_card", None)
-                return thc() if callable(thc) else None
+                # cards.taste renders the ranking — NOT a nonexistent
+                # TasteRanking.to_hud_card, which silently returned None and
+                # dropped every shelf/menu to object-naming (audit 2026-07-23).
+                # An unavailable/empty ranking hands back to the object floor
+                # rather than drawing a hollow "nothing to compare" card.
+                if getattr(res, "unavailable", False) or not getattr(res, "items", None):
+                    return None
+                return cards.taste(res, unavailable=False)
         except Exception as exc:               # noqa: BLE001 — a lens never crashes a look
             log.warning("[glance] lens %s failed: %s", action, exc)
+        return None
+
+    @staticmethod
+    def _glance_lens_result(r):
+        """A look_lens result → a glance card: the real card when the look
+        succeeded, the honest {need:...}/{need_location:...} self-description when
+        a pack is missing (so auto-fire says "install the pack"), else None → the
+        object floor (a genuine "nothing in view", never a swallowed missing-pack)."""
+        if isinstance(r, dict) and (r.get("ok") or r.get("need") or r.get("need_location")):
+            return r
         return None
 
     def choose_glance(self, action: str, frame, args: dict, scene: str = "") -> dict:
@@ -569,7 +701,8 @@ class WorldLensHost:
             lens_key = {"read": "read", "math": "math", "translate": "rosetta",
                         "taste": "taste", "juno": "juno"}.get(action, action)
             try:
-                self.glance_arbiter.reinforce(scene, lens_key)
+                self.glance_arbiter.reinforce(
+                    scene, lens_key, hour=int(time.localtime().tm_hour))
             except Exception:                  # noqa: BLE001
                 pass
         if action == "juno":

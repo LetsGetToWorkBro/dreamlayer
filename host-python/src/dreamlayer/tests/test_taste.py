@@ -120,8 +120,17 @@ def test_taste_card_unavailable_state():
 # -- routing: a shelf look goes to TasteLens ---------------------------------
 
 def test_a_shelf_scene_routes_to_taste():
-    d = GlanceArbiter().arbitrate(classify_coarse({"items": 4}))
+    d = GlanceArbiter().arbitrate(classify_coarse({"items": 4, "shelf": True}))
     assert d.kind == "fire" and d.winner.lens == "taste"
+
+
+def test_a_couple_of_DIFFERENT_things_is_not_something_to_compare():
+    """`items >= 2` alone used to resolve the scene to "shelf" and bid taste at
+    0.88 — above identify — so a mug beside a laptop turned any desk into a
+    comparison. Comparing needs several of the SAME kind of thing, which is what
+    the shelf cue means (the phone seeing a repeated label)."""
+    d = GlanceArbiter().arbitrate(classify_coarse({"items": 4, "has_object": True}))
+    assert d.winner is None or d.winner.lens != "taste"
 
 
 # -- end to end through the orchestrator -------------------------------------

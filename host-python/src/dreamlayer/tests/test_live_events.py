@@ -65,12 +65,25 @@ def test_unsubscribe_stops_delivery(brain):
     assert brain.push_event("hark", {"type": "HarkCard"}, veil_ok=True) == 0
 
 
-def test_push_event_drops_a_full_queue_without_blocking(brain):
+def test_a_full_queue_drops_an_ambient_push_without_blocking(brain):
     q = brain.subscribe_events()
     for _ in range(q.maxsize):                        # fill it
-        q.put_nowait({"kind": "x"})
-    # a further push must not block or raise — it just doesn't reach this client
-    assert brain.push_event("hark", {"type": "HarkCard"}, veil_ok=True) == 0
+        q.put_nowait({"kind": "x", "safety": False})
+    # an AMBIENT push must not block or raise — it just doesn't reach this client
+    assert brain.push_event("brief", {"type": "MorningBriefCard"}) == 0
+
+
+def test_a_full_queue_still_takes_a_SAFETY_push(brain):
+    """A stalled reader is exactly when a smoke alarm matters most, and the queue
+    drops the NEWEST event — so a burst of ambient cards used to bury it. A safety
+    push now evicts the oldest non-safety event instead (audit 2026-07-23)."""
+    q = brain.subscribe_events()
+    for i in range(q.maxsize):
+        q.put_nowait({"kind": "x", "safety": False, "n": i})
+    assert brain.push_event("hark", {"type": "HarkCard"}, veil_ok=True) == 1
+    items = [q.get_nowait() for _ in range(q.qsize())]
+    assert any(i.get("safety") for i in items)        # the alarm got through
+    assert not any(i.get("n") == 0 for i in items)    # the oldest ambient made room
 
 
 # --- the sound-safety wire (ear → bus → HarkCard) ----------------------------

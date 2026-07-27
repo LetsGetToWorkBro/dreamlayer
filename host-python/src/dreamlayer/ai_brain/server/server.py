@@ -75,6 +75,7 @@ MAX_REQUEST_HEADER_SECONDS = 30.0       # wall-clock cap on the request line + h
 MAX_CONCURRENT_REQUESTS = 64            # worker-thread ceiling (anti thread-exhaustion)
 MAX_EVENT_SUBS = 6                      # concurrent /live/events streams (each holds a worker thread)
 
+
 # Content-Security-Policy for the token-bearing panel/builder pages. The panel is
 # built on inline event handlers (onclick=/onchange=), so — unlike the Live page,
 # which nonces its one inline block and can forbid inline entirely — it must keep
@@ -304,6 +305,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # tap, the morning brief, a commitment nudge) to connected phones over SSE
         self._event_subs: list = []    # one Queue per connected /live/events stream
         self._event_lock = threading.Lock()
+        # guards _spoken_intent, so a look POPS it in one step (concurrent
+        # looks otherwise both saw the same utterance)
+        self._intent_lock = threading.Lock()
         # Model supply-chain gate: when the wearer's posture is offline/incognito/
         # LAN-only, set HF_HUB_OFFLINE &co process-wide so NO ML loader (embedder,
         # ASR, speaker, CLIP…) can silently reach a CDN. One call gates every
@@ -897,7 +901,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                     return 0
             except Exception:                        # noqa: BLE001 — unreadable → drop
                 return 0
-        ev: dict = {"kind": kind}
+        ev: dict = {"kind": kind, "safety": bool(veil_ok)}
         if isinstance(card, dict):
             ev["card"] = card
         with self._event_lock:
@@ -907,9 +911,188 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             try:
                 q.put_nowait(ev)
                 sent += 1
-            except Exception:                        # noqa: BLE001 — full → drop for that client
-                pass
+            except Exception:                        # noqa: BLE001 — full
+                # A stalled reader (backgrounded phone, TCP zero-window) is exactly
+                # the state in which a smoke alarm matters most, and the default
+                # policy drops the NEWEST event — so a burst of ambient cards could
+                # bury the one that matters. A SAFETY push instead evicts the oldest
+                # non-safety event to make room, and only gives up if the queue is
+                # somehow all safety (audit 2026-07-23).
+                if not veil_ok:
+                    continue
+                if self._evict_for_safety(q):
+                    try:
+                        q.put_nowait(ev)
+                        sent += 1
+                    except Exception:                # noqa: BLE001
+                        pass
         return sent
+
+    @staticmethod
+    def _evict_for_safety(q) -> bool:
+        """Drop the oldest non-safety event from a full queue. True if room was
+        made. Order is preserved for everything kept."""
+        kept = []
+        dropped = False
+        try:
+            while True:
+                try:
+                    item = q.get_nowait()
+                except Exception:                    # noqa: BLE001 — empty
+                    break
+                if not dropped and not (isinstance(item, dict) and item.get("safety")):
+                    dropped = True                   # this one makes the room
+                    continue
+                kept.append(item)
+            for item in kept:                        # put the survivors back in order
+                try:
+                    q.put_nowait(item)
+                except Exception:                    # noqa: BLE001
+                    break
+        except Exception:                            # noqa: BLE001 — never break a push
+            return False
+        return dropped
+
+    # Self-test kinds → the card the real publisher would push, built by the SAME
+    # hud.cards builders and rendered by the SAME phone renderers. Every one is
+    # stamped selftest=True so it can never be mistaken for the real event.
+    # "nudge" was removed: NudgeCard had no cards.py builder, no bespoke renderer
+    # and no publisher anywhere, so self-testing it demonstrated a card the Brain
+    # never emits (audit 2026-07-23).
+    SELFTEST_KINDS = ("hark", "brief")
+    MAX_SELFTEST_PER_MIN = 6
+
+    def push_selftest(self, kind: str = "hark") -> dict:
+        """Push ONE clearly-labelled self-test card to every connected Live Lens.
+
+        This exists because the ambient half of the HUD was undemonstrable: a
+        sound-safety tap needs a real smoke alarm (plus the sound-events pack) and
+        the brief only self-pushes at its configured hour, so there was no way to
+        prove the push channel and the card renderers actually work end to end.
+
+        Honesty rules this deliberately obeys:
+          * the card is stamped ``selftest: True`` and carries a SELF-TEST eyebrow,
+            so it never masquerades as a real alarm or a real brief;
+          * it is **never** ``veil_ok`` — a self-test must not borrow a real safety
+            alert's privilege to pierce the shield, and being suppressed under the
+            veil is itself the proof the shield works;
+          * it invents no data: the brief self-test carries no memory content and
+            the hark self-test names itself as a test tone, not a detected sound.
+        Returns {ok, kind, delivered} — delivered==0 means nothing is listening
+        (or the veil is up), which is a true answer, not a failure."""
+        k = str(kind or "hark").strip().lower()
+        if k not in self.SELFTEST_KINDS:
+            return {"ok": False, "error": "unknown self-test kind",
+                    "kinds": list(self.SELFTEST_KINDS)}
+        from ...hud import cards
+        if k == "brief":
+            card = cards.morning_brief(
+                text="Self-test — your brief would appear here.",
+                bullets=["this card is a self-test", "no memories were read"])
+        else:
+            card = cards.hark(clue="Self-test — the tap works.",
+                              detail="a test tone, not a real alert",
+                              importance="normal")
+        # Rate-limited: without this an authed caller can flood the bounded event
+        # queues (burying a real safety card) and pump the signed ledger, scrubbing
+        # the panel's audit window — measured at 1804 pushes/s (audit 2026-07-23).
+        now = time.monotonic()
+        recent = [t for t in getattr(self, "_selftest_hits", []) if now - t < 60.0]
+        if len(recent) >= self.MAX_SELFTEST_PER_MIN:
+            self._selftest_hits = recent
+            return {"ok": False, "error": "self-test is rate-limited",
+                    "retry_after_s": int(60 - (now - recent[0])) + 1}
+        recent.append(now)
+        self._selftest_hits = recent
+        card = dict(card)
+        card["selftest"] = True
+        card["eyebrow"] = "SELF-TEST"
+        # The device renderers hard-code the eyebrow and drop unknown fields, so the
+        # marker would vanish on the glasses' own card path — carry it in the fields
+        # they DO render, and never borrow a real tap's earcon/haptic/flash.
+        lines = [x for x in (card.get("lines") or []) if x]
+        card["lines"] = ["SELF-TEST"] + [ln for ln in lines[1:]] if lines else ["SELF-TEST"]
+        for borrowed in ("earcon", "haptic", "flash"):
+            card.pop(borrowed, None)
+        delivered = self.push_event(k, card)            # never veil_ok
+        try:
+            self.activity.add("selftest", f"Pushed a {k} self-test card")
+        except Exception:                               # noqa: BLE001
+            pass
+        with self._event_lock:
+            listeners = len(self._event_subs)
+        reason = ""
+        if delivered == 0:
+            reason = "veiled" if self._veiled_quiet() else (
+                "no listeners" if listeners == 0 else "queues full")
+        return {"ok": True, "kind": k, "delivered": delivered,
+                "listeners": listeners, "reason": reason}
+
+    def _veiled_quiet(self) -> bool:
+        """True when the shield is up — so a 0-delivery self-test can say WHY."""
+        try:
+            return bool(self.incognito_now())
+        except Exception:                               # noqa: BLE001
+            return True                                 # unreadable → assume shielded
+
+    # Tier 3: a spoken intent is only "yours" for a few seconds. Long enough to
+    # say "where are my keys" and raise the phone; short enough that it never
+    # steers a look you take minutes later.
+    INTENT_TTL_S = 20.0
+
+    def note_spoken_intent(self, text: str) -> dict:
+        """Parse a spoken phrase into a lens intent and hold it briefly.
+
+        Fed by BOTH ears: the Brain's own on-device transcript (the Sharp Ears
+        pack, via EarHost) and the phone's speech service (POST /live/intent), so
+        whichever ear you have, the words steer the lens. Veil-gated: under the
+        shield nothing is remembered, not even for a second."""
+        from .spoken_intent import parse_spoken_intent
+        try:
+            if self.incognito_now():
+                return {"ok": False, "reason": "veiled"}
+        except Exception:                            # noqa: BLE001 — unreadable → closed
+            return {"ok": False, "reason": "veiled"}
+        parsed = parse_spoken_intent(text)
+        if not parsed:
+            self._spoken_intent = None
+            return {"ok": True, "intent": ""}        # heard, matched nothing — honest
+        self._spoken_intent = (parsed, time.monotonic())
+        return {"ok": True, "intent": parsed["intent"], "terms": parsed["terms"]}
+
+    def pending_intent(self) -> "dict | None":
+        """The fresh spoken intent, or None. Consumed by the next look.
+
+        Veil-gated on the way OUT as well as in. `note_spoken_intent` refuses to
+        remember under the shield, but raising the shield after an utterance left
+        the transcript readable here — only the accident of `world_lens.glance`
+        checking the posture first kept it off the veiled path, and one new caller
+        would have undone that. Reading it while veiled also DROPS it, so the
+        shield actively clears speech rather than merely declining to serve it."""
+        # POP, not peek. The caller used to read here and clear afterwards, and
+        # ThreadingHTTPServer serves concurrent looks — with two looks in flight the
+        # window between the two steps let one utterance steer both. Measured at
+        # 18-34% under a shortened switch interval. Taking it out under the lock, in
+        # one step, removes the window rather than narrowing it.
+        with self._intent_lock:
+            got = getattr(self, "_spoken_intent", None)
+            self._spoken_intent = None
+            if not got:
+                return None
+            try:
+                veiled = bool(self.incognito_now())
+            except Exception:                        # noqa: BLE001 — unreadable → closed
+                veiled = True
+            if veiled:
+                return None
+            parsed, ts = got
+            if (time.monotonic() - ts) > self.INTENT_TTL_S:
+                return None
+            return parsed
+
+    def clear_intent(self) -> None:
+        with self._intent_lock:
+            self._spoken_intent = None
 
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
@@ -3027,6 +3210,80 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 pass
             return False
 
+        @staticmethod
+        def _own_names() -> set:
+            """Every name this machine answers to, WITHOUT touching the resolver.
+
+            This used to call socket.getfqdn(), which can do a reverse lookup, and
+            cached it behind a lock — but the lock was held across the resolve, so a
+            slow or blackholed DNS server serialised every write behind one lookup
+            (measured: 64 concurrent POSTs each took the full 3s, and a plain GET
+            queued 7.1s behind a POST burst). gethostname() is a syscall against a
+            local string and cannot block, so the cache and its failure mode are
+            both gone."""
+            names = {"localhost", "localhost.local"}
+            try:
+                n = (socket.gethostname() or "").strip().lower().rstrip(".")
+            except OSError:
+                return names
+            if n:
+                names.add(n)
+                base = n.split(".")[0]
+                if base:
+                    names.update({base, base + ".local"})
+                if not n.endswith(".local"):
+                    names.add(n + ".local")
+            return names
+
+        def _write_host_ok(self) -> bool:
+            """A stricter Host test than the rebind guard, applied to WRITES only.
+
+            `_host_allowed` accepts ANY ``.local`` name, because an mDNS name is not
+            remotely rebindable — fine for reads. But it means a LAN attacker running
+            an mDNS responder for ``evil.local`` pointed at this Brain gets a Host
+            AND an Origin that match each other, satisfying the CSRF guard: a page
+            the wearer merely visits could then POST as a same-origin caller. So a
+            write must additionally arrive at a name we ACTUALLY answer to — an IP
+            literal, localhost, or this machine's own (m)DNS name. Reads are
+            untouched, so nothing about phone reachability changes."""
+            import ipaddress
+            raw = self.headers.get("Host")
+            if not raw:
+                return True                    # non-browser client; no CSRF vector
+            host = raw.strip()
+            if host.startswith("["):
+                hostname = host[1:host.index("]")] if "]" in host else host[1:]
+            elif host.count(":") == 1:
+                hostname = host.rsplit(":", 1)[0]
+            else:
+                hostname = host
+            hostname = hostname.strip().lower().rstrip(".")
+            if not hostname:
+                return False
+            try:
+                ipaddress.ip_address(hostname)
+                return True                    # an IP literal is not a claimed name
+            except ValueError:
+                pass
+            if hostname in self._own_names():
+                return True
+            # A SINGLE-LABEL mDNS name. This is the concession that keeps the phone
+            # working: requiring the write to arrive at gethostname()'s own label
+            # broke every machine whose Bonjour name differs from it, which is
+            # routine — mDNS collision renaming appends "-2", and macOS keeps a
+            # LocalHostName separate from the hostname. The symptom was the worst
+            # kind: the page loaded and then every action failed, with pairing
+            # reporting "wrong or expired code" forever.
+            #
+            # It is still strictly tighter than the read guard, which takes ANY
+            # `.local`: a multi-label name is refused, so `evil.vm.local`,
+            # `127.0.0.1.evil.local` and `vm.local.evil.com` cannot slip through, and
+            # neither can a non-mDNS name like `evil.example`. What remains is an
+            # active mDNS rebind on the same LAN against a TOKENLESS Brain — a real
+            # but much narrower attack than the one this closed, and one a paired
+            # token defeats outright, since an attacker's page cannot read it.
+            return hostname.endswith(".local") and hostname.count(".") == 1
+
         def _same_origin_write(self) -> bool:
             """CSRF guard for state-changing (POST) requests.
 
@@ -3131,7 +3388,10 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             raw = self._read_capped(MAX_JSON_BODY)
             try:
                 parsed = json.loads(raw.decode("utf-8")) if raw else {}
-            except (ValueError, UnicodeDecodeError):
+            # RecursionError belongs here: json.loads recurses per nesting
+            # level, so a deeply nested body raised straight out of the
+            # handler and the connection died with no response at all.
+            except (ValueError, UnicodeDecodeError, RecursionError):
                 return {}
             # Every caller does _body().get(...); a non-object JSON body
             # (list/str/int/null) would AttributeError and, since do_POST only
@@ -4018,6 +4278,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                                  "tier": "local", "sources": [], "confidence": 1.0,
                                  "intent": "introduce", "enrolled": intro})
                 return
+            # "who is Sarah" / "what do I know about Marcus" → the person dossier
+            # card, built from YOUR records (roster + mirror + your own memory).
+            # Roster-gated: it only fires for someone you introduced, so a general
+            # question ("who is the mayor") falls through to normal recall below.
+            try:
+                dq = brain.dossier_query(query)
+            except Exception:                          # noqa: BLE001
+                dq = None
+            if dq:
+                # carry the provenance of any file passage the dossier used, rather
+                # than reporting certainty with empty sources (audit 2026-07-23)
+                self._json(200, {"text": dq.get("say", ""), "tier": "local",
+                                 "sources": (dq.get("dossier") or {}).get("sources") or [],
+                                 "confidence": 1.0,
+                                 "intent": "dossier", "who": dq.get("who"),
+                                 "card": dq.get("card"),
+                                 "dossier": dq.get("dossier")})
+                return
             ans = brain.ask(query, no_cloud=bool(b.get("no_cloud")))
             self._json(200, _answer_json(ans))
 
@@ -4047,15 +4325,26 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if lens:
                 lens_args = {}
                 if qs.get("terms"):
-                    lens_args["terms"] = [t.strip() for t in qs["terms"][0].split(",") if t.strip()]
+                    # Bounded the way the spoken path is: each term becomes a
+                    # YOLO-World class that is CLIP text-encoded on a freshly
+                    # built model, so 5000 of them from one query string was a
+                    # free way to pin the CPU. Same caps as spoken_intent.
+                    from .spoken_intent import MAX_TERMS
+                    lens_args["terms"] = [
+                        t.strip()[:48] for t in qs["terms"][0][:512].split(",")
+                        if t.strip()][:MAX_TERMS]
                 for k in ("lat", "lon"):
                     if qs.get(k):
                         try:
                             lens_args[k] = float(qs[k][0])
                         except ValueError:
                             pass
+            # the phone's own on-device scene cues (coarse labels + a count +
+            # person-present) ride the query so the arbiter decides from what the
+            # PHONE can already see, not just image statistics (Tier 1)
+            cues = live_mod.parse_cues(qs)
             data = self._raw(live_mod.MAX_FRAME_BYTES)
-            self._json(200, live_mod.look(brain, data, ambient=ambient,
+            self._json(200, live_mod.look(brain, data, ambient=ambient, cues=cues,
                                           lens=lens, lens_args=lens_args, scene=scene))
 
         def _post_live_hear(self, path, qs):
@@ -4295,7 +4584,50 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                               memories=b.get("memories"))
             if out.get("depth") == "long":     # keep the last long brief for the phone
                 brain.last_long_brief = {**out, "ts": time.time()}
+            # "brief me now" can also reach the GLASS — the panel button used to
+            # return JSON while any connected Live Lens got nothing. OPT-IN
+            # (`push: true`) on purpose: brief() echoes the caller's own `agenda`
+            # into the text, so a default-on push would make this route an
+            # arbitrary-text-onto-every-glass primitive as a side effect of merely
+            # fetching a brief (audit 2026-07-23). push_event stays veil-gated.
+            if b.get("push") is True:
+                # report the delivery count: a silently-swallowed push would
+                # reproduce the very bug this fixes (200 OK, nothing on the glass)
+                try:
+                    from ...hud import cards
+                    out["pushed"] = brain.push_event("brief", cards.morning_brief(
+                        text=out.get("text", ""), bullets=out.get("bullets") or []))
+                except Exception as exc:       # noqa: BLE001 — never fail the brief
+                    out["pushed"] = 0
+                    out["push_error"] = str(exc)[:120]
             self._json(200, out)
+
+        def _post_live_intent(self, path, qs):
+            """The phone heard you speak. Turn the words into a lens intent that
+            the NEXT look obeys — the difference between guessing what you want
+            and being told. Only the transcript crosses (the phone's own speech
+            service produced it); it is length-capped, parsed, and dropped after
+            20s. Veil-gated inside note_spoken_intent."""
+            b = self._body() or {}
+            said = str((b.get("text") if isinstance(b, dict) else "") or "")[:240]
+            self._json(200, brain.note_spoken_intent(said))
+
+        def _post_live_selftest(self, path, qs):
+            """Prove the ambient push channel + card renderers work, without a real
+            smoke alarm and without waiting for the brief hour. Authed like every
+            other write; the card is stamped SELF-TEST and is never veil_ok, so it
+            can't be used to spoof a safety alert (nor to pierce the shield)."""
+            # Call _body() bare. It already returns {} for an absent/empty/non-JSON
+            # body, and its exceptions (_RequestTooLarge/_BadContentLength/
+            # _LengthRequired/_RequestTimeout) are what do_POST maps to 413/400/411/
+            # 408 — catching them here answered 200 to a malformed request and left
+            # an undrained chunked body that desynced the keep-alive connection
+            # (audit 3, HIGH).
+            b = self._body() or {}
+            kind = str((b.get("kind") if isinstance(b, dict) else None)
+                       or qs.get("kind", ["hark"])[0])
+            out = brain.push_selftest(kind)
+            self._json(200 if out.get("ok") else 400, out)
 
         def _post_replies(self, path, qs):
             """Suggest quick replies to a message."""
@@ -4643,6 +4975,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,
+            "/dreamlayer/live/selftest": _post_live_selftest,
+            "/dreamlayer/live/intent": _post_live_intent,
             "/dreamlayer/replies": _post_replies,
             "/dreamlayer/voice": _post_voice,
             "/dreamlayer/calendar": _post_calendar,
@@ -4691,6 +5025,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             # CSRF guard first: a forged cross-origin write must be refused even
             # when it would otherwise be authorized (tokenless loopback trusts
             # any local caller). Native/CLI callers carry no Origin and pass.
+            if not self._write_host_ok():
+                self._json(421, {"error": "host not allowed for writes"}); return
             if not self._same_origin_write():
                 self._json(403, {"error": "cross-origin write refused"}); return
             # PUBLIC POSTs (only /live/redeem) resolve BEFORE the auth gate — the
