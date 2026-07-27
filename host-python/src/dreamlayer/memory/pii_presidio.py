@@ -84,14 +84,34 @@ class PiiRedactor:
                     self._analyzer = None
 
     def redact(self, text: str) -> str:
+        """Scrub contact/financial identifiers. Presidio when it's available,
+        THEN the regex sweep — never one instead of the other.
+
+        Installing an optional dependency must never make the redactor scrub
+        LESS, and running presidio alone did exactly that. Its US_SSN recogniser
+        rejects digit patterns it considers impossible, so `123-45-6789` came
+        back verbatim on a machine with the `privacy` extra and as `<SSN>` on the
+        four profiles without it. The regex sweep is cheap, it runs over
+        presidio's output (placeholders like `<US_SSN>` hold no digits, so it has
+        nothing to chew on), and it shields ISO dates itself — so the two passes
+        compose into the union of what either catches. Found by giving the
+        real-models CI job a presidio it could actually run (issue #528)."""
         if self._analyzer is not None:
             try:
                 # scope presidio to the safe, name-free entity set (above)
                 results = self._analyzer.analyze(
                     text=text, language="en", entities=_SAFE_ENTITIES)
-                return self._anon.anonymize(text=text, analyzer_results=results).text
+                text = self._anon.anonymize(
+                    text=text, analyzer_results=results).text
             except Exception as exc:
                 log.warning("[pii] presidio analyze failed: %s; regex", exc)
+        return self._regex_pass(text)
+
+    def _regex_pass(self, text: str) -> str:
+        """The dependency-free sweep: emails, SSNs, cards, phones, long runs.
+
+        The whole redactor on the profiles without the `privacy` extra, and the
+        second half of it everywhere else."""
         text = _EMAIL.sub("<EMAIL>", text)
         text = _SSN.sub("<SSN>", text)
         # Shield ISO dates for the duration of the numeric passes, then put them

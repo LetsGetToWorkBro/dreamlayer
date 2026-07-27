@@ -4,11 +4,21 @@ name: real-models
 # dependency-free tiers (the hashing embedder, the heuristic vision classifier).
 # This job is the other half of the honesty contract: it installs the heavy ML
 # deps and runs the `real_model`-marked tests against the *actual* neural
-# backends (MiniLM sentence-transformers, open_clip/CLIP), so the claim "the
-# real path is exercised in CI" is literally true.
+# backends, so the claim "the real path is exercised in CI" is literally true.
 #
 # It is intentionally NOT on every push: torch + model downloads are slow and
 # network-dependent, so it runs weekly and on demand, and never gates a PR.
+#
+# The install list below is load-bearing, and it silently was not (issue #528).
+# Every `real_model` test is gated behind an `importorskip` (or an `available`
+# probe) on its backend, so a backend missing from this step does not fail the
+# job — it makes the test VANISH, and the run goes green having exercised
+# nothing. Exactly half of the marked tests were skipping that way — 5 of 10:
+# model2vec (2) and silero-vad / faster-whisper (3) were never installed, so
+# only the sentence-transformers and CLIP tests ever ran. A job whose purpose
+# is "the real path ran" cannot be allowed to pass while the real path is
+# absent, so the final step now FAILS on any skip. That guard, not this comment,
+# is what keeps the list honest as tests are added.
 
 on:
   workflow_dispatch:
@@ -42,13 +52,71 @@ jobs:
       - name: Install with real ML backends
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # CPU torch keeps the runner light; sentence-transformers -> MiniLM,
-          # open-clip-torch -> CLIP. Both download their weights on first use.
+          # CPU torch keeps the runner light. Each package below is here because
+          # a `real_model` test importorskips on it — keep the two lists in step.
+          #   sentence-transformers -> MiniLM  (embedder_local, retrieval_quality)
+          #   open-clip-torch       -> CLIP    (vision_bench)
+          #   model2vec             -> static embedder  (embedder_static)
+          #   silero-vad            -> VAD     (voice_pipeline_real)
+          #   faster-whisper        -> ASR     (voice_pipeline_real)
+          # Weights download on first use.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev]" sentence-transformers open-clip-torch
+          pip install -e ".[dev,privacy]" \
+            sentence-transformers open-clip-torch model2vec \
+            silero-vad faster-whisper
+          # presidio needs spaCy AND a spaCy *model* — models are not pip deps,
+          # so the `privacy` extra alone leaves the analyzer None and the
+          # redactor silently on its regex fallback. nlp_setup standardises on
+          # the small model rather than presidio's ~560 MB default.
+          pip install "spacy>=3,<4"
+          python -m spacy download en_core_web_sm
 
       - name: Run the real-model tests
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
           TOKENIZERS_PARALLELISM: "false"
-        run: pytest --tb=short -m "real_model"
+        run: pytest --tb=short -m "real_model" --junitxml=real-models.xml
+
+      # A skip here is a FAILURE, not a pass. Every real_model test is gated on
+      # its backend being importable, so a missing install turns "we exercised
+      # the real model" into "we selected the test and then didn't run it" —
+      # indistinguishable from green in the summary line. This step is the only
+      # thing standing between that and a weekly false all-clear (issue #528).
+      # It runs even when pytest failed, so a run reports both problems at once.
+      - name: Fail if any real-model test was skipped
+        if: always()
+        run: |
+          python - <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path("real-models.xml")
+          if not report.exists():
+              sys.exit("real-models.xml is missing — pytest did not get far "
+                       "enough to write a report; see the step above.")
+
+          root = ET.parse(report).getroot()
+          cases = root.iter("testcase")
+          skipped = [(c.get("classname", ""), c.get("name", ""),
+                      (s.get("message") or "").strip())
+                     for c in cases for s in c.findall("skipped")]
+          if not skipped:
+              print("No real-model test was skipped — the real backends ran.")
+              sys.exit(0)
+
+          print(f"{len(skipped)} real-model test(s) were SKIPPED. This job "
+                f"exists to exercise them, so that is a failure:\n")
+          for cls, name, msg in skipped:
+              print(f"  - {cls}::{name}\n      {msg}")
+          print("\nInstall the missing backend in the step above, or drop the "
+                "real_model mark if the test no longer has a real path.")
+          sys.exit(1)
+          EOF
+
+      - name: Upload the test report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: real-models-report
+          path: host-python/real-models.xml
+          if-no-files-found: warn
