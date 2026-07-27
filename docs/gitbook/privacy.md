@@ -137,6 +137,21 @@ one Settings group:
 
 ## Deliberately not built
 
-No stranger face lookup, no public face database, no voice cloning, no covert
-recording. These are absent from the codebase by design, not disabled by
-configuration — see `docs/PRIVACY_MODEL.md` for the standing threat model.
+No stranger face lookup, no public face database, **no cloning of anyone's voice
+but Juno's**, no covert recording. See `docs/PRIVACY_MODEL.md` for the standing
+threat model.
+
+The first, second and fourth are absent from the codebase, not switched off. The
+shipped face embedder cannot return an identity at all — with no face model
+present it declines every frame rather than guessing, so there is no setting that
+turns stranger recognition on.
+
+The voice line needs one sentence more, because a blanket "no voice cloning"
+would be false and we would rather be precise than absolute. A voice-cloning
+engine (XTTS) *is* in the tree, behind an opt-in extra, and it exists for exactly
+one purpose: so Juno can speak in *her own* voice offline instead of a stock
+robot one. The only place the product builds it points the reference clips at her
+baked `juno_*.mp3` takes, hard-coded. **No microphone audio, no recording of you,
+and no recording of anyone near you is ever used as a voice reference** — there is
+no code path that would accept one. That is the promise worth making, and it is
+the one the code keeps; `test_advertised_claims.py` fails if it stops being true.

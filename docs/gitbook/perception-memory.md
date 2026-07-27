@@ -175,11 +175,20 @@ What "remembering" is made of got real this wave (`memory/`):
   and bounded crash window) — because a linear scan breaks
   inside year one of real use. Without `usearch` every query falls back to
   the exact linear cosine scan with identical scoring.
-- **A retention lifecycle.** Hot (a 24-hour ring, purged after REM), warm
-  (90 days for consolidated rows — a memory REM keeps reaching for
-  survives its window), cold (forever, but only *entities*: people,
-  promises, tasks, teaches, places). Pinned rows never expire. The sweep
-  is deliberately conservative: unknown age means keep.
+- **A retention lifecycle — written, but not yet running.** The tiers are
+  built: hot (a 24-hour ring, purged after REM), warm (90 days for
+  consolidated rows — a memory REM keeps reaching for survives its window),
+  cold (forever, but only *entities*: people, promises, tasks, teaches,
+  places). Pinned rows never expire, and the sweep is deliberately
+  conservative: unknown age means keep. **Today none of it fires.** The sweep
+  is only constructed inside the nightly REM pass, that pass has no production
+  caller, and it would return early anyway because its vault directory is not a
+  config field — so on a shipped build *nothing ages out on its own*.
+  Deleting is unaffected: "forget that", erase-all, and the retention-days
+  setting (which really does prune the ask history and activity log on boot)
+  all work. We would rather say this plainly than let you assume a sweep is
+  running. Tracked as [decision
+  0001](https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/decisions/0001-retention-lifecycle-never-runs.md).
 - **A cold-start maturity arc.** A fresh install is an **OBSERVER** (48
   hours and 200 scored events of pure silence), then an **APPRENTICE**
   (high-confidence commitment/event cues only, at most three a day, no
