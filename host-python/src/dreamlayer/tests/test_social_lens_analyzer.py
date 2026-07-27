@@ -105,7 +105,14 @@ class TestSocialLensAnalyzer:
         c = make_contact_from_frame("grace", "Grace")
         fr = SocialLens(contacts=[c], privacy=Paused())
         result = fr.identify(make_frame(0.8))
-        assert result.no_face is True
+        # NOT no_face. Under the veil the lens did not look, so it has no basis
+        # for a statement about whether a face was there -- it used to render
+        # "No face detected", a falsehood about the world. `veiled` says the true
+        # thing, and the card now reads "Not looking / The veil is up".
+        assert result.veiled is True
+        assert result.no_face is False
+        assert result.match is None
+        assert result.to_hud_card()["primary"] == "Not looking"
 
     def test_record_encounter_updates_last_met(self):
         import datetime

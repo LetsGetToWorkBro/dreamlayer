@@ -679,7 +679,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
         if self.config.model == "ollama":
-            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(self.config)
+            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(
+                self.config, on_egress=self._note_model_egress)
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
                                    if self.config.semantic_search else None)
@@ -693,7 +694,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.index.synthesizer = make_synthesizer(self._backend)
                 self.index.embedder = None   # embeddings ride the embedder ladder
             else:
-                self._backend = OllamaBackend(self.config)
+                self._backend = OllamaBackend(
+                    self.config, on_egress=self._note_model_egress)
                 self.index.synthesizer = make_synthesizer(self._backend)
                 self.index.embedder = (self._backend.embed
                                        if self.config.semantic_search else None)
@@ -715,6 +717,22 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
 
     def save(self) -> None:
         self.config.save(self.cfg_dir)
+
+    def _note_model_egress(self, url: str) -> None:
+        """Count and log a model request that is about to leave this machine.
+
+        `OllamaBackend` calls this before any non-local request. A LAN Ollama box
+        is still another computer: the wearer's notes crossing the room is egress,
+        and the receipt has to say so or "every cloud request is counted and
+        logged locally" is not true. Never raises into the ask path."""
+        try:
+            host = urllib.parse.urlsplit(url).netloc or url
+            self.bump_cloud_calls()
+            self.activity.add("cloud-egress",
+                              f"Asked the model host {host[:60]}")
+            self.save()
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[brain] egress note failed: %s", exc)
 
     def bump_cloud_calls(self, n: int = 1) -> None:
         """Atomically advance the cloud-egress ledger (config.cloud_calls).
@@ -1122,6 +1140,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 if k in ("immich_api_key", "home_assistant_token",
                          "dawarich_api_key") and updates[k] == "set":
                     continue
+                # Type-check against the CURRENT value's type. JSON was written
+                # straight onto the dataclass, so `{"quiet_hours": 5}` returned
+                # 200, persisted the int, and then `in_quiet_hours` raised
+                # TypeError on `"-" not in 5` -- permanently breaking
+                # GET /dreamlayer/status (which the panel renders as "Brain
+                # offline") until someone hand-edited brain_config.json. A field
+                # the wearer cannot have meant is a 400, not a stored value.
+                cur = getattr(self.config, k, None)
+                if isinstance(cur, str) and not isinstance(updates[k], str):
+                    log.warning("[brain] refused %s: expected a string", k)
+                    continue
+                if isinstance(cur, bool) and not isinstance(updates[k], bool):
+                    log.warning("[brain] refused %s: expected a boolean", k)
+                    continue
+                if isinstance(cur, int) and not isinstance(cur, bool) \
+                        and not isinstance(updates[k], int):
+                    log.warning("[brain] refused %s: expected a number", k)
+                    continue
                 setattr(self.config, k, updates[k])
         from .backends import is_blocked_endpoint
         for uk in _url_fields:
@@ -1210,8 +1246,17 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 and self.config.cloud_ready() and not self.incognito_now():
             ans = self._ask_cloud(query)
         if ans is not None:
-            self.history.add(query, ans.text, ans.tier, ans.sources)
-            self.saga_record("recall")
+            # The panel says incognito "logs nothing". history.jsonl holds the
+            # question AND the verbatim answer, and GET /history serves both, so
+            # writing here under the shield made that claim false. Fail closed:
+            # a posture check that raises is treated as veiled.
+            try:
+                veiled = self.incognito_now()
+            except Exception:                        # noqa: BLE001
+                veiled = True
+            if not veiled:
+                self.history.add(query, ans.text, ans.tier, ans.sources)
+                self.saga_record("recall")
         return ans
 
     def _ask_primary_api(self, query: str, no_cloud: bool = False) -> Optional[Answer]:
@@ -1288,6 +1333,21 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         return Answer(text=text, tier="cloud", sources=["cloud"], confidence=0.6)
 
     def explain(self, label: str, image_b64, want: str) -> Optional[Answer]:
+        """The phone Look screen's second tap ("tell me more"). VEIL-GATED.
+
+        This was a bare `vision_answer(...)` while both siblings refuse
+        correctly -- `/live/look` returns `local_only` and `/brain/look` returns
+        `{"veiled": true}`. So the one route with no gate shipped the wearer's
+        byte-identical posted JPEG to whatever `ollama_url` points at while the
+        device was meant to be deliberately blind, and reported `tier:"laptop"`
+        with the egress counter still reading zero. Fail closed: a posture check
+        that raises means veiled."""
+        try:
+            veiled = self.incognito_now()
+        except Exception:                            # noqa: BLE001
+            veiled = True
+        if veiled:
+            return None
         return vision_answer(self._backend, label, image_b64, want)
 
     def world_lens(self):
@@ -1391,9 +1451,18 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         from .store import field_list
         cfg = data.get("config") or {}
         known = {f.name for f in field_list(BrainConfig)}
+        # A restored backup is request data. `apply_config` vets endpoint fields
+        # against is_blocked_endpoint; this path did not, so a crafted /restore
+        # persisted `ollama_url: http://169.254.169.254` and the next ask read
+        # cloud instance-metadata credentials back as the answer.
+        from .backends import is_blocked_endpoint
         for k, v in cfg.items():
-            if k in known:
-                setattr(self.config, k, v)
+            if k not in known:
+                continue
+            if k.endswith("_url") and isinstance(v, str) and is_blocked_endpoint(v):
+                log.warning("[brain] restore: refused %s (link-local/metadata)", k)
+                continue
+            setattr(self.config, k, v)
         # A restored backup writes config.folders straight from request data,
         # bypassing add_folder's allow-list — filter it through the same
         # primitive so a crafted/legacy backup can't smuggle /etc (or another
@@ -1462,10 +1531,21 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
 
     def purge_memories(self) -> dict:
         """The phone's "Erase all memories" honored where the memories actually
-        live: every Waypath anchor is dropped and the store rewritten, so a
-        later refresh can't quietly resurrect what the user erased. People and
+        live: the MEMORY DATABASE is purged through the same cascade a "forget
+        that" uses (rows, vectors, the ANN index and the ember sidecar), and
+        every Waypath anchor is dropped and the store rewritten, so a later
+        refresh can't quietly resurrect what the user erased. People and
         reminders are mirrors of their own surfaces (People tab, Reminders) and
         are not deleted here — erasing memories is not deleting your contacts.
+
+        The memory DB was the gap, and it was the whole point of the button. The
+        phone's copy reads "Erase all memories. This cannot be undone."; this
+        method cleared only the anchors and the ember sidecar, so every
+        conversation, promise, place signature and commitment stayed in
+        ~/.dreamlayer/dreamlayer.db and was still readable with sqlite3 — and
+        still served by this Brain's own /dreamlayer/memory/file route. The
+        method that DID reach all of it, `Orchestrator.erase_all_memories()`, had
+        no production caller at all.
 
         The Ember practice goes too: engrams hold verbatim ANSWERS (and cues
         and staged offers carry memory content), so erase-everything empties
@@ -1476,6 +1556,26 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         import os as _os
         n = self.waypath.forget_all()
         self._save_waypath()
+        # The memory DB, through the real cascade. Wired exactly the way
+        # `_ember_burn` wires it, so vectors and the ANN index go too — a row
+        # deleted while its embedding survives is a memory you can still find.
+        n_rows = 0
+        db_path = str(_memory_db_path(self))
+        if _os.path.exists(db_path):
+            try:
+                from ...memory.ann_index import PersistentAnnIndex
+                from ...memory.db import MemoryDB
+                from ...memory.retrieval import Retriever
+                db = MemoryDB(db_path)
+                n_rows = len(db.memories())
+                dim = db.get_setting("embedder_dim")
+                ann = (PersistentAnnIndex(db_path + ".usearch", int(dim))
+                       if PersistentAnnIndex.available and dim else None)
+                Retriever(db, None, ann).purge_all()
+            except Exception as exc:                 # noqa: BLE001
+                log.error("[brain] memory purge failed: %s", exc)
+                return {"ok": False, "error": f"memory purge failed: {exc}",
+                        "purged": n, "embers_purged": 0}
         n_ember = 0
         ember_path = _ember_store_path(self)
         if _os.path.exists(ember_path):
@@ -1489,9 +1589,10 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # host, and its ring, alive).
         self._invalidate_world_lens()
         self.activity.add("privacy",
-                          f"Erased kept memories ({n} anchor(s), "
-                          f"{n_ember} ember(s))")
-        return {"ok": True, "purged": n, "embers_purged": n_ember}
+                          f"Erased kept memories ({n_rows} memory row(s), "
+                          f"{n} anchor(s), {n_ember} ember(s))")
+        return {"ok": True, "purged": n, "memories_purged": n_rows,
+                "embers_purged": n_ember}
 
     def missed(self, since: float = 0.0) -> dict:
         """"What did I miss?" — the incoming texts and emails since you last
@@ -3424,8 +3525,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             token. Same posture as the panel: the token is injected only for a
             localhost request. No CORS header on purpose — this HTML carries the
             injected Brain token (localhost only), so it must stay same-origin;
-            it's loaded by navigation, never fetch()."""
-            html = _builder_page(brain.config.token if self._from_localhost() else "")
+            it's loaded by navigation, never fetch(). Same `_write_host_ok()`
+            requirement as `_get_root` -- a token must not ride an mDNS name an
+            attacker chose."""
+            html = _builder_page(brain.config.token
+                                 if (self._from_localhost()
+                                     and self._write_host_ok()) else "")
             if html is None:
                 self._json(404, {"error": "builder assets not found"}); return
             body = html.encode("utf-8")
@@ -3944,6 +4049,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "url": best, "http_url": http_url + frag,
                 "https": bool(https_url),
                 "code": code,
+                # Can a PHONE redeem this code? `_post_live_redeem` refuses any
+                # non-loopback caller without TLS, so on an http-only Brain the
+                # code is real (loopback can redeem it) but useless to the phone
+                # — and `live.py` maps that 403 to "wrong or expired code", so the
+                # panel printed a code, the phone refused it, and the wearer was
+                # told they had mistyped. The panel reads this flag and offers the
+                # typed-code path only when it can actually work.
+                "code_offbox": bool(https_url and code),
                 "note": ("scan with the phone camera — accept the one-time "
                          "certificate warning (it is this Brain's own)"
                          if https_url else
@@ -4537,7 +4650,13 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         def _post_rc_import(self, path, qs):
             """The no-code browser builder's "Deploy to my Brain"."""
-            self._json(200, brain.rc_import(self._body().get("figment") or self._body()))
+            # ONE read. `self._body()` consumes the socket, so calling it twice
+            # left the second `_read_capped` blocking on a drained connection for
+            # the full SOCKET_TIMEOUT_S with no response at all -- 64 such bodies
+            # (a few KB) held every worker and took the public panel offline. On a
+            # pipelined connection the second read ate the NEXT request instead.
+            body = self._body()
+            self._json(200, brain.rc_import(body.get("figment") or body))
 
         def _post_event(self, path, qs):
             """The $6 physical-events kit (INNOVATION 1.6): a sensor out in the
@@ -5067,6 +5186,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # a byte-dribbling slow-POST; abort so the worker + slot free up.
                 self.close_connection = True
                 self._json(408, {"error": "request body read timed out"})
+            except OSError:
+                # A socket-level fault -- a slow-POST that hit the read deadline
+                # as a bare TimeoutError, a peer that vanished, a broken pipe --
+                # is NOT an application error and must keep the old behaviour:
+                # close the connection. Writing a 500 into a dead socket just
+                # raises again, and it would defeat the slowloris timeout.
+                self.close_connection = True
+                raise
+            except Exception:                    # noqa: BLE001
+                # The catch-all do_GET has had all along. Without it, anything
+                # other than the four body faults above escaped to
+                # socketserver.handle_error: a traceback on stderr, the
+                # connection dropped, and ZERO bytes to the client. A JSON field
+                # with the wrong TYPE was enough -- `{"query": 5}` to
+                # /dreamlayer/brain/ask hit `.lower()` on an int -- across a
+                # dozen handlers. A caller deserves a status code, and a
+                # keep-alive connection must not die on a bad field.
+                log.exception("[brain] unhandled error in POST %s", path)
+                self._json(500, {"error": "internal"})
 
     class _BrainServer(ThreadingHTTPServer):
         # sibling https listener's port (set by the factory when __main__

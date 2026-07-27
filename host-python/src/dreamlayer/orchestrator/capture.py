@@ -117,7 +117,8 @@ class CapturePipeline:
         now = self._now() if ts is None else ts
         if self._veiled():
             # BOTH accumulators. `_ambient` is the other pool of the wearer's
-            # surroundings (up to AMBIENT_MAX_MS of it); clearing only `_seg`
+            # surroundings -- ~2800 ms of it on the shipped 3000 ms window, since
+            # it flushes at the window rather than at the cap; clearing only `_seg`
             # left pre-veil audio resident in RAM for the whole veiled stretch
             # and then handed the tagger / bird lens one window that straddled
             # the veil boundary -- and the bird lens writes its buffer to a temp

@@ -10,6 +10,7 @@ injectable so it's testable without Ollama running.
 from __future__ import annotations
 
 import json
+import logging
 import urllib.parse
 import urllib.request
 from typing import TYPE_CHECKING, Callable, Optional
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     from ..mlx_backend import MLXBackend
 
 from ..schema import Answer
+
+log = logging.getLogger("dreamlayer.backends")
 
 
 # Cloud providers the panel offers. `wire` is the on-the-wire format the
@@ -82,9 +85,16 @@ PROVIDER_PRESETS: dict[str, dict] = {
 # an unparseable URL — is REMOTE and treated as egress. Fail-safe by design:
 # over-counting a call as leaving the device is harmless; under-counting one
 # that actually left is a privacy lie.
+# NOTE 169.254.0.0/16 is deliberately ABSENT. It was here as "link-local, so
+# it's on my network" -- but it is the same range as _BLOCKED_NETS below, where
+# every cloud's instance-metadata service lives. Any call site that asked only
+# `is_local_endpoint` therefore treated cloud-credential space as a trusted
+# on-device endpoint: exempt from the egress counter, exempt from the veil, and
+# described to the wearer as "on your device". Link-local is not somewhere a
+# model endpoint ever legitimately lives.
 _LOCAL_NETS = tuple(__import__("ipaddress").ip_network(n) for n in (
     "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-    "169.254.0.0/16", "::1/128"))
+    "::1/128"))
 
 
 def is_local_endpoint(base_url: str) -> bool:
@@ -210,13 +220,13 @@ def _urllib_post(url: str, payload: dict, timeout: float = 30.0) -> dict:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data,
                                  headers={"Content-Type": "application/json"})
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = _guarded_opener()
     with opener.open(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _urllib_get(url: str, timeout: float = 4.0) -> dict:
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = _guarded_opener()
     with opener.open(urllib.request.Request(url), timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -237,7 +247,7 @@ def _urllib_post_stream(url: str, payload: dict, timeout: float, on_line) -> Non
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data,
                                  headers={"Content-Type": "application/json"})
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = _guarded_opener()
 
     def _emit(chunk: bytes) -> None:
         line = chunk.decode("utf-8", "replace").strip()
@@ -448,16 +458,53 @@ class OllamaBackend:
     """Chat + vision + embeddings via a local Ollama server."""
 
     def __init__(self, config, http_post: Optional[Callable] = None,
-                 timeout: float = 30.0):
+                 timeout: float = 30.0, on_egress: Optional[Callable] = None):
         self.config = config
         self._post = http_post or (lambda u, p: _urllib_post(u, p, timeout))
+        # Called with the endpoint URL immediately BEFORE a request that leaves
+        # this machine, so the Brain can count and log it. Optional so a bare
+        # backend still works; when absent the posture gate below still holds.
+        self._on_egress = on_egress
+
+    def _endpoint(self, path: str) -> Optional[str]:
+        """Resolve an Ollama URL, refusing the ones we must not reach.
+
+        Ollama is presented to the wearer as the on-device tier -- the panel says
+        "questions never leave your device and it keeps working while incognito".
+        That is true for 127.0.0.1 and false the moment `ollama_url` points at
+        another box, which is a supported setup ("run Ollama on your gaming PC").
+        Before this, that case had NO posture gate, NO locality check, NO egress
+        count and NO ledger entry, while `probe_ollama` right above already had
+        all of them -- so a veiled `ask` shipped the wearer's notes (and, with
+        semantic search on, the entire indexed corpus via /api/embeddings) to
+        another machine, reported tier "laptop", and left the counter at 0.
+
+        Returns None when the request must not be made."""
+        url = (getattr(self.config, "ollama_url", "") or "").rstrip("/")
+        if not url:
+            return None
+        # Link-local / cloud-metadata space is never a model endpoint.
+        if is_blocked_endpoint(url):
+            log.warning("[ollama] endpoint refused: link-local / metadata address")
+            return None
+        if not is_local_endpoint(url):
+            if _posture_forbids_egress(self.config):
+                return None                  # the shield is up: do not reach out
+            if self._on_egress is not None:
+                try:
+                    self._on_egress(url)
+                except Exception:            # noqa: BLE001 - never break the ask
+                    pass
+        return url + path
 
     def _gen(self, model: str, prompt: str, images=None) -> str:
         payload = {"model": model, "prompt": prompt, "stream": False}
         if images:
             payload["images"] = images
-        out = self._post(self.config.ollama_url.rstrip("/") + "/api/generate",
-                         payload)
+        url = self._endpoint("/api/generate")
+        if url is None:
+            return ""
+        out = self._post(url, payload)
         return (out or {}).get("response", "").strip()
 
     def chat(self, prompt: str) -> str:
@@ -481,9 +528,40 @@ class OllamaBackend:
         return self._gen(self.config.ollama_vision_model, prompt, images=imgs)
 
     def embed(self, text: str) -> list:
-        out = self._post(self.config.ollama_url.rstrip("/") + "/api/embeddings",
-                         {"model": self.config.ollama_embed_model, "prompt": text})
+        # The highest-volume egress on this backend by far: a reindex embeds
+        # every indexed file, one request per chunk.
+        url = self._endpoint("/api/embeddings")
+        if url is None:
+            return []
+        out = self._post(url, {"model": self.config.ollama_embed_model,
+                               "prompt": text})
         return (out or {}).get("embedding", []) or []
+
+
+class _NoBlockedRedirect(urllib.request.HTTPRedirectHandler):
+    """Re-apply the SSRF guard to every redirect hop.
+
+    `is_blocked_endpoint` was checked once, against the URL the caller supplied,
+    and then `opener.open` happily followed a 302 wherever it pointed. One
+    redirect to 169.254.169.254 was enough to read cloud instance-metadata
+    credentials back through the model reply -- the exact "turn the Brain into an
+    IMDS credential-theft proxy" the guard's own comment says it prevents. A
+    guard that only inspects the first hop does not guard a redirect chain."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if is_blocked_endpoint(newurl):
+            raise urllib.error.HTTPError(
+                newurl, code,
+                "redirect refused: link-local / cloud-metadata address",
+                headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _guarded_opener():
+    """A urllib opener with no proxy and no unguarded redirects. Every model
+    endpoint fetch must use this, not `build_opener(ProxyHandler({}))`."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                       _NoBlockedRedirect())
 
 
 def _provider_chat(provider: str, base_url: str, model: str, key: str,
@@ -503,7 +581,7 @@ def _provider_chat(provider: str, base_url: str, model: str, key: str,
     wire, url, body, headers = _build_request(provider, base_url, model, key, prompt)
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = _guarded_opener()
     with opener.open(req, timeout=timeout) as resp:
         d = json.loads(resp.read().decode("utf-8"))
     return _parse_cloud_response(wire, d)

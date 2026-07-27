@@ -142,6 +142,11 @@ class SocialOps(BrainHost):
         t = (text or "").strip()
         if not t:
             return None
+        # A meeting records attendees and verbatim notes to disk and to the signed
+        # ledger. Same rule as add_person: not under the shield.
+        if self._veiled():
+            return {"say": "The veil is up — I'm not keeping a record of this.",
+                    "veiled": True}
         log = self._meetings()
         if re.match(r"(?i)^\s*(start|begin)\s+(a\s+|the\s+)?meeting\b", t):
             who = re.split(r"(?i)\bwith\b", t, 1)
@@ -169,8 +174,24 @@ class SocialOps(BrainHost):
             return {"intent": "meeting_note", "say": "Noted.", "meeting": mtg}
         return None
 
+    def _veiled(self) -> bool:
+        """The privacy posture, FAIL-CLOSED. An unreadable posture is veiled."""
+        try:
+            return bool(self.incognito_now())
+        except Exception:                              # noqa: BLE001
+            return True
+
     def add_person(self, name: str, note: str = "", tags=None) -> list:
-        """Introduce (or update) a person. Re-adding a name updates the note."""
+        """Introduce (or update) a person. Re-adding a name updates the note.
+
+        Refused under the shield. `dossier_query` already declines to record who
+        you ASKED about, with the comment "a signed permanent record of 'Recalled
+        Sarah Chen' is exactly the kind of thing the veil exists to prevent" --
+        but ENROLLING a name was ungated, so a veiled "this is Sarah Chen from
+        Acme" wrote people.json, rehearsal.json, and a signed, hash-chained
+        ledger row. Reading a name was gated; writing one was not."""
+        if self._veiled():
+            return self.people()
         name = (name or "").strip()
         if not name:
             return self.people()

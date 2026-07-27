@@ -18,8 +18,18 @@ ledger, the user model's learning, commitment capture, anticipation cards,
 harks, message pop-ups, dossiers and greetings, the Social Lens ear and eye
 (both `identify` and introduction offers), Truth Lens feeds, Veritas world
 checks, answer-ahead, object look-ups, waypath, brain asks, profile
-publishing, and place triggers. The Horizon keeps rendering — but only the
-empty paused frame.
+publishing, and place triggers. Introductions, meetings and name rehearsal are
+gated too — enrolling a name is a write, and the shield stops writes, not just
+reads. So are the Brain's question/answer history, the glance arbiter's learned
+priors, and any model request to an endpoint that is not on this machine (a LAN
+Ollama box is another computer; a request to it is counted and logged like any
+other egress). The Horizon keeps rendering — but only the empty paused frame.
+
+Two honest limits, stated rather than implied. Voice **commands** still work
+under the shield — "incognito off" has to be sayable, or a wearer who turned it
+on by voice would be stuck. And a full `pause()` gesture is a separate flag from
+the incognito session shield: leaving incognito never silently clears an explicit
+pause, so the gesture is its own way back.
 
 The veil is also honored *aesthetically*: the PrivacyVeilCard enters with a
 slam (no pane, no pretty fade), parallax freezes to zero on the exact frame

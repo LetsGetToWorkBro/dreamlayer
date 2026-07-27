@@ -105,8 +105,16 @@ class SocialLens:
         Check result.no_face / result.no_match / result.match.
         """
         if not self._privacy.allow_capture():
+            # NOT `no_face` -- we did not look. Saying "No face detected" here is
+            # a statement about the world the system has no basis for.
             return SocialLensResult(match=None, frame_confidence=0.0,
-                                    no_face=True)
+                                    veiled=True)
+
+        # No face model on this build: say so, rather than reporting the absence
+        # of a face we never went looking for.
+        if not getattr(self._embedder, "available", True):
+            return SocialLensResult(match=None, frame_confidence=0.0,
+                                    unavailable=True)
 
         # Stage 1: embed
         embedding, face_conf = embed_frame(frame, self._embedder)

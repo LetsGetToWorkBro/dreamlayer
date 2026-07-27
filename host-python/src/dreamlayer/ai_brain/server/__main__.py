@@ -114,7 +114,7 @@ def main(argv=None) -> int:
             brain, args.host, args.dir, args.port, args.tls_port)
         if tls_server is None:
             print("  ⚠ https (Live Lens camera) needs the `cryptography` package "
-                  "(pip install 'dreamlayer[verify]') — serving http only.")
+                  "(pip install 'dreamlayer[privacy]') — serving http only.")
 
     # the tls_port kwarg rides only when --tls actually started a listener, so
     # the bare-launch call shape stays exactly as it always was (pinned by

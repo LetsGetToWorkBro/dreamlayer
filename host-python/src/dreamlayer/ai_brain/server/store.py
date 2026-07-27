@@ -792,6 +792,10 @@ class ActivityLog:
         self._signer = signer
         # External rollback/wipe watermark (see _ReceiptWatermark). None → the
         # in-file .head anchor is the only length check (unchanged behavior).
+
+        # True only inside `_rechain` (the owner's prune/restore), which is
+        # the one operation allowed to lower the rollback watermark.
+        self._rebasing = False
         self._watermark = watermark
         self._head_hash = ""            # sha256 of the last record's core ("" = genesis)
         self._next_seq = 0
@@ -841,7 +845,8 @@ class ActivityLog:
         # the signing pubkey so a later reinstall's stale mark can't false-alarm.
         if self._watermark is not None:
             self._watermark.set(self._next_seq,
-                                getattr(self._signer, "public_key_hex", ""))
+                                getattr(self._signer, "public_key_hex", ""),
+                                allow_lower=self._rebasing)
 
     def _read_head(self) -> Optional[dict]:
         """The verified head anchor, or None (absent / unverifiable / no signer)."""
@@ -1034,8 +1039,14 @@ class ActivityLog:
         """Rewrite the log, re-numbering + re-signing `recs` from a fresh genesis.
         A legitimate owner edit (prune/restore) with the key in hand re-attests
         the surviving records; an attacker WITHOUT the key cannot, so their edit
-        fails verify()."""
+        fails verify().
+
+        Sets `_rebasing` for the duration so `_write_head` may LOWER the rollback
+        watermark. This is the only path allowed to: an owner edit shrinks the
+        ledger on purpose, whereas an ordinary append that lowered the mark was
+        how a wipe erased the evidence of itself."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._rebasing = True
         prev, seq = "", 0
         with self.path.open("w") as f:
             for src in recs:
@@ -1050,7 +1061,10 @@ class ActivityLog:
                     seq += 1
                 f.write(json.dumps(rec) + "\n")
         self._head_hash, self._next_seq, self._loaded = prev, seq, True
-        self._write_head()                     # re-attest the new (owner-signed) head
+        try:
+            self._write_head()                 # re-attest the new (owner-signed) head
+        finally:
+            self._rebasing = False
 
     def clear(self) -> None:
         with self._lock:
@@ -1165,11 +1179,28 @@ class _ReceiptWatermark:
         except Exception:
             return None
 
-    def set(self, count: int, pub: str) -> None:
+    def set(self, count: int, pub: str, allow_lower: bool = False) -> None:
+        """Record the committed-record count. MONOTONIC unless `allow_lower`.
+
+        A high-water mark that an ordinary append can move DOWN is not a
+        high-water mark. `_write_head` feeds this `self._next_seq`, which is
+        derived from the file -- so after an out-of-band truncation or wipe, the
+        very next logged action (a search, a folder index, an incognito toggle:
+        seconds on a live device) re-baselined the mark to the shortened length
+        and `verify()` went green again, under the same public key, with the
+        cloud-egress records gone. The wipe concealed itself.
+
+        `allow_lower=True` is passed by exactly one caller -- `_rechain`, which
+        backs the owner's own `prune`/`restore`. A legitimate shrink is an
+        explicit act; an append is not."""
         try:
+            n = int(count)
+            if not allow_lower:
+                cur = self.get(pub)
+                if cur is not None:
+                    n = max(int(cur), n)
             self._get_store().set(
-                self._NAME,
-                json.dumps({"pub": pub, "count": int(count)}).encode())
+                self._NAME, json.dumps({"pub": pub, "count": n}).encode())
         except Exception:
             pass
 
@@ -1219,7 +1250,12 @@ def _prune_jsonl(path: Path, days: int) -> int:
 
 def in_quiet_hours(spec: str, now: Optional[float] = None) -> bool:
     """True if `now` falls in a "HH:MM-HH:MM" window (wraps past midnight)."""
-    if not spec or "-" not in spec:
+    # Type-safe as well as empty-safe: a non-string reached this from a config
+    # patch (`{"quiet_hours": 5}`) and raised TypeError on `"-" not in 5`, which
+    # took out GET /dreamlayer/status permanently. apply_config now rejects the
+    # wrong type at the door; this is the second line so a legacy config file
+    # already carrying one degrades to "not in quiet hours" rather than crashing.
+    if not isinstance(spec, str) or not spec or "-" not in spec:
         return False
     try:
         a, b = spec.split("-", 1)

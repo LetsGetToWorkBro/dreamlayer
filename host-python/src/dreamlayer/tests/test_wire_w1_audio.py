@@ -106,7 +106,7 @@ def test_ambient_buffer_is_drop_oldest_capped():
     # with a bird lens, it pools but never grows past AMBIENT_MAX_MS
     from dreamlayer.orchestrator import capture as capmod
     pipe2 = CapturePipeline(hub, bird=object(), sample_rate=16000,
-                            ambient_window_ms=99_000)  # never flushes here
+                            ambient_window_ms=99_000)  # clamped to the cap
     cap = int(16000 * capmod.AMBIENT_MAX_MS / 1000.0)
     pipe2._accumulate_ambient([0.1] * (cap * 3))
     assert len(pipe2._ambient) <= cap

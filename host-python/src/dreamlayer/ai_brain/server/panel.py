@@ -2218,7 +2218,10 @@ function isLocalUrl(u){
     // mirror both so "010.0.0.1"/"10.999.0.0" can't read local here yet remote there.
     for(let i=0;i<4;i++){if(o[i].length>1&&o[i][0]==="0")return false;if(+o[i]>255)return false;}
     const a=+o[0],b=+o[1];
-    return a===127||a===10||(a===192&&b===168)||(a===172&&b>=16&&b<=31)||(a===169&&b===254);}
+    // 169.254/16 is deliberately absent, matching backends._LOCAL_NETS: it is
+    // link-local / cloud-metadata space, never a legitimate model endpoint,
+    // and calling it "on your device" exempted it from the egress count.
+    return a===127||a===10||(a===192&&b===168)||(a===172&&b>=16&&b<=31);}
   return false;                                         // public / bare host → remote
 }
 const APROV={custom:{base:"",model:"",key:true},openai:{base:"https://api.openai.com",model:"gpt-4o-mini",key:true},
@@ -2468,11 +2471,16 @@ async function liveLink(){const out=$("liveout");out.innerHTML='<div class="pair
       '(it turns on automatically once the <code>cryptography</code> package is available — update the app, or run the Brain with <code>--tls</code>). '+
       'The link below still works for <b>asking</b>; only the live camera needs https.</div>';
   const qr=r.qr?`<div class="qrbox${secure?" live":""}">${r.qr}</div>`:"";
-  // a short code the wearer can type on the phone if it can't scan — the page
-  // exchanges it for the token at /dreamlayer/live/redeem
-  const code=r.code?`<div class="livecode"><div class="conn-s">Can't scan? On the phone, open <b>${esc((r.url||"").split("#")[0])}</b> and enter this code:</div>`+
+  // A short code the wearer can type on the phone if it can't scan — the page
+  // exchanges it for the token at /dreamlayer/live/redeem. Shown ONLY when the
+  // server says a phone can actually redeem it (`code_offbox`): /live/redeem
+  // refuses a non-loopback caller without TLS, and the live page maps that 403
+  // to "wrong or expired code", so on an http-only Brain this panel used to
+  // print a code, the phone got refused, and the wearer was blamed for a typo.
+  const code=(r.code&&r.code_offbox)?`<div class="livecode"><div class="conn-s">Can't scan? On the phone, open <b>${esc((r.url||"").split("#")[0])}</b> and enter this code:</div>`+
     `<div class="codebig">${esc(r.code)}</div>`+
-    `<div class="conn-s">Good for 5 minutes, one use.</div></div>`:"";
+    `<div class="conn-s">Good for 5 minutes, one use.</div></div>`
+    :(r.code?`<div class="livecode"><div class="conn-s">Typing a code needs the secure link — restart the Brain with <b>--tls</b>. Scanning the QR above still works.</div></div>`:"");
   out.innerHTML=`<div class="paircode">${qr}${steps}${code}`+
     `<div class="foot"><span class="url">${esc(r.url)}</span>`+
     `<span style="margin-left:8px;display:inline-flex;gap:6px">`+
