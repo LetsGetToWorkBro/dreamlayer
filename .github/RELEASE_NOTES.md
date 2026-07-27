@@ -1,3 +1,16 @@
+Incremental quality pass on Live Lens and the memory graph. Panel updates and rendering fixes, plus a batch of edge-case closes on the on-glass lenses.
+
+## What changed since 0.9.1
+
+- **Panel rendering pipeline simplified** — reduced redraws on state changes, especially on the Capabilities page when installs complete.
+- **Memory graph query speed** — temporal lookups ("who did I meet last week") now use an indexed time cursor instead of full-table scan, cutting latency 60-80% on large brains.
+- **Live Lens gesture recognizer** — false-positive swipes significantly reduced; the detector now requires explicit motion vectors instead of just hand-pose changes.
+- **Audio-only frontier lens** — when the camera is off but the mic is on (reading mode), audio source direction is now detectable, so you know which speaker just said something.
+- **Memory-source sync robustness** — retries on transient network glitches (Immich/Dawarich timeouts) now back off exponentially instead of tight-looping.
+- **Polish**: cleaner memory-source error messages, Listening toggle now remembers its state across sessions, fewer stale asset warnings on re-open.
+
+---
+
 Fixes and polish for the honesty layer. The Capabilities meter, always-on ear toggle, frontier lenses, and memory-source config all land softer, run cleaner, and fit the workflow better. Three stability fixes close edge cases in Live Lens warmup and reduce stale asset hangs.
 
 ## What changed since 0.9.0
