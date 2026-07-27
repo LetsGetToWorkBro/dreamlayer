@@ -1132,3 +1132,109 @@ def test_the_LIVE_set_also_has_an_owner_for_every_scene_it_can_see():
         if not [b for b in bids if isinstance(b, LensBid)]:
             orphans.append(scene)
     assert orphans == ["person", "unknown"], f"scenes with no bidder: {orphans}"
+
+
+def test_the_sky_survives_a_high_RESOLUTION_frame():
+    """The light cues are box-averaged, and averaging destroys the thing they
+    measure: at 2160 px the block is 4x4, so a 1-px star is divided by sixteen and
+    a whole starfield measured ZERO lights — the sky simply vanished above the size
+    the phone happens to post. Pooled by MAXIMUM, a point light survives at any
+    input size."""
+    import numpy as np
+    from dreamlayer.ai_brain.perception import HeuristicPerceptor, frame_cues
+    P = HeuristicPerceptor()
+
+    def stars(size):
+        rng = np.random.default_rng(11)
+        h = int(size * 0.75)
+        a = np.full((h, size), 7.0)
+        for _ in range(90):
+            y, x = rng.integers(1, h - 2), rng.integers(1, size - 2)
+            a[y, x] = rng.integers(90, 255)
+        return (a + rng.normal(0, 2.0, a.shape)).clip(0, 255).astype(np.uint8)
+    for size in (240, 480, 720, 1080, 2160):
+        assert frame_cues(stars(size)).get("lights", 0) >= 8, size
+        assert P.perceive(stars(size)).sky is True, size
+
+
+def test_low_contrast_structure_is_counted_but_a_wall_is_not():
+    """The prominence floor was fitted to high-contrast synthetics (a shelf 0.31, a
+    page 0.51), so it sat above real pale-on-pale structure: a foggy street measures
+    0.010-0.017 and a grey filing cabinet 0.011-0.021, both silently uncounted, and
+    the cabinet flipped between 0 and 4 peaks with resolution."""
+    import numpy as np
+    from dreamlayer.ai_brain.perception import frame_cues
+
+    def bars(dn, n=12, size=720):
+        h = int(size * 0.75)
+        a = np.full((h, size), 128.0)
+        for i in range(n):
+            x = int(i * size / n)
+            a[int(h * 0.2):int(h * 0.8), x + 4:x + int(size / n) - 4] = 128.0 + dn
+        rng = np.random.default_rng(3)
+        return (a + rng.normal(0, 1.5, a.shape)).clip(0, 255).astype(np.uint8)
+    for dn in (6, 9, 12, 20, 40):
+        assert frame_cues(bars(dn))["col_reps"] >= 8, f"{dn} DN of contrast is structure"
+    # a wall, with and without a lighting gradient, is still nothing
+    rng = np.random.default_rng(7)
+    for grad in (0.0, 24.0):
+        a = (np.full((540, 720), 128.0) + np.linspace(0, grad, 720)[None, :]
+             + rng.normal(0, 1.5, (540, 720)))
+        c = frame_cues(a.clip(0, 255).astype(np.uint8))
+        assert c["col_reps"] == 0 and c["row_reps"] == 0, (grad, c)
+
+
+def test_one_pick_does_not_fully_arm_the_learned_nudge():
+    """`boost` was a pure SHARE, so it returned the full weight after a single
+    reinforce — identical at 1, 2, 3, 4 and 200 picks. That nudge is what opens the
+    salience gap and makes a fire look "clear", so one accidental tap was enough to
+    start steering every later look on that scene."""
+    from dreamlayer.orchestrator.glance import GlancePriors
+    seen = []
+    for n in (1, 2, 3, 4, 8):
+        p = GlancePriors()
+        for _ in range(n):
+            p.reinforce("text", "read")
+        seen.append(round(p.boost("text", "read"), 4))
+    assert seen[0] < seen[1] < seen[2], f"the nudge must grow with evidence: {seen}"
+    assert seen[0] <= 0.05, f"one pick must be a hint, not a verdict: {seen[0]}"
+    assert seen[-1] == seen[-2], "and it saturates once established"
+
+
+def test_the_priors_have_no_silently_coupled_constants():
+    """`amount` was coupled to confident()'s floor with nothing saying so: at 0.3 or
+    below the row converges on 3.0 or less, so confidence became PERMANENTLY
+    unreachable, and below ~1.1e-3 the decay deleted the entry before the credit
+    landed so the row never grew at all — while `boost` still reported a full share
+    of it. A full row was worse: it returned early, so it stopped decaying AND
+    stopped accepting, freezing whatever habit it happened to hold."""
+    from dreamlayer.orchestrator.glance import GlancePriors, MAX_PRIOR_LENSES
+    for amount in (1.0, 0.3, 0.05, 1e-9):
+        p = GlancePriors()
+        for _ in range(8):
+            p.reinforce("text", "read", amount)
+        assert p.confident("text", "read"), f"amount={amount} must reach confidence"
+    # a full row still decays and still accepts
+    p = GlancePriors()
+    for i in range(MAX_PRIOR_LENSES + 2):
+        p.reinforce("text", f"lens{i}")
+    row_before = dict(p._c["text"])
+    p.reinforce("text", "brand-new")
+    assert len(p._c["text"]) <= MAX_PRIOR_LENSES
+    assert p._c["text"] != row_before, "a full row must not freeze"
+    assert "brand-new" in p._c["text"], "the newest pick must land"
+    assert p.boost("text", "brand-new") > 0
+
+
+def test_the_posture_cue_fails_closed_on_the_client():
+    """Two ways the elevation can be confidently WRONG rather than absent, both of
+    which the page must refuse instead: gamma missing (substituting 0 silently
+    reverts to the portrait-only formula, which is the exact case gamma was added to
+    fix) and a FRONT camera (facingMode is requested as an ideal, so a device
+    without a rear camera hands over the selfie one and every elevation inverts)."""
+    page = live_mod._PAGE
+    assert 'typeof e.gamma !== "number") return' in page
+    assert "if (REARCAM === false) return;" in page
+    assert 'REARCAM = fm ? (fm === "environment") : null' in page
+    # and the value is still only sent when a real reading arrived
+    assert 'if (TILTOK) q.set("tilt"' in page

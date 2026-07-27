@@ -1966,6 +1966,15 @@ function initControls(){
     const s = $("cam").srcObject;
     track = s && s.getVideoTracks ? s.getVideoTracks()[0] : null;
     caps = (track && track.getCapabilities) ? (track.getCapabilities() || {}) : {};
+    /* Which camera did we actually GET? facingMode is requested as an ideal, so a
+       device with no rear camera silently hands over the selfie one — and every
+       elevation the posture cue derives would then be inverted (flat on a table
+       would read "pointed at the ceiling"). Confirm it, and if we cannot, report no
+       posture rather than a confident opposite. */
+    try {
+      const fm = (track && track.getSettings) ? (track.getSettings().facingMode || "") : "";
+      REARCAM = fm ? (fm === "environment") : null;
+    } catch (e) { REARCAM = null; }
     if (caps.torch) $("torch").hidden = false;
     if (caps.zoom) {
       $("zoomwrap").hidden = false;
@@ -2303,6 +2312,11 @@ let loopTimer = null, booted = false, detectorActive = false;
 let LASTDETS = null;          /* the phone's own scene cues for the next look */
 /* Tier 2: where the camera is pointed, and how long you've held a focus. */
 let TILT = 0, FOCUS = {name: "", since: 0}, TILTOK = false;
+/* null = not yet known, true = confirmed environment-facing, false = it is the
+   selfie camera, so every elevation would be inverted. `facingMode` is requested
+   as an IDEAL, not a constraint, so a device without a rear camera silently
+   returns the front one. */
+let REARCAM = null;
 function onTilt(e){
   /* Where the CAMERA is pointed, in degrees of elevation: +90 straight up, 0 dead
      ahead, -90 at the floor. That is the only quantity the arbiter's posture cues
@@ -2320,8 +2334,15 @@ function onTilt(e){
      Sanity: flat on a table screen-up, the camera faces the table -> -90. Held
      upright with the screen toward you, it faces the room -> 0. Screen flat facing
      down, it faces the sky -> +90. */
-  if (typeof e.beta !== "number") return;
-  const b = e.beta * Math.PI / 180, g = (typeof e.gamma === "number" ? e.gamma : 0) * Math.PI / 180;
+  /* Both angles or neither. Substituting gamma=0 while still declaring the reading
+     valid silently reverted to the portrait-only formula — which is the exact case
+     gamma was added to fix, so a landscape phone held level would have reported a
+     steep tilt and been believed. And a FRONT camera inverts the whole sign, so a
+     stream we could not confirm is rear-facing reports no posture at all rather
+     than a confident opposite. */
+  if (typeof e.beta !== "number" || typeof e.gamma !== "number") return;
+  if (REARCAM === false) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
   const up = Math.max(-1, Math.min(1, -Math.cos(b) * Math.cos(g)));
   TILTOK = true;
   TILT = Math.max(-90, Math.min(90, Math.asin(up) * 180 / Math.PI));

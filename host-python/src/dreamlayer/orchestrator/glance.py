@@ -279,6 +279,7 @@ INTENT_LENS = {
 
 MAX_PRIOR_LENSES = 12       # distinct lens keys one scene row may ever hold
 PRIOR_DECAY = 0.9           # each new pick fades the older ones by this much
+PRIOR_FLOOR = 3.0           # picks before a preference counts as established
 
 
 class GlancePriors:
@@ -336,16 +337,24 @@ class GlancePriors:
         return b
 
     def _boost_key(self, key: str, lens: str) -> float:
+        """The salience nudge for `lens` on this key, scaled by BOTH how dominant
+        the preference is and how much evidence there is for it.
+
+        It used to be the share alone, so a single pick returned the full weight —
+        identical at 1, 2, 3, 4 and 200 picks. That is the nudge that opens the
+        salience gap and makes a fire look "clear", so one accidental tap was enough
+        to start steering every later look on that scene."""
         row = self._c.get(key)
         if not row:
             return 0.0
         total = sum(row.values())
         if total <= 0:
             return 0.0
-        return self.weight * (row.get(lens, 0.0) / total)
+        evidence = min(1.0, total / PRIOR_FLOOR)
+        return self.weight * (row.get(lens, 0.0) / total) * evidence
 
     def confident(self, scene: str, lens: str, part: str = "",
-                  share: float = 0.7, floor: float = 3.0) -> bool:
+                  share: float = 0.7, floor: float = PRIOR_FLOOR) -> bool:
         """True when you have picked `lens` for this scene enough times, and
         dominantly enough, that asking again would be pestering you."""
         for key in ([self._key(scene, part)] if part else []) + [scene]:
@@ -356,6 +365,22 @@ class GlancePriors:
         return False
 
     def reinforce(self, scene: str, lens: str, amount: float = 1.0) -> None:
+        """Record ONE pick.
+
+        `amount` is accepted for signature compatibility and normalised away, and
+        that is deliberate. It was silently coupled to `confident()`'s floor with
+        nothing saying so: because counts decay, a row converges on
+        ``amount / (1 - PRIOR_DECAY)``, so at amount <= 0.3 the total can never reach
+        the floor of 3.0 and confidence became PERMANENTLY unreachable — while
+        `boost` went on reporting a full share of that row. Below ~1.1e-3 it was
+        worse: the decay deleted the entry before the credit landed, so the row never
+        grew at all. Two constants on a public API that had to agree by coincidence.
+
+        A pick is a pick. Nothing in production ever passed anything else, and a
+        weighting knob is not worth a threshold that can be tuned into never
+        firing."""
+        del amount                       # normalised: see above
+        amount = 1.0
         # Only the fixed vocabulary of scenes may become a key — an unknown
         # (crafted/oversized) scene must never grow this file, which is rewritten
         # whole on every reinforce. Bounds the on-disk priors to |SCENES| keys.
@@ -374,23 +399,27 @@ class GlancePriors:
         if not lens:
             return
         row = self._c.setdefault(key, {})
-        if lens not in row and len(row) >= MAX_PRIOR_LENSES:
-            return
+        # Decay FIRST, and never drop the key being credited — the old order
+        # decayed-then-deleted before the credit, so a small amount left the row
+        # permanently at zero while `boost` still reported a full share of it.
         for k in list(row):
             row[k] = round(row[k] * PRIOR_DECAY, 6)
-            if row[k] < 1e-3:
+            if row[k] < 1e-3 and k != lens:
                 del row[k]
         row[lens] = round(row.get(lens, 0.0) + amount, 6)
+        # Over the cap: evict the WEAKEST, don't refuse the write. Returning early
+        # on a full row froze it — no decay, no credit, so the habit it happened to
+        # be holding became permanent and `boost` kept serving it.
+        while len(row) > MAX_PRIOR_LENSES:
+            weakest = min((k for k in row if k != lens), key=lambda k: row[k],
+                          default=None)
+            if weakest is None:
+                break
+            del row[weakest]
 
     def boost(self, scene: str, lens: str) -> float:
         """Salience nudge in [0, weight] for `lens` given past picks for `scene`."""
-        row = self._c.get(scene)
-        if not row:
-            return 0.0
-        total = sum(row.values())
-        if total <= 0:
-            return 0.0
-        return self.weight * (row.get(lens, 0.0) / total)
+        return self._boost_key(scene, lens)
 
     def favourite(self, scene: str) -> Optional[str]:
         row = self._c.get(scene)

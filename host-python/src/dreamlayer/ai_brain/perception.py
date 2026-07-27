@@ -38,9 +38,12 @@ class PerceptSignals:
     question: Optional[bool] = None
     has_object: Optional[bool] = None
     language: Optional[str] = None
-    # Tier-1 scene cues (2026-07-23): the arbiter always consumed items/shelf/menu
-    # but nothing produced them, so a shelf could never be recognised. `sky` and
-    # `moving` are new scene inputs the arbiter learned to read alongside them.
+    # Tier-1 scene cues (2026-07-23). `items`/`shelf`/`menu` were always consumed
+    # by the arbiter and never produced; they now come from a real detector rather
+    # than from image statistics, which cannot tell a bookshelf from a radiator.
+    # `moving` is declared but NO LONGER PRODUCED by any tier here: single-frame
+    # blur measures the sensor noise floor, not the wearer's motion. It stays in the
+    # shape because a real IMU or a frame-to-frame differ could honestly supply it.
     items: Optional[int] = None
     shelf: Optional[bool] = None
     menu: Optional[bool] = None
@@ -163,8 +166,25 @@ def _boxds(a: np.ndarray, target: int = 512) -> np.ndarray:
     return b.reshape(hh // k, k, ww // k, k).mean(axis=(1, 3))
 
 
+def _boxmax(a: np.ndarray, target: int = 512) -> np.ndarray:
+    """Box-MAXIMUM downsample — for cues about small bright things.
+
+    Averaging destroys them: a star is one or two pixels, so a 4x4 mean at 2160 px
+    divides it by sixteen and a whole sky measures zero lights. Pooling by maximum
+    keeps a point light at any input size, which is what the light cues need."""
+    h, w = a.shape[:2]
+    k = max(1, int(max(h, w) // target))
+    if k <= 1:
+        return a.astype(np.float64, copy=False)
+    hh, ww = (h // k) * k, (w // k) * k
+    if hh < k or ww < k:
+        return a.astype(np.float64, copy=False)
+    b = a[:hh, :ww].astype(np.float64)
+    return b.reshape(hh // k, k, ww // k, k).max(axis=(1, 3))
+
+
 def _peaks(prof: np.ndarray, min_prom: float = 0.18, min_gap: int = 3,
-           min_range: float = 0.02) -> int:
+           min_range: float = 0.008) -> int:
     """Count prominent, well-separated peaks in a 1-D profile. The repetition
     detector: a shelf of bottles or a menu's rows put regular spikes in the
     gradient profile, a single mug does not.
@@ -176,7 +196,14 @@ def _peaks(prof: np.ndarray, min_prom: float = 0.18, min_gap: int = 3,
     out of nothing. Measured, in profile units of full-scale gradient: a blank
     wall's range is ~0.002, a wall with a lighting gradient ~0.003, while real
     structure is an order of magnitude up (a radiator 0.14, a shelf 0.31, a
-    printed page 0.51). Below `min_range` there is no structure to count."""
+    printed page 0.51). Below `min_range` there is no structure to count.
+
+    The floor is 0.008, not the 0.02 first chosen: those reference values are all
+    HIGH-contrast synthetics, and the real world has pale things against pale
+    backgrounds. A foggy street measures 0.010-0.017 and a grey filing cabinet
+    0.011-0.021 — both real structure, both silently uncounted at 0.02, and the
+    cabinet flipped between 0 and 4 peaks with resolution. 0.008 still sits well
+    clear of the 0.0037 a gradient-lit wall produces."""
     if prof.size < 8:
         return 0
     p = prof - prof.min()
@@ -210,8 +237,8 @@ def frame_cues(frame) -> dict:
       light_frac  bright pixels as a fraction of the frame
       lights      how many separate bright runs there are
       light_len   their mean length — stars are tiny, a lamp or a screen is not
-      light_up    the fraction of rows containing a bright pixel; stars are spread
-                  across the frame, an LED cluster is not
+      light_spanx how far the lights are SCATTERED across each axis, as their
+      light_spany bounding box; stars cover the frame, an LED cluster does not
       sharp       high-frequency energy; LOW means the frame is blurred, which on
                   a phone means the wearer is MOVING (walking)
 
@@ -251,12 +278,20 @@ def frame_cues(frame) -> dict:
     # land on the stride — which is why a single LED in a dark room used to look
     # exactly like the Milky Way. Box-average instead, and only below 512 px is
     # that a no-op, so the common look path measures the frame as decoded.
+    # Box-averaging is right for sharpness and wrong for stars: at 2160 px the
+    # block is 4x4, which averages a 1-px star down below any threshold — measured,
+    # a starfield went from 91 lights at 1080 to ZERO at 2160, so the sky simply
+    # vanished above the size the phone happens to post. Take the block MAXIMUM for
+    # the light cues instead. A point light survives pooling by maximum at any input
+    # size, and nothing else in the frame is brightened by it.
     gf = _boxds(a0)
+    gl = _boxmax(a0)
     gf = gf / (255.0 if float(gf.max()) > 1.0 else 1.0)
     mean_l = float(gf.mean())
     out["dark"] = bool(mean_l < 0.28)
     out["contrast"] = round(float(gf.std()), 5)
     if out["dark"]:
+        gf = gl                      # the light cues below read the max-pooled frame
         # A star is not 250/255. Requiring 55% of full scale only ever caught
         # near-saturated ones, so a real sparse sky (magnitudes 80-170, dimmed
         # again by noise and JPEG) registered 5 lights out of 12 and failed every
