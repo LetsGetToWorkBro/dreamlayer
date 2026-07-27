@@ -388,3 +388,77 @@ def test_a_restore_cannot_launder_the_ledger_silently(tmp_path):
     assert any("restored from a backup" in x for x in texts), (
         f"the shrink left no trace: {texts}")
     assert any("5 record(s) replaced with 0" in x for x in texts)
+
+
+# --------------------------------------------------------------------------
+# A-C9 — the request path never reaches the operator's log
+# --------------------------------------------------------------------------
+
+def test_a_a_500_logs_the_route_not_the_callers_path():
+    """do_POST's catch-all wrote `path` verbatim into log.exception. Two of the
+    POST routes match on a PREFIX, so the tail of the URL is entirely
+    caller-supplied — `/dreamlayer/event/<anything>` put attacker text in the
+    log that a human reads when something breaks. urlparse leaves `%0A`
+    encoded and the request line cannot carry a bare CR/LF, so forged log
+    *lines* were not reachable, but that is a property of two layers below
+    this call rather than of the call itself. It now names the matched
+    handler, which comes from our own route table."""
+    import logging
+    import threading
+    import urllib.error
+    import urllib.request
+
+    import dreamlayer.ai_brain.server.server as srv_mod
+    from dreamlayer.ai_brain.server import make_brain_server
+
+    def _boom(self, path, qs):
+        raise RuntimeError("kaboom")
+
+    server = make_brain_server(_brain_for_log_test(), "127.0.0.1", 0)
+    handler_cls = server.RequestHandlerClass
+    port = server.server_address[1]
+    saved = handler_cls._POST_ROUTES_PREFIX
+    handler_cls._POST_ROUTES_PREFIX = [("/dreamlayer/event/", _boom)]
+
+    records: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    cap = _Capture()
+    srvlog = logging.getLogger(srv_mod.log.name)
+    srvlog.addHandler(cap)
+    try:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        marker = "PWNED-a1b2c3"
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/dreamlayer/event/{marker}",
+            data=b"{}", method="POST",
+            headers={"Content-Type": "application/json"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(req, timeout=10) as r:
+                status = r.status
+        except urllib.error.HTTPError as e:
+            status = e.code
+        assert status == 500                       # the catch-all still answers
+        assert records, "the catch-all logged nothing at all"
+        joined = "\n".join(records)
+        assert marker not in joined, (
+            f"the caller's path reached the log: {joined!r}")
+        assert "_boom" in joined, (
+            f"the log names no route, so it is useless to an operator: "
+            f"{joined!r}")
+    finally:
+        srvlog.removeHandler(cap)
+        handler_cls._POST_ROUTES_PREFIX = saved
+        server.shutdown()
+        server.server_close()
+
+
+def _brain_for_log_test():
+    import tempfile
+
+    from dreamlayer.ai_brain.server import Brain
+    return Brain(tempfile.mkdtemp())

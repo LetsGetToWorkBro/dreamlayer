@@ -5238,7 +5238,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # /dreamlayer/brain/ask hit `.lower()` on an int -- across a
                 # dozen handlers. A caller deserves a status code, and a
                 # keep-alive connection must not die on a bad field.
-                log.exception("[brain] unhandled error in POST %s", path)
+                # Log the matched HANDLER, never the request path. The path is
+                # caller-supplied — the prefix routes above match on a prefix
+                # and carry an arbitrary tail (`/dreamlayer/event/<anything>`),
+                # so writing it verbatim puts attacker text in the operator's
+                # log (CodeQL py/log-injection). urlparse leaves %0A encoded and
+                # the request line can't hold a bare CR/LF, so forged log LINES
+                # aren't reachable today, but that's a property of two layers
+                # below us, not of this call. The handler's name comes from our
+                # own route table and identifies the endpoint just as well.
+                log.exception("[brain] unhandled error in POST route %s",
+                              getattr(handler, "__name__", "?"))
                 self._json(500, {"error": "internal"})
 
     class _BrainServer(ThreadingHTTPServer):
