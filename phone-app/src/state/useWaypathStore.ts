@@ -9,8 +9,9 @@
  */
 import { create } from "zustand";
 
-import { fetchRoute, OSRM_DEMO, type RouteOpts } from "../nav/osrm";
+import { fetchRoute, type RouteOpts } from "../nav/osrm";
 import { dotFor, type Dot, type LatLng } from "../nav/waypath";
+import { useBrainStore, veilClosed } from "./useBrainStore";
 
 type Status = "idle" | "routing" | "navigating" | "arrived" | "error";
 
@@ -36,14 +37,38 @@ export const useWaypathStore = create<WaypathState>((set, get) => ({
   dot: null,
   status: "idle",
   error: null,
-  baseUrl: OSRM_DEMO,
+  // EMPTY on purpose — see nav/osrm.ts. A routing server is somebody else's
+  // computer, and the wearer chooses which one.
+  baseUrl: "",
 
   setBaseUrl: (u) => set({ baseUrl: u }),
 
   navigateTo: async (from, to, opts) => {
+    const base = (opts?.baseUrl ?? get().baseUrl ?? "").trim();
+    if (!base) {
+      set({ status: "error", destination: to, route: [],
+            error: "add your own routing server in Waypath settings — "
+                 + "DreamLayer will not send your location to a stranger" });
+      return;
+    }
+    // A route request carries the wearer's origin AND destination off-device, so
+    // it is gated exactly like every other egress: the Veil (phone capturePaused
+    // or the glasses' PRIVACY_VEIL) and the cloud opt-in both have to be open.
+    // None of these three checks existed, so Navigate leaked through all of them.
+    const { capturePaused, effectiveCloud } = useBrainStore.getState();
+    if (veilClosed(capturePaused)) {
+      set({ status: "error", destination: to, route: [],
+            error: "Incognito is on — routing stays off with it" });
+      return;
+    }
+    if (!effectiveCloud()) {
+      set({ status: "error", destination: to, route: [],
+            error: "routing needs the network switch on (Settings → Cloud)" });
+      return;
+    }
     set({ status: "routing", error: null, destination: to });
     try {
-      const route = await fetchRoute(from, to, { baseUrl: get().baseUrl, ...opts });
+      const route = await fetchRoute(from, to, { baseUrl: base, ...opts });
       if (!route.length) {
         set({ status: "error", error: "no route found", route: [] });
         return;

@@ -9,10 +9,29 @@ that speak JSON-lines RPC to it.
 What crosses the boundary is deliberately tiny: object-provider ``matches``/
 ``build`` and shop-provider calls — pure request→data, each under the same
 glance-panel deadline the in-process registry uses, each failure/timeout recorded
-to the HealthLedger and the provider skipped. The child can compute; it cannot
-touch the wearer's frame (never sent), the display, the mesh, the filesystem, or
-the network on the host's behalf. A hung child is killed; a crashed child is
-reported, not fatal.
+to the HealthLedger and the provider skipped. A hung child is killed; a crashed
+child is reported, not fatal.
+
+WHAT THE BOUNDARY DOES AND DOES NOT GIVE YOU — read this before trusting it.
+
+Two of the guarantees are structural and hold everywhere, because they are about
+what is *sent*: the child never receives the wearer's frame, and the context it is
+handed exposes no memory, no db, no mesh and no display. Nothing it does can reach
+those, sandbox or no sandbox.
+
+Filesystem and network confinement are NOT structural. They come entirely from the
+kernel sandbox `os_sandbox` wraps the child in (bwrap or nsjail). Where no such
+sandbox exists — which is every Mac and every Windows Brain — the child is a plain
+subprocess running as the wearer, and an audit demonstrated it reading /etc/passwd,
+lifting a pairing token out of the environment, writing a file that survives a
+restart, spawning a process, importing the host package and opening a socket to the
+internet. That is not a weakness in this module; it is the honest limit of a
+subprocess on a kernel with no sandboxing primitive.
+
+So `require_sandbox` now defaults to TRUE: with no kernel boundary the child is not
+launched at all, and the plugin is reported as unavailable rather than run
+unconfined. The static scanner in `validate.py` is a lint, not a second boundary —
+see its docstring for why it cannot be one.
 
 Usage (via PluginStore.load_installed(..., isolate="untrusted")):
     host = SubprocessPluginHost(pkg_dir, capabilities, health=…)

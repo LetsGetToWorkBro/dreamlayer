@@ -452,7 +452,8 @@ class Figment:
             return f
         except FigmentError:
             raise
-        except (KeyError, TypeError, ValueError, IndexError, AttributeError) as e:
+        except (KeyError, TypeError, ValueError, IndexError, AttributeError,
+                ArithmeticError) as e:
             raise FigmentError(f"malformed figment: {e}") from e
 
     def canonical_json(self) -> str:

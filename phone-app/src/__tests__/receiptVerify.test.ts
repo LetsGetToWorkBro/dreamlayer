@@ -156,3 +156,54 @@ describe("receipt verification", () => {
     );
   });
 });
+
+describe("total truncation cannot read as Verified", () => {
+  it("an empty ledger under a head that attests entries is TRUNCATION, not clean", () => {
+    // The empty branch returned ok:true BEFORE `head` was ever read, so deleting
+    // every record verified green -- "Verified - 0 entries - chain intact" --
+    // while a genuinely-signed anchor sitting right there attested 500. That is
+    // precisely the attack the head anchor exists to detect, and it was the one
+    // case that skipped the check entirely.
+    const priv = new Uint8Array(32).fill(7);
+    const { pub, head } = buildLedger(priv, Array.from({ length: 500 },
+                                                       (_, i) => "entry " + i));
+    expect(head.count).toBe(500);
+
+    const out = verifyReceipt([], pub, head);
+    expect(out.ok).toBe(false);
+    expect(out.tailShort).toBe(true);
+    expect(out.tailComplete).toBe(false);
+    expect(out.attestedCount).toBe(500);   // so the screen can say "0 of 500"
+    expect(out.headVerified).toBe(true);
+  });
+
+  it("a genuinely empty ledger with an honest empty head still verifies", () => {
+    // buildLedger needs at least one record, so sign the empty anchor directly.
+    const priv = new Uint8Array(32).fill(9);
+    const pub = toHex(ed.getPublicKey(priv));
+    const core = { last_seq: -1, head: "", count: 0 };
+    const head: HeadAnchor = {
+      ...core, sig: toHex(ed.sign(enc.encode(canonicalHead(core)), priv)),
+    };
+    const out = verifyReceipt([], pub, head);
+    expect(out.ok).toBe(true);
+    expect(out.tailShort).toBe(false);
+  });
+
+  it("an empty ledger with no head at all is still vacuously fine", () => {
+    const { pub } = buildLedger(new Uint8Array(32).fill(3), ["one"]);
+    const out = verifyReceipt([], pub);
+    expect(out.ok).toBe(true);
+    expect(out.attestedCount).toBeNull();
+  });
+
+  it("a FORGED head over an empty ledger does not get to claim anything", () => {
+    const priv = new Uint8Array(32).fill(7);
+    const { pub, head } = buildLedger(priv, ["a", "b"]);
+    const forged: HeadAnchor = { ...head, count: 500, sig: "00".repeat(64) };
+    const out = verifyReceipt([], pub, forged);
+    // an unverifiable anchor attests nothing; it must not be believed either way
+    expect(out.attestedCount).toBeNull();
+    expect(out.headVerified).toBe(false);
+  });
+});

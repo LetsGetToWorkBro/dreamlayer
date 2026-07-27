@@ -2475,8 +2475,14 @@ async function doRedeem(raw){
       startEvents();                   /* the Brain can now push ambient cards */
       return {ok:true};
     }
+    /* Blaming the wearer for a typo they did not make was the bug here: a 403
+       means the SERVER refused the channel (/live/redeem requires TLS for any
+       off-box caller), not that the code was wrong. Surface the server's own
+       reason when it gives one, and only claim "wrong code" for a 400/404. */
     return {ok:false, msg: rsp.status === 429
       ? "too many tries — wait a minute, then a fresh code from the panel"
+      : rsp.status === 403
+      ? (j.error || "this Brain needs the secure (https) link to accept a code")
       : "wrong or expired code — get a fresh one from the panel"};
   } catch (e) { return {ok:false, msg:"brain unreachable"}; }
 }

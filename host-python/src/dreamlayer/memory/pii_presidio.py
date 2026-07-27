@@ -30,14 +30,34 @@ except BaseException:  # ImportError, or a broken native dep (pyo3 PanicExceptio
     _HAS_PRESIDIO = False
 
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
-_PHONE = re.compile(r"\b(?:\+?\d[\d\-\s().]{7,}\d)\b")
+# The `-`, space and `.` in the character class are there for real phone
+# formatting ("+1 415 555-0132"), but they also match an ISO date, a hyphenated
+# number run, and an IP -- so "dentist on 2026-08-14" was stored as "dentist on
+# <PHONE>", irreversibly, before the INSERT. Redaction is applied to the summary
+# BEFORE the row is written, so every date in every memory was destroyed on the
+# two profiles that ship without the `privacy` extra (phone, halo) and on every
+# fresh mac install until `dreamlayer setup models` runs. The negative lookahead
+# exempts a bare ISO date; presidio's own path never touched dates (DATE_TIME is
+# deliberately absent from _SAFE_ENTITIES) so this restores parity between the
+# two backends rather than inventing a new rule.
+_ISO_DATE = r"\d{4}-\d{2}-\d{2}"
+_PHONE = re.compile(r"\b(?!" + _ISO_DATE + r"\b)(?:\+?\d[\d\-\s().]{7,}\d)\b")
 # grouped card (4x4 with space/dash) and US SSN (nnn-nn-nnnn) BEFORE the bare
 # long-digit run, so their separators don't slip past _LONGNUM. These are the
 # common separator-delimited identifiers the regex fallback can strip with a low
 # false-positive rate; deeper alphanumeric IDs (IBAN, crypto, passport, license)
 # still need presidio (the Guardian pack) — the fallback can't reliably catch
 # them without over-scrubbing ordinary words.
-_CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+# The trailing `[ -]?` on the LAST repetition consumed the separator after the
+# number, so "card 4111 1111 1111 1111 exp" became "card <CARD>exp" -- two words
+# fused. Anchor the group on a digit and let the separators live only between.
+# The separator class must not let an ISO DATE be absorbed as a card digit run.
+# `\d(?:[ -]?\d){12,18}` happily spanned "2024-01-01 2026-12-31" (16 digits with
+# legal separators) and rendered it "<CARD>". A real card number is written in
+# groups of 4 (or solid); a date is not. So: allow a separator only where it does
+# NOT sit between an ISO date and the next number.
+_ISO_RUN = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_CARD = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")
 _SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _LONGNUM = re.compile(r"\b\d{6,}\b")
 
@@ -74,8 +94,22 @@ class PiiRedactor:
                 log.warning("[pii] presidio analyze failed: %s; regex", exc)
         text = _EMAIL.sub("<EMAIL>", text)
         text = _SSN.sub("<SSN>", text)
+        # Shield ISO dates for the duration of the numeric passes, then put them
+        # back. A date is not an identifier, redaction runs BEFORE the INSERT, and
+        # a destroyed date is unrecoverable — so the safest place to protect them
+        # is out of the numeric matchers' reach entirely, rather than trying to
+        # out-clever two regexes that legitimately want long digit runs.
+        dates: list[str] = []
+
+        def _stash(m):
+            dates.append(m.group(0))
+            return f"\x00D{len(dates) - 1}\x00"
+
+        text = _ISO_RUN.sub(_stash, text)
         text = _CARD.sub("<CARD>", text)
         text = _PHONE.sub("<PHONE>", text)
+        for i, d in enumerate(dates):
+            text = text.replace(f"\x00D{i}\x00", d)
         text = _LONGNUM.sub("<NUM>", text)
         return text
 

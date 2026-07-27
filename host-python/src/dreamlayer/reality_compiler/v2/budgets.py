@@ -273,8 +273,123 @@ def verify(fig: Figment) -> BudgetReport:
     )
 
 
+def _zero_time_cycle(nodes: list, zero_edges: dict) -> "list | None":
+    """A cycle using only zero-duration edges, or None. O(V+E) — an iterative DFS
+    with a colour map, so a deep graph cannot blow the Python stack."""
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour = {n: WHITE for n in nodes}
+    for root in nodes:
+        if colour[root] != WHITE:
+            continue
+        stack = [(root, iter(zero_edges.get(root, ())))]
+        path = [root]
+        colour[root] = GREY
+        while stack:
+            node, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                colour[node] = BLACK
+                stack.pop()
+                path.pop()
+                continue
+            if colour.get(nxt) == GREY:                 # back edge → a cycle
+                return path[path.index(nxt):]
+            if colour.get(nxt) == WHITE:
+                colour[nxt] = GREY
+                path.append(nxt)
+                stack.append((nxt, iter(zero_edges.get(nxt, ()))))
+    return None
+
+
+def _max_ratio_cycle(nodes: list, arcs: list, lo: float, hi: float):
+    """The maximum emits-per-second over all cycles, and a witness cycle.
+
+    Returns ``(rate, cycle_or_None)``. This replaces enumerating every simple
+    cycle, which is exponential: a figment that is fully valid under the grammar
+    caps (32 scenes, 4 branches each) took 3s at 18 scenes and over 90s at 22,
+    growing ~5x per 4 scenes — and it is reachable from an unauthenticated-shaped
+    "deploy to my Brain" import, so a ~10 KB payload pinned a CPU indefinitely.
+
+    Maximum cycle RATIO is a classic problem with a polynomial solution. A cycle
+    with emits/time > L exists exactly when the graph has a positive-weight cycle
+    under w = emits - L*time, so binary-search L and detect that cycle with
+    Bellman-Ford. O(V*E*log(1/eps)) — at the grammar's caps, a few hundred
+    thousand operations, versus unbounded."""
+    def positive_cycle(lam: float):
+        """A cycle with sum(emits - lam*secs) > 0, as a node list, else None."""
+        dist = {n: 0.0 for n in nodes}
+        pred: dict = {}
+        n_nodes = len(nodes)
+        changed_at = None
+        for i in range(n_nodes):
+            changed = False
+            for u, w_e, w_s, tgt in arcs:
+                w = w_e - lam * w_s
+                if dist[u] + w > dist[tgt] + 1e-12:
+                    dist[tgt] = dist[u] + w
+                    pred[tgt] = u
+                    changed = True
+                    changed_at = tgt
+            if not changed:
+                return None
+        # still relaxing after |V| passes → a positive cycle is reachable from here
+        if changed_at is None:
+            return None
+        seen, node = set(), changed_at
+        for _ in range(n_nodes + 1):
+            if node in seen:
+                break
+            seen.add(node)
+            node = pred.get(node, node)
+        cycle, cur = [node], pred.get(node)
+        while cur is not None and cur != node and len(cycle) <= n_nodes:
+            cycle.append(cur)
+            cur = pred.get(cur)
+        cycle.reverse()
+        return cycle
+
+    # Is there any emitting cycle at all? (L just above 0)
+    witness = positive_cycle(0.0)
+    if witness is None:
+        return 0.0, None
+    best_cycle = witness
+    for _ in range(48):
+        mid = (lo + hi) / 2.0
+        c = positive_cycle(mid)
+        if c is not None:
+            best_cycle, lo = c, mid
+        else:
+            hi = mid
+    # Report the witness cycle's EXACT ratio, not the search bound. A binary search
+    # converges to the maximum but never lands on it, so the rate came back as
+    # 0.9999999999989981 for a cycle that plainly emits once per second — a number
+    # no reader should have to squint at, and one that would make an
+    # exactly-at-budget figment read as under it by a rounding error. Once the
+    # witness is known its ratio is a plain division over its own edges.
+    if not best_cycle:
+        return 0.0, None
+    best_pair: dict = {}
+    for u, w_e, w_s, tgt in arcs:
+        key = (u, tgt)
+        prev = best_pair.get(key)
+        score = w_e - lo * w_s
+        if prev is None or score > prev[0]:
+            best_pair[key] = (score, w_e, w_s)
+    tot_e = tot_s = 0.0
+    ring = list(best_cycle) + [best_cycle[0]]
+    for a, b in zip(ring, ring[1:]):
+        got = best_pair.get((a, b))
+        if got is None:                       # not a real walk — trust the bound
+            return lo, best_cycle
+        tot_e += got[1]
+        tot_s += got[2]
+    if tot_s <= 0.0:
+        return lo, best_cycle                 # zero-time: the livelock check owns it
+    return tot_e / tot_s, best_cycle
+
+
 def _cycle_analysis(fig: Figment, v: list[Violation]) -> float:
-    """Enumerate simple cycles in the timeout graph; enforce time >= emits.
+    """Enforce time >= emits around every autonomous cycle in the timeout graph.
 
     Returns the worst sustained autonomous emit rate found (emits/sec)."""
     # adjacency over timeout edges only (SELF is a 1-node cycle)
@@ -290,37 +405,38 @@ def _cycle_analysis(fig: Figment, v: list[Violation]) -> float:
             emits = 1 if t.emit is not None else 0
             edges.setdefault(sid, []).append((target, dur, emits))
 
-    worst_rate = 0.0
-    order = sorted(fig.scenes)
+    nodes = sorted(fig.scenes)
+    known = set(nodes)
+    arcs = [(u, e, dur, tgt)
+            for u, outs in edges.items()
+            for tgt, dur, e in outs
+            if u in known and tgt in known]
+    if not arcs:
+        return 0.0
 
-    def dfs(start: str, node: str, path: list[str],
-            secs: float, emits: int) -> None:
-        nonlocal worst_rate
-        for target, dur, e in edges.get(node, []):
-            if target == start:
-                total_secs, total_emits = secs + dur, emits + e
-                if total_secs <= 0:
-                    v.append(Violation("livelock",
-                                       "zero-time autonomous cycle through "
-                                       + " → ".join(path + [start]),
-                                       start, _beat_of(fig, start)))
-                elif total_emits:
-                    rate = total_emits / total_secs
-                    worst_rate = max(worst_rate, rate)
-                    if rate > EMIT_REFILL_PER_S:
-                        v.append(Violation(
-                            "ble_flood",
-                            f"autonomous cycle {' → '.join(path + [start])} "
-                            f"emits {rate:.2f}/s > budget "
-                            f"{EMIT_REFILL_PER_S:g}/s",
-                            start, _beat_of(fig, start)))
-            # only expand to nodes after start in canonical order, so each
-            # simple cycle is found exactly once (rooted at its least node)
-            elif target not in path and target > start:
-                dfs(start, target, path + [target], secs + dur, emits + e)
+    # A zero-time autonomous cycle is a livelock regardless of what it emits.
+    zero_edges = {u: [t for t, dur, _e in outs if dur <= 0.0]
+                  for u, outs in edges.items()}
+    zc = _zero_time_cycle(nodes, zero_edges)
+    if zc:
+        v.append(Violation("livelock",
+                           "zero-time autonomous cycle through "
+                           + " → ".join(list(zc) + [zc[0]]),
+                           zc[0], _beat_of(fig, zc[0])))
 
-    for start in order:
-        dfs(start, start, [start], 0.0, 0)
+    # The worst sustained emit rate is the maximum cycle ratio. Bound the search
+    # above by the fastest single edge can possibly cycle: 1 emit over the
+    # smallest positive duration present (and a generous floor when all are zero).
+    durs = [dur for _u, _e, dur, _t in arcs if dur > 0.0]
+    hi = (1.0 / min(durs)) * len(nodes) if durs else 1e6
+    worst_rate, cyc = _max_ratio_cycle(nodes, arcs, 0.0, max(hi, 1.0))
+    if cyc and worst_rate > EMIT_REFILL_PER_S:
+        v.append(Violation(
+            "ble_flood",
+            f"autonomous cycle {' → '.join(list(cyc) + [cyc[0]])} "
+            f"emits {worst_rate:.2f}/s > budget "
+            f"{EMIT_REFILL_PER_S:g}/s",
+            cyc[0], _beat_of(fig, cyc[0])))
     return worst_rate
 
 

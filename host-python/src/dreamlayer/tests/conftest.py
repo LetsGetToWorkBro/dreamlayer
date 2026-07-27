@@ -153,3 +153,32 @@ def _no_cloud_egress(request):
     else:
         with no_cloud_egress():          # armed (idempotent) for the test body
             yield
+
+# ---------------------------------------------------------------------------
+# The face-embedding test double.
+# ---------------------------------------------------------------------------
+# `truth_lens.face_embed.FaceEmbedder` FAILS CLOSED in production: with no real
+# model wired it declines rather than fabricate an identity (it used to seed a
+# 512-d gaussian from the frame's PIXEL SUM, which named strangers as contacts at
+# "100% match" roughly once every 43,800 frame pairs). The suite still needs *an*
+# embedder to exercise introductions, notes, the dossier and recall, so every
+# test runs against the documented double in that module: it recalls a
+# byte-identical frame and never confuses two different ones.
+#
+# This is autouse and suite-wide ON PURPOSE. Wiring it here rather than in
+# production means a test can never accidentally prove that the shipped build
+# recognises faces -- `test_stack_audit_lenses.py` opts out explicitly to assert
+# the production path declines.
+
+@pytest.fixture(autouse=True)
+def _face_embedder_double(request, monkeypatch):
+    if "no_face_double" in request.keywords:
+        return
+    from dreamlayer.truth_lens import face_embed as fe
+    real_init = fe.FaceEmbedder.__init__
+
+    def _init(self, threshold=fe.DETECTION_THRESHOLD, embed_fn=None):
+        real_init(self, threshold,
+                  embed_fn or fe.deterministic_embed_fn(max(threshold, 0.9)))
+
+    monkeypatch.setattr(fe.FaceEmbedder, "__init__", _init)

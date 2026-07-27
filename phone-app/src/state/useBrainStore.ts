@@ -22,8 +22,13 @@ import * as demo from "../demo/fixtures";
  *  local incognito forces on synchronously) OR the glasses raised the Veil
  *  (PRIVACY_VEIL telemetry → useVitalsStore.veiled). Defense-in-depth for the
  *  relay methods below so a direct caller can't leak captured content past the
- *  Veil either (audit 2026-07-14). */
-function veilClosed(capturePaused: boolean): boolean {
+ *  Veil either (audit 2026-07-14).
+ *
+ *  Exported because it is not only this store's business: `useWaypathStore` has
+ *  to consult the same gate before a route request, which carries the wearer's
+ *  origin AND destination off-device. One definition of "the Veil is closed"
+ *  beats two that can drift. */
+export function veilClosed(capturePaused: boolean): boolean {
   return capturePaused || useVitalsStore.getState().veiled;
 }
 
@@ -259,6 +264,27 @@ async function brainFetch(m: MacMini, path: string, opts: RequestInit = {}): Pro
     if (!cleartextAllowed(m.url)) throw new Error("cleartext to a non-LAN host refused: " + m.url);
     const r = await fetch(m.url + path, o);
     conn.noteLan();
+    // `fetch` rejects only on a NETWORK failure, so without this every 401 /
+    // 403 / 421 / 5xx was parsed as a success body. That produced answers that
+    // were wrong in the most expensive direction: `getProfile` threw a
+    // TypeError during render (red screen instead of an empty state),
+    // `fetchMessages` told the wearer to "turn on message relay" for what was
+    // a stale token, and `getBrief` returned "" -- not nullish, so the fallback
+    // never fired and the button silently did nothing. Every caller already has
+    // a catch that returns the honest null/[]/false, so throwing here routes
+    // them all to it.
+    // A real `Response` always carries both `ok` and `status`; the test doubles
+    // in this repo model a successful reply and carry neither. So fail on what
+    // the response actually TELLS us — never on a missing field — which keeps
+    // production exact (ok is always a boolean there) without treating an
+    // under-specified double as an error.
+    const failed = r.ok === false
+      || (typeof r.status === "number" && r.status >= 400);
+    if (failed) {
+      const err: Error & { status?: number } = new Error("http " + r.status);
+      err.status = r.status;
+      throw err;
+    }
     return r;
   } catch (e) {
     if (m.relayUrl && cleartextAllowed(m.relayUrl)) {

@@ -68,7 +68,7 @@ jobs:
           canary_key="AKIA""QYLPMN5HGXO4VB2C"
           printf 'aws_key = "%s"\n' "$canary_key" > "$canary/canary.txt"
           if docker run --rm -v "$PWD:/repo:ro" -v "$canary:/canary:ro" \
-               ghcr.io/gitleaks/gitleaks:latest detect \
+               ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f detect \
                --no-git --source=/canary --config=/repo/.gitleaks.toml \
                --redact --exit-code=1; then
             echo "::error::gitleaks did NOT flag the canary secret — the .gitleaks.toml is fail-open (detection disabled)."
@@ -85,7 +85,7 @@ jobs:
             mode="--no-git"    # scan the current tree only (push / PR gate)
             echo "push/PR run → scanning the current tree"
           fi
-          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             detect \
             $mode \
             --source=/repo \

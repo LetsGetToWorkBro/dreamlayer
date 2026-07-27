@@ -16,29 +16,71 @@ class MemoryDB:
     def __init__(self, path: str = ":memory:"):
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        # Whether a DELETE scrubs the freed page or leaves the plaintext in the
+        # file is a COMPILE-TIME default (SECURE_DELETE), and it differs between
+        # the Debian build and the python.org macOS build the "full Brain" runs
+        # on. Set it explicitly so a deletion means the same thing everywhere.
+        try:
+            self.conn.execute("PRAGMA secure_delete=ON")
+        except sqlite3.Error:                     # ancient build: VACUUM still covers purge_all
+            pass
         self._lock = threading.RLock()
         schema = os.path.join(os.path.dirname(__file__), "schema.sql")
         with self._lock:
             self.conn.executescript(open(schema).read())
             self.conn.commit()
     def _now(self): return datetime.now(UTC).isoformat()
+
+    def _scrub(self, text):
+        """PII-scrub one piece of caller text before it becomes a column.
+
+        This is what delivers the Guardian pack's "PII scrubbed before write"
+        promise, and it has to be applied at EVERY write of caller text, not just
+        `add_memory`. `add_memory`'s comment used to call itself "the single write
+        chokepoint every capture path funnels through" -- but `IngestPipeline
+        .ingest` calls `add_commitment` three lines earlier with the same
+        transcript, so a card number spoken inside a promise landed verbatim in
+        `commitments.task` and was served to the phone by the reminders surface.
+
+        `default_redactor()` returns None when the pii_redaction cap is toggled
+        off (DL_DISABLE_PII_REDACTION, the panel switch), so this is on by default
+        and still switch-off-able. It strips only verbatim contact/financial
+        identifiers (card, SSN, phone, email) -- never names or places -- so
+        name-recall, the product's whole point, is untouched."""
+        if not isinstance(text, str) or not text:
+            return text
+        from .pii_presidio import default_redactor
+        red = default_redactor()
+        if red is None:
+            return text
+        try:
+            return red.redact(text)
+        except Exception:                         # never let redaction break a write
+            return text
+
+    def _scrub_tree(self, obj, _depth: int = 0):
+        """`_scrub` applied through a nested dict/list, for columns that hold JSON.
+
+        Bounded depth so a crafted payload can't recurse without limit; keys are
+        scrubbed as well as values, because a caller can put text in either."""
+        if _depth > 6:
+            return obj
+        if isinstance(obj, str):
+            return self._scrub(obj)
+        if isinstance(obj, dict):
+            return {self._scrub(k) if isinstance(k, str) else k:
+                    self._scrub_tree(v, _depth + 1) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._scrub_tree(v, _depth + 1) for v in obj]
+        return obj
+
     def add_memory(self, kind, summary, embedding=None, confidence=0.5, place_id=None, meta=None) -> int:
-        # PII scrub before the row is written — this is the single write chokepoint
-        # every capture path funnels through, so redacting here (rather than at each
-        # caller) is what actually delivers the Guardian pack's "PII scrubbed before
-        # write" promise. default_redactor() returns None when the pii_redaction cap
-        # is toggled off (DL_DISABLE_PII_REDACTION, set by the panel switch), so this
-        # is on by default yet fully switch-off-able. It only strips verbatim
-        # contact/financial identifiers (card, SSN, phone, email) — never names or
-        # places — so name-recall, the product's whole point, is untouched.
-        if isinstance(summary, str) and summary:
-            from .pii_presidio import default_redactor
-            _red = default_redactor()
-            if _red is not None:
-                try:
-                    summary = _red.redact(summary)
-                except Exception:                 # never let redaction break a write
-                    pass
+        summary = self._scrub(summary)
+        # `meta` is caller text too, and `IngestPipeline.ingest` puts the whole
+        # utterance in it (`meta["task"]`), so a card number scrubbed out of
+        # `summary` sat verbatim in `meta` one column over. Scrubbing the summary
+        # alone made the redaction look like it worked.
+        meta = self._scrub_tree(meta)
         # embeddings persist as packed float32 BLOBs (embeddings.pack_embedding);
         # readers accept legacy JSON-text rows too, so no migration pass is needed
         from .embeddings import pack_embedding
@@ -73,11 +115,17 @@ class MemoryDB:
             self.conn.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
             self.conn.commit()
     def add_commitment(self, person, task, due=None, source_memory_id=None, confidence=0.5) -> int:
+        # All three are caller text. `person` and `due` come from the same parsed
+        # utterance as `task`, so scrubbing only `task` left two columns open.
+        task = self._scrub(task)
+        person = self._scrub(person)
+        due = self._scrub(due)
         with self._lock:
             c = self.conn.execute("INSERT INTO commitments(person,task,due,source_memory_id,confidence,created_at) VALUES (?,?,?,?,?,?)",
                 (person, task, due, source_memory_id, confidence, self._now()))
             self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
     def add_place(self, name, signature=None) -> int:
+        name = self._scrub(name)                  # spoken place names are caller text
         with self._lock:
             c = self.conn.execute("INSERT INTO places(name,signature) VALUES (?,?)", (name, signature))
             self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
@@ -94,7 +142,13 @@ class MemoryDB:
             return [dict(r) for r in self.conn.execute("SELECT * FROM places").fetchall()]
     def purge_memory(self, memory_id: int):
         with self._lock:
-            self.conn.execute("DELETE FROM memories WHERE id=?", (memory_id,)); self.conn.commit()
+            self.conn.execute("DELETE FROM memories WHERE id=?", (memory_id,))
+            # A commitment extracted FROM this memory is part of it. "Forget that"
+            # deleted the memory and left "wire Ana the deposit" standing in
+            # `commitments`, where the reminders surface still reads it.
+            self.conn.execute("DELETE FROM commitments WHERE source_memory_id=?",
+                              (memory_id,))
+            self.conn.commit()
     def purge_all(self):
         # Erase every stored trace of the wearer's world. `places` and
         # `entities` were skipped before — but a place row is a location
@@ -105,3 +159,11 @@ class MemoryDB:
             for t in ("memories","commitments","conversations","events","places","entities"):
                 self.conn.execute(f"DELETE FROM {t}")
             self.conn.commit()
+            # A bare DELETE only frees SQLite pages; it does not scrub them, so
+            # the "erased" text stays in the file's bytes and comes back out of
+            # `dreamlayer memories export` (a raw file copy) or any backup.
+            # Measured on a SECURE_DELETE-off build -- the upstream amalgamation
+            # default, which python.org's macOS builds ship -- 105 plaintext
+            # occurrences survived purge_all. EmberStore has VACUUMed for exactly
+            # this reason; the main DB, which holds far more, did not.
+            self.conn.execute("VACUUM")

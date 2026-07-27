@@ -83,6 +83,7 @@ class CapturePipeline:
         self._seg_started = 0.0
         self._last_speech = 0.0
         self._ambient: list = []         # pooled NON-speech samples (world sound)
+        self._tag_takes_rate: bool | None = None   # tagger signature, probed once
         self._source = None
         self._stop: threading.Event | None = None
         self._thread: threading.Thread | None = None
@@ -115,7 +116,15 @@ class CapturePipeline:
         accumulates and any in-flight segment is dropped."""
         now = self._now() if ts is None else ts
         if self._veiled():
+            # BOTH accumulators. `_ambient` is the other pool of the wearer's
+            # surroundings -- ~2800 ms of it on the shipped 3000 ms window, since
+            # it flushes at the window rather than at the cap; clearing only `_seg`
+            # left pre-veil audio resident in RAM for the whole veiled stretch
+            # and then handed the tagger / bird lens one window that straddled
+            # the veil boundary -- and the bird lens writes its buffer to a temp
+            # WAV. "While paused, nothing accumulates" has to mean nothing.
             self._seg = []
+            self._ambient = []
             return None
 
         speech = True
@@ -158,7 +167,13 @@ class CapturePipeline:
         if len(self._ambient) > cap:
             self._ambient = self._ambient[-cap:]
         span_ms = len(self._ambient) * 1000.0 / max(1, self.sample_rate)
-        if span_ms >= self.ambient_window_ms:
+        # The window is CLAMPED to the cap, not compared against the raw config.
+        # The drop-oldest cap above is the RAM bound and must stay the bound --
+        # but comparing against an unclamped `ambient_window_ms` made a window
+        # larger than AMBIENT_MAX_MS unreachable, so the pool sat one sample
+        # under the threshold forever and the whole world-sound path (tagger +
+        # bird lens) was silently off. Clamp the window; keep the bound.
+        if span_ms >= min(self.ambient_window_ms, float(AMBIENT_MAX_MS)):
             buf, self._ambient = self._ambient, []
             self._ambient_context(buf)
 
@@ -168,7 +183,7 @@ class CapturePipeline:
         species read. Both best-effort; a hub without the seams is a no-op."""
         if self.tagger is not None:
             try:
-                tags = self.tagger.tag(buf) or []
+                tags = self._tag(buf)
             except Exception as exc:
                 self._record(exc)
                 tags = []
@@ -208,6 +223,13 @@ class CapturePipeline:
             self._record(exc)
             return None
         if not text:
+            # An engine that swallows its own error into "" is indistinguishable
+            # from silence, which is how a whole broken ASR rung stayed invisible
+            # while every status surface reported it live. Engines that expose
+            # `last_error` get it onto the health ledger.
+            err = getattr(self.asr, "last_error", None)
+            if isinstance(err, BaseException):
+                self._record(err)
             return None
 
         label = ""
@@ -250,6 +272,35 @@ class CapturePipeline:
             except Exception as exc:
                 self._record(exc)
 
+    def _tag(self, audio) -> list:
+        """Tag one buffer, telling the tagger THIS PIPELINE'S sample rate.
+
+        `SoundEventDetector.tag` defaults to 32 kHz (PANNs' native rate) while
+        the pipeline runs at `self.sample_rate` (16 kHz by default). Calling it
+        with one argument presented every world sound an octave up and 2x time-
+        compressed on both backends -- a ~3.2 kHz smoke alarm arrived as 6.4 kHz
+        -- and that is the input to `attention_for`'s watch-out map and to the
+        one hark documented to pierce the Veil for safety. `_ambient_context`
+        already got this right for the bird lens (`note_audio(buf, rate)`); the
+        two consumers of the same buffer disagreed.
+
+        `SherpaAudioTagger.tag` takes no rate (it reads its own config), so the
+        argument goes only to taggers whose signature accepts one."""
+        tag = self.tagger.tag
+        if self._tag_takes_rate is None:
+            try:
+                import inspect
+                params = inspect.signature(tag).parameters
+                self._tag_takes_rate = (
+                    "sample_rate" in params
+                    or any(p.kind is inspect.Parameter.VAR_KEYWORD
+                           for p in params.values()))
+            except (TypeError, ValueError):       # builtins / C callables
+                self._tag_takes_rate = False
+        if self._tag_takes_rate:
+            return tag(audio, sample_rate=self.sample_rate) or []
+        return tag(audio) or []
+
     def _acoustic_context(self, segment) -> None:
         """Tag the segment's non-speech sound (doorbell/alarm/…) and hand it to
         the hub if it accepts one. Best-effort and optional — a tagger error or
@@ -257,7 +308,7 @@ class CapturePipeline:
         if self.tagger is None:
             return
         try:
-            tags = self.tagger.tag(segment) or []
+            tags = self._tag(segment)
         except Exception as exc:
             self._record(exc)
             return

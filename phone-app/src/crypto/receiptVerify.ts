@@ -129,6 +129,22 @@ function edVerify(sigHex: string, bytes: Uint8Array, pubHex: string): boolean {
  * mid-chain. Each in-window link is still verified; the first record's link into
  * the (out-of-window) past is instead attested by the signed head anchor.
  */
+/** Verify a head anchor's own signature and return what it attests, or null.
+ *
+ *  Factored out because the empty-ledger branch below needs exactly this check
+ *  and used to skip it entirely — which is how "delete every record" verified
+ *  green under a signed anchor claiming 500 entries. Two branches asking the
+ *  same question must ask it the same way. */
+function verifyHeadAnchor(head: HeadAnchor, pubkey: string): { count: number } | null {
+  try {
+    if (!head.sig) return null;
+    if (!edVerify(head.sig, enc.encode(canonicalHead(head)), pubkey)) return null;
+    return { count: head.count };
+  } catch {
+    return null;
+  }
+}
+
 export function verifyReceipt(
   records: ReceiptRecord[],
   pubkey: string,
@@ -136,10 +152,25 @@ export function verifyReceipt(
 ): VerifyResult {
   const signed = !!pubkey;
   if (records.length === 0) {
-    // an empty ledger has nothing to attest — trivially, vacuously verified
+    // An empty ledger is only vacuously verified if nothing SAYS otherwise. This
+    // branch returned ok:true before `head` was ever read, so deleting every
+    // record verified green -- "Verified - Signed by this device - 0 entries -
+    // chain intact" -- while a signed anchor sitting right there attested 500.
+    // That is the exact attack the head anchor exists to catch, and it was the
+    // one case that skipped it.
+    const claim = signed && head && head.sig ? verifyHeadAnchor(head, pubkey) : null;
+    if (claim && claim.count > 0) {
+      return {
+        ok: false, signed, signatureValid: signed, chainIntact: true,
+        sequenceComplete: true, firstBroken: null, count: 0,
+        attestedCount: claim.count, headVerified: true,
+        tailShort: true, unattestedAppend: false, tailComplete: false,
+      };
+    }
     return {
       ok: true, signed, signatureValid: signed, chainIntact: true, sequenceComplete: true,
-      firstBroken: null, count: 0, attestedCount: null, headVerified: false,
+      firstBroken: null, count: 0, attestedCount: null,
+      headVerified: !!claim,
       tailShort: false, unattestedAppend: false, tailComplete: true,
     };
   }

@@ -514,9 +514,23 @@ class WorldLensOps(OpsHost):
         contacts (on-device, never a stranger lookup) and, when it's someone
         the conversation ledger also knows, follows the identity card with the
         dossier (last spoke, recurring topics, what's open). Veil-gated by
-        SocialLens itself. Returns what it surfaced, or None on no match."""
+        SocialLens itself. Returns what it surfaced, or None on no match.
+
+        A deliberate look never produces SILENCE. `look_at_object` sends
+        `cards.couldnt_see()` when it has nothing; this returned bare None, and
+        because `PersonCandidate` bids 0.95 — the highest of any candidate — a
+        look at a person also suppressed every fallback lens. So the wearer got
+        nothing at all, from the highest-confidence decision the arbiter makes.
+        The honest card the result already knows how to build is sent instead."""
         res = self.social.identify(frame)
         if res is None or res.match is None:
+            # The result distinguishes veiled / no-model / no-face / no-match, and
+            # `to_hud_card()` renders each honestly. Say the true thing.
+            if res is not None:
+                try:
+                    self.bridge.send_card(res.to_hud_card(), event="social")
+                except Exception:                       # noqa: BLE001
+                    pass
             return None
         name = res.match.contact.name
         # remember who you're looking at, so "remember she likes climbing"

@@ -79,9 +79,59 @@ class SocialLensResult:
     frame_confidence: float     # face detection confidence
     no_face: bool = False       # True if no face was detected
     no_match: bool = False      # True if face found but no contact matched
+    # Two states that are NOT "no face". Conflating them made the glass state a
+    # falsehood about the world: under the Veil, and with no face model wired,
+    # the system had not looked -- so "No face detected" was a claim it had no
+    # basis for. `veiled` means the shield is up; `unavailable` means there is
+    # no face embedder on this build (see truth_lens/face_embed.py).
+    veiled: bool = False
+    unavailable: bool = False
 
     def to_hud_card(self) -> dict:
         """Render as a Halo HUD card dict."""
+        if self.veiled:
+            return {
+                "type": "SocialLensCard",
+                "dismiss_ms": 2500,
+                "eyebrow": "FACE RECALL",
+                "primary": "Not looking",
+                "detail": "The veil is up",
+                "footer": "",
+                "color": 0x7BEF,
+                "opacity": 0.7,
+                "lines": ["FACE RECALL", "Not looking", "The veil is up"],
+                "layout": {
+                    "eyebrow": {"x": 128, "y": 200, "size": "sm",
+                                "color": 0x7BEF, "tracking": 3},
+                    "primary": {"x": 128, "y": 218, "size": "sm",
+                                "color": 0x7BEF},
+                    "detail":  {"x": 128, "y": 234, "size": "sm",
+                                "color": 0x39E7},
+                },
+            }
+
+        if self.unavailable:
+            return {
+                "type": "SocialLensCard",
+                "dismiss_ms": 2500,
+                "eyebrow": "FACE RECALL",
+                "primary": "Face recall isn't set up",
+                "detail": "No face model on this device",
+                "footer": "",
+                "color": 0x7BEF,
+                "opacity": 0.7,
+                "lines": ["FACE RECALL", "Face recall isn't set up",
+                          "No face model on this device"],
+                "layout": {
+                    "eyebrow": {"x": 128, "y": 200, "size": "sm",
+                                "color": 0x7BEF, "tracking": 3},
+                    "primary": {"x": 128, "y": 218, "size": "sm",
+                                "color": 0x7BEF},
+                    "detail":  {"x": 128, "y": 234, "size": "sm",
+                                "color": 0x39E7},
+                },
+            }
+
         if self.no_face:
             return {
                 "type": "SocialLensCard",

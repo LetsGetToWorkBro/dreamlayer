@@ -227,8 +227,15 @@ class JunoCandidate(LensCandidate):
             return LensBid(self.lens, self.label, 0.4, "juno",
                            reason="fallback: name what's here")
         if reading.scene in ("text", "screen") and not _q(reading):
-            # a weak default so a bare look at text still has a fallback owner
-            return LensBid(self.lens, self.label, 0.32, "juno",
+            # A weak default so a bare look at text still has a fallback owner.
+            # It has to clear `GlanceArbiter.floor` (0.35) to BE that owner: at
+            # 0.32 it was 0.03 short, and the dwell boost is deliberately gated
+            # on `salience >= floor`, so nothing could ever lift it -- a look at
+            # a receipt or a sparse page (density in (0.1, 0.5)) silently did
+            # nothing whenever the vision tier couldn't answer, i.e. offline,
+            # which is the stated design premise. Same bug the two comments
+            # above describe fixing for `sky` and for `form`/`question`.
+            return LensBid(self.lens, self.label, 0.36, "juno",
                            reason="fallback: name what's here")
         return None
 
@@ -317,10 +324,18 @@ class GlancePriors:
                      amount: float = 1.0) -> None:
         """Learn the pick for this scene AND for this scene-at-this-time-of-day,
         so the arbiter can grow a habit that is specific to your mornings without
-        forgetting the general one."""
-        self.reinforce(scene, lens, amount)
+        forgetting the general one.
+
+        `amount` is accepted for call-site compatibility and deliberately
+        IGNORED, exactly as in `reinforce`. Honouring it here while `reinforce`
+        normalised it away re-introduced the coupling `reinforce`'s docstring
+        says was removed: the daypart row grew at a different rate from the
+        general one, so the two disagreed about the same pick. One pick is one
+        pick, in both rows."""
+        del amount
+        self.reinforce(scene, lens)
         if part and part in DAYPARTS and scene in SCENES:
-            self._bump(self._key(scene, part), lens, amount)
+            self._bump(self._key(scene, part), lens, 1.0)
             self._save()
 
     def boost_at(self, scene: str, lens: str, part: str = "") -> float:

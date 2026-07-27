@@ -231,6 +231,7 @@ markers = [
     "benchmark: latency-budget test via pytest-benchmark (deselected in CI)",
     "real_model: needs heavy ML deps installed (MiniLM/CLIP/moondream); deselected in the default job, run by the real-models workflow",
     "allow_egress: opts a test OUT of the autouse no-cloud-egress audit hook (rare; for a test that must reach a public host). Loopback/RFC-1918 LAN never needs this.",
+    "no_face_double: opts a test OUT of the autouse face-embedder test double, so it sees the PRODUCTION FaceEmbedder — which declines, because there is no face model. Used to assert the shipped build never names anyone.",
 ]
 
 [tool.mutmut]

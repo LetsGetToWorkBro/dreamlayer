@@ -61,11 +61,18 @@ _ISLOCAL_INPUTS = [
     "http://[::1]@127.0.0.1", "http://[foo]@192.168.1.1", "//[::1]@10.0.0.1",
     "http://[x]@127.0.0.1", "http://[::1]@10.0.0.5",
 ]
+# Forms that MUST read as local on both sides. 169.254/16 was here and has been
+# removed on purpose: it is link-local / cloud-metadata space (the same range as
+# backends._BLOCKED_NETS), so calling it "on your device" exempted a cloud
+# credential endpoint from the egress counter and from the veil. Both the Python
+# rule and the served JS now class it remote; this corpus is the thing that keeps
+# the two in step, so the expectation moves with them.
 _ISLOCAL_LOCAL_FORMS = [
     "http://localhost", "http://localhost:1234/v1", "http://127.0.0.1",
     "http://10.0.0.5", "http://192.168.1.5", "http://172.16.0.1",
-    "http://169.254.1.1", "http://[::1]", "http://foo.local",
+    "http://[::1]", "http://foo.local",
 ]
+_ISLOCAL_MUST_BE_REMOTE = ["http://169.254.1.1", "http://169.254.169.254"]
 _ISLOCAL_DIVERGENCES = [
     "http://ｌｏｃａｌｈｏｓｔ",
     "http://ｌｏｃａｌｈｏｓｔ:8080",
@@ -128,6 +135,15 @@ def test_panel_html_has_the_memory_section():
     html = render_panel(token="t")
     assert "Your memory is a file" in html
     assert "browseMemory()" in html and "exportMemory()" in html
+
+
+def test_link_local_is_remote_on_both_sides():
+    """169.254/16 is where every cloud's instance-metadata service lives. It must
+    never be classed on-device: that is what exempted it from the egress count,
+    from the veil, and from the panel's "leaves your device" warning."""
+    for u in _ISLOCAL_MUST_BE_REMOTE:
+        assert is_local_endpoint(u) is False, u
+        assert _js_islocalurl_py(u) is False, u
 
 
 def test_panel_islocalurl_matches_python_is_local_endpoint():
@@ -243,7 +259,8 @@ def _js_islocalurl_py(u):
                 return False
         a, b = int(octets[0]), int(octets[1])
         return (a == 127 or a == 10 or (a == 192 and b == 168)
-                or (a == 172 and 16 <= b <= 31) or (a == 169 and b == 254))
+                or (a == 172 and 16 <= b <= 31))
+    # 169.254/16 deliberately absent -- see _ISLOCAL_MUST_BE_REMOTE.
     return False                                     # public / bare host -> remote
 
 

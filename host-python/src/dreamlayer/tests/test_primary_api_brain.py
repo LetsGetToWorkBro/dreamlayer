@@ -27,8 +27,16 @@ class TestIsLocalEndpoint:
         for u in ("http://localhost:11434", "http://127.0.0.1:1234/v1",
                   "http://[::1]:8080", "http://192.168.1.9:11434",
                   "http://10.0.0.5", "http://172.16.4.4:9000",
-                  "http://169.254.1.1", "http://hermes.local:8000"):
+                  "http://hermes.local:8000"):
             assert is_local_endpoint(u) is True, u
+
+    def test_link_local_is_not_local(self):
+        """169.254/16 is cloud-metadata space, not "your network". It was in both
+        _LOCAL_NETS and _BLOCKED_NETS, so any site asking only is_local_endpoint
+        treated an IMDS endpoint as on-device: uncounted, unveiled, and described
+        to the wearer as "on your device"."""
+        for u in ("http://169.254.1.1", "http://169.254.169.254"):
+            assert is_local_endpoint(u) is False
 
     def test_public_hosts_are_remote(self):
         for u in ("https://api.openai.com", "https://example.com",

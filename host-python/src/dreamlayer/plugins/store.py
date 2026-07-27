@@ -309,7 +309,18 @@ class PluginStore:
         `self.isolated` (call .stop() to reclaim)."""
         import os as _os
         if require_sandbox is None:
-            require_sandbox = _os.environ.get("DL_REQUIRE_SANDBOX", "") == "1"
+            # FAIL CLOSED. This defaulted to False, so the public API's default was
+            # to run third-party code in a "jail" that, without a kernel sandbox
+            # (i.e. on every Mac and Windows Brain), is a plain subprocess holding
+            # the wearer's full authority — an audit retrieved /etc/passwd, the
+            # pairing token out of the environment, a persistent file write, a
+            # spawned process, the imported host package and live network egress
+            # through it. The one production caller already passed True; the unsafe
+            # value was the one you got by not thinking about it.
+            #
+            # DL_REQUIRE_SANDBOX=0 still opts out, explicitly, for a developer on a
+            # box with no bwrap/nsjail who accepts running plugins unconfined.
+            require_sandbox = _os.environ.get("DL_REQUIRE_SANDBOX", "1") != "0"
         plugins = []
         self.isolated = []
         self.isolation_notices: list = []      # degraded-posture load records

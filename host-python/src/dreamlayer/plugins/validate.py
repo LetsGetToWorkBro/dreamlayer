@@ -11,10 +11,29 @@ lines of defence, cheapest first:
      (a bad signature is a hard error); when a trusted-keys registry is
      supplied, the key must be in it. Unsigned packages stay installable
      under the curated-registry model, labeled with a warning.
-  3. **Static scan** — the source is parsed to an AST and screened for
-     dangerous operations (subprocess, eval/exec, raw sockets, file writes,
-     ctypes, dynamic import…). Each is allowed *only* if the manifest declared
-     the matching capability — no undeclared reach. Nothing is executed.
+  3. **Static scan** — the source is parsed to an AST and screened for dangerous
+     operations (subprocess, eval/exec, raw sockets, file writes, ctypes, dynamic
+     import…), each cross-checked against what the manifest declared. Nothing is
+     executed.
+
+     THIS IS A LINT, NOT A SECURITY BOUNDARY, and the difference matters enough to
+     spell out. An AST screen keyed on names cannot enforce a capability model in
+     Python, because reaching a capability does not require naming it. An audit
+     walked five separate routes past a scan with ZERO declared capabilities:
+
+         ().__class__.__base__.__subclasses__()      -> subprocess.Popen
+         __builtins__["__import__"]("socket")        -> a socket, via subscript
+         io.open("/etc/passwd")                      -> a read
+         pathlib.Path(p).write_text(...)             -> an arbitrary write
+         os.environ.get("...")                       -> the pairing token
+
+     The list is not exhaustive and cannot be made exhaustive; introspection is
+     unbounded. So the scan is here to catch honest mistakes and obvious hostility
+     early, with a clear message, before anything runs — which is worth having. It
+     is NOT what stands between a hostile plugin and the wearer's data. That is the
+     kernel or WASM sandbox in `isolation.py` / `wasm_component_host.py`, which is
+     why `load_installed` now refuses to run a plugin at all when no such sandbox
+     is available. Do not add a capability to this list and consider it enforced.
   4. **Smoke load** (opt-in) — the module is imported in a fresh namespace and
      its factory is built and registered against a *mock* context. If it fails
      to import, its entry factory is missing, or `register()` raises, it fails
@@ -92,6 +111,26 @@ _DANGER_CALLS = {
     # asyncio itself is legitimate; only its raw-socket openers imply network.
     ("asyncio", "open_connection"): "network",
     ("asyncio", "open_unix_connection"): "network",
+    # Filesystem reach the table simply did not name. An audit read /etc/passwd
+    # through `io.open` and wrote an arbitrary file through `pathlib`, both with
+    # zero declared capabilities, because only the BARE `open` builtin was listed.
+    ("io", "open"): "fs",
+    ("io", "FileIO"): "fs",
+    ("shutil", "copy"): "fs", ("shutil", "copy2"): "fs",
+    ("shutil", "copyfile"): "fs", ("shutil", "move"): "fs",
+    ("shutil", "make_archive"): "fs",
+    ("shutil", "unpack_archive"): "fs",
+    ("tempfile", "NamedTemporaryFile"): "fs", ("tempfile", "mkstemp"): "fs",
+    ("tempfile", "mkdtemp"): "fs",
+}
+# Path-object methods that read or write the filesystem. `pathlib.Path(p)` is an
+# unresolved call result, so the (module, attr) table never sees the receiver —
+# flag the method name on ANY receiver, the same way the asyncio openers are
+# handled. Over-declaration is the safe direction for a screen.
+_FS_METHOD_NAMES = {
+    "write_text", "write_bytes", "read_text", "read_bytes",
+    "unlink", "rmdir", "mkdir", "touch", "rename", "replace", "symlink_to",
+    "chmod", "hardlink_to",
 }
 # asyncio EVENT-LOOP socket openers (loop.create_connection(...)). The loop is
 # usually an unresolved call result — asyncio.new_event_loop().create_connection()
@@ -176,6 +215,17 @@ class ValidationReport:
         self.warnings.append(msg)
 
 
+# Attribute names that exist to escape the type system. Flagging them does not
+# make the scan a boundary (see the module docstring), but a plugin reaching for
+# `__subclasses__` is not making an honest mistake, and saying so early is better
+# than saying nothing.
+_ESCAPE_ATTRS = frozenset({
+    "__class__", "__base__", "__bases__", "__mro__", "__subclasses__",
+    "__globals__", "__builtins__", "__code__", "__closure__", "__dict__",
+    "__getattribute__", "__reduce__", "__reduce_ex__",
+})
+
+
 class _DangerScanner(ast.NodeVisitor):
     def __init__(self, allowed: set):
         self.allowed = allowed
@@ -257,6 +307,37 @@ class _DangerScanner(ast.NodeVisitor):
         cap = _DANGER_CALLS.get((mod, attr)) or _DANGER_CALLS.get((mod, "*"))
         if cap is not None or (mod, attr) in _DANGER_CALLS:
             self._need(cap, shown)
+
+    def visit_Attribute(self, node):
+        """Flag a reach for the type-system escape hatches.
+
+        A plugin touching `__subclasses__` or `__globals__` is not making an honest
+        mistake, and the scan exists to say so early. This does not turn the scan
+        into a boundary — the routes past it are unbounded (module docstring) — it
+        just declines to stay silent about the obvious ones."""
+        # `os.environ` is where the pairing token lives. Reading it is not a call,
+        # so no call-table entry could ever have caught it.
+        if node.attr == "environ" and isinstance(node.value, ast.Name):
+            mod = self._alias.get(node.value.id, node.value.id) \
+                if hasattr(self, "_alias") else node.value.id
+            if mod == "os":
+                self._need("secrets", "os.environ")
+        if node.attr in _FS_METHOD_NAMES:
+            self._need("fs", f".{node.attr}()")
+        if node.attr in _ESCAPE_ATTRS:
+            self.issues.append(
+                f"forbidden operation: {node.attr} (introspection escape); a "
+                f"plugin has no honest use for reaching through the type system")
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node):
+        """`__builtins__["__import__"]("socket")` reaches an import without ever
+        naming one — the same escape as above, spelled with brackets."""
+        v = node.value
+        if isinstance(v, ast.Name) and v.id in _ESCAPE_ATTRS:
+            self.issues.append(
+                f"forbidden operation: {v.id}[...] (introspection escape)")
+        self.generic_visit(node)
 
     def visit_Call(self, node):
         f = node.func

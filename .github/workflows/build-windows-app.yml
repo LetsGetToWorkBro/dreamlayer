@@ -91,6 +91,20 @@ jobs:
             /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
             host-python/packaging/windows/dist/DreamLayer/DreamLayer.exe
 
+      # A signature nobody verifies is a signature nobody can rely on. macOS runs
+      # `codesign --verify --deep --strict` unconditionally; Windows signed and
+      # never checked, so a partial sign — or a missing timestamp because
+      # timestamp.digicert.com was unreachable — shipped silently. /tw is what
+      # makes an untimestamped signature an error rather than a warning.
+      - name: Verify the exe signature
+        if: env.HAVE_CERT == 'true'
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName verify /pa /tw `
+            host-python/packaging/windows/dist/DreamLayer/DreamLayer.exe
+          if ($LASTEXITCODE -ne 0) { throw "exe signature did not verify" }
+
       - name: Smoke-launch the exe
         # the CI stand-in for "double-click on a clean Windows 11 machine":
         # the windowed exe must boot the server, answer on :7777, mint a
@@ -127,6 +141,32 @@ jobs:
             Sort-Object FullName -Descending | Select-Object -First 1
           & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p "$env:PFX_PASS" `
             /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 DreamLayer-Setup.exe
+
+      - name: Verify the installer signature
+        if: env.HAVE_CERT == 'true'
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName verify /pa /tw DreamLayer-Setup.exe
+          if ($LASTEXITCODE -ne 0) { throw "installer signature did not verify" }
+
+      # An UNSIGNED Windows build is documented, intended behaviour (see the
+      # header): the secrets are optional and SmartScreen's "More info -> Run
+      # anyway" is the accepted cost. What was NOT intended is a silent
+      # signed-to-unsigned DOWNGRADE — blank or rotate the secret and a tagged
+      # release publishes unsigned, green, with nothing in the run, the artifact
+      # name, or the release body recording the loss. This makes the loss loud
+      # without turning an intentionally-unsigned build red, and lets a repo opt
+      # into strictness with a REQUIRE_WINDOWS_SIGNING variable.
+      - name: Flag an unsigned build
+        if: env.HAVE_CERT != 'true'
+        run: |
+          $msg = "This Windows build is UNSIGNED (no WINDOWS_CERT_PFX_BASE64 secret). SmartScreen will warn on first run."
+          Write-Output "::warning title=Unsigned Windows build::$msg"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "> [!WARNING]`n> $msg"
+          if ("${{ vars.REQUIRE_WINDOWS_SIGNING }}" -eq "true") {
+            throw "REQUIRE_WINDOWS_SIGNING is set but no signing certificate is configured"
+          }
 
       # SLSA build provenance: a signed, verifiable statement that this installer
       # came out of THIS repo's CI (this workflow, this commit), not a developer

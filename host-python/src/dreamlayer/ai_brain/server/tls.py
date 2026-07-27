@@ -14,7 +14,7 @@ Honesty notes:
   * Off by default. A plain `python -m dreamlayer.ai_brain.server` binds
     loopback http, exactly as before.
   * The private key never leaves <dir>/tls/ and is written 0600.
-  * cryptography is optional (extras: `verify`); absent -> a clear message,
+  * cryptography is optional (extras: `privacy`); absent -> a clear message,
     the http server runs unchanged, and the Live Lens still answers asks
     (camera needs the https link and says so).
   * If the LAN IP changed since the cert was minted, we re-mint so the SAN
@@ -69,7 +69,7 @@ def ensure_self_signed(cfg_dir: str | Path) -> Optional[tuple[Path, Path]]:
         from cryptography.x509.oid import NameOID
     except ImportError:
         log.warning("[tls] cryptography not installed — https unavailable "
-                    "(pip install 'dreamlayer[verify]')")
+                    "(pip install 'dreamlayer[privacy]')")
         return None
 
     import ipaddress

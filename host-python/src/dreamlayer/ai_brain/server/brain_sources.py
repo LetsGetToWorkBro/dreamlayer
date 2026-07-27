@@ -216,7 +216,15 @@ class SourceOps(BrainHost):
 
     def rehearse_person(self, name: str, note: str = "") -> Optional[dict]:
         """Start rehearsing a name (and how you know them) so it doesn't slip.
-        First review is due in ten minutes — right after the introduction."""
+        First review is due in ten minutes — right after the introduction.
+
+        Veil-gated, fail-closed: rehearsal.json holds the name and how you know
+        them, so it is the same class of write as `add_person`."""
+        try:
+            if self.incognito_now():
+                return None
+        except Exception:                              # noqa: BLE001
+            return None                                # unreadable posture = veiled
         name = (name or "").strip()
         if not name:
             return None

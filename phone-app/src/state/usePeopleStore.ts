@@ -131,7 +131,17 @@ export const usePeopleStore = create<PeopleState>((set, get) => ({
     set({ loading: true, paired: true });
     try {
       const r = await req(m, "/dreamlayer/social/people");
-      const people = Array.isArray(r?.people) ? r.people.map(normalize) : [];
+      // An ERROR BODY IS NOT AN EMPTY ROSTER. `req` resolves with the parsed
+      // body whatever the status, so a 401/500 gave `people: []` -- which was
+      // then written to AsyncStorage with a fresh `fetchedAt`, destroying the
+      // cache and stamping the emptiness as current. The sibling
+      // `useMemoryStore.refresh` has had this guard, with a comment naming this
+      // exact bug; it was applied to one store and not the other.
+      if (!Array.isArray(r?.people)) {
+        set({ loading: false, loaded: true });
+        return;
+      }
+      const people = r.people.map(normalize);
       const fetchedAt = Date.now();
       set({ people, loading: false, loaded: true, fetchedAt });
       AsyncStorage.setItem(CACHE_KEY,

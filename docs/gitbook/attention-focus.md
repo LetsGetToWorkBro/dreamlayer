@@ -108,16 +108,27 @@ into one decision.
   Translate"). A pick runs that lens *and* teaches the arbiter.
 - **It learns you.** Per-scene priors (`GlancePriors`) reinforce the lens you
   keep choosing for a kind of scene — and for that scene *at that time of day* —
-  so tomorrow's ambiguous look leans your way. They persist as a small JSON on
-  the hub beside the vault (`glancepriors.json`, the same pattern as the user
-  model) — read once at start, rewritten on each pick, in-memory only when
-  there's no vault. The local file stays the source of truth so a glance never
+  so tomorrow's ambiguous look leans your way. They persist as a small JSON in
+  the Brain's config directory (`glance_priors.json`, the same pattern as the
+  user model) — read once at start, rewritten on each pick, in-memory only when
+  there's no hub. The local file stays the source of truth so a glance never
   waits on the network; the dict is still serialisable, so a Mac Brain can later
   mirror it across hubs.
+
+  Where this runs, precisely, because the two tiers are not yet symmetric: the
+  arbiter is live on the **Live Lens / phone** path (`ai_brain/server/live.py`
+  → `world_lens.py`, its own `LIVE_CANDIDATES` set, writing
+  `glance_priors.json`). The **glasses-side** twin (`Orchestrator.glance()` /
+  `choose_glance()`, `DEFAULT_CANDIDATES`, and a `glancepriors.json` beside the
+  vault) has no camera entry point and no uplink from a chooser tap yet, so on
+  the glasses the GlanceChoiceCard is drawn but not yet answered, and that file
+  is never written. Treat this section as describing the Live Lens today.
 - **Only from answers you actually got.** A pick teaches the arbiter only when
-  the lens it ran *worked*. Crediting the tap instead of the result meant a lens
-  whose pack wasn't installed still built a habit out of three "install the pack"
-  cards.
+  the lens it ran *worked*, and never while the Veil is up — the shield writes
+  nothing to disk, priors included. Crediting the tap instead of the result meant
+  a lens whose pack wasn't installed still built a habit out of three "install the
+  pack" cards. (Both guards live on the Live Lens path; the glasses-side
+  `choose_glance()` above is unwired and has neither.)
 - **A habit is never a cage.** Counts decay as they accumulate, so a row
   converges rather than growing without bound and a few contrary picks revise a
   formed preference. And once the arbiter is confident enough to stop asking, the

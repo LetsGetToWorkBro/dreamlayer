@@ -248,7 +248,17 @@ class EarHost:
             caps.add("asr_moonshine" if engine == "moonshine" else "local_asr")
             if vad is not None:
                 caps.add("voice_vad")
-            if tagger is not None:
+            # A tagger object is not a working tagger. `SoundEventDetector`
+            # exposes TWO booleans and they mean different things: `available` is
+            # the WHEEL (and is what `default_sound_detector` filters on, so a
+            # non-None tagger only proves the wheel), while `ready` is a MODEL
+            # actually loaded — and `detect()` returns [] unless `ready`. On a
+            # bare `pip install dreamlayer[voice]` the wheel is there and no model
+            # is, so this reported sound_events live for a seam that could only
+            # ever return nothing: exactly the blanket over-promotion the comment
+            # above says was removed. Ask for `ready` when the seam offers it.
+            tagger_live = bool(getattr(tagger, "ready", tagger is not None))
+            if tagger_live:
                 caps.add("sound_events")
             if self._bird is not None:
                 caps.add("bird_song")
@@ -256,7 +266,7 @@ class EarHost:
                 caps.add("mic_capture")
             self.active_caps = frozenset(caps & set(EAR_CAPS))
             return {"ok": True, "engine": engine,
-                    "sound_events": tagger is not None,
+                    "sound_events": tagger_live,
                     "birds": self._bird is not None,
                     "active_caps": sorted(self.active_caps),
                     **self.status()}

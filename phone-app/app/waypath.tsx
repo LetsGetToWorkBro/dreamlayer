@@ -57,9 +57,11 @@ function Ring({ dot }: { dot: Dot | null }) {
 export default function Waypath() {
   const st = useSt();
   const { colors } = useTheme();
-  const { route, dot, status, error, navigateTo, update, clear } = useWaypathStore();
+  const { route, dot, status, error, navigateTo, update, clear,
+          baseUrl, setBaseUrl } = useWaypathStore();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [server, setServer] = useState(baseUrl);
 
   async function useMyLocation() {
     if (!Location?.getCurrentPositionAsync) return;
@@ -75,7 +77,10 @@ export default function Waypath() {
   function go() {
     const a = parseLatLng(from);
     const b = parseLatLng(to);
-    if (a && b) navigateTo(a, b);
+    if (a && b) {
+      setBaseUrl(server.trim());        // commit the field before routing
+      navigateTo(a, b);
+    }
   }
 
   // A virtual walk along the route — demo Waypath with no GPS. Steps the store
@@ -149,6 +154,24 @@ export default function Waypath() {
         value={to}
         onChangeText={setTo}
       />
+      {/* Your routing server. There is deliberately no default: a route request
+          carries where you are AND where you are going, so it goes to a machine
+          you chose or it does not go. OSRM self-hosts with no key and no
+          account — `docker run osrm/osrm-backend` and point this at it. */}
+      <TextInput
+        style={st.input}
+        placeholder="Routing server — e.g. http://192.168.1.20:5000 (yours)"
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={server}
+        onChangeText={setServer}
+        onBlur={() => setBaseUrl(server.trim())}
+      />
+      <Text style={st.hint}>
+        Routing needs a server you host. DreamLayer will not send your location
+        to a stranger, so nothing is filled in for you.
+      </Text>
       <PrimaryButton label={route.length ? "Re-route" : "Navigate"} onPress={go} />
       {route.length ? (
         <Tappable onPress={simulate}>
@@ -187,6 +210,7 @@ const useSt = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
     fontSize: 16,
   },
   link: { color: colors.accentMemory, marginBottom: space.md, ...typography.body },
+  hint: { color: colors.textSecondary, marginBottom: space.md, ...typography.caption },
   ringWrap: { width: D, height: D, alignSelf: "center", marginVertical: space.xl },
   ring: {
     position: "absolute",
