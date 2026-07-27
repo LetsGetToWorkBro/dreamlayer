@@ -58,6 +58,25 @@ is agreed before code. Small fixes: just send the PR. Maintainers make final
 product calls — see [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md) for
 governance.
 
+### Check `decisions/` before re-raising a finding
+
+[`decisions/`](decisions/) records findings that were investigated and closed
+**without** a code change — refuted, accepted as a known risk, or confirmed and
+deferred. Audits keep re-deriving the same conclusions at full cost, and a
+finding that leaves no commit behind leaves no trace at all. If you are about to
+report something in the security, privacy, or dead-code family, skim the index
+first; you may find the hour has already been spent, with the evidence.
+
+Every entry names the check that would overturn it, so a stale conclusion can be
+refuted rather than believed. If you run that check and it comes back the other
+way, say so — that is the most useful thing the directory can produce. Closing a
+finding without a code change means adding an entry; `TEMPLATE.md` has the shape,
+and a test enforces it.
+
+The directory holds **decisions only** — never descriptions of how code works.
+Code answers that by being read and run; a prose copy drifts silently and cannot
+be executed. `decisions/README.md` explains why that line is drawn where it is.
+
 ### Security remediations get an adversarial re-audit
 
 Any change that fixes a security/privacy finding — veil/capture gates, auth,
