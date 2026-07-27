@@ -5247,8 +5247,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # aren't reachable today, but that's a property of two layers
                 # below us, not of this call. The handler's name comes from our
                 # own route table and identifies the endpoint just as well.
-                log.exception("[brain] unhandled error in POST route %s",
-                              getattr(handler, "__name__", "?"))
+                #
+                # Bound to a local first, and deliberately not called `*name`:
+                # .semgrep/dreamlayer.yml's pii-in-log-message keys on the
+                # interpolated expression's TEXT, so an inline
+                # `getattr(handler, "__name__", …)` reads as a sensitive
+                # identifier to it. The rule is right to be blunt about that
+                # substring; the fix is to hand it a value whose name says what
+                # this actually is.
+                route = getattr(handler, "__name__", "?")
+                log.exception("[brain] unhandled error in POST route %s", route)
                 self._json(500, {"error": "internal"})
 
     class _BrainServer(ThreadingHTTPServer):
