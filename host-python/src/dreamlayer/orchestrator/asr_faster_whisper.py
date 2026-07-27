@@ -36,6 +36,7 @@ class FasterWhisperASR:
 
     def __init__(self, model_size: str = DEFAULT_MODEL, device: str = "auto", compute_type: str = "int8"):
         self._model = None
+        self.last_error: Exception | None = None
         if _HAS_FW:
             try:
                 self._model = WhisperModel(model_size, device=device, compute_type=compute_type)
@@ -43,14 +44,42 @@ class FasterWhisperASR:
                 log.error("[asr] faster-whisper load failed: %s; no-transcript fallback", exc)
                 self._model = None
 
-    def transcribe(self, audio, language: str = "en") -> str:
-        """`audio` = a path or a mono 16k float numpy array. Returns text ("" if
-        the dep/model is unavailable)."""
+    def transcribe(self, audio, language: str = "en",
+                   sample_rate: int = 16000) -> str:
+        """`audio` = a path, OR any array-like of PCM samples (list, int16
+        array, stereo — whatever the mic hands over). Returns text ("" if the
+        dep/model is unavailable).
+
+        The coercion is not a nicety. ``CapturePipeline._endpoint`` accumulates
+        into a plain Python ``list`` (``SoundDeviceMic.read``/``RemoteMicSource
+        .read`` both return lists) and hands that straight here. faster-whisper
+        does ``if not isinstance(audio, np.ndarray): audio = decode_audio(audio)``
+        → ``av.open(list)`` → ``ValueError: File object has no read() method``,
+        which this method swallowed into a log line — so the always-on ear
+        transcribed *nothing* on the faster-whisper rung (the rung a plain
+        ``pip install dreamlayer[voice]`` lands on) while every status surface
+        reported the engine live. Moonshine's twin coerced all along; only this
+        one did not, under a shared docstring claiming both did.
+
+        A `str`/path is passed through untouched so the documented file-path form
+        still works, and a failure still returns "" (callers rely on "no
+        transcript = no-op" and must not see an exception from a bad path) — but
+        it is recorded on ``last_error`` so ``CapturePipeline`` can put it on the
+        health ledger. Silence that merely *looks* like silence is how the
+        original bug hid for a whole release."""
         if self._model is None:
             return ""
+        self.last_error = None
         try:
+            if not isinstance(audio, (str, bytes)) and not hasattr(audio, "__fspath__"):
+                from .sound_events import _to_mono
+                mono = _to_mono(audio, sample_rate, 16000)
+                if mono is None:
+                    return ""
+                audio = mono
             segments, _info = self._model.transcribe(audio, language=language)
             return " ".join(s.text.strip() for s in segments).strip()
         except Exception as exc:
             log.error("[asr] transcribe failed: %s", exc)
+            self.last_error = exc
             return ""

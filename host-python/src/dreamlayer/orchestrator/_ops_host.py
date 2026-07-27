@@ -121,6 +121,9 @@ class OpsHost:
         conversation: ConversationLedger
         social: SocialLens
         attention: AttentionPolicy
+        # Juno's "Listen!" rate limiter, kept per importance class so a chatty
+        # normal hark can never mute an urgent (safety) one.
+        _hark_marks: dict[str, float]
         veritas: Veritas
         world_check: WorldChecker
         truth: TruthLens

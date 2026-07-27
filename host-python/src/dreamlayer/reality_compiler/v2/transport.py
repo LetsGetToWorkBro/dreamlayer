@@ -107,6 +107,12 @@ def parse_frame(raw: bytes) -> dict:
     if total != len(raw):
         raise ValueError(f"frame length header {total} != actual {len(raw)}")
     body = raw[4:]
+    # A length-only frame (b"\x00\x00\x00\x04") passes the length check above with a
+    # ZERO-BYTE body, and the CBOR sniff below then indexes body[0] — an IndexError
+    # out of a parser whose contract is to raise ValueError on anything malformed.
+    # This is bytes off a BLE link, so "malformed" is the normal case.
+    if not body:
+        raise ValueError("empty frame body")
     if body[:1] == b"{":
         return json.loads(body.decode("utf-8"))
     if 0xA0 <= body[0] <= 0xBF:          # a CBOR map

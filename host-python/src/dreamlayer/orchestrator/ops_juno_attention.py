@@ -271,15 +271,26 @@ class JunoAttentionOps(OpsHost):
         worth hearing (a clue, a heads-up). Rate-limited so it never nags:
         nothing fires within `cooldown_s` of the last hark. Silenced by the
         Privacy Veil; a *normal* hark also holds during Focus, but an *urgent*
-        one pierces it. Returns the card sent, or None if hushed."""
+        one pierces it. Returns the card sent, or None if hushed.
+
+        The cooldown is kept PER IMPORTANCE CLASS. A single global one meant a
+        dog-bark hark muted a smoke alarm for the next two minutes — urgent
+        pierced Focus but not the rate limiter, so the one hark documented to
+        break through for safety was the one a bird could block. A chatty
+        normal hark still can't nag, and an urgent hark still can't spam
+        either: it has its own 120 s window, plus the per-key cooldowns in
+        `AttentionPolicy._alerted`."""
         import time
         now = now if now is not None else time.time()
         if not self.privacy.allow_capture():
             return None
         if importance != "urgent" and self.focus_active():
             return None
-        if now - getattr(self, "_last_hark", -1e9) < cooldown_s:
+        marks = self._hark_marks
+        key = "urgent" if importance == "urgent" else "normal"
+        if now - marks.get(key, -1e9) < cooldown_s:
             return None
+        marks[key] = now
         self._last_hark = now
         card = cards.hark(clue, detail, importance)
         self.bridge.send_card(card, event="hark")

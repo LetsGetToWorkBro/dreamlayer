@@ -171,7 +171,11 @@ class VaultSync:
             try:
                 record = json.loads(figs[fid])
                 fig = Figment.from_dict(record["figment"])
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            # ArithmeticError too: a peer's blob can carry a number so large that
+            # coercing it raises OverflowError, which is NOT a ValueError, so it
+            # escaped and took the whole CRDT sync down with it.
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError,
+                    ArithmeticError):
                 report.tampered.append(fid)
                 continue
             if content_hash(fig) != record.get("content_hash"):

@@ -63,7 +63,16 @@ def _parse_scene_reply(text: str):
     lg = re.search(r"lang\w*\s*=\s*([a-z\-]+)", t, re.IGNORECASE)
     if lg:
         signals["language"] = lg.group(1).lower()
-    if re.search(r"question\s*=\s*(yes|true|1)", t, re.IGNORECASE) or "?" in t:
+    # An explicit tag wins over the shape of the prose. The old test was
+    # `question=yes  OR  "?" in t`, so a reply that said `question=no` and then
+    # asked the wearer anything ("Anything else?") -- or that wrote `fields=?`
+    # for an unknown count -- set question=True and fired "Answer it" (0.62) over
+    # a page of dense legal prose instead of offering "Plain words". The bare-`?`
+    # sniff survives only as a fallback for a reply that omits the tag entirely.
+    q = re.search(r"question\s*=\s*(yes|true|1|no|false|0)", t, re.IGNORECASE)
+    if q is not None:
+        signals["question"] = q.group(1).lower() in ("yes", "true", "1")
+    elif "?" in t:
         signals["question"] = True
     conf = 0.8 if scene != "unknown" else 0.3
     return GlanceReading(scene, conf, signals)

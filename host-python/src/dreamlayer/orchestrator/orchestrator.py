@@ -411,6 +411,10 @@ class Orchestrator(
         self.wake_sources = {"voice", "tap", "gaze", "raise"}
         self.wake_feedback = {"visual": True, "audio": True, "haptic": True}
         self._last_hark = -1e9                  # rate-limit Juno's "Listen!"
+        # …kept PER IMPORTANCE CLASS, so a chatty normal hark cannot mute an
+        # urgent one. A single global mark meant birdsong silenced a smoke alarm
+        # for the next two minutes: urgent pierced Focus but not the limiter.
+        self._hark_marks: dict[str, float] = {}
         # Attention policy: decides *when* a moment is worth an audible "Listen!"
         # (a commitment slipping, someone you owe, something you left) or an
         # urgent "Watch out!" (leave now). Feeds hark(); never nags (per-key
@@ -827,9 +831,21 @@ class Orchestrator(
         own voice. Returns {intent, text, executed, ...}."""
         from .commands import parse_command
         from . import persona
+        # The Veil gates the WRITES, not the answers. docs/gitbook/privacy.md
+        # lists "the user model's learning" among the things a pause stops, and
+        # `hear()` reached `user.learn`/`user.observe` with no gate — so a line
+        # spoken under the shield was persisted to usermodel.json. It is gated
+        # here rather than in `hear()` on purpose: "incognito off" is a spoken
+        # command (commands.py:42), and a gate at the door would trap the wearer
+        # inside the veil with no voice way out.
+        learning_ok = True
+        try:
+            learning_ok = bool(self.privacy.allow_capture())
+        except Exception:                              # noqa: BLE001
+            learning_ok = False                        # fail closed
         # first: is this you teaching Juno about yourself? ("call me Sam",
         # "remember that I prefer aisle seats") — it learns and confirms.
-        learned = self.user.learn(text)
+        learned = self.user.learn(text) if learning_ok else None
         if learned is not None:
             if learned["kind"] == "name":
                 line = persona.confirm("learned_name", name=learned["value"])
@@ -845,8 +861,10 @@ class Orchestrator(
             self._juno_say(line, "action")
             return {"intent": intent, "text": line, "executed": executed}
         # not a command → knowledge / conversation. Your questions also reveal
-        # what you care about, so the Juno keeps learning as you ask.
-        self.user.observe(text)
+        # what you care about, so the Juno keeps learning as you ask — unless
+        # the Veil is up, in which case nothing about this line is recorded.
+        if learning_ok:
+            self.user.observe(text)
         res = self.handle_voice(text)
         kind = res.get("intent")
         if kind in ("ask", "recall"):

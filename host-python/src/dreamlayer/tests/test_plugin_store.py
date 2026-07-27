@@ -309,10 +309,15 @@ def test_default_isolates_unsigned_installed_plugin(tmp_path):
     store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
     assert store.install_package(_jailable_package()).ok
     orc = Orchestrator(FakeBridge())
-    result = store.load_installed(orc)              # default = "untrusted"
+    # The DEFAULT now fails closed: with no kernel sandbox on this host the plugin
+    # is refused rather than run unconfined (see the require_sandbox tests below).
+    assert store.load_installed(orc).loaded == []
+    # Opt into the permissive path to exercise the JAIL itself, which is what this
+    # test is about — that an unsigned package never gets in-process authority.
+    result = store.load_installed(orc, require_sandbox=False)
     try:
         assert result.loaded == []                  # never ran in-process
-        assert len(store.isolated) == 1             # jailed instead
+        assert len(store.isolated) >= 1             # jailed instead
         # the provider's rows still reach the panel — through the jail, not in-process
         from dreamlayer.object_lens.schema import ObjectSighting
         panel = orc.object_lens.registry.build_panel(
@@ -339,10 +344,10 @@ def test_self_signed_plugin_is_jailed_not_run_in_process(tmp_path):
     rep = validate(signed_pkg, frozenset({"object_lens"}))
     assert rep.signed is True and rep.publisher == ""
     orc = Orchestrator(FakeBridge())
-    result = store.load_installed(orc)              # default = "untrusted", no keys
+    result = store.load_installed(orc, require_sandbox=False)   # no keys
     try:
         assert result.loaded == []                  # never ran in-process
-        assert len(store.isolated) == 1             # jailed instead
+        assert len(store.isolated) >= 1             # jailed instead
     finally:
         for h in store.isolated:
             h.stop()
@@ -382,20 +387,67 @@ def _no_kernel_sandbox(monkeypatch):
     monkeypatch.setattr(wh, "available", lambda: False)
 
 
-def test_degraded_isolation_is_recorded_not_silent(tmp_path, monkeypatch):
+def test_the_DEFAULT_refuses_to_run_a_plugin_with_no_kernel_sandbox(tmp_path,
+                                                                    monkeypatch):
+    """`require_sandbox` used to default to False, so the public API's default was
+    to run third-party code in a "jail" that, without bwrap or nsjail — i.e. on
+    every Mac and Windows Brain — is a plain subprocess holding the wearer's full
+    authority. An audit used one to read /etc/passwd, lift a pairing token out of
+    the environment, write a file that survives a restart, spawn a process, import
+    the host package, and open a socket to the internet.
+
+    The unsafe value was the one you got by not thinking about it. Now the default
+    refuses, and the refusal is on the record rather than silent."""
     _no_kernel_sandbox(monkeypatch)
     store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
     assert store.install_package(_jailable_package()).ok
     orc = Orchestrator(FakeBridge())
-    store.load_installed(orc)                       # permissive default
+    result = store.load_installed(orc)              # no argument at all
     try:
-        # still loaded (permissive), but the degraded posture is on the record
-        assert len(store.isolated) == 1
-        assert store.isolation_notices, "degraded load must be surfaced"
+        assert result.loaded == [], "must not run in-process"
+        assert store.isolated == [], "must not run unconfined either"
+        assert store.isolation_notices, "a refusal must be surfaced, not silent"
         assert any("no OS/WASM sandbox" in n for n in store.isolation_notices)
     finally:
         for h in store.isolated:
             h.stop()
+
+
+def test_the_permissive_path_is_still_available_but_must_be_ASKED_for(tmp_path,
+                                                                     monkeypatch):
+    """A developer on a box with no bwrap can still opt out — explicitly. The
+    degraded posture is recorded either way."""
+    _no_kernel_sandbox(monkeypatch)
+    store = PluginStore(tmp_path, host_capabilities=frozenset({"object_lens"}))
+    assert store.install_package(_jailable_package()).ok
+    orc = Orchestrator(FakeBridge())
+    store.load_installed(orc, require_sandbox=False)
+    try:
+        assert len(store.isolated) == 1
+        assert any("no OS/WASM sandbox" in n for n in store.isolation_notices)
+    finally:
+        for h in store.isolated:
+            h.stop()
+
+
+def test_the_env_opt_out_needs_an_explicit_zero(tmp_path, monkeypatch):
+    """DL_REQUIRE_SANDBOX used to mean "1 opts IN to safety"; it now means "0 opts
+    OUT of it", so an unset or garbage value lands on the safe side."""
+    import dreamlayer.plugins.store as store_mod
+    for value, expect_refused in (("0", False), ("1", True), ("", True),
+                                  ("yes", True), ("false", True)):
+        _no_kernel_sandbox(monkeypatch)
+        monkeypatch.setenv("DL_REQUIRE_SANDBOX", value)
+        st = store_mod.PluginStore(tmp_path / f"env{value or 'unset'}",
+                                   host_capabilities=frozenset({"object_lens"}))
+        assert st.install_package(_jailable_package()).ok
+        st.load_installed(Orchestrator(FakeBridge()))
+        try:
+            refused = (st.isolated == [])
+            assert refused is expect_refused, f"DL_REQUIRE_SANDBOX={value!r}"
+        finally:
+            for h in st.isolated:
+                h.stop()
 
 
 def test_require_sandbox_fails_closed_without_kernel_boundary(tmp_path, monkeypatch):
