@@ -145,15 +145,25 @@ class TestAutomaticKeep:
         assert cap.heard("I'm Maya", frame=make_frame()) is None
         assert idx.size == 0
 
-    def test_name_only_auto_keep_stays_out_of_the_face_index(self):
+    def test_name_only_auto_keep_is_a_contact_but_never_a_face_match(self):
+        """A name-only introduction joins the ROSTER and stays out of face
+        MATCHING. Those are two different questions, and this index answers
+        both — the People screen, find_by_name, notes, debts and forget_all's
+        purge all read it, so keeping a name out of it silently voided every one
+        of them."""
         idx = ContactIndex()
         enr = ContactEnricher()
         cap = IntroductionCapture(index=idx, enricher=enr, auto_keep=True)
         card = cap.heard("I'm Maya")             # no frame -> no face
         assert card["type"] == "IntroKeptCard"
         assert card["has_face"] is False
-        assert idx.size == 0                      # never a false-matchable face
-        assert enr.get_notes(card["contact_id"])  # kept as a note instead
+        assert idx.size == 1                      # in the roster…
+        assert idx.find_by_name("Maya") is not None
+        # …and unmatchable by sight, from any direction
+        for probe in ([0.0] * 512, [1.0] + [0.0] * 511, [0.05] * 512):
+            assert idx.search(probe) is None
+            assert idx.search_top_k(probe) == []
+        assert enr.get_notes(card["contact_id"])
 
     def test_confirm_is_a_noop_after_auto_keep(self):
         idx = ContactIndex()
@@ -229,7 +239,7 @@ class TestPrivacyAndLifecycle:
         assert cap.pending is None
         assert cap.confirm() is None
 
-    def test_name_only_offer_stays_out_of_the_face_index(self):
+    def test_a_confirmed_name_only_offer_is_a_contact_not_a_face(self):
         idx = ContactIndex()
         enr = ContactEnricher()
         cap = IntroductionCapture(index=idx, enricher=enr, auto_keep=False)
@@ -237,8 +247,9 @@ class TestPrivacyAndLifecycle:
         assert card["has_face"] is False
         rec = cap.confirm()
         assert rec is not None and rec.name == "Maya"
-        assert idx.size == 0                      # never a false-matchable face
-        assert enr.get_notes(rec.contact_id)      # kept as a note instead
+        assert idx.size == 1                      # recallable BY NAME
+        assert idx.search([0.2] * 512) is None    # never BY FACE
+        assert enr.get_notes(rec.contact_id)
 
 
 # --------------------------------------------------------------------------

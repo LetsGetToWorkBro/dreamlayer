@@ -58,6 +58,17 @@ def _ago(ts: float, now: float | None = None) -> str:
     return f"{int(d // 86400)}d ago"
 
 
+# The shapes `meeting_command` handles. Kept as one pattern so the veil gate and
+# the dispatch below cannot disagree about what counts as a meeting command --
+# they disagreed once, and the Brain stopped answering anything while incognito.
+_IS_MEETING_CMD = __import__("re").compile(
+    r"(?i)("
+    r"^\s*(start|begin)\s+(a\s+|the\s+)?meeting\b"
+    r"|^\s*(end|stop|finish|wrap up)\s+(the\s+)?meeting\b"
+    r"|^\s*(?:note(?:\s+that)?|action(?:\s+item)?|todo)\s*[:\-]?\s+.+$"
+    r")")
+
+
 class SocialOps(BrainHost):
     def people(self) -> list:
         """Everyone you've introduced to the Brain, newest first. Backed by
@@ -109,6 +120,13 @@ class SocialOps(BrainHost):
         parsed = parse_introduction(text)
         if not parsed:
             return None
+        # The gate belongs HERE, not only inside add_person. `add_person` refused
+        # and the very next line still wrote the name into meetings.json as an
+        # attendee — and this method returned truthy, so /brain/ask replied "Good
+        # to meet Sarah Chen — I'll remember." A name is a name whichever file it
+        # lands in.
+        if self._veiled():
+            return None
         self.add_person(parsed["name"], note=parsed.get("note", ""))
         try:
             self._meetings().add_attendee(parsed["name"])
@@ -142,11 +160,18 @@ class SocialOps(BrainHost):
         t = (text or "").strip()
         if not t:
             return None
-        # A meeting records attendees and verbatim notes to disk and to the signed
-        # ledger. Same rule as add_person: not under the shield.
+        # The veil gate goes AFTER the pattern match, not before it. Placed first,
+        # it returned a truthy dict for ANY non-empty text -- and `/brain/ask`
+        # treats a truthy meeting result as a handled intent, so while incognito
+        # the Brain answered every single question with "The veil is up", including
+        # ones that touch nothing. It also broke this method's own documented
+        # contract ("or None when the text isn't a meeting command"). Only a real
+        # meeting command is refused; everything else falls through untouched.
+        if not _IS_MEETING_CMD.search(t):
+            return None
         if self._veiled():
-            return {"say": "The veil is up — I'm not keeping a record of this.",
-                    "veiled": True}
+            return {"intent": "meeting", "veiled": True,
+                    "say": "The veil is up — I'm not keeping a record of this."}
         log = self._meetings()
         if re.match(r"(?i)^\s*(start|begin)\s+(a\s+|the\s+)?meeting\b", t):
             who = re.split(r"(?i)\bwith\b", t, 1)
@@ -274,10 +299,45 @@ class SocialOps(BrainHost):
         return {"people": self.social_people}
 
     def receive_people(self, payload: dict) -> dict:
-        """Store the snapshot the hub pushed (merging so phone-side edits made
-        while the hub was offline aren't clobbered by name that isn't present)."""
+        """Merge the snapshot the hub pushed into the mirror.
+
+        It MERGES, as this docstring always claimed and the code did not: it was
+        `self.social_people = list(incoming)`, a full replace, so a hub whose
+        in-RAM roster was empty — after a restart, or (until the enrolment fix)
+        on every single push — silently wiped the phone's People screen and
+        persisted the wipe. The hub is one writer among several, not the sole
+        authority; a name it does not currently hold is not a name the wearer
+        deleted. Deletion is an explicit act, and `remove_person` is where it
+        lives.
+
+        Matching is by `contact_id` when present, else by lower-cased name, so an
+        id-less legacy row still updates in place instead of duplicating."""
+        if self._veiled():
+            return {"ok": False, "veiled": True,
+                    "count": len(self.social_people)}
         incoming = (payload or {}).get("people") or []
-        self.social_people = list(incoming)
+        if not isinstance(incoming, list):
+            return {"ok": False, "error": "people must be a list",
+                    "count": len(self.social_people)}
+
+        def key(p):
+            if not isinstance(p, dict):
+                return None
+            cid = str(p.get("contact_id") or "").strip()
+            return cid or str(p.get("name") or "").strip().lower() or None
+
+        merged = list(self.social_people)
+        index = {key(p): i for i, p in enumerate(merged) if key(p)}
+        for p in incoming:
+            k = key(p)
+            if k is None:
+                continue
+            if k in index:
+                merged[index[k]] = p          # the hub's row is the fresher one
+            else:
+                index[k] = len(merged)
+                merged.append(p)
+        self.social_people = merged
         self._save_people()
         return {"ok": True, "count": len(self.social_people)}
 
@@ -285,6 +345,8 @@ class SocialOps(BrainHost):
         """Apply a phone edit to a person in the mirror: add a note, set the
         relationship, remove a note, or settle debts. Returns the updated
         person, or {ok:False} if the id isn't in the mirror."""
+        if self._veiled():
+            return {"ok": False, "veiled": True}
         b = body or {}
         cid = str(b.get("contact_id", ""))
         action = str(b.get("action", ""))
@@ -563,6 +625,13 @@ class SocialOps(BrainHost):
         you type instead of speaking to the glasses."""
         a = args or {}
         who = str(a.get("who") or "").strip()
+
+        # Every branch below writes to the people mirror — names, relations,
+        # notes, debts. `add_person` was gated and this was not, so the same
+        # enrolment the glasses refused went through the phone's typed box.
+        if self._veiled():
+            return {"intent": intent, "ok": False, "veiled": True,
+                    "say": "Not while the veil is up — I'm keeping no record."}
 
         if intent == "meet_person":
             if not who:

@@ -254,7 +254,14 @@ def test_restore_rechains_and_stays_verifiable(tmp_path):
     assert log.verify()["records"] == 0
     log.restore(snapshot)
     v = log.verify()
-    assert v["ok"] is True and v["records"] == 2
+    # 3, not 2: a restore now OPENS the new chain with a signed record of what it
+    # replaced. `_rechain` may lower the rollback watermark (an owner edit
+    # legitimately shrinks the ledger), which made `POST /restore {"activity":[]}`
+    # a silent laundering route — every egress row gone, verify() still green.
+    # A legitimate restore has no reason to hide, so it says so in the ledger.
+    assert v["ok"] is True and v["records"] == 3
+    texts = [r.get("text", "") for r in log.recent(10)]
+    assert any("restored from a backup" in x for x in texts), texts
 
 
 def test_add_after_prune_continues_the_chain(tmp_path):

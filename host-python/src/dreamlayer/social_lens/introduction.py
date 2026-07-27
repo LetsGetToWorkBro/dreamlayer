@@ -206,11 +206,19 @@ class IntroductionOffer:
     def has_face(self) -> bool:
         return self.embedding is not None
 
+    def _no_face_reason(self) -> str:
+        """Why there is no face on this record. "No face in view" blames the
+        wearer's framing, which is wrong when the truth is that this build has
+        no face model at all (truth_lens/face_embed.py declines by design)."""
+        from ..truth_lens.face_embed import FaceEmbedder
+        return ("name only — face recall isn't set up"
+                if not FaceEmbedder().available else "name only — no face in view")
+
     def to_hud_card(self) -> dict:
         """The offer card. It asks; it never states a saved fact."""
         detail = ("double-tap to remember  •  dismiss to skip"
                   if self.has_face()
-                  else "name only — no face in view")
+                  else self._no_face_reason())
         return {
             "type": "IntroOfferCard",
             "dismiss_ms": int(OFFER_TTL_S * 1000),
@@ -229,7 +237,7 @@ class IntroductionOffer:
         """The kept card (auto_keep). It states the saved fact."""
         detail = ("introduced themselves — kept"
                   if self.has_face()
-                  else "name only — no face in view")
+                  else self._no_face_reason())
         return {
             "type": "IntroKeptCard",
             "dismiss_ms": 5000,
@@ -354,10 +362,24 @@ class IntroductionCapture:
             notes=extra.get("notes"),
             email=extra.get("email"),
         )
-        # Only a real face joins the recall index; a name-only memory
-        # must never masquerade as a matchable face (its zero embedding
-        # would false-match). It lives as a note instead.
-        if offer.has_face() and self._index is not None:
+        # EVERY confirmed introduction joins the index — with or without a face.
+        # The index is not only the face-recall table; it is the contact roster
+        # that `people()`, the phone's People screen, `find_by_name` (and so
+        # notes, debts, settle, remove_contact) and `forget_all`'s dossier purge
+        # all read. Gating entry on `has_face()` meant that when the face
+        # embedder correctly began declining (there is no face model on this
+        # build — see truth_lens/face_embed.py), NOTHING could ever be enrolled
+        # from the glasses: the People screen went empty, name-resolved notes and
+        # debts answered "I don't know who that is", the meet->recall loop broke
+        # in the next breath, and `forget_all` stopped reaching the dossier it is
+        # supposed to erase. A name is a memory worth keeping even when a face
+        # isn't available.
+        #
+        # It cannot masquerade as a face: a face-less record is stored with a
+        # zero embedding, and `ContactIndex.search`/`search_top_k` skip those
+        # explicitly (see `_has_face` there). Enrolling a name and matching a
+        # face are different questions, and this index answers both.
+        if self._index is not None:
             self._index.add(record)
         if self._enricher is not None:
             self._enricher.record_encounter(record.contact_id)

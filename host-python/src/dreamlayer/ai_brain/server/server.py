@@ -718,18 +718,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def save(self) -> None:
         self.config.save(self.cfg_dir)
 
-    def _note_model_egress(self, url: str) -> None:
-        """Count and log a model request that is about to leave this machine.
+    def _note_model_egress(self, url: str, remote: bool = True) -> None:
+        """Record a model request that is about to leave this machine.
 
-        `OllamaBackend` calls this before any non-local request. A LAN Ollama box
-        is still another computer: the wearer's notes crossing the room is egress,
-        and the receipt has to say so or "every cloud request is counted and
-        logged locally" is not true. Never raises into the ask path."""
+        `OllamaBackend` calls this before any non-loopback request, and tells us
+        which kind it is. A REMOTE host is cloud egress: counted in `cloud_calls`
+        and logged as `cloud-egress`. A LAN host is not cloud — folding it into
+        the cloud counter would misreport it — but it is still another computer,
+        so it gets its own `lan-model` ledger row. Either way the receipt stops
+        describing it as "on your device". Never raises into the ask path."""
         try:
             host = urllib.parse.urlsplit(url).netloc or url
-            self.bump_cloud_calls()
-            self.activity.add("cloud-egress",
-                              f"Asked the model host {host[:60]}")
+            if remote:
+                self.bump_cloud_calls()
+                self.activity.add("cloud-egress",
+                                  f"Asked the model host {host[:60]}")
+            else:
+                self.activity.add("lan-model",
+                                  f"Asked the model host {host[:60]} on your network")
             self.save()
         except Exception as exc:                     # noqa: BLE001
             log.debug("[brain] egress note failed: %s", exc)
@@ -1148,17 +1154,34 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 # offline") until someone hand-edited brain_config.json. A field
                 # the wearer cannot have meant is a 400, not a stored value.
                 cur = getattr(self.config, k, None)
-                if isinstance(cur, str) and not isinstance(updates[k], str):
-                    log.warning("[brain] refused %s: expected a string", k)
-                    continue
-                if isinstance(cur, bool) and not isinstance(updates[k], bool):
-                    log.warning("[brain] refused %s: expected a boolean", k)
-                    continue
-                if isinstance(cur, int) and not isinstance(cur, bool) \
-                        and not isinstance(updates[k], int):
-                    log.warning("[brain] refused %s: expected a number", k)
-                    continue
-                setattr(self.config, k, updates[k])
+                val = updates[k]
+                # `isinstance(True, int)` is True in Python, so a bool sailed
+                # through the int branch and STUCK: once `retention_days` held
+                # True, the bool branch (checked first) refused every attempt to
+                # set it back to a number, so one request permanently wedged the
+                # field — and for `retention_days` that silently switched the
+                # signed privacy ledger from keep-forever to 24-hour deletion,
+                # with no way to undo it short of hand-editing the JSON. Bools are
+                # therefore tested and EXCLUDED explicitly, in both directions.
+                if isinstance(cur, bool):
+                    if not isinstance(val, bool):
+                        log.warning("[brain] refused %s: expected a boolean", k)
+                        continue
+                elif isinstance(cur, int):
+                    if isinstance(val, bool) or not isinstance(val, int):
+                        log.warning("[brain] refused %s: expected a number", k)
+                        continue
+                elif isinstance(cur, str):
+                    if not isinstance(val, str):
+                        log.warning("[brain] refused %s: expected a string", k)
+                        continue
+                elif isinstance(cur, (list, tuple)):
+                    # There was no collection check at all, so `index_extensions`
+                    # accepted a dict and every consumer that iterates it broke.
+                    if not isinstance(val, list):
+                        log.warning("[brain] refused %s: expected a list", k)
+                        continue
+                setattr(self.config, k, val)
         from .backends import is_blocked_endpoint
         for uk in _url_fields:
             if uk in updates and is_blocked_endpoint(getattr(self.config, uk, "") or ""):
@@ -3508,8 +3531,20 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         # Public handlers run BEFORE the auth gate (static, same-origin assets
         # + the panel). Everything below the auth gate is token/localhost gated.
         def _get_root(self, path, qs):
-            """The local control panel (token injected only for localhost)."""
-            html = render_panel(brain.config.token if self._from_localhost() else "",
+            """The local control panel (token injected only for localhost).
+
+            The token rides `self._write_host_ok()` as well as the peer address.
+            The read-side Host allowlist accepts ANY `.local` name, so a LAN
+            attacker running an mDNS responder for `evil.local` pointed at
+            127.0.0.1 got this page, same-origin, with `const TOKEN="…"` in it —
+            defeating the very mitigation `_write_host_ok`'s own docstring relies
+            on ("an attacker's page cannot read it"). It could: the credential was
+            on the READ path, which that guard did not cover. This is the panel,
+            whose JS performs every write, so it is the higher-value page of the
+            two. The page still serves at any allowed Host; only the credential
+            is withheld."""
+            token_ok = self._from_localhost() and self._write_host_ok()
+            html = render_panel(brain.config.token if token_ok else "",
                                 os_name=platform.system())
             body = html.encode("utf-8")
             self.send_response(200)

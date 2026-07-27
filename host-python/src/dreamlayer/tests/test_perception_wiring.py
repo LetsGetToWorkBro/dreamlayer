@@ -47,12 +47,22 @@ def test_look_at_person_shows_identity_then_dossier():
     assert "PersonDossierCard" in kinds    # + the conversation dossier
 
 
-def test_look_at_unknown_face_is_silent():
+def test_look_at_unknown_face_says_so_rather_than_going_silent():
+    """A deliberate look never produces silence. `look_at_object` has always sent
+    `cards.couldnt_see()`; the person branch returned a bare None — and because
+    `PersonCandidate` bids 0.95, the highest of any candidate, a look at a person
+    also suppressed every fallback lens. So the wearer got nothing at all, from
+    the arbiter's most confident decision. The result already knows how to render
+    its own state honestly (no match / no face / not looking / not set up)."""
     br = FakeBridge()
     orc = Orchestrator(br)
     orc.social = _FakeSocial(match=False)
-    assert orc.look_at_person(frame=object()) is None
-    assert _cards(br) == []
+    assert orc.look_at_person(frame=object()) is None    # still no identity
+    cards_sent = _cards(br)
+    assert cards_sent, "a deliberate look at a person produced silence"
+    # …and whatever it says, it must not name or imply a person
+    blob = str(cards_sent)
+    assert "%" not in blob or "match" not in blob.lower() or "No match" in blob
 
 
 def test_look_at_contact_without_ledger_history_shows_identity_only():

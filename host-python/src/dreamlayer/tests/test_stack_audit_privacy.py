@@ -127,6 +127,72 @@ def test_a_redirect_cannot_walk_out_of_the_ssrf_guard():
     assert out is not None
 
 
+def test_the_guard_is_actually_wired_into_the_opener():
+    """The test above builds `_NoBlockedRedirect()` by hand. That proves the class
+    works and NOT that anything uses it — the entire fix could be unwired
+    (`build_opener(ProxyHandler({}))`) and it would stay green. This pins the
+    wiring, which is the part that protects anyone."""
+    from dreamlayer.ai_brain.server import backends
+    opener = backends._guarded_opener()
+    assert any(isinstance(h, backends._NoBlockedRedirect)
+               for h in opener.handlers), "the SSRF redirect guard is not installed"
+    # …and no model-fetch helper may build a bare opener behind its back.
+    import inspect
+    src = inspect.getsource(backends)
+    assert "build_opener(urllib.request.ProxyHandler({}))" not in src, (
+        "a fetch helper builds an unguarded opener")
+
+
+@pytest.mark.parametrize("spelling", [
+    "http://0251.0376.0251.0376",      # octal dotted
+    "http://0xa9fea9fe",               # hex 32-bit
+    "http://2852039166",               # decimal 32-bit
+    "http://169.254.43518",            # mixed / short form
+    "http://169.254.169.254.",         # root-anchored trailing dot
+    "http://[::ffff:a9fe:a9fe]",       # IPv4-mapped, hex groups
+])
+def test_every_spelling_of_the_metadata_address_is_blocked(spelling):
+    """The guard matched a STRING, not a destination. `ipaddress.ip_address`
+    accepts only dotted-quad and canonical IPv6, so all six of these reached
+    169.254.169.254 while reading as "not blocked" — through POST /config, POST
+    /restore, the redirect guard and _provider_chat alike."""
+    assert is_blocked_endpoint(spelling) is True
+    assert is_local_endpoint(spelling) is False
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:11434", "http://192.168.1.50:11434", "http://10.0.0.5",
+    "http://[::1]", "http://api.openai.com", "http://osrm.local:5000",
+    "http://172.16.0.1", "http://8.8.8.8",
+])
+def test_canonicalising_did_not_start_blocking_real_endpoints(url):
+    assert is_blocked_endpoint(url) is False
+
+
+def test_a_provider_key_does_not_cross_a_redirect_to_another_host():
+    """urllib strips the BODY on a 30x and keeps the Authorization header, so a
+    redirect from a compromised or mistyped endpoint handed the wearer's provider
+    key to whoever it pointed at — and returned their body as the model's answer.
+    Blocking link-local never addressed that; the destination that matters is
+    "not the host I authenticated to"."""
+    import urllib.request
+    from dreamlayer.ai_brain.server import backends
+    handler = backends._NoBlockedRedirect()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat",
+        headers={"Authorization": "Bearer sk-WEARER-SECRET"})
+
+    away = handler.redirect_request(req, None, 302, "Found", {},
+                                    "https://attacker.example/v1/chat")
+    assert away is not None
+    assert away.has_header("Authorization") is False
+    assert "sk-WEARER-SECRET" not in str(sorted(away.headers.items()))
+
+    same = handler.redirect_request(req, None, 302, "Found", {},
+                                     "https://api.openai.com/v2/chat")
+    assert same.has_header("Authorization") is True   # same host: still needed
+
+
 # --------------------------------------------------------------------------
 # A-M4 — a wrongly-typed config field must not break an endpoint forever
 # --------------------------------------------------------------------------
@@ -222,27 +288,36 @@ def test_forgetting_a_memory_takes_its_commitment_with_it(tmp_path):
 # C3 — the rollback watermark cannot be lowered by an ordinary append
 # --------------------------------------------------------------------------
 
-class _Mark:
-    """A stand-in for the keychain-backed watermark, same interface."""
+def _mark(tmp_path):
+    """The REAL `_ReceiptWatermark`, backed by an in-memory store.
 
-    def __init__(self):
-        self._v = {}
+    This used to be a hand-written stand-in that reimplemented the monotonic
+    logic inside the test file — so deleting the whole `if not allow_lower:
+    max(cur, n)` block from production left both tests below green. A test that
+    contains the behaviour it is meant to pin cannot fail when that behaviour is
+    removed. Only the STORAGE is faked now; the logic under test is the real one.
+    """
+    from dreamlayer.ai_brain.server.store import _ReceiptWatermark
 
-    def get(self, pub):
-        return self._v.get(pub)
+    class _MemStore:
+        def __init__(self):
+            self._v = {}
 
-    def set(self, count, pub, allow_lower=False):
-        n = int(count)
-        if not allow_lower:
-            cur = self._v.get(pub)
-            if cur is not None:
-                n = max(int(cur), n)
-        self._v[pub] = n
+        def get(self, name):
+            return self._v.get(name)
+
+        def set(self, name, blob):
+            self._v[name] = blob
+
+    store = _MemStore()
+    wm = _ReceiptWatermark.__new__(_ReceiptWatermark)
+    wm._get_store = lambda: store
+    return wm
 
 
-def _log(tmp_path, mark):
+def _log(tmp_path, mark, signer=None):
     from dreamlayer.ai_brain.server.store import ActivityLog
-    signer = _signer()
+    signer = signer or _signer()
     if signer is None:
         pytest.skip("no Ed25519 signer available (cryptography absent)")
     return ActivityLog(tmp_path, signer=signer, watermark=mark)
@@ -264,7 +339,7 @@ def test_one_append_cannot_relaunder_a_wiped_ledger(tmp_path):
     used to reset the mark to the shortened length. verify() then went green
     under the same public key, so the wipe concealed itself and the
     cloud-egress records were gone with no trace anywhere."""
-    mark = _Mark()
+    mark = _mark(tmp_path)
     log = _log(tmp_path, mark)
     for i in range(6):
         log.add("cloud", f"sent frame {i} to a provider")
@@ -284,10 +359,32 @@ def test_one_append_cannot_relaunder_a_wiped_ledger(tmp_path):
 def test_a_legitimate_prune_may_still_lower_the_mark(tmp_path):
     """The owner's own prune/restore is an explicit shrink and must keep
     working, or the fix would break the feature it protects."""
-    mark = _Mark()
+    mark = _mark(tmp_path)
     log = _log(tmp_path, mark)
     for i in range(6):
         log.add("index", f"entry {i}")
     log.restore([{"ts": 1.0, "kind": "index", "text": "just this one"}])
     assert log.verify()["ok"] is True
-    assert mark.get(getattr(log._signer, "public_key_hex", "")) == 1
+    # The restored chain is the marker below plus the one restored record.
+    assert mark.get(getattr(log._signer, "public_key_hex", "")) == 2
+
+
+def test_a_restore_cannot_launder_the_ledger_silently(tmp_path):
+    """`POST /dreamlayer/restore {"activity": []}` was a one-request laundering
+    route: `_rechain` is allowed to lower the watermark, so every signed
+    cloud-egress row vanished, the mark reset, and verify() stayed green with
+    nothing anywhere recording that the ledger had been replaced. A legitimate
+    restore has no reason to hide, so the new chain opens with a signed record
+    of what it replaced."""
+    mark = _mark(tmp_path)
+    log = _log(tmp_path, mark)
+    for i in range(5):
+        log.add("cloud", f"sent frame {i} to a provider")
+
+    log.restore([])                                  # the wipe attempt
+    out = log.verify()
+    assert out["ok"] is True                         # still a valid owner edit…
+    texts = [r.get("text", "") for r in log.recent(10)]
+    assert any("restored from a backup" in x for x in texts), (
+        f"the shrink left no trace: {texts}")
+    assert any("5 record(s) replaced with 0" in x for x in texts)

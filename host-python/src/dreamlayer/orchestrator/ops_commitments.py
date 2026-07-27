@@ -217,7 +217,16 @@ class CommitmentRecallOps(OpsHost):
         dossier with the relationship and any note. Veil-gated."""
         if not name:
             return {"intent": "meet_person", "ok": False, "say": "Who is this?"}
-        if self.incognito or not self.privacy.allow_capture():
+        # Fail CLOSED, and fail QUIETLY. A bare `self.privacy.allow_capture()`
+        # let a posture that RAISES propagate all the way out of `hear()` — so an
+        # unreadable gate did not fail open, it crashed the wake path mid-reply.
+        # Every other posture check in this codebase wraps the call; this one did
+        # not, and nothing exercised it.
+        try:
+            veiled = self.incognito or not self.privacy.allow_capture()
+        except Exception:                                  # noqa: BLE001
+            veiled = True
+        if veiled:
             return {"intent": "meet_person", "ok": False,
                     "say": "Not while you're incognito."}
         rec = self.social.meet(name, frame=frame, note=note, relation=relation)
@@ -226,8 +235,16 @@ class CommitmentRecallOps(OpsHost):
                     "say": "Couldn't add them just now."}
         self._last_person = {"contact_id": rec.contact_id, "name": name,
                              "ts": self._clock()}
-        tail = (" — I'll know them next time" if frame is not None
-                else " (no face in view, so name only)")
+        # Keyed on whether a FACE was actually captured, not on whether a frame
+        # was offered. `frame is not None` promised "I'll know them next time"
+        # for every introduction, including the ones where no face was captured
+        # at all -- and on a build with no face model that is every one of them,
+        # so the promise was broken in the next breath. `has_face` on the record
+        # is the only thing that makes it true.
+        knows_face = bool(getattr(rec, "embedding", None)) and \
+            any(float(x) != 0.0 for x in rec.embedding)
+        tail = (" — I'll know them next time" if knows_face
+                else " — I'll remember the name")
         self.publish_people()
         return {"intent": "meet_person", "ok": True, "who": name,
                 "relation": relation, "note": note,

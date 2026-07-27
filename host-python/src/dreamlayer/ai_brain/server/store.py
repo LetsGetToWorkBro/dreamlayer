@@ -1089,12 +1089,29 @@ class ActivityLog:
             return removed
 
     def restore(self, items) -> None:
+        """Re-sign a restored ledger. Records the SHRINK in the ledger itself.
+
+        `_rechain` is allowed to lower the rollback watermark, which is right for
+        an owner edit — but that made `POST /dreamlayer/restore {"activity": []}`
+        a one-request laundering route: every signed cloud-egress row gone, the
+        mark reset, and `verify()` still green with nothing anywhere saying the
+        ledger had been replaced. A legitimate restore has no reason to hide
+        itself, so the new chain OPENS with a signed record of what it replaced.
+        The wearer (or the panel) can then see that a rebase happened, its size,
+        and when — which is the difference between an owner edit and a wipe."""
         if self._signer is None:
             _restore_jsonl(self.path, items)
             return
         with self._lock:
+            before = len(self._read_all())
             # `items` arrives newest-first (as recent()/state export produce it).
-            self._rechain(list(reversed(list(items or []))))
+            fresh = list(reversed(list(items or [])))
+            marker = {
+                "ts": time.time(), "kind": "receipt",
+                "text": (f"Ledger restored from a backup: {before} record(s) "
+                         f"replaced with {len(fresh)}"),
+            }
+            self._rechain([marker] + fresh)
 
 
 def activity_receipt_signer(cfg_dir: Path | str):

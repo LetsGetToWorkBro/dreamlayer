@@ -305,6 +305,36 @@ def test_the_veil_stops_the_user_model_learning_from_a_spoken_line():
     assert not o.user.name, f"a name was learned under the Veil: {o.user.name!r}"
     assert not o.user._prefs, (
         f"a preference was learned under the Veil: {o.user._prefs!r}")
+    # `observe()` writes _topics, and checking only name/_prefs let a mutant that
+    # removed the observe gate pass while veiled speech persisted to disk.
+    o.hear("Hey Juno, what did the oncologist say about the biopsy", now=2.0)
+    assert not o.user._topics, (
+        f"topics were learned under the Veil: {o.user._topics!r}")
+
+
+def test_an_unreadable_posture_is_treated_as_veiled():
+    """The gate claims to fail CLOSED, and nothing exercised that: flipping the
+    handler to fail OPEN left every veil test green, because none of them used a
+    posture that raises."""
+    o = _hub()
+
+    class _Broken:
+        @staticmethod
+        def allow_capture():
+            raise RuntimeError("posture unreadable")
+
+        @staticmethod
+        def allow_recall():
+            return True
+
+        @staticmethod
+        def paused():
+            return False
+
+    o.privacy = _Broken()
+    o.hear("Hey Juno, call me Sam", now=0.0)
+    assert not o.user.name, "a broken posture read as permission to learn"
+    assert not o.user._topics
 
 
 def test_incognito_off_is_still_sayable_from_inside_the_shield():

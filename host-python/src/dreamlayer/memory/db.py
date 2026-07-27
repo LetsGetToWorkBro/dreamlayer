@@ -58,8 +58,29 @@ class MemoryDB:
         except Exception:                         # never let redaction break a write
             return text
 
+    def _scrub_tree(self, obj, _depth: int = 0):
+        """`_scrub` applied through a nested dict/list, for columns that hold JSON.
+
+        Bounded depth so a crafted payload can't recurse without limit; keys are
+        scrubbed as well as values, because a caller can put text in either."""
+        if _depth > 6:
+            return obj
+        if isinstance(obj, str):
+            return self._scrub(obj)
+        if isinstance(obj, dict):
+            return {self._scrub(k) if isinstance(k, str) else k:
+                    self._scrub_tree(v, _depth + 1) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._scrub_tree(v, _depth + 1) for v in obj]
+        return obj
+
     def add_memory(self, kind, summary, embedding=None, confidence=0.5, place_id=None, meta=None) -> int:
         summary = self._scrub(summary)
+        # `meta` is caller text too, and `IngestPipeline.ingest` puts the whole
+        # utterance in it (`meta["task"]`), so a card number scrubbed out of
+        # `summary` sat verbatim in `meta` one column over. Scrubbing the summary
+        # alone made the redaction look like it worked.
+        meta = self._scrub_tree(meta)
         # embeddings persist as packed float32 BLOBs (embeddings.pack_embedding);
         # readers accept legacy JSON-text rows too, so no migration pass is needed
         from .embeddings import pack_embedding
@@ -94,12 +115,17 @@ class MemoryDB:
             self.conn.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
             self.conn.commit()
     def add_commitment(self, person, task, due=None, source_memory_id=None, confidence=0.5) -> int:
-        task = self._scrub(task)                  # same chokepoint as add_memory
+        # All three are caller text. `person` and `due` come from the same parsed
+        # utterance as `task`, so scrubbing only `task` left two columns open.
+        task = self._scrub(task)
+        person = self._scrub(person)
+        due = self._scrub(due)
         with self._lock:
             c = self.conn.execute("INSERT INTO commitments(person,task,due,source_memory_id,confidence,created_at) VALUES (?,?,?,?,?,?)",
                 (person, task, due, source_memory_id, confidence, self._now()))
             self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid
     def add_place(self, name, signature=None) -> int:
+        name = self._scrub(name)                  # spoken place names are caller text
         with self._lock:
             c = self.conn.execute("INSERT INTO places(name,signature) VALUES (?,?)", (name, signature))
             self.conn.commit(); assert c.lastrowid is not None; return c.lastrowid

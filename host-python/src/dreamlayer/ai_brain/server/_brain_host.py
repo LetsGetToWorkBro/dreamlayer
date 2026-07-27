@@ -59,6 +59,11 @@ class BrainHost:
         _rc_active: str | None
         _cal_stop: threading.Event | None
         _capability_handlers: dict
+        # The phone-facing people mirror. Declared here because SocialOps now
+        # ASSIGNS it (receive_people merges rather than replacing), and an
+        # assignment inside a mixin leaves mypy unable to infer the attribute's
+        # type from the composed Brain. Same reason `incognito_now` is declared.
+        social_people: list
         # macOS reader seams (injectable for tests) — untyped third-party
         # payloads, so their return is Any.
         _calendar_reader: Callable[..., Any]

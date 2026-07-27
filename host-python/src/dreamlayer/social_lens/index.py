@@ -27,6 +27,17 @@ DEFAULT_THRESHOLD = 0.65      # minimum cosine similarity for a match
 DEFAULT_MARGIN = 0.08
 
 
+def _has_face(contact) -> bool:
+    """True when this record carries a real face vector.
+
+    A name-only introduction is stored with an all-zero embedding so it can live
+    in the index for name lookup without ever being matchable by sight."""
+    emb = getattr(contact, "embedding", None)
+    if not emb:
+        return False
+    return any(float(x) != 0.0 for x in emb)
+
+
 class ContactIndex:
     """Vector index over personal contact face embeddings.
 
@@ -93,7 +104,16 @@ class ContactIndex:
 
     def search(self, embedding: list[float]) -> Optional[MatchResult]:
         """Return the best-matching contact, or None when below threshold
-        OR when the race is too close to call (top-2 margin)."""
+        OR when the race is too close to call (top-2 margin).
+
+        Records with NO face (a name-only introduction, stored with a zero
+        embedding) are skipped explicitly. They belong in this index — every
+        name-keyed feature reads it: the People screen, `find_by_name`, notes,
+        debts, settle, remove_contact, and `forget_all`'s purge — but they must
+        never be a face match. The arithmetic already made that true (cosine
+        against a zero vector is 0.0, and 0.0 is below both `best_score`'s
+        starting value and the 0.65 threshold); saying it out loud means a future
+        change to either can't quietly turn a name into a face."""
         if not self._contacts or not embedding:
             return None
 
@@ -102,6 +122,8 @@ class ContactIndex:
         second_score: float = 0.0
 
         for cid, contact in self._contacts.items():
+            if not _has_face(contact):
+                continue
             score = cosine_similarity(embedding, contact.embedding)
             if score > best_score:
                 second_score = best_score
@@ -124,13 +146,14 @@ class ContactIndex:
 
     def search_top_k(self, embedding: list[float],
                      k: int = 3) -> list[MatchResult]:
-        """Return the top-k matches above threshold, sorted by confidence."""
+        """Return the top-k matches above threshold, sorted by confidence.
+        Face-less (name-only) records are skipped — see `search`."""
         if not self._contacts or not embedding:
             return []
 
         scored = [
             (cid, cosine_similarity(embedding, c.embedding))
-            for cid, c in self._contacts.items()
+            for cid, c in self._contacts.items() if _has_face(c)
         ]
         scored.sort(key=lambda x: x[1], reverse=True)
 

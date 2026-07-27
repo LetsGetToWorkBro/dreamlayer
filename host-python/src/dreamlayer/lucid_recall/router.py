@@ -79,9 +79,20 @@ class LucidRecall:
                     detail=m.contact.context_line(),
                     source="social_lens",
                 )
+            # "Not in your contacts" is a statement about the world, and we can
+            # only make it if we actually looked. `unavailable` (no face model on
+            # this build) and `veiled` (the shield is up) both mean we did not.
+            if getattr(result, "unavailable", False):
+                answer = "Face recall isn't set up on this device"
+            elif getattr(result, "veiled", False):
+                answer = "Not looking — the veil is up"
+            elif getattr(result, "no_face", False):
+                answer = "I don't see a face"
+            else:
+                answer = "Not in your contacts"
             return LucidRecallResult(
                 query_type=QueryType.FACE,
-                answer="Not in your contacts",
+                answer=answer,
                 confidence=0.0,
                 source="social_lens",
             )

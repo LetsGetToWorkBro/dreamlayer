@@ -94,7 +94,20 @@ PROVIDER_PRESETS: dict[str, dict] = {
 # model endpoint ever legitimately lives.
 _LOCAL_NETS = tuple(__import__("ipaddress").ip_network(n) for n in (
     "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-    "::1/128"))
+    "::1/128",
+    # IPv6 unique-local (fd00::/8) is the ordinary way an IPv6-only home LAN
+    # addresses itself, so an IPv6 LAN's own Ollama box has to read as local —
+    # otherwise the posture gate refuses the very endpoint `lan_only` exists to
+    # permit. fe80::/10 (v6 link-local) is deliberately NOT here: it is in
+    # _BLOCKED_NETS, and listing a blocked range as "local" is precisely the
+    # overlap that made 169.254/16 read as on-device. One range, one meaning.
+    #
+    # fd00::/8, not fc00::/7: RFC 4193 sets L=1 for locally-assigned ULAs, so
+    # fd00::/8 is the range real networks use and fc00::/8 is unassigned. The
+    # egress seal permits the wider fc00::/7, which CONTAINS this — that is fine,
+    # and the parity test checks containment rather than identity for exactly that
+    # reason (the seal is deliberately a superset).
+    "fd00::/8"))
 
 
 def is_local_endpoint(base_url: str) -> bool:
@@ -104,20 +117,24 @@ def is_local_endpoint(base_url: str) -> bool:
     unparseable URL returns False and is treated as egress: counted, logged,
     and veil-gated. See _LOCAL_NETS for the exact rule (mirrored in panel.py's
     isLocalUrl)."""
-    import ipaddress
     try:
         host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
     except ValueError:
         return False                       # malformed URL (e.g. bad IPv6) → remote
     if not host:
         return False
-    if host == "localhost" or host.endswith(".local"):
+    # The root-anchored FQDN forms ("localhost.", "nas.local.") are the same
+    # names; a trailing dot is DNS syntax, not a different host.
+    h = host.rstrip(".")
+    if h == "localhost" or h.endswith(".local"):
         return True
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
+    # Same canonicaliser as the block guard, so the two agree about what an
+    # address IS. It also restores the shorthand forms a person actually types:
+    # `127.1` is genuine loopback, and refusing it broke a legitimate endpoint.
+    ip = _canon_ip(host)
+    if ip is None:
         return False                       # hostname (bare or public) → remote
-    return any(ip in net for net in _LOCAL_NETS)
+    return any(ip in net for net in _LOCAL_NETS if ip.version == net.version)
 
 
 # Addresses that are NEVER a legitimate model endpoint and are the classic SSRF
@@ -133,26 +150,79 @@ _BLOCKED_HOSTS = frozenset({"169.254.169.254", "fd00:ec2::254",
                             "::ffff:169.254.169.254"})
 
 
+def _canon_ip(host: str):
+    """Every spelling of an IP literal, reduced to one address — or None.
+
+    `ipaddress.ip_address` accepts ONLY dotted-quad and canonical IPv6, so a
+    guard built on it alone matched a *string*, not a destination. All of these
+    reach 169.254.169.254 and all of them slipped past it:
+
+        0251.0376.0251.0376   octal dotted
+        0xa9fea9fe            hex 32-bit
+        2852039166            decimal 32-bit
+        169.254.43518         partial / mixed
+        169.254.169.254.      root-anchored trailing dot
+        [::ffff:a9fe:a9fe]    IPv4-mapped, written in hex groups
+
+    So: strip the trailing dot, unwrap an IPv4-mapped/compatible v6 address to
+    its v4 form, and hand anything else to `inet_aton`, which implements the
+    same permissive parse the C library — and therefore the socket — uses.
+    Returns an `IPv4Address`/`IPv6Address`, or None when the host is a name."""
+    import ipaddress
+    import socket
+    h = (host or "").strip().strip("[]").rstrip(".")
+    if not h:
+        return None
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        # Not a canonical literal. `inet_aton` accepts octal, hex, and the
+        # short forms; it rejects hostnames, which is exactly the split we want.
+        try:
+            return ipaddress.ip_address(socket.inet_aton(h))
+        except (OSError, ValueError):
+            return None
+    # An IPv4 address wearing a v6 costume is still that IPv4 address.
+    mapped = getattr(ip, "ipv4_mapped", None) or getattr(ip, "sixtofour", None)
+    return mapped or ip
+
+
+def _is_loopback(base_url: str) -> bool:
+    """True only when the endpoint is on THIS machine. Distinct from
+    `is_local_endpoint`, which also spans the LAN -- and the difference is what
+    the receipt needs, because the LAN is somebody else's computer."""
+    try:
+        host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
+    except ValueError:
+        return False
+    if host in ("localhost", "localhost."):
+        return True
+    ip = _canon_ip(host)
+    return bool(ip is not None and ip.is_loopback)
+
+
 def is_blocked_endpoint(base_url: str) -> bool:
     """True when `base_url`'s host is link-local / cloud-metadata space — an
     endpoint the Brain must never fetch. Only IP-literal hosts are judged here
     (a hostname like ``metadata.google.internal`` is already egress via
     is_local_endpoint=False and DNS-resolved by the OS); this stops the direct
-    IP-literal IMDS pivot. Unparseable / non-IP hosts return False."""
-    import ipaddress
+    IP-literal IMDS pivot. Non-IP hosts return False.
+
+    Judges the ADDRESS, not the spelling — see `_canon_ip`. Matching spellings
+    let five different renderings of 169.254.169.254 through `POST /config`,
+    `POST /restore`, the redirect guard and `_provider_chat` alike."""
     try:
         host = (urllib.parse.urlsplit(base_url or "").hostname or "").strip().lower()
     except ValueError:
         return False
     if not host:
         return False
-    if host in _BLOCKED_HOSTS:
+    if host.rstrip(".") in _BLOCKED_HOSTS:
         return True
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
+    ip = _canon_ip(host)
+    if ip is None:
         return False
-    return any(ip in net for net in _BLOCKED_NETS)
+    return any(ip in net for net in _BLOCKED_NETS if ip.version == net.version)
 
 
 def _build_request(provider: str, base_url: str, model: str, key: str, prompt: str):
@@ -490,12 +560,30 @@ class OllamaBackend:
         if not is_local_endpoint(url):
             if _posture_forbids_egress(self.config):
                 return None                  # the shield is up: do not reach out
-            if self._on_egress is not None:
-                try:
-                    self._on_egress(url)
-                except Exception:            # noqa: BLE001 - never break the ask
-                    pass
+            self._note(url, remote=True)
+        elif not _is_loopback(url):
+            # A LAN box is NOT "on your device". `lan_only` legitimately permits
+            # it -- that is what the mode name means -- but the wearer's notes
+            # still crossed the room to another computer, so the receipt has to
+            # show it. Reported separately from cloud egress rather than folded
+            # into `cloud_calls`, because calling a LAN hop a cloud call would be
+            # its own inaccuracy. (An earlier version of this comment claimed a
+            # LAN host was already counted "like any other egress". It was not.)
+            self._note(url, remote=False)
         return url + path
+
+    def _note(self, url: str, remote: bool) -> None:
+        if self._on_egress is None:
+            return
+        try:
+            self._on_egress(url, remote)
+        except TypeError:                    # a 1-arg hook (tests, older callers)
+            try:
+                self._on_egress(url)
+            except Exception:                # noqa: BLE001
+                pass
+        except Exception:                    # noqa: BLE001 - never break the ask
+            pass
 
     def _gen(self, model: str, prompt: str, images=None) -> str:
         payload = {"model": model, "prompt": prompt, "stream": False}
@@ -538,6 +626,15 @@ class OllamaBackend:
         return (out or {}).get("embedding", []) or []
 
 
+def _host_of(url: str) -> str:
+    """scheme://host:port, lower-cased — the identity a credential is scoped to."""
+    try:
+        s = urllib.parse.urlsplit(url or "")
+        return f"{(s.scheme or '').lower()}://{(s.netloc or '').lower()}"
+    except ValueError:
+        return ""
+
+
 class _NoBlockedRedirect(urllib.request.HTTPRedirectHandler):
     """Re-apply the SSRF guard to every redirect hop.
 
@@ -554,7 +651,19 @@ class _NoBlockedRedirect(urllib.request.HTTPRedirectHandler):
                 newurl, code,
                 "redirect refused: link-local / cloud-metadata address",
                 headers, fp)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        # A CROSS-HOST redirect must not carry the wearer's provider key. urllib
+        # strips the body on a 30x but KEEPS the Authorization header, so a 302
+        # from a compromised or typo'd endpoint to any public host handed over
+        # `Bearer sk-…` and returned the attacker's body as the model's answer.
+        # Blocking link-local was never enough for that: the destination that
+        # matters here is "not the host I authenticated to".
+        out = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if out is not None and _host_of(newurl) != _host_of(req.get_full_url()):
+            for h in ("Authorization", "Proxy-Authorization", "X-Api-Key",
+                      "Api-Key", "X-Goog-Api-Key"):
+                out.remove_header(h)
+                out.remove_header(h.capitalize())
+        return out
 
 
 def _guarded_opener():

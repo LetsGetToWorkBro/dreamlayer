@@ -40,12 +40,19 @@ class TestClassifier:
         assert E._addr_is_local((12345, 80)) is False
 
     def test_matches_server_local_nets(self):
-        # cross-check: every net the server treats as local must be sealed as
-        # local too (the seal set is a superset — it adds IPv6 link-local/ULA).
+        """Every net the server treats as local must be sealed as local too.
+
+        CONTAINMENT, not set membership. The seal is deliberately a superset (it
+        permits the whole fc00::/7 ULA allocation and v6 link-local), so a server
+        range that sits *inside* a seal range satisfies the invariant — an
+        identity check would fail on fd00::/8 vs fc00::/7 while the property it
+        is protecting holds perfectly."""
         from dreamlayer.ai_brain.server.backends import _LOCAL_NETS
-        seal_nets = set(E.allowed_networks())
+        seal_nets = list(E.allowed_networks())
         for net in _LOCAL_NETS:
-            assert net in seal_nets, f"seal is missing server local net {net}"
+            assert any(net.subnet_of(s) for s in seal_nets
+                       if s.version == net.version), \
+                f"seal does not cover server local net {net}"
 
 
 class TestSeal:
