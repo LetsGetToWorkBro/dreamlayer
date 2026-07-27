@@ -455,7 +455,7 @@ pub extern "C" fn rc_stage_add_line(h: i32, scene: i32) -> i32 {
 /// # Safety
 /// `ptr` must be valid for reads of `len` bytes.
 #[no_mangle]
-pub extern "C" fn rc_line_lit(h: i32, scene: i32, line: i32, ptr: *const u8, len: u64) -> i32 {
+pub unsafe extern "C" fn rc_line_lit(h: i32, scene: i32, line: i32, ptr: *const u8, len: u64) -> i32 {
     let Some(s) = stage(h) else { return -1 };
     if scene < 0 || scene >= s.n_scenes as i32 {
         return -1;
@@ -510,8 +510,15 @@ pub extern "C" fn rc_line_tok(h: i32, scene: i32, line: i32, kind: u8, arg: u32)
 }
 
 /// Enter the initial scene and arm the clock/token state (Stage.__init__).
+///
+/// # Safety
+/// `h` must be a handle previously returned by `rc_stage_new` and not yet
+/// freed. Passing any other value is undefined behaviour; an out-of-range
+/// handle is detected and returns -1. This function dereferences no
+/// caller-supplied pointer — it is `unsafe` because it shares the C-ABI
+/// contract of the rest of the stage surface, where several entry points do.
 #[no_mangle]
-pub extern "C" fn rc_stage_start(h: i32, initial_scene: i32) -> i32 {
+pub unsafe extern "C" fn rc_stage_start(h: i32, initial_scene: i32) -> i32 {
     let Some(s) = stage(h) else { return -1 };
     if initial_scene < 0 || initial_scene >= s.n_scenes as i32 {
         return -1;
@@ -643,8 +650,15 @@ fn timeout(s: &mut Stage) {
 
 /// Advance dt seconds; may cross several scene timeouts. The float-epsilon
 /// subdivision is byte-identical to both Stages so trajectories match exactly.
+///
+/// # Safety
+/// `h` must be a handle previously returned by `rc_stage_new` and not yet
+/// freed. Passing any other value is undefined behaviour; an out-of-range
+/// handle is detected and returns -1. This function dereferences no
+/// caller-supplied pointer — it is `unsafe` because it shares the C-ABI
+/// contract of the rest of the stage surface, where several entry points do.
 #[no_mangle]
-pub extern "C" fn rc_stage_step(h: i32, dt: f64) -> i32 {
+pub unsafe extern "C" fn rc_stage_step(h: i32, dt: f64) -> i32 {
     let Some(s) = stage(h) else { return -1 };
     if !s.started {
         return -1;
@@ -673,8 +687,15 @@ pub extern "C" fn rc_stage_step(h: i32, dt: f64) -> i32 {
 /// Deliver an event by its (binding-interned) code. Returns 1 if a handler in
 /// the current scene took it, 0 otherwise (incl. after END) — the binding does
 /// the "ble:<n> falls back to ble" second lookup itself.
+///
+/// # Safety
+/// `h` must be a handle previously returned by `rc_stage_new` and not yet
+/// freed. Passing any other value is undefined behaviour; an out-of-range
+/// handle is detected and returns -1. This function dereferences no
+/// caller-supplied pointer — it is `unsafe` because it shares the C-ABI
+/// contract of the rest of the stage surface, where several entry points do.
 #[no_mangle]
-pub extern "C" fn rc_stage_inject(h: i32, event_code: u32) -> i32 {
+pub unsafe extern "C" fn rc_stage_inject(h: i32, event_code: u32) -> i32 {
     let Some(s) = stage(h) else { return -1 };
     if !s.started || s.ended {
         return 0;
@@ -692,7 +713,7 @@ pub extern "C" fn rc_stage_inject(h: i32, event_code: u32) -> i32 {
 /// # Safety
 /// `ptr` must be valid for reads of `len` bytes.
 #[no_mangle]
-pub extern "C" fn rc_stage_text(h: i32, slot_code: u32, ptr: *const u8, len: u64) -> i32 {
+pub unsafe extern "C" fn rc_stage_text(h: i32, slot_code: u32, ptr: *const u8, len: u64) -> i32 {
     let Some(s) = stage(h) else { return -1 };
     if !s.started || s.ended || ptr.is_null() {
         return 0;
@@ -769,7 +790,7 @@ fn write_dec_i64(n: i64, buf: &mut [u8]) -> usize {
 /// # Safety
 /// `out` must be valid for writes of `cap` bytes.
 #[no_mangle]
-pub extern "C" fn rc_stage_render_line(h: i32, line: i32, out: *mut u8, cap: u64) -> i64 {
+pub unsafe extern "C" fn rc_stage_render_line(h: i32, line: i32, out: *mut u8, cap: u64) -> i64 {
     let Some(s) = stage(h) else { return -1 };
     if !s.started || out.is_null() {
         return -1;
@@ -932,7 +953,7 @@ mod tests {
 
     fn render(h: i32, line: i32) -> String {
         let mut buf = [0u8; 32];
-        let n = rc_stage_render_line(h, line, buf.as_mut_ptr(), 32);
+        let n = unsafe { rc_stage_render_line(h, line, buf.as_mut_ptr(), 32) };
         assert!(n >= 0);
         core::str::from_utf8(&buf[..n as usize]).unwrap().to_string()
     }
@@ -948,7 +969,7 @@ mod tests {
         rc_tx_begin(h, TARGET_SELF);
         rc_tx_op(h, round, OP_INC, 1);
         rc_tx_commit_timeout(h, work);
-        rc_stage_start(h, work);
+        unsafe { rc_stage_start(h, work) };
         h
     }
 
@@ -957,7 +978,7 @@ mod tests {
         let _g = lock();
         let h = rounds_stage();
         for _ in 0..10 {
-            rc_stage_step(h, 0.5); // half-second device ticks
+            unsafe { rc_stage_step(h, 0.5) }; // half-second device ticks
         }
         assert_eq!(rc_stage_ended(h), 1);
         assert_eq!(rc_stage_counter(h, 0), 3);
@@ -971,7 +992,7 @@ mod tests {
         // one big 2.6 s step over a 1 s scene must fire 2 timeouts and leave
         // 0.6 s of elapsed in the third round — the N3 {elapsed} bug shape
         let h = rounds_stage();
-        rc_stage_step(h, 2.6);
+        unsafe { rc_stage_step(h, 2.6) };
         assert_eq!(rc_stage_ended(h), 0);
         assert_eq!(rc_stage_counter(h, 0), 3);
         assert!((rc_stage_elapsed(h) - 0.6).abs() < 1e-9);
@@ -986,9 +1007,9 @@ mod tests {
         rc_tx_begin(h, TARGET_SELF);
         rc_tx_emit(h);
         rc_tx_commit_event(h, a, 7);
-        rc_stage_start(h, a);
+        unsafe { rc_stage_start(h, a) };
         for _ in 0..20 {
-            assert_eq!(rc_stage_inject(h, 7), 1);
+            assert_eq!(unsafe { rc_stage_inject(h, 7) }, 1);
         }
         assert_eq!(rc_stage_emits(h), 5); // burst cap
         assert_eq!(rc_stage_dropped(h), 15);
@@ -1000,8 +1021,8 @@ mod tests {
         let _g = lock();
         let h = rc_stage_new();
         let a = rc_stage_add_scene(h, 0, 0.0, 0);
-        rc_stage_start(h, a);
-        assert_eq!(rc_stage_inject(h, 999), 0);
+        unsafe { rc_stage_start(h, a) };
+        assert_eq!(unsafe { rc_stage_inject(h, 999) }, 0);
         let hs: [i32; 3] = core::array::from_fn(|_| rc_stage_new());
         assert_eq!(rc_stage_new(), -1); // pool of 4 exhausted
         for x in hs {
@@ -1017,15 +1038,15 @@ mod tests {
         let a = rc_stage_add_scene(h, 0, 0.0, 0);
         let l0 = rc_stage_add_line(h, a);
         rc_line_tok(h, a, l0, TOK_SLOT, 42); // {slot:keep} interned as 42
-        rc_stage_start(h, a);
+        unsafe { rc_stage_start(h, a) };
         assert_eq!(render(h, 0), ""); // never pushed → ""
-        assert_eq!(rc_stage_text(h, 42, b"K".as_ptr(), 1), 1);
+        assert_eq!(unsafe { rc_stage_text(h, 42, b"K".as_ptr(), 1) }, 1);
         // fill the remaining 7 named slots, then overflow with new codes
         for c in 100..107u32 {
-            assert_eq!(rc_stage_text(h, c, b"v".as_ptr(), 1), 1);
+            assert_eq!(unsafe { rc_stage_text(h, c, b"v".as_ptr(), 1) }, 1);
         }
-        assert_eq!(rc_stage_text(h, 999, b"x".as_ptr(), 1), 0); // full → reject
-        assert_eq!(rc_stage_text(h, 42, b"K2".as_ptr(), 2), 1); // known updates
+        assert_eq!(unsafe { rc_stage_text(h, 999, b"x".as_ptr(), 1) }, 0); // full → reject
+        assert_eq!(unsafe { rc_stage_text(h, 42, b"K2".as_ptr(), 2) }, 1); // known updates
         assert_eq!(render(h, 0), "K2"); // known slot never evicted
         rc_stage_free(h);
     }
@@ -1039,17 +1060,17 @@ mod tests {
         rc_tx_begin(h, TARGET_END);
         rc_tx_commit_timeout(h, a);
         let l0 = rc_stage_add_line(h, a);
-        rc_line_lit(h, a, l0, b"t=".as_ptr(), 2);
+        unsafe { rc_line_lit(h, a, l0, b"t=".as_ptr(), 2) };
         rc_line_tok(h, a, l0, TOK_REMAINING, 0);
-        rc_line_lit(h, a, l0, b" n=".as_ptr(), 3);
+        unsafe { rc_line_lit(h, a, l0, b" n=".as_ptr(), 3) };
         rc_line_tok(h, a, l0, TOK_COUNT, n as u32);
-        rc_stage_start(h, a);
-        rc_stage_step(h, 12.0);
+        unsafe { rc_stage_start(h, a) };
+        unsafe { rc_stage_step(h, 12.0) };
         assert_eq!(render(h, 0), "t=2:48 n=7"); // 168 s left — that string again
         // a long slot value clamps the composed line at MAX_TEXT
         let b = rc_stage_add_line(h, a);
         rc_line_tok(h, a, b, TOK_SLOT, 1);
-        rc_stage_text(h, 1, b"abcdefghijklmnopqrstuvwxyz".as_ptr(), 26);
+        unsafe { rc_stage_text(h, 1, b"abcdefghijklmnopqrstuvwxyz".as_ptr(), 26) };
         assert_eq!(render(h, 1), "abcdefghijklmnopqrstuvwx"); // 24 = MAX_TEXT
         rc_stage_free(h);
     }
@@ -1064,15 +1085,15 @@ mod tests {
         rc_tx_op(h, hits, OP_INC, 1);
         rc_tx_commit_event(h, a, 5); // 5 = interned "battery_low"
         rc_stage_set_battery(h, 30, 20, 5); // level 20 < below 30
-        rc_stage_start(h, a);
-        rc_stage_step(h, 1.0); // fires immediately, arms the 60 s cooldown
+        unsafe { rc_stage_start(h, a) };
+        unsafe { rc_stage_step(h, 1.0) }; // fires immediately, arms the 60 s cooldown
         assert_eq!(rc_stage_counter(h, 0), 1);
-        rc_stage_step(h, 30.0); // still cooling down
+        unsafe { rc_stage_step(h, 30.0) }; // still cooling down
         assert_eq!(rc_stage_counter(h, 0), 1);
-        rc_stage_step(h, 30.5); // past 60 s → fires again
+        unsafe { rc_stage_step(h, 30.5) }; // past 60 s → fires again
         assert_eq!(rc_stage_counter(h, 0), 2);
         rc_stage_battery_level(h, 90); // recovered → no more dispatches
-        rc_stage_step(h, 120.0);
+        unsafe { rc_stage_step(h, 120.0) };
         assert_eq!(rc_stage_counter(h, 0), 2);
         rc_stage_free(h);
     }
@@ -1087,19 +1108,19 @@ mod tests {
             rc_tx_begin(h, TARGET_SELF);
             rc_tx_commit_timeout(h, a);
             rc_stage_seed(h, 42);
-            rc_stage_start(h, a);
+            unsafe { rc_stage_start(h, a) };
             h
         };
         let (h1, h2) = (mk(), mk());
         for _ in 0..6 {
-            rc_stage_step(h1, 2.2);
-            rc_stage_step(h2, 2.2);
+            unsafe { rc_stage_step(h1, 2.2) };
+            unsafe { rc_stage_step(h2, 2.2) };
             assert_eq!(rc_stage_clock(h1), rc_stage_clock(h2));
             assert_eq!(rc_stage_elapsed(h1), rc_stage_elapsed(h2));
         }
         // rolls stay inside the declared range
         let h3 = mk();
-        rc_stage_step(h3, 0.0);
+        unsafe { rc_stage_step(h3, 0.0) };
         rc_stage_free(h1);
         rc_stage_free(h2);
         rc_stage_free(h3);

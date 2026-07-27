@@ -107,7 +107,7 @@ pub(crate) fn spend(tokens: f64) -> (i32, f64) {
 /// # Safety
 /// `out_tokens` must be a valid, non-null pointer to a writable `f64`.
 #[no_mangle]
-pub extern "C" fn rc_spend_token(tokens: f64, out_tokens: *mut f64) -> i32 {
+pub unsafe extern "C" fn rc_spend_token(tokens: f64, out_tokens: *mut f64) -> i32 {
     let (spent, after) = spend(tokens);
     if !out_tokens.is_null() {
         unsafe { *out_tokens = after };
@@ -235,7 +235,7 @@ fn write_dec(mut n: u64, buf: &mut [u8]) -> usize {
 /// # Safety
 /// `out` must be valid for writes of `cap` bytes (or null, to just measure).
 #[no_mangle]
-pub extern "C" fn rc_fmt_clock(secs: f64, out: *mut u8, cap: u64) -> u64 {
+pub unsafe extern "C" fn rc_fmt_clock(secs: f64, out: *mut u8, cap: u64) -> u64 {
     let s = if secs.is_nan() || secs <= 0.0 {
         0u64
     } else {
@@ -344,13 +344,13 @@ mod tests {
     #[test]
     fn spend_never_goes_negative() {
         let mut out = 0.0;
-        assert_eq!(rc_spend_token(1.0, &mut out), 1);
+        assert_eq!(unsafe { rc_spend_token(1.0, &mut out) }, 1);
         assert_eq!(out, 0.0);
-        assert_eq!(rc_spend_token(0.999, &mut out), 0);
+        assert_eq!(unsafe { rc_spend_token(0.999, &mut out) }, 0);
         assert_eq!(out, 0.999);
-        assert_eq!(rc_spend_token(0.0, &mut out), 0);
+        assert_eq!(unsafe { rc_spend_token(0.0, &mut out) }, 0);
         assert_eq!(out, 0.0);
-        assert_eq!(rc_spend_token(2.5, &mut out), 1);
+        assert_eq!(unsafe { rc_spend_token(2.5, &mut out) }, 1);
         assert_eq!(out, 1.5);
     }
 
@@ -358,7 +358,7 @@ mod tests {
     fn pure_spend_wrappers_match_the_pointer_form() {
         let mut out = 0.0;
         for &t in &[0.0, 0.5, 0.999, 1.0, 1.0001, 2.5, 5.0] {
-            let ptr_spent = rc_spend_token(t, &mut out);
+            let ptr_spent = unsafe { rc_spend_token(t, &mut out) };
             assert_eq!(rc_spend_ok(t), ptr_spent);
             assert_eq!(rc_spend_after(t), out);
         }
@@ -368,7 +368,7 @@ mod tests {
     fn fmt_clock_matches_both_interpreters() {
         fn fmt(secs: f64) -> String {
             let mut buf = [0u8; 24];
-            let n = rc_fmt_clock(secs, buf.as_mut_ptr(), 24) as usize;
+            let n = unsafe { rc_fmt_clock(secs, buf.as_mut_ptr(), 24) } as usize;
             core::str::from_utf8(&buf[..n]).unwrap().to_string()
         }
         assert_eq!(fmt(0.0), "0");
@@ -388,9 +388,9 @@ mod tests {
     #[test]
     fn fmt_clock_respects_the_cap_and_scratch_fits() {
         let mut buf = [0u8; 2];
-        assert_eq!(rc_fmt_clock(168.0, buf.as_mut_ptr(), 2), 2); // truncated
+        assert_eq!(unsafe { rc_fmt_clock(168.0, buf.as_mut_ptr(), 2) }, 2); // truncated
         assert_eq!(&buf, b"2:");
-        assert_eq!(rc_fmt_clock(168.0, core::ptr::null_mut(), 0), 0); // measure-only
+        assert_eq!(unsafe { rc_fmt_clock(168.0, core::ptr::null_mut(), 0) }, 0); // measure-only
         assert!(rc_scratch_len() >= 24);
     }
 

@@ -86,7 +86,7 @@ Answer truthfully; the iOS app itself collects almost nothing:
 - **Data collection:** the app does **not** collect data in the default/local path. Choose
   **"Data Not Collected"** unless you add analytics later.
 - **Tracking:** No. There is no IDFA / ad SDK / third-party tracker in the app.
-- **Camera:** used only on-device to scan a pairing QR; nothing is stored or sent → not "collected".
+- **Camera:** scans a pairing QR on-device, and on an explicit Look tap sends ONE photo to the user's own paired Brain on their own network. Declare **Photos or Videos → App Functionality**, *not linked to identity, not used for tracking*: the frame goes to hardware the user owns, we receive nothing, and the on-disk copy is deleted immediately. Do NOT answer "Data Not Collected" for the camera — a reviewer who taps Look will see the upload.
 - **The opt-in cloud nuance:** if you want to be maximally conservative, disclose that when the user
   enables cloud AI, the **content of that request** is sent to their chosen provider (OpenAI /
   Anthropic / Google / OpenRouter) to produce a result. This is user-initiated and covered by the
@@ -122,7 +122,8 @@ banner is shown), so you can navigate the entire app.
 
 Notes:
   • No demo account is needed (the app has no login).
-  • The camera is used only to scan a pairing QR from the Mac Brain.
+  • The camera scans a pairing QR from the Mac Brain, and on a Look tap sends one photo
+    to the user's own Brain on their own network (blocked while Incognito is on).
   • Data is stored on-device; users can erase everything in Settings → Danger zone.
   • Cloud AI is opt-in and off by default; privacy policy: https://dreamlayer.app/privacy.html
 ```

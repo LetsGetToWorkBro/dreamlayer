@@ -47,6 +47,18 @@ jobs:
           cargo build --release
           cargo test
 
+      # Clippy had never run here, and it did not merely warn: the crate would
+      # not COMPILE under it. Eight `#[no_mangle] pub extern "C"` entry points
+      # dereferenced raw pointers with a safe signature, which is a deny-by-default
+      # `correctness` lint — invisible because CI only ran build + test. They are
+      # `unsafe extern "C"` now (the shape `rc_clamp_text_len` always had), and
+      # this step is what keeps the next one from slipping in.
+      - name: Clippy (deny warnings)
+        working-directory: reality-core
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets -- -D warnings
+
       - name: Build the wasm target + run the JS parity harness
         working-directory: reality-core
         run: |

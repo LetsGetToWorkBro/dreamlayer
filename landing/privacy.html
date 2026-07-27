@@ -116,7 +116,7 @@
           <strong>At a glance</strong>
           <ul>
             <li>The iOS app collects no personal data and requires no account.</li>
-            <li>The camera is used only to scan a pairing QR code. Nothing is uploaded.</li>
+            <li>The camera is used to scan a pairing QR code, and — only when you tap Look — to take one photo and send it to your own paired Brain, which answers on your hardware. The photo goes to your Brain, never to us and never to a third party; the file expo-camera writes to disk is deleted immediately.</li>
             <li>Your memories, messages, and mail are processed by your own Mac "Brain" on your own machine.</li>
             <li>Cloud AI is <strong>off by default</strong> and opt-in. When you turn it on, only the text of that
               request is sent to the AI provider you choose.</li>
@@ -129,8 +129,11 @@
         optional self-hosted Mac "Brain"). On its own, the app:</p>
         <ul>
           <li><strong>Collects no personal information</strong> and has no login or account.</li>
-          <li>Uses the <strong>camera only</strong> to scan a pairing QR code shown by your Mac Brain. Frames are
-            processed on-device to read the code and are never stored or transmitted.</li>
+          <li>Uses the <strong>camera</strong> for two things and no others: to scan a pairing QR code shown by
+            your Mac Brain (those frames are read on-device and never leave it), and — only on an explicit
+            <strong>Look</strong> tap — to take one photo and send it to <strong>your own paired Brain</strong>
+            for an answer. Look is blocked while Incognito is on, and the on-disk copy of that photo is
+            deleted as soon as it has been sent.</li>
           <li>Stores its settings and any sample/paired state <strong>locally on your device</strong>.</li>
           <li>Can show a <strong>Demo Mode</strong> with clearly-labeled sample data so you can explore the app
             without any hardware. Demo data is fictional and never leaves your device.</li>

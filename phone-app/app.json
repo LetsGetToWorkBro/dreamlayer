@@ -45,7 +45,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "DreamLayer uses the camera to scan the pairing QR from your Mac mini.",
+          "cameraPermission": "DreamLayer uses the camera to scan the pairing QR from your Mac mini, and — when you tap Look — to send that one photo to your own paired Brain so it can tell you what you're looking at.",
           "recordAudioAndroid": false
         }
       ],
