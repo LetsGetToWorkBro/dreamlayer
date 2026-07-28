@@ -329,3 +329,112 @@ class TestForgetting:
             "erase-everything left the enrolled face templates on disk — the "
             "most personal store on the device survived the wipe")
         assert brain.face_recall().identify(face)["known"] is False
+
+
+# --------------------------------------------------------------------------
+# The REAL model. Marked `real_model`, so it runs in the weekly real-models job
+# (which installs the backend and FAILS if a marked test skips) and is
+# deselected from the default gate, which must stay green with zero extras.
+# --------------------------------------------------------------------------
+
+@pytest.mark.real_model
+@pytest.mark.no_face_double
+class TestTheRealArcFaceBackend:
+    """Against the actual buffalo_l weights, not a double.
+
+    What these pin is the DECLINE direction, and that is deliberate. The
+    predecessor stub's documented failure was that `mean(abs(frame))` asserted a
+    face at 100% in any non-black image, so "the real detector says no to things
+    that are not faces" is the exact regression worth holding — and it is
+    checkable without shipping photographs of real people in the repo.
+
+    Cross-photo recall ACCURACY is not tested here and cannot be: this repo
+    contains no face photographs, and adding some would mean committing
+    biometrics of real people to a public git history to test a privacy
+    feature. `social_lens/index.py` already says the 0.65 threshold and 0.08
+    margin are placeholders "until the real embedder is calibrated on-device
+    (Rig 3 perception bench: set them from an ROC over genuine/impostor
+    pairs)". That calibration is where accuracy gets established; this is not a
+    substitute for it, and the thresholds should not be treated as validated
+    until it has run.
+    """
+
+    def _fn(self):
+        from dreamlayer.truth_lens import face_backends as fb
+        fb.reset_cache()
+        if not fb.available():
+            pytest.skip("buffalo_l weights are not installed on this machine")
+        fn = fb.default_face_embed_fn()
+        assert fn is not None, (
+            "the weights are present but no embed_fn was produced — the model "
+            "failed to load; check the model_guard verification path, which has "
+            "silently refused a perfectly good install before")
+        return fn
+
+    def test_the_pack_being_present_makes_the_embedder_available(self):
+        from dreamlayer.truth_lens.face_embed import FaceEmbedder
+        self._fn()
+        assert FaceEmbedder().available is True
+
+    def test_the_real_detector_declines_noise(self):
+        """The stub's exact bug, against the real model: random pixels are not
+        a face, and must not produce a template."""
+        fn = self._fn()
+        for seed in range(4):
+            rng = np.random.default_rng(seed)
+            frame = rng.integers(0, 255, (256, 256, 3), dtype=np.uint8)
+            assert fn(frame) is None, (
+                "the real detector returned a face template for uniform noise")
+
+    def test_the_real_detector_declines_flat_and_empty_frames(self):
+        fn = self._fn()
+        assert fn(np.zeros((256, 256, 3), dtype=np.uint8)) is None
+        assert fn(np.full((256, 256, 3), 255, dtype=np.uint8)) is None
+        assert fn(np.zeros((0, 0, 3), dtype=np.uint8)) is None
+
+    def test_a_non_colour_frame_is_declined_not_crashed(self):
+        fn = self._fn()
+        assert fn(np.zeros((64, 64), dtype=np.uint8)) is None
+        assert fn(None) is None
+
+    def test_unpinned_weights_warn_but_still_load(self):
+        """models.lock ships this entry unpinned, as every model in it is. That
+        must warn, not disable the feature: reading `verify_path`'s False as a
+        refusal made face recall silently unavailable on a machine with the
+        model correctly installed."""
+        from dreamlayer.truth_lens import face_backends as fb
+        self._fn()
+        assert fb._verify_weights(fb.model_root()) is True
+
+    def test_tampered_weights_refuse_to_load(self, monkeypatch):
+        """The fatal case. A hash MISMATCH must stop the load — for weights that
+        decide who the wearer is looking at, a wrong file is never tolerated."""
+        from dreamlayer import model_guard
+        from dreamlayer.truth_lens import face_backends as fb
+        self._fn()
+
+        def _boom(*a, **kw):
+            raise model_guard.ModelIntegrityError("sha256 mismatch")
+
+        monkeypatch.setattr(model_guard, "verify_path", _boom)
+        assert fb._verify_weights(fb.model_root()) is False
+        fb.reset_cache()
+        assert fb.default_face_embed_fn() is None or fb._get_app() is None
+
+
+@pytest.mark.real_model
+@pytest.mark.no_face_double
+def test_importing_the_face_backend_does_not_phone_home():
+    """`insightface` pulls in `albumentations`, which runs an update check
+    against a public host on import. On an on-device/LAN-only product a
+    transitive dependency opening an HTTPS connection because it was imported is
+    a privacy regression whatever it sends — this repo's own egress harness
+    caught it the moment insightface entered the tree. The opt-out is read at
+    IMPORT time, so it has to be set before the import, not at Brain start-up."""
+    import os
+    from dreamlayer.truth_lens import face_backends as fb
+
+    fb._deps_present()
+    assert os.environ.get("NO_ALBUMENTATIONS_UPDATE") == "1", (
+        "the albumentations update check is not disabled — importing the face "
+        "backend reaches a public host")

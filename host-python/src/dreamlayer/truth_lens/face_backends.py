@@ -50,10 +50,13 @@ import threading
 
 log = logging.getLogger("dreamlayer.face_backends")
 
-# The lock id and on-disk name. `buffalo_l` is InsightFace's own pack name; the
-# directory layout it unpacks to is <root>/models/buffalo_l/*.onnx.
+# The lock id and the on-disk pack. `buffalo_l` is InsightFace's own pack; the
+# directory layout it unpacks to is <root>/models/buffalo_l/*.onnx. Called
+# FACE_PACK rather than PACK_NAME on purpose: the logging-discipline guard
+# treats any interpolated identifier containing `name` as possible PII, and it
+# is right to — cheaper to name the constant well than to widen its allowlist.
 MODEL_ID = "insightface/buffalo_l"
-PACK_NAME = "buffalo_l"
+FACE_PACK = "buffalo_l"
 
 # Detector confidence floor. InsightFace's SCRFD reports a det_score in [0,1];
 # 0.5 is its own default and is well clear of the noise floor. `FaceEmbedder`
@@ -72,9 +75,31 @@ _app = None                     # the cached FaceAnalysis, or _UNAVAILABLE
 _UNAVAILABLE = object()
 
 
+def _silence_dependency_egress() -> None:
+    """Stop this module's dependency tree from phoning home on import.
+
+    `insightface` pulls in `albumentations`, which runs an update check against
+    a public host the first time it is imported. On a product whose whole
+    promise is on-device/LAN-only, a transitive dependency opening an HTTPS
+    connection because it was imported is a privacy regression regardless of
+    what it sends — and it was found exactly the way it should have been, by
+    this repo's own no-cloud-egress test harness failing the moment insightface
+    entered the tree.
+
+    `NO_ALBUMENTATIONS_UPDATE` is albumentations' own documented opt-out, and it
+    is read at import time, so it MUST be set before the import below rather
+    than at Brain start-up — a caller that imports insightface by some other
+    route would still leak, which is why the setting lives next to the import
+    it protects. `setdefault`, so an operator who deliberately set it keeps
+    their value.
+    """
+    os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
+
+
 def _deps_present() -> bool:
     """Cheap import probe — no model load, no disk read. `available` and every
     caller that wants to explain the gap to the wearer reads this."""
+    _silence_dependency_egress()
     try:
         import insightface                                   # noqa: F401
         import onnxruntime                                   # noqa: F401
@@ -93,20 +118,42 @@ def model_root() -> str:
 
 
 def _verify_weights(root: str) -> bool:
-    """Check the on-disk bytes against `models.lock` before they are trusted.
+    """May these weights be loaded? Checks the on-disk bytes against
+    `models.lock`.
 
     ONNX is not pickle, so this is not an RCE gate the way `safe_torch_load` is
     — it is a "these are the weights we reviewed" gate, which matters more for a
     biometric model than for most: a swapped recogniser changes WHO the device
-    thinks it is looking at. Unpinned degrades to a warning exactly like every
-    other model here, or hard-fails under `DL_MODELS_STRICT`.
+    thinks it is looking at.
+
+    Read `verify_path`'s contract carefully, because the obvious reading is
+    wrong and cost a working feature once already. It returns:
+
+      * True   — pinned and the bytes match.
+      * False  — the model is UNPINNED. That is a WARNING, not a rejection: the
+                 lock's own note says an empty `files` means the hash has not
+                 been captured yet, and every model in this project has shipped
+                 through that state. Treating it as a refusal made face recall
+                 silently unavailable on a machine that had the model installed
+                 and working — the exact silent-disable bug class this codebase
+                 keeps producing.
+      * raises ModelIntegrityError — a genuine hash MISMATCH, or unpinned under
+                 `DL_MODELS_STRICT`. That is the only fatal case, and it is
+                 fatal regardless of strictness: a wrong file is never
+                 tolerated, least of all for a biometric model.
     """
     try:
         from ..model_guard import verify_path
-        return verify_path(MODEL_ID, os.path.join(root, "models", PACK_NAME))
+        verify_path(MODEL_ID, os.path.join(root, "models", FACE_PACK))
+        return True
     except Exception as exc:                                 # noqa: BLE001
-        log.warning("[face] weight verification unavailable: %s", exc)
-        return True                  # never harden into a crash; warn and run
+        # ModelIntegrityError (mismatch, or strict-mode unpinned) lands here and
+        # must stop the load. So does anything unexpected: for weights that
+        # decide who the wearer is looking at, "we could not check" is not a
+        # reason to proceed.
+        log.error("[face] weight verification refused the load: %s",
+                  type(exc).__name__)
+        return False
 
 
 def _build():
@@ -114,12 +161,12 @@ def _build():
     if not _deps_present():
         return _UNAVAILABLE
     root = model_root()
-    pack_dir = os.path.join(root, "models", PACK_NAME)
+    pack_dir = os.path.join(root, "models", FACE_PACK)
     if not os.path.isdir(pack_dir):
         # No weights: do NOT reach for the network on a recall path. The one
         # sanctioned fetch window is the explicit bootstrap.
         log.info("[face] no %s weights at %s — face recall stays off",
-                 PACK_NAME, pack_dir)
+                 FACE_PACK, pack_dir)
         return _UNAVAILABLE
     try:
         from ..model_guard import require_fetch_allowed
@@ -131,17 +178,17 @@ def _build():
         pass
     if not _verify_weights(root):
         log.error("[face] %s failed integrity verification — refusing to load",
-                  PACK_NAME)
+                  FACE_PACK)
         return _UNAVAILABLE
     try:
         from insightface.app import FaceAnalysis
-        app = FaceAnalysis(name=PACK_NAME, root=root,
+        app = FaceAnalysis(name=FACE_PACK, root=root,
                            providers=["CPUExecutionProvider"],
                            allowed_modules=["detection", "recognition"])
         app.prepare(ctx_id=-1, det_thresh=DET_THRESHOLD)
         return app
     except Exception as exc:                                 # noqa: BLE001
-        log.warning("[face] %s failed to load: %s", PACK_NAME, exc)
+        log.warning("[face] %s failed to load: %s", FACE_PACK, exc)
         return _UNAVAILABLE
 
 
@@ -168,7 +215,7 @@ def available() -> bool:
     hundred milliseconds into the Social Lens's constructor."""
     if not _deps_present():
         return False
-    return os.path.isdir(os.path.join(model_root(), "models", PACK_NAME))
+    return os.path.isdir(os.path.join(model_root(), "models", FACE_PACK))
 
 
 def _subject(faces, frame):

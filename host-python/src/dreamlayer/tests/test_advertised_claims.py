@@ -46,8 +46,33 @@ pytestmark_note = "see docs privacy.html § Deliberately not built"
 @pytest.mark.no_face_double
 def test_the_shipped_face_embedder_cannot_identify_anyone():
     """The site's hardest promise. The PRODUCTION embedder (the autouse test
-    double is opted out of here) must decline, not guess."""
+    double is opted out of here) must decline, not guess.
+
+    A real model now EXISTS behind the opt-in `face` extra, so this asserts what
+    the copy actually claims: the SHIPPED build — the default install, with no
+    `face` pack and no weights — cannot return an identity. The invariant that
+    keeps that true is that `face` is in no deployment profile, which is
+    asserted separately and unconditionally below, because it cannot be
+    satisfied by a machine simply not having installed something.
+
+    A developer who deliberately installed the pack has not made the website
+    false, so this skips there rather than failing. What must NOT happen
+    silently is a BUILD shipping the pack: that is the step-3 copy change (see
+    HANDOFF), and `test_the_face_pack_is_in_no_deployment_profile` is the guard
+    that fires if anyone tries.
+    """
+    from dreamlayer.truth_lens import face_backends
     from dreamlayer.truth_lens.face_embed import FaceEmbedder
+
+    if face_backends.available():
+        pytest.skip(
+            "this machine has the opt-in face pack AND its weights installed, "
+            "so it is not the shipped default this claim describes. Before any "
+            "BUILD ships the pack, landing/privacy.html ('cannot return an "
+            "identity at all', 'keep a face database') and docs/gitbook/"
+            "privacy.md ('absent from the codebase, not switched off') must "
+            "change, along with the iOS purpose strings — face templates are "
+            "biometric identifiers.")
 
     emb = FaceEmbedder()
     assert emb.available is False, (
@@ -60,6 +85,35 @@ def test_the_shipped_face_embedder_cannot_identify_anyone():
         assert emb.process_frame(frame) is None, (
             "the shipped face embedder returned an embedding for an arbitrary "
             "frame — stranger recognition is reachable in the default build")
+
+
+def test_the_face_pack_is_in_no_deployment_profile():
+    """What actually keeps "the shipped face embedder cannot return an identity"
+    true, and the one check a machine cannot accidentally satisfy by not having
+    installed something.
+
+    Every target this project ships is a `profile-*` extra. If `face` ever
+    appears inside one, the default install for that target gains a face model
+    and the site's sentence becomes false the moment the build goes out — so
+    this is the tripwire that must fire BEFORE the copy is wrong, not after."""
+    import re
+    from pathlib import Path
+
+    pyproject = (Path(__file__).resolve().parents[3] / "pyproject.toml")
+    if not pyproject.exists():                    # installed wheel, not a checkout
+        pytest.skip("pyproject.toml not on disk")
+    text = pyproject.read_text()
+    offenders = [
+        line.split("=", 1)[0].strip()
+        for line in text.splitlines()
+        if re.match(r"\s*profile-[a-z]+\s*=", line) and
+        re.search(r"[\[,]\s*face\s*[,\]]", line.split("=", 1)[1])
+    ]
+    assert not offenders, (
+        f"the `face` extra was added to deployment profile(s) {offenders} — a "
+        f"default install for that target now ships a face model, so "
+        f"landing/privacy.html and docs/gitbook/privacy.md are about to be "
+        f"false. Change the copy in the same commit (HANDOFF step 3).")
 
 
 @pytest.mark.no_face_double

@@ -61,15 +61,26 @@ jobs:
           #   faster-whisper        -> ASR     (voice_pipeline_real)
           # Weights download on first use.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          #   insightface+onnxruntime -> ArcFace buffalo_l (face_recognition)
           pip install -e ".[dev,privacy]" \
             sentence-transformers open-clip-torch model2vec \
-            silero-vad faster-whisper
+            silero-vad faster-whisper \
+            insightface onnxruntime
           # presidio needs spaCy AND a spaCy *model* — models are not pip deps,
           # so the `privacy` extra alone leaves the analyzer None and the
           # redactor silently on its regex fallback. nlp_setup standardises on
           # the small model rather than presidio's ~560 MB default.
           pip install "spacy>=3,<4"
           python -m spacy download en_core_web_sm
+          # insightface fetches buffalo_l on first use, and the face tests
+          # skip without it — which this job treats as a failure. Pull it here
+          # so the "real path ran" claim is true for the face model too.
+          python - <<'PY'
+          from insightface.app import FaceAnalysis
+          FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"],
+                       allowed_modules=["detection", "recognition"]
+                       ).prepare(ctx_id=-1, det_thresh=0.5)
+          PY
 
       - name: Run the real-model tests
         env:
