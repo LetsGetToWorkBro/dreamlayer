@@ -68,9 +68,20 @@ rules:
       # logging_setup._is_sensitive: a substring ROOT (name/email/token/… — safe
       # as substrings) OR an exact/`_<key>`-suffix KEY (text/content/prompt/cue/…
       # — anchored so `rescue`/`queryset`/`context`/`session_id` do NOT trip).
+      #
+      # The leading lookahead mirrors the authoritative guard's _GUARD_GENERIC
+      # allowlist for the ONE case that regularly reaches a log call: the
+      # class/module dunder, `type(exc).__name__`. That is an exception CLASS
+      # name — never PII — and logging it rather than `exc` is the careful
+      # choice, since an exception's *message* can carry a path or content. The
+      # AST guard has allowlisted it since it was written (with that exact
+      # example); this rule had not, so it flagged four deliberate uses. Kept to
+      # the dunder alone: `user_name`, `contact_name`, `display_name` and every
+      # other person-name field still trip, here and in the AST guard.
+      # tests/test_logging_discipline.py pins the two guards agreeing.
       - metavariable-regex:
           metavariable: $VAL
-          regex: (?i).*(name|email|phone|address|token|secret|password|passphrase|credential|apikey|transcript|embedding|contact|summary|caption|passcode|ssn).*|.*(^|_)(text|content|prompt|reply|query|answer|cue|key|auth|authorization|session|cookie|message_body)$
+          regex: (?i)(?!(?:.*\.)?__name__$)(?:.*(name|email|phone|address|token|secret|password|passphrase|credential|apikey|transcript|embedding|contact|summary|caption|passcode|ssn).*|.*(^|_)(text|content|prompt|reply|query|answer|cue|key|auth|authorization|session|cookie|message_body)$)
 
   # --------------------------------------------------------------------------
   # eval-exec — arbitrary code execution. Never on untrusted input; flagged
