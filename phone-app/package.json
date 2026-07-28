@@ -46,14 +46,14 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@react-native/jest-preset": "^0.86.0",
+    "@react-native/jest-preset": "^0.86.2",
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.4",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.2",
     "test-renderer": "^1.2.0",
-    "ts-jest": "^29.4.11",
+    "ts-jest": "^29.4.12",
     "typescript": "~6.0.3"
   }
 }
