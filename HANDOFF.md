@@ -6,33 +6,29 @@ Working state as of 2026-07-27. Written for whoever picks this up next.
 
 ## The task in front of you
 
-**Step 1: wire retention Brain-side.** Then face recognition. In that order —
-the owner decided retention is a prerequisite, because storing face templates
-under a retention policy that does not run is materially worse than storing
-text under it.
+**Step 2: face recognition.** Step 1 (retention) is done — see below. The owner
+made retention the prerequisite because storing face templates under a retention
+policy that does not run is materially worse than storing text under it.
 
-### Step 1 — retention (do this first)
+### Step 1 — retention (DONE, 2026-07-28)
 
-Nothing on the device expires today. The full diagnosis, with commands, is in
-[`decisions/0001`](decisions/0001-retention-lifecycle-never-runs.md). **Read it
-before you start, including the corrected consequences section**, because the
-obvious fix is the wrong one.
+Wired Brain-side, following the `ear.py` / `glance_live.py` precedent rather
+than resurrecting the `Orchestrator` the shipped Brain never builds:
 
-Short version: `RetentionSweep` lives on `Orchestrator`, and **`Orchestrator` is
-never instantiated in the shipped Brain**. That is deliberate (`ear.py:4-10`
-explains why: it would drag in a second `MemoryDB` and a heavy reasoning graph).
-Do not resurrect it.
-
-Do what `ear.py` and `glance_live.py` already did — re-implement Brain-side:
-
-- Hook into `ai_brain/server/server.py:454-457`, where `retention_days` already
-  prunes the ask history and activity log on boot. That path is live and tested.
-- Sweep the Brain's own `MemoryDB` beside it, honouring `retention_hot_hours`
-  and `retention_warm_days` (both already exist in `config.py`).
-- Keep the existing conservatism: unknown age means keep; pinned rows never
-  expire; entities (people, promises, tasks, teaches, places) are cold-forever.
-- **Write a test that proves rows actually disappear.** A retention feature that
-  passes without deleting anything is how this got here.
+- `ai_brain/server/retention_live.py` runs the existing `RetentionSweep`
+  primitive against the Brain's own `MemoryDB`.
+- Called from `Brain.__init__` beside the `retention_days` log prune, and again
+  hourly via `Brain.start_retention_scheduler` — boot alone would mean nothing
+  ages out on a machine that stays awake, and the hot ring is in-memory, so boot
+  is the one moment it is guaranteed to be empty.
+- Windows come from `config.py` (`retention_hot_hours` / `retention_warm_days`),
+  read live. Conservatism kept: unknown age → keep, pinned → never expires,
+  entities cold-forever, any failure → keep.
+- `tests/test_brain_retention_boot.py` is the proof, and every assertion in it
+  is a row that is GONE from a real file after a real boot. It was
+  mutation-tested against the boot hook.
+- `decisions/0001` is now `fixed` (a new status — see `decisions/README.md`),
+  and the docs' retention claims were made confident again in the same change.
 
 ### Step 2 — face recognition
 
@@ -155,9 +151,9 @@ holding uncommitted work.
 | #534 | Voice-cloning claim corrected; `test_advertised_claims.py` |
 | #535 | Docs claims fixed at source (`docs/gitbook/*.md`) |
 
-**Open and unresolved:** `decisions/0001` (retention — step 1 above). Task list
-item #58 (tray icons, dock-click, Learn glass) is stale and needs a build to
-verify.
+**Open and unresolved:** Task list item #58 (tray icons, dock-click, Learn
+glass) is stale and needs a build to verify. `decisions/0001` (retention) is
+closed — the fix is step 1 above.
 
 ---
 

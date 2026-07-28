@@ -1,10 +1,22 @@
 ---
 id: 0001
 title: Nothing on the device ever expires — the retention lifecycle has no live caller
-status: confirmed-deferred
-date: 2026-07-27
+status: fixed
+date: 2026-07-28
 area: orchestrator/retention
 ---
+
+> **Fixed 2026-07-28.** Retention now runs Brain-side
+> (`ai_brain/server/retention_live.py`), swept from `Brain.__init__` beside the
+> `retention_days` log prune and hourly thereafter. Regression test:
+> `tests/test_brain_retention_boot.py`, every assertion of which is a row that
+> is gone from a real SQLite file after a real boot.
+>
+> The entry is kept rather than deleted because the public docs link to it and
+> because the *reasoning* below is the part worth keeping: the obvious fix — the
+> one the original "Consequences" section prescribed — was the wrong one, and
+> the correction is the record. Everything below is the state as of the
+> diagnosis; the closing section says what changed.
 
 ## Claim
 
@@ -85,6 +97,23 @@ grep -rn "Orchestrator(" src/dreamlayer --include=*.py | grep -v /tests/
 If the only hits remain `main.py` and `simulator/`, the sweep cannot run no
 matter what happens to `vault_dir` or `maybe_dream_tonight`.
 
+**Now that this is fixed, the check that matters is the reverse one** — what
+would show the lifecycle has stopped running again:
+
+```
+grep -rn "sweep_retention" src/dreamlayer/ai_brain/server/server.py
+```
+
+must show a call inside `Brain.__init__`, and
+
+```
+python -m pytest src/dreamlayer/tests/test_brain_retention_boot.py
+```
+
+must pass. Those tests delete real rows from a real file; if the wiring is
+removed they fail rather than passing green over a sweep that does nothing,
+which is the failure mode that produced this entry in the first place.
+
 ## Consequences
 
 - Treat any statement that DreamLayer ages out memory on a schedule as **not
@@ -132,3 +161,25 @@ matter what happens to `vault_dir` or `maybe_dream_tonight`.
 - The privacy story is unaffected in the other direction: explicit deletion
   (`purge_all`, "Erase all memories") does work and was hardened separately in
   PR #530. This entry is about *automatic expiry*, not about erase.
+
+## Resolution (2026-07-28)
+
+Fixed exactly as the last consequence prescribed — Brain-side, following the
+precedent, not by repairing the Orchestrator's three broken legs.
+
+`ai_brain/server/retention_live.py` runs `RetentionSweep` (which is a plain
+pass over a `MemoryDB`, not an Orchestrator-owned thing) against the Brain's
+own store, wired at `Brain.__init__` beside the `retention_days` prune of the
+ask history and activity log, and re-run hourly by
+`Brain.start_retention_scheduler` — because a boot-only sweep on a machine that
+stays awake for weeks is "nothing ages out" with extra steps.
+
+The windows are `retention_hot_hours` / `retention_warm_days` from `config.py`,
+read live. All four conservatisms hold: cold kinds are never considered,
+`meta.pinned` never expires, an unreadable `created_at` keeps the row, and any
+failure in the sweep degrades to keeping. Expired rows lose their ANN vectors
+with them, so nothing stays recallable behind a deleted row.
+
+The `Orchestrator` was **not** resurrected, and
+`test_brain_retention_boot.py::test_the_orchestrator_is_still_not_resurrected`
+keeps it that way.

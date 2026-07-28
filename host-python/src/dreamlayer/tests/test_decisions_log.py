@@ -29,7 +29,8 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DECISIONS = _REPO_ROOT / "decisions"
 
-VALID_STATUS = {"refuted", "accepted-risk", "confirmed-deferred", "needs-recheck"}
+VALID_STATUS = {"refuted", "accepted-risk", "confirmed-deferred",
+                "needs-recheck", "fixed"}
 REQUIRED_FIELDS = ("id", "title", "status", "date", "area")
 REQUIRED_SECTIONS = ("## Claim", "## Verdict", "## Evidence",
                      "## What would overturn this")

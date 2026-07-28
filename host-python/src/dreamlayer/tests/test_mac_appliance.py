@@ -288,6 +288,9 @@ def test_source_autostart_serves_on_0_0_0_0_with_a_pairing_token(monkeypatch):
         def start_brief_scheduler(self): ...
         def start_calendar_sync(self): ...
 
+        def start_retention_scheduler(self):
+            captured["retention"] = True
+
     class _FakeServer:
         def serve_forever(self):
             captured["served"] = True        # returns at once so _serve_brain ends
@@ -308,6 +311,8 @@ def test_source_autostart_serves_on_0_0_0_0_with_a_pairing_token(monkeypatch):
     assert captured["port"] == 7777
     assert captured["token"]                          # a pairing token was minted
     assert captured.get("served") is True
+    # the memory lifecycle turns over while the appliance runs, not only at boot
+    assert captured.get("retention") is True
 
 
 def test_install_launch_agent_has_log_paths_and_throttle(tmp_path, monkeypatch):

@@ -175,20 +175,21 @@ What "remembering" is made of got real this wave (`memory/`):
   and bounded crash window) — because a linear scan breaks
   inside year one of real use. Without `usearch` every query falls back to
   the exact linear cosine scan with identical scoring.
-- **A retention lifecycle — written, but not yet running.** The tiers are
-  built: hot (a 24-hour ring, purged after REM), warm (90 days for
-  consolidated rows — a memory REM keeps reaching for survives its window),
-  cold (forever, but only *entities*: people, promises, tasks, teaches,
-  places). Pinned rows never expire, and the sweep is deliberately
-  conservative: unknown age means keep. **Today none of it fires.** The sweep
-  is only constructed inside the nightly REM pass, that pass has no production
-  caller, and it would return early anyway because its vault directory is not a
-  config field — so on a shipped build *nothing ages out on its own*.
-  Deleting is unaffected: "forget that", erase-all, and the retention-days
-  setting (which really does prune the ask history and activity log on boot)
-  all work. We would rather say this plainly than let you assume a sweep is
-  running. Tracked as [decision
+- **A retention lifecycle, and it runs.** Three tiers: hot (a 24-hour ring of
+  what a look has seen), warm (90 days for consolidated rows), cold (forever,
+  but only *entities*: people, promises, tasks, teaches, places). Pinned rows
+  never expire, and the sweep is deliberately conservative: unknown age means
+  keep. The Brain sweeps both windows when it starts and hourly while it is
+  running, so a row past its warm window is deleted from the store and its
+  vector from the ANN index — nothing is left recallable behind a deleted row.
+  For most of this project's life *none of it fired*: the sweep was built only
+  inside a nightly REM pass that had no production caller, on an `Orchestrator`
+  the shipped Brain never instantiates. It is now wired against the Brain's own
+  memory store instead, beside the retention-days prune of the ask history and
+  activity log. The history is [decision
   0001](https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/decisions/0001-retention-lifecycle-never-runs.md).
+  Explicit deleting is unaffected and always worked: "forget that", erase-all,
+  and the retention-days setting.
 - **A cold-start maturity arc.** A fresh install is an **OBSERVER** (48
   hours and 200 scored events of pure silence), then an **APPRENTICE**
   (high-confidence commitment/event cues only, at most three a day, no

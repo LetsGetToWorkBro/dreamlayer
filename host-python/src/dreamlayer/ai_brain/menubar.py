@@ -425,6 +425,7 @@ def _serve_brain(directory: str | None, port: int,
     brain.start_watching()
     brain.start_brief_scheduler()
     brain.start_calendar_sync()
+    brain.start_retention_scheduler()   # age memory out (hot/warm) while we run
     try:
         server = make_brain_server(brain, host="0.0.0.0", port=port)
     except Exception as exc:                        # bind failed (port in use, …)
