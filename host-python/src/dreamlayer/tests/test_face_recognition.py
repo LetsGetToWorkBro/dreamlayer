@@ -36,6 +36,14 @@ import pytest
 from dreamlayer.ai_brain.server import Brain
 from dreamlayer.ai_brain.server import face_live
 from dreamlayer.ai_brain.server.store import BrainConfig
+from dreamlayer.truth_lens import face_backends as _fb
+
+# Captured at import, BEFORE conftest's fixture stubs the resolution for
+# `no_face_double` tests. Tests that probe the BACKEND's own dependency/weights
+# logic call these, so they exercise the real function rather than the stub and
+# cannot pass vacuously.
+_REAL_AVAILABLE = _fb.available
+_REAL_DEFAULT_FN = _fb.default_face_embed_fn
 
 
 def _frame(seed: int) -> np.ndarray:
@@ -54,12 +62,13 @@ class TestTheShippedBuildStillCannotIdentifyAnyone:
     """The site's hardest promise, unchanged by wiring a model behind an extra."""
 
     @pytest.mark.no_face_double
-    def test_the_production_embedder_declines_without_the_pack(self):
-        from dreamlayer.truth_lens.face_backends import available
+    def test_the_production_embedder_declines_in_the_default_build(self):
+        """The default build has no face pack, so the embedder declines. The
+        precondition is guaranteed by conftest rather than by what happens to be
+        installed on the machine running this — otherwise a developer who opted
+        into the pack would silently flip the assertion."""
         from dreamlayer.truth_lens.face_embed import FaceEmbedder
 
-        if available():
-            pytest.skip("this install has the opt-in face pack AND its weights")
         emb = FaceEmbedder()
         assert emb.available is False, (
             "a default install reports a face embedder — the `face` extra is "
@@ -68,24 +77,25 @@ class TestTheShippedBuildStillCannotIdentifyAnyone:
             assert emb.process_frame(_frame(seed)) is None
 
     @pytest.mark.no_face_double
-    def test_the_default_embed_fn_is_none_without_the_pack(self):
-        from dreamlayer.truth_lens import face_backends
-
-        if face_backends.available():
-            pytest.skip("this install has the opt-in face pack AND its weights")
-        assert face_backends.default_face_embed_fn() is None
+    def test_the_real_resolver_returns_none_without_weights(self, tmp_path,
+                                                            monkeypatch):
+        """The REAL resolver (not conftest's stub), pointed at a directory with
+        no weights: it must produce no embedder rather than raise or guess."""
+        monkeypatch.setenv("DL_FACE_MODEL_DIR", str(tmp_path / "absent"))
+        _fb.reset_cache()
+        assert _REAL_AVAILABLE() is False
+        assert _REAL_DEFAULT_FN() is None
 
     @pytest.mark.no_face_double
     def test_a_missing_weights_dir_is_not_an_error(self, tmp_path, monkeypatch):
         """The pack installed but the weights absent must decline, not raise —
         that is the state a user lands in between `pip install` and the model
         fetch."""
-        from dreamlayer.truth_lens import face_backends
 
         monkeypatch.setenv("DL_FACE_MODEL_DIR", str(tmp_path / "nope"))
-        face_backends.reset_cache()
-        assert face_backends.available() is False
-        assert face_backends.default_face_embed_fn() is None
+        _fb.reset_cache()
+        assert _REAL_AVAILABLE() is False
+        assert _REAL_DEFAULT_FN() is None
 
 
 class TestTheSeamResolvesARealBackend:

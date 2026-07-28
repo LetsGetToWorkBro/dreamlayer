@@ -55,24 +55,17 @@ def test_the_shipped_face_embedder_cannot_identify_anyone():
     asserted separately and unconditionally below, because it cannot be
     satisfied by a machine simply not having installed something.
 
-    A developer who deliberately installed the pack has not made the website
-    false, so this skips there rather than failing. What must NOT happen
-    silently is a BUILD shipping the pack: that is the step-3 copy change (see
-    HANDOFF), and `test_the_face_pack_is_in_no_deployment_profile` is the guard
-    that fires if anyone tries.
-    """
-    from dreamlayer.truth_lens import face_backends
-    from dreamlayer.truth_lens.face_embed import FaceEmbedder
+    The default build is pinned deterministically by conftest (opting out of the
+    face double also pins the backend to absent), so this asserts the same thing
+    on a bare CI runner and on a developer machine that opted into the pack —
+    a local install must never flip a claim about what ships.
 
-    if face_backends.available():
-        pytest.skip(
-            "this machine has the opt-in face pack AND its weights installed, "
-            "so it is not the shipped default this claim describes. Before any "
-            "BUILD ships the pack, landing/privacy.html ('cannot return an "
-            "identity at all', 'keep a face database') and docs/gitbook/"
-            "privacy.md ('absent from the codebase, not switched off') must "
-            "change, along with the iOS purpose strings — face templates are "
-            "biometric identifiers.")
+    What must NOT happen silently is a BUILD shipping the pack: that is the
+    step-3 copy change (see HANDOFF), and
+    `test_the_face_pack_is_in_no_deployment_profile` is the guard that fires if
+    anyone tries.
+    """
+    from dreamlayer.truth_lens.face_embed import FaceEmbedder
 
     emb = FaceEmbedder()
     assert emb.available is False, (

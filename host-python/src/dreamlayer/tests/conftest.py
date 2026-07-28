@@ -172,7 +172,24 @@ def _no_cloud_egress(request):
 
 @pytest.fixture(autouse=True)
 def _face_embedder_double(request, monkeypatch):
+    # A test that opted OUT of the double is asserting what the SHIPPED DEFAULT
+    # build does — "the production embedder declines rather than guess". Since a
+    # real model now exists behind the opt-in `face` extra, a developer who
+    # installed it locally would otherwise flip those assertions on their
+    # machine and nowhere else: the suite would start claiming the default build
+    # recognises faces, which is the one thing this fixture's comment says must
+    # never happen. So opting out of the double ALSO pins the backend to absent,
+    # and the default gate says the same thing on every machine.
+    #
+    # `real_model` tests are the deliberate exception: those exist to run the
+    # actual weights, and they carry both marks.
     if "no_face_double" in request.keywords:
+        if "real_model" not in request.keywords:
+            from dreamlayer.truth_lens import face_backends as fb
+            # Only the RESOLUTION is stubbed, not `available()`: tests that
+            # probe the backend's own dependency/weights logic must still see
+            # the real function, or they would pass vacuously.
+            monkeypatch.setattr(fb, "default_face_embed_fn", lambda: None)
         return
     from dreamlayer.truth_lens import face_embed as fe
     real_init = fe.FaceEmbedder.__init__
