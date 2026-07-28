@@ -448,3 +448,128 @@ def test_importing_the_face_backend_does_not_phone_home():
     assert os.environ.get("NO_ALBUMENTATIONS_UPDATE") == "1", (
         "the albumentations update check is not disabled — importing the face "
         "backend reaches a public host")
+
+
+class TestTheHttpSurface:
+    """The routes the phone actually calls. A capability with no route is the
+    bug this whole change exists to fix, one layer up — so the wiring is tested
+    over a real server, not by calling the methods directly."""
+
+    @staticmethod
+    def _live(tmp_path, token="tok"):
+        import json as _json
+        import threading
+        import urllib.request
+        from dreamlayer.ai_brain.server import make_brain_server
+
+        cfg = tmp_path / "cfg"
+        cfg.mkdir(exist_ok=True)
+        BrainConfig(token=token, face_recognition=True).save(cfg)
+        brain = Brain(cfg)
+        srv = make_brain_server(brain, "127.0.0.1", 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        headers = {"X-DreamLayer-Token": token,
+                   "Content-Type": "application/json"}
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def call(path, body=None):
+            req = urllib.request.Request(
+                url + path, headers=headers,
+                data=None if body is None else _json.dumps(body).encode())
+            return _json.loads(opener.open(req, timeout=5).read())
+
+        return brain, srv, call
+
+    @staticmethod
+    def _b64(frame) -> str:
+        import base64
+        import io
+
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.fromarray(frame).save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+
+    def test_enrol_then_identify_over_http(self, tmp_path):
+        pytest.importorskip("PIL")
+        brain, srv, call = self._live(tmp_path)
+        try:
+            img = self._b64(_frame(21))
+            out = call("/dreamlayer/face/enrol", {"name": "Ana", "image": img})
+            assert out["ok"] is True, out
+
+            seen = call("/dreamlayer/face/identify", {"image": img})
+            assert seen["known"] is True and seen["name"] == "Ana"
+
+            stranger = call("/dreamlayer/face/identify",
+                            {"image": self._b64(_frame(22))})
+            assert stranger["known"] is False
+            assert "name" not in stranger
+        finally:
+            srv.shutdown(); srv.server_close()
+
+    def test_the_identify_response_carries_no_biometrics(self, tmp_path):
+        """Whatever the answer, the wire must not carry a template or the
+        geometry of a face — least of all for someone who matched nobody."""
+        pytest.importorskip("PIL")
+        brain, srv, call = self._live(tmp_path)
+        try:
+            call("/dreamlayer/face/enrol",
+                 {"name": "Ana", "image": self._b64(_frame(23))})
+            for seed in (23, 24):
+                body = call("/dreamlayer/face/identify",
+                            {"image": self._b64(_frame(seed))})
+                assert not (set(body) & {"embedding", "template", "vector",
+                                         "bbox", "landmarks", "crop"}), body
+        finally:
+            srv.shutdown(); srv.server_close()
+
+    def test_the_status_route_reports_capability_not_content(self, tmp_path):
+        pytest.importorskip("PIL")
+        brain, srv, call = self._live(tmp_path)
+        try:
+            call("/dreamlayer/face/enrol",
+                 {"name": "Ana", "image": self._b64(_frame(25))})
+            st = call("/dreamlayer/face")
+            assert st["enrolled"] == 1
+            assert set(st) == {"enabled", "model", "ambient", "enrolled"}, (
+                "the status route grew a field — it must stay counts and "
+                "capability, never a name or a vector")
+            assert "Ana" not in json.dumps(st)
+        finally:
+            srv.shutdown(); srv.server_close()
+
+    def test_forget_over_http(self, tmp_path):
+        pytest.importorskip("PIL")
+        brain, srv, call = self._live(tmp_path)
+        try:
+            img = self._b64(_frame(26))
+            cid = call("/dreamlayer/face/enrol",
+                       {"name": "Ana", "image": img})["contact_id"]
+            assert call("/dreamlayer/face/forget",
+                        {"contact_id": cid})["removed"] is True
+            assert call("/dreamlayer/face/identify",
+                        {"image": img})["known"] is False
+        finally:
+            srv.shutdown(); srv.server_close()
+
+    def test_the_routes_are_token_gated(self, tmp_path):
+        """An unauthenticated caller must not be able to ask who is in a frame."""
+        import urllib.error
+        import urllib.request
+
+        pytest.importorskip("PIL")
+        brain, srv, _ = self._live(tmp_path)
+        try:
+            url = f"http://127.0.0.1:{srv.server_address[1]}"
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}))
+            req = urllib.request.Request(
+                url + "/dreamlayer/face/identify", data=b"{}",
+                headers={"Content-Type": "application/json"})
+            with pytest.raises(urllib.error.HTTPError) as err:
+                opener.open(req, timeout=5)
+            assert err.value.code in (401, 403)
+        finally:
+            srv.shutdown(); srv.server_close()
