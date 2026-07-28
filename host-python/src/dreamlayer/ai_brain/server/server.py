@@ -451,10 +451,20 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # did the work) and route straight to the slot.
         self._capability_handlers: dict = {"ask": self._cap_ask}
         self._watch_stop: threading.Event | None = None
+        self._retention_stop: threading.Event | None = None
         # retention: drop logs older than the configured window on boot
         if self.config.retention_days:
             self.history.prune(self.config.retention_days)
             self.activity.prune(self.config.retention_days)
+        # ...and age the MEMORY store out by the same lifecycle the docs
+        # describe (hot 24 h / warm 90 d / cold forever). This is NOT gated on
+        # retention_days: that setting is about the ask history and activity
+        # LOG, and its 0 default means "keep logs forever" — the memory
+        # lifecycle has its own windows in config.py, with their own defaults.
+        # Until now nothing on the device expired at all (decisions/0001); the
+        # sweep it wanted lives on an Orchestrator this Brain never builds, so
+        # retention_live runs the same primitive against the Brain's own store.
+        self.sweep_retention()
         self._wire_model()
         self.reindex()
 
@@ -675,6 +685,49 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._watch_stop is not None:
             self._watch_stop.set()
             self._watch_stop = None
+
+    # -- the memory lifecycle (ai_brain/server/retention_live.py) -------------
+
+    def sweep_retention(self) -> dict:
+        """Age memory out by policy: warm rows past their window are deleted
+        from the store (and their vectors from the ANN index), the live hot
+        ring is dropped past its own. Cold entities, pinned rows and rows of
+        unknown age are kept. Never raises — a failed sweep keeps everything."""
+        try:
+            from .retention_live import sweep_retention
+            return sweep_retention(self)
+        except Exception:                            # noqa: BLE001 — never fail boot
+            log.warning("retention sweep failed", exc_info=True)
+            return {"ok": False, "swept": 0, "expired": 0, "hot_purged": 0}
+
+    def start_retention_scheduler(self, interval: float | None = None) -> None:
+        """Turn the lifecycle over on a cadence, not just at boot.
+
+        A Brain that stays up for a month would otherwise sweep once and then
+        never again — "nothing ages out on its own" with extra steps — and the
+        hot ring only ever has anything in it while the process is running, so
+        boot is precisely the moment it is guaranteed to be empty."""
+        if self._retention_stop is not None:
+            return
+        from .retention_live import SWEEP_INTERVAL_S
+        every = SWEEP_INTERVAL_S if interval is None else interval
+        self._retention_stop = threading.Event()
+        stop = self._retention_stop
+
+        def loop():
+            while not stop.wait(every):
+                try:
+                    self.sweep_retention()
+                except Exception:
+                    # keep the thread alive across a bad sweep; log so a
+                    # persistently failing lifecycle is visible, not silent.
+                    log.warning("retention sweep run failed", exc_info=True)
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_retention_scheduler(self) -> None:
+        if self._retention_stop is not None:
+            self._retention_stop.set()
+            self._retention_stop = None
 
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""

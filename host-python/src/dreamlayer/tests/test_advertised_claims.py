@@ -10,8 +10,9 @@ stops keeping it. A marketing claim with no test behind it is a claim that
 drifts — the 2026-07-27 sweep of the site found three that already had:
 
   * "A retention lifecycle … hot purged after REM, warm 90 days" — the sweep
-    has no live caller, so nothing ever expired. Copy corrected; the code fix
-    is tracked in decisions/0001.
+    had no live caller, so nothing ever expired. The copy was corrected, then
+    the code was fixed (decisions/0001) and the copy made confident again; what
+    is pinned below is now the live wiring, not its absence.
   * "no voice cloning … absent from the codebase by design" — a cloning engine
     IS present. What is actually true, and is now what we say, is narrower and
     stronger: it can only ever clone Juno's own baked clips.
@@ -133,18 +134,43 @@ def test_cloud_is_off_in_a_fresh_config():
 
 
 # --------------------------------------------------------------------------
-# The claim the sweep found FALSE, kept honest here so it cannot silently
-# become true-again-but-unnoticed, or false-again after a fix.
+# "A retention lifecycle, and it runs … the Brain sweeps both windows when it
+# starts and hourly while it is running" — docs/gitbook/perception-memory.md,
+# and the privacy page's memory-lifecycle bullet.
+#
+# The sweep found this claim FALSE on 2026-07-27; the copy was corrected to say
+# so, and this test pinned the un-wiring. It was fixed on 2026-07-28 and the
+# copy is confident again, so what this pins is now the other direction: the
+# claim is live, and the wiring it depends on has to stay wired.
 # --------------------------------------------------------------------------
 
-def test_retention_sweep_is_still_unwired_or_the_docs_need_updating():
-    """decisions/0001: nothing on the device expires, because RetentionSweep is
-    built only inside a nightly pass with no production caller.
+def test_the_retention_lifecycle_has_a_live_caller():
+    """decisions/0001, closed. The docs say memory ages out on its own, so a
+    boot must reach the sweep. Behaviour — rows actually disappearing — is
+    pinned in test_brain_retention_boot.py; this is the claim-to-code link."""
+    import ast
+    server = (_SRC / "ai_brain" / "server" / "server.py").read_text()
+    tree = ast.parse(server)
+    brain = next(n for n in tree.body
+                 if isinstance(n, ast.ClassDef) and n.name == "Brain")
+    ctor = next(n for n in brain.body
+                if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+    init = ast.get_source_segment(server, ctor) or ""
+    assert "self.sweep_retention()" in init, (
+        "Brain.__init__ no longer sweeps retention — the docs promise memory "
+        "ages out on its own, so either restore the call or correct the copy "
+        "in docs/gitbook/perception-memory.md and privacy.md")
 
-    The docs now say so out loud. When someone wires it up, THIS test fails —
-    which is the reminder to go and make the documentation optimistic again.
-    That is the intended direction of travel; the test exists so the copy and
-    the code cannot drift apart a second time."""
+    live = (_SRC / "ai_brain" / "server" / "retention_live.py").read_text()
+    assert "RetentionSweep(" in live, (
+        "the Brain-side sweep no longer builds a RetentionSweep — re-check "
+        "decisions/0001 before believing anything still expires")
+
+
+def test_the_lifecycle_was_not_fixed_by_resurrecting_the_orchestrator():
+    """The wrong fix, kept out by test. Giving `maybe_dream_tonight` a caller
+    would stand a second MemoryDB and a reasoning graph up beside the Brain's
+    own — what ear.py:4-10 records the team choosing twice not to do."""
     ops = (_SRC / "orchestrator" / "ops_dream_rem.py").read_text()
     assert "RetentionSweep(" in ops, "the sweep moved — re-check decisions/0001"
 
@@ -157,6 +183,5 @@ def test_retention_sweep_is_still_unwired_or_the_docs_need_updating():
             callers.append(str(path.relative_to(_SRC)))
     assert not callers, (
         f"maybe_dream_tonight now has production caller(s) {callers} — the "
-        f"retention lifecycle may finally be live. Re-verify decisions/0001, and "
-        f"if it now runs, restore the confident wording in the docs' "
-        f"perception-memory page and delete this test.")
+        f"Orchestrator path was resurrected. The shipped Brain does not build "
+        f"an Orchestrator; retention lives in ai_brain/server/retention_live.py.")

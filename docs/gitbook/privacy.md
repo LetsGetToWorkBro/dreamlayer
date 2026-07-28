@@ -121,6 +121,11 @@ connection tests, model pulls, and message sends.
   scheduled incognito — cloud off for the window.
 - **Retention days** prune the ask history and activity log on boot (0 keeps
   forever).
+- **The memory lifecycle** runs on its own windows, separate from that setting:
+  sightings older than 24 hours and memories older than 90 days are deleted at
+  startup and hourly thereafter. People, promises, tasks, taught facts and
+  places are cold — kept until you forget them — and a pinned row never
+  expires. A row whose age cannot be read is kept, not guessed at.
 - **Backup** is a full restorable snapshot (config including secrets,
   history, activity, agenda) — local-only to download, local-only to
   restore. **Erase** clears questions, activity, or folders selectively.

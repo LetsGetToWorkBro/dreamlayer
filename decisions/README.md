@@ -20,10 +20,15 @@ One file per **decision**, not per bug:
   yet, and what fixing it would take.
 * **`needs-recheck`** — we acted on this conclusion but have not re-verified it
   against current code. An honest debt marker, not a resting state.
+* **`fixed`** — an entry that WAS one of the above and has since been fixed.
+  Reserved for entries that cannot simply be deleted: ones the public docs link
+  to, or whose reasoning is the record (0001's prescribed fix was itself wrong,
+  and the correction is the valuable part). A `fixed` entry names the commit's
+  regression test and re-points `What would overturn this` at the *fix*.
 
-A finding that was **fixed** does not belong here. Its record is the commit and
-the regression test. This directory is only for the ones that leave no other
-trace.
+A finding that was fixed does not otherwise belong here. Its record is the
+commit and the regression test. This directory is mainly for the ones that
+leave no other trace.
 
 ## What must NEVER go here
 
@@ -71,7 +76,7 @@ between this directory and a pile of free text.
 
 | id | status | title |
 |----|--------|-------|
-| [0001](0001-retention-lifecycle-never-runs.md) | confirmed-deferred | Nothing on the device ever expires — the retention lifecycle has no live caller |
+| [0001](0001-retention-lifecycle-never-runs.md) | fixed | Nothing on the device ever expires — the retention lifecycle has no live caller |
 | [0002](0002-object-lens-none-path-unreachable.md) | refuted | `default_classifier()` cannot return `None` in production |
 | [0003](0003-person-guard-mug-false-positive.md) | accepted-risk | Presidio tags `"mug"` as a PERSON, and we ship it |
 | [0004](0004-presidio-real-tests-did-not-exist.md) | refuted | Issue #528's Presidio tests were not being skipped — they did not exist |
