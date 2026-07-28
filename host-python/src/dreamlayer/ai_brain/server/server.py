@@ -1191,7 +1191,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled"):
+                  "remote_listen_enabled", "face_recognition"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -1448,6 +1448,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         plugin install/remove or a model rewire changes what a look can do."""
         self._world_lens = None
 
+    def face_recall(self):
+        """Recognising the people you INTRODUCED — never a stranger
+        (ai_brain/server/face_live.py). Built once and cached; the index of
+        consented faces is read from disk on first use, not here, so a Brain
+        that never looks at anyone never loads it. Returns None if it can't be
+        built, which every caller must read as "no answer", not "not a
+        contact"."""
+        fr = getattr(self, "_face_recall", None)
+        if fr is None:
+            try:
+                from .face_live import build_face_recall
+                fr = build_face_recall(self)
+            except Exception:
+                log.warning("face recall unavailable", exc_info=True)
+                fr = None
+            self._face_recall = fr
+        return fr
+
     def summarize(self, text: str, max_chars: int = 220) -> str:
         """One-glance summary of a long email. Uses the local model when there
         is one; otherwise clips to the first sentence — never blocks the feed."""
@@ -1664,11 +1682,28 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # on the very next look (refute 2026-07-21: purge left the cached
         # host, and its ring, alive).
         self._invalidate_world_lens()
+        # Enrolled FACE templates are the most personal thing the device holds —
+        # a biometric identifier, not a memory of one — so erase-everything must
+        # reach them. They live in their own file (face_index.json), outside the
+        # memory DB and the ember sidecar, which is exactly how a store gets
+        # forgotten by a wipe that "erases everything".
+        n_faces = 0
+        fr = self.face_recall()
+        if fr is not None:
+            try:
+                n_faces = fr.forget_all()
+            except Exception as exc:                 # noqa: BLE001
+                log.error("[brain] face index purge failed: %s", exc)
+                return {"ok": False, "error": f"face purge failed: {exc}",
+                        "purged": n, "memories_purged": n_rows,
+                        "embers_purged": n_ember}
+        self._face_recall = None
         self.activity.add("privacy",
                           f"Erased kept memories ({n_rows} memory row(s), "
-                          f"{n} anchor(s), {n_ember} ember(s))")
+                          f"{n} anchor(s), {n_ember} ember(s), "
+                          f"{n_faces} enrolled face(s))")
         return {"ok": True, "purged": n, "memories_purged": n_rows,
-                "embers_purged": n_ember}
+                "embers_purged": n_ember, "faces_purged": n_faces}
 
     def missed(self, since: float = 0.0) -> dict:
         """"What did I miss?" — the incoming texts and emails since you last

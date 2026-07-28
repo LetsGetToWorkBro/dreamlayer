@@ -1,8 +1,13 @@
 """truth_lens/face_embed.py — Face detection and embedding extraction.
 
-THERE IS NO FACE MODEL HERE. This module is the seam where an on-device
-MobileFaceNet-class embedder would be wired; nothing is wired yet. Read the
-next three paragraphs before touching it.
+THERE IS NO FACE MODEL IN THIS FILE, and none in a default install. This module
+is the seam; the model that plugs into it lives in `face_backends.py` and is
+opt-in three times over — the `face` extras group (in no deployment profile),
+the weights being present on disk, and the wearer's own switch on the consumer
+side. With any of those absent `process_frame` returns None and every consumer
+takes its existing honest "I don't know them yet" path, which is what the
+default build does. Read the next three paragraphs before touching it: they are
+why this fails closed rather than guessing.
 
 The stub that used to live here produced a 512-d gaussian seeded by the frame's
 PIXEL SUM. That has two consequences, both measured:
@@ -25,13 +30,15 @@ uint8 frame and was compared against a 0.50 threshold, so ANY non-black image --
 including a 1x1 white pixel -- asserted a face at 100%.
 
 So both now FAIL CLOSED. `process_frame` returns None unless a real embedder is
-injected. `brain_social.py` already refuses to wire this stub to the dossier,
-with the words "wiring that to a dossier would fabricate identity - the exact
-dishonesty this project refuses"; this module now holds itself to that too. An
+wired -- injected by the caller, or resolved from `face_backends` on an install
+that opted into one. `brain_social.py` already refuses to wire a stub to the
+dossier, with the words "wiring that to a dossier would fabricate identity - the
+exact dishonesty this project refuses"; this module holds itself to that too. An
 honest "I don't know them yet" already exists on every consumer path.
 
 Tests that need determinism can pass an explicit `embed_fn`; that is the same
-injection seam a real model will use, so nothing has to change when one arrives.
+injection seam the real model uses, which is why wiring one changed nothing
+here but the resolution of the default.
 """
 from __future__ import annotations
 
@@ -58,14 +65,35 @@ class FaceEmbedder:
     def __init__(self, threshold: float = DETECTION_THRESHOLD, embed_fn=None):
         self.threshold = threshold
         self._embed_fn = embed_fn
+        self._tried_default = False
         self._call_count = 0
+
+    def _resolve(self):
+        """The wired embedder: an explicitly injected one, else the real
+        on-device backend when this install actually has one.
+
+        Resolved lazily and cached, never in `__init__`: `FaceEmbedder()` is
+        constructed in `SocialLens.__init__` and `TruthLens.__init__`, and
+        loading an ONNX graph there would put the model's startup cost into
+        every construction of a lens that may never see a frame.
+        `face_backends.default_face_embed_fn` is itself a cheap dependency +
+        weights probe that returns None — the shipped default — unless the
+        opt-in `face` pack AND its weights are both present."""
+        if self._embed_fn is None and not self._tried_default:
+            self._tried_default = True
+            try:
+                from .face_backends import default_face_embed_fn
+                self._embed_fn = default_face_embed_fn()
+            except Exception:               # noqa: BLE001 — a seam never raises
+                self._embed_fn = None
+        return self._embed_fn
 
     @property
     def available(self) -> bool:
         """True only when a real embedder is wired. Callers that want to explain
         the gap to the wearer ("face recall needs the vision pack") read this
         instead of inferring capability from a None return."""
-        return self._embed_fn is not None
+        return self._resolve() is not None
 
     def process_frame(self, frame: Optional[np.ndarray]) -> Optional["AUFrame"]:
         """Return an AUFrame with an embedding, or None when we cannot know.
@@ -77,7 +105,8 @@ class FaceEmbedder:
         contacts"."""
         from .schema import AUFrame
 
-        if frame is None or self._embed_fn is None:
+        embed_fn = self._resolve()
+        if frame is None or embed_fn is None:
             return None
         if getattr(frame, "size", 0) == 0:
             return None
@@ -90,7 +119,7 @@ class FaceEmbedder:
             return None
 
         try:
-            out = self._embed_fn(frame)
+            out = embed_fn(frame)
         except Exception:                       # noqa: BLE001 - a seam never raises
             return None
         if not out:
