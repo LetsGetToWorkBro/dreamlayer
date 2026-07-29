@@ -22,7 +22,7 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | PersonContextCard | person cue (anticipation) | device | 3500 | chord arpeggio |
 | PersonDossierCard | greet / look at a known person | device | 5000 | earcon `look` |
 | SpokenCaptionCard | each raw-transcript caption line (the translate path now rides the Rosetta figment instead) | device | rolling | — |
-| LiveCaptionCard | Puente / Rosetta translation | device | rolling | — |
+| LiveCaptionCard | Rosetta translation | device | rolling | — |
 | MorningBriefCard | wake with a brief waiting | device | 8000 | — |
 | EmberPromptCard | an Ember tending moment (the cue, never the answer) | device | 12000 | — |
 | EmberFlareCard | you answered from memory — the warm flare | device | 2600 | — |

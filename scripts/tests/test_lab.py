@@ -69,11 +69,6 @@ class TestValidateScenario:
         if s:
             assert validate_scenario(s) == []
 
-    def test_valid_puente_caption(self):
-        s = self._load("puente_caption")
-        if s:
-            assert validate_scenario(s) == []
-
     def test_missing_name(self):
         assert any("name" in e for e in validate_scenario({"steps": []}))
 

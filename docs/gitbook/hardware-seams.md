@@ -74,7 +74,7 @@ display runtime, BLE, and the basic sensors could host the same experience.
 | Cloud verify / answers | `verify.py`, cloud tier | an Ollama install and/or an OpenAI-compatible key — plumbing, gating, parsing all built |
 | Phone notifications | `services/notify.ts` | permission on a real device |
 | Reach-anywhere relay | pairing `relay_url` + `brainFetch` | any secure tunnel to the Brain; client already prefers LAN and falls back |
-| OCR + translation models | Rosetta / Puente | the recognition and translation models behind the seams |
+| OCR + translation models | Rosetta | the recognition and translation models behind the seams |
 | Tier-0 NPU perception | `ai_brain/perception.py: NpuPerceptor` | a Vela-compiled model for the Halo's Ethos-U55; the heuristic tier answers until then |
 | GhostMode radio | `confluence/mesh.py: MeshTransport` | the LE Coded PHY group transport; an in-memory bus stands in today |
 | MIDI bridge | plugin `midi_out` seams (Face Synth, Air Drums) | python-rtmidi or an OSC bridge; plugins stay dormant without one |
@@ -108,7 +108,7 @@ low tens of KB/s. What that means, concretely:
 
 **The open firmware question (load-bearing, unresolved):** roughly half the
 lens catalogue — Juno voice, Veritas, live captions, Name Capture, Timbre,
-Puente — consumes *transcribed speech*, which requires continuous audio off
+Rosetta's ear — consumes *transcribed speech*, which requires continuous audio off
 the glasses. Whether Halo's firmware exposes the microphone with an
 on-glass codec (or a raw stream the phone can encode) is a question for
 Brilliant Labs that no amount of host-side code can answer. Until it is

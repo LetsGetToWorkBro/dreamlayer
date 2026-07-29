@@ -111,7 +111,6 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Premonition** — recurring-pattern ghosts of the near future on the
   Horizon.
 - **Prism** — the kaleidoscope lens (Atmosphere).
-- **Puente** — the ear: live speech translation to caption cards.
 - **Reality Compiler** — Rehearsal to Figment: describe a procedure, get a
   runnable on-glass skill.
 - **REM** — the nightly consolidation cycle; its retrieval bias tunes the

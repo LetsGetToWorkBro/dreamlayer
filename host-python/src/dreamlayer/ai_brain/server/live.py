@@ -569,6 +569,60 @@ def hear(brain, body: bytes, src_rate: int = 0, stop: bool = False) -> dict:
     return brain.hear_remote(pcm)
 
 
+def _frame_bytes(data: bytes) -> bytes:
+    """Raw image bytes out of either body shape this product actually posts.
+
+    The browser Live Lens posts a bare JPEG (`/live/look`); the phone posts
+    `{"image": "<base64>"}` (`/brain/look`). Both are real clients, so a route
+    that only accepted one would be reachable from one surface and not the
+    other — which is the whole complaint this audit is about. Anything that is
+    not JSON with an `image` field passes through untouched, so a raw JPEG
+    (which never starts with `{`) costs one byte comparison.
+    """
+    if not data[:1] == b"{":
+        return data
+    try:
+        import base64
+        body = json.loads(data.decode("utf-8", "replace"))
+        img = body.get("image") or ""
+        return base64.b64decode(img, validate=False) if img else data
+    except (ValueError, TypeError):
+        return data
+
+
+def scholar(brain, data: bytes, mode: str = "answer", arg: str = "") -> dict:
+    """One Scholar read: a JPEG frame in, an understood card out.
+
+    Three faces of one move — `answer` a question in view, read a `form` and
+    say what to write in each field, `explain` dense text in plain words —
+    differing only in what is asked of the vision tier. Same in-memory decode,
+    same 413-before-read cap and same never-touches-disk contract as a look;
+    the Veil is checked inside `WorldLensHost._scholar_read`, so a veiled read
+    comes back as Scholar's honest "no tier could read this" rather than a
+    guess.
+
+    `arg` is the mode's one free parameter: the spoken question for `answer`,
+    the purpose for `form`, unused for `explain`.
+    """
+    wl = brain.world_lens()
+    if wl is None or getattr(wl, "scholar", None) is None:
+        return {"ok": False, "mode": mode, "reason": "scholar unavailable"}
+    frame = decode_frame(_frame_bytes(data))
+    if frame is None:
+        return {"ok": False, "mode": mode, "reason": "unreadable frame"}
+    lens = wl.scholar
+    if mode == "form":
+        r = lens.form(frame, purpose=arg)
+    elif mode == "explain":
+        r = lens.explain(frame)
+    else:
+        mode = "answer"
+        r = lens.answer(frame, question=arg)
+    return {"ok": r.ok, "mode": r.mode, "primary": r.primary,
+            "detail": r.detail, "items": list(r.items),
+            "confidence": r.confidence, "card": r.card}
+
+
 def render_live(nonce: str = "") -> str:
     """The Live Lens page. Served PUBLIC (like the builder) because it holds no
     secrets: the token arrives in the URL fragment from the panel's link/QR and

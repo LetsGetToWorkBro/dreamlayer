@@ -4,20 +4,47 @@ Working state as of 2026-07-29. Written for whoever picks this up next.
 
 ---
 
-## The task in front of you — an Ultracode brief
+## The task in front of you
 
 **Correct every lens and every HUD item, at minimum, plus capabilities.** The
 owner asked for this explicitly and asked for it at AAA level: fully built,
-tested, mutation-tested, merged. Read the whole of this section before starting;
-the first item is smaller than it looks and unblocks the rest.
+tested, mutation-tested, merged.
 
-### Testing face recall end-to-end (no consent flow exists to remove)
+### Where it stands
 
-There is no consent flow, no consent UI and no per-person consent gate in the
-face code — `grep -rn "consent" ai_brain/server/face_live.py` returns only
-docstrings describing what enrolment means. Nothing needs deleting to test.
-What gates `identify()` is, in order: the Veil, the wearer's switch, an empty
-index, no face detected, no match.
+Three checkers now answer "is this reachable from the shipped Brain" instead of
+anyone's memory. Run all three before believing any claim in this file:
+
+```
+python3 scripts/lens_reachability.py         # exits 1 while a lens is unloadable
+python3 scripts/hud_reachability.py          # exits 1 while a card is unproducible
+python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see §4
+```
+
+| | done | open |
+|---|---|---|
+| **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
+| **HUD cards** | 24 of 24 have a real glass renderer; 6 have a Brain-side producer | **18 cards nothing in the Brain can produce** (§3) |
+| **Capabilities** | 41 of 74 seams loadable; 13 unreachable by design, with reasons | **19 open questions** (§4) |
+
+The single most important thing in this file, because it is the mistake that
+keeps repeating: **`lens_reachability.py` reporting a lens as "reachable" is not
+evidence it runs.** It says the code can be LOADED. Seven lenses were listed as
+reachable for a whole release while nothing constructed one of them. The script
+says so in its own header; believe the header, not the green line.
+
+### Testing face recall end-to-end
+
+**This section used to say "no consent flow exists to remove". That is stale —
+one was added at `9f0f7c5`.** `face_live.CONSENT_VERSION` /`CONSENT_TEXT` and
+`POST /dreamlayer/face/consent` are real, and `identify()`/`enrol()` refuse with
+`no-consent` BEFORE the embedder is reached, so without acceptance no template
+is computed at all. It is the WEARER's consent, accepted on a bystander's
+behalf, and the text says so in those words.
+
+What gates `identify()` is, in order: the Veil, the versioned consent, the
+wearer's switch, the model, no face detected, no match — then either a match, or
+`face_auto_enrol` storing the stranger, or `_discard`.
 
 Full end-to-end test on a source checkout:
 
@@ -36,15 +63,19 @@ Then every path is exercisable: `POST /dreamlayer/face/enrol` with a name and a
 base64 frame, `/identify` for match and no-match, `/forget`, `GET
 /dreamlayer/face` for status, plus erase-everything and the retention sweep.
 
-**Matching is enrolment-only**, and that is the mechanism rather than a gate:
-the index contains only people the wearer named, so there is nothing for a
-stranger's face to match against. Making the device "recognise anyone" is
-therefore not a gate removal — it requires AUTO-ENROLLING every face the camera
-sees, which is a face database of bystanders. That change would falsify
-`landing/privacy.html`, `docs/gitbook/privacy.md` and the iOS purpose strings,
-trip `test_advertised_claims.py`, and collect biometric identifiers from people
-who never agreed (BIPA is per-violation; GDPR Art. 9 is special category). It
-does not need to happen for testing, which is what it keeps getting reached for.
+**Auto-enrol shipped, on the owner's explicit call** (`9f0f7c5`). Matching used
+to be enrolment-only — the index held only people the wearer named, so a
+stranger had nothing to match against. `face_auto_enrol` (default False) changes
+that answer: a face matching nobody is STORED rather than discarded, including
+bystanders who never agreed and cannot agree in the app. Unnamed identities age
+out on the 90-day warm window; named ones are kept until erased.
+
+Every claim this falsified was corrected in the same round (`8666a2e`, 23
+confirmed-false sentences across `landing/privacy.html`, `landing/index.html`,
+six gitbook pages and three `docs/` pages), and `test_advertised_claims.py` grew
+from 9 tests to 16 to hold them. The consent text names biometric templates,
+bystanders, BIPA and GDPR Art. 9 outright. **If you change the default, that
+copy becomes false again** — the standing rule applies.
 
 ### The bar: 1:1 and reachable, no partial wiring
 
@@ -88,48 +119,68 @@ If a lens cannot pass all eight, do not half-wire it and move on. Leave it, and
 write down which check it fails and what it is blocked on. A documented gap is
 recoverable; a lens that looks wired and is not costs the next audit a day.
 
-### 0. FIRST: routes for the seven lenses that already work (half a day)
+### 0. The seven hosted lenses (DONE — and it was worse than "no routes")
 
-`ai_brain/server/lens_hosts.py` hosts Provenance, Candor, Commitment Drift,
-Saga, Stasis, Premonition and Inner Weather. They load, they answer, they are
-tested (`tests/test_brain_lens_hosts.py`, 17 tests) — and **nothing in
-`_POST_ROUTES` exposes them, so the phone still cannot call one of them.**
+This section used to say the seven lenses in `lens_hosts.py` "load, they answer,
+they are tested" and only lacked routes. **The first half was wrong**, and the
+parity audit caught it: `brain.lenses()` had exactly ONE production call site —
+`purge_memories()`, which nulls the set two lines later — so in a shipped build
+no lens object was ever constructed at all. Importable-never-called is
+`decisions/0001` verbatim, one layer up, and `scripts/lens_reachability.py`
+listed all seven as "reachable" throughout, exactly as its own header warns it
+would. **A clean reachability run is not evidence a lens executes.** Check 2 of
+the bar below means CONSTRUCTED ON A PATH A USER REACHES, not "a constructor
+exists somewhere".
 
-That is the #542 last-mile bug repeating: a capability that exists and cannot
-be reached is the same as one that does not exist. Do this before building
-anything new, because it converts finished work into shipped work.
+Closed now: `EarHost.ingest_caption` feeds the ring through
+`BrainLenses.ingest_utterance`, nine POST and six GET routes are registered, and
+`phone-app/app/lenses.tsx` + `src/state/useLensStore.ts` are the surface. 40
+tests in `test_brain_lens_wiring.py`, none of which touches a lens directly —
+each drives the ear, a route, a spoken intent or a sweep and asserts the lens
+moved. 21 mutants, all killed.
 
-Follow the pattern already in `server.py` for `/dreamlayer/face/*`: handlers
-just above `_POST_ROUTES = {`, entries in the dict, token-gated (not local-only
-— the phone is the surface), every other gate left inside the host so a route
-cannot become a way around the Veil. Test over a live server, and assert what
-the WIRE carries, not just the status code.
+Six real defects fell out of doing it, listed here because each is a shape worth
+recognising rather than a one-off:
 
-Two of these hand back finished HUD cards already, so the HUD work in §3 is
-smaller than it looks:
+| What | Why it was invisible |
+|---|---|
+| "hold that thought" returned `{"intent": "stasis_freeze"}` and the phone rendered the literal text `(stasis_freeze)` | 200 OK. A working-looking no-op, live in the shipped product |
+| retention's statement-ring leg read `getattr(brain, "_lenses")` | None at every moment a sweep could observe it — the same bug in miniature |
+| the sighting purge ASSIGNED `hot_purged` where it should have added | the ledger line disclosing an automatic deletion under-counted by exactly the statements taken |
+| the 24 h ring purge deleted in-force commitments | their rows are cold-forever on disk and the drift lifetime is 48 h; fixed with `purge_before(keep_kinds=)` |
+| erase-everything missed `vault/quest_log.json` | xp, streak and badges survived a wipe and a fresh lens set read them straight back |
+| nothing emitted `quest_done`/`quest_rescue`/`streak` | all five quest achievements in `saga.py` were unlockable by nothing; the phone drew them permanently locked |
 
-```
-candor.check(claim)      -> ConsistencyResult(fired, prior_summary, card{ConsistencyCard})
-provenance.trace(claim)  -> ProvenanceResult(found, origin, supports, card{ProvenanceCard})
-```
+Still open on these seven: Commitment Drift reads `ring.latest(kind="task")`
+only, so a `promise` row with a real due date is never tracked — that is the
+Orchestrator's own design and changing it changes both surfaces, so it is
+recorded rather than quietly altered. And Inner Weather has a route and a lens
+but **no phone code posts `imu_delta`/`imu_pose`** — the store method exists,
+the sensor feed does not.
 
-### 1. The four lenses still unreachable
+### 1. The three lenses still unreachable
 
 `scripts/lens_reachability.py` is the check — run it, it exits non-zero while
-anything is unreachable. Puente is **deliberately excluded**: the owner has
-retired it in favour of Rosetta (see §2). That leaves four, and their real
-constructor shapes are below so you do not have to re-derive them:
+anything is unreachable. It reports **three** now: Scholar is wired (below) and
+Puente is gone rather than excluded. Their constructor shapes, so you do not
+have to re-derive them:
 
 ```
 LucidRecall(social_lens, memory_index, privacy, classify_fn)   .query()
-Scholar(read_fn)                                   .answer() .form() .explain()
 TimbreReactor(baselines, privacy, now_fn)          .tick()
 YesterlightController(ledger, now_fn)              .tick()
 ```
 
-- **Scholar** is the most user-visible and the easiest: `read_fn` is OCR, and
-  the Brain already has it — `WorldLensHost.look_lens(frame, "doc")` runs the
-  `doc_read` extra. Wire that as `read_fn` and Scholar works.
+- **Scholar — DONE.** Note the earlier advice here was wrong: `look_lens(frame,
+  "doc")` is an OCR reader returning `{"text": …}`, but `read_fn(frame, prompt)`
+  wants a MODEL REPLY TO A PROMPT. The right seam was `WorldLensHost._describe`,
+  the same one `TasteLens` uses — the docstring on `backend.describe` says it
+  outright ("the caller owns the prompt and parses the reply"). Wired at
+  `world_lens.py`, routed as `POST /dreamlayer/scholar?mode=answer|form|explain`,
+  and on the phone as a four-way mode strip on the Look screen (one photo, four
+  questions). 11 tests, including one that asserts SCHOLAR'S OWN PROMPT reached
+  the model — a route that sent the object-lens prompt would still return a
+  parsed card and still look like it worked.
 - **Lucid Recall** wants a `social_lens` and a `memory_index`. The Brain now has
   a real face-recall host (`brain.face_recall()`) and `brain.index`; check
   whether `LucidRecall` needs the full `SocialLens` surface or only `identify`,
@@ -147,49 +198,112 @@ YesterlightController(ledger, now_fn)              .tick()
   itself Orchestrator-only — so this is a two-step: give it a Brain-side home,
   not just an import.
 
-### 2. Retire Puente (the owner's call: Rosetta supersedes it)
+### 2. Retire Puente (DONE)
 
-Blast radius, already measured — this touches PUBLIC COPY, so it is not a
-delete:
+Module, tests, scenario fixture and the `Feature` entry deleted; every public
+mention rewritten across `landing/index.html`, both READMEs, five gitbook pages,
+`docs/AI_BRAIN.md`, `docs/LENSES.md` and all eleven locales of
+`phone-app/src/i18n/translations.ts`.
+
+The copy question this section asked has a real answer: **Rosetta does cover the
+ear.** `ops_world_lenses.translate_heard` ("Rosetta Live") was already the live
+caption path, riding a figment stage rather than a per-utterance card, and it
+had superseded Puente in practice long before this. Puente knew Spanish and
+English against Rosetta's dozen-plus languages and non-Latin scripts, and had no
+caller outside its own test. So the copy now says Rosetta is the eye AND the
+ear, which is true, rather than dropping a half nobody serves.
+
+### 3. Every HUD item, on phone and glasses — MEASURED, 18 still open
+
+The checker this section asked for exists: **`scripts/hud_reachability.py`**. It
+asks both halves for each of the 24 declared cards — does anything a shipped
+Brain can reach PRODUCE it, and does `halo-lua` have a real drawing for its
+`type` — and exits non-zero while either is missing.
+
+**The glass half is fine: 24 of 24 have a dedicated renderer branch.** The Brain
+half is not:
 
 ```
-host-python/src/dreamlayer/orchestrator/puente_bridge.py   (the module)
-host-python/src/dreamlayer/tests/test_puente_bridge.py     (its tests)
-host-python/src/dreamlayer/lenses.py                       (the Feature)
-docs/gitbook/lenses.md · hardware-seams.md · hud-cards.md
-docs/gitbook/reference/cards.md · glossary.md
-docs/AI_BRAIN.md · docs/LENSES.md
-landing/index.html
+NO BRAIN-SIDE PRODUCER (18 of 24)
+  Always ready · Ask first · Ask it anything · Forget that · Hey Juno
+  It remembers for you · Keep a moment · Live captions · Off your usual path
+  Privacy Veil · Private zones · Read the room · Rewind your day
+  The answer before you speak · Truth, checked live · What you owe
+  Where you left it · Your inner weather
 ```
 
-The standing instruction applies: when you change what the software does, fix
-the claims in the same change. Rosetta covers the eye (translate what you look
-at); Puente was the ear (live voice translation). If Rosetta does **not** cover
-the ear, say so plainly rather than letting the copy imply it does.
+Verified by hand, not just by the script: every one of their producers lives in
+`orchestrator/ops_*.py` — `ops_conversation`, `ops_ingest`, `ops_commitments`,
+`ops_juno_attention`, `ops_world_lenses`. That is `decisions/0001` again, for
+the card layer this time. Six do have Brain-side producers: Hark (`ear.py`),
+Person Context, Person Dossier, World Anchor, Morning Brief, and Commitment
+Drift.
 
-### 3. Every HUD item, on phone and glasses
+Two traps for whoever closes this, both already paid for once:
 
-`demo/catalog.py` declares 24 HUD cards; `hud/cards.py` is where they are built.
-The job is that **every one is reachable on both surfaces**, not that 24 files
-exist. Build the equivalent of `scripts/lens_reachability.py` for cards — a
-check that fails while any declared card has no producer reachable from the
-Brain AND no path to the glass — and then close what it finds. A card that only
-a demo can produce is the same class of lie as a lens only the Orchestrator can
-build.
+- **Do not hand-roll the card dict.** `lens_hosts._drift_card` originally built
+  a `{primary, detail, footer}` lookalike; `renderer.lua`'s
+  `draw_commitment_drift` reads `task`, `person`, `drift_state` and `decay` and
+  would have drawn it wrong while the JSON looked perfect. Call the real
+  `hud/cards.py` builder.
+- **Do not trust a clean run of the checker without reading it.** Its first
+  draft counted `hud/cards.py` itself as a producer (`ALL_SAMPLES` is a dict of
+  literal calls to every builder) and reported 0 gaps on a product with 18.
+  `tests/test_hud_reachability_checker.py` pins that and the sibling bug where
+  the Lua scan missed the whole `DRAW` dispatch table.
 
-### 4. Capabilities
+### 4. Capabilities — MEASURED, 19 open questions
 
-`capabilities.py` has ~39 entries and a meter that reports installed/active. If
-12 of 28 lenses were unreachable, assume the meter is over-reporting too, and
-verify each capability the same way: does anything the Brain can reach actually
-exercise it? `ear.py:239-267` is the precedent for getting this right — it
+It is **74** entries, not ~39. `scripts/capability_reachability.py` measures
+them the same way as the other two checkers, using the field
+`capabilities.py` already carries: every `Cap` names a `seam`, "the adapter file
+that consumes it", so a seam outside the Brain's import closure cannot be
+exercised however green the meter reads. (`installed()` asks whether a module
+IMPORTS — "is the library on disk", not "does anything here use it".)
+
+```
+74 declared · 41 seams the Brain can load
+19 OPEN · 13 unreachable by design · 1 documented recipe, no adapter
+```
+
+This one **exits 0 on purpose** and its two siblings do not. "A declared lens
+cannot be loaded" and "a promised card cannot be drawn" have no legitimate
+reading; "this adapter belongs to the Orchestrator" has several, and 13 of them
+are exactly that — `wake_word`, `speaker_id`, `nlp`, `onnx_speech`, `fs_watch`,
+`lan_discovery`, `mesh_range`, `home_hud`, `persona_tuning`,
+`structured_concurrency` (Orchestrator), `spatial_viz` (simulator),
+`frame_glasses` (another device), `mlx_train` (the REM job the Brain does not
+run). Wiring those would be the regression.
+
+The 19 open ones need triage, and they split two ways — **the fixes are
+opposite, so do not batch them**:
+
+- **Stale seam string.** `vector_search` points at `memory/vector_store.py`
+  while the Brain's actual vector path is `memory/ann_index.py` (usearch), which
+  `retention_live._ann_for` and the erase path both use. The capability is live
+  and the meter is describing the wrong file. Fix the string.
+- **Genuinely not wired.** `social_graph`, `memory_dedup`, `typed_docs`,
+  `typed_models`, `facial_aus`, `causal_fusion`, `diarization`, `asr_alignment`,
+  `object_tracking`, `live_interpret`, `event_bus`, `skia_render`,
+  `lsl_streams`, `extism_plugins`, `wasm_plugins`, `plugin_entrypoints`,
+  `structured_output`, `typed_pipeline`. Each is a decision: wire it Brain-side
+  or say plainly it is Orchestrator-only and add it to `_BY_DESIGN` with the
+  reason. **Do not silently move one to `_BY_DESIGN` to shrink the list** — that
+  bucket is a claim, and it is the claim the next audit will check.
+
+Note two that are their own conversation: `diarization` and `asr_alignment` are
+speaker attribution, which `ear.py:129-131` records as deliberately absent.
+Wiring them is the same biometric decision as Timbre in §1, not a plumbing job.
+
+`ear.py:239-267` is the precedent for getting the RUNTIME half right — it
 promotes only the caps a run genuinely drives, after an earlier blanket
 promotion lied about engines that were not running.
 
 ### 5. Module reachability — the number is a DIAGNOSTIC, not a target
 
-`scripts/lens_reachability.py` reports 189 of 390 modules reachable from the
-Brain. **Do not try to make that 390.** Three reasons, and they matter:
+`scripts/lens_reachability.py` reports **199 of 390** modules reachable from the
+Brain (up from 189 — the lens hosts, Scholar and their transitive imports).
+**Do not try to make that 390.** Three reasons, and they matter:
 
 - `orchestrator/*`, `simulator/*`, `main.py` and the emulator bridge are
   *supposed* to be unreachable. Making the Brain import them is precisely the
@@ -205,6 +319,11 @@ zero user-facing capabilities unreachable, zero HUD cards unproducible** — the
 triage the remaining modules into "should be Brain-reachable → fix" and "must
 not be → record why", and put that list somewhere durable. A number that goes
 up for a bad reason is worse than a number that stays put for a good one.
+
+Two of those three now have a checker that exits non-zero while the goal is
+unmet — `scripts/lens_reachability.py` (3 lenses left: Lucid Recall, Timbre,
+Yesterlight) and `scripts/hud_reachability.py` (18 cards left, §3).
+Capabilities is the one still measured by eye.
 
 ### Step 1 — retention (DONE, #541)
 
@@ -256,11 +375,13 @@ computed at all.
    other about `type(exc).__name__` and cost a review round. A test now pins them
    agreeing; keep it that way.
 
-### Step 3 — lens hosts (PARTIAL, #543)
+### Step 3 — lens hosts (#543, then finished — see §0)
 
 `ai_brain/server/lens_hosts.py` hosts seven of the twelve unreachable lenses.
-They load and answer through a real `Brain(cfg)`; **they have no HTTP routes,
-so the phone cannot reach them yet** — that is item 0 above.
+#543 made them load and answer through a real `Brain(cfg)` and stopped there;
+what that release actually shipped was seven lenses **nothing ever
+constructed** — §0 has the full account, and it is the most instructive failure
+in this file. Fed, routed and surfaced now.
 
 The build worth knowing about: Provenance, Candor and Commitment Drift each take
 a `ring` of what the wearer SAID, and the Brain had nothing of the kind (the ear
@@ -277,6 +398,17 @@ any held Stasis thought.
 `ctx.imu_delta`/`imu_pose`/`extra` off a context object written for the glasses.
 `BrainLenses.weather_tick(payload)` adapts the phone's IMU payload into that
 shape. With no sensors it reports calm — it does not invent a reading.
+
+**And that last sentence is the lens's open problem, not its safety net.** The
+adapter's docstring claimed the phone "already posts heading and tilt on the
+live path"; a repo-wide grep for `imu_delta` / `imu_pose` / `self_prosody`
+across `phone-app/` returns nothing but the adapter's own lines. The route
+(`POST /dreamlayer/weather`) and the store method (`useLensStore.weatherTick`)
+are wired and tested with real motion, so the plumbing is proven — but no
+screen samples the phone's accelerometer yet, so in a shipped build the lens
+reports calm forever, which is indistinguishable from a working lens reporting
+a calm wearer. Whoever picks this up: the missing piece is a sensor subscription
+on the phone, not anything Brain-side.
 
 ### The face copy, timed to the release (still pending)
 

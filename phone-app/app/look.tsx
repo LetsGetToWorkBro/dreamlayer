@@ -13,12 +13,13 @@
  */
 import React from "react";
 import { ActivityIndicator, Text, View, StyleSheet } from "react-native";
-import { useBrainStore, LookPanel } from "../src/state/useBrainStore";
+import { useBrainStore, LookPanel, ScholarMode, ScholarRead, ScholarField } from "../src/state/useBrainStore";
 import { Screen } from "../src/ui/components/Screen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { Card } from "../src/ui/components/Card";
 import { EmptyState } from "../src/ui/components/EmptyState";
 import { PrimaryButton } from "../src/ui/components/PrimaryButton";
+import { Tappable } from "../src/ui/components/Tappable";
 import { play } from "../src/services/haptics";
 import { t } from "../src/i18n";
 import { useTheme, makeThemedStyles } from "../src/ui/theme/useTheme";
@@ -109,10 +110,71 @@ export function LensPanel({ panel }: { panel: LookPanel }) {
   );
 }
 
+/** What one photo is FOR. Recognising a thing and reading a thing are
+ *  different questions of the same frame, and Scholar answers the second —
+ *  until now it was outside the Brain's import closure entirely, so this strip
+ *  had nowhere to send you. `look` is the World lens; the other three are
+ *  Scholar's three faces. */
+type ReadMode = "look" | ScholarMode;
+const MODES: { key: ReadMode; label: string; hint: string }[] = [
+  { key: "look", label: "Look", hint: "what is this?" },
+  { key: "answer", label: "Answer", hint: "a question in view" },
+  { key: "form", label: "Form", hint: "what to write in each field" },
+  { key: "explain", label: "Explain", hint: "dense text, plain words" },
+];
+
+function ScholarPanel({ read }: { read: ScholarRead }) {
+  const s = useS();
+  const { colors } = useTheme();
+  if (!read.ok) {
+    // Scholar's own words for why it could not read — no vision tier, an
+    // unreadable frame, the Veil. Never replaced with a generic failure.
+    return (
+      <Card accent={colors.accentAttention}>
+        <Text style={[typography.body, { color: colors.textPrimary }]}>
+          {read.detail || "Couldn't read this."}
+        </Text>
+      </Card>
+    );
+  }
+  const fields = read.items as ScholarField[];
+  const isForm = read.mode === "form" && fields.length > 0 && typeof fields[0] === "object";
+  return (
+    <Card>
+      <Text style={[typography.eyebrow, { color: colors.accentMemory }]}>
+        {read.mode.toUpperCase()}
+      </Text>
+      <Text style={[typography.title, { color: colors.textPrimary, marginTop: space.xs }]}>
+        {read.primary}
+      </Text>
+      {read.detail ? (
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.xs }]}>
+          {read.detail}
+        </Text>
+      ) : null}
+      {isForm
+        ? fields.map((f, i) => (
+            <View key={i} style={s.field}>
+              <Text style={[typography.body, { color: colors.textPrimary }]}>{f.label}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{f.guidance}</Text>
+            </View>
+          ))
+        : (read.items as string[]).map((it, i) => (
+            <Text key={i} style={[typography.body, { color: colors.textPrimary, marginTop: space.xs }]}>
+              · {String(it)}
+            </Text>
+          ))}
+    </Card>
+  );
+}
+
 function LiveLook() {
   const s = useS();
   const { colors } = useTheme();
   const look = useBrainStore((s) => s.look);
+  const readScholar = useBrainStore((s) => s.readScholar);
+  const [mode, setMode] = React.useState<ReadMode>("look");
+  const [read, setRead] = React.useState<ScholarRead | null>(null);
   const [permission, requestPermission] = kit!.useCameraPermissions();
   const camRef = React.useRef<any>(null);
   const [busy, setBusy] = React.useState(false);
@@ -131,6 +193,7 @@ function LiveLook() {
     if (busy || !camRef.current) return;
     setBusy(true);
     setPanel(null);
+    setRead(null);
     play("action");
     try {
       const photo = await camRef.current.takePictureAsync({
@@ -138,9 +201,15 @@ function LiveLook() {
         quality: 0.5,
         skipProcessing: true,
       });
-      const res = await look(photo?.base64 ?? "");
-      setPanel(res);
-      play(res.ok ? "success" : "warn");
+      if (mode === "look") {
+        const res = await look(photo?.base64 ?? "");
+        setPanel(res);
+        play(res.ok ? "success" : "warn");
+      } else {
+        const res = await readScholar(photo?.base64 ?? "", mode);
+        setRead(res);
+        play(res.ok ? "success" : "warn");
+      }
       // expo-camera ALWAYS writes the JPEG to the app cache; we only ever use the
       // in-memory base64, so delete the on-disk copy — a captured frame must not
       // linger in the cache after the look (refute 2026-07-18). Best-effort, and
@@ -171,9 +240,24 @@ function LiveLook() {
       <View style={s.viewport}>
         <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing="back" />
       </View>
+      <View style={s.modes}>
+        {MODES.map((m) => (
+          <Tappable
+            key={m.key}
+            onPress={() => { setMode(m.key); setPanel(null); setRead(null); }}
+            style={[s.mode, mode === m.key ? s.modeOn : null]}
+            accessibilityLabel={`${m.label} — ${m.hint}`}
+          >
+            <Text style={[typography.caption, {
+              color: mode === m.key ? colors.textPrimary : colors.textSecondary,
+            }]}>{m.label}</Text>
+          </Tappable>
+        ))}
+      </View>
       <PrimaryButton label={busy ? t("look.looking") : t("look.look")} onPress={snap} />
       {busy && <ActivityIndicator color={colors.accentSuccess} />}
       {panel && <LensPanel panel={panel} />}
+      {read && <ScholarPanel read={read} />}
     </View>
   );
 }
@@ -207,6 +291,18 @@ const useS = makeThemedStyles(({ colors, platinum }) => StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
+  /* the one-photo, four-questions strip: Look recognises, the other three read */
+  modes: { flexDirection: "row", gap: space.sm },
+  mode: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+  },
+  modeOn: { backgroundColor: colors.surfaceElevated, borderColor: colors.accentMemory },
+  field: { marginTop: space.sm, gap: 2 },
   row: { marginTop: space.sm, gap: 2 },
   rowHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   tier: { color: colors.textSecondary ?? "#8aa", marginTop: space.md },

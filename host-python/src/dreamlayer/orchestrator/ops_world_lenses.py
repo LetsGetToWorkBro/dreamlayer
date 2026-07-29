@@ -323,8 +323,8 @@ class WorldLensOps(OpsHost):
 
 
     def translate_seen(self, text: str, target: str = "en"):
-        """Rosetta Lens (the eye): translate text you look at. Puente is the
-        ear (live voice translation)."""
+        """Rosetta Lens (the eye): translate text you look at.
+        `translate_heard` below is the same lens's ear."""
         return self.rosetta.read(text, target=target)
 
     def translate_heard(self, text: str, target: str = "en", speaker: str = ""):

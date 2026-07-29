@@ -71,9 +71,9 @@ One family, three directions.
   half rides the opt-in cloud tier.
 - **AI Brain** — name and explain anything; ask your own files/mail. Tiered:
   on-device → your Mac mini → opt-in cloud.
-- **Rosetta Lens** — translate text you *look at* (a menu, a sign): the eye.
-- **Puente** — live voice translation: the ear. Together, Rosetta + Puente
-  are "understand any language."
+- **Rosetta Lens** — "understand any language", both halves: the eye
+  (translate text you *look at* — a menu, a sign) and the ear (live captions
+  of what someone is saying). One detector, one translation seam.
 - **Scholar** — look at a test question and the answer is on the glass; look at
   a form and each field says what to write; look at dense legal or technical
   text and it comes back in plain words. Reads through the Brain's vision tier

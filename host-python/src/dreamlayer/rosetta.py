@@ -1,14 +1,23 @@
 """rosetta.py — Rosetta Lens: understand any language.
 
-Two halves, one banner:
-  the ear   — live voice translation (Puente, orchestrator/puente_bridge.py):
-              real-time captions of what someone is *saying*.
-  the eye   — this module: text you *look at* (a menu, a sign) → its meaning.
+Two halves, one banner, one engine — THIS module:
+  the eye   — text you *look at* (a menu, a sign) → its meaning
+              (`ops_world_lenses.translate_seen`).
+  the ear   — what someone is *saying*, captioned live
+              (`ops_world_lenses.translate_heard`, "Rosetta Live").
 
-The eye half is a clean seam: a translation model plugs in via `translate_fn`
+Both call `read()` below. There used to be a second engine for the ear —
+Puente, `orchestrator/puente_bridge.py` — with its own Spanish/English word
+list and its own card path. It was retired: it covered two languages to this
+module's dozen-plus (including non-Latin scripts, which its heuristic read as
+English), it had no caller outside its own test, and `translate_heard` had
+already superseded it with a figment-backed stage. One detector, one seam, one
+set of languages.
+
+Translation itself is a clean seam: a model plugs in via `translate_fn`
 (on-device, or the AI brain). With none wired it's a no-op that returns the
 source, so the pipeline runs; a real model makes it useful. Source-language
-detection is a light offline heuristic (shared vocabulary with Puente).
+detection is a light offline heuristic.
 """
 from __future__ import annotations
 

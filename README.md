@@ -123,7 +123,7 @@ the full breakdown is in [`docs/LENSES.md`](docs/LENSES.md).
 | **Memory** | your life, remembered | Dream Mode · Ghost Layer · Lucid Recall · REM · Yesterlight · Premonition · Waypath · Ember · Stasis |
 | **People** | who's around you | Social Lens · Timbre · Name Capture |
 | **Truth** | what's true, and where beliefs come from | Truth Lens · Candor · Provenance |
-| **World** | understand what you look at | Juno (look → know) · Label Lens · Scholar · TasteLens · AI Brain · Rosetta · Puente |
+| **World** | understand what you look at | Juno (look → know) · Label Lens · Scholar · TasteLens · AI Brain · Rosetta |
 | **Life** | do, keep, and build | Commitment Drift · Saga · Reality Compiler (Rehearsal + figments) |
 | **Together** | two wearers, one sky | Confluence |
 

@@ -69,6 +69,24 @@ export type LookPanel = {
   lines?: string[];
   localOnly?: boolean;
 };
+/** Scholar's three faces of one move — differing only in what is asked of the
+ *  vision tier, not in how the frame is captured. */
+export type ScholarMode = "answer" | "form" | "explain";
+export type ScholarField = { label: string; guidance: string };
+export type ScholarRead = {
+  ok: boolean;
+  mode: ScholarMode;
+  /** the answer, the form's one-line summary, or the plain-words gist */
+  primary: string;
+  /** the "why" for an answer; on `ok: false` it is the honest reason */
+  detail: string;
+  /** form fields, or the key points of an explanation */
+  items: ScholarField[] | string[];
+  confidence: number;
+  card?: Record<string, unknown>;
+  reason?: string;
+  veiled?: boolean;
+};
 export type BriefSection = { title: string; items: string[] };
 export type LongBrief = {
   text: string;
@@ -163,6 +181,12 @@ type BrainState = {
   // the World lens: a phone photo → the on-glass panel (Object Lens / TasteLens),
   // provider rows and all — the phone standing in for the glasses' camera.
   look: (imageB64: string, opts?: { lens?: string; facet?: string; label?: string; attrs?: Record<string, unknown> }) => Promise<LookPanel>;
+
+  // Scholar — the same photo, read instead of recognised: a test question
+  // answered, a form explained field by field, dense text put in plain words.
+  // The lens was outside the Brain's import closure entirely until now, so no
+  // phone surface could have called it. POST /dreamlayer/scholar.
+  readScholar: (imageB64: string, mode?: ScholarMode, arg?: string) => Promise<ScholarRead>;
 
   // the lens relay — closes the glass→Brain→glass loop for the live showcases:
   //  • feedLens streams host text (a translation, a camera label, a memory)
@@ -594,6 +618,42 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       };
     } catch {
       return empty("Couldn't reach your Brain — try again when it's back.");
+    }
+  },
+
+  readScholar: async (imageB64, mode = "answer", arg = "") => {
+    const nope = (reason: string, veiled = false): ScholarRead => ({
+      ok: false, mode, primary: "", detail: reason, items: [],
+      confidence: 0, reason, veiled,
+    });
+    // Same "enforce, don't trust upstream" rule as look(): a Scholar read
+    // ships a full photo, and the phone's Veil is a different signal from the
+    // Brain's incognito posture. Both gate; this is the near one.
+    if (veilClosed(get().capturePaused)) return nope("The Veil is up — reading is paused.", true);
+    const m = get().macMini;
+    if (!m.connected || !m.url) return nope("Pair your Brain to read through it.");
+    try {
+      const r = await brainFetch(
+        m,
+        `/dreamlayer/scholar?mode=${encodeURIComponent(mode)}&q=${encodeURIComponent(arg)}`,
+        { method: "POST", body: JSON.stringify({ image: imageB64 }) },
+      );
+      const j = await r.json();
+      // `ok: false` is Scholar being honest — no vision tier, an unreadable
+      // frame, the Veil — and carries its own words. Never overwrite them with
+      // a generic failure.
+      return {
+        ok: !!j?.ok,
+        mode: (j?.mode ?? mode) as ScholarMode,
+        primary: j?.primary ?? "",
+        detail: j?.detail ?? j?.reason ?? "",
+        items: Array.isArray(j?.items) ? j.items : [],
+        confidence: typeof j?.confidence === "number" ? j.confidence : 0,
+        card: j?.card ?? undefined,
+        reason: j?.reason,
+      };
+    } catch {
+      return nope("Couldn't reach your Brain — try again when it's back.");
     }
   },
 

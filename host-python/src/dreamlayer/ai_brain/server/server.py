@@ -4716,6 +4716,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             body = b"" if stop else self._raw(live_mod.MAX_AUDIO_BYTES)
             self._json(200, live_mod.hear(brain, body, src_rate=sr, stop=stop))
 
+        def _post_scholar(self, path, qs):
+            """Scholar: read a question, a form, or dense text.
+            `?mode=answer|form|explain`, `?q=` the spoken question (answer) or
+            the purpose (form). Body is the JPEG, same cap and same
+            never-persisted decode as a look.
+
+            Scholar lived outside the Brain's import closure entirely — no code
+            path could load it, so this route is the whole of its reachability
+            from the phone."""
+            from . import live as live_mod
+            mode = (qs.get("mode", ["answer"])[0] or "answer").strip().lower()
+            arg = (qs.get("q", [""])[0] or "").strip()
+            data = self._raw(live_mod.MAX_FRAME_BYTES)
+            self._json(200, live_mod.scholar(brain, data, mode=mode, arg=arg))
+
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL
             SynesthesiaCard (six-word phrase + gestural sprite) and — when a
@@ -5557,6 +5572,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/message/send": _post_message_send,
             "/dreamlayer/live/look": _post_live_look,
             "/dreamlayer/live/hear": _post_live_hear,
+            "/dreamlayer/scholar": _post_scholar,
             "/dreamlayer/live/dream/scene": _post_live_dream_scene,
             "/dreamlayer/rehearsal/review": _post_rehearsal,
             "/dreamlayer/recall/sealed": _post_sealed_recall,

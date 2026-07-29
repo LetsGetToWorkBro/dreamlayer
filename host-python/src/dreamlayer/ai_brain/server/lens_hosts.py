@@ -67,6 +67,24 @@ SPOKEN_KINDS = frozenset({"conversation", "promise", "task", "taught", "memory",
                           "heard", "person"})
 
 
+def _due_text(due_ts) -> str:
+    """A due timestamp as the glass says it. Empty when there is no due date —
+    `CommitmentDriftEngine` falls back to a 48-hour lifetime in that case, and
+    inventing "in 2 days" from an implementation default would put a deadline
+    on the glass that the wearer never gave."""
+    if not due_ts:
+        return ""
+    import time as _t
+    left = float(due_ts) - _t.time()
+    if left < 0:
+        return "overdue"
+    if left < 3600:
+        return f"in {max(1, int(left // 60))} min"
+    if left < 86400:
+        return f"in {int(left // 3600)} h"
+    return f"in {int(left // 86400)} d"
+
+
 class _LensGate:
     """The Veil, fail-closed — identical posture to `ear._EarGate`,
     `world_lens._LookGate` and `face_live._FaceGate`. An unreadable trust signal
@@ -508,20 +526,24 @@ class BrainLenses:
 
     @staticmethod
     def _drift_card(rec) -> dict:
-        subject = (rec.event.summary or "a promise").strip()
-        peril = rec.state in ("cracking", "shattered")
-        return {
-            "type": "CommitmentDriftCard",
-            "dismiss_ms": 5000,
-            "eyebrow": "SLIPPING" if peril else "COMMITMENT",
-            "primary": subject[:48],
-            "detail": rec.state,
-            "footer": "tend it or let it go",
-            "color": "accent_error" if rec.state == "shattered"
-                     else "accent_attention" if peril else "accent_memory",
-            "lines": ["SLIPPING" if peril else "COMMITMENT", subject[:48],
-                      rec.state, "tend it or let it go"],
-        }
+        """The REAL `CommitmentDriftCard`, from `hud/cards.py`.
+
+        An earlier version of this built a lookalike dict by hand, which is the
+        subtler half of the parity problem: `renderer.lua` has a dedicated
+        `draw_commitment_drift` keyed on the type, and it reads `task`,
+        `person`, `drift_state` and `decay` — none of which a hand-rolled
+        `{primary, detail, footer}` carries. The card would have drawn, wrong,
+        and looked fine in JSON. `scripts/hud_reachability.py` exists because
+        that gap is invisible from the Brain side.
+        """
+        from ...hud import cards
+        return cards.commitment_drift({
+            "task": (rec.event.summary or "a promise").strip(),
+            "person": (rec.event.meta or {}).get("person") or "",
+            "drift_state": rec.state,
+            "decay": float(rec.decay),
+            "due": _due_text(rec.due_ts),
+        })
 
     def tend(self, subject: str):
         """Nudge a commitment — progress without finishing it."""

@@ -1,5 +1,32 @@
 ## Lens parity gap list — 1:1 and reachable
 
+> **Status note, added when the first wave of fixes landed.** This report was
+> written against `8666a2e` and is kept verbatim below — it is the measurement,
+> not a to-do list, and rewriting it in place would destroy the record of what
+> was actually true that day. What has since changed:
+>
+> **Closed.** Both blockers — the ring is fed (`EarHost.ingest_caption` →
+> `BrainLenses.ingest_utterance`) and the lens set is built on a path a user
+> reaches. All seven hosted lenses are routed and have a phone surface
+> (`app/lenses.tsx`). §3(a) retention (both the never-running purge and the
+> masked count), §3(d) Provenance's degenerate inputs (`via` is threaded
+> honestly now, so `firsthand` is reachable and the room ear can never claim
+> it), §3(e) the "hold that thought" no-op, §3(g) the quest tally surviving an
+> erase, the `task` rows deleted by the 24 h hot window, and the five quest
+> badges nothing could unlock. Scholar is wired and routed; Puente is retired.
+>
+> **Still open, and worth reading the detail below for.** §3(b) Inner Weather
+> has a route and a lens and **no phone code posts IMU** — the lens is reachable
+> and its input is not. §3(c) `/dreamlayer/live/weather` and `/dreamlayer/saga`
+> remain decoys for different lenses; the new routes are `/dreamlayer/weather`
+> and `/dreamlayer/quests`. Lucid Recall, Timbre (biometric — see §5) and
+> Yesterlight are still unreachable. Stasis is wired but shallow: no gaze hook,
+> no place signature, no IMU, and its replayed utterance is the PII-scrubbed
+> line rather than verbatim, which is a deliberate narrowing recorded in
+> `lens_hosts.freeze`. Commitment Drift still reads `kind="task"` only, so a
+> `promise` row with a real due date is never tracked — the Orchestrator's own
+> design, recorded rather than quietly changed.
+
 *Audited 2026-07-29 at `8666a2e`, working tree clean. Repo root `/home/user/dreamlayer`; paths below are relative to `host-python/src/dreamlayer/` unless prefixed. Every claim here was verified by running a command against the code at that commit; where a claim could not be settled it says so.*
 
 ---
