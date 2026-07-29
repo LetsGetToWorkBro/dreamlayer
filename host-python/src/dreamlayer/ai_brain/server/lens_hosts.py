@@ -193,7 +193,8 @@ class BrainLenses:
                 pass
 
     def observe(self, kind: str, summary: str, meta=None, ts=None,
-                via: str = "", person: str = "", confidence: float = 0.6) -> bool:
+                via: str = "", person: str = "", confidence: float = 0.6,
+                said_by: str = "") -> bool:
         """Put one statement into the ring.
 
         Veil-gated at the door: while incognito the Brain logs nothing, so the
@@ -236,6 +237,18 @@ class BrainLenses:
                 m.setdefault("via", via)
             if person:
                 m.setdefault("person", person)
+            # `said_by` is WHO UTTERED THIS, and it is a separate key from
+            # `person` because those two mean different things on the same row.
+            # On a raw statement `person` is the speaker; on a promise EXTRACTED
+            # from that statement it is the recipient ("Promise to Ana: …"), and
+            # `ingest_utterance` lets the extracted value win. Reusing it for
+            # "who said it" would make a promise Ana made to Bob read as a
+            # promise BOB made — an attribution the wearer would act on.
+            #
+            # Set unconditionally, never `setdefault`: extraction has no idea who
+            # was speaking, so it must not be able to supply this.
+            if said_by:
+                m["said_by"] = said_by
             self.ring.append(MemoryEvent(kind=str(kind or "memory"),
                                          summary=summary,
                                          confidence=float(confidence),
@@ -247,7 +260,7 @@ class BrainLenses:
             return False
 
     def ingest_utterance(self, text: str, *, via: str = "heard",
-                         person: str = "") -> dict:
+                         person: str = "", said_by: str = "") -> dict:
         """One line of speech in; the ring fed, and Candor's answer out.
 
         This is the caller the lens set never had. `observe()` was the only live
@@ -296,7 +309,7 @@ class BrainLenses:
             log.warning("[lenses] candor on ingest failed: %s",
                         type(exc).__name__)
         kind = "conversation" if via in ("said", "typed") else "heard"
-        if self.observe(kind, text, via=via, person=person):
+        if self.observe(kind, text, via=via, person=person, said_by=said_by):
             out["observed"] += 1
         try:
             from ...pipelines.ingest import extract_events
@@ -307,7 +320,8 @@ class BrainLenses:
                 meta = dict(ev.meta or {})
                 if self.observe(ev.kind, ev.summary, meta=meta, via=via,
                                 person=meta.get("person") or person,
-                                confidence=float(ev.confidence)):
+                                confidence=float(ev.confidence),
+                                said_by=said_by):
                     out["observed"] += 1
         except Exception as exc:                     # noqa: BLE001
             log.warning("[lenses] extract failed: %s", type(exc).__name__)
@@ -784,6 +798,128 @@ class BrainLenses:
             log.warning("[lenses] frames failed: %s", type(exc).__name__)
             return []
 
+    # -- what THEY said, last time -------------------------------------------
+
+    #: Which kind of disagreement this is, as a rank for the card's score dot.
+    #: NOT a probability and never presented as one — `contradicts` returns a
+    #: category, and inventing a percentage from a category is exactly the
+    #: dressed-up-heuristic move the Truth Lens gauge was rejected for.
+    _DISAGREEMENT_RANK = {"negation": 0.9, "antonym": 0.8, "value": 0.7}
+
+    def _by_speaker(self, person: str) -> list:
+        """Ring rows this person is recorded as having SAID.
+
+        Matched on `meta["said_by"]`, never on `meta["person"]`: the latter is
+        the promise RECIPIENT on an extracted row, so keying on it would file
+        "Promise to Ana" under Ana having said it.
+        """
+        want = (person or "").strip().lower()
+        if not want:
+            return []
+        out = []
+        for b in self.ring.latest(limit=RING_CAPACITY):
+            meta = getattr(b.event, "meta", None) or {}
+            if str(meta.get("said_by") or "").strip().lower() == want:
+                out.append(b)
+        return out
+
+    def they_said(self, person: str, claim: str, push: bool = True) -> dict:
+        """Did this person tell you something different last time?
+
+        Truth Lens, reframed. The nine-stage gauge inferred DECEPTION from a
+        bystander's face and voice — an inference with no reliable basis, over
+        stages (`au_detector.process`, `face_embed`) that are documented no-ops.
+        This answers a question that is actually answerable and verifiable:
+        *what did they say before, and does it square with what they just said?*
+        Both sides are quotes the wearer can read and judge. Nothing is inferred
+        about anyone's interior, and no biometric is computed at all.
+
+        ATTRIBUTION IS NEVER GUESSED. `person` is supplied by the caller — the
+        wearer naming who they are talking to — and an empty one is refused
+        rather than resolved. Guessing would mean voiceprinting everyone in
+        earshot, which `ear.py` refuses on purpose; and matching a new claim
+        against a baseline that is not really theirs produces a false accusation
+        about a named individual, which is the failure this whole feature has to
+        avoid to be worth having.
+
+        Compares against THAT PERSON'S rows only. `contradicts()` already
+        refuses pairs whose named subjects are disjoint, but that guards the
+        text; this guards the timeline.
+        """
+        person = (person or "").strip()
+        claim = (claim or "").strip()
+        if not person:
+            return {"fired": False, "reason": "no-attribution",
+                    "detail": "who said it has to be named, never inferred"}
+        if not claim:
+            return {"fired": False, "person": person, "reason": "no-claim"}
+        if not self.privacy.allow_recall():
+            return {"fired": False, "person": person, "reason": "veiled"}
+        try:
+            rows = self._by_speaker(person)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] they_said failed: %s", type(exc).__name__)
+            return {"fired": False, "person": person, "reason": "lens-error"}
+
+        from ...orchestrator.consistency import contradicts
+        for b in rows:                               # newest first
+            prior = (b.event.summary or "").strip()
+            if not prior:
+                continue
+            clash = contradicts(claim, prior)
+            if clash is None:
+                continue
+            out = {"fired": True, "person": person, "claim": claim,
+                   "prior": prior, "reason": clash[0], "detail": clash[1],
+                   "prior_ts": b.ts}
+            if push:
+                from ...hud import cards
+                out["card"] = cards.deviation_alert(
+                    prior_summary=prior, new_summary=claim,
+                    score=self._DISAGREEMENT_RANK.get(clash[0], 0.7),
+                    prior_confidence=float(getattr(b.event, "confidence", 0.0) or 0.0),
+                    new_confidence=0.0)              # unrated: the wearer judges
+                self._push("they_said", out["card"])
+            return out
+        return {"fired": False, "person": person, "claim": claim,
+                "checked": len(rows)}
+
+    def their_word(self, person: str, limit: int = 20) -> dict:
+        """Everything this person told you, and what they promised.
+
+        The other half of "keep track of what people say to you". Promises are
+        separated out because they are the rows with a due date attached and the
+        ones a wearer actually wants back — but they are reported as THEIR
+        promise, from `said_by`, never merged with the wearer's own commitments
+        in `owed()`. Those two must not mix: what you owe and what you are owed
+        are opposite ledgers.
+        """
+        person = (person or "").strip()
+        if not person:
+            return {"person": "", "said": [], "promised": [],
+                    "reason": "no-attribution"}
+        if not self.privacy.allow_recall():
+            return {"person": person, "said": [], "promised": [],
+                    "reason": "veiled"}
+        try:
+            rows = self._by_speaker(person)[:max(1, int(limit))]
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] their_word failed: %s", type(exc).__name__)
+            return {"person": person, "said": [], "promised": []}
+        from ...orchestrator.commitment_drift import _parse_due
+        said, promised = [], []
+        for b in rows:
+            meta = getattr(b.event, "meta", None) or {}
+            row = {"summary": (b.event.summary or "").strip(),
+                   "kind": b.event.kind, "ts": b.ts,
+                   "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
+            if b.event.kind in ("promise", "task"):
+                row["due"] = _due_text(_parse_due(meta.get("due"), b.ts))
+                promised.append(row)
+            else:
+                said.append(row)
+        return {"person": person, "said": said, "promised": promised}
+
     # -- what you owe, and what is worth resurfacing -------------------------
 
     def owed(self, push: bool = True, limit: int = 5) -> dict:
@@ -807,8 +943,16 @@ class BrainLenses:
             self.drift.tick()                        # the clock, same as drift_tick
             # `resolved` is None while open, not False — `is None` rather than
             # a truth test, so a record resolved at ts 0.0 is not read as open.
+            # …and only the WEARER'S OWN. A commitment carrying `said_by` was
+            # uttered by a named other person, and belongs in `their_word`, not
+            # here: what you owe and what you are owed are opposite ledgers, and
+            # merging them puts someone else's promise on your list of debts.
+            # (Caught by test the day `they_said` landed — `owed()` shipped two
+            # commits earlier with no notion of a speaker at all, so every
+            # attributed promise fell into the wearer's ledger.)
             rows = [self._drift_json(r) for r in self.drift.all_records()
-                    if r.resolved is None]
+                    if r.resolved is None
+                    and not str((r.event.meta or {}).get("said_by") or "").strip()]
         except Exception as exc:                     # noqa: BLE001
             log.warning("[lenses] owed failed: %s", type(exc).__name__)
             return {"items": [], "pushed": 0}

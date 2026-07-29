@@ -1934,6 +1934,42 @@ function glassAnswerAheadCard(c){                    /* ON THE TIP OF YOUR TONGU
   gend(c.dismiss_ms || 8000);
 }
 
+function glassDeviationCard(c){                      /* SOUNDS DIFFERENT — THEY said */
+  /* The outward twin of glassConsistencyCard, and it fails the same way through
+     the generic renderer: `prior_summary` lives in `footer`, so what they said
+     LAST time — the entire evidence for the claim — was dropped, leaving
+     "Sounds different…" over a sentence with nothing to compare it to.
+
+     Deliberately NOT a verdict. There is no deception score here and no ring
+     gauge: two quotes, equally weighted, and the wearer decides. The score dot
+     encodes WHICH KIND of disagreement (negation / antonym / value), never a
+     probability that someone is lying. */
+  const ctx = glassCtx(); gback(ctx);
+  const col = GP.confidence_low;
+  garc(ctx, 128, 128, 104, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "Sounds different…").toUpperCase().slice(0, 24),
+        128, 46, col, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 60); ctx.lineTo(208, 60);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+
+  gtext(ctx, "NOW", 128, 78, GP.text_ghost, "sm");
+  const now = gwrap(String(c.primary || c.new_summary || "").trim(), 24).slice(0, 2);
+  now.forEach((ln, i) => gtext(ctx, ln, 128, 98 + i * 15, GP.text_primary, "md"));
+
+  const y = 98 + Math.max(now.length, 1) * 15 + 10;
+  ctx.beginPath(); ctx.moveTo(80, y); ctx.lineTo(176, y);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "LAST TIME", 128, y + 16, GP.text_ghost, "sm");
+  const prior = gwrap(String(c.footer || c.prior_summary || "").trim(), 26).slice(0, 2);
+  prior.forEach((ln, i) => gtext(ctx, ln, 128, y + 34 + i * 14, GP.text_secondary, "sm"));
+
+  /* the kind of disagreement, as a single dot — not a percentage */
+  const s = Math.max(0, Math.min(1, Number(c.score) || 0));
+  ctx.beginPath(); ctx.arc(128, 206, 3 + s * 2, 0, 2 * Math.PI);
+  ctx.fillStyle = col; ctx.fill();
+  gend(c.dismiss_ms || 5000);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3457,6 +3493,7 @@ function renderEvent(ev){
   else if (t === "CommitmentRecallCard") glassOwedCard(c);
   else if (t === "ProactiveMemoryCard") glassProactiveCard(c);
   else if (t === "AnswerAheadCard") glassAnswerAheadCard(c);
+  else if (t === "DeviationAlertCard") glassDeviationCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

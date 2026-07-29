@@ -4560,6 +4560,26 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if ls is not None:
                 self._json(200, {"frames": ls.frames()})
 
+        def _get_they_said(self, path, qs):
+            """Did they tell you something different last time?
+            `?person=Ana&claim=the+deposit+is+1400`.
+
+            `person` is REQUIRED and never inferred — nothing in this product
+            does speaker diarization, and guessing would put a false
+            contradiction against a named individual."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.they_said(qs.get("person", [""])[0],
+                                             qs.get("claim", [""])[0]))
+
+        def _get_their_word(self, path, qs):
+            """Everything this person told you, and what they promised:
+            `?person=Ana`. Their promises are kept separate from yours —
+            what you owe and what you are owed are opposite ledgers."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.their_word(qs.get("person", [""])[0]))
+
         def _get_owed(self, path, qs):
             """Open commitments, most-urgent first, and draws the top one.
 
@@ -4658,6 +4678,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/scrub": _get_scrub,
             "/dreamlayer/factcheck": _get_factcheck,
             "/dreamlayer/owed": _get_owed,
+            "/dreamlayer/theysaid": _get_they_said,
+            "/dreamlayer/their": _get_their_word,
             "/dreamlayer/resurface": _get_resurface,
             "/dreamlayer/forget/last": _get_forget_last,
             "/dreamlayer/cloud": _get_cloud,
