@@ -312,3 +312,59 @@ class TestForgetThat:
         assert '"/dreamlayer/forget/last": _post_forget_last,' in text
         assert '"/dreamlayer/owed": _get_owed,' in text
         assert '"/dreamlayer/resurface": _get_resurface,' in text
+
+
+class TestPromisesAreCommitmentsToo:
+    """The kind mismatch that made "what you owe" answer half the question.
+
+    `pipelines/ingest.py` writes a spoken promise as `kind="promise"` (with meta
+    carrying person, task and due) and only a "remind me to…" phrasing as
+    `kind="task"`. Both `commitment_drift` and `tell` read `kind="task"` alone,
+    so "I'll send Ana the invoice on Friday" — the archetypal commitment, and
+    the only one that names a person — was invisible to them.
+
+    It stayed invisible because the Orchestrator that owns those engines is
+    never built, so nothing user-facing depended on it. `owed()` changed that:
+    it answers a question the wearer ASKED, and an answer that silently omits
+    every promise made to a person is worse than no answer at all.
+    """
+
+    def test_a_spoken_promise_reaches_what_you_owe(self, brain):
+        ls = brain.lenses()
+        ls.ingest_utterance("I will send Ana the invoice on Friday", via="said")
+        subjects = [i["subject"] for i in ls.owed(push=False)["items"]]
+        assert any("Ana" in s for s in subjects), subjects
+
+    def test_the_promise_keeps_the_person_it_named(self, brain):
+        """The reason this matters most: a promise's meta is RICHER than a
+        task's — it is the only ring kind that records who it was made to."""
+        ls = brain.lenses()
+        ls.ingest_utterance("I will send Ana the invoice on Friday", via="said")
+        rows = [i for i in ls.owed(push=False)["items"] if i["person"]]
+        assert rows and rows[0]["person"] == "Ana"
+
+    def test_a_reminder_still_reaches_it(self, brain):
+        """The kind that already worked must not have been traded away."""
+        ls = brain.lenses()
+        ls.ingest_utterance("remind me to call the dentist tomorrow", via="said")
+        subjects = [i["subject"] for i in ls.owed(push=False)["items"]]
+        assert any("dentist" in s for s in subjects), subjects
+
+    def test_ordinary_talk_is_not_a_commitment(self, brain):
+        """The gate has to keep meaning something. A conversation line is not a
+        promise, and widening the kind set must not have swept it in."""
+        ls = brain.lenses()
+        ls.ingest_utterance("the meeting moved to 4pm", via="said")
+        assert ls.owed(push=False)["items"] == []
+
+    def test_both_commitment_engines_read_the_same_kinds(self):
+        """`tell.py` had the identical filter for the identical reason. Sharing
+        one helper is what stops the two answering different questions about
+        what counts as a promise."""
+        import inspect
+        from dreamlayer.orchestrator import tell
+        from dreamlayer.orchestrator.commitment_drift import COMMITMENT_KINDS
+        assert set(COMMITMENT_KINDS) == {"task", "promise"}
+        src = inspect.getsource(tell.TellEngine._baseline)
+        assert "_commitments(" in src
+        assert 'kind="task"' not in src, "tell.py re-grew its own kind filter"

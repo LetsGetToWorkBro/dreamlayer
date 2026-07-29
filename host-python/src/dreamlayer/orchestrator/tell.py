@@ -63,7 +63,12 @@ class TellEngine:
 
     def _baseline(self) -> list:
         """Return recent task/commitment ring buckets above the confidence floor."""
-        buckets = self.ring.latest(kind="task", limit=self.lookback_limit)
+        # Same kind set as commitment drift, for the same reason: a spoken
+        # promise is written as `kind="promise"`, so reading only "task" made the
+        # baseline empty on any real Brain and this engine silent for the wrong
+        # reason. Imported rather than re-listed so the two cannot drift apart.
+        from .commitment_drift import _commitments
+        buckets = _commitments(self.ring, self.lookback_limit)
         return [b for b in buckets if b.event.confidence >= self.min_prior_confidence]
 
     def check(self, transcript: str, confidence: float = 0.80) -> DeviationResult:
