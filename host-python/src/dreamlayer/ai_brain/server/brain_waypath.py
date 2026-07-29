@@ -70,6 +70,47 @@ class WaypathOps(BrainHost):
         if not cue.found:
             return {"intent": "locate", "ok": False, "found": False,
                     "say": f"I don't have a spot saved for your {subject} yet."}
+        # …and draw it, not only speak it. `hud/cards.py` has had an
+        # `object_recall` builder and `halo-lua` a dedicated drawing for it the
+        # whole time; nothing the shipped Brain can reach ever called either, so
+        # "where did I leave my keys" answered as JSON and the glass stayed
+        # blank. That is `decisions/0001` at the card layer.
+        #
+        # Four of the five arguments below are load-bearing:
+        #   * the `cue.place` guard — `waypath_stash` accepts an empty place, and
+        #     `waypath.locate` then says "somewhere you saved it" with `place=""`.
+        #     The card's HERO SLOT is `place`, so that pushes a blank answer.
+        #   * `detail=""` — Brain-side anchors are place-only (no IMU seam), so
+        #     `cue.text` is literally "at <place>". Passing it would print the
+        #     place twice, clipped to two different widths.
+        #   * `confidence=0.9` rather than None — `renderer.lua` initialises the
+        #     confidence arc to MEDIUM and only overrides it when a value is
+        #     present, so None renders as a hedge rather than as neutral. 0.9 is
+        #     what `live_dream` already scores these same anchors.
+        #   * `cue.subject`, never the caller's string — `locate` matches on a
+        #     substring, so the two can differ, and only the stored anchor is
+        #     ours to draw.
+        pushed = 0
+        if cue.place:
+            try:
+                from ...hud import cards
+                from .brain_social import _ago
+                ts = next((getattr(a, "ts", 0.0) for a in self.waypath.anchors()
+                           if (getattr(a, "subject", "") or "").strip().lower()
+                           == (cue.subject or "").strip().lower()), 0.0)
+                pushed = self.push_event("object_recall", cards.object_recall({
+                    "object": cue.subject,
+                    "place": cue.place,
+                    "detail": "",
+                    "last_seen": _ago(ts),
+                    "confidence": 0.9,
+                }), veil_ok=False)
+            except Exception:                # noqa: BLE001 — a card must never
+                pushed = 0                   # cost the wearer their answer
+        # `pushed` rides the response for the same reason the ear's selftest does:
+        # a silently-swallowed push reproduces the exact bug this fixes — 200 OK,
+        # nothing on the glass.
         return {"intent": "locate", "ok": True, "found": True,
                 "subject": cue.subject, "place": cue.place, "detail": cue.text,
+                "pushed": pushed,
                 "say": f"Your {cue.subject} — {cue.text}."}

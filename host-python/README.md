@@ -51,7 +51,7 @@ memory/             anchors, storage, retrieval, ranking
 pipelines/          audio · vision · IMU · place-context ingestion
 bridge/             BLE protocol, hardware translation, the Lua raster harness
 simulator/          a host-side stand-in for the glasses
-rosetta.py          visual translation (Rosetta = eye; Puente = ear/voice)
+rosetta.py          translation — the eye (text you look at) and the ear (live captions)
 lenses.py           the six-lens registry (the mental model, in code)
 plugins/            lens plugins: capability gate, store validation, subprocess/WASM isolation
 sdk/ · cli.py       the plugin-author SDK and the `dreamlayer` CLI (new/validate/pack/install)

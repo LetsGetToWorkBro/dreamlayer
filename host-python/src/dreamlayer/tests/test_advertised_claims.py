@@ -22,6 +22,22 @@ The first two are pinned below. Deliberately NOT pinned: anything needing an
 optional dependency, so this file stays green on a zero-extras install — the
 promises here are about the SHIPPED default, which is the configuration a user
 actually gets.
+
+The 2026-07-29 sweep found a fourth, and it was the biggest:
+
+  * "No stranger face lookup … the shipped face embedder cannot return an
+    identity at all … there is no setting that turns stranger recognition on."
+    A real recogniser now ships behind the opt-in `face` extra, and
+    `BrainConfig.face_auto_enrol` is exactly that setting: with it on, a face
+    matching nobody is PERSISTED rather than discarded, including bystanders
+    who never agreed and cannot agree in the app. The copy was corrected in the
+    same commit as the capability, so the site is never ahead of the build.
+
+    What survived, and is pinned below because a narrow true claim is worth
+    more than a broad false one: the DEFAULT build still cannot identify
+    anyone, `face` is still in no deployment profile, matching is still local
+    only — no public database, no cloud face search — and erase-everything and
+    the retention sweep still reach every stored template.
 """
 from __future__ import annotations
 
@@ -32,12 +48,35 @@ import numpy as np
 import pytest
 
 _SRC = Path(__file__).resolve().parents[1]
+_REPO = Path(__file__).resolve().parents[4]
+
+# The user-facing surfaces corrected on 2026-07-29. The drift guards below read
+# these; on an installed wheel they are absent and the guards skip.
+_PUBLIC_COPY = (
+    "landing/privacy.html",
+    "landing/index.html",
+    "docs/gitbook/privacy.md",
+    "docs/gitbook/perception-memory.md",
+    "docs/gitbook/guide/privacy.md",
+)
+
+
+def _public_copy() -> dict:
+    """The corrected pages, whitespace-flattened so a reflow cannot smuggle a
+    retracted sentence back past a substring check."""
+    out = {}
+    for rel in _PUBLIC_COPY:
+        p = _REPO / rel
+        if not p.exists():
+            pytest.skip(f"{rel} not on disk (installed wheel, not a checkout)")
+        out[rel] = re.sub(r"\s+", " ", p.read_text()).lower()
+    return out
 
 
 # --------------------------------------------------------------------------
-# "No stranger face lookup … the shipped face embedder cannot return an
-# identity at all — with no face model present it declines every frame rather
-# than guessing, so there is no setting that turns stranger recognition on."
+# "A default install cannot recognise a face at all … the face model ships
+# only in the optional `face` package, which is in no install profile, and
+# without it every frame is declined."
 # --------------------------------------------------------------------------
 
 pytestmark_note = "see docs privacy.html § Deliberately not built"
@@ -70,14 +109,15 @@ def test_the_shipped_face_embedder_cannot_identify_anyone():
     emb = FaceEmbedder()
     assert emb.available is False, (
         "the shipped FaceEmbedder reports itself available — something wired a "
-        "real face model into the default build, which the site says we do not do")
+        "real face model into the default build. The site says a default "
+        "install cannot recognise a face at all; correct that copy first.")
 
     rng = np.random.default_rng(7)
     for _ in range(8):
         frame = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)
         assert emb.process_frame(frame) is None, (
             "the shipped face embedder returned an embedding for an arbitrary "
-            "frame — stranger recognition is reachable in the default build")
+            "frame — face recognition is reachable in the default build")
 
 
 def test_the_face_pack_is_in_no_deployment_profile():
@@ -120,6 +160,181 @@ def test_a_uniform_frame_does_not_assert_a_face():
                   np.full((32, 32, 3), 255, np.uint8),
                   np.ones((1, 1, 3), np.uint8) * 255):
         assert emb.process_frame(frame) is None
+
+
+# --------------------------------------------------------------------------
+# The auto-enrol copy, 2026-07-29. The site now says a specific, narrow, ugly
+# thing instead of a broad comfortable falsehood, and every clause of it is
+# pinned here so it cannot drift back in either direction — neither into
+# "we don't do that" nor into a vaguer, safer-sounding overstatement.
+# --------------------------------------------------------------------------
+
+def test_a_fresh_install_has_face_recall_off_unconsented_and_not_enrolling():
+    """"Recognition is off by default … auto-enrol is a further switch, off by
+    default … a default install has no weights and declines every frame."
+
+    Three separate defaults, asserted separately, because the copy claims each
+    one on its own and a reader relies on all three."""
+    from dreamlayer.ai_brain.server.store import BrainConfig
+
+    cfg = BrainConfig()
+    assert cfg.face_recognition is False, (
+        "a fresh BrainConfig has face recognition ON — every public page says "
+        "it is off until the wearer switches it on")
+    assert cfg.face_auto_enrol is False, (
+        "a fresh BrainConfig auto-enrols faces — the site says auto-enrol is a "
+        "further switch that is off by default. This one stores biometric "
+        "templates of people who never agreed; it must never ship on.")
+    assert cfg.face_consent_version == "", (
+        "a fresh install already counts as having accepted the biometric "
+        "consent — the consent gate is the only thing standing between a "
+        "default install and a bystander's template")
+
+
+def test_the_consent_version_quoted_in_the_docs_is_the_one_the_code_requires():
+    """docs/gitbook/privacy.md quotes the consent version by value. A version
+    bump that does not reach the docs leaves the page describing terms nobody
+    is being asked to accept."""
+    from dreamlayer.ai_brain.server.face_live import CONSENT_VERSION
+
+    doc = _REPO / "docs" / "gitbook" / "privacy.md"
+    if not doc.exists():
+        pytest.skip("docs not on disk")
+    assert CONSENT_VERSION in doc.read_text(), (
+        f"the consent version is now {CONSENT_VERSION!r}, which appears "
+        f"nowhere in docs/gitbook/privacy.md — the Consent moments section "
+        f"quotes it, so either update the page or stop quoting a version")
+
+
+def test_the_consent_text_names_biometrics_bystanders_and_the_statutes():
+    """The public copy tells the wearer the consent screen "names biometric
+    templates, bystanders, BIPA and GDPR Article 9 outright". That is a claim
+    about words the wearer will actually read, so it is checked against them."""
+    from dreamlayer.ai_brain.server.face_live import CONSENT_TEXT
+
+    low = CONSENT_TEXT.lower()
+    for phrase in ("biometric", "cannot agree", "bipa", "article 9"):
+        assert phrase in low, (
+            f"the consent text no longer says {phrase!r}. The site promises "
+            f"this text names biometric identifiers, the people who cannot "
+            f"agree, and the statutes — do not quietly soften it.")
+
+
+def test_erase_everything_reaches_the_stored_face_templates():
+    """"Erase all memories deletes every stored template."
+
+    A face template is the most personal thing the device holds and it lives in
+    its own file, outside the memory DB — exactly the shape of store a wipe
+    forgets. Behaviour is pinned in test_face_recognition.py; this is the
+    claim-to-code link, and it fails if the call is dropped."""
+    server = (_SRC / "ai_brain" / "server" / "server.py").read_text()
+    assert "fr.forget_all()" in server, (
+        "the Brain's erase no longer calls forget_all() on the face index — "
+        "landing/privacy.html and docs/gitbook/privacy.md both promise that "
+        "erasing everything deletes every stored face template")
+
+
+def test_the_unnamed_face_sweep_has_a_live_caller():
+    """"Auto-enrolled faces you never name are deleted by the Brain's retention
+    sweep once they have not been seen for the warm window (90 days by
+    default)."
+
+    decisions/0001 is the reason this test exists: an uncalled sweep already
+    made a retention promise false once. A stored biometric that ages out only
+    in the docs is the same bug with worse consequences."""
+    live = (_SRC / "ai_brain" / "server" / "retention_live.py").read_text()
+    assert "sweep_unnamed(policy.warm_days)" in live, (
+        "the Brain-side retention sweep no longer drops unnamed auto-enrolled "
+        "faces on the warm window — the public copy says they age out on their "
+        "own, so either restore the call or correct the copy")
+
+    from dreamlayer.ai_brain.server import face_live
+    assert face_live.UNNAMED_TTL_DAYS_DEFAULT == 90.0, (
+        "the unnamed-face window moved off 90 days, which is the number the "
+        "public pages print")
+
+
+def test_face_matching_never_leaves_the_device():
+    """"Never a public database: matching only ever happens against the index on
+    your own hardware."
+
+    The one half of the old promise that survived intact, and the half worth
+    defending hardest. No named face-search vendor anywhere, and no network
+    client in the three modules the recall path is made of."""
+    vendors = re.compile(r"clearview|pimeyes|faceplusplus|face\+\+|rekognition",
+                         re.I)
+    hits = [str(p.relative_to(_SRC)) for p in _SRC.rglob("*.py")
+            if "tests" not in p.parts and vendors.search(p.read_text())]
+    assert not hits, (
+        f"an external face-identification service is referenced in {hits} — "
+        f"every public page promises no public database and no cloud face "
+        f"search anywhere in the codebase")
+
+    net = re.compile(r"\b(?:import\s+(?:requests|httpx|socket|urllib)"
+                     r"|from\s+(?:requests|httpx|socket|urllib))")
+    for rel in ("truth_lens/face_backends.py",
+                "ai_brain/server/face_live.py",
+                "social_lens/index.py"):
+        body = (_SRC / rel).read_text()
+        assert not net.search(body), (
+            f"{rel} now imports a network client. The recall path — embed, "
+            f"match, store — is promised to be entirely local; a face template "
+            f"crossing the wire would falsify every privacy page at once.")
+
+
+def test_the_retracted_face_promises_did_not_come_back():
+    """The 2026-07-29 sweep retracted these exact sentences because the code
+    stopped keeping them. This is the tripwire for a well-meaning revert: any
+    of them reappearing means the site is ahead of the build again."""
+    retracted = {
+        "landing/privacy.html": [
+            "cannot return an identity at all",
+            "no setting that turns stranger recognition on",
+            "keep a face database",
+        ],
+        "landing/index.html": [
+            "never strangers, never a public database",
+            "introductions only, never strangers",
+            "no stranger identification",
+            "no stranger lookup",
+        ],
+        "docs/gitbook/privacy.md": [
+            "no stranger face lookup",
+            "the first, second and fourth are absent from the codebase",
+        ],
+        "docs/gitbook/perception-memory.md": [
+            "**no stranger lookup.**",
+            "the index contains only contacts you enrolled",
+            "the invariants are architectural, not policy",
+        ],
+        "docs/gitbook/guide/privacy.md": [
+            "no stranger identification",
+            "the capability simply does not exist in the product",
+        ],
+    }
+    copy = _public_copy()
+    back = [f"{rel}: {phrase!r}"
+            for rel, phrases in retracted.items()
+            for phrase in phrases
+            if phrase in copy[rel]]
+    assert not back, (
+        f"retracted claim(s) are back in the public copy: {back}. Each was "
+        f"falsified against committed code on 2026-07-29 — `face_auto_enrol` "
+        f"persists a template for a face that matched nobody. Re-check "
+        f"ai_brain/server/face_live.py before restoring any of them.")
+
+
+def test_the_public_copy_discloses_auto_enrol():
+    """The other direction, and the one that actually protects a bystander: a
+    page may not describe face recall while omitting the switch that stores
+    people who never agreed. Silence is how the old copy became false."""
+    copy = _public_copy()
+    silent = [rel for rel, body in copy.items() if "auto-enrol" not in body
+              and "auto_enrol" not in body]
+    assert not silent, (
+        f"{silent} describe face recall without mentioning auto-enrol. The "
+        f"shipped setting stores biometric templates of people who cannot "
+        f"consent; a privacy page that omits it is false by omission.")
 
 
 # --------------------------------------------------------------------------

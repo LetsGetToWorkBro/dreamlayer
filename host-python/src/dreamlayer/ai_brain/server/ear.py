@@ -143,6 +143,28 @@ class EarHost:
             self.brain.index.add_documents([(name, text)])
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] index ingest failed: %s", exc)
+        # …and into the statement ring the lens set reads (lens_hosts.py).
+        # `brain.index` is NOT a substitute for it: index.py:156 is an in-memory
+        # document list rebuilt from disk, with no timestamps and no kinds, and
+        # Candor / Provenance / Commitment Drift all reason over WHEN something
+        # was said and WHAT kind of thing it was. Without this call the ring is
+        # empty on every shipped Brain and all seven lenses answer "nothing to
+        # report" forever.
+        #
+        # `via="heard"` is the honest value and it matters: Provenance treats
+        # "said"/"saw"/"observed" as FIRSTHAND, and the room ear is not
+        # firsthand — it is ambient audio in front of the wearer. Passing
+        # "said" here would make the lens claim the wearer witnessed anything
+        # anyone near them mentioned. `speaker` is threaded for the same
+        # reason it is threaded above: nothing populates it today (see the
+        # note above), so it is empty, and Provenance renders "you" rather
+        # than inventing an attribution.
+        try:
+            ls = self.brain.lenses()
+            if ls is not None:
+                ls.ingest_utterance(text, via="heard", person=speaker or "")
+        except Exception as exc:                 # noqa: BLE001
+            log.warning("[ear] lens ingest failed: %s", type(exc).__name__)
         # fold into the temporal knowledge graph too, when one is built
         try:
             g = self.brain._graph_recall()

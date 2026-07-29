@@ -84,5 +84,13 @@ class BrainHost:
         # the dossier refuses to record who you asked about while the shield is up
         # — and it is defined on the composed Brain, not on any one of them.
         def incognito_now(self) -> bool: ...
+        # The Live Lens push channel, declared here for the same reason as
+        # `incognito_now` above: a mixin now calls it (WaypathOps pushes an
+        # ObjectRecallCard on a found locate) and it is defined on the composed
+        # Brain, not on any one mixin. Without this, `mypy src/dreamlayer` fails
+        # with `"WaypathOps" has no attribute "push_event"` — brain_waypath is
+        # not in pyproject's ignore_errors list, so this is required, not tidy.
+        def push_event(self, kind: str, card: Any = None,
+                       veil_ok: bool = False) -> int: ...
         def rehearse_person(self, name: str,
                             note: str = "") -> Optional[dict]: ...

@@ -31,8 +31,9 @@ counterfeits from posing as the original.
   final product and API calls. If a core team forms, this section grows a
   real decision process.
 - **Big changes start as issues**, not PRs — agree on design first.
-- **The privacy contract is not up for vote**: capture guards, the Veil,
-  no stranger identification. PRs weakening them are declined.
+- **The privacy contract is not up for vote**: capture guards, the Veil, no
+  external face lookup, and face recall staying opt-in, off by default, and
+  behind consent. PRs weakening them are declined.
 
 ## Contributions: DCO, not CLA
 

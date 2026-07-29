@@ -159,18 +159,45 @@ def sweep_retention(brain) -> dict:
     # The statement ring (lens_hosts) is a hot store too, and it must age out on
     # the SAME window rather than inventing its own — a second hot store with its
     # own policy is how "nothing expires" comes back.
-    ls = getattr(brain, "_lenses", None)
+    #
+    # This reads through `brain.lenses()`, NOT `getattr(brain, "_lenses", None)`
+    # as it first did. That was the same bug in miniature as the one this whole
+    # module exists to fix: `_lenses` is only ever set by `lenses()`, the one
+    # production call site was `purge_memories` (which nulls it two lines later),
+    # so the attribute was None at every moment a sweep could observe it and this
+    # leg never ran once in a shipped build. Building the set is cheap by design
+    # — every lens inside is lazy and `purge_hot` returns 0 without touching the
+    # ring when none was built — so the accessor costs nothing on a Brain that
+    # has used no lens, and works on one that has.
+    ls = brain.lenses() if hasattr(brain, "lenses") else None
     if ls is not None:
         try:
             cutoff = time.time() - policy.hot_hours * 3600.0
             report["hot_purged"] += int(ls.purge_hot(cutoff))
         except Exception as exc:                     # noqa: BLE001
             log.warning("[retention] statement-ring purge failed: %s", exc)
+    # Auto-enrolled faces nobody named age out on the WARM window. A named
+    # contact is a deliberate keep and stays cold-forever; an unnamed one is a
+    # stranger the camera happened to see, and keeping those permanently grows
+    # the store without bound with people the wearer could not identify.
+    fr = getattr(brain, "_face_recall", None)
+    if fr is not None:
+        try:
+            report["unnamed_faces_dropped"] = int(
+                fr.sweep_unnamed(policy.warm_days))
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[retention] unnamed-face sweep failed: %s", exc)
     ring = _hot_ring(brain)
     if ring is not None:
         try:
             cutoff = time.time() - policy.hot_hours * 3600.0
-            report["hot_purged"] = int(ring.purge_before(cutoff))
+            # `+=`, not `=`. A plain assignment here overwrote the statement-ring
+            # count set above, so the sweep report and the activity-ledger line
+            # the wearer reads ("N sighting(s) past 24h") under-counted by
+            # exactly the statements purged — an automatic deletion that
+            # happened and was not disclosed, which is the one thing that ledger
+            # line exists to prevent.
+            report["hot_purged"] += int(ring.purge_before(cutoff))
         except Exception as exc:                 # noqa: BLE001
             log.warning("[retention] hot purge failed: %s", exc)
     if report["expired"] or report["hot_purged"]:

@@ -123,6 +123,61 @@ def _declared_lenses():
     return out
 
 
+def _classes_defined_in(modules) -> set:
+    """Class NAMES defined anywhere in these modules.
+
+    The pairing that matters is name-to-name: a lens's module defines
+    `TasteLens`, and `ai_brain/server/world_lens.py` calls `TasteLens(...)`.
+    Comparing MODULE paths instead — which an earlier draft of this did — can
+    never match, so it reported "no Brain-side constructor" for every lens
+    including the ones plainly constructed in `world_lens.py`. A check that
+    fires on everything is worse than no check.
+    """
+    want = set(modules)
+    out = set()
+    for path in _sources():
+        mod = _module_name(path)
+        if mod not in want:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                out.add(node.name)
+    return out
+
+
+def _brain_side_constructions() -> set:
+    """Class NAMES that some `ai_brain/` module instantiates.
+
+    Check 2 of the handoff's bar. Import reachability says the code CAN be
+    loaded; this says something in the Brain actually builds it. The gap between
+    those two is decision 0001 in one line.
+
+    Deliberately syntactic — it matches `Name(...)` call sites, so it over-counts
+    helper calls that happen to be capitalised and under-counts construction via
+    a factory. It is a signal for a human, not a gate, which is why it prints a
+    note rather than failing the run.
+    """
+    out: set = set()
+    for path in _sources():
+        if not _module_name(path).startswith(f"{PKG}.ai_brain"):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+                if name and name[:1].isupper():
+                    out.add(name)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--verbose", action="store_true",
@@ -151,10 +206,18 @@ def main() -> int:
         print(f"  {title:20} {module}")
 
     print(f"\nreachable ({len(reachable)}) — an UPPER BOUND, not proof it runs")
+    built = _brain_side_constructions()
     for key, title, module, hits in sorted(reachable):
+        # Importable and CONSTRUCTED are different things, and the difference is
+        # exactly decision 0001: RetentionSweep was importable for years while
+        # nothing ever built one. A lens whose class no ai_brain/ module
+        # instantiates is reachable on paper only.
+        defined = _classes_defined_in(hits)
+        owners = sorted(defined & built)
+        mark = "" if owners else "   [no Brain-side constructor]"
         via = f"   via {', '.join(h.replace(PKG + '.', '') for h in hits[:3])}" \
             if args.verbose else ""
-        print(f"  {title:20} {module}{via}")
+        print(f"  {title:20} {module}{via}{mark}")
 
     if lua:
         print(f"\nnot Python ({len(lua)}) — on-glass display effects")

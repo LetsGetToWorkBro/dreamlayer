@@ -31,6 +31,12 @@ the seams marked.
 | `/dreamlayer/people` | token | the dossier registry `{items: [{name, note, tags, ts}]}` |
 | `/dreamlayer/rewind` | token | today in hour blocks `{blocks, count}` |
 | `/dreamlayer/saga` | token | the progression profile: rank, level, XP, every achievement |
+| `/dreamlayer/lenses` | token | what the lens set can answer now: hot-ring size, held thoughts, whether the Veil is down. Reads nothing from disk |
+| `/dreamlayer/provenance` | token | `?claim=` → where a belief came from `{result}`. `result: null` is the VEIL, distinct from `{found: false}` ("never heard it") |
+| `/dreamlayer/quests` | token | commitments as quests + the XP/level/streak tally. NOT `/dreamlayer/saga`, which is the ecosystem badge profile |
+| `/dreamlayer/drift` | token | every tracked commitment and how far it has slipped. Ticks the engine, so a poll is also the clock |
+| `/dreamlayer/stasis` | token | held thoughts, with freshness and decay |
+| `/dreamlayer/premonition` | token | what usually happens next, only where the pattern is strong enough to say so |
 | `/dreamlayer/profile` | token | the mirrored Juno user-model profile |
 | `/dreamlayer/brief/latest` | token | the scheduler's most recent morning brief (or `{}`) |
 | `/dreamlayer/brief/long/latest` | token | the last extended (long) brief (or `{}`) |
@@ -58,6 +64,16 @@ the seams marked.
 | `/dreamlayer/brain/ask` | token | `{query}` → `Answer {text, tier, sources, confidence}`; logged; may cross to cloud under the gate |
 | `/dreamlayer/brain/explain` | token | `{label, image?, want?}` → object `Answer` |
 | `/dreamlayer/voice` | token | `{text}` → intent routing: ask/recall/brief answered inline; timers/intervals/clock compiled and deployed (`rc_native`); notes/meet/debts/settle applied to the people mirror (`voice_social`); locate/stash answered from Waypath; missed and reply handled in place; others returned as `{intent, ...args}` |
+| `/dreamlayer/lens/observe` | token | `{text[, person]}` → a statement the WEARER made, into the hot ring, marked firsthand (`via="said"`). Returns Candor's verdict on it in the same round trip |
+| `/dreamlayer/candor/check` | token | `{claim}` → does this contradict something already recorded? Pushes the ConsistencyCard when it fires; the card's FOOTER is the prior statement |
+| `/dreamlayer/drift/tend` | token | `{subject}` → nudge a commitment: momentum, no XP |
+| `/dreamlayer/quests/complete` | token | `{subject}` → keep a promise: XP, streak, reward card, and the Saga quest badges |
+| `/dreamlayer/quests/abandon` | token | `{subject}` → let one go; the streak breaks |
+| `/dreamlayer/stasis/freeze` | token | `{[note]}` → hold the current thought. The replayed line is PII-scrubbed, not verbatim — see `lens_hosts.freeze` |
+| `/dreamlayer/stasis/resume` | token | `{[id]}` → pick one back up; no id means the top of the stack |
+| `/dreamlayer/stasis/pin` | token | `{id}` → pin it so it never composts |
+| `/dreamlayer/weather` | token | `{imu_delta, imu_pose, extra}` → one Inner Weather beat, returning the frames the glass would draw. NOT `/dreamlayer/live/weather`, which is Confluence's shared sky between two people |
+| `/dreamlayer/scholar` | token | `?mode=answer\|form\|explain&q=` + a JPEG (raw body or `{"image": "<base64>"}`) → a question in view answered, a form explained field by field, or dense text in plain words. Frame decoded in memory, never persisted |
 | `/dreamlayer/brief` | token | `{agenda?, since?, depth?, commitments?, memories?}` → `{text, bullets, missed}`; `depth: "long"` adds `sections` and is cached for `brief/long/latest`. Add `push: true` to ALSO push the brief as a card to every connected Live Lens (veil-gated; the response then carries `pushed`, the delivery count) |
 | `/dreamlayer/live/selftest` | token | `{kind?}` (`hark`\|`brief`) → push ONE clearly-labelled SELF-TEST card to every connected Live Lens, so the ambient channel and the card renderers can be proven without a real smoke alarm. Never `veil_ok` — a test must not borrow a safety alert's privilege to pierce the shield, and being suppressed under the veil is itself the proof it works. Rate-limited (6/min). Returns `{ok, kind, delivered, listeners, reason}` |
 | `/dreamlayer/live/intent` | token | `{text}` → parse a SPOKEN phrase into a lens intent the next look obeys ("where are my keys" → the find lens with `terms:["keys"]`). Veil-gated; the intent expires after ~20 s and steers exactly one look. Speech that names nothing returns `{intent:""}` rather than guessing |

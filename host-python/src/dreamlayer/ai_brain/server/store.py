@@ -543,6 +543,16 @@ class BrainConfig:
     # refuses it outright in a release build — a panel toggle is a thing a
     # shipped app carries, and that one must not be.
     face_recognition: bool = False
+    # In-app consent, recorded as the VERSION of the text the wearer accepted.
+    # Empty means never accepted; a stale version means the terms changed and
+    # must be re-accepted, because agreeing to different words is not this
+    # agreement. face_live.CONSENT_VERSION is the current one.
+    face_consent_version: str = ""
+    # Auto-enrol: store a template for EVERY face seen, not only people the
+    # wearer named — bystanders included, who have not agreed and cannot agree
+    # in-app. Off by default and gated behind consent. The wearer accepts this
+    # risk explicitly; see face_live.CONSENT_TEXT for what they are told.
+    face_auto_enrol: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

@@ -55,16 +55,53 @@ On the Brain, incognito maps to `network_mode: "lan_only"`, which hard-fails
 
 ## Consent moments
 
+- **Face recall** — a versioned consent (`BrainConfig.face_consent_version`,
+  currently `2026-07-29.auto-enrol.v1`) the wearer must accept before any face
+  is embedded, matched or stored. `identify` returns `no-consent` and `enrol`
+  refuses, both *before* the embedder is reached, so without acceptance no
+  template is computed at all (`test_without_consent_nothing_runs`). The text
+  names what it is: templates are biometric identifiers; with
+  `face_auto_enrol` on they include people who have not agreed and cannot
+  agree here — bystanders, passers-by, anyone in frame; collecting biometric
+  identifiers without the subject's consent is restricted or unlawful in some
+  places (Illinois' BIPA, GDPR Article 9). An acceptance is recorded against
+  one exact version, so a stale acceptance does not count and new terms
+  re-prompt instead of inheriting the old one
+  (`test_a_stale_consent_version_does_not_count`) — keeping the version in
+  step with the words is a discipline on us, not something the code detects.
+  Withdrawing consent stops recall immediately and deletes nothing:
+  `revoke_consent` reports how many faces are still held so an erase can be
+  put beside it, and erasing is the separate deliberate act (`forget_all`, and
+  erase-everything, which reaches the face index). **This is the wearer's
+  consent, not the subject's.** No flow here can obtain a bystander's
+  agreement, and we do not claim it does — the wearer is accepting a risk on
+  their behalf. Two limits stated rather than implied: today this consent
+  lives on the Brain (`GET /dreamlayer/face` returns the version and the exact
+  text, `POST /dreamlayer/face/consent` accepts or withdraws) — the phone and
+  panel screens that render it are not built yet, so there is no prompt a
+  wearer meets by tapping around. And it is off three times over on a fresh
+  install: `face_recognition` is False, `face_auto_enrol` is False, and the
+  face model ships in no deployment profile (`pip install dreamlayer[face]`),
+  so a default install has no weights and declines every frame.
 - **Name capture** — a name is kept only from a closed, offline grammar of
   self-introductions ("Hi, I'm Maya" — never ambient chatter, never a
   bystander), saved automatically the moment it is given; the veil closes
-  the ear, and "forget that" erases it.
-- **ConsentRequiredCard** — a new data source stops the world until you say
-  yes.
-- **Private zones** — places you mark never-record; entering one shows the
-  PrivateZoneCard.
-- **Forget** — "forget that" erases the last capture and confirms with the
-  ForgetLastCard.
+  the ear, and erasing it is a deliberate act on the Memories screen (a
+  spoken "forget that" is designed and not built — see below).
+Three of these are **designed and not built**, and are listed here as design
+rather than as behaviour, because a privacy promise that is not implemented is
+the worst kind of copy to leave standing:
+
+- **ConsentRequiredCard** — the intent is that a new data source stops the world
+  until you say yes. The card exists; nothing produces it, and `push_event` is a
+  one-way envelope with no path for the answer to come back, so the affordance
+  ("Hold to allow · Tap to deny") has nowhere to send a decision yet.
+- **Private zones** — the intent is places you mark never-record. **There is no
+  way to mark one today**: no setting, no route, no place-identity primitive,
+  and nothing that would honour a zone if you had marked it.
+- **Forget** — the intent is that "forget that" erases the last capture. There
+  is no such command in the voice grammar and no scoped undo; the only erase the
+  Brain can perform reaches *everything* (`purge_memories`).
 
 | ![Consent](assets/cards/consent_required.webp) | ![Private zone](assets/cards/private_zone.webp) | ![Forget](assets/cards/forget_last.webp) |
 |---|---|---|
@@ -131,7 +168,23 @@ connection tests, model pulls, and message sends.
   restore. **Erase** clears questions, activity, or folders selectively.
 - **Structured memory, never raw:** DreamLayer stores meaning — labels,
   places, lines of text, embeddings' conclusions — not audio or video
-  recordings.
+  recordings. One stored thing is named separately, because it is different in
+  kind: with the opt-in `face` pack and its weights installed, the versioned
+  consent accepted, and the face-recall switch on, a 512-dimension face
+  template is written for each stored identity to `face_index.json` beside the
+  config (chmod'ed to 0600 after every write), along with that identity's name
+  if it has one and how often and when it was last seen. That template is a
+  biometric identifier, not a description of one. With `face_auto_enrol` on, a
+  template is stored for the subject of a frame even when they match nobody —
+  often someone who never agreed and cannot agree in the app — not only for
+  people you introduced; unnamed ones age out on the 90-day warm window, named
+  ones are kept until you erase them. Only one face per frame is ever
+  templated, the largest and most central, and only if it fills at least a
+  tenth of the frame's shorter side: a bystander in the background is detected
+  but never templated. No image, crop, bounding box or landmark is written to
+  disk or to a log; no template leaves this machine (backup and encrypted sync
+  carry config, history, activity and agenda — not the face index); and
+  erase-everything deletes the file.
 
 ## The phone's privacy surface
 
@@ -142,14 +195,43 @@ one Settings group:
 
 ## Deliberately not built
 
-No stranger face lookup, no public face database, **no cloning of anyone's voice
+No public face database and no cloud face search, **no cloning of anyone's voice
 but Juno's**, no covert recording. See `docs/PRIVACY_MODEL.md` for the standing
 threat model.
 
-The first, second and fourth are absent from the codebase, not switched off. The
-shipped face embedder cannot return an identity at all — with no face model
-present it declines every frame rather than guessing, so there is no setting that
-turns stranger recognition on.
+Those are absent from the codebase, not switched off: no code path queries an
+outside face service — the recogniser loads local weights and never reaches the
+network on a recall path — and continuous, un-prompted recognition is refused
+outright in a release build no matter what the environment says
+(`face_live.ambient_allowed`).
+
+Face *recognition* used to be on that list and no longer belongs there, so it is
+stated here rather than quietly dropped. It is built, and we will not blur the
+two. A real recogniser is in the tree: InsightFace `buffalo_l` (SCRFD detect +
+ArcFace r50, 512-d, ONNX/CPU) in `truth_lens/face_backends.py`. What keeps it
+quiet is a chain of switches — exactly what this page used to say it was not.
+The `face` extra is in no deployment profile
+(`test_the_face_pack_is_in_no_deployment_profile` fails the build if it ever
+enters one), the weights must be on disk and pass their integrity check,
+`face_recognition` is off on a fresh install, and the versioned consent must be
+accepted before the Brain's face routes put a single frame through the model.
+
+With all of those satisfied it answers one question — "is this one of the people
+I introduced?" — and a template that matches nobody is discarded on the spot,
+never stored, never logged, never in the ledger. One switch further,
+`face_auto_enrol` (off by default), changes that answer: a face that matches
+nobody is stored instead, so it is recognised next time. That includes a
+bystander who never agreed and cannot agree here, and the consent gating it is
+the **wearer's**, accepted on the subject's behalf — the consent text says so in
+those words, and names biometric templates, BIPA and GDPR Article 9 outright.
+Such identities are kept unnamed rather than given a fabricated name, age out on
+the 90-day warm window unless the wearer names them, and erase-everything
+reaches every one of them.
+
+True in every configuration: the Veil stops capture before the model runs, only
+the subject's face is embedded (a passer-by in the background is detected, never
+templated), no template ever leaves the device, and erase-everything deletes
+every stored face.
 
 The voice line needs one sentence more, because a blanket "no voice cloning"
 would be false and we would rather be precise than absolute. A voice-cloning

@@ -1324,8 +1324,10 @@ html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
           <h3>Never forget <em>a name.</em></h3>
           <p>Someone says “Hi, I’m Maya.” DreamLayer keeps it automatically and starts a quiet
              dossier. Next time you meet, it greets you with her name, when you last spoke, and what
-             about — you never blank again. Only people who introduce themselves are ever kept; no
-             stranger lookup, ever.</p>
+             about — you never blank again. A <em>name</em> is only ever kept from a real
+             introduction. Faces are a separate, opt-in thing that is off until you install it — and
+             if you also switch on auto-enrol, it keeps nameless faces nobody introduced. Nothing is
+             ever looked up outside your own hardware.</p>
         </div>
         <div class="step" data-step="2">
           <div class="n">03 / ASK</div>
@@ -1344,7 +1346,7 @@ html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
           <div class="n">05 / READ</div>
           <h3>Every menu, <em>in your language.</em></h3>
           <p>A menu you can’t read reads back in your own words, live, on your own hardware.
-             Rosetta is the eye; Puente is the ear and voice.</p>
+             Rosetta is the eye and the ear both.</p>
         </div>
       </div>
     </div>
@@ -1577,10 +1579,10 @@ html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
         <div class="speek">
           <div class="glyph" aria-hidden="true"><svg viewBox="0 0 38 38"><circle cx="19" cy="13" r="6"/><path d="M7 32c0-7 5-11 12-11s12 4 12 11"/></svg></div>
           <h4>People</h4><div class="for">who’s around you — and never a blank</div>
-          <div class="inc">Social Lens · Timbre · Name Capture · Dossier — introductions only, never strangers</div>
+          <div class="inc">Social Lens · Timbre · Name Capture · Dossier — introductions first, and never a public database</div>
         </div>
         <div class="sbody"><div><div class="feats">
-          <div class="feat"><b>Social Lens</b><span>Recognises the people you chose to keep — and only them. Never strangers, never a public database.</span></div>
+          <div class="feat"><b>Social Lens</b><span>Recognises the people you introduced and chose to keep. Face recall does nothing until you install the optional face pack, switch it on, and accept the biometric consent — and auto-enrol is a further switch, off by default: with it off, a face that matches nobody is discarded on the spot, never stored; with it on, the glasses also keep a nameless template for a face nobody introduced, so they can tell you you’ve seen this person before. Unnamed ones are dropped on your retention window unless you name them. Never a public database: matching only ever happens against the index on your own hardware.</span></div>
           <div class="feat"><b>Timbre</b><span>Familiar voices glow as waveforms at the rim of sight; strangers stay anonymous static.</span></div>
           <div class="feat"><b>Name Capture</b><span>Someone introduces themselves out loud and the name is kept for you — automatically, no tap. Only self-introductions, never strangers; the Privacy Veil silences it like everything else.</span></div>
           <div class="feat"><b>Dossier</b><span>Every name you keep grows a quiet dossier — when you last met, what you talked about, their last line, plus your own notes and tags. Next time you meet, the glasses greet you with it, so you never blank on a name again.</span></div>
@@ -1611,14 +1613,13 @@ html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
         <div class="speek">
           <div class="glyph" aria-hidden="true"><svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="14"/><ellipse cx="19" cy="19" rx="6.5" ry="14"/><line x1="5" y1="19" x2="33" y2="19"/></svg></div>
           <h4>World</h4><div class="for">understand what you look at</div>
-          <div class="inc">Juno (look → know) · Label Lens · AI Brain · Rosetta · Puente · Scholar · TasteLens</div>
+          <div class="inc">Juno (look → know) · Label Lens · AI Brain · Rosetta · Scholar · TasteLens</div>
         </div>
         <div class="sbody"><div><div class="feats">
           <div class="feat"><b>Juno</b><span>Look at anything and know it — the plant, the wine, the part number. Objects, never people.</span></div>
           <div class="feat"><b>Label Lens</b><span>Your own rules on what you’re holding: “you’re avoiding dairy,” “you returned this brand last year.”</span></div>
           <div class="feat"><b>AI Brain</b><span>Name and explain anything; ask your own files and mail. On-device first, your Mac mini next, cloud only if you switched it on.</span></div>
-          <div class="feat"><b>Rosetta</b><span>The eye: menus and signs you look at, read back in your language.</span></div>
-          <div class="feat"><b>Puente</b><span>The ear: live voice translation as the other person speaks.</span></div>
+          <div class="feat"><b>Rosetta</b><span>The eye and the ear: menus and signs you look at, read back in your language — and live captions as the other person speaks.</span></div>
           <div class="feat"><b>Scholar</b><span>Look at a test question and the answer appears — any subject. Look at a form and each field says what to write; look at dense legal or technical text and it comes back in plain words. Reads through the Brain’s vision — local first, cloud only if you opted in — and never while the Veil is down.</span></div>
           <div class="feat"><b>The look decides</b><span>No mode to switch. On a glance the Arbiter reads the scene and routes it — answer, fill, translate, or identify — firing the clear winner, offering a one-tap choice when it’s close, and learning the lens you prefer for a kind of view. Say “what’s the answer” or “how do I fill this” first and the very next look obeys.</span></div>
           <div class="feat"><b>TasteLens</b><span>Look at a whole shelf or menu and get the pick — ranked against your rules: what you avoid vetoed first, then your budget, then rating and price. Your dietary rules stay on device; prices and reviews ride the opt-in cloud through a pluggable connector.</span></div>
@@ -1851,12 +1852,14 @@ html.midnight .shade .tbar:focus-visible{outline-color:#7B87FF}
           <span class="v-eyebrow">Privacy Veil</span>
           <h2 id="veilTitle">One gesture. Fully deaf and blind.</h2>
           <p class="body">Not a mute icon — an architecture. Nothing seen, heard, or kept until you
-            lift it. And underneath: no stranger identification, no voice cloning, no covert recording.
-            Deliberately not built.</p>
+            lift it. And underneath: no face lookup outside your own hardware, no voice cloning, no
+            covert recording. Deliberately not built. Face recall itself <em>is</em> built — opt-in,
+            off by default, behind a biometric consent, and with auto-enrol on it stores faces nobody
+            introduced. We say so on the <a href="privacy.html">privacy page</a> rather than here.</p>
           <div class="veil-contract">
             <span>on-device by default</span>
             <span>meaning, never recordings</span>
-            <span>no stranger lookup — ever</span>
+            <span>no public face database — ever</span>
             <span>one gate, honored everywhere</span>
           </div>
         </div>

@@ -20,6 +20,7 @@ const GROUPS: { section: string; rows: Row[] }[] = [
     section: "Memory & story",
     rows: [
       { route: "/rewind", labelKey: "settings.rewindLink" },
+      { route: "/lenses", labelKey: "settings.lensesLink" },
       { route: "/saga", labelKey: "settings.sagaLink" },
       { route: "/ember", labelKey: "settings.emberLink" },
       { route: "/profile", labelKey: "settings.profileLink" },

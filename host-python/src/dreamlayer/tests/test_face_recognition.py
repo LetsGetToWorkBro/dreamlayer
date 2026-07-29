@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 import numpy as np
 import pytest
@@ -51,10 +52,16 @@ def _frame(seed: int) -> np.ndarray:
     return rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)
 
 
-def _brain(tmp_path, *, face: bool = True) -> Brain:
+def _brain(tmp_path, *, face: bool = True, consent: bool = True,
+           auto: bool = False) -> Brain:
+    """A Brain with face recall usable. Consent defaults to ACCEPTED because
+    most tests here are about the capability, not the gate — the gate has its
+    own tests below, and they set consent=False deliberately."""
+    from dreamlayer.ai_brain.server.face_live import CONSENT_VERSION
     cfg = tmp_path / "cfg"
     cfg.mkdir(exist_ok=True)
-    BrainConfig(token="tok", face_recognition=face).save(cfg)
+    BrainConfig(token="tok", face_recognition=face, face_auto_enrol=auto,
+                face_consent_version=CONSENT_VERSION if consent else "").save(cfg)
     return Brain(cfg)
 
 
@@ -464,7 +471,9 @@ class TestTheHttpSurface:
 
         cfg = tmp_path / "cfg"
         cfg.mkdir(exist_ok=True)
-        BrainConfig(token=token, face_recognition=True).save(cfg)
+        from dreamlayer.ai_brain.server.face_live import CONSENT_VERSION
+        BrainConfig(token=token, face_recognition=True,
+                    face_consent_version=CONSENT_VERSION).save(cfg)
         brain = Brain(cfg)
         srv = make_brain_server(brain, "127.0.0.1", 0)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -533,10 +542,16 @@ class TestTheHttpSurface:
                  {"name": "Ana", "image": self._b64(_frame(25))})
             st = call("/dreamlayer/face")
             assert st["enrolled"] == 1
-            assert set(st) == {"enabled", "model", "ambient", "enrolled"}, (
-                "the status route grew a field — it must stay counts and "
-                "capability, never a name or a vector")
-            assert "Ana" not in json.dumps(st)
+            # The rule is CONTENT, not shape: the route may grow capability and
+            # count fields (it has — consent state, auto-enrol, unnamed count),
+            # but never anything about a specific person. Pinning the exact key
+            # set made honest additions look like regressions.
+            assert "Ana" not in json.dumps(st), "a name reached the status route"
+            assert not (set(st) & {"embedding", "template", "vector", "bbox",
+                                   "landmarks", "crop", "contacts", "names"})
+            for value in st.values():               # no nested content either
+                assert not isinstance(value, (list, dict)) or not value, (
+                    f"status carried a collection: {value!r}")
         finally:
             srv.shutdown(); srv.server_close()
 
@@ -573,3 +588,151 @@ class TestTheHttpSurface:
             assert err.value.code in (401, 403)
         finally:
             srv.shutdown(); srv.server_close()
+
+
+# --------------------------------------------------------------------------
+# In-app consent, and auto-enrol — the wearer's accepted risk.
+#
+# The owner reversed the earlier "verbal consent, no UI" position: consent is
+# now in-app and versioned, and auto-enrol stores a template for EVERY face
+# seen, bystanders included. These pin what that does and does not change. What
+# it does NOT change: the Veil still closes the camera, erase still reaches
+# every stored face, and the wearer's switch still has to be on.
+# --------------------------------------------------------------------------
+
+class TestConsentIsRequired:
+    def test_a_fresh_install_has_not_consented(self):
+        assert BrainConfig().face_consent_version == ""
+        assert BrainConfig().face_auto_enrol is False
+
+    def test_without_consent_nothing_runs(self, tmp_path):
+        from dreamlayer.ai_brain.server.face_live import CONSENT_VERSION
+        brain = _brain(tmp_path, consent=False)
+        fr = brain.face_recall()
+        out = fr.identify(_frame(3))
+        assert out["known"] is False
+        assert out["reason"] == "no-consent"
+        assert out["consent_required"] == CONSENT_VERSION
+        assert fr.enrol("Ana", _frame(3))["ok"] is False
+
+    def test_accepting_consent_turns_it_on(self, tmp_path):
+        brain = _brain(tmp_path, consent=False)
+        fr = brain.face_recall()
+        assert fr.consented is False
+        assert fr.accept_consent()["ok"] is True
+        assert fr.consented is True
+        assert fr.enrol("Ana", _frame(4))["ok"] is True
+
+    def test_a_stale_consent_version_does_not_count(self, tmp_path):
+        """Agreeing to different words is not this agreement — changing the
+        terms must re-prompt rather than inherit the old acceptance."""
+        brain = _brain(tmp_path, consent=False)
+        brain.config.face_consent_version = "2020-01-01.something.else"
+        fr = brain.face_recall()
+        assert fr.consented is False
+        assert fr.identify(_frame(5))["reason"] == "no-consent"
+        assert fr.accept_consent("2020-01-01.something.else")["ok"] is False
+
+    def test_withdrawing_consent_stops_recall_without_deleting(self, tmp_path):
+        """Withdrawal and erasure are separate deliberate acts."""
+        brain = _brain(tmp_path)
+        fr = brain.face_recall()
+        fr.enrol("Ana", _frame(6))
+        out = fr.revoke_consent()
+        assert out["ok"] is True and out["still_stored"] == 1
+        assert fr.identify(_frame(6))["reason"] == "no-consent"
+
+    def test_the_consent_text_names_the_bystander_problem(self):
+        """The wearer is accepting a risk on behalf of people who cannot accept
+        it here. If the text ever stops saying so, this fails."""
+        from dreamlayer.ai_brain.server.face_live import CONSENT_TEXT
+        low = CONSENT_TEXT.lower()
+        assert "biometric" in low
+        assert "bystander" in low or "not agreed" in low
+        assert "bipa" in low or "gdpr" in low
+
+
+class TestAutoEnrol:
+    def test_off_by_default_a_stranger_is_still_discarded(self, tmp_path):
+        brain = _brain(tmp_path, auto=False)
+        fr = brain.face_recall()
+        fr.enrol("Ana", _frame(7))
+        before = fr.path.read_bytes()
+        assert fr.identify(_frame(70))["reason"] == "no-match"
+        assert fr.path.read_bytes() == before
+
+    def test_on_a_stranger_is_stored_and_recognised_next_time(self, tmp_path):
+        brain = _brain(tmp_path, auto=True)
+        fr = brain.face_recall()
+        stranger = _frame(71)
+
+        first = fr.identify(stranger)
+        assert first["auto_enrolled"] is True
+        assert first["unnamed"] is True
+        assert first["name"] == ""
+
+        again = fr.identify(stranger)
+        assert again["known"] is True
+        assert again["contact_id"] == first["contact_id"]
+        assert again["seen_count"] == 2, "encounters are not being counted"
+
+    def test_an_auto_enrolled_face_gets_no_fabricated_name(self, tmp_path):
+        """A placeholder name reads like knowledge. Unnamed is honest."""
+        fr = _brain(tmp_path, auto=True).face_recall()
+        out = fr.identify(_frame(72))
+        assert out["name"] == ""
+        assert "person-" not in json.dumps(out)
+
+    def test_naming_promotes_it_out_of_the_unnamed_sweep(self, tmp_path):
+        fr = _brain(tmp_path, auto=True).face_recall()
+        cid = fr.identify(_frame(73))["contact_id"]
+        assert fr.name_identity(cid, "Bo")["ok"] is True
+        assert fr.identify(_frame(73))["name"] == "Bo"
+        # backdate it well past the window; a NAMED contact must survive
+        fr._meta[cid]["last_ts"] = time.time() - 400 * 86400
+        assert fr.sweep_unnamed(90.0) == 0
+        assert fr.identify(_frame(73))["name"] == "Bo"
+
+    def test_unnamed_strangers_age_out_on_the_warm_window(self, tmp_path):
+        fr = _brain(tmp_path, auto=True).face_recall()
+        cid = fr.identify(_frame(74))["contact_id"]
+        fr._meta[cid]["last_ts"] = time.time() - 400 * 86400
+
+        assert fr.sweep_unnamed(90.0) == 1, (
+            "an unnamed stranger the camera saw once is kept forever — the "
+            "store grows without bound with people the wearer cannot identify")
+        assert fr.identify(_frame(74)).get("auto_enrolled") is True  # re-enrolled
+
+    def test_a_hand_enrolled_contact_is_never_swept(self, tmp_path):
+        fr = _brain(tmp_path, auto=True).face_recall()
+        fr.enrol("Ana", _frame(75))
+        assert fr.sweep_unnamed(0.001) == 0
+
+    def test_auto_enrol_still_obeys_the_veil(self, tmp_path, monkeypatch):
+        brain = _brain(tmp_path, auto=True)
+        fr = brain.face_recall()
+        monkeypatch.setattr(Brain, "incognito_now", lambda self: True)
+        assert fr.identify(_frame(76))["reason"] == "veiled"
+        assert not fr.path.exists(), "a face was stored while veiled"
+
+    def test_auto_enrol_requires_consent_like_everything_else(self, tmp_path):
+        fr = _brain(tmp_path, auto=True, consent=False).face_recall()
+        assert fr.identify(_frame(77))["reason"] == "no-consent"
+        assert not fr.path.exists()
+
+    def test_erase_everything_still_reaches_auto_enrolled_faces(self, tmp_path):
+        brain = _brain(tmp_path, auto=True)
+        fr = brain.face_recall()
+        fr.identify(_frame(78))
+        assert fr.path.exists()
+        assert brain.purge_memories()["faces_purged"] >= 1
+        assert not fr.path.exists()
+
+    def test_status_reports_how_many_are_unnamed(self, tmp_path):
+        fr = _brain(tmp_path, auto=True).face_recall()
+        fr.enrol("Ana", _frame(79))
+        fr.identify(_frame(80))
+        st = fr.status()
+        assert st["auto_enrol"] is True
+        assert st["consented"] is True
+        assert st["enrolled"] == 2 and st["unnamed"] == 1

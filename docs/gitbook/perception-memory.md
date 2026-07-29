@@ -47,25 +47,45 @@ drift, and the quest engine.
 
 ## Look at someone — the Social Lens
 
-`look_at_person(frame)` matches a face against **your own contacts only** —
-an on-device index of people you were introduced to and chose to keep. On a
+`look_at_person(frame)` matches a face against **an on-device index only** —
+by default that is people you were introduced to and chose to keep, and with
+auto-enrol on it also holds faces nobody introduced (see below). On a
 match it shows the identity card, and if the ledger knows them, follows with
 the conversation dossier.
 
 ![Look — who is this](assets/demo/catalog/features/dossier/preview.webp)
 
-The invariants are architectural, not policy:
+Three of the invariants below are architectural. The fourth is a switch, and
+it is the one that matters:
 
-- **No stranger lookup.** There is no public database and no cloud face
-  search anywhere in the codebase. The index contains only contacts you
-  enrolled.
+- **No public or cloud face lookup.** There is no public database and no cloud
+  face search anywhere in the codebase: the recogniser is a local ONNX model,
+  matching is a cosine scan over one file on your own hardware, and no route
+  ever hands back a template — the identify response carries no vector, no
+  bounding box, no landmarks. **What the index holds, though, is a switch, not
+  an invariant.** A default install ships no face model at all, so the index
+  stays empty and nothing can be recognised. On an install that has added the
+  opt-in `face` pack and its weights, turned `face_recognition` on, and
+  accepted the versioned consent, `face_auto_enrol` decides what happens to a
+  face that matches nobody. With it **off** — the default — that template is
+  discarded inside the call: not stored, not counted, not logged, and the
+  index holds only people you enrolled by name. With it **on**, that face is
+  stored instead, unnamed, so the same person is recognised next time. One
+  template per frame, always for the single face the frame resolves as the
+  subject (the largest, and only if it fills at least a tenth of the frame's
+  shorter side) — which routinely means someone who never agreed and could not
+  be asked, because the consent recorded here is the wearer's, not theirs. The
+  Veil still blocks capture, "erase all memories" still reaches every stored
+  face, and an unnamed entry is swept 90 days after it was last seen unless
+  you name it — but turning the switch back off does not delete what it
+  already stored.
 - **Closed-grammar name capture.** A name is captured only from a closed,
   offline grammar of introductions — explicit forms ("my name is...",
   "call me...") taken as given, soft forms ("I'm Maya") only when the next
   token is capitalized. Since #101 the default is **auto-keep**: a matched
   self-introduction is saved the moment it is given and confirmed with an
   **IntroKeptCard** ("KEPT - on your device - veil silences this"), so the
-  dossier works from day one; "forget that" erases it, the Veil closes the
+  dossier works from day one; erasing it is deliberate, the Veil closes the
   ear entirely, and ambient chatter or a bystander's name never matches the
   grammar. The old offer-then-confirm flow remains available
   (`auto_keep=False`, the IntroOfferCard with its 12-second window).
@@ -188,7 +208,7 @@ What "remembering" is made of got real this wave (`memory/`):
   memory store instead, beside the retention-days prune of the ask history and
   activity log. The history is [decision
   0001](https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/decisions/0001-retention-lifecycle-never-runs.md).
-  Explicit deleting is unaffected and always worked: "forget that", erase-all,
+  Explicit deleting is unaffected and always worked: erase-all,
   and the retention-days setting.
 - **A cold-start maturity arc.** A fresh install is an **OBSERVER** (48
   hours and 200 scored events of pure silence), then an **APPRENTICE**

@@ -6,10 +6,17 @@ the keys on the kitchen table", "Maya mentioned the lease." And it only
 keeps anything while capture is on; Incognito or the Veil stops even that.
 
 **Can it tell me who a stranger is?**
-No, and it never will — the capability was deliberately left out of the
-product. It only knows people who were introduced to you — "Hi, I'm Maya,"
-or you saying "meet my colleague Sarah" — kept on your device, erasable
-with "forget that."
+It can never give you a stranger's name — nothing is ever looked up outside
+your own hardware, so there is no public database and no cloud face search,
+and a face nobody named stays nameless. By default it recognises nobody at
+all: the face model is not installed. Install it, switch it on, accept the
+biometric consent, and it knows the people who were introduced to you — "Hi,
+I'm Maya," or you saying "meet my colleague Sarah" — kept on your device,
+erasable from the Memories screen. One switch further, **auto-enrol** (off by
+default), it will also keep a nameless template of a face nobody introduced
+and tell you you have seen that person before. That includes people who never
+agreed and cannot agree here, and the consent is yours, not theirs — read
+[Privacy](privacy.md) before turning it on.
 
 **Does it work without internet?**
 Yes. Memory, people, promises, finding your things, Juno, live
@@ -40,10 +47,11 @@ confident, and limits itself to one verdict per person per 45 seconds.
 A quiet fact-checker you can trust beats a chatty one you learn to ignore.
 
 **How do I make it forget something?**
-Say "forget that" right after — the last capture is erased and a card
-confirms it. Bigger cleanups (a day, a person, everything) live in the
-phone's Memories and Settings screens, and the Mac panel has erase buttons
-for its history too.
+Today: through the phone's Memories and Settings screens, and the Mac panel's
+erase buttons. A spoken **"forget that"** for the last capture alone is designed
+and not built — there is no such command in the voice grammar yet, and the only
+erase that exists reaches everything rather than one moment. Saying so plainly
+because a half-true forget promise is worse than none.
 
 **How do I shut it up during a meeting?**
 "Hey Juno, focus mode" — interruptions pause for 25 minutes while memory

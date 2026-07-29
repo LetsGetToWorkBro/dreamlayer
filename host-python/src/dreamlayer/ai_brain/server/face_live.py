@@ -90,6 +90,34 @@ FACE_INDEX_FILE = "face_index.json"
 # a panel toggle is a thing a release build ships with, and this must not be.
 AMBIENT_ENV = "DL_FACE_AMBIENT"
 
+# The in-app consent the WEARER accepts before any of this runs. Versioned, so
+# changing the terms re-prompts instead of silently inheriting an old consent —
+# an agreement to different words is not this agreement.
+#
+# Read the second paragraph honestly, because it is the one that matters: this
+# consent is the wearer's, and in auto-enrol mode the people being enrolled are
+# NOT the ones accepting. No in-app flow can obtain their agreement, because
+# they never touch the app. The wearer is accepting a risk on their behalf.
+CONSENT_VERSION = "2026-07-29.auto-enrol.v1"
+CONSENT_TEXT = (
+    "Face recall stores a mathematical template of faces your camera sees, on "
+    "this device. Templates are biometric identifiers.\n\n"
+    "With auto-enrol ON, this includes people who have not agreed and cannot "
+    "agree here — bystanders, passers-by, anyone in frame. Collecting "
+    "biometric identifiers without the subject's consent is restricted or "
+    "unlawful in some places (for example Illinois' BIPA and GDPR Article 9). "
+    "By continuing you accept responsibility for how you use this.\n\n"
+    "You can turn it off, erase every stored face, and see how many are held, "
+    "at any time."
+)
+
+# Unnamed auto-enrolled identities are NOT cold-forever. A named contact is
+# someone the wearer chose to keep; an unnamed one is a stranger the camera
+# happened to see, and keeping those permanently makes the store grow without
+# bound with people the wearer could not identify if asked. They age out on the
+# warm window unless naming promotes them.
+UNNAMED_TTL_DAYS_DEFAULT = 90.0
+
 
 def ambient_allowed() -> bool:
     """Whether continuous, un-prompted face recognition may run.
@@ -143,6 +171,10 @@ class FaceRecall:
         self._embedder = None
         self._index = None
         self._loaded = False
+        # Per-identity bookkeeping the ContactRecord dataclass has no room for:
+        # whether it was auto-enrolled, how often it has been seen, when last.
+        # Kept beside the index in the same file so the two cannot drift.
+        self._meta: dict = {}
 
     # -- lazy pieces -------------------------------------------------------
 
@@ -184,16 +216,22 @@ class FaceRecall:
                 emb = [float(x) for x in (row.get("embedding") or [])]
                 if not emb:
                     continue
+                cid = str(row["contact_id"])
                 self._index.add(ContactRecord(
-                    contact_id=str(row["contact_id"]),
+                    contact_id=cid,
                     name=str(row.get("name") or ""),
                     embedding=emb))
+                self._meta[cid] = {"auto": bool(row.get("auto")),
+                                   "seen": int(row.get("seen") or 0),
+                                   "first_ts": float(row.get("first_ts") or 0.0),
+                                   "last_ts": float(row.get("last_ts") or 0.0)}
             except Exception:                        # noqa: BLE001 — skip a bad row
                 continue
 
     def _save(self) -> None:
         rows = [{"contact_id": c.contact_id, "name": c.name,
-                 "embedding": [float(x) for x in (c.embedding or [])]}
+                 "embedding": [float(x) for x in (c.embedding or [])],
+                 **{k: v for k, v in (self._meta.get(c.contact_id) or {}).items()}}
                 for c in self._index.all()]
         try:
             tmp = self.path.with_suffix(".json.tmp")
@@ -217,8 +255,57 @@ class FaceRecall:
             return False
 
     @property
+    def consented(self) -> bool:
+        """Whether the wearer has accepted the CURRENT in-app consent text.
+
+        Versioned on purpose: accepting the old wording is not acceptance of new
+        wording, so changing the terms re-prompts rather than inheriting.
+        """
+        got = str(getattr(self.brain.config, "face_consent_version", "") or "")
+        return got == CONSENT_VERSION
+
+    def accept_consent(self, version: str = "") -> dict:
+        """Record the wearer's in-app acceptance. The ONLY way consent is set —
+        nothing else in this module writes it, so acceptance is always a
+        deliberate act rather than a side effect."""
+        version = (version or CONSENT_VERSION).strip()
+        if version != CONSENT_VERSION:
+            return {"ok": False, "error": "stale consent version",
+                    "required": CONSENT_VERSION}
+        try:
+            self.brain.config.face_consent_version = CONSENT_VERSION
+            self.brain.save()
+        except Exception as exc:                     # noqa: BLE001
+            return {"ok": False, "error": f"could not record consent: {exc}"}
+        try:
+            self.brain.activity.add(
+                "face", f"Accepted face-recall consent ({CONSENT_VERSION})")
+        except Exception:                            # noqa: BLE001
+            pass
+        return {"ok": True, "version": CONSENT_VERSION}
+
+    def revoke_consent(self) -> dict:
+        """Withdraw consent. Recall stops immediately; stored faces are NOT
+        silently deleted, because a wipe is a separate deliberate act — call
+        forget_all for that. Reported so the panel can offer both."""
+        try:
+            self.brain.config.face_consent_version = ""
+            self.brain.save()
+            self.brain.activity.add("face", "Withdrew face-recall consent")
+        except Exception as exc:                     # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "still_stored": self._get_index().size}
+
+    @property
+    def auto_enrol(self) -> bool:
+        """Enrol every face seen, including people who did not agree."""
+        return bool(getattr(self.brain.config, "face_auto_enrol", False))
+
+    @property
     def enabled(self) -> bool:
-        """Whether recall may run at all: the wearer's switch AND a model."""
+        """Whether recall may run at all: consent, the wearer's switch, a model."""
+        if not self.consented:
+            return False
         if not bool(getattr(self.brain.config, "face_recognition", False)):
             return False
         return self.model_available
@@ -226,10 +313,18 @@ class FaceRecall:
     def status(self) -> dict:
         """What the panel shows. Counts and capability only — never a name,
         never a vector."""
+        index = self._get_index()
+        unnamed = sum(1 for c in index.all() if not c.name)
         return {"enabled": self.enabled,
                 "model": self.model_available,
                 "ambient": ambient_allowed(),
-                "enrolled": self._get_index().size}
+                "consented": self.consented,
+                "consent_version": CONSENT_VERSION,
+                "auto_enrol": self.auto_enrol,
+                "enrolled": index.size,
+                # the count that matters for what the wearer is holding: how
+                # many stored faces belong to people who never named themselves
+                "unnamed": unnamed}
 
     # -- the template rule -------------------------------------------------
 
@@ -259,13 +354,18 @@ class FaceRecall:
         """
         if not self.privacy.allow_capture():
             return {"known": False, "reason": "veiled"}
+        if not self.consented:
+            return {"known": False, "reason": "no-consent",
+                    "consent_required": CONSENT_VERSION}
         if not bool(getattr(self.brain.config, "face_recognition", False)):
             return {"known": False, "reason": "off"}
         index = self._get_index()
-        if index.size == 0:
-            # Nobody is enrolled, so the answer cannot be yes. Return BEFORE the
-            # model runs: with no possible match there is no reason to compute a
-            # template for whoever is in frame.
+        if index.size == 0 and not self.auto_enrol:
+            # Nobody is enrolled and we are not enrolling, so the answer cannot
+            # be yes. Return BEFORE the model runs: with no possible match there
+            # is no reason to compute a template for whoever is in frame.
+            # Auto-enrol deliberately skips this: an empty index is precisely
+            # when the first face gets stored.
             return {"known": False, "reason": "nobody-enrolled"}
         au = self._get_embedder().process_frame(frame)
         if au is None:
@@ -275,16 +375,118 @@ class FaceRecall:
             return {"known": False, "reason": "no-face"}
         match = index.search(template)
         if match is None:
-            # A stranger, or a contact the model would not commit to. Either
-            # way the template dies here and the wearer is told the honest
-            # thing. Nothing about this face is recorded — not the vector, not
-            # a count, not a ledger line.
+            if self.auto_enrol:
+                # THE CONSEQUENTIAL BRANCH. With auto-enrol on, a face that
+                # matches nobody is STORED rather than discarded — including a
+                # bystander who never agreed and could not have. This is the
+                # wearer's accepted risk (see CONSENT_TEXT), and it is the one
+                # place in this file where a template outlives the call for
+                # someone who did not ask for that.
+                return self._auto_enrol(template)
+            # Not enrolling: a stranger's template dies here and the wearer is
+            # told the honest thing. Nothing about this face is recorded — not
+            # the vector, not a count, not a ledger line.
             self._discard(template)
             return {"known": False, "reason": "no-match"}
         self._discard(template)
+        cid = match.contact.contact_id
+        seen = self._note_seen(cid)
         return {"known": True, "name": match.contact.name,
-                "contact_id": match.contact.contact_id,
+                "contact_id": cid,
+                "unnamed": not bool(match.contact.name),
+                "seen_count": seen,
                 "confidence": float(match.confidence)}
+
+    # -- auto-enrolment ----------------------------------------------------
+
+    def _auto_enrol(self, template) -> dict:
+        """Store a face nobody named, so it is recognised next time.
+
+        It gets a stable id and NO name. A generated placeholder name would be
+        worse than nothing: `identify` would answer `name: "person-8842"`, which
+        reads like knowledge and is noise. An unnamed identity is honest — "you
+        have seen this person before, three times" is true and useful, and the
+        wearer can name them later with `name_identity`.
+        """
+        from ...social_lens.schema import ContactRecord
+        cid = f"auto-{int(time.time() * 1000)}-{len(template) % 97}"
+        with self._lock:
+            index = self._get_index()
+            index.add(ContactRecord(contact_id=cid, name="",
+                                    embedding=[float(x) for x in template]))
+            self._meta[cid] = {"auto": True, "seen": 1,
+                               "first_ts": time.time(), "last_ts": time.time()}
+            self._save()
+        return {"known": True, "name": "", "contact_id": cid,
+                "unnamed": True, "seen_count": 1, "auto_enrolled": True,
+                "confidence": 1.0}
+
+    def name_identity(self, contact_id: str, name: str) -> dict:
+        """Give an auto-enrolled identity a name.
+
+        This PROMOTES it: a named contact is someone the wearer chose to keep,
+        so it stops ageing out on the unnamed window and becomes cold-forever
+        like every other contact.
+        """
+        name = (name or "").strip()
+        if not name:
+            return {"ok": False, "error": "a name is required"}
+        with self._lock:
+            index = self._get_index()
+            rec = index.get(contact_id)
+            if rec is None:
+                return {"ok": False, "error": "no such identity"}
+            from ...social_lens.schema import ContactRecord
+            index.add(ContactRecord(contact_id=contact_id, name=name,
+                                    embedding=list(rec.embedding or [])))
+            meta = self._meta.setdefault(contact_id, {})
+            meta["auto"] = False                     # named: no longer a stranger
+            meta["named_ts"] = time.time()
+            self._save()
+        try:
+            self.brain.activity.add("face", f"Named a remembered face: {name}")
+        except Exception:                            # noqa: BLE001
+            pass
+        return {"ok": True, "contact_id": contact_id, "name": name}
+
+    def _note_seen(self, contact_id: str) -> int:
+        """Count encounters. Only for identities already stored — this never
+        creates a record, so it cannot become a back door to enrolment."""
+        with self._lock:
+            if self._get_index().get(contact_id) is None:
+                return 0
+            meta = self._meta.setdefault(contact_id, {"auto": False, "seen": 0})
+            meta["seen"] = int(meta.get("seen", 0)) + 1
+            meta["last_ts"] = time.time()
+            self._save()
+            return int(meta["seen"])
+
+    def sweep_unnamed(self, ttl_days: float = UNNAMED_TTL_DAYS_DEFAULT) -> int:
+        """Drop auto-enrolled identities the wearer never named.
+
+        A named contact is a deliberate keep and stays cold-forever. An unnamed
+        one is a stranger the camera happened to see; keeping those permanently
+        grows the store without bound with people the wearer could not identify
+        if asked. Called by the retention sweep on the warm window.
+        """
+        if ttl_days <= 0:
+            return 0
+        cutoff = time.time() - ttl_days * 86400.0
+        dropped = 0
+        with self._lock:
+            index = self._get_index()
+            for rec in list(index.all()):
+                meta = self._meta.get(rec.contact_id) or {}
+                if rec.name or not meta.get("auto"):
+                    continue                          # named or hand-enrolled
+                if float(meta.get("last_ts", 0.0)) >= cutoff:
+                    continue                          # seen recently
+                index.remove(rec.contact_id)
+                self._meta.pop(rec.contact_id, None)
+                dropped += 1
+            if dropped:
+                self._save()
+        return dropped
 
     # -- enrolment: the only writer ----------------------------------------
 
@@ -301,6 +503,9 @@ class FaceRecall:
             return {"ok": False, "error": "a name is required"}
         if not self.privacy.allow_capture():
             return {"ok": False, "error": "veiled"}
+        if not self.consented:
+            return {"ok": False, "error": "consent not accepted",
+                    "consent_required": CONSENT_VERSION}
         if not bool(getattr(self.brain.config, "face_recognition", False)):
             return {"ok": False, "error": "face recognition is off"}
         if not self.model_available:

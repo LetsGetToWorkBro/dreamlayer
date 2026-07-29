@@ -1191,7 +1191,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled", "face_recognition"):
+                  "remote_listen_enabled", "face_recognition",
+                  "face_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -4351,15 +4352,84 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             ("/panel-assets/", _get_panel_asset),
         ]
         # exact-path routes, resolved AFTER the auth gate
+
+        # -- the lens set (ai_brain/server/lens_hosts.py) -------------------
+        # Provenance, Candor, Commitment Drift, Saga, Stasis, Premonition and
+        # Inner Weather each ran on the Orchestrator and had no way to the
+        # phone. These are that way. Each handler is a thin seam: the veil gate,
+        # the lens call and the card push all live in `lens_hosts`, so a route
+        # added later cannot forget the gate.
+
+        def _lenses_or_503(self):
+            """The lens set, or None with a 503 already sent. `lenses()` returns
+            None only when the module itself failed to import, which is a broken
+            install rather than a wearer-facing state — so it is a 503, not an
+            empty answer a client would render as "no promises are slipping"."""
+            ls = brain.lenses()
+            if ls is None:
+                self._json(503, {"ok": False, "error": "lens set unavailable"})
+            return ls
+
+        def _get_lenses(self, path, qs):
+            """What the lens set can answer right now: how many statements are
+            in the hot ring, how many thoughts are held, whether the veil is
+            down. Reads nothing from disk."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.status())
+
+        def _get_provenance(self, path, qs):
+            """Trace a belief: ?claim=the+venue+is+booked. `null` means the
+            veil is down — distinct from {"found": false}, which means the
+            Brain has genuinely never heard it."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, {"result": ls.trace(qs.get("claim", [""])[0])})
+
+        def _get_quests(self, path, qs):
+            """Commitments as quests, plus the XP/level/streak tally.
+            `/dreamlayer/saga` is a DIFFERENT thing (the ecosystem badge
+            profile), which is why this is not called that."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.quests())
+
+        def _get_drift(self, path, qs):
+            """Every tracked commitment and how far it has slipped. Ticks the
+            engine first, so a GET is also the clock — a phone that polls this
+            keeps promises decaying even with nothing else running."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.drift_tick())
+
+        def _get_stasis(self, path, qs):
+            """The held thoughts, freshest first."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, {"frames": ls.frames()})
+
+        def _get_premonition(self, path, qs):
+            """What usually happens next — only where the pattern is strong
+            enough that the model will say so."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, {"predictions": ls.predictions()})
+
         def _get_face(self, path, qs):
             """Runtime state of face recall: whether the wearer's switch is on,
             whether a model is actually installed, whether ambient is permitted
             here, and how many faces are enrolled. Counts and capability only —
             never a name, never a vector."""
+            from .face_live import CONSENT_TEXT
             fr = brain.face_recall()
-            self._json(200, fr.status() if fr is not None
-                       else {"enabled": False, "model": False,
-                             "ambient": False, "enrolled": 0})
+            if fr is None:
+                self._json(200, {"enabled": False, "model": False,
+                                 "ambient": False, "enrolled": 0})
+                return
+            # the exact words the acceptance is recorded against travel with the
+            # state, so the panel can never show different terms than the ones
+            # `accept_consent` versions
+            self._json(200, {**fr.status(), "consent_text": CONSENT_TEXT})
 
         _GET_ROUTES = {
             "/dreamlayer/config": _get_config,
@@ -4371,6 +4441,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/capabilities": _get_capabilities,
             "/dreamlayer/ear": _get_ear,
             "/dreamlayer/face": _get_face,
+            "/dreamlayer/lenses": _get_lenses,
+            "/dreamlayer/provenance": _get_provenance,
+            "/dreamlayer/quests": _get_quests,
+            "/dreamlayer/drift": _get_drift,
+            "/dreamlayer/stasis": _get_stasis,
+            "/dreamlayer/premonition": _get_premonition,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -4639,6 +4715,21 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 sr = 0
             body = b"" if stop else self._raw(live_mod.MAX_AUDIO_BYTES)
             self._json(200, live_mod.hear(brain, body, src_rate=sr, stop=stop))
+
+        def _post_scholar(self, path, qs):
+            """Scholar: read a question, a form, or dense text.
+            `?mode=answer|form|explain`, `?q=` the spoken question (answer) or
+            the purpose (form). Body is the JPEG, same cap and same
+            never-persisted decode as a look.
+
+            Scholar lived outside the Brain's import closure entirely — no code
+            path could load it, so this route is the whole of its reachability
+            from the phone."""
+            from . import live as live_mod
+            mode = (qs.get("mode", ["answer"])[0] or "answer").strip().lower()
+            arg = (qs.get("q", [""])[0] or "").strip()
+            data = self._raw(live_mod.MAX_FRAME_BYTES)
+            self._json(200, live_mod.scholar(brain, data, mode=mode, arg=arg))
 
         def _post_live_dream_scene(self, path, qs):
             """One Dream-Mode scene beat: a JPEG frame in, the REAL
@@ -4927,8 +5018,37 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # (a paired hub that is incognito must not egress here).
                 ans = brain.ask(it.args.get("query", ""),
                                 no_cloud=bool(vb.get("no_cloud")))
-                self._json(200, {"intent": it.kind, "query": it.args.get("query", ""),
-                                 "answer": ans.text if ans is not None else ""})
+                out = {"intent": it.kind, "query": it.args.get("query", ""),
+                       "answer": ans.text if ans is not None else ""}
+                # Juno's answer, drawn as well as returned. This is the seam and
+                # not `/dreamlayer/brain/ask`, deliberately: the Live Lens page
+                # posts to THAT route and already draws the answer itself, so
+                # pushing there would draw it twice on the surface that asked.
+                # Nothing that calls `/dreamlayer/voice` subscribes to the event
+                # stream, so this is the one non-duplicating place to push from.
+                #
+                # ONE CARD PER WEARER UTTERANCE. `locate` already pushes its own
+                # ObjectRecallCard (`brain_waypath.waypath_locate`), and several
+                # other branches below carry a `say` string. If a generic
+                # "push a JunoReplyCard whenever the response has `say`" is ever
+                # added, it MUST exclude every branch that pushes its own card —
+                # stash, locate, note_person, meet_person, debt, debt_settle,
+                # reply, stasis_freeze, stasis_resume — or one question draws two
+                # cards saying the same thing in different words.
+                #
+                # It pushes `ans.text`, never `vb["text"]`. Echoing the caller's
+                # string would turn this route into the arbitrary-text-onto-every-
+                # glass primitive the selftest push refuses to become.
+                reply = (out["answer"] or "").strip()
+                if reply:
+                    try:
+                        from ...hud import cards
+                        out["pushed"] = brain.push_event(
+                            "juno", cards.juno_reply(reply[:160], "answer"),
+                            veil_ok=False)
+                    except Exception:        # noqa: BLE001 — never cost the answer
+                        out["pushed"] = 0
+                self._json(200, out)
             elif it.kind == "brief":
                 self._json(200, {"intent": "brief", **brain.brief()})
             elif it.kind in ("timer", "interval", "clock"):
@@ -4952,6 +5072,27 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             elif it.kind == "reply":
                 self._json(200, brain.voice_reply(
                     it.args.get("to", ""), it.args.get("text", "")))
+            elif it.kind in ("stasis_freeze", "stasis_resume"):
+                # `orchestrator/voice.py:342,345` has parsed "hold that thought"
+                # and "where was I" into these two intents for as long as the
+                # grammar has existed, and this branch did not exist — so both
+                # fell through to the `else` below, returned 200 with a bare
+                # {"intent": "stasis_freeze"}, and `phone-app/app/now.tsx:110`
+                # rendered the literal string "(stasis_freeze)" on screen. A
+                # wearer saying "hold that thought" got an acknowledgement and
+                # nothing held. That is worse than an unimplemented feature: it
+                # looks like it worked.
+                ls = brain.lenses()
+                if ls is None:
+                    self._json(200, {"intent": it.kind, "ok": False,
+                                     "reason": "lens set unavailable"})
+                    return
+                r = (ls.freeze(it.args.get("note", ""))
+                     if it.kind == "stasis_freeze" else ls.resume())
+                # `None` is the veil, and it must not read as failure-to-parse:
+                # under the shield the Brain holds nothing and says so.
+                self._json(200, {"intent": it.kind,
+                                 **(r or {"ok": False, "reason": "veiled"})})
             else:
                 self._json(200, {"intent": it.kind, **it.args})
 
@@ -5256,6 +5397,127 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 return
             self._json(200, fr.identify(b64_to_frame(self._body().get("image"))))
 
+        def _post_face_consent(self, path, qs):
+            """Record or withdraw the wearer's in-app consent.
+            Body: {accept: true, version} or {accept: false}.
+
+            GET /dreamlayer/face returns the version that must be accepted, and
+            the text lives in `face_live.CONSENT_TEXT` so the panel renders the
+            exact words the acceptance is recorded against."""
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            b = self._body()
+            if b.get("accept") is True:
+                self._json(200, fr.accept_consent(str(b.get("version", ""))))
+            else:
+                self._json(200, fr.revoke_consent())
+
+        def _post_face_name(self, path, qs):
+            """Name an auto-enrolled identity. Body: {contact_id, name}.
+            Promotes it out of the unnamed-TTL sweep."""
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            b = self._body()
+            self._json(200, fr.name_identity(str(b.get("contact_id", "")),
+                                             str(b.get("name", ""))))
+
+        # -- the lens set, write side --------------------------------------
+
+        def _post_lens_observe(self, path, qs):
+            """Put a statement the WEARER made into the ring. Body:
+            {text[, person]}.
+
+            `via="said"` here and only here: this route is the wearer typing or
+            speaking on purpose, which is the one thing on the Brain that is
+            genuinely firsthand. The room ear posts through `ingest_caption`
+            with `via="heard"` instead, so Provenance can tell "you saw this"
+            from "someone near you mentioned it"."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            b = self._body()
+            self._json(200, ls.ingest_utterance(str(b.get("text", "")),
+                                                via="said",
+                                                person=str(b.get("person", ""))))
+
+        def _post_candor_check(self, path, qs):
+            """Does this contradict something already recorded? Body: {claim}.
+            Pushes the ConsistencyCard to the glass when it fires."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"result": ls.candor_check(
+                str(self._body().get("claim", "")))})
+
+        def _post_drift_tend(self, path, qs):
+            """Nudge a commitment — momentum, no XP. Body: {subject}."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"record": ls.tend(
+                str(self._body().get("subject", "")))})
+
+        def _post_quest_complete(self, path, qs):
+            """Keep a promise: XP, streak, reward card, and the Saga badges
+            (`quest_done`/`quest_rescue`/`streak`) that nothing used to emit.
+            Body: {subject}. `reward: null` means no such open commitment."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"reward": ls.quest_complete(
+                str(self._body().get("subject", "")))})
+
+        def _post_quest_abandon(self, path, qs):
+            """Let a commitment go: the streak breaks. Body: {subject}."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"ok": ls.quest_abandon(
+                str(self._body().get("subject", "")))})
+
+        def _post_stasis_freeze(self, path, qs):
+            """Hold the current thought. Body: {[note]} — a note overrides the
+            last thing heard as the line a resume hands back."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, ls.freeze(str(self._body().get("note", "")))
+                       or {"ok": False, "reason": "veiled"})
+
+        def _post_stasis_resume(self, path, qs):
+            """Pick a held thought back up. Body: {[id]} — no id means the top
+            of the stack, which is what "where was I" means out loud."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, ls.resume(self._body().get("id"))
+                       or {"ok": False, "reason": "veiled"})
+
+        def _post_stasis_pin(self, path, qs):
+            """Pin a held thought so it never composts. Body: {id}."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"ok": ls.pin(self._body().get("id"))})
+
+        def _post_inner_weather(self, path, qs):
+            """One Inner Weather beat from the phone's sensors. Body:
+            {imu_delta, imu_pose, extra}. Returns the frames the glass would
+            render (churn geometry, storm events).
+
+            NOT the same lens as `/dreamlayer/live/weather`, which is
+            Confluence's shared EntangledSky between two people. This one is
+            the wearer's own body: motion, micro-tremor and self-prosody fused
+            into a single churn value."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            self._json(200, {"frames": ls.weather_tick(self._body())})
+
         def _post_face_forget(self, path, qs):
             """Forget one enrolled face. Body: {contact_id}."""
             fr = brain.face_recall()
@@ -5297,6 +5559,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/face/enrol": _post_face_enrol,
             "/dreamlayer/face/identify": _post_face_identify,
             "/dreamlayer/face/forget": _post_face_forget,
+            "/dreamlayer/face/consent": _post_face_consent,
+            "/dreamlayer/face/name": _post_face_name,
+            "/dreamlayer/lens/observe": _post_lens_observe,
+            "/dreamlayer/candor/check": _post_candor_check,
+            "/dreamlayer/drift/tend": _post_drift_tend,
+            "/dreamlayer/quests/complete": _post_quest_complete,
+            "/dreamlayer/quests/abandon": _post_quest_abandon,
+            "/dreamlayer/stasis/freeze": _post_stasis_freeze,
+            "/dreamlayer/stasis/resume": _post_stasis_resume,
+            "/dreamlayer/stasis/pin": _post_stasis_pin,
+            "/dreamlayer/weather": _post_inner_weather,
             "/dreamlayer/social/people": _post_social_people,
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,
@@ -5328,6 +5601,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/message/send": _post_message_send,
             "/dreamlayer/live/look": _post_live_look,
             "/dreamlayer/live/hear": _post_live_hear,
+            "/dreamlayer/scholar": _post_scholar,
             "/dreamlayer/live/dream/scene": _post_live_dream_scene,
             "/dreamlayer/rehearsal/review": _post_rehearsal,
             "/dreamlayer/recall/sealed": _post_sealed_recall,

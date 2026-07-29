@@ -196,6 +196,14 @@ class WorldLensHost:
             allow_network=self.privacy.allow_capture))
         self.taste_lens = TasteLens(read_fn=self._taste_read,
                                     profile=self.dietary, shop_fn=self._taste_shop)
+        # Scholar, on exactly the same seam as TasteLens: a prompt and a frame
+        # in, the model's raw reply out, parsing owned by the lens. It was
+        # outside the Brain's import closure entirely — a look at a test
+        # question, a form or a page of legal language could not reach it from
+        # the phone no matter how complete the lens was. `read_fn` is injected
+        # (the lens is pure) so this needed a home, not a rewrite.
+        from ...orchestrator.scholar import Scholar
+        self.scholar = Scholar(read_fn=self._scholar_read)
 
         self._load_installed_plugins(isolate)
 
@@ -307,6 +315,22 @@ class WorldLensHost:
         from ...orchestrator._ops_helpers import _parse_taste_reply
         text = self._describe(_TASTE_PROMPT, frame_to_b64(frame))
         return _parse_taste_reply(text) if text else []
+
+    def _scholar_read(self, frame, prompt: str):
+        """Scholar's vision seam. Veil-gated, and `None` is the contract for
+        "no tier could read this" — Scholar turns that into an honest
+        "Connect a Brain to read this" card rather than a guess.
+
+        The trailing `or None` is belt-and-braces and known to be so: mutating
+        it away changes no behaviour, because `Scholar._read` already collapses
+        a blank reply to None. It is kept because the contract is `Optional[str]`
+        and `_describe` returning `""` on every failure path is a detail of a
+        different module. Do not read it as load-bearing.
+        """
+        if not self.privacy.allow_capture():
+            return None
+        from ...object_lens.vision_recognizer import frame_to_b64
+        return self._describe(prompt, frame_to_b64(frame)) or None
 
     def _taste_shop(self, label, attrs) -> dict:
         merged: dict = {}

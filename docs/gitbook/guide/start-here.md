@@ -18,8 +18,11 @@ of the time the display shows almost nothing at all.
   and it tells you: kitchen table, 7:42 this morning.
 - **It remembers people for you.** When you meet someone again, it can quietly
   remind you of their name, when you last spoke, and what you talked about.
-  Only people who introduced themselves to you and whom you chose to save —
-  it will never identify a stranger.
+  Out of the box it recognises nobody — the face model is not even installed.
+  Add it and it knows the people who introduced themselves to you and whom you
+  chose to save. There is a further switch, off by default, that also keeps a
+  nameless record of a face nobody introduced, so it can tell you you have met
+  them before; see [Privacy](privacy.md) before you turn it on.
 - **It keeps your promises visible.** Say "I'll send you the lease by Friday"
   out loud, and it tracks that. As Friday gets close, it reminds you before
   you drop it.

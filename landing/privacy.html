@@ -101,12 +101,12 @@
       <span class="wbox collapse" aria-hidden="true"></span>
       <span class="wbox zoom" aria-hidden="true"></span>
     </div>
-    <div class="fstatus"><span>read-only&nbsp;&nbsp;·&nbsp;&nbsp;plain text&nbsp;&nbsp;·&nbsp;&nbsp;last updated 8 July 2026</span></div>
+    <div class="fstatus"><span>read-only&nbsp;&nbsp;·&nbsp;&nbsp;plain text&nbsp;&nbsp;·&nbsp;&nbsp;last updated 29 July 2026</span></div>
     <div class="mbody">
       <article class="doc">
         <div class="eyebrow">Privacy</div>
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated 8 July 2026</p>
+        <p class="updated">Last updated 29 July 2026</p>
 
         <p>DreamLayer is a memory layer for the real world, built to run on your own devices. This policy
         explains what the DreamLayer apps do with your information. The short version: <strong>by default your
@@ -150,10 +150,31 @@
             audio or video recordings.</li>
           <li>The phone talks to your Brain over your home network, or over a relay you host, using a pairing token.
             This traffic goes between your own devices, not to us.</li>
-          <li>The glasses capture is on-device; DreamLayer deliberately does <strong>not</strong> perform stranger
-            facial recognition, keep a face database, or record covertly. The shipped face embedder
-            cannot return an identity at all — with no face model present it declines every frame
-            rather than guessing, so there is no setting that turns stranger recognition on.</li>
+          <li>The glasses capture is on-device, and DreamLayer <strong>never looks a face up in any public or
+            third-party database</strong> — matching only ever happens against an index held on your own Brain
+            (face_index.json in your Brain's config folder, written owner-only). A default install
+            <strong>cannot recognise a face at all</strong>: that needs two things it does not have — the optional
+            <em>face</em> package (InsightFace buffalo_l), which is in no install profile, and the model weights
+            present on disk and passing their integrity check. With either missing, every frame is declined, and
+            nothing is downloaded on the recall path. If you install both, turn face recognition on, and accept
+            the biometric consent, DreamLayer computes a <strong>face template</strong> — 512 numbers describing a
+            face, which is a biometric identifier — for <strong>one face per frame</strong>: the largest face in
+            view, and only if it fills at least a tenth of the frame's shorter side, so a face in the background is
+            never templated. With auto-enrol <strong>off</strong> (the default), that template is compared against
+            the contacts you enrolled by name and then discarded: a face that matches none of them leaves nothing
+            behind — no template, no count, no log line — and if you have enrolled nobody, no template is computed
+            at all.</li>
+          <li>With auto-enrol <strong>on</strong>, a template that matches nobody is instead <strong>saved to your
+            Brain</strong> without a name, together with when and how often that face has been seen, so it is
+            recognised next time as someone you have seen before. That includes people who never agreed and cannot
+            agree in the app: the consent you accept is <strong>yours, not theirs</strong>, and collecting biometric
+            identifiers without the subject's consent is restricted or unlawful in some places (for example
+            Illinois' BIPA and GDPR Article 9). Auto-enrolled faces you never name are deleted by the Brain's
+            retention sweep once they have not been seen for the warm window (90 days by default); faces you give a
+            name are kept until you delete them. There is no continuous recognition loop — a template is computed
+            only for a frame explicitly submitted to your Brain. The <strong>Privacy Veil</strong> blocks the whole
+            path, and <strong>Erase all memories</strong> deletes every stored template. DreamLayer still does not
+            record covertly.</li>
           <li>DreamLayer <strong>never clones your voice, or anyone else's.</strong> It does synthesise
             <em>Juno's</em> voice — an optional offline engine lets her speak in her own voice rather
             than a stock one, and the only reference clips it is ever given are her own pre-recorded

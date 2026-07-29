@@ -100,7 +100,7 @@ behaves identically, and nothing marked private leaves.
 | Search *your* files & mail (Lucid Recall) | ✓ on the Mac mini | ✓ |
 | Deep "explain / tell me more" on an object | ✓ Mac mini; **phone mode: coarse** | ✓ frontier VLM, richest |
 | Rare/obscure knowledge not in your files | ✗ ("nothing local matches") | ✓ |
-| Translation (Rosetta / Puente) breadth | ✓ common langs on-device | ✓ widest coverage |
+| Translation (Rosetta) breadth | ✓ common langs on-device | ✓ widest coverage |
 | Works in airplane mode | ✓ | ✗ (cloud tier needs a connection) |
 
 Rule of thumb: **everything that is *yours* — memory, people, your files,
@@ -206,12 +206,11 @@ Provenance can trace it.
    but only through a **draft → you approve → send** consent flow (an
    outbound action is never taken silently; see Phase 3). iMessage reads from
    `~/Library/Messages/chat.db`; sending via AppleScript to Messages/Mail.
-3. **Read/translate visual text** — **yes.** Scope boundary with **Puente**
-   (`orchestrator/puente_bridge.py`): Puente is the **ear** (real-time
-   voice/conversation translation → LiveCaptionCard); the AI Object Lens is
-   the **eye** (text you *look at* — a menu, a sign — OCR'd + translated).
-   Complementary, no duplication; the Object Lens may reuse Puente's caption
-   card styling but not its pipeline.
+3. **Read/translate visual text** — **yes.** Scope boundary with
+   **Rosetta's ear** (`ops_world_lenses.translate_heard`): the ear is
+   real-time voice/conversation translation; the AI Object Lens is the **eye**
+   (text you *look at* — a menu, a sign — OCR'd + translated). Complementary,
+   no duplication, and one detector behind both since Puente was retired.
 4. **Local model** — target the Mac mini with **Ollama** (least friction:
    local HTTP, OpenAI-compatible API, vision models + an embedding model for
    RAG in one install). **MLX** is the higher-performance alternative later.

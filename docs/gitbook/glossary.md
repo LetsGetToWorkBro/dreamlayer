@@ -111,7 +111,6 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Premonition** — recurring-pattern ghosts of the near future on the
   Horizon.
 - **Prism** — the kaleidoscope lens (Atmosphere).
-- **Puente** — the ear: live speech translation to caption cards.
 - **Reality Compiler** — Rehearsal to Figment: describe a procedure, get a
   runnable on-glass skill.
 - **REM** — the nightly consolidation cycle; its retrieval bias tunes the
@@ -136,8 +135,8 @@ Every DreamLayer term of art, one line each. Chapter links go deeper.
 - **Simulator (Halo)** — the product with no glasses: the browser simulator
   on the website, and the Python simulator that runs the real stack.
   [The Halo Simulator](simulator.md)
-- **Social Lens** — recognizing your own people, consent-first; never
-  strangers.
+- **Social Lens** — recognizing your own people, consent-first; opt-in, off
+  by default, and never a lookup outside your own hardware.
 - **Solid** — the material half of Meridian: real type scale, glass panes,
   gradient ramps, blooms. [Meridian](meridian.md)
 - **Synesthesia** — Dream Mode's six-word poetic sense read.

@@ -12,7 +12,7 @@ Palette Cycling).
 | **Memory** | your life, remembered | Dream Mode, Ghost Layer, Lucid Recall, REM, Yesterlight, Premonition, Waypath |
 | **People** | who is around you | Social Lens, Timbre, Name Capture |
 | **Truth** | what is true and where beliefs come from | Truth Lens, Candor, Provenance |
-| **World** | understand what you look at | Juno (look-to-know), Label Lens, AI Brain, Rosetta, Puente |
+| **World** | understand what you look at | Juno (look-to-know), Label Lens, AI Brain, Rosetta |
 | **Life** | do, keep, and build | Commitment Drift, Saga, Reality Compiler |
 | **Together** | two wearers, one sky | Confluence |
 
@@ -83,12 +83,15 @@ real), hardening the model when a predicted event lands.
   text); integration seams exist for a laptop, a car, a plant. The lens never
   identifies people — `PERSON_LABELS` enforcement keeps humans in the Social
   Lens's consented domain.
-- **Rosetta** (`rosetta.py`) is the **eye**: text you look at — a menu, a
-  sign — OCR'd and translated (`translate_seen(text, target)`). **Puente**
-  (`orchestrator/puente_bridge.py`) is the **ear**: real-time speech
-  translation into LiveCaptionCards. Complementary by design; they share
-  card styling, not pipelines. **Seams:** OCR, the translation model, and
-  the microphone.
+- **Rosetta** (`rosetta.py`) is both halves of "understand any language",
+  one engine behind them. The **eye**: text you look at — a menu, a sign —
+  OCR'd and translated (`translate_seen(text, target)`). The **ear**: what
+  someone is saying, captioned live (`translate_heard(text, target,
+  speaker)`, "Rosetta Live"), riding a figment stage rather than a
+  per-utterance card. A separate ear engine, Puente, was retired: it knew
+  Spanish and English where this module knows a dozen-plus languages and
+  non-Latin scripts, and nothing outside its own test called it.
+  **Seams:** OCR, the translation model, and the microphone.
 - **Waypath** (`find_way(subject, heading_deg)`) — point-me-to-my-things:
   a bearing card from your heading to where the remembered object lives.
 - **Docent** (`docent(query)`) — a venue's own knowledge, answered on its
