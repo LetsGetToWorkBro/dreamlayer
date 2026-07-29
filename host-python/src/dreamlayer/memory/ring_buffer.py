@@ -69,12 +69,23 @@ class SemanticRingBuffer:
             out = [b for b in out if b.event.kind == kind]
         return out
 
-    def purge_before(self, cutoff_ts: float) -> int:
+    def purge_before(self, cutoff_ts: float, keep_kinds=None) -> int:
         """Drop events older than cutoff_ts — the hot-store retention window.
         Capacity eviction bounds SIZE; this bounds AGE. Returns count purged.
-        Held under the lock so a concurrent append is never lost to the rebind."""
+        Held under the lock so a concurrent append is never lost to the rebind.
+
+        `keep_kinds` exempts identity-grade kinds from the AGE bound, so a ring
+        can be swept on the same policy `memory/retention.py` applies to the
+        rows it mirrors. Without it a 24-hour hot window silently deletes a
+        commitment due in three days — the row is cold-forever on disk
+        (`retention.COLD_KINDS`) while its ring view expires under it, and the
+        lens reading the ring reports the promise simply gone. Capacity still
+        bounds an exempt kind, so this cannot grow the buffer without limit.
+        Default None keeps the old behaviour: age out everything."""
+        keep = frozenset(keep_kinds or ())
         with self._lock:
-            kept = [b for b in self._buf if b.ts >= cutoff_ts]
+            kept = [b for b in self._buf
+                    if b.ts >= cutoff_ts or b.event.kind in keep]
             purged = len(self._buf) - len(kept)
             if purged:
                 self._buf = deque(kept, maxlen=self.capacity)

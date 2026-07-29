@@ -244,6 +244,24 @@ def _deduplicate(events: list[MemoryEvent]) -> list[MemoryEvent]:
     return out
 
 
+def extract_events(text: str, context: dict | None = None) -> list[MemoryEvent]:
+    """Tier-1 extraction on its own: promises, tasks, people, objects, places.
+
+    `IngestPipeline.ingest` is the full three-tier path and it WRITES — it takes
+    a `MemoryDB` and persists every event it finds. That makes it the wrong tool
+    for a caller that wants structure without a store, which is exactly what the
+    shipped Brain's hot statement ring is (`ai_brain/server/lens_hosts.py`):
+    a bounded in-memory view swept on the retention window, deliberately not a
+    second durable transcript.
+
+    So this exposes the tier-1 extractor as what it already is — a pure function
+    over a string. No database, no model, no network, no spaCy, nothing to
+    close. Same events, same confidences, same dedupe as tier 1 inside the
+    pipeline; a caller that wants tiers 2 and 3 still wants `IngestPipeline`.
+    """
+    return _deduplicate(_extract_tier1(text or "", context or {}))
+
+
 # ---------------------------------------------------------------------------
 # IngestPipeline
 # ---------------------------------------------------------------------------
