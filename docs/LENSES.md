@@ -43,7 +43,7 @@ The resting state and everything about recall.
 
 ## 👤 People — *who's around you*
 
-Only people you know; never strangers.
+People you know, on your own hardware; never a public database.
 
 - **Social Lens** — recognises your own contacts and labels them.
 - **Timbre** — familiar voices glow as waveforms at the rim; strangers are

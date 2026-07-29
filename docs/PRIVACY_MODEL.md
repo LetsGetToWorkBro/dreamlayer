@@ -24,8 +24,10 @@ first-class, visible feature.
   your notes) from there. The KeptCard states the saved fact in-eye.
 - **The boundary is the closed grammar.** Only a spoken self-introduction
   triggers capture. Ambient chatter, overheard third-party mentions, and
-  people who never addressed you produce nothing — bystanders are never
-  enrolled. There is no stranger lookup, no public database, no network.
+  people who never addressed you produce nothing — no bystander's NAME is
+  ever captured. There is no public database and no network. Face enrolment
+  is a separate matter and no longer has this boundary: see "Face recall and
+  auto-enrol" below.
 - **The veil wins.** While the Privacy Veil is down the ear is closed: no
   name is kept or offered, no face is grabbed. "Forget that" erases a kept
   introduction; the consent flow (offer + deliberate confirm) remains
@@ -44,7 +46,8 @@ first-class, visible feature.
 | entities, places           | raw audio waveforms |
 | commitments, timestamps    | continuous transcripts |
 | confidence scores          | raw media of any kind |
-| kept contacts' face embeddings (local only) | biometric identifiers of strangers |
+| kept contacts' face embeddings (local only) | face images, crops, bounding boxes, landmarks |
+| with auto-enrol ON, face embeddings of people nobody named (local only, unnamed) | any face embedding, off this device |
 
 ## Retention lifecycle
 "Structured, never raw" is also a *lifecycle* claim (`memory/retention.py`):
@@ -75,16 +78,28 @@ review is still a tracked owner action (docs/AUDIT_ACTIONS.md).
   owner. DreamLayer treats that as the documented consent event: it is
   timestamped in the kept contact, revocable at any time ("forget that"
   erases the embedding, not just the name), and never happens while the
-  Veil is down. Bystanders who never addressed the wearer are structurally
-  incapable of enrollment; stranger lookup is a refused capability, not a
-  setting.
+  Veil is down.
+- **Face recall and auto-enrol — where that theory stops.** The paragraph
+  above describes `face_auto_enrol` OFF, which is the default and the only
+  configuration the consent theory covers. With it ON, a face matching no
+  enrolled contact is stored rather than discarded, unnamed, and recognised on
+  the next look. Bystanders are then NOT structurally incapable of enrolment,
+  and stranger enrolment is a setting, not a refused capability. What still
+  holds in that mode: the template never leaves the device, nothing is looked
+  up externally, no name is ever invented for it, only the subject face of a
+  frame is embedded, the Veil blocks the path, unnamed entries age out on the
+  90-day warm window, and erase-everything reaches them. What does not hold is
+  the consent event: the versioned in-app acceptance is the WEARER's, taken on
+  the subject's behalf, and no flow here can obtain the subject's.
 - **The honest caveats.** (1) An introduction is strong *evidence* of
   consent to be remembered; whether it satisfies each statute's *informed*
   consent standard is exactly the counsel question. (2) Matching requires
   embedding the face *in view* before knowing whether it's a kept contact —
-  the transient probe embedding is computed and discarded, never stored for
-  strangers; counsel should confirm transient computation is defensible per
-  jurisdiction. (3) Until that review lands, deployments in two-party-consent
+  with auto-enrol off the transient probe embedding is computed and discarded,
+  never stored for strangers, and counsel should confirm transient computation
+  is defensible per jurisdiction. With auto-enrol ON it is not transient at
+  all — it is persisted — which is a different and much harder question, and
+  the reason that switch ships off with a consent screen in front of it. (3) Until that review lands, deployments in two-party-consent
   or BIPA-class jurisdictions should treat face matching as an explicit
   per-jurisdiction opt-in, off by default.
 - **What this section is not.** Legal advice, or a substitute for the

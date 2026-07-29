@@ -47,9 +47,14 @@ Short version: **on your own devices, and it works that way by default.**
 
 ## People — the hard line
 
-- **It never identifies strangers.** There is no giant face database to
-  search, by design — the capability simply does not exist in the product.
-  It recognizes only people who were introduced to you.
+- **There is no giant face database to search.** Nothing is ever looked up
+  outside your own hardware — no public database, no cloud face search, by
+  design. Out of the box it recognizes nobody at all: the face model is not
+  even installed. Turn it on and it recognizes the people who were introduced
+  to you; turn **auto-enrol** on as well and it also keeps a nameless record
+  of a face nobody introduced, so it can tell you you have seen them before.
+  That second switch is the one to think hard about — see "What was
+  deliberately not built" below.
 - **Names come only from introductions.** When someone says "Hi, I'm Maya"
   — or you say "meet my colleague Sarah" — the name is kept and a card
   says so plainly ("KEPT - on your device"). Only a real introduction ever
@@ -81,6 +86,24 @@ All the switches live together in the phone's Settings:
 
 ## What was deliberately not built
 
-No stranger identification. No voice cloning. No covert recording modes.
-These are not features waiting behind a setting — they were designed out of
-the product on purpose.
+No voice cloning. No covert recording modes. These are not features waiting
+behind a setting — they were designed out of the product on purpose.
+
+Face recognition used to be on that list. It is not any more. It ships as an
+opt-in capability: the face model is in no install profile, so you have to add
+it deliberately; recognition is off by default; and nothing runs until you
+accept a consent whose exact wording is recorded — reword it and it has to be
+accepted again. Beyond that sits **auto-enrol**, a further switch, also off by
+default. With it off, a face that matches nobody you introduced is discarded
+the instant it is compared — not stored, not counted, not logged. With it on,
+that face is kept instead, so it is recognised the next time you see it, and
+that includes people who never agreed and cannot agree here: the consent is
+yours, taken on their behalf. We would rather say that plainly than keep a
+promise the build no longer keeps.
+
+What stays true either way: only the face you are actually looking at is ever
+turned into a template — one per frame, and only if it is large enough in
+view, so someone in the background is not — a stored face nobody named is
+never given an invented name, nothing is ever looked up outside your own
+hardware, unnamed faces age out on your retention window unless you name them,
+the Privacy Veil stops the whole path, and erasing everything erases them.
