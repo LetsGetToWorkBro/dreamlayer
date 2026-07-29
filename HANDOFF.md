@@ -11,6 +11,48 @@ owner asked for this explicitly and asked for it at AAA level: fully built,
 tested, mutation-tested, merged. Read the whole of this section before starting;
 the first item is smaller than it looks and unblocks the rest.
 
+### The bar: 1:1 and reachable, no partial wiring
+
+The owner's words: **"it needs to be 1:1 full functionality and reachable, no
+shortcuts."** A slogan does not hold a bar, so here it is as eight checks. A
+lens is DONE when all eight pass, and not before. "It imports now" is not done.
+"There's a method for it" is not done.
+
+1. **In the closure.** `python3 scripts/lens_reachability.py` does not list it
+   as unreachable.
+2. **Constructed Brain-side.** A host in `ai_brain/server/` builds it —
+   `grep -rn "TheClass(" src/dreamlayer/ai_brain --include=*.py` returns a hit.
+   Never by resurrecting the `Orchestrator`.
+3. **Reachable by the phone.** A route in `_POST_ROUTES` / `_GET_ROUTES`, tested
+   over a LIVE server, not just a Brain method. A capability with no route is
+   invisible — this is the bug #542 shipped with and #543 shipped with, twice in
+   a row, so check it twice.
+4. **Fed real input.** The lens gets what the Orchestrator path gives it, not a
+   stub, an empty collection, or a surrogate that technically satisfies the
+   signature. THIS IS THE ONE THE OWNER IS WARNING ABOUT. A `ConsistencyEngine`
+   over an empty ring answers "no contradiction" forever and looks like it
+   works. If the real input does not exist Brain-side, BUILD IT (that is what
+   the statement ring in `lens_hosts.py` is) or say plainly that the lens is
+   blocked and why.
+5. **Proven by behaviour, not construction.** A test that puts real state in and
+   asserts the lens ANSWERS about it. `assert x is not None` and
+   `assert ... or True` are not tests; an earlier draft of
+   `test_brain_lens_hosts.py` had three of the latter and they would all have
+   passed vacuously.
+6. **Mutation-tested.** Break the wiring; the test must fail. Commit first, then
+   mutate, then restore — a `git checkout --` during mutation testing has eaten
+   uncommitted work in this repo twice now.
+7. **Obeys the standing rules** if it stores anything: Veil-gated and
+   fail-closed, swept by retention, reached by erase-everything. A new store
+   that skips any of the three is how "nothing expires" and "erase everything"
+   quietly stop being true.
+8. **Claims moved with it.** If wiring it makes a sentence on `dreamlayer.app`
+   or in `docs/gitbook/` true or false, fix it in the same change.
+
+If a lens cannot pass all eight, do not half-wire it and move on. Leave it, and
+write down which check it fails and what it is blocked on. A documented gap is
+recoverable; a lens that looks wired and is not costs the next audit a day.
+
 ### 0. FIRST: routes for the seven lenses that already work (half a day)
 
 `ai_brain/server/lens_hosts.py` hosts Provenance, Candor, Commitment Drift,
