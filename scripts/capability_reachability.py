@@ -30,12 +30,22 @@ regression:
 So this prints the list and the reason bucket, and — unlike its two siblings —
 exits 0. A number to argue with beats a gate that fails for a good reason.
 
-The one thing an entry here always means: **if you believe a capability is live
-in the shipped product and it appears below, one of the two is wrong.** Either
-the seam string is stale (it names a file the Brain replaced — `vector_search`
-points at `memory/vector_store.py` while the Brain uses `memory/ann_index.py`)
-or the capability genuinely is not wired. Both are worth knowing; they need
-opposite fixes.
+Three buckets, and only one of them is a defect:
+
+  * MISREPORTED — a seam the Brain cannot load, on a capability that is NOT in
+    `capabilities.py:_NOT_WIRED`. The meter will light it green once its pip
+    extras install, and nothing can exercise it. **This is the list to read**,
+    and it is empty today.
+  * declared DORMANT — unreachable and `_NOT_WIRED` says so, so the wearer is
+    told "dormant" rather than shown a false green. Honest; still real work.
+  * unreachable BY DESIGN — reaching it would be the regression.
+
+An earlier version had no dormant bucket and printed eighteen `_NOT_WIRED`
+capabilities as "no reason on file", when the reason was written out in prose
+directly above their names. It buried the single entry that was genuinely
+wrong: `vector_search` named `memory/vector_store.py` while the Brain's recall
+paths construct `PersistentAnnIndex` from `memory/ann_index.py`. A checker that
+reports eighteen non-problems alongside one real one gets read as noise.
 
     $ python3 scripts/capability_reachability.py
     $ python3 scripts/capability_reachability.py --verbose   # show reachable too

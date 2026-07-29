@@ -17,9 +17,22 @@ become a lie, in two different directions:
     `footer` is where `ConsistencyCard` puts the prior statement, i.e. Candor's
     entire proposition. "It renders something" is not "it renders the card".
 
-Both halves are checked, because either alone is satisfiable while the wearer
-sees nothing. A card is DONE when it has a producer in the Brain's import
-closure AND a renderer branch on the glass.
+  * NOT DECLARED AT ALL. The 24 come from `demo/catalog.py`, so a card the
+    Brain pushes that the demo never lists lands in NEITHER bucket above — and
+    that is not a corner case, it is where the worst-drawn card in the product
+    was hiding. `ConsistencyCard` is built inline in `orchestrator/
+    consistency.py`, pushed by Candor on a live path, and drawn by neither
+    surface; its `footer` is the prior statement, so it rendered an accusation
+    with the evidence removed while every bucket here read clean.
+
+Three halves, then, and the third needs one distinction to be worth anything:
+**built is not pushed.** Most undeclared types are returned as JSON to the
+phone, where every field survives — they never meet a generic renderer and are
+not defects. Only what reaches `_push`/`push_event` can be gutted. A first pass
+conflated the two and manufactured seven defects that do not exist.
+
+A card is DONE when it has a producer in the Brain's import closure AND a
+renderer branch on the surface that producer can actually reach.
 
 WHAT THIS PROVES, AND WHAT IT DOES NOT. Same honest limits as its sibling: a
 producer call site in the closure means the code CAN run, not that it does —
