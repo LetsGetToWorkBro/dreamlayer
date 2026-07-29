@@ -1,16 +1,64 @@
 # Handoff — read this before touching anything
 
-Working state as of 2026-07-27. Written for whoever picks this up next.
+Working state as of 2026-07-29. Written for whoever picks this up next.
 
 ---
 
 ## The task in front of you
 
-**Step 2: face recognition.** Step 1 (retention) is done — see below. The owner
-made retention the prerequisite because storing face templates under a retention
-policy that does not run is materially worse than storing text under it.
+**Step 3 is the lens-coverage gap below.** Steps 1 (retention) and 2 (face
+recognition) are done and merged — kept here as context, not work.
 
-### Step 1 — retention (DONE, 2026-07-28)
+### The lens gap — four lenses the phone cannot reach (audit 2026-07-29)
+
+The phone camera path does **not** use the `Orchestrator`, which is correct and
+deliberate: `WorldLensHost` (`ai_brain/server/world_lens.py`) is the Brain-side
+host. It imports shared primitives *from* the `orchestrator` package (`TasteLens`,
+`GlanceArbiter`, `CapabilityLedger`) but never constructs an `Orchestrator`.
+
+It is **not 1:1 with the lens classes**, and that is the open work. Verified:
+
+```
+$ for c in TruthLens ProvenanceLens Scholar YesterlightController; do \
+    grep -rn "$c(" src/dreamlayer --include=*.py | grep -v /tests/; done
+truth_lens/__init__.py, orchestrator/orchestrator.py          # TruthLens
+orchestrator/orchestrator.py, orchestrator/capture_provenance.py  # ProvenanceLens
+orchestrator/orchestrator.py, orchestrator/glance.py          # Scholar
+dream_mode/engine.py   (DreamEngine — itself orchestrator-only)  # Yesterlight
+```
+
+All four are declared as lenses in `lenses.py`, all four have real modules on
+disk, and none has any reference from `ai_brain/` — so they are invisible from
+the phone, the same disease as retention (`decisions/0001`) and the Social Lens
+(fixed in #542). **Truth Lens, Provenance, Scholar and Yesterlight are the
+remaining Orchestrator-only lenses.** Scholar is the most user-visible of the
+four ("read a test → the answer; a form → what to write in each field").
+
+Fix them the way the last three were fixed: re-implement Brain-side against the
+Brain's own state, do **not** resurrect the Orchestrator.
+
+**What already works, so you do not re-audit it:**
+
+- **The glass does pick its own lens.** `GlanceArbiter` is built in
+  `WorldLensHost.__init__` (via `glance_live.build_live_arbiter`) and `glance()`
+  arbitrates every look: fire the clear winner, offer a chooser when genuinely
+  ambiguous, else the object floor. It learns per-scene priors, and a
+  priors-forced fire still carries `alts` so the roads not taken stay reachable.
+- **All 8 arbiter candidates dispatch to something real.** Verified in
+  `_run_glance_lens`: read→`look_lens("doc")`, math→`look_lens("math")`,
+  depth/sky/segment→`look_lens(action)`, translate→`look(facet="ai")`,
+  taste→`taste()`, juno→the object floor. No candidate bids for a lens that
+  cannot run.
+- **`find` IS reachable.** Spoken intent lands via `/live/intent` →
+  `note_spoken_intent` → `pending_intent()`, and `world_lens.py:576` runs
+  `look_lens(frame, "find", {"terms": …})`. **The comment in `glance_live.py`
+  calling that "the next tier of this work" is STALE** — fix the comment when
+  you are next in that file.
+- Deliberately not auto-fired: `find` (needs nouns a bare frame cannot supply),
+  `dream` (a deliberate style tap), and `person` (every face defers to
+  `person_guard`; the arbiter must never try to identify a stranger).
+
+### Step 1 — retention (DONE, #541)
 
 Wired Brain-side, following the `ear.py` / `glance_live.py` precedent rather
 than resurrecting the `Orchestrator` the shipped Brain never builds:
@@ -25,53 +73,54 @@ than resurrecting the `Orchestrator` the shipped Brain never builds:
   read live. Conservatism kept: unknown age → keep, pinned → never expires,
   entities cold-forever, any failure → keep.
 - `tests/test_brain_retention_boot.py` is the proof, and every assertion in it
-  is a row that is GONE from a real file after a real boot. It was
-  mutation-tested against the boot hook.
+  is a row that is GONE from a real file after a real boot. Mutation-tested.
 - `decisions/0001` is now `fixed` (a new status — see `decisions/README.md`),
   and the docs' retention claims were made confident again in the same change.
 
-### Step 2 — face recognition
+### Step 2 — face recognition (DONE, #542)
 
-The owner has explicitly asked for this, reversing an earlier "no". Their four
-answers, verbatim in intent:
+InsightFace `buffalo_l` (SCRFD + ArcFace r50, ONNX/CPU) behind a new opt-in
+`face` extra, plus the Brain-side consumer that did not exist — `SocialLens` was
+`Orchestrator`-only, so the model alone would have been `decisions/0001` one lens
+over. `ai_brain/server/face_live.py` + `POST /dreamlayer/face/{enrol,identify,
+forget}` + `GET /dreamlayer/face`.
 
-1. **No in-app consent flow to start.** Testing with friends who consent
-   verbally. Do not build a consent UI as a blocker.
-2. **Ambient to start**, gesture-triggered later.
-3. **Retention first** — yes.
-4. **Licensing** — not a concern for now.
+Both non-negotiables are enforced and mutation-tested: ambient is `$DL_FACE_AMBIENT`
+(**not** a `BrainConfig` field — a panel toggle is a thing a release build ships
+with) and is refused outright in a frozen build; a non-matching template is
+discarded with no disk write, no ledger line, no log. Only ONE template is
+computed per frame — the subject's — so a bystander never has a biometric
+computed at all.
 
-The seam already exists and is documented as such: `truth_lens/face_embed.py:52`
-calls `embed_fn` *"the hole a real on-device model plugs into"*. `ContactIndex`
-already has the 0.65 threshold and 0.08 top-2 margin. `social_lens/
-introduction.py` already enrols on introduction. You are plugging in a model,
-not building a subsystem.
+**Three things carried forward from #542, still open:**
 
-Recommended model: **InsightFace ArcFace `buffalo_l`** via ONNX — 512-d output
-matches `FaceEmbedder`'s existing contract exactly, onnxruntime is already an
-extra, and `models.lock` + `model_guard.py` already exist to hash-pin weights.
+1. **`models.lock` ships `insightface/buffalo_l` UNPINNED.** Capture the hashes
+   on a clean, connected, trusted box (`dreamlayer models pin`) before any build
+   ships the face pack. The weights the PR was verified against arrived over a
+   sandbox proxy, which is not that box.
+2. **0.65 / 0.08 are still uncalibrated.** The `real_model` tests pin only the
+   DECLINE direction (noise, flat, empty frames). Cross-photo accuracy is
+   untested — this repo has no face photographs and should not gain any.
+   `social_lens/index.py` says these are placeholders until the Rig 3 perception
+   bench runs an ROC over genuine/impostor pairs. Do not treat them as validated.
+3. **Two guards must not drift again.** `test_logging_discipline.py` (AST,
+   authoritative) and `.semgrep/dreamlayer.yml` (regex twin) contradicted each
+   other about `type(exc).__name__` and cost a review round. A test now pins them
+   agreeing; keep it that way.
 
-**Two things that are not negotiable, because they were promised:**
+### The face copy, timed to the release (still pending)
 
-- **Ambient must be an explicit flag, OFF in release builds.** A testing default
-  that silently becomes the ship default is the exact bug class this codebase
-  keeps producing (`RetentionSweep` uncalled, `probe_ollama` gated but `_gen`
-  not, `/brain/look` gated but `/brain/explain` not). Make the two impossible to
-  confuse.
-- **Non-matching face templates are discarded immediately** — never persisted,
-  never logged. Answering "is this one of my contacts?" requires computing a
-  template for every face in frame, including bystanders who consented to
-  nothing. Discarding is what keeps that defensible.
+The copy is deliberately UNCHANGED, and still correct: the default install has
+no `face` pack and no weights, so the shipped embedder still declines every
+frame. `face` is in no `profile-*` extra, which is what keeps the sentence true.
 
-### Step 3 — the copy, timed to the release
-
-`host-python/src/dreamlayer/tests/test_advertised_claims.py` **will fail** when a
-real model ships. That is deliberate: it is a tripwire that forces the website
-copy to change before the capability can reach users.
-
-Do not change the copy early. Right now *"the shipped face embedder cannot
-return an identity at all"* is **true** of the shipped build; changing it before
-a model ships would make the site wrong in the other direction.
+The tripwire moved in #542 and is now sharper, so do not look for the old one.
+`test_advertised_claims.py` asserts the default build's behaviour
+unconditionally (conftest pins the backend absent for `no_face_double` tests, so
+a developer who installs the pack locally no longer flips the assertion), and
+`test_the_face_pack_is_in_no_deployment_profile` is the guard that actually
+fires: **the moment `face` is added to a deployment profile, it fails.** That is
+the signal to change the copy — before the build ships, not after.
 
 What must change when it does ship (exact sentences are in the test docstrings):
 - `landing/privacy.html` — "cannot return an identity at all", and "keep a face
@@ -150,10 +199,14 @@ holding uncommitted work.
 | #533 | `decisions/` directory + validator |
 | #534 | Voice-cloning claim corrected; `test_advertised_claims.py` |
 | #535 | Docs claims fixed at source (`docs/gitbook/*.md`) |
+| #541 | Retention wired Brain-side; `decisions/0001` closed |
+| #542 | Face recognition: ArcFace behind the `face` extra + the Brain-side consumer |
 
-**Open and unresolved:** Task list item #58 (tray icons, dock-click, Learn
-glass) is stale and needs a build to verify. `decisions/0001` (retention) is
-closed — the fix is step 1 above.
+**Open and unresolved:** the lens-coverage gap at the top of this file (Truth
+Lens, Provenance, Scholar, Yesterlight are Orchestrator-only), the three
+carry-forwards from #542, and the face copy when a build ships the pack. Task
+list item #58 (tray icons, dock-click, Learn glass) is stale and needs a build
+to verify. `decisions/0001` (retention) is closed.
 
 ---
 
