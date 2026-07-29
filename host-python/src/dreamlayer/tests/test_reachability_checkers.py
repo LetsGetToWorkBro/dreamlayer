@@ -118,10 +118,40 @@ class TestTheProducerScanIsNotVacuous:
             assert f"{hud.PKG}.hud.cards" not in mods, (
                 f"{fn}: the card module counted itself as a producer")
 
-    def test_the_demo_is_not_counted_as_a_caller(self, hud):
-        made = self._producers(hud)
+    def test_the_demo_is_outside_the_brains_closure_in_the_first_place(self, hud):
+        """Why the demo cannot leak in, stated as the mechanism rather than as
+        an outcome. `demo/storyboards.py` genuinely calls sixteen card builders,
+        so if it were ever reachable it would mark those cards produced — it is
+        not reachable, and this is the assertion that would notice if it became
+        so."""
+        lens = hud._lens_module()
+        files = lens._sources()
+        known = {lens._module_name(p) for p in files}
+        _roots, reachable = lens._closure(lens._import_graph(files), known)
+        leaked = [m for m in reachable if m.startswith(f"{hud.PKG}.demo")
+                  or m.startswith(f"{hud.PKG}.simulator")]
+        assert not leaked, f"the Brain now imports demo/simulator code: {leaked}"
+
+    def test_the_demo_exclusion_holds_even_if_it_became_reachable(self, hud):
+        """The belt to that braces, and the reason the exclusion is not dead
+        code. Deleting it from `_producers` changes nothing TODAY — mutating it
+        away leaves every test green — because the closure already keeps the
+        demo out. So this hands `_producers` a reachable set that deliberately
+        contains the demo and asserts the explicit exclusion still fires. Both
+        halves have to be tested separately or one silently protects the
+        other."""
+        lens = hud._lens_module()
+        files = lens._sources()
+        everything = {lens._module_name(p) for p in files}
+        assert f"{hud.PKG}.demo.storyboards" in everything, (
+            "the fixture module moved; this test no longer proves anything")
+        made = hud._producers(everything, set(hud._sample_builders().values()))
         for fn, mods in made.items():
-            assert not any(m.startswith(f"{hud.PKG}.demo") for m in mods), fn
+            assert not any(m.startswith(f"{hud.PKG}.demo")
+                           or m.startswith(f"{hud.PKG}.simulator")
+                           for m in mods), f"{fn}: counted a demo call site"
+        # …and with everything reachable, real producers still register.
+        assert made.get("hark"), "the exclusion swallowed the real callers too"
 
     def test_it_still_finds_the_producers_that_do_exist(self, hud):
         """The opposite failure: an exclusion so broad nothing counts. The ear

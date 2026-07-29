@@ -319,9 +319,14 @@ class WorldLensHost:
     def _scholar_read(self, frame, prompt: str):
         """Scholar's vision seam. Veil-gated, and `None` is the contract for
         "no tier could read this" — Scholar turns that into an honest
-        "Connect a Brain to read this" card rather than a guess, so a veiled
-        or model-less read must never come back as an empty string that the
-        lens would try to parse."""
+        "Connect a Brain to read this" card rather than a guess.
+
+        The trailing `or None` is belt-and-braces and known to be so: mutating
+        it away changes no behaviour, because `Scholar._read` already collapses
+        a blank reply to None. It is kept because the contract is `Optional[str]`
+        and `_describe` returning `""` on every failure path is a detail of a
+        different module. Do not read it as load-bearing.
+        """
         if not self.privacy.allow_capture():
             return None
         from ...object_lens.vision_recognizer import frame_to_b64
