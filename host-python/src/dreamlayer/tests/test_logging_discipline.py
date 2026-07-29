@@ -289,3 +289,46 @@ def test_scanner_ignores_benign_interpolation():
     for expr in benign:
         src = f'import logging\nlog = logging.getLogger("x")\n{expr}\n'
         assert not _scan_source(src, "benign.py"), f"false positive on: {expr}"
+
+
+def test_the_semgrep_rule_agrees_with_this_guard_about_the_class_dunder():
+    """The AST scan above is authoritative for `dreamlayer/`; `.semgrep/
+    dreamlayer.yml` carries a best-effort regex twin of it for ancillary Python.
+    They are allowed to differ in reach — that is stated in the rule's own
+    comment — but not to CONTRADICT each other, and they did: `__name__` has
+    been in `_GUARD_GENERIC` since this file was written (with `type(exc)
+    .__name__` as its example), while the Semgrep twin flagged exactly that as
+    PII. Four deliberate uses were reported on a PR whose code this guard had
+    already passed.
+
+    Pins the one identifier that actually reaches log calls. `filename` /
+    `hostname` and the rest stay stricter in Semgrep on purpose — the twin is
+    allowed to be more conservative, just not to call this guard's documented
+    allowlist a leak."""
+    import re
+    from pathlib import Path
+
+    import pytest
+
+    rule = Path(__file__).resolve().parents[4] / ".semgrep" / "dreamlayer.yml"
+    if not rule.exists():                        # installed wheel, not a checkout
+        pytest.skip(".semgrep/dreamlayer.yml not on disk")
+
+    line = next((ln for ln in rule.read_text().splitlines()
+                 if "regex:" in ln and "passcode" in ln), None)
+    assert line, "the pii-in-log-message $VAL regex moved — re-point this test"
+    pattern = re.compile(line.split("regex:", 1)[1].strip())
+
+    assert "__name__" in _GUARD_GENERIC, "this guard stopped allowlisting the dunder"
+    for expr in ("__name__", "type(exc).__name__", "type(e).__name__"):
+        assert not pattern.match(expr), (
+            f"the Semgrep twin flags {expr!r} as PII while this guard allowlists "
+            f"it — an exception CLASS name is never PII, and logging it instead "
+            f"of the exception itself is the careful choice")
+
+    # ...and it must still catch a real person-name field, or the fix that
+    # silenced the dunder went too far.
+    for expr in ("user_name", "contact_name", "display_name"):
+        assert pattern.match(expr), (
+            f"the Semgrep twin stopped flagging {expr!r} — the allowlist "
+            f"widened past the dunder it was meant to cover")

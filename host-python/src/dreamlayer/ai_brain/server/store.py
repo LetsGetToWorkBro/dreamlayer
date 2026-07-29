@@ -529,6 +529,20 @@ class BrainConfig:
     # owns its own consent. OFF by default; every other gate (the Veil, on-device
     # transcription, PII scrub, nothing-uploaded) is identical to listen_enabled.
     remote_listen_enabled: bool = False
+    # -- recognising the people you introduced (ai_brain/server/face_live.py) --
+    # OFF on a fresh install, and nothing here ever flips it on. When on, and
+    # ONLY when the opt-in `face` pack and its weights are also present, the
+    # Brain can answer "is this one of my contacts?" about a face in view. It
+    # cannot answer "who is this stranger": the index holds only people the
+    # wearer deliberately enrolled, and a face matching none of them gets the
+    # same "I don't know them yet" the no-model build gives. A template computed
+    # for a non-match is discarded on the spot — never stored, never logged.
+    #
+    # AMBIENT recognition (continuous, with no deliberate look) is deliberately
+    # NOT a field here. It is $DL_FACE_AMBIENT, and face_live.ambient_allowed()
+    # refuses it outright in a release build — a panel toggle is a thing a
+    # shipped app carries, and that one must not be.
+    face_recognition: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

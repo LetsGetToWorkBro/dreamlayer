@@ -1191,7 +1191,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled"):
+                  "remote_listen_enabled", "face_recognition"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -1448,6 +1448,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         plugin install/remove or a model rewire changes what a look can do."""
         self._world_lens = None
 
+    def face_recall(self):
+        """Recognising the people you INTRODUCED — never a stranger
+        (ai_brain/server/face_live.py). Built once and cached; the index of
+        consented faces is read from disk on first use, not here, so a Brain
+        that never looks at anyone never loads it. Returns None if it can't be
+        built, which every caller must read as "no answer", not "not a
+        contact"."""
+        fr = getattr(self, "_face_recall", None)
+        if fr is None:
+            try:
+                from .face_live import build_face_recall
+                fr = build_face_recall(self)
+            except Exception:
+                log.warning("face recall unavailable", exc_info=True)
+                fr = None
+            self._face_recall = fr
+        return fr
+
     def summarize(self, text: str, max_chars: int = 220) -> str:
         """One-glance summary of a long email. Uses the local model when there
         is one; otherwise clips to the first sentence — never blocks the feed."""
@@ -1664,11 +1682,28 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # on the very next look (refute 2026-07-21: purge left the cached
         # host, and its ring, alive).
         self._invalidate_world_lens()
+        # Enrolled FACE templates are the most personal thing the device holds —
+        # a biometric identifier, not a memory of one — so erase-everything must
+        # reach them. They live in their own file (face_index.json), outside the
+        # memory DB and the ember sidecar, which is exactly how a store gets
+        # forgotten by a wipe that "erases everything".
+        n_faces = 0
+        fr = self.face_recall()
+        if fr is not None:
+            try:
+                n_faces = fr.forget_all()
+            except Exception as exc:                 # noqa: BLE001
+                log.error("[brain] face index purge failed: %s", exc)
+                return {"ok": False, "error": f"face purge failed: {exc}",
+                        "purged": n, "memories_purged": n_rows,
+                        "embers_purged": n_ember}
+        self._face_recall = None
         self.activity.add("privacy",
                           f"Erased kept memories ({n_rows} memory row(s), "
-                          f"{n} anchor(s), {n_ember} ember(s))")
+                          f"{n} anchor(s), {n_ember} ember(s), "
+                          f"{n_faces} enrolled face(s))")
         return {"ok": True, "purged": n, "memories_purged": n_rows,
-                "embers_purged": n_ember}
+                "embers_purged": n_ember, "faces_purged": n_faces}
 
     def missed(self, since: float = 0.0) -> dict:
         """"What did I miss?" — the incoming texts and emails since you last
@@ -4288,6 +4323,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             ("/panel-assets/", _get_panel_asset),
         ]
         # exact-path routes, resolved AFTER the auth gate
+        def _get_face(self, path, qs):
+            """Runtime state of face recall: whether the wearer's switch is on,
+            whether a model is actually installed, whether ambient is permitted
+            here, and how many faces are enrolled. Counts and capability only —
+            never a name, never a vector."""
+            fr = brain.face_recall()
+            self._json(200, fr.status() if fr is not None
+                       else {"enabled": False, "model": False,
+                             "ambient": False, "enrolled": 0})
+
         _GET_ROUTES = {
             "/dreamlayer/config": _get_config,
             "/dreamlayer/brain/tiers": _get_brain_tiers,
@@ -4297,6 +4342,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/health": _get_health,
             "/dreamlayer/capabilities": _get_capabilities,
             "/dreamlayer/ear": _get_ear,
+            "/dreamlayer/face": _get_face,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -5146,6 +5192,50 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
 
         # -- POST route table -------------------------------------------
         # exact-path routes (all behind the auth gate applied in do_POST)
+        # -- recognising the people you introduced (face_live.py) ------------
+        # Token-gated, not local-only, on purpose: the phone IS the enrolment
+        # surface — you are looking at the person through it — exactly like the
+        # look path. Every other gate (the wearer's switch, the Veil, a model
+        # actually being installed) lives in FaceRecall and is checked there, so
+        # these routes cannot become a way around them.
+
+        def _post_face_enrol(self, path, qs):
+            """Remember this face as this person. Body: {name, image (base64),
+            contact_id?}. The ONLY route that stores a face template, and it
+            stores one only for a person the wearer just named."""
+            from ...object_lens.vision_recognizer import b64_to_frame
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            b = self._body()
+            self._json(200, fr.enrol(str(b.get("name", "")),
+                                     b64_to_frame(b.get("image")),
+                                     str(b.get("contact_id", "") or "")))
+
+        def _post_face_identify(self, path, qs):
+            """Is this one of the people I introduced? Body: {image (base64)}.
+
+            Answers about ENROLLED contacts only and never about anyone else: a
+            face matching nobody comes back {known: false} with a reason, and its
+            template is discarded before this returns. The response deliberately
+            carries no vector and no geometry — there is nothing in it about a
+            person who did not consent."""
+            from ...object_lens.vision_recognizer import b64_to_frame
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"known": False, "reason": "unavailable"})
+                return
+            self._json(200, fr.identify(b64_to_frame(self._body().get("image"))))
+
+        def _post_face_forget(self, path, qs):
+            """Forget one enrolled face. Body: {contact_id}."""
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            self._json(200, fr.forget(str(self._body().get("contact_id", ""))))
+
         _POST_ROUTES = {
             "/dreamlayer/memory/browse": _post_memory_browse,
             "/dreamlayer/memory/export": _post_memory_export,
@@ -5176,6 +5266,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/rc/feed": _post_rc_feed,
             "/dreamlayer/rc/emit": _post_rc_emit,
             "/dreamlayer/rc/import": _post_rc_import,
+            "/dreamlayer/face/enrol": _post_face_enrol,
+            "/dreamlayer/face/identify": _post_face_identify,
+            "/dreamlayer/face/forget": _post_face_forget,
             "/dreamlayer/social/people": _post_social_people,
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,

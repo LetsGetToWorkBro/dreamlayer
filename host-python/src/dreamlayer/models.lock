@@ -51,6 +51,13 @@
       "loader": "spacy",
       "prefer": "spacy-package",
       "files": {}
+    },
+    "insightface/buffalo_l": {
+      "source": "insightface:buffalo_l (SCRFD detection + ArcFace r50 recognition)",
+      "loader": "insightface",
+      "prefer": "onnx",
+      "note": "face recognition of CONSENTED contacts only (truth_lens/face_backends.py). ONNX, not pickle, so this pin is an authenticity gate rather than an RCE gate — but it matters more than most: swapped recogniser weights change WHO the device believes it is looking at. Pin before any build that ships the face pack.",
+      "files": {}
     }
   }
 }
