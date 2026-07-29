@@ -150,6 +150,31 @@ class TestTheEarFeedsTheRing:
         assert len(b.lenses().ring) == 0, (
             "an utterance reached the ring while the veil was down")
 
+    def test_the_ring_door_is_gated_in_its_own_right(self, tmp_path,
+                                                     monkeypatch):
+        """`observe` is public and `ingest_utterance` is not its only caller,
+        so the gate has to be ON THE DOOR — not only on the corridor outside
+        it. Without this, removing `observe`'s own check leaves every test
+        green because the outer gate happens to cover today's one caller."""
+        b = _brain(tmp_path)
+        ls = b.lenses()
+        monkeypatch.setattr(b, "incognito_now", lambda: True)
+        assert ls.observe("heard", "the venue is booked") is False
+        assert len(ls.ring) == 0
+
+    def test_an_unreadable_posture_is_treated_as_veiled(self, tmp_path,
+                                                        monkeypatch):
+        """Fail closed, the same posture as `_EarGate`, `_LookGate` and
+        `_FaceGate`: a trust signal that cannot be read must never resolve to
+        'record it'."""
+        def _boom():
+            raise RuntimeError("posture unreadable")
+        b = _brain(tmp_path)
+        ls = b.lenses()
+        monkeypatch.setattr(b, "incognito_now", _boom)
+        assert ls.observe("heard", "the venue is booked") is False
+        assert len(ls.ring) == 0
+
     def test_a_commitment_lands_as_a_task_row_not_a_blob(self, tmp_path):
         """Commitment Drift reads `ring.latest(kind='task')` and nothing else.
         A ring of undifferentiated 'heard' lines leaves Drift and Saga
@@ -208,13 +233,33 @@ class TestCandorRunsOnWhatYouSay:
         assert out["card"]["footer"] == "the deposit was paid"
 
     def test_a_negated_sentence_does_not_contradict_itself(self, tmp_path):
-        """Order regression. Extraction rewrites "I won't pay the deposit" into
-        a task row that drops the negator; checking the line against a fragment
-        of ITSELF fires on every negated sentence a wearer says. Candor has to
-        run before the utterance enters the ring."""
+        """Order regression, with a sentence that genuinely triggers it.
+
+        Tier-1 extraction turns "I do not need to send Maya the deck" into
+        `Task: send Maya the deck` — the negator is gone, and the two share
+        three keywords. Check the line against a ring that already holds that
+        fragment and Candor fires: the wearer is told they contradicted
+        themselves by saying one thing, once. So Candor has to run BEFORE the
+        utterance and its fragments are appended.
+
+        The exact sentence matters and is the reason an earlier version of this
+        test passed against the bug. Most negations do not reproduce it —
+        `_TOKEN` splits on apostrophes, so "don't" is not a negator at all, and
+        `object`/`place` fragments never enter the ring (`SPOKEN_KINDS`). This
+        one clears every hurdle, and it is the shape of a perfectly ordinary
+        thing to say."""
+        from dreamlayer.orchestrator.consistency import contradicts
+        from dreamlayer.pipelines.ingest import extract_events
+
+        line = "I do not need to send Maya the deck"
+        # Pin the premise: if extraction stops producing a self-clashing
+        # fragment, this test silently stops testing anything.
+        assert any(contradicts(line, e.summary, 2) is not None
+                   for e in extract_events(line) if e.kind == "task"), (
+            "the fixture no longer reproduces the ordering bug")
+
         b = _brain(tmp_path)
-        out = b.lenses().ingest_utterance(
-            "I will not pay the deposit this week", via="said")
+        out = b.lenses().ingest_utterance(line, via="said")
         assert out["candor"] is not None
         assert not out["candor"]["fired"], out["candor"]
 
