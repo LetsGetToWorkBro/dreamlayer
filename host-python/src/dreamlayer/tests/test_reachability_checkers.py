@@ -161,12 +161,13 @@ class TestTheProducerScanIsNotVacuous:
             "the ear's real HarkCard producer was excluded")
 
     def test_the_known_gap_is_still_visible(self, hud):
-        """18 of 24 declared cards have no Brain-side producer — every one of
-        their producers lives in `orchestrator/ops_*.py`, which the shipped
-        Brain never constructs (`decisions/0001`). This asserts the checker can
-        still SEE that, not that the number is acceptable. If the gap is being
-        closed, this test should start failing — read the number, fix the
-        assertion, and keep it pointing at what is still open."""
+        """15 of 24 declared cards have no Brain-side producer (was 18 before
+        ObjectRecall, SavedMemory and JunoReply were wired). Every remaining
+        one's producer lives in `orchestrator/ops_*.py`, which the shipped Brain
+        never constructs (`decisions/0001`). This asserts the checker can still
+        SEE that, not that the number is acceptable. As the gap closes this test
+        should fail — read the number, fix the assertion, and keep it pointing
+        at what is still open."""
         made = self._producers(hud)
         samples = hud._sample_builders()
         gap = [t for _, t, k in hud._declared_features()
@@ -175,6 +176,62 @@ class TestTheProducerScanIsNotVacuous:
                      "excellent, and this assertion needs retiring")
         assert "Truth, checked live" in gap, (
             "fact_check gained a producer, or the scan stopped finding gaps")
+
+    def test_the_cards_just_wired_are_out_of_the_gap(self, hud):
+        """The other direction: closing three cards has to be visible too, or
+        the checker is only ever reporting bad news and nobody will believe the
+        good."""
+        made = self._producers(hud)
+        samples = hud._sample_builders()
+        closed = {t for _, t, k in hud._declared_features() if made.get(samples[k])}
+        for title in ("Where you left it", "Keep a moment", "Ask it anything"):
+            assert title in closed, f"{title} lost its Brain-side producer"
+
+
+class TestTheGlassIsTheONETheBrainCanReach:
+    """The correction that mattered most, and the one a green checker hid.
+
+    An earlier draft asked only "does `halo-lua` draw this type" and answered
+    yes for all 24. But `Brain.push_event` fans out to the LIVE LENS — an SSE
+    stream to the browser page in `live.py` — and nothing under `ai_brain/`
+    calls `bridge.send_card`, so no Brain push has any path to the glasses
+    firmware at all. The checker was measuring the Orchestrator's renderer to
+    decide whether the Brain's cards were visible.
+    """
+
+    def test_the_brain_has_no_path_to_the_device_renderer(self):
+        import pathlib
+        import subprocess
+        root = pathlib.Path(__file__).resolve().parents[4]
+        hits = subprocess.run(
+            ["grep", "-rn", "send_card", str(root / "host-python/src/dreamlayer/ai_brain")],
+            capture_output=True, text=True).stdout.strip()
+        assert not hits, (
+            "something under ai_brain/ now calls send_card — if the Brain has "
+            f"gained a path to halo-lua, this whole model needs revisiting:\n{hits}")
+
+    def test_the_two_renderers_are_measured_separately(self, hud):
+        device = hud._drawn_on_glass()
+        live = hud._drawn_on_live_lens()
+        assert device and live
+        assert live < device, (
+            "the Live Lens is meant to be the SMALLER set — a handful of "
+            "bespoke branches plus a generic fallback. If it caught up with "
+            "halo-lua, check the scan is not matching comments again.")
+
+    def test_the_generic_fallback_is_not_counted_as_a_drawing(self, hud):
+        """`glassEventCard` draws `eyebrow` and `primary` only. Counting it
+        would mark every card as rendered on a surface that silently drops the
+        field carrying the answer."""
+        live = hud._drawn_on_live_lens()
+        assert "ReadyCard" not in live      # no branch; falls back, draws "…"
+        assert "HarkCard" in live           # has a real branch
+
+    def test_the_card_whose_answer_needs_a_branch_has_one(self, hud):
+        """ObjectRecallCard puts the place — the entire answer — outside
+        `primary`. Wiring the producer without the renderer branch ships a card
+        that echoes the question back."""
+        assert "ObjectRecallCard" in hud._drawn_on_live_lens()
 
 
 # ---------------------------------------------------------------------------

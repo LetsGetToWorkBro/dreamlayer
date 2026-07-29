@@ -85,7 +85,7 @@ it is the one that matters:
   token is capitalized. Since #101 the default is **auto-keep**: a matched
   self-introduction is saved the moment it is given and confirmed with an
   **IntroKeptCard** ("KEPT - on your device - veil silences this"), so the
-  dossier works from day one; "forget that" erases it, the Veil closes the
+  dossier works from day one; erasing it is deliberate, the Veil closes the
   ear entirely, and ambient chatter or a bystander's name never matches the
   grammar. The old offer-then-confirm flow remains available
   (`auto_keep=False`, the IntroOfferCard with its 12-second window).
@@ -208,7 +208,7 @@ What "remembering" is made of got real this wave (`memory/`):
   memory store instead, beside the retention-days prune of the ask history and
   activity log. The history is [decision
   0001](https://github.com/LetsGetToWorkBro/dreamlayer/blob/main/decisions/0001-retention-lifecycle-never-runs.md).
-  Explicit deleting is unaffected and always worked: "forget that", erase-all,
+  Explicit deleting is unaffected and always worked: erase-all,
   and the retention-days setting.
 - **A cold-start maturity arc.** A fresh install is an **OBSERVER** (48
   hours and 200 scored events of pure silence), then an **APPRENTICE**

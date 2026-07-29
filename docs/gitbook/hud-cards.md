@@ -370,7 +370,9 @@ ambient. They stay up until you act (dismiss 0).
 
 ![ForgetLastCard](assets/cards/forget_last.webp)
 
-- **Appears:** "forget that" — confirming the last capture was erased.
+- **Appears:** nothing produces this card in either runtime today. It is the
+  confirmation a spoken "forget that" would show, and that command does not
+  exist — see `docs/gitbook/privacy.md`.
 
 ### PrivateZoneCard
 

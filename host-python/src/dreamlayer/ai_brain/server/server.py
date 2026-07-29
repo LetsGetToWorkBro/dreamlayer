@@ -5018,8 +5018,37 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 # (a paired hub that is incognito must not egress here).
                 ans = brain.ask(it.args.get("query", ""),
                                 no_cloud=bool(vb.get("no_cloud")))
-                self._json(200, {"intent": it.kind, "query": it.args.get("query", ""),
-                                 "answer": ans.text if ans is not None else ""})
+                out = {"intent": it.kind, "query": it.args.get("query", ""),
+                       "answer": ans.text if ans is not None else ""}
+                # Juno's answer, drawn as well as returned. This is the seam and
+                # not `/dreamlayer/brain/ask`, deliberately: the Live Lens page
+                # posts to THAT route and already draws the answer itself, so
+                # pushing there would draw it twice on the surface that asked.
+                # Nothing that calls `/dreamlayer/voice` subscribes to the event
+                # stream, so this is the one non-duplicating place to push from.
+                #
+                # ONE CARD PER WEARER UTTERANCE. `locate` already pushes its own
+                # ObjectRecallCard (`brain_waypath.waypath_locate`), and several
+                # other branches below carry a `say` string. If a generic
+                # "push a JunoReplyCard whenever the response has `say`" is ever
+                # added, it MUST exclude every branch that pushes its own card —
+                # stash, locate, note_person, meet_person, debt, debt_settle,
+                # reply, stasis_freeze, stasis_resume — or one question draws two
+                # cards saying the same thing in different words.
+                #
+                # It pushes `ans.text`, never `vb["text"]`. Echoing the caller's
+                # string would turn this route into the arbitrary-text-onto-every-
+                # glass primitive the selftest push refuses to become.
+                reply = (out["answer"] or "").strip()
+                if reply:
+                    try:
+                        from ...hud import cards
+                        out["pushed"] = brain.push_event(
+                            "juno", cards.juno_reply(reply[:160], "answer"),
+                            veil_ok=False)
+                    except Exception:        # noqa: BLE001 — never cost the answer
+                        out["pushed"] = 0
+                self._json(200, out)
             elif it.kind == "brief":
                 self._json(200, {"intent": "brief", **brain.brief()})
             elif it.kind in ("timer", "interval", "clock"):

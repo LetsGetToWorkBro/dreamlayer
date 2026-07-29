@@ -10,12 +10,12 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | Card | Emitted by | Renderer | Dismiss | Sound / touch |
 |---|---|---|---|---|
 | ReadyCard | boot, resume, connect | device | — | — |
-| SavedMemoryCard | scene/conversation kept, nod-to-save | device | 1200 | chime visual, burst |
+| SavedMemoryCard | scene/conversation kept, nod-to-save, held thought pinned | device + Live Lens | 1200 | chime visual, burst |
 | QueryListeningCard | single click / ask | device | on result | live amp waveform |
 | ListeningCard | Juno wake (any source) | device | 0 | earcon `wake`, haptic tick |
 | LoadingCard | a tier thinking | device | on result | — |
-| JunoReplyCard | Juno answer/action | device | 6000 | — |
-| ObjectRecallCard | object recall | device | 3500 | conduct flair |
+| JunoReplyCard | Juno answer/action | device + Live Lens | 6000 | — |
+| ObjectRecallCard | object recall, a found `locate` | device + Live Lens | 3500 | conduct flair |
 | CommitmentRecallCard | commitment recall / capture | device | 4000 | — |
 | CommitmentDriftCard | `tick_drift` slippage | device | 4500 | — |
 | ProactiveMemoryCard | arriving at a memory place | device | 3500 | — |
@@ -35,9 +35,9 @@ Full visual treatment per card: [the gallery](../hud-cards.md).
 | DeviationAlertCard | tell_check contradiction | device | 5000 | — |
 | TimeScrubNodeCard | rewind scrub | device | 0 | — |
 | PrivacyVeilCard | the veil lands | device | 0 | rumble + slam |
-| ForgetLastCard | "forget that" | device | 0 | slam class |
-| PrivateZoneCard | entering a private zone | device | 0 | slam class |
-| ConsentRequiredCard | a source needs consent | device | 0 | slam class |
+| ForgetLastCard | *no producer — the forget command does not exist* | device | 0 | slam class |
+| PrivateZoneCard | *no producer — zones cannot be marked* | device | 0 | slam class |
+| ConsentRequiredCard | *no producer — nothing calls the face routes* | device | 0 | slam class |
 | ErrorCard | failures worth surfacing | device | 4000 | — |
 | LowConfidenceCard | recall below threshold | device | 3000 | — |
 | WorldAnchorCard | Ghost Layer echo | dream | 8000 | — |

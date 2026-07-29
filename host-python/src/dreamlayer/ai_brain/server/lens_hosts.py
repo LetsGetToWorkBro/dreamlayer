@@ -735,8 +735,19 @@ class BrainLenses:
             frame = self.stasis.get(int(frame_id))
             if frame is None:
                 return False
+            if frame.meta.get("pinned"):
+                return True              # already pinned — no second confirmation
             self.stasis.replace_frame(frame.pinned())
             self.save_stasis()
+            # The keep, confirmed on the glass. "Held." is verbatim from the
+            # Orchestrator's own pin path and is the WHOLE payload that draws —
+            # both renderers read `primary` and nothing else here. Note what is
+            # deliberately absent: the wearer's held sentence. A confirmation
+            # that quotes what it kept would push captured speech over the event
+            # stream, which is the one thing the ear's redaction rules exist to
+            # prevent.
+            from ...hud import cards
+            self._push("saved_memory", cards.saved_memory("Held."))
             return True
         except Exception as exc:                     # noqa: BLE001
             log.warning("[lenses] pin failed: %s", type(exc).__name__)

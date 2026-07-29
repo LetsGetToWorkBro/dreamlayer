@@ -24,7 +24,7 @@ python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see �
 | | done | open |
 |---|---|---|
 | **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
-| **HUD cards** | 24 of 24 have a real glass renderer; 6 have a Brain-side producer | **18 cards nothing in the Brain can produce** (§3) |
+| **HUD cards** | 9 of 24 have a Brain-side producer (3 wired this round); 4 draw properly on the Brain's own surface | **15 cards nothing in the Brain can produce**, and 5 more that draw degraded (§3) |
 | **Capabilities** | 41 of 74 seams loadable; 13 unreachable by design, with reasons | **19 open questions** (§4) |
 
 The single most important thing in this file, because it is the mistake that
@@ -213,44 +213,84 @@ English against Rosetta's dozen-plus languages and non-Latin scripts, and had no
 caller outside its own test. So the copy now says Rosetta is the eye AND the
 ear, which is true, rather than dropping a half nobody serves.
 
-### 3. Every HUD item, on phone and glasses — MEASURED, 18 still open
+### 3. Every HUD item — 3 wired, 15 open, and the checker was measuring the wrong glass
 
-The checker this section asked for exists: **`scripts/hud_reachability.py`**. It
-asks both halves for each of the 24 declared cards — does anything a shipped
-Brain can reach PRODUCE it, and does `halo-lua` have a real drawing for its
-`type` — and exits non-zero while either is missing.
+`scripts/hud_reachability.py` asks both halves for each of the 24 declared
+cards. **Its first version got the second half wrong, and the error flattered
+everything.** It asked "does `halo-lua` draw this type" and answered yes for all
+24 — but `Brain.push_event` fans out to the **Live Lens**, an SSE stream to the
+browser page in `live.py`, and `grep -rn send_card ai_brain/` returns **nothing**.
+No Brain push has any path to the glasses firmware. halo-lua is the
+*Orchestrator's* renderer; the checker was using it to decide whether the
+*Brain's* cards were visible.
 
-**The glass half is fine: 24 of 24 have a dedicated renderer branch.** The Brain
-half is not:
+Corrected, the two surfaces disagree sharply — 40 types drawn by halo-lua, **4**
+by the Live Lens. Everything else falls to `glassEventCard`, which draws
+`eyebrow` and `primary` **and nothing else**. So a card whose answer lives in
+another field arrives gutted, and the checker now prints that as its own
+category rather than folding it into a pass.
 
 ```
-NO BRAIN-SIDE PRODUCER (18 of 24)
-  Always ready · Ask first · Ask it anything · Forget that · Hey Juno
-  It remembers for you · Keep a moment · Live captions · Off your usual path
-  Privacy Veil · Private zones · Read the room · Rewind your day
-  The answer before you speak · Truth, checked live · What you owe
-  Where you left it · Your inner weather
+NO BRAIN-SIDE PRODUCER  15 of 24
+generic on the Live Lens 5   (drawn, but degraded to eyebrow+primary)
+drawn properly on both   4
 ```
 
-Verified by hand, not just by the script: every one of their producers lives in
-`orchestrator/ops_*.py` — `ops_conversation`, `ops_ingest`, `ops_commitments`,
-`ops_juno_attention`, `ops_world_lenses`. That is `decisions/0001` again, for
-the card layer this time. Six do have Brain-side producers: Hark (`ear.py`),
-Person Context, Person Dossier, World Anchor, Morning Brief, and Commitment
-Drift.
+**Wired this round**, each with the behavioural test that would catch the
+plausible wrong version:
 
-Two traps for whoever closes this, both already paid for once:
+| Card | Trigger | The mistake the test catches |
+|---|---|---|
+| ObjectRecallCard | a found `waypath_locate` | the answer is in `place`, not `primary` — a hand-rolled lookalike renders "bike" with no answer. Needed a `renderEvent` branch FIRST, or the producer would have shipped a card that echoes the question back |
+| SavedMemoryCard | pinning a held thought | a confirmation that quotes what it kept would push captured speech over the event stream |
+| JunoReplyCard | `/dreamlayer/voice` ask/recall | pushing the caller's string instead of the answer makes this an arbitrary-text-onto-every-glass primitive |
 
-- **Do not hand-roll the card dict.** `lens_hosts._drift_card` originally built
-  a `{primary, detail, footer}` lookalike; `renderer.lua`'s
-  `draw_commitment_drift` reads `task`, `person`, `drift_state` and `decay` and
-  would have drawn it wrong while the JSON looked perfect. Call the real
-  `hud/cards.py` builder.
-- **Do not trust a clean run of the checker without reading it.** Its first
-  draft counted `hud/cards.py` itself as a producer (`ALL_SAMPLES` is a dict of
-  literal calls to every builder) and reported 0 gaps on a product with 18.
-  `tests/test_hud_reachability_checker.py` pins that and the sibling bug where
-  the Lua scan missed the whole `DRAW` dispatch table.
+Two collisions are written into the code as comments rather than left to be
+rediscovered: `/dreamlayer/voice` must push **one card per utterance** (the
+`locate` branch already pushes its own, so any future generic `say`-driven push
+must exclude it), and the JunoReply push belongs on `/voice` and **not** on
+`/brain/ask` — the Live Lens posts to the latter and already draws the answer
+itself, so pushing there draws it twice on the surface that asked.
+
+**Two the checker was simply wrong about.** `PrivacyVeilCard` is produced by the
+device FSM on the physical long-press; a Brain push cannot reach that surface and
+would land on the page that already renders the veil from its own status read.
+`SynesthesiaCard` is produced — `live_dream.py` and `scene_describer.py` both
+build `synesthesia_card_v2`; the catalogue points at a stale sample key. That is
+a catalogue fix with a stale committed preview image behind it, deliberately not
+bundled here.
+
+**Two declared orchestrator-only, with reasons that have to survive "why not
+just wire it".** `ReadyCard`'s entire payload is `{type, dismiss_ms}` — a card
+meaning "nothing is happening" cannot be sent over a channel that exists to
+announce that something is, and on the Live Lens it would draw a ring and a
+literal ellipsis. `TruthLensCard` is a biometric read on another person: its nine
+stages need `observe_face`/`observe_voice` (device seams), a per-contact
+baseline would be a new durable store of other people's behavioural profiles, and
+any plausible Brain trigger would emit a verdict on a stranger's face every
+three seconds. The shipped design already decided this — the Orchestrator folds
+the credibility read into a FactCheckCard footer, never its own card.
+
+**The 15 still open** are in the workflow's own table; the short version is that
+five need speaker attribution (which is the biometric decision again — the
+Brain's `speaker` is structurally `""`), three need a new durable store, and one
+— `DeviationAlertCard` — is blocked at the input in a way worth knowing:
+`TellEngine.check` scores 0.12–0.24 against a 0.55 threshold on Brain-minted
+data, and scores a *real* contradiction **lower** than an identical sentence,
+because the negator dilutes the overlap the score multiplies by. A producer that
+provably never fires is not a producer; wiring it would satisfy the checker and
+blind it.
+
+Two traps for whoever continues, both already paid for once:
+
+- **Do not hand-roll the card dict.** `lens_hosts._drift_card` originally built a
+  `{primary, detail, footer}` lookalike; the real drawing reads `task`, `person`,
+  `drift_state` and `decay` and would have drawn it wrong while the JSON looked
+  perfect. Call the builder in `hud/cards.py`.
+- **Do not trust a clean run without reading it.** This checker has now been
+  wrong twice in the flattering direction — once counting `hud/cards.py` itself
+  as a producer (0 gaps where there were 18), once measuring a renderer the Brain
+  cannot reach. `tests/test_reachability_checkers.py` pins both.
 
 ### 4. Capabilities — MEASURED, 19 open questions
 

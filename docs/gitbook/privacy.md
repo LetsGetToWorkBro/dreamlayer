@@ -86,13 +86,22 @@ On the Brain, incognito maps to `network_mode: "lan_only"`, which hard-fails
 - **Name capture** — a name is kept only from a closed, offline grammar of
   self-introductions ("Hi, I'm Maya" — never ambient chatter, never a
   bystander), saved automatically the moment it is given; the veil closes
-  the ear, and "forget that" erases it.
-- **ConsentRequiredCard** — a new data source stops the world until you say
-  yes.
-- **Private zones** — places you mark never-record; entering one shows the
-  PrivateZoneCard.
-- **Forget** — "forget that" erases the last capture and confirms with the
-  ForgetLastCard.
+  the ear, and erasing it is a deliberate act on the Memories screen (a
+  spoken "forget that" is designed and not built — see below).
+Three of these are **designed and not built**, and are listed here as design
+rather than as behaviour, because a privacy promise that is not implemented is
+the worst kind of copy to leave standing:
+
+- **ConsentRequiredCard** — the intent is that a new data source stops the world
+  until you say yes. The card exists; nothing produces it, and `push_event` is a
+  one-way envelope with no path for the answer to come back, so the affordance
+  ("Hold to allow · Tap to deny") has nowhere to send a decision yet.
+- **Private zones** — the intent is places you mark never-record. **There is no
+  way to mark one today**: no setting, no route, no place-identity primitive,
+  and nothing that would honour a zone if you had marked it.
+- **Forget** — the intent is that "forget that" erases the last capture. There
+  is no such command in the voice grammar and no scoped undo; the only erase the
+  Brain can perform reaches *everything* (`purge_memories`).
 
 | ![Consent](assets/cards/consent_required.webp) | ![Private zone](assets/cards/private_zone.webp) | ![Forget](assets/cards/forget_last.webp) |
 |---|---|---|

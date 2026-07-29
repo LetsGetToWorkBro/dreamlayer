@@ -59,7 +59,7 @@ Short version: **on your own devices, and it works that way by default.**
   — or you say "meet my colleague Sarah" — the name is kept and a card
   says so plainly ("KEPT - on your device"). Only a real introduction ever
   matches: ambient chatter, an overheard name, a bystander — none of it
-  qualifies. Say **"forget that"** and it is gone; the Veil closes the ear
+  qualifies. Erase it from the Memories screen; the Veil closes the ear
   entirely. (Prefer the old ask-first flow? The offer-and-confirm mode
   still exists as a setting.)
 - **No recordings.** DreamLayer keeps meaning — "Maya mentioned the lease" —
@@ -67,10 +67,12 @@ Short version: **on your own devices, and it works that way by default.**
 
 ## Everyday controls worth knowing
 
-- **"Forget that."** Instantly erases the last thing it captured and shows
-  you a confirmation card.
-- **Private zones.** Mark a place as never-record; the glasses honor it
-  automatically whenever you are there.
+- **"Forget that."** *Designed, not built.* The intent is a scoped undo of the
+  last capture. What exists today is the all-or-nothing erase in Settings —
+  there is no command that removes just the last thing.
+- **Private zones.** *Designed, not built.* The intent is to mark a place
+  never-record and have it honoured automatically. There is no way to mark one
+  yet.
 - **Nothing sends silently.** If you use it to reply to a message, you see
   the exact message and approve it first — the product physically cannot
   send without that approval.

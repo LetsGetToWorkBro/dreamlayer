@@ -1319,6 +1319,28 @@ function glassSkyCard(j){                           /* Sky -> a named star map *
 /* ---- ambient cards the Brain PUSHES (over the /live/events channel) -------
    Not a reply to a look — the Brain surfaces these on its own: a sound-safety
    tap, the morning brief, a memory nudge. Same glass, same primitives. */
+function glassObjectRecallCard(c){                   /* WHERE YOU LEFT IT */
+  /* This branch exists because the generic renderer would GUT this card, and
+     that is a specific claim rather than a stylistic one: glassEventCard draws
+     `eyebrow` and `primary` only, while object_recall() puts the object in
+     `primary` and THE ANSWER IN `place` (hud/cards.py). Pushed without this,
+     "where's my bike" renders "JUNO / bike" — the question echoed back with the
+     answer dropped. Slot semantics mirror renderer.lua's draw_object_recall:
+     last_seen is the eyebrow, the object is a label, the PLACE is the hero.
+     Deliberately no earcon or haptic — only a HarkCard earns a sound, and
+     object_recall() supplies none to borrow. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 150, 52, 0, 360, GP.border_subtle);          /* the place, as a field */
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 7;
+  gdiamond(ctx, 128, 96, 7, GP.memory_trace); ctx.restore();  /* the thing, as a jewel */
+  gtext(ctx, String(c.last_seen || "").slice(0, 24), 128, 50, GP.text_ghost, "sm");
+  gtext(ctx, String(c.object || c.primary || "").slice(0, 20), 128, 70, GP.memory_trace, "sm");
+  const spot = gwrap(String(c.place || "").trim(), 22).slice(0, 2);
+  spot.forEach((ln, i) => gtext(ctx, ln, 128, 150 + i * 16, GP.text_primary, "md"));
+  if (c.detail) gtext(ctx, String(c.detail).slice(0, 18), 128, 190, GP.text_secondary, "sm");
+  gend(c.dismiss_ms || 3500);
+}
+
 function glassDossierCard(c){                        /* YOU KNOW — someone you introduced */
   const ctx = glassCtx(); gback(ctx);
   /* the person as a lit field (the device's social material family) */
@@ -2887,6 +2909,7 @@ function renderEvent(ev){
   }
   else if (t === "MorningBriefCard") glassBriefCard(c);
   else if (t === "PersonDossierCard") glassDossierCard(c);
+  else if (t === "ObjectRecallCard") glassObjectRecallCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

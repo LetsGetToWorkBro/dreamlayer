@@ -200,6 +200,10 @@ def _drawn_on_glass() -> set:
     labels each drawing function with a `-- XCard` banner and lists card names
     in its header, so leaving them in would mark a type as drawn on the
     strength of a section heading.
+
+    THIS IS THE DEVICE'S RENDERER, AND THE BRAIN CANNOT REACH IT. See
+    `_drawn_on_live_lens` below — that distinction is the whole reason this
+    function is no longer the answer on its own.
     """
     seen: set = set()
     if not LUA.exists():
@@ -212,6 +216,37 @@ def _drawn_on_glass() -> set:
         seen |= set(_LUA_QUOTED.findall(body))
         seen |= set(_LUA_DRAW_ENTRY.findall(body))
     return seen
+
+
+# `renderEvent`'s dispatch in the Live Lens page: `t === "XCard"` comparisons.
+_JS_DISPATCH = re.compile(r't\s*===\s*["\']([A-Za-z]+Card)["\']')
+
+
+def _drawn_on_live_lens() -> set:
+    """Card types the LIVE LENS has a bespoke drawing for — the surface the
+    Brain actually reaches.
+
+    An earlier draft of this script checked only `halo-lua` and reported all 24
+    declared cards as having a renderer. That was measuring the wrong glass.
+    `Brain.push_event` "fans a card out to every connected Live Lens" — an SSE
+    stream to the browser page in `ai_brain/server/live.py`. Nothing under
+    `ai_brain/` calls `bridge.send_card`, so no Brain push has any path to the
+    glasses firmware at all; halo-lua is the ORCHESTRATOR's renderer.
+
+    The two disagree sharply, which is the point: `renderEvent` has bespoke
+    branches for a handful of types and sends everything else to
+    `glassEventCard`, which draws `eyebrow` and `primary` AND NOTHING ELSE. So
+    a card whose answer lives in another field — `object_recall` puts the place
+    there, `ConsistencyCard` puts the prior statement in `footer` — arrives
+    gutted. "It renders something" is not "it renders the card", and counting
+    the fallback as a renderer is how a checker starts agreeing with itself.
+    """
+    p = SRC / "ai_brain" / "server" / "live.py"
+    try:
+        body = p.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return set(_JS_DISPATCH.findall(body))
 
 
 def main() -> int:
@@ -229,20 +264,25 @@ def main() -> int:
     samples = _sample_builders()
     types = _card_types()
     producers = _producers(reachable, set(samples.values()))
-    drawn = _drawn_on_glass()
+    device = _drawn_on_glass()
+    live = _drawn_on_live_lens()
 
-    print(f"{len(features)} declared HUD features · {len(samples)} sample cards · "
-          f"{len(drawn)} card types drawn on glass")
+    print(f"{len(features)} declared HUD features · {len(samples)} sample cards")
+    print(f"renderers: {len(device)} types drawn by halo-lua (the DEVICE, reached "
+          f"by the Orchestrator) · {len(live)} by the Live Lens (the only surface "
+          f"a Brain push reaches)")
 
-    no_producer, no_glass, ok = [], [], []
+    no_producer, no_device, gutted, ok = [], [], [], []
     for fid, title, key in features:
         builder = samples.get(key)
         ctype = types.get(builder or "", "")
         made = producers.get(builder or "", set())
         if not made:
             no_producer.append((title, key, builder, ctype))
-        elif ctype and ctype not in drawn:
-            no_glass.append((title, key, builder, ctype))
+        elif ctype and ctype not in device:
+            no_device.append((title, key, builder, ctype))
+        elif ctype and ctype not in live:
+            gutted.append((title, key, builder, ctype, made))
         else:
             ok.append((title, key, builder, ctype, made))
 
@@ -251,18 +291,28 @@ def main() -> int:
     for title, key, builder, ctype in sorted(no_producer):
         print(f"  {title:28} {key:20} {builder or '?'}()  {ctype}")
 
-    print(f"\nNO GLASS RENDERER ({len(no_glass)}) — produced, but halo-lua has "
-          f"no branch for the type; a generic fallback DROPS the footer")
-    for title, key, builder, ctype in sorted(no_glass):
+    print(f"\nNO DEVICE RENDERER ({len(no_device)}) — produced, but halo-lua has "
+          f"no drawing for the type")
+    for title, key, builder, ctype in sorted(no_device):
         print(f"  {title:28} {key:20} {ctype}")
 
-    print(f"\nreachable on both surfaces ({len(ok)})")
+    # Not a failure, and not a pass either. A Brain push of one of these lands on
+    # `glassEventCard`, which draws `eyebrow` and `primary` only — fine for a
+    # card whose whole content is those two fields, wrong for one whose answer
+    # lives elsewhere. Printed so the judgement is made per card by a human
+    # rather than absorbed into a green line.
+    print(f"\ngeneric on the Live Lens ({len(gutted)}) — produced and drawn on "
+          f"the device, but the Brain's own surface falls back to eyebrow+primary")
+    for title, key, builder, ctype, made in sorted(gutted):
+        print(f"  {title:28} {ctype}")
+
+    print(f"\ndrawn properly on both surfaces ({len(ok)})")
     for title, key, builder, ctype, made in sorted(ok):
         via = ("   via " + ", ".join(sorted(m.replace(PKG + ".", "")
                                             for m in made)[:3])) if args.verbose else ""
         print(f"  {title:28} {ctype}{via}")
 
-    return 1 if (no_producer or no_glass) else 0
+    return 1 if (no_producer or no_device) else 0
 
 
 if __name__ == "__main__":
