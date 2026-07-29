@@ -174,17 +174,29 @@ class TestTheProducerScanIsNotVacuous:
                if not made.get(samples[k])]
         assert gap, ("every declared card now has a Brain-side producer — "
                      "excellent, and this assertion needs retiring")
-        assert "Truth, checked live" in gap, (
-            "fact_check gained a producer, or the scan stopped finding gaps")
+        # Repointed as instructed above: "Truth, checked live" gained a producer
+        # (`BrainLenses.fact_check`, world-check half only — Candor already owns
+        # the self-contradiction half). Now pointed at "Read the room", which is
+        # blocked on something structural rather than on nobody having wired it:
+        # TruthLens reads DELIVERY — facial action units and prosody — and that
+        # is the biometric question, not a plumbing job. It will not close by
+        # accident, so this assertion should stay stable.
+        assert "Read the room" in gap, (
+            "truth_gauge gained a producer, or the scan stopped finding gaps")
 
     def test_the_cards_just_wired_are_out_of_the_gap(self, hud):
-        """The other direction: closing three cards has to be visible too, or
-        the checker is only ever reporting bad news and nobody will believe the
-        good."""
+        """The other direction: closing a card has to be visible too, or the
+        checker is only ever reporting bad news and nobody will believe the
+        good. Each of these had a builder and a drawing all along and nothing a
+        shipped Brain could reach ever called it."""
         made = self._producers(hud)
         samples = hud._sample_builders()
         closed = {t for _, t, k in hud._declared_features() if made.get(samples[k])}
-        for title in ("Where you left it", "Keep a moment", "Ask it anything"):
+        for title in ("Where you left it", "Keep a moment", "Ask it anything",
+                      "Hey Juno", "Live captions",      # the ear
+                      "Always ready", "Privacy Veil",   # the posture pair
+                      "Rewind your day",                # the hot ring IS the day
+                      "Truth, checked live"):           # world-check half
             assert title in closed, f"{title} lost its Brain-side producer"
 
 
@@ -245,8 +257,16 @@ class TestTheGlassIsTheONETheBrainCanReach:
         would mark every card as rendered on a surface that silently drops the
         field carrying the answer."""
         live = hud._drawn_on_live_lens()
-        assert "ReadyCard" not in live      # no branch; falls back, draws "…"
         assert "HarkCard" in live           # has a real branch
+        # The negative case used to be ReadyCard, which now HAS a branch — it is
+        # `{type, dismiss_ms}` and nothing else, so the fallback drew its "…"
+        # placeholder, i.e. a resting state that looked like a failure.
+        # ErrorCard takes its place: still no branch, still must not be counted.
+        assert "ErrorCard" not in live
+        # …and the scan must not have degenerated into "any name in the file".
+        # These appear in comments and payloads here but have no dispatch arm.
+        assert "PaletteShiftCard" not in live
+        assert "QueryListeningCard" not in live
 
     def test_the_card_whose_answer_needs_a_branch_has_one(self, hud):
         """ObjectRecallCard puts the place — the entire answer — outside

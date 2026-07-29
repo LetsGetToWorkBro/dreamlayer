@@ -1706,6 +1706,117 @@ function glassCaptionCard(c){                        /* LIVE CAPTIONS */
   gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
 }
 
+function glassVeilCard(c){                           /* THE SHIELD IS UP */
+  /* `privacy_veil()` carries no fields but `primary` and `lines` — there is
+     deliberately nothing to draw ABOUT, which is the point. Through
+     glassEventCard it rendered "JUNO / Privacy Veil" with the sentence that
+     does the work ("Nothing is being captured") dropped, since it lives in
+     `lines[1]` and the generic renderer reads only `primary`.
+
+     Drawn as a closed shield rather than a message: this is the one card whose
+     job is to be recognised without being read. `dismiss_ms: 0` and it means
+     it — the shield is up until the Brain says otherwise, and `announce_posture`
+     replaces this with a ReadyCard the moment it comes down. */
+  const ctx = glassCtx(); gback(ctx);
+  const col = GP.text_secondary;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 8;
+  ctx.beginPath();                                   /* a shield outline */
+  ctx.moveTo(128, 68);
+  ctx.lineTo(174, 90); ctx.lineTo(174, 132);
+  ctx.quadraticCurveTo(174, 168, 128, 188);
+  ctx.quadraticCurveTo(82, 168, 82, 132);
+  ctx.lineTo(82, 90); ctx.closePath();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.fillStyle = "rgba(168,184,192,.06)"; ctx.fill();
+  ctx.restore();
+  const lines = Array.isArray(c.lines) ? c.lines : [];
+  gtext(ctx, String(c.primary || "Privacy Veil").slice(0, 20), 128, 120, GP.text_primary, "md");
+  gtext(ctx, String(lines[1] || "Nothing is being captured").slice(0, 26),
+        128, 146, GP.text_ghost, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassReadyCard(c){                          /* ALWAYS READY */
+  /* `ready()` is `{type, dismiss_ms: 0}` and nothing else — no `primary` at
+     all — so glassEventCard drew its "…" placeholder, i.e. a card that looks
+     like a failure. It is a resting state, not a message: a quiet breathing
+     mark that says the Brain is live and the shield is down. It is also what
+     REPLACES the veil card, so it must be visibly the opposite of one. */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 8;
+  garc(ctx, 128, 128, 34, 0, 360, GP.memory_trace);
+  gdiamond(ctx, 128, 128, 6, GP.memory_trace);
+  ctx.restore();
+  garc(ctx, 128, 128, 44, 0, 360, GP.border_subtle);
+  gtext(ctx, "READY", 128, 190, GP.text_ghost, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassScrubCard(c){                          /* REWIND YOUR DAY */
+  /* The only card in the set whose meaning is POSITIONAL: `index` and `total`
+     say where in the day you are, and the builder's layout puts a progress
+     value on them. Through glassEventCard both were dropped, so scrubbing
+     through twelve nodes drew twelve indistinguishable cards — a scrubber
+     that never moves is not a scrubber. */
+  const ctx = glassCtx(); gback(ctx);
+  const total = Math.max(1, Number(c.total) || 1);
+  const idx   = Math.max(0, Math.min(Number(c.index) || 0, total - 1));
+  /* the day as an arc, filled to where you are. 0 of 1 is a full day, not an
+     empty one — a single node IS the whole timeline. */
+  const frac = total > 1 ? idx / (total - 1) : 1;
+  garc(ctx, 128, 128, 104, 150, 390, GP.border_subtle);
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 6;
+  garc(ctx, 128, 128, 104, 150, 150 + 240 * frac, GP.memory_trace);
+  ctx.restore();
+  const a = (150 + 240 * frac) * Math.PI / 180;
+  ctx.beginPath(); ctx.arc(128 + Math.cos(a) * 104, 128 + Math.sin(a) * 104, 3.5, 0, 2 * Math.PI);
+  ctx.fillStyle = GP.confidence_high; ctx.fill();
+
+  gtext(ctx, String(c.kind || "moment").toUpperCase().slice(0, 16), 128, 56, GP.memory_trace, "sm");
+  const body = gwrap(String(c.summary || c.primary || "").trim(), 22).slice(0, 3);
+  if (body.length) body.forEach((ln, i) => gtext(ctx, ln, 128, 108 + i * 17, GP.text_primary, "md"));
+  else gtext(ctx, "nothing recorded", 128, 116, GP.text_secondary, "sm");
+  gtext(ctx, String(c.ts_label || c.footer || "").slice(0, 24), 128, 172, GP.text_ghost, "sm");
+  gtext(ctx, (idx + 1) + " / " + total, 128, 196, GP.text_secondary, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassFactCheckCard(c){                      /* TRUTH, CHECKED LIVE */
+  /* `detail` is the BASIS — the one line saying why a claim is disputed — and
+     glassEventCard drew the claim alone. A card that says "CHECK THIS" over a
+     sentence, with no reason attached, is an assertion the wearer cannot
+     evaluate; the basis is the entire difference between a fact-check and a
+     accusation. `verdict` also drives the colour, and the generic path drew
+     every verdict in the same phosphor, so a VERIFIED and a DISPUTED were
+     visually identical.
+
+     No earcon or haptic is played from here even though the card carries them:
+     they are device seams, and the one thing that earns a sound on this surface
+     is a safety tap. A fact-check that chimes would train the wearer to treat
+     an alarm as routine. */
+  const ctx = glassCtx(); gback(ctx);
+  const v = String(c.verdict || "unverified");
+  const col = v === "supported" ? "#56D364"
+            : v === "disputed" ? GP.confidence_low
+            : v === "self_contradiction" ? "#E05252"
+            : GP.text_ghost;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(128, 56, 10, 0, 2 * Math.PI);
+  ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.restore();
+  gtext(ctx, String(c.eyebrow || v).toUpperCase().slice(0, 26), 128, 84, col, "sm");
+  ctx.beginPath(); ctx.moveTo(44, 98); ctx.lineTo(212, 98);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+
+  const body = gwrap(String(c.primary || "").trim(), 24).slice(0, 2);
+  body.forEach((ln, i) => gtext(ctx, ln, 128, 122 + i * 16, GP.text_primary, "md"));
+  const why = gwrap(String(c.detail || "").trim(), 30).slice(0, 2);
+  why.forEach((ln, i) => gtext(ctx, ln, 128, 164 + i * 14, GP.text_secondary, "sm"));
+  const foot = String(c.footer || "").trim();
+  if (foot) gtext(ctx, foot.slice(0, 30), 128, 202, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 7000);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3220,6 +3331,10 @@ function renderEvent(ev){
   else if (t === "QuestRewardCard") glassQuestRewardCard(c);
   else if (t === "ListeningCard") glassListeningCard(c);
   else if (t === "SpokenCaptionCard") glassCaptionCard(c);
+  else if (t === "PrivacyVeilCard") glassVeilCard(c);
+  else if (t === "ReadyCard") glassReadyCard(c);
+  else if (t === "TimeScrubNodeCard") glassScrubCard(c);
+  else if (t === "FactCheckCard") glassFactCheckCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

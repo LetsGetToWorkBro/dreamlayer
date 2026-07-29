@@ -955,7 +955,49 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             if len(self._event_subs) >= MAX_EVENT_SUBS:
                 return None
             self._event_subs.append(q)
+        # DELIBERATELY NOT a posture greeting on this queue. Enqueueing one here
+        # was tried and reverted: a fresh subscription yielding an EMPTY queue is
+        # a contract 21 tests across three files encode on purpose, because it is
+        # what makes "this push reached N streams" checkable at all. Announcing
+        # the posture to a connecting phone is worth something; it is not worth
+        # making every push-counting assertion in the suite conditional on a
+        # greeting. Posture reaches the glass through `announce_posture` on the
+        # transition, which is the moment that actually changes what is true.
         return q
+
+    def announce_posture(self, veiled: bool) -> int:
+        """Draw the privacy shield going up or coming down.
+
+        `privacy_veil()` and `ready()` are both declared HUD features that no
+        shipped Brain could produce — `decisions/0001` at the card layer, and
+        the pair has to be wired TOGETHER rather than one at a time:
+
+          * VEIL UP pushes `veil_ok=True`. This is not borrowing the safety
+            flag loosely — it is the only way the card can exist. `push_event`
+            drops every non-`veil_ok` push while `incognito_now()`, so a card
+            announcing the shield would be suppressed by the shield. It meets
+            the stated bar for the flag: it carries NO captured content (the
+            builder takes no arguments and emits two fixed strings). The flag
+            also stamps `safety: true` on the envelope, which is read only by
+            the server's own queue-eviction policy — no client branches on it.
+
+          * VEIL DOWN pushes `ready()`, and this half is the load-bearing one.
+            PrivacyVeilCard is `dismiss_ms: 0` — stays until replaced — so
+            without something to replace it the glass would keep reading
+            "Nothing is being captured" after capture resumed. A stale card is
+            usually cosmetic; a stale PRIVACY card is a false assurance, which
+            is the worst error this product can make. `ready()` is the honest
+            successor state: the Brain is live again.
+        """
+        from ...hud import cards
+        try:
+            if veiled:
+                return self.push_event("privacy_veil", cards.privacy_veil(),
+                                       veil_ok=True)
+            return self.push_event("ready", cards.ready(), veil_ok=False)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[brain] posture card push failed: %s", type(exc).__name__)
+            return 0
 
     def unsubscribe_events(self, q) -> None:
         with self._event_lock:
@@ -4408,6 +4450,32 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if ls is not None:
                 self._json(200, {"frames": ls.frames()})
 
+        def _get_factcheck(self, path, qs):
+            """World-check a claim: `?claim=the+wall+fell+in+1975`.
+
+            GET rather than POST because it is a read — it stores nothing. It
+            can reach the wearer's cloud tier, but only through `brain.ask`,
+            which already refuses egress while incognito or with cloud off.
+            `fired: false` covers an unverifiable claim, an unreachable tier
+            and a cooling speaker alike — all "nothing worth interrupting for"."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.fact_check(qs.get("claim", [""])[0]))
+
+        def _get_scrub(self, path, qs):
+            """Rewind your day: `?index=N` steps back through the hot ring,
+            0 = most recent, and draws that node on the glass. `index` is
+            clamped, not rejected — a phone holding a stale position after a
+            retention sweep gets the oldest node rather than a 400."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            try:
+                idx = int((qs.get("index", ["0"])[0] or "0").strip())
+            except ValueError:
+                idx = 0
+            self._json(200, ls.scrub(idx))
+
         def _get_premonition(self, path, qs):
             """What usually happens next — only where the pattern is strong
             enough that the model will say so."""
@@ -4447,6 +4515,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/drift": _get_drift,
             "/dreamlayer/stasis": _get_stasis,
             "/dreamlayer/premonition": _get_premonition,
+            "/dreamlayer/scrub": _get_scrub,
+            "/dreamlayer/factcheck": _get_factcheck,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -4539,6 +4609,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _post_config(self, path, qs):
             """Apply a config patch, log notable posture changes, reindex."""
             body = self._body()
+            # The EFFECTIVE posture, not the raw flag: `incognito_now()` is
+            # lan_only OR a quiet-hours window, and a patch that clears lan_only
+            # inside quiet hours does not lift the shield. Reading the flag
+            # would announce a veil-down that did not happen.
+            veiled_before = bool(brain.incognito_now())
             before = (brain.config.model, brain.config.cloud_enabled,
                       brain.config.network_mode, brain.config.email_enabled,
                       brain.config.captions_enabled)
@@ -4558,6 +4633,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if "captions_enabled" in body and brain.config.captions_enabled != before[4]:
                 brain.activity.add("privacy", "Live captions "
                                    + ("on" if brain.config.captions_enabled else "off"))
+            # …and say it on the glass, not only in the activity log. Only on a
+            # TRANSITION: re-POSTing the same posture must not re-push a card,
+            # and the panel saves the whole config on every switch.
+            veiled_now = bool(brain.incognito_now())
+            if veiled_now != veiled_before:
+                brain.announce_posture(veiled_now)
             self._json(200, {"config": brain.config.public()})
 
         def _post_capabilities(self, path, qs):

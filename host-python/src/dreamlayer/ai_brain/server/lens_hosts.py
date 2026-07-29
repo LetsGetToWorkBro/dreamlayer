@@ -119,6 +119,7 @@ class BrainLenses:
         self._seeded = False
         self._provenance = None
         self._candor = None
+        self._veritas = None
         self._drift = None
         self._saga = None
         self._stasis = None
@@ -783,6 +784,130 @@ class BrainLenses:
             log.warning("[lenses] frames failed: %s", type(exc).__name__)
             return []
 
+    # -- truth, checked live ------------------------------------------------
+
+    @property
+    def veritas(self):
+        if getattr(self, "_veritas", None) is None:
+            from ...orchestrator.veritas import Veritas
+            self._veritas = Veritas(verify_fn=self._verify_claim)
+        return self._veritas
+
+    def _verify_claim(self, claim: str):
+        """Hand a claim to the wearer's own knowledge tiers.
+
+        `brain.ask` is the router, and it ALREADY owns the egress decision —
+        local model first, cloud only on an explicit opt-in and never while
+        incognito. So this deliberately adds no gate of its own: a second,
+        parallel posture check here is how the two drift apart and one of them
+        starts being wrong.
+        """
+        try:
+            from ..verify import verify_claim
+            return verify_claim(claim, self.brain.ask)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] verify failed: %s", type(exc).__name__)
+            return None
+
+    def fact_check(self, claim: str, push: bool = True) -> dict:
+        """Check a claim against the world — the "Truth, checked live" feature.
+
+        WORLD-ONLY, and that is the whole design decision. `Veritas.check` has
+        two halves: an offline self-contradiction pass over the speaker's
+        earlier lines, and a world check through the verifier. The offline half
+        is *already wired* as Candor (`candor_check`, fired on every ingest),
+        over the same ring and the same `contradicts()` scorer. Running both
+        would push two cards accusing the wearer of the same thing.
+
+        So `prior` is left empty: the self-contradiction loop iterates nothing
+        and control falls straight through to the world check, which is the
+        half nothing else in the shipped Brain performs. Where the two lenses
+        overlap, the better-wired one keeps the job.
+
+        Returns the FactCheck as a dict; `fired` is False for an unverifiable
+        claim, an unreachable tier, or a speaker still inside the cooldown —
+        all three are "nothing worth interrupting for", not errors.
+        """
+        claim = (claim or "").strip()
+        if not claim:
+            return {"fired": False, "claim": ""}
+        if not self.privacy.allow_recall():
+            return {"fired": False, "claim": claim, "reason": "veiled"}
+        import time as _t
+        try:
+            res = self.veritas.check(claim, speaker="", prior=None,
+                                     now=_t.time(), world=True)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] fact_check failed: %s", type(exc).__name__)
+            return {"fired": False, "claim": claim, "reason": "lens-error"}
+        out = {"fired": bool(res.fired), "claim": claim, "verdict": res.verdict,
+               "basis": res.basis, "detail": res.detail,
+               "confidence": round(float(res.confidence), 3), "card": res.card}
+        if res.fired and push and res.card:
+            self._push("fact_check", res.card)
+        return out
+
+    # -- rewind your day ----------------------------------------------------
+
+    def scrub(self, index: int = 0, hours: float | None = None,
+              push: bool = True) -> dict:
+        """Step back through today — the "Rewind your day" HUD feature.
+
+        Recorded for a while as needing "a durable store the Brain lacks",
+        which was wrong: the hot ring already IS the day. It carries a
+        timestamp and a kind per entry and is swept on `retention_hot_hours`
+        (24 h by default), so "everything since the cutoff, newest first" is
+        exactly the scrub timeline and needs nothing new on disk.
+
+        `index` walks that list, 0 = most recent. It is CLAMPED rather than
+        wrapped or rejected: a phone holding a stale index after a retention
+        sweep would otherwise 400 or silently jump to the other end of the
+        day, and the honest answer to "show me node 40 of a 12-node day" is
+        the oldest one.
+
+        The card is pushed only when there is something at that position — an
+        empty ring means an empty day, and `total: 0` says so without drawing
+        a node that does not exist.
+        """
+        if not self.privacy.allow_recall():
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        import time as _t
+        now = _t.time()
+        if hours is None:
+            # the SAME source retention_live._policy reads, so the scrub window
+            # and the sweep that empties it can never drift apart
+            from ...config import CONFIG
+            hours = float(getattr(CONFIG, "retention_hot_hours", 24.0) or 24.0)
+        try:
+            rows = self.ring.since(now - max(0.0, hours) * 3600.0)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] scrub failed: %s", type(exc).__name__)
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        from .brain_social import _ago as _ts_label
+        rows = sorted(rows, key=lambda b: b.ts, reverse=True)
+        total = len(rows)
+        nodes = [{"summary": (b.event.summary or "").strip(),
+                  "kind": b.event.kind or "object",
+                  "ts": b.ts, "ts_label": _ts_label(b.ts, now),
+                  "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
+                 for b in rows]
+        if not total:
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        idx = max(0, min(int(index or 0), total - 1))
+        pushed = 0
+        if push:
+            from ...hud import cards
+            n = nodes[idx]
+            # The builder's own signature, not a hand-rolled lookalike: the
+            # drawing reads `index`/`total` to place the progress dot, and a
+            # dict with only {primary, footer} would render a scrubber that
+            # never moves (the `_drift_card` mistake, recorded in HANDOFF).
+            self._push("time_scrub", cards.time_scrub_node(
+                summary=n["summary"], kind=n["kind"], ts_label=n["ts_label"],
+                index=idx, total=total, confidence=n["confidence"] or None))
+            pushed = 1
+        return {"nodes": nodes, "total": total, "index": idx, "pushed": pushed}
+
     @staticmethod
     def _stasis_card(eyebrow: str, primary: str, footer: str) -> dict:
         return {"type": "StasisCard", "dismiss_ms": 5000, "eyebrow": eyebrow,
@@ -908,6 +1033,10 @@ class BrainLenses:
         self._drift = None
         self._provenance = None
         self._candor = None
+        # Veritas holds a PER-SPEAKER COOLDOWN, not memories — but an erase that
+        # left it standing would keep suppressing cards on the strength of a
+        # check about a claim the wearer just deleted.
+        self._veritas = None
         self._premonition = None
         self._weather = None
         return n
