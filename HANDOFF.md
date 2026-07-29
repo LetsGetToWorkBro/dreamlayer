@@ -9,33 +9,58 @@ Working state as of 2026-07-29. Written for whoever picks this up next.
 **Step 3 is the lens-coverage gap below.** Steps 1 (retention) and 2 (face
 recognition) are done and merged — kept here as context, not work.
 
-### The lens gap — four lenses the phone cannot reach (audit 2026-07-29)
+### The lens gap — 12 of 28 lenses never reach the phone (audit 2026-07-29)
 
 The phone camera path does **not** use the `Orchestrator`, which is correct and
 deliberate: `WorldLensHost` (`ai_brain/server/world_lens.py`) is the Brain-side
 host. It imports shared primitives *from* the `orchestrator` package (`TasteLens`,
 `GlanceArbiter`, `CapabilityLedger`) but never constructs an `Orchestrator`.
 
-It is **not 1:1 with the lens classes**, and that is the open work. Verified:
+It is **not 1:1 with the lens classes.** `lenses.py` declares 30 Features (2 are
+Lua display effects, so 28 are Python). An AST import graph over the whole
+package — function-level imports included, resolved through relative imports and
+package `__init__` re-exports — walked transitively from all 48 `ai_brain/`
+modules reaches 189 of 390 modules. **12 of the 28 lenses are not in that closure
+at all**, i.e. no code path from the Brain can even load them:
+
+| lens | module |
+|---|---|
+| Lucid Recall | `lucid_recall` |
+| Scholar | `orchestrator.scholar` |
+| Stasis | `orchestrator.stasis` |
+| Provenance Lens | `orchestrator.provenance` |
+| Candor | `orchestrator.consistency` |
+| Commitment Drift | `orchestrator.commitment_drift` |
+| Saga | `orchestrator.quest` |
+| Puente | `orchestrator.puente_bridge` |
+| Timbre | `dream_mode.timbre_reactor` |
+| Yesterlight | `dream_mode.yesterlight` |
+| Premonition | `dream_mode.premonition` |
+| Inner Weather | `dream_mode.inner_weather` |
+
+Same disease as retention (`decisions/0001`) and the Social Lens (fixed in #542),
+twelve times over. Fix them the way the last three were fixed: re-implement
+Brain-side against the Brain's own state, do **not** resurrect the Orchestrator.
+Scholar is the most user-visible ("read a test → the answer; a form → what to
+write in each field").
+
+**Reproduce it in one command** — grep is not enough here (`quest` matches
+"request", `provenance` matches a schema field and two comments, and a docstring
+naming `lucid_recall` is not an import):
 
 ```
-$ for c in TruthLens ProvenanceLens Scholar YesterlightController; do \
-    grep -rn "$c(" src/dreamlayer --include=*.py | grep -v /tests/; done
-truth_lens/__init__.py, orchestrator/orchestrator.py          # TruthLens
-orchestrator/orchestrator.py, orchestrator/capture_provenance.py  # ProvenanceLens
-orchestrator/orchestrator.py, orchestrator/glance.py          # Scholar
-dream_mode/engine.py   (DreamEngine — itself orchestrator-only)  # Yesterlight
+python3 scripts/lens_reachability.py            # --verbose shows what reached each
 ```
 
-All four are declared as lenses in `lenses.py`, all four have real modules on
-disk, and none has any reference from `ai_brain/` — so they are invisible from
-the phone, the same disease as retention (`decisions/0001`) and the Social Lens
-(fixed in #542). **Truth Lens, Provenance, Scholar and Yesterlight are the
-remaining Orchestrator-only lenses.** Scholar is the most user-visible of the
-four ("read a test → the answer; a form → what to write in each field").
+It exits non-zero while any lens is unreachable, so it can go in CI the day
+someone wants this to stop regressing.
 
-Fix them the way the last three were fixed: re-implement Brain-side against the
-Brain's own state, do **not** resurrect the Orchestrator.
+**Two honest limits on the other 16.** Import-reachable is an upper bound, not
+proof a lens works: retention was imported and never called for years. And
+package-level reachability can flatter — `truth_lens` counts as reachable only
+because #542 wired `truth_lens.face_embed`; the **credibility analyzer
+(`truth_lens/analyzer.py`) is still not reached by anything**. Treat the 16 as
+"worth checking", not "fine".
 
 **What already works, so you do not re-audit it:**
 
@@ -52,8 +77,8 @@ Brain's own state, do **not** resurrect the Orchestrator.
 - **`find` IS reachable.** Spoken intent lands via `/live/intent` →
   `note_spoken_intent` → `pending_intent()`, and `world_lens.py:576` runs
   `look_lens(frame, "find", {"terms": …})`. **The comment in `glance_live.py`
-  calling that "the next tier of this work" is STALE** — fix the comment when
-  you are next in that file.
+  calling that "the next tier of this work" is STALE** — fix it when you are next
+  in that file.
 - Deliberately not auto-fired: `find` (needs nouns a bare frame cannot supply),
   `dream` (a deliberate style tap), and `person` (every face defers to
   `person_guard`; the arbiter must never try to identify a stranger).
@@ -202,8 +227,8 @@ holding uncommitted work.
 | #541 | Retention wired Brain-side; `decisions/0001` closed |
 | #542 | Face recognition: ArcFace behind the `face` extra + the Brain-side consumer |
 
-**Open and unresolved:** the lens-coverage gap at the top of this file (Truth
-Lens, Provenance, Scholar, Yesterlight are Orchestrator-only), the three
+**Open and unresolved:** the lens-coverage gap at the top of this file (12 of 28
+lenses are unreachable from the Brain), the three
 carry-forwards from #542, and the face copy when a build ships the pack. Task
 list item #58 (tray icons, dock-click, Learn glass) is stale and needs a build
 to verify. `decisions/0001` (retention) is closed.
