@@ -72,26 +72,48 @@ class TestWhatYouOwe:
         assert seen[-1][1]["person"] == "Ana"
 
     def test_a_promise_with_no_due_date_sorts_last_not_first(self, brain):
-        """`due_ts` of 0/None would read as "due at the epoch", i.e. maximally
-        overdue — so an undated promise would always outrank a real deadline."""
+        """`due_ts` of None coerced to 0 reads as "due at the epoch", i.e.
+        maximally overdue — so an undated someday-maybe would outrank a real
+        deadline and be the one card the wearer gets.
+
+        The fixture needs BOTH kinds present or it proves nothing: an earlier
+        version created two undated promises and asserted conditionally, so it
+        passed against a mutant that sorted undated first. `_parse_due`
+        understands "Xh"/"Xd"/"tomorrow", so "2h" gives a real due_ts.
+        """
         ls = brain.lenses()
-        self._promise(ls, "someday learn welding")           # no due
-        rec_ring = ls.ring.latest(kind="task", limit=1)
-        assert rec_ring, "fixture did not land in the ring"
-        ls.drift.tick()
-        for r in ls.drift.all_records():
-            if "welding" not in (r.event.summary or ""):
-                continue
-            assert r.due_ts in (None, 0) or r.due_ts, "fixture assumption changed"
-        self._promise(ls, "call the dentist back")
+        # DATED FIRST, so ring order (newest-first) puts it LAST and only the
+        # sort can bring it to the front. Appending it second made the test
+        # pass with the sort deleted outright.
+        ls.ring.append(MemoryEvent(kind="task", summary="call the dentist back",
+                                   confidence=0.8, meta={"due": "2h"}))
+        ls.ring.append(MemoryEvent(kind="task", summary="someday learn welding",
+                                   confidence=0.8, meta={}))
         out = ls.owed(push=False)
         subjects = [i["subject"] for i in out["items"]]
-        assert "someday learn welding" in subjects
-        # whatever else is true, an undated promise must not be first when a
-        # dated one exists; with neither dated, order is merely stable
+        assert set(subjects) == {"someday learn welding", "call the dentist back"}
+
         dated = [i for i in out["items"] if i.get("due_ts")]
-        if dated:
-            assert out["items"][0].get("due_ts"), subjects
+        undated = [i for i in out["items"] if not i.get("due_ts")]
+        assert dated and undated, (
+            f"fixture no longer has one of each: {out['items']}")
+        assert out["items"][0]["subject"] == "call the dentist back", (
+            f"an undated promise outranked a real deadline: {subjects}")
+
+    def test_the_card_drawn_is_the_most_urgent_one(self, brain):
+        """`owed` pushes the TOP row, so the sort order decides what the wearer
+        actually sees — the assertion above only matters because of this."""
+        ls = brain.lenses()
+        # DATED FIRST, so ring order (newest-first) puts it LAST and only the
+        # sort can bring it to the front. Appending it second made the test
+        # pass with the sort deleted outright.
+        ls.ring.append(MemoryEvent(kind="task", summary="call the dentist back",
+                                   confidence=0.8, meta={"due": "2h"}))
+        ls.ring.append(MemoryEvent(kind="task", summary="someday learn welding",
+                                   confidence=0.8, meta={}))
+        seen = _pushes(brain)
+        ls.owed()
+        assert seen[-1][1]["primary"] == "call the dentist back"
 
     def test_a_resolved_promise_is_not_something_you_owe(self, brain):
         """`resolved` is None while open, not False. A truth test would read a
