@@ -24,7 +24,7 @@ python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see �
 | | done | open |
 |---|---|---|
 | **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
-| **HUD cards** | 11 of 24 have a Brain-side producer (2 wired this round); **all 11 draw properly** on the Brain's own surface, and so do the 3 undeclared cards it pushes | **13 cards nothing in the Brain can produce** (§3) |
+| **HUD cards** | **15 of 24** have a Brain-side producer (6 wired this round); all 15 draw properly on the Brain's own surface, and so do the 3 undeclared cards it pushes | **9 cards nothing in the Brain can produce** — 4 blockers, not 9 tasks (§3) |
 | **Capabilities** | 42 of 74 seams loadable; 13 unreachable by design; 18 declared dormant, with reasons | **0 misreported**; the 18 dormant ones are real work, not a labelling gap (§4) |
 
 The single most important thing in this file, because it is the mistake that
@@ -231,9 +231,9 @@ another field arrives gutted, and the checker now prints that as its own
 category rather than folding it into a pass.
 
 ```
-NO BRAIN-SIDE PRODUCER  13 of 24
-generic on the Live Lens  0   (was 5 — every one now has a branch)
-drawn properly on both   11
+NO BRAIN-SIDE PRODUCER   9 of 24
+generic on the Live Lens  0   (was 5 — and a test now keeps it there)
+drawn properly on both   15
 UNDECLARED               10   (built by the Brain, absent from demo/catalog.py)
 ```
 
