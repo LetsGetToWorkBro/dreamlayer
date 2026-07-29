@@ -537,3 +537,36 @@ class TestTheLiveLensDrawsWhatTheBrainPushes:
         assert "clearInterval(glassAnim)" in src[i:i + 700]
         j = src.index("function glassClear()")
         assert "clearInterval(glassAnim)" in src[j:j + 300]
+
+    def test_no_producible_card_is_left_on_the_generic_renderer(self, hud):
+        """The bucket the script PRINTS but does not fail on — and the gap a
+        mutation run found. Deleting the `FactCheckCard` dispatch arm moved it
+        into "generic on the Live Lens" and every test still passed, because
+        `_pushed_types` cannot name that push (`self._push("fact_check",
+        res.card)` hands it an attribute) and the exit code ignores the bucket.
+
+        A card with a Brain-side producer that lands on `glassEventCard` loses
+        every field but eyebrow and primary — for FactCheckCard that is the
+        BASIS, i.e. the difference between a fact-check and an accusation. The
+        bucket is empty today and this keeps it there."""
+        features = hud._declared_features()
+        samples = hud._sample_builders()
+        types = hud._card_types()
+        lens = hud._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        producers = hud._producers(reachable, set(samples.values()))
+        live = hud._drawn_on_live_lens()
+
+        gutted = []
+        for _fid, title, key in features:
+            builder = samples.get(key)
+            ctype = types.get(builder or "", "")
+            if not producers.get(builder or "") or not ctype:
+                continue                       # no producer: a different bucket
+            if ctype not in live:
+                gutted.append(f"{title} ({ctype})")
+        assert not gutted, (
+            "cards the Brain can produce that the Live Lens draws generically "
+            f"— each loses every field but eyebrow+primary: {gutted}")

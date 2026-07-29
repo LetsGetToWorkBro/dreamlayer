@@ -115,11 +115,37 @@ def test_the_config_route_announces_only_on_a_transition(brain):
 def test_quiet_hours_mean_the_effective_posture_not_the_flag(brain):
     """A patch clearing lan_only INSIDE quiet hours does not lift the shield.
     Reading `config.lan_only` instead of `incognito_now()` would announce a
-    veil-down that never happened."""
+    veil-down that never happened — a ReadyCard replacing the shield while
+    capture is still suppressed, which is a false assurance in the one
+    direction that matters.
+
+    Driven through the ROUTE's own transition logic rather than by asserting on
+    `incognito_now()` alone: an earlier version checked the helper and passed
+    happily against a mutant that made the route read the raw flag.
+    """
     import datetime as _dt
     hour = _dt.datetime.now().hour
     brain.config.quiet_hours = f"{hour:02d}:00-{(hour + 1) % 24:02d}:00"
     brain.config.network_mode = "lan_only"
     assert brain.incognito_now() is True
-    brain.config.network_mode = "connected"
-    assert brain.incognito_now() is True, "quiet hours still veil the Brain"
+
+    q = brain.subscribe_events()
+    veiled_before = bool(brain.incognito_now())      # what the route records
+    brain.apply_config({"network_mode": "connected"})
+    veiled_now = bool(brain.incognito_now())
+    assert veiled_now is True, "quiet hours still veil the Brain"
+    assert veiled_now == veiled_before, (
+        "the effective posture changed when only the flag did")
+    if veiled_now != veiled_before:                  # the route's own condition
+        brain.announce_posture(veiled_now)
+    assert _drain(q) == [], (
+        "a veil-down was announced while quiet hours still hold the shield up")
+
+
+def test_the_route_reads_the_effective_posture(brain):
+    """The mutation guard, stated as source. `config.lan_only` is one of two
+    inputs to the shield; announcing on it alone is wrong inside quiet hours."""
+    from dreamlayer.ai_brain.server import server as srv
+    text = open(srv.__file__, encoding="utf-8").read()
+    assert "veiled_before = bool(brain.incognito_now())" in text
+    assert "veiled_before = bool(brain.config.lan_only)" not in text

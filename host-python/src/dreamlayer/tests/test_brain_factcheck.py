@@ -104,10 +104,21 @@ def test_it_does_not_re_fire_candors_half(brain):
     so if `fact_check` passed `prior` it would fire a SECOND card about the
     thing Candor already reported — two accusations, one disagreement."""
     ls = brain.lenses()
-    ls.ingest_utterance("the meeting is at 3pm", via="said")
+    # The claim has to be one Veritas would actually TAKE, or this proves
+    # nothing: `detect_claim` rejects "the meeting is at 4pm" outright (not a
+    # checkable factual assertion), so an earlier version of this test passed
+    # against a mutant that DID pass `prior`. A numeric claim is checkable, and
+    # the ring holds a line it contradicts.
+    ls.ingest_utterance("rent is 1200 a month", via="said")
+    from dreamlayer.orchestrator.veritas import detect_claim
+    assert detect_claim("rent is 1400 a month").checkable, (
+        "the fixture claim is not one Veritas would take — test is vacuous")
+    from dreamlayer.orchestrator.consistency import contradicts
+    assert contradicts("rent is 1400 a month", "rent is 1200 a month"), (
+        "the fixture pair no longer contradicts — test is vacuous")
     _answers(brain, "")                      # world tier declines to answer
     seen = _pushes(brain)
-    out = ls.fact_check("the meeting is at 4pm")
+    out = ls.fact_check("rent is 1400 a month")
     assert out["fired"] is False, (
         "fact_check ran the self-contradiction pass Candor already owns")
     assert not [c for k, c in seen if k == "fact_check"]
@@ -117,8 +128,8 @@ def test_candor_still_catches_that_same_pair(brain):
     """…and the other half of the same decision: giving the world check to
     Veritas must not have taken the self-contradiction away from Candor."""
     ls = brain.lenses()
-    ls.ingest_utterance("the meeting is at 3pm", via="said")
-    res = ls.candor_check("the meeting is at 4pm", push=False)
+    ls.ingest_utterance("rent is 1200 a month", via="said")
+    res = ls.candor_check("rent is 1400 a month", push=False)
     assert res["fired"] is True, "Candor lost the contradiction it owns"
     assert res["card"]["type"] == "ConsistencyCard"
 
