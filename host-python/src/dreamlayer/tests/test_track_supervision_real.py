@@ -79,6 +79,19 @@ def test_real_tracker_is_available():
     assert SupervisionTracker().available is True
 
 
+def test_synthetic_confidence_activates_tracker(spies):
+    """The bridge synthesises confidence=1.0. ByteTrack filters detections
+    below its activation threshold (~0.35 on supervision 0.29.1), so if the
+    synthesised confidence drifts below that threshold the real path returns
+    no ids, the per-frame mapping becomes incomplete, and the centroid
+    fallback silently takes over. This test runs the full bridge path and
+    asserts the real tracker emitted ids — not the fallback."""
+    ids = spies.tracker.update([(0.5, 0.5)])
+    assert ids == [1]
+    assert spies.real_calls == 1
+    assert spies.fallback_calls == 0
+
+
 def test_crossing_tracks_keep_identity(real_path):
     """The real tracker must hold both identities across the crossing, in
     input order. Behavioural first: against upstream, update() degrades to
@@ -105,8 +118,11 @@ def test_fallback_would_swap_on_the_same_scenario():
 def test_tracker_id_zero_is_not_dropped():
     """np.array([0]) is falsy under `or` — the old code returned [] for a real
     track. This case fails WITHOUT raising, so it needs its own assertion.
-    The stub ignores its input, so this test is independent of how
-    update_with_detections is fed and fails behaviourally against upstream."""
+    ByteTrack ids are 1-based, so `tracker_id=array([0])` is unreachable
+    through the real tracker; we therefore fabricate it with a stub to unit
+    test the conversion directly. The stub ignores its input, so this test is
+    independent of how update_with_detections is fed and fails behaviourally
+    against upstream."""
 
     class _ZeroIdTracker:
         def update_with_detections(self, detections):
