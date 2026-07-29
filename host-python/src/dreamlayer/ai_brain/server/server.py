@@ -1191,7 +1191,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled", "face_recognition"):
+                  "remote_listen_enabled", "face_recognition",
+                  "face_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -4356,10 +4357,16 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             whether a model is actually installed, whether ambient is permitted
             here, and how many faces are enrolled. Counts and capability only —
             never a name, never a vector."""
+            from .face_live import CONSENT_TEXT
             fr = brain.face_recall()
-            self._json(200, fr.status() if fr is not None
-                       else {"enabled": False, "model": False,
-                             "ambient": False, "enrolled": 0})
+            if fr is None:
+                self._json(200, {"enabled": False, "model": False,
+                                 "ambient": False, "enrolled": 0})
+                return
+            # the exact words the acceptance is recorded against travel with the
+            # state, so the panel can never show different terms than the ones
+            # `accept_consent` versions
+            self._json(200, {**fr.status(), "consent_text": CONSENT_TEXT})
 
         _GET_ROUTES = {
             "/dreamlayer/config": _get_config,
@@ -5256,6 +5263,34 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 return
             self._json(200, fr.identify(b64_to_frame(self._body().get("image"))))
 
+        def _post_face_consent(self, path, qs):
+            """Record or withdraw the wearer's in-app consent.
+            Body: {accept: true, version} or {accept: false}.
+
+            GET /dreamlayer/face returns the version that must be accepted, and
+            the text lives in `face_live.CONSENT_TEXT` so the panel renders the
+            exact words the acceptance is recorded against."""
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            b = self._body()
+            if b.get("accept") is True:
+                self._json(200, fr.accept_consent(str(b.get("version", ""))))
+            else:
+                self._json(200, fr.revoke_consent())
+
+        def _post_face_name(self, path, qs):
+            """Name an auto-enrolled identity. Body: {contact_id, name}.
+            Promotes it out of the unnamed-TTL sweep."""
+            fr = brain.face_recall()
+            if fr is None:
+                self._json(200, {"ok": False, "error": "face recall unavailable"})
+                return
+            b = self._body()
+            self._json(200, fr.name_identity(str(b.get("contact_id", "")),
+                                             str(b.get("name", ""))))
+
         def _post_face_forget(self, path, qs):
             """Forget one enrolled face. Body: {contact_id}."""
             fr = brain.face_recall()
@@ -5297,6 +5332,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/face/enrol": _post_face_enrol,
             "/dreamlayer/face/identify": _post_face_identify,
             "/dreamlayer/face/forget": _post_face_forget,
+            "/dreamlayer/face/consent": _post_face_consent,
+            "/dreamlayer/face/name": _post_face_name,
             "/dreamlayer/social/people": _post_social_people,
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,

@@ -166,6 +166,17 @@ def sweep_retention(brain) -> dict:
             report["hot_purged"] += int(ls.purge_hot(cutoff))
         except Exception as exc:                     # noqa: BLE001
             log.warning("[retention] statement-ring purge failed: %s", exc)
+    # Auto-enrolled faces nobody named age out on the WARM window. A named
+    # contact is a deliberate keep and stays cold-forever; an unnamed one is a
+    # stranger the camera happened to see, and keeping those permanently grows
+    # the store without bound with people the wearer could not identify.
+    fr = getattr(brain, "_face_recall", None)
+    if fr is not None:
+        try:
+            report["unnamed_faces_dropped"] = int(
+                fr.sweep_unnamed(policy.warm_days))
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[retention] unnamed-face sweep failed: %s", exc)
     ring = _hot_ring(brain)
     if ring is not None:
         try:
