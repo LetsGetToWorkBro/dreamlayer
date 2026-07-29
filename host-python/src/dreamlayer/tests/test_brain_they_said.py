@@ -224,3 +224,21 @@ class TestWhatTheyPromised:
         text = open(srv.__file__, encoding="utf-8").read()
         assert '"/dreamlayer/theysaid": _get_they_said,' in text
         assert '"/dreamlayer/their": _get_their_word,' in text
+
+
+def test_the_caller_owns_attribution_not_the_extracted_meta(brain):
+    """`said_by` is set unconditionally, never `setdefault`.
+
+    `extract_events` does not populate `said_by` today, so the two forms behave
+    identically through the ear and a mutation swapping them survives every
+    other test here. It is still the wrong shape: extraction has no idea who was
+    speaking, and the identical bug on `meta["person"]` — where the extracted
+    RECIPIENT wins over the caller's speaker — is the one this whole feature had
+    to work around. Exercised directly so the guard cannot rot.
+    """
+    ls = brain.lenses()
+    ls.observe("conversation", "the deposit is 1200 a month",
+               meta={"said_by": "Bob"}, said_by="Ana", confidence=0.8)
+    assert ls.their_word("Ana")["said"], "the caller's attribution was overridden"
+    assert not ls.their_word("Bob")["said"], (
+        "meta from extraction was allowed to claim the speaker")
