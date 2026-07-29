@@ -11,6 +11,41 @@ owner asked for this explicitly and asked for it at AAA level: fully built,
 tested, mutation-tested, merged. Read the whole of this section before starting;
 the first item is smaller than it looks and unblocks the rest.
 
+### Testing face recall end-to-end (no consent flow exists to remove)
+
+There is no consent flow, no consent UI and no per-person consent gate in the
+face code — `grep -rn "consent" ai_brain/server/face_live.py` returns only
+docstrings describing what enrolment means. Nothing needs deleting to test.
+What gates `identify()` is, in order: the Veil, the wearer's switch, an empty
+index, no face detected, no match.
+
+Full end-to-end test on a source checkout:
+
+```
+pip install -e ".[face]"                      # the model, opt-in by design
+python -c "from insightface.app import FaceAnalysis; \
+  FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'], \
+  allowed_modules=['detection','recognition']).prepare(ctx_id=-1)"   # weights
+export DL_FACE_AMBIENT=1                      # ambient; refused in release builds
+curl -sX POST localhost:PORT/dreamlayer/config \
+  -H "X-DreamLayer-Token: $TOK" -H 'Content-Type: application/json' \
+  -d '{"face_recognition": true}'             # the wearer's switch
+```
+
+Then every path is exercisable: `POST /dreamlayer/face/enrol` with a name and a
+base64 frame, `/identify` for match and no-match, `/forget`, `GET
+/dreamlayer/face` for status, plus erase-everything and the retention sweep.
+
+**Matching is enrolment-only**, and that is the mechanism rather than a gate:
+the index contains only people the wearer named, so there is nothing for a
+stranger's face to match against. Making the device "recognise anyone" is
+therefore not a gate removal — it requires AUTO-ENROLLING every face the camera
+sees, which is a face database of bystanders. That change would falsify
+`landing/privacy.html`, `docs/gitbook/privacy.md` and the iOS purpose strings,
+trip `test_advertised_claims.py`, and collect biometric identifiers from people
+who never agreed (BIPA is per-violation; GDPR Art. 9 is special category). It
+does not need to happen for testing, which is what it keeps getting reached for.
+
 ### The bar: 1:1 and reachable, no partial wiring
 
 The owner's words: **"it needs to be 1:1 full functionality and reachable, no
