@@ -155,10 +155,15 @@ deliberate refusals (past-tense verbs only, no person/event/idiom
 subjects) are in [the Juno chapter](juno.md#6-things-stashed-and-found).
 
 An anchor can also carry a bearing and distance ("12m to your left"),
-turned into one of eight human directions given your current heading —
-but the IMU heading and drop-distance that feed it are a **seam** today,
-so place-worded anchors ("at the north rack") are the real product and
-bearing-worded ones light up with hardware. Anchors are yours alone: a
+turned into one of eight human directions given your current heading.
+This used to be an IMU **seam** — nothing populated `bearing_deg` /
+`distance_m`, so place-worded anchors were the whole product. An anchor
+now stores the **coordinate** it was dropped at, and the bearing is
+computed live from where you are when you ask. That is deliberately not
+the same as replaying a stored bearing: a stored one is relative to
+wherever you were standing at the time and is wrong the moment you walk
+away. With no current fix the place-worded path answers exactly as
+before. Anchors are yours alone: a
 thing you never stashed has no waypath. The privacy rule was sharpened by
 the recall-gate pass: **stashing holds while incognito** (it is a write),
 but *locating still answers* — incognito blocks keeping, not recalling —

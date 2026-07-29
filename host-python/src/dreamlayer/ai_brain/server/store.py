@@ -547,6 +547,13 @@ class BrainConfig:
     # called with `no_cloud=True`), so an overheard question never egresses,
     # whatever the cloud settings say.
     answer_ahead_enabled: bool = False
+    # Places where the Brain captures NOTHING — the "Private zones" feature.
+    # Each entry is {name, lat, lon, radius_m}. Inside one, `incognito_now()`
+    # returns True, so every existing gate (the ear, captions, the lens ring,
+    # face recall, ambient pushes) suppresses on the shield it already honours
+    # rather than on a second suppression path that could be wired wrong.
+    # Empty by default; the wearer defines their own.
+    private_zones: list = field(default_factory=list)
     # -- recognising the people you introduced (ai_brain/server/face_live.py) --
     # OFF on a fresh install, and nothing here ever flips it on. When on, and
     # ONLY when the opt-in `face` pack and its weights are also present, the

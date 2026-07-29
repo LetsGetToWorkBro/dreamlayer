@@ -1970,6 +1970,38 @@ function glassDeviationCard(c){                      /* SOUNDS DIFFERENT — THE
   gend(c.dismiss_ms || 5000);
 }
 
+function glassPrivateZoneCard(c){                    /* CAPTURE SUSPENDED */
+  /* The strongest claim any card in this product makes, so it is drawn to be
+     unmistakable and it is drawn from fields the generic renderer dropped:
+     `detail` is WHICH zone (a shield with no place named is not reassuring)
+     and `footer` is "Memory resumes when you leave", which is the half that
+     tells you this is temporary rather than a fault.
+
+     Visually the closed twin of glassVeilCard — a filled shield rather than an
+     outlined one — because the two mean the same thing arriving by different
+     routes, and a wearer should not have to learn two shapes for "off". */
+  const ctx = glassCtx(); gback(ctx);
+  const col = GP.text_secondary;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 9;
+  ctx.beginPath();
+  ctx.moveTo(128, 58);
+  ctx.lineTo(172, 79); ctx.lineTo(172, 120);
+  ctx.quadraticCurveTo(172, 154, 128, 173);
+  ctx.quadraticCurveTo(84, 154, 84, 120);
+  ctx.lineTo(84, 79); ctx.closePath();
+  ctx.fillStyle = "rgba(168,184,192,.16)"; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.restore();
+  gtext(ctx, String(c.eyebrow || "CAPTURE SUSPENDED").toUpperCase().slice(0, 22),
+        128, 44, col, "sm");
+  gtext(ctx, String(c.primary || "Private zone").slice(0, 18), 128, 112, GP.text_primary, "md");
+  const where = String(c.detail || c.zone || "").trim();
+  if (where) gtext(ctx, gwrap(where, 22)[0] || "", 128, 136, GP.text_secondary, "sm");
+  gtext(ctx, String(c.footer || "Memory resumes when you leave").slice(0, 30),
+        128, 200, GP.text_ghost, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3494,6 +3526,7 @@ function renderEvent(ev){
   else if (t === "ProactiveMemoryCard") glassProactiveCard(c);
   else if (t === "AnswerAheadCard") glassAnswerAheadCard(c);
   else if (t === "DeviationAlertCard") glassDeviationCard(c);
+  else if (t === "PrivateZoneCard") glassPrivateZoneCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

@@ -12,7 +12,7 @@ thing you never saved has no waypath.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 # 8-point relative directions, 45° sectors centred on "ahead" (0°)
@@ -40,9 +40,19 @@ class Anchor:
     distance_m: Optional[float] = None    # metres from the anchor drop (IMU seam)
     place: str = ""                       # a plain-words spot ("the north rack")
     ts: float = 0.0
+    # WHERE ON EARTH it was dropped. The bearing/distance pair above is relative
+    # to wherever the wearer was standing at the time, so it goes stale the
+    # moment they move; a coordinate does not. With this, `locate` can compute a
+    # live bearing from the CURRENT position instead of replaying a dead one,
+    # which is what makes "12 m to your left" true rather than a fossil.
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
     def has_bearing(self) -> bool:
         return self.bearing_deg is not None and self.distance_m is not None
+
+    def has_coord(self) -> bool:
+        return self.lat is not None and self.lon is not None
 
 
 @dataclass
@@ -73,18 +83,22 @@ class WaypathLens:
 
     def remember(self, subject: str, bearing_deg: Optional[float] = None,
                  distance_m: Optional[float] = None, place: str = "",
-                 ts: Optional[float] = None) -> None:
-        """Record where a thing (or place) is. Latest wins. Either a
-        bearing+distance (from the IMU), a plain `place`, or both."""
+                 ts: Optional[float] = None, lat: Optional[float] = None,
+                 lon: Optional[float] = None) -> None:
+        """Record where a thing (or place) is. Latest wins. A bearing+distance
+        (from the IMU), a plain `place`, a coordinate, or any combination."""
         self._anchors[subject.strip().lower()] = Anchor(
             subject=subject.strip(), bearing_deg=bearing_deg, distance_m=distance_m,
-            place=place.strip(), ts=ts if ts is not None else self._now())
+            place=place.strip(), ts=ts if ts is not None else self._now(),
+            lat=lat, lon=lon)
 
     def remember_place(self, subject: str, place: str,
-                       ts: Optional[float] = None) -> None:
-        """The spoken capture path: 'I left my bike at the north rack'. No IMU,
-        just the spot in your own words."""
-        self.remember(subject, place=place, ts=ts)
+                       ts: Optional[float] = None, lat: Optional[float] = None,
+                       lon: Optional[float] = None) -> None:
+        """The spoken capture path: 'I left my bike at the north rack'. No IMU
+        — the spot in your own words, plus the coordinate if the Brain has a
+        current fix, so recall can give a direction as well as a name."""
+        self.remember(subject, place=place, ts=ts, lat=lat, lon=lon)
 
     def forget(self, subject: str) -> bool:
         return self._anchors.pop(subject.strip().lower(), None) is not None
@@ -99,8 +113,17 @@ class WaypathLens:
         """Every anchor, for persistence and the memories feed."""
         return list(self._anchors.values())
 
-    def locate(self, subject: str, heading_deg: float = 0.0) -> WaypathCue:
-        """Where is `subject`, relative to where you're facing?"""
+    def locate(self, subject: str, heading_deg: float = 0.0,
+               here: Optional[dict] = None) -> WaypathCue:
+        """Where is `subject`, relative to where you're facing?
+
+        `here` is the wearer's CURRENT position ({lat, lon}). When both it and
+        the anchor have coordinates, the bearing and distance are computed live
+        — which is the only way they stay true after the wearer has moved. A
+        stored bearing is relative to wherever they were standing when they
+        dropped it and is worthless the moment they walk away, which is why the
+        IMU seam alone was never enough to make this feature honest.
+        """
         key = subject.strip().lower()
         anchor = self._anchors.get(key)
         if anchor is None:                    # fuzzy: substring match
@@ -108,6 +131,18 @@ class WaypathLens:
                            if key in k or k in key), None)
         if anchor is None:
             return WaypathCue(found=False, subject=subject)
+        # A live fix beats a stored bearing: same branch below, fresher inputs.
+        if here and anchor.has_coord():
+            try:
+                from ..ai_brain.server.geo import haversine_m, initial_bearing_deg
+                hlat, hlon = float(here["lat"]), float(here["lon"])
+                assert anchor.lat is not None and anchor.lon is not None
+                anchor = replace(
+                    anchor,
+                    distance_m=haversine_m(hlat, hlon, anchor.lat, anchor.lon),
+                    bearing_deg=initial_bearing_deg(hlat, hlon, anchor.lat, anchor.lon))
+            except Exception:                     # noqa: BLE001 — a missing fix
+                pass                              # must never cost the answer
         if anchor.has_bearing():
             # has_bearing() is exactly `bearing_deg is not None and distance_m
             # is not None`, so both are present on this branch.

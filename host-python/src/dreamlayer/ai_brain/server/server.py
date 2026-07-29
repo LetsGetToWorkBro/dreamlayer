@@ -304,6 +304,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # the Live Lens event bus: the Brain PUSHES ambient cards (a sound-safety
         # tap, the morning brief, a commitment nudge) to connected phones over SSE
         self._event_subs: list = []    # one Queue per connected /live/events stream
+        from .geo import LastFix
+        self._last_fix = LastFix()     # in memory only; never written to disk
+        self._zone_was = ""            # last announced zone, for edge detection
         self._event_lock = threading.Lock()
         # guards _spoken_intent, so a look POPS it in one step (concurrent
         # looks otherwise both saw the same utterance)
@@ -965,7 +968,41 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # transition, which is the moment that actually changes what is true.
         return q
 
-    def announce_posture(self, veiled: bool) -> int:
+    def note_location(self, lat, lon, accuracy_m=0.0) -> dict:
+        """Take a position report and announce any zone the wearer just crossed.
+
+        NOT veil-gated, and that is a deliberate exception rather than an
+        oversight. A private zone contributes to `incognito_now()`, so refusing
+        fixes while incognito would mean the Brain could never learn it had
+        LEFT a zone — the shield would latch on the first entry and stay up
+        forever. This is the input that decides the shield; it cannot be gated
+        on the shield's own output. Nothing is stored: the fix lives in memory
+        and dies with the process.
+        """
+        from .geo import valid_coord
+        if not valid_coord(lat, lon):
+            return {"ok": False, "error": "not a coordinate"}
+        self._last_fix.set(lat, lon, accuracy_m)
+        zone = self.private_zone_now()
+        if zone != self._zone_was:
+            entered, self._zone_was = zone, zone
+            # ENTERING draws the zone card; LEAVING hands off to the ordinary
+            # posture announcement, which pushes ReadyCard — and that matters
+            # for the same reason it did for the veil pair: `private_zone_card`
+            # is `dismiss_ms: 0`, so without something replacing it the glass
+            # keeps promising "capture suspended" after capture resumed.
+            if entered:
+                self.announce_posture(True, zone=entered)
+            else:
+                self.announce_posture(bool(self.incognito_now()))
+            try:
+                self.activity.add("privacy", "Entered a private zone"
+                                  if entered else "Left a private zone")
+            except Exception:                       # noqa: BLE001
+                pass
+        return {"ok": True, "zone": zone, "veiled": bool(self.incognito_now())}
+
+    def announce_posture(self, veiled: bool, zone: str = "") -> int:
         """Draw the privacy shield going up or coming down.
 
         `privacy_veil()` and `ready()` are both declared HUD features that no
@@ -992,8 +1029,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         from ...hud import cards
         try:
             if veiled:
-                return self.push_event("privacy_veil", cards.privacy_veil(),
-                                       veil_ok=True)
+                # A zone names WHERE the shield came from; a plain veil cannot.
+                # Same `veil_ok=True` and for the same reason — the card would
+                # otherwise be suppressed by the shield it is announcing.
+                card = (cards.private_zone_card(zone) if zone
+                        else cards.privacy_veil())
+                return self.push_event(
+                    "private_zone" if zone else "privacy_veil", card, veil_ok=True)
             return self.push_event("ready", cards.ready(), veil_ok=False)
         except Exception as exc:                     # noqa: BLE001
             log.warning("[brain] posture card push failed: %s", type(exc).__name__)
@@ -1234,6 +1276,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
+                  "private_zones",
                   "face_recognition", "face_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
@@ -1320,9 +1363,79 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self.saga_record("incognito")
 
     def incognito_now(self) -> bool:
-        """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
+        """Effective privacy shield: LAN-only, a quiet-hours window, OR a
+        private zone.
+
+        Private zones are a THIRD TERM HERE rather than a suppression path of
+        their own, and that is the whole design. `private_zone_card` says
+        "CAPTURE SUSPENDED · Memory resumes when you leave", and the only way to
+        make that sentence true is for the wearer's existing shield to be up:
+        every gate in the product already consults this one method — the ear,
+        captions, answer-ahead, the lens ring, face recall, ambient pushes —
+        so a zone suppresses all of them at once and none of them had to be
+        taught about zones. A parallel mechanism would be a second thing to keep
+        in step, and the first one it fell out of step with would be a card
+        promising a silence the Brain was not keeping.
+        """
         from .store import in_quiet_hours
-        return self.config.lan_only or in_quiet_hours(self.config.quiet_hours)
+        if self.config.lan_only or in_quiet_hours(self.config.quiet_hours):
+            return True
+        return bool(self.private_zone_now())
+
+    def private_zone_now(self) -> str:
+        """Name of the private zone the wearer is currently inside, else "".
+
+        Fails OPEN, unlike most gates here, and the asymmetry is deliberate: a
+        zone that cannot be evaluated (no fix, a stale fix, malformed config)
+        must not silently veil the Brain forever. The wearer has other, explicit
+        shields; an unreadable geofence that quietly disabled capture would look
+        exactly like the product being broken, with no way to tell.
+        """
+        zones = getattr(self.config, "private_zones", None) or []
+        if not zones:
+            return ""
+        try:
+            fix = self.here()
+            if not fix:
+                return ""
+            from .geo import zone_containing
+            return zone_containing(zones, fix["lat"], fix["lon"])
+        except Exception as exc:                    # noqa: BLE001
+            log.warning("[brain] zone check failed: %s", type(exc).__name__)
+            return ""
+
+    def here(self) -> Optional[dict]:
+        """The wearer's current position, or None.
+
+        Two sources, freshest wins. The phone's own report (POST
+        /dreamlayer/location) is the live one; Dawarich is the fallback for a
+        wearer who already self-hosts a location history and would rather not
+        have the phone push as well. Neither is stored by this method.
+        """
+        fix = self._last_fix.get()
+        if fix:
+            return fix
+        base = getattr(self.config, "dawarich_url", "")
+        if not base:
+            return None
+        try:
+            from ...memory.source_dawarich import default_dawarich
+            from .geo import FIX_MAX_AGE_S, valid_coord
+            src = default_dawarich(base, getattr(self.config, "dawarich_api_key", ""))
+            if src is None:
+                return None
+            last = src.last()
+            if not last or not valid_coord(last.get("lat"), last.get("lon")):
+                return None
+            age = time.time() - float(last.get("ts") or 0.0)
+            if age > FIX_MAX_AGE_S:
+                return None                        # a track point is not a fix
+            return {"lat": float(last["lat"]), "lon": float(last["lon"]),
+                    "accuracy_m": 0.0, "ts": float(last["ts"]),
+                    "age_s": round(age, 1)}
+        except Exception as exc:                    # noqa: BLE001
+            log.debug("[brain] dawarich fix unavailable: %s", type(exc).__name__)
+            return None
 
     def _apply_model_posture(self) -> None:
         """Set the process-wide HF offline flags to match the wearer's posture,
@@ -4560,6 +4673,28 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if ls is not None:
                 self._json(200, {"frames": ls.frames()})
 
+        def _post_location(self, path, qs):
+            """The phone reports where it is: {lat, lon, accuracy_m}.
+
+            Held in memory only — no row, no index entry, no file. Its whole
+            job is to decide whether a private zone's shield is up and to give
+            Waypath a bearing. Deliberately NOT veil-gated: a zone contributes
+            to the shield, so gating this on the shield would latch it up
+            forever the first time the wearer walked into one."""
+            b = self._body()
+            self._json(200, brain.note_location(b.get("lat"), b.get("lon"),
+                                                b.get("accuracy_m", 0.0)))
+
+        def _get_where(self, path, qs):
+            """Current fix and zone state, for the phone's own UI. Coarse: the
+            zone NAME and whether the shield is up, never the coordinate."""
+            fix = brain.here()
+            self._json(200, {"has_fix": bool(fix),
+                             "age_s": (fix or {}).get("age_s"),
+                             "zone": brain.private_zone_now(),
+                             "veiled": bool(brain.incognito_now()),
+                             "zones": len(getattr(brain.config, "private_zones", []) or [])})
+
         def _get_they_said(self, path, qs):
             """Did they tell you something different last time?
             `?person=Ana&claim=the+deposit+is+1400`.
@@ -4679,6 +4814,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/factcheck": _get_factcheck,
             "/dreamlayer/owed": _get_owed,
             "/dreamlayer/theysaid": _get_they_said,
+            "/dreamlayer/where": _get_where,
             "/dreamlayer/their": _get_their_word,
             "/dreamlayer/resurface": _get_resurface,
             "/dreamlayer/forget/last": _get_forget_last,
@@ -5827,6 +5963,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,
             "/dreamlayer/forget/last": _post_forget_last,
+            "/dreamlayer/location": _post_location,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,

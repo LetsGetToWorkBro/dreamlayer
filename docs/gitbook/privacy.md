@@ -92,16 +92,32 @@ Three of these are **designed and not built**, and are listed here as design
 rather than as behaviour, because a privacy promise that is not implemented is
 the worst kind of copy to leave standing:
 
-- **ConsentRequiredCard** — the intent is that a new data source stops the world
-  until you say yes. The card exists; nothing produces it, and `push_event` is a
-  one-way envelope with no path for the answer to come back, so the affordance
-  ("Hold to allow · Tap to deny") has nowhere to send a decision yet.
-- **Private zones** — the intent is places you mark never-record. **There is no
-  way to mark one today**: no setting, no route, no place-identity primitive,
-  and nothing that would honour a zone if you had marked it.
-- **Forget** — the intent is that "forget that" erases the last capture. There
-  is no such command in the voice grammar and no scoped undo; the only erase the
-  Brain can perform reaches *everything* (`purge_memories`).
+- **ConsentRequiredCard** — **produced now.** `face_live.identify()` and
+  `enrol()` already refused with `no-consent` before the embedder ran; nothing
+  drew the refusal, so the wearer got silence where the product promises a
+  question. Both refusal sites now push the card, naming which operation was
+  refused. Still true, and still the limit: `push_event` is a one-way envelope,
+  so the affordance ("Hold to allow · Tap to deny") has nowhere to send a
+  decision — acceptance remains the explicit `POST /dreamlayer/face/consent`
+  against a versioned text, and the card points at it rather than replacing it.
+- **Private zones** — **built.** Zones live in `private_zones` (name, lat, lon,
+  radius), the phone reports position to `POST /dreamlayer/location`, and
+  `geo.zone_containing` decides membership. What makes the card's claim true is
+  where it is wired: a zone is a third term in `incognito_now()`, the same
+  shield LAN-only and quiet-hours raise — so the ear, captions, answer-ahead,
+  the lens ring, face recall and ambient pushes all suppress on a gate they
+  already consulted, rather than on a second mechanism that could fall out of
+  step. Entering draws the card; leaving replaces it with ReadyCard, because a
+  stale "capture suspended" is a false assurance. The zone check fails **open**
+  — an unreadable geofence must not silently veil the Brain forever.
+- **Forget** — **scoped erase built.** `GET /dreamlayer/forget/last` previews
+  what would go and draws the card; `POST` with the returned id erases just that
+  memory, through `Retriever.purge_memory` so the row, the ANN vector, any
+  alternate vector store and the REM bias move together — a row deleted while
+  its embedding survives is a memory you were told is gone and search can still
+  find. The id echo is the confirmation and a race guard. Still true: there is
+  no "forget that" in the **voice grammar**, so this is a phone/route action,
+  not a spoken one.
 
 | ![Consent](assets/cards/consent_required.webp) | ![Private zone](assets/cards/private_zone.webp) | ![Forget](assets/cards/forget_last.webp) |
 |---|---|---|
