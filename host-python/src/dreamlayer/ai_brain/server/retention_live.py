@@ -156,6 +156,16 @@ def sweep_retention(brain) -> dict:
     # relationship to the database file, so "no memory file yet" (a fresh
     # install that has only ever looked at things) must still age sightings out.
     report.update(_sweep_warm(brain, policy))
+    # The statement ring (lens_hosts) is a hot store too, and it must age out on
+    # the SAME window rather than inventing its own — a second hot store with its
+    # own policy is how "nothing expires" comes back.
+    ls = getattr(brain, "_lenses", None)
+    if ls is not None:
+        try:
+            cutoff = time.time() - policy.hot_hours * 3600.0
+            report["hot_purged"] += int(ls.purge_hot(cutoff))
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[retention] statement-ring purge failed: %s", exc)
     ring = _hot_ring(brain)
     if ring is not None:
         try:

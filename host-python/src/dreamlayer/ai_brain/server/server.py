@@ -1448,6 +1448,22 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         plugin install/remove or a model rewire changes what a look can do."""
         self._world_lens = None
 
+    def lenses(self):
+        """The lens set that had no way into the Brain until now
+        (ai_brain/server/lens_hosts.py): Provenance, Candor, Commitment Drift,
+        Saga, Stasis, Premonition, Inner Weather. Built once and cached; every
+        lens inside is lazy, so this costs nothing until one is used."""
+        ls = getattr(self, "_lenses", None)
+        if ls is None:
+            try:
+                from .lens_hosts import build_lenses
+                ls = build_lenses(self)
+            except Exception:
+                log.warning("lens hosts unavailable", exc_info=True)
+                ls = None
+            self._lenses = ls
+        return ls
+
     def face_recall(self):
         """Recognising the people you INTRODUCED — never a stranger
         (ai_brain/server/face_live.py). Built once and cached; the index of
@@ -1698,12 +1714,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                         "purged": n, "memories_purged": n_rows,
                         "embers_purged": n_ember}
         self._face_recall = None
+        # The statement ring and any held thought are memory too — a wipe that
+        # leaves them is exactly the residue this method exists to prevent.
+        n_lens = 0
+        ls = self.lenses()
+        if ls is not None:
+            try:
+                n_lens = ls.forget_all()
+            except Exception as exc:                 # noqa: BLE001
+                log.warning("[brain] lens purge failed: %s", exc)
+        self._lenses = None
         self.activity.add("privacy",
                           f"Erased kept memories ({n_rows} memory row(s), "
                           f"{n} anchor(s), {n_ember} ember(s), "
-                          f"{n_faces} enrolled face(s))")
+                          f"{n_faces} enrolled face(s), "
+                          f"{n_lens} statement(s))")
         return {"ok": True, "purged": n, "memories_purged": n_rows,
-                "embers_purged": n_ember, "faces_purged": n_faces}
+                "embers_purged": n_ember, "faces_purged": n_faces,
+                "statements_purged": n_lens}
 
     def missed(self, since: float = 0.0) -> dict:
         """"What did I miss?" — the incoming texts and emails since you last
