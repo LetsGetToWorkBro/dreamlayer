@@ -539,6 +539,14 @@ class BrainConfig:
     # reason. OFF by default; the Veil suppresses the card the same way it
     # suppresses the write, and with this off the ear behaves exactly as before.
     captions_enabled: bool = False
+    # Answering a question the ROOM asked, from your own memory, on your own
+    # glass — the "answer before you speak" feature. A fourth opt-in, off by
+    # default, and separate from captions for the same reason captions are
+    # separate from listening: drawing what was said and ANSWERING it are
+    # different things. The answer is computed strictly on-device (`ask` is
+    # called with `no_cloud=True`), so an overheard question never egresses,
+    # whatever the cloud settings say.
+    answer_ahead_enabled: bool = False
     # -- recognising the people you introduced (ai_brain/server/face_live.py) --
     # OFF on a fresh install, and nothing here ever flips it on. When on, and
     # ONLY when the opt-in `face` pack and its weights are also present, the

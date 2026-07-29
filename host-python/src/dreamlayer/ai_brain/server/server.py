@@ -1233,7 +1233,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled", "captions_enabled",
+                  "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "face_recognition", "face_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":

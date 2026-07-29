@@ -80,6 +80,7 @@ class EarHost:
         self._lock = threading.RLock()
         self._bird = None
         self._bird_built = False
+        self._last_answer_ts = 0.0
         self.last_heard = ""
         self.heard_count = 0
         self.active_caps = frozenset()          # the caps THIS run genuinely drives
@@ -147,6 +148,8 @@ class EarHost:
                     veil_ok=False)
         except Exception as exc:                 # noqa: BLE001 — a card must never
             log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and ANSWER it, when the room asked a question and the Brain knows.
+        self._answer_ahead(text)
         name = "heard" if not speaker else f"heard:{speaker}"
         # The room ear does NOT steer the lens, and cannot be made to safely.
         #
@@ -202,6 +205,88 @@ class EarHost:
             self.brain.activity.add("ear", "Heard and remembered an utterance")
         except Exception:                        # noqa: BLE001
             pass
+
+    # -- the answer before you speak ---------------------------------------
+
+    #: wh-openers that make a line a question without a "?" — ASR punctuation is
+    #: unreliable and a transcript often arrives with none at all.
+    _WH = ("who", "what", "when", "where", "why", "how", "which", "whose",
+           "did", "do", "does", "is", "are", "was", "were", "can", "could",
+           "will", "would", "should", "have", "has", "had")
+    _ANSWER_MIN_CONFIDENCE = 0.35
+    _ANSWER_MIN_GAP_S = 20.0
+
+    @classmethod
+    def _is_question(cls, text: str) -> bool:
+        """Is this line a question worth trying to answer?
+
+        Deliberately narrow. Every false positive spends a memory search and
+        risks a card, and the wearer cannot un-see one — so a bare "what?" or
+        "really?" must not qualify. Four or more words, and either explicit
+        punctuation or an interrogative opener.
+        """
+        t = (text or "").strip()
+        words = t.lower().split()
+        if len(words) < 4:
+            return False
+        if t.endswith("?"):
+            return True
+        return words[0].strip(",.").rstrip("'") in cls._WH
+
+    def _answer_ahead(self, text: str) -> None:
+        """Answer a question the room just asked, from the wearer's own memory.
+
+        `answer_ahead`'s own docstring is "a question the room just asked you,
+        with the answer already pulled from your knowledge" — it was recorded as
+        blocked on "a predicted question the premonition lens does not produce",
+        which was a mis-read of the title. Nothing needs predicting: the
+        question arrives in the transcript.
+
+        Four gates, and each is answering a specific objection:
+
+          * ITS OWN OPT-IN, off by default. Remembering, drawing and ANSWERING
+            what the room says are three different exposures.
+          * `no_cloud=True`, unconditionally. This is the one that matters. The
+            wearer typing a question chose to ask it and may egress; a bystander's
+            overheard sentence chose nothing, so it must never leave the device
+            whatever the cloud settings say. Not read from config — passed as a
+            constant, so no configuration can turn it off.
+          * A CONFIDENCE FLOOR. `ask` falls through tiers and will return a weak
+            keyword-index hit for almost anything; drawing that would put a
+            confident-looking wrong answer on the glass mid-conversation.
+          * A RATE LIMIT. A conversation is mostly questions. Without this the
+            glass would answer continuously, which is both useless and the
+            fastest way to make a wearer switch the feature off.
+
+        This is NOT the lens-steering the note above forbids, and the difference
+        is worth stating rather than assuming: steering changed what the Brain
+        CAPTURED, persistently, from a bystander's words. This changes only what
+        the wearer momentarily sees, on their own display, with nothing stored
+        and nothing sent. Same input, different blast radius.
+        """
+        try:
+            if not getattr(self.brain.config, "answer_ahead_enabled", False):
+                return
+            if not self._is_question(text):
+                return
+            import time as _t
+            now = _t.time()
+            if now - float(getattr(self, "_last_answer_ts", 0.0)) < self._ANSWER_MIN_GAP_S:
+                return
+            ans = self.brain.ask(text, no_cloud=True)
+            if ans is None or ans.is_empty():
+                return
+            if float(getattr(ans, "confidence", 0.0) or 0.0) < self._ANSWER_MIN_CONFIDENCE:
+                return
+            self._last_answer_ts = now
+            from ...hud import cards
+            self.brain.push_event("answer_ahead", cards.answer_ahead(
+                question=text, answer=ans.text,
+                speaker="",                      # never attributed: see above
+                source=getattr(ans, "tier", "") or ""), veil_ok=False)
+        except Exception as exc:                 # noqa: BLE001 — never cost the
+            log.warning("[ear] answer-ahead failed: %s",   # utterance its memory
+                        type(exc).__name__)
 
     def note_acoustic_context(self, tags) -> None:
         """World-sound hook (CapturePipeline calls it with the tagger's tags): a

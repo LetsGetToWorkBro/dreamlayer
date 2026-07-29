@@ -782,6 +782,9 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Live captions &middot; draw what it hears</div>
       <div class="conn-s">Off by default, and <b>separate from Listening on purpose</b>: remembering what was said and putting it on a screen are different things. With this on, each transcribed line is also drawn on the Live Lens as it is heard. It shows the <b>scrubbed</b> text — the same thing your memory stores, never more — and the Veil suppresses the card exactly as it suppresses the write. Needs Listening on to have anything to draw. <b>Everyone in range appears on that screen</b>, so treat it the way you would a recording light.</div></div>
       <label class="sw"><input type="checkbox" id="captions" onchange="saveCaptions()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
+      <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
+      <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -1866,6 +1869,7 @@ async function load(){
   $("incognito").checked=incog;
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
   if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
+  if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
   // memory sources
   if($("srcSync")){
     $("srcSync").checked=!!c.config.sources_sync;
@@ -2098,6 +2102,11 @@ async function saveCaptions(){
   const on=$("captions").checked;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({captions_enabled:on})});
   toast(on?"Live captions on — drawn on the Live Lens, scrubbed":"Live captions off");
+}
+async function saveAnswerAhead(){
+  const on=$("answerAhead").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
+  toast(on?"Answer ahead on — on-device only":"Answer ahead off");
 }
 async function refreshEarStatus(){
   const el=$("earStat"); if(!el) return;

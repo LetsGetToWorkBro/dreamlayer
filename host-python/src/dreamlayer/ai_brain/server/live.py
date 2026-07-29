@@ -1907,6 +1907,33 @@ function glassProactiveCard(c){                      /* IT REMEMBERS FOR YOU */
   gend(c.dismiss_ms || 3500);
 }
 
+function glassAnswerAheadCard(c){                    /* ON THE TIP OF YOUR TONGUE */
+  /* Both halves are the card: `primary` is the ANSWER and `detail` is the
+     question it answers, and the generic renderer drew the answer alone — a
+     bare fact floating with nothing to attach it to, mid-conversation, which is
+     worse than nothing when the room has moved on. `footer` carries the tier
+     the answer came from, and provenance is the difference between "your own
+     note said this" and "a model thinks so".
+
+     Quiet by construction, matching the builder: memory teal, no flash, and no
+     sound played here even though the card carries a haptic — it is a nudge
+     while someone is talking to you, not an alert. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 100, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "ON THE TIP OF YOUR TONGUE").toUpperCase().slice(0, 26),
+        128, 70, GP.memory_trace, "sm");
+  const ans = gwrap(String(c.primary || "").trim(), 20).slice(0, 2);
+  ans.forEach((ln, i) => gtext(ctx, ln, 128, 116 + i * 18, GP.text_primary, "lg"));
+  /* the question sits BELOW its answer and dimmer — you already heard it */
+  ctx.beginPath(); ctx.moveTo(70, 152); ctx.lineTo(186, 152);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  const q = gwrap(String(c.detail || "").trim(), 28).slice(0, 2);
+  q.forEach((ln, i) => gtext(ctx, ln, 128, 170 + i * 14, GP.text_secondary, "sm"));
+  const foot = String(c.footer || "").trim();
+  if (foot) gtext(ctx, foot.slice(0, 26), 128, 206, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 8000);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3429,6 +3456,7 @@ function renderEvent(ev){
   else if (t === "ForgetLastCard") glassForgetCard(c);
   else if (t === "CommitmentRecallCard") glassOwedCard(c);
   else if (t === "ProactiveMemoryCard") glassProactiveCard(c);
+  else if (t === "AnswerAheadCard") glassAnswerAheadCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 
