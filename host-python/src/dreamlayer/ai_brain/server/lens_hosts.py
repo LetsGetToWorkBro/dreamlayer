@@ -784,6 +784,88 @@ class BrainLenses:
             log.warning("[lenses] frames failed: %s", type(exc).__name__)
             return []
 
+    # -- what you owe, and what is worth resurfacing -------------------------
+
+    def owed(self, push: bool = True, limit: int = 5) -> dict:
+        """Open commitments, most-urgent first — the "What you owe" feature.
+
+        Recorded for a while as blocked on speaker attribution. It is not:
+        `cards.commitment_recall` takes `person` OPTIONALLY (`_d(data,
+        "person")` with no default requirement), and the drift engine already
+        carries one on `event.meta` when a promise named someone. With no
+        attribution the card simply omits the footer, which is the honest
+        rendering of "you owe this" rather than "you owe this to X".
+
+        DISTINCT from Commitment Drift, which is why both exist. Drift FIRES
+        when a promise slips — an interruption you did not ask for. This
+        ANSWERS "what do I owe?" — a question you asked. Same store, opposite
+        directions, so neither displaces the other.
+        """
+        if not self.privacy.allow_recall():
+            return {"items": [], "pushed": 0}
+        try:
+            self.drift.tick()                        # the clock, same as drift_tick
+            # `resolved` is None while open, not False — `is None` rather than
+            # a truth test, so a record resolved at ts 0.0 is not read as open.
+            rows = [self._drift_json(r) for r in self.drift.all_records()
+                    if r.resolved is None]
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] owed failed: %s", type(exc).__name__)
+            return {"items": [], "pushed": 0}
+        # most urgent first: an overdue promise outranks a distant one, and a
+        # promise with no due date sorts last rather than first — `due_ts` of 0
+        # would otherwise read as "due at the epoch", i.e. maximally overdue.
+        rows.sort(key=lambda r: (r.get("due_ts") or float("inf")))
+        rows = rows[:max(1, int(limit))]
+        pushed = 0
+        if push and rows:
+            from ...hud import cards
+            top = rows[0]
+            self._push("commitment_recall", cards.commitment_recall({
+                "task": top["subject"],
+                "person": top.get("person") or "",
+                "due": _due_text(top.get("due_ts")),
+                "confidence": max(0.0, 1.0 - float(top.get("decay") or 0.0)),
+            }))
+            pushed = 1
+        return {"items": rows, "pushed": pushed}
+
+    def resurface(self, push: bool = True, limit: int = 3) -> dict:
+        """A name or fact worth bringing back now — "It remembers for you".
+
+        Reads the Brain's own FSRS rehearsal store (`brain.rehearsals_due`),
+        which is already the feed the morning brief and the Rehearsal surface
+        use — so this is a new SURFACE for existing state, not a new store.
+        `proactive_memory` also takes `person` optionally, so no attribution is
+        involved: the item's own text is the memory.
+        """
+        if not self.privacy.allow_recall():
+            return {"items": [], "pushed": 0}
+        try:
+            items = self.brain.rehearsals_due(max(1, int(limit))) or []
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] resurface failed: %s", type(exc).__name__)
+            return {"items": [], "pushed": 0}
+        pushed = 0
+        if push and items:
+            from ...hud import cards
+            top = items[0]
+            summary = str(top.get("text") or "").strip()
+            if summary:
+                # `confidence` rides the card's arc. `reps` is how many times
+                # this has been recalled successfully, so it is the honest
+                # signal — a name reviewed six times is one the Brain is surer
+                # of than one seen once. Capped so a long streak never renders
+                # as certainty about a memory the wearer may still have lost.
+                reps = int(top.get("reps") or 0)
+                self._push("proactive_memory", cards.proactive_memory({
+                    "summary": summary,
+                    "person": "",
+                    "confidence": min(0.5 + reps * 0.1, 0.9),
+                }))
+                pushed = 1
+        return {"items": items, "pushed": pushed}
+
     # -- truth, checked live ------------------------------------------------
 
     @property

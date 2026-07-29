@@ -1817,6 +1817,96 @@ function glassFactCheckCard(c){                      /* TRUTH, CHECKED LIVE */
   gend(c.dismiss_ms || 7000);
 }
 
+function glassConsentCard(c){                        /* ASK FIRST */
+  /* `context` is the whole card: "Allow access?" with no object is a question
+     the wearer cannot answer, and the generic renderer drew exactly that —
+     eyebrow plus primary, with `detail` (which operation was refused) and
+     `footer` (how to answer) both dropped. Amber, not red: a refusal pending
+     consent is a question, not a failure. */
+  const ctx = glassCtx(); gback(ctx);
+  const col = GP.confidence_low;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 8;
+  ctx.beginPath();                                   /* an open shield */
+  ctx.moveTo(128, 40); ctx.lineTo(150, 50);
+  ctx.moveTo(128, 40); ctx.lineTo(106, 50);
+  ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+  garc(ctx, 128, 62, 12, 200, 340, col);
+  ctx.restore();
+  gtext(ctx, String(c.eyebrow || "CONSENT REQUIRED").toUpperCase().slice(0, 22), 128, 88, col, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 100); ctx.lineTo(208, 100);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, String(c.primary || "Allow access?").slice(0, 20), 128, 126, GP.text_primary, "lg");
+  const det = gwrap(String(c.detail || c.context || "").trim(), 28).slice(0, 2);
+  det.forEach((ln, i) => gtext(ctx, ln, 128, 154 + i * 15, GP.text_secondary, "sm"));
+  gtext(ctx, String(c.footer || "").slice(0, 32), 128, 198, GP.text_ghost, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassForgetCard(c){                         /* FORGET THAT */
+  /* The one card here that asks for something IRREVERSIBLE, and the generic
+     path dropped both halves that make it safe: `detail` ("Hold to confirm •
+     Tap to cancel") and `footer` ("This cannot be undone"). What was left was
+     the question and the quoted memory, with no warning and no way to answer.
+     Danger red, and the quoted memory is drawn dimmer than the question so the
+     eye lands on what is being asked, not on the text about to vanish. */
+  const ctx = glassCtx(); gback(ctx);
+  const col = "#E05252";
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 9;
+  garc(ctx, 128, 44, 10, 0, 360, col);
+  ctx.fillStyle = col; ctx.fillRect(127, 38, 2.5, 8);
+  ctx.beginPath(); ctx.arc(128, 50, 1.6, 0, 2 * Math.PI); ctx.fill();
+  ctx.restore();
+  gtext(ctx, String(c.eyebrow || "MEMORY WIPE").toUpperCase().slice(0, 20), 128, 70, col, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 84); ctx.lineTo(208, 84);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  const q = gwrap(String(c.primary || "").trim(), 22).slice(0, 3);
+  q.forEach((ln, i) => gtext(ctx, ln, 128, 112 + i * 16, GP.text_primary, "md"));
+  gtext(ctx, String(c.detail || "").slice(0, 30), 128, 172, GP.text_secondary, "sm");
+  gtext(ctx, String(c.footer || "").slice(0, 28), 128, 196, col, "sm");
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassOwedCard(c){                           /* WHAT YOU OWE */
+  /* `commitment_recall` puts the promise in `primary`, WHO it is to in
+     `person`, and WHEN in `due`/`footer`. The generic path kept the promise
+     and lost both the person and the deadline — which is most of what makes a
+     debt actionable. */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 118, 60, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.05)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.2)"; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "YOU OWE", 128, 52, GP.memory_trace, "sm");
+  const task = gwrap(String(c.primary || c.task || "").trim(), 20).slice(0, 2);
+  task.forEach((ln, i) => gtext(ctx, ln, 128, 106 + i * 18, GP.text_primary, "lg"));
+  const who = String(c.person || "").trim();
+  if (who) gtext(ctx, "→ " + who.slice(0, 20), 128, 152, GP.memory_trace, "md");
+  const due = String(c.due || c.footer || "").trim();
+  if (due) gtext(ctx, due.slice(0, 28), 128, 182, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 4000);
+}
+
+function glassProactiveCard(c){                      /* IT REMEMBERS FOR YOU */
+  /* A memory the Brain brought back unasked, so it is drawn QUIETLY — a
+     resurfacing is an offer, not an alert. `footer` carries "With <person>"
+     when there is one, and the generic path dropped it; `confidence` drives
+     an arc the generic path had no way to draw at all. */
+  const ctx = glassCtx(); gback(ctx);
+  const conf = (typeof c.confidence === "number")
+    ? Math.max(0, Math.min(1, c.confidence)) : 0.5;
+  garc(ctx, 128, 128, 92, 0, 360, GP.border_subtle);
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 5;
+  garc(ctx, 128, 128, 92, -90, -90 + 360 * conf, GP.memory_trace);
+  gdiamond(ctx, 128, 66, 5, GP.memory_trace);
+  ctx.restore();
+  gtext(ctx, "YOU MIGHT WANT", 128, 92, GP.text_ghost, "sm");
+  const body = gwrap(String(c.primary || c.summary || "").trim(), 24).slice(0, 3);
+  if (body.length) body.forEach((ln, i) => gtext(ctx, ln, 128, 126 + i * 16, GP.text_primary, "md"));
+  else gtext(ctx, "nothing due", 128, 128, GP.text_secondary, "sm");
+  const foot = String(c.footer || "").trim();
+  if (foot) gtext(ctx, foot.slice(0, 26), 128, 190, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 3500);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3335,6 +3425,10 @@ function renderEvent(ev){
   else if (t === "ReadyCard") glassReadyCard(c);
   else if (t === "TimeScrubNodeCard") glassScrubCard(c);
   else if (t === "FactCheckCard") glassFactCheckCard(c);
+  else if (t === "ConsentRequiredCard") glassConsentCard(c);
+  else if (t === "ForgetLastCard") glassForgetCard(c);
+  else if (t === "CommitmentRecallCard") glassOwedCard(c);
+  else if (t === "ProactiveMemoryCard") glassProactiveCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

@@ -1682,6 +1682,116 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 return {}
         return {}
 
+    def _retriever_for_purge(self):
+        """(Retriever, MemoryDB) over the live store, or (None, None).
+
+        Built exactly as `purge_memories` builds it, so a single "forget that"
+        reaches the same stores an erase-everything does. Sharing the shape is
+        the point: the ANN index is the one that bites — a row deleted while its
+        embedding survives is a memory the wearer was told is gone and that
+        vector search still finds.
+        """
+        import os as _os
+        db_path = str(_memory_db_path(self))
+        if not _os.path.exists(db_path):
+            return None, None
+        from ...memory.ann_index import PersistentAnnIndex
+        from ...memory.db import MemoryDB
+        from ...memory.retrieval import Retriever
+        db = MemoryDB(db_path)
+        dim = db.get_setting("embedder_dim")
+        ann = (PersistentAnnIndex(db_path + ".usearch", int(dim))
+               if PersistentAnnIndex.available and dim else None)
+        return Retriever(db, None, ann), db
+
+    def forget_last_preview(self, push: bool = True) -> dict:
+        """What "forget that" would erase — and the card that asks.
+
+        The FIRST half of a two-step. `forget_last_card` is a declared HUD
+        feature whose own copy is "Hold to confirm • Tap to cancel", so wiring
+        it as a one-way push would have drawn a question with no way to answer
+        it — the shape of half-wiring this project keeps finding. The second
+        half is `forget_memory`, and it requires the id this returns.
+
+        Veil-gated as RECALL, not as capture: naming the last thing you said
+        back to you is a read of the timeline, and under the shield the Brain
+        does not answer reads.
+        """
+        if self.incognito_now():
+            return {"ok": False, "reason": "veiled"}
+        try:
+            _r, db = self._retriever_for_purge()
+            if db is None:
+                return {"ok": False, "reason": "no-store"}
+            rows = db.memories()
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[brain] forget preview failed: %s", type(exc).__name__)
+            return {"ok": False, "reason": "error"}
+        if not rows:
+            return {"ok": False, "reason": "nothing-to-forget"}
+        # newest by id: `created_at` is a string and rows arrive in insert order,
+        # but an explicit max on the primary key does not depend on either.
+        row = max(rows, key=lambda r: int(r.get("id") or 0))
+        label = (row.get("summary") or "").strip()
+        pushed = 0
+        if push and label:
+            try:
+                from ...hud import cards
+                # The card QUOTES the memory, so it is the wearer's own content
+                # going to their own glass — the same class of push as
+                # SavedMemoryCard, and veil-gated the same way.
+                pushed = self.push_event("forget_last",
+                                         cards.forget_last_card(label[:60]),
+                                         veil_ok=False)
+            except Exception:                        # noqa: BLE001
+                pushed = 0
+        return {"ok": True, "id": int(row.get("id") or 0), "label": label,
+                "kind": row.get("kind") or "", "pushed": pushed}
+
+    def forget_memory(self, memory_id) -> dict:
+        """Erase one memory everywhere — the SECOND half of "forget that".
+
+        The caller must name the id `forget_last_preview` returned. That is the
+        confirmation, and it is also a race guard: between the wearer asking and
+        confirming, the ear can land a new utterance, and a confirm that meant
+        "the newest one" would then delete something they never saw.
+
+        Goes through `Retriever.purge_memory`, never `MemoryDB.purge_memory`
+        alone — the row, the ANN vector, any alternate vector store and the REM
+        consolidation bias have to move together, or "forget that" leaves a
+        memory that is gone from the list and still findable by search.
+        """
+        try:
+            mid = int(memory_id)
+        except (TypeError, ValueError):
+            return {"ok": False, "reason": "bad-id"}
+        try:
+            retr, db = self._retriever_for_purge()
+            if db is None:
+                return {"ok": False, "reason": "no-store"}
+            if not any(int(r.get("id") or 0) == mid for r in db.memories()):
+                # Already gone, or never here. Idempotent rather than an error:
+                # a double-confirm from a flaky connection must not read as a
+                # failure to erase.
+                return {"ok": True, "forgotten": 0, "reason": "not-found"}
+            retr.purge_memory(mid)
+        except Exception as exc:                     # noqa: BLE001
+            log.error("[brain] forget failed: %s", exc)
+            return {"ok": False, "reason": "error"}
+        try:
+            self.activity.add("privacy", "Forgot one memory")
+        except Exception:                            # noqa: BLE001
+            pass
+        pushed = 0
+        try:
+            from ...hud import cards
+            pushed = self.push_event("saved_memory",
+                                     cards.saved_memory("Forgotten."),
+                                     veil_ok=False)
+        except Exception:                            # noqa: BLE001
+            pushed = 0
+        return {"ok": True, "forgotten": 1, "pushed": pushed}
+
     def purge_memories(self) -> dict:
         """The phone's "Erase all memories" honored where the memories actually
         live: the MEMORY DATABASE is purged through the same cascade a "forget
@@ -4450,6 +4560,36 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if ls is not None:
                 self._json(200, {"frames": ls.frames()})
 
+        def _get_owed(self, path, qs):
+            """Open commitments, most-urgent first, and draws the top one.
+
+            Distinct from `/dreamlayer/drift`: drift FIRES when a promise slips
+            (an interruption), this ANSWERS "what do I owe?" (a question)."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.owed())
+
+        def _get_resurface(self, path, qs):
+            """A name or fact worth bringing back now, from the FSRS rehearsal
+            store — a new surface over state the morning brief already reads."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.resurface())
+
+        def _get_forget_last(self, path, qs):
+            """What "forget that" WOULD erase, and the card that asks. Erases
+            nothing — POST the returned id to confirm."""
+            self._json(200, brain.forget_last_preview())
+
+        def _post_forget_last(self, path, qs):
+            """Confirm: erase the memory whose id the GET returned.
+
+            The id echo IS the confirmation, and it is a race guard — the ear
+            can land a new utterance between asking and confirming, and a
+            confirm meaning "the newest" would then erase something unseen."""
+            body = self._body()
+            self._json(200, brain.forget_memory(body.get("id")))
+
         def _get_factcheck(self, path, qs):
             """World-check a claim: `?claim=the+wall+fell+in+1975`.
 
@@ -4517,6 +4657,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/premonition": _get_premonition,
             "/dreamlayer/scrub": _get_scrub,
             "/dreamlayer/factcheck": _get_factcheck,
+            "/dreamlayer/owed": _get_owed,
+            "/dreamlayer/resurface": _get_resurface,
+            "/dreamlayer/forget/last": _get_forget_last,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -5661,6 +5804,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/social/people": _post_social_people,
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,
+            "/dreamlayer/forget/last": _post_forget_last,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,
