@@ -779,6 +779,9 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <div class="conn-s">Off by default. When on, this Mac's microphone transcribes speech <b>entirely on-device</b> (voice-activity detection → local speech recognition) and folds what it hears into your memory, so you can later ask "what did we decide about the lease?". <b>Nothing is uploaded</b> — audio never leaves this machine. The Veil still wins: while Incognito or in quiet hours it captures nothing. Phone numbers, emails, cards and SSNs are scrubbed before anything is stored (install the <b>Guardian</b> pack for deeper scrubbing of IBANs, passports and the like); names and places are kept. <b>It hears everyone in range</b>, not just you — so use it with consent. Needs the <b>Sharp Ears</b> pack (a local speech engine) and a microphone.</div>
       <div id="earStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="listen" onchange="saveListen()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Live captions &middot; draw what it hears</div>
+      <div class="conn-s">Off by default, and <b>separate from Listening on purpose</b>: remembering what was said and putting it on a screen are different things. With this on, each transcribed line is also drawn on the Live Lens as it is heard. It shows the <b>scrubbed</b> text — the same thing your memory stores, never more — and the Veil suppresses the card exactly as it suppresses the write. Needs Listening on to have anything to draw. <b>Everyone in range appears on that screen</b>, so treat it the way you would a recording light.</div></div>
+      <label class="sw"><input type="checkbox" id="captions" onchange="saveCaptions()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -1862,6 +1865,7 @@ async function load(){
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
+  if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
   // memory sources
   if($("srcSync")){
     $("srcSync").checked=!!c.config.sources_sync;
@@ -2089,6 +2093,11 @@ async function saveListen(){
   const r=await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({listen_enabled:on})});
   toast(on?"Listening on — on-device, nothing uploaded":"Listening off");
   refreshEarStatus();
+}
+async function saveCaptions(){
+  const on=$("captions").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({captions_enabled:on})});
+  toast(on?"Live captions on — drawn on the Live Lens, scrubbed":"Live captions off");
 }
 async function refreshEarStatus(){
   const el=$("earStat"); if(!el) return;

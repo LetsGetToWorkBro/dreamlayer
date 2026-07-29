@@ -121,6 +121,32 @@ class EarHost:
             pass
         self.last_heard = text
         self.heard_count += 1
+        # …and DRAW it, when the wearer has asked for captions. `spoken_caption`
+        # is a declared HUD feature ("Live captions") that no shipped Brain
+        # could produce: `hud/cards.py` has built the card all along and nothing
+        # reachable ever called it, so the glass stayed blank while the ear
+        # heard everything — decisions/0001 at the card layer, the same shape as
+        # the ObjectRecall gap.
+        #
+        # Three things make this safe to wire rather than merely possible:
+        #   * its OWN opt-in. Remembering speech and displaying it are different
+        #     exposures; `captions_enabled` defaults False, so an existing
+        #     wearer who turned Listening on gets no new behaviour.
+        #   * the redacted text, not the raw. This runs AFTER the PII scrub
+        #     above, so the card carries what the store carries and never more.
+        #   * `privacy=self.privacy` handed to the builder, which blanks both
+        #     speaker and body if the gate reads shut between the check above
+        #     and here — the builder fails closed on its own.
+        # The text is never logged; only ever drawn (test_logging_discipline).
+        try:
+            if getattr(self.brain.config, "captions_enabled", False):
+                from ...hud import cards
+                self.brain.push_event(
+                    "caption",
+                    cards.spoken_caption(speaker or "", text, privacy=self.privacy),
+                    veil_ok=False)
+        except Exception as exc:                 # noqa: BLE001 — a card must never
+            log.warning("[ear] caption push failed: %s", type(exc).__name__)
         name = "heard" if not speaker else f"heard:{speaker}"
         # The room ear does NOT steer the lens, and cannot be made to safely.
         #
@@ -258,6 +284,29 @@ class EarHost:
                 log.error("[ear] mic open failed: %s", exc)
                 return {"ok": False, "reason": "mic-error", "detail": str(exc)}
             self._pipe = pipe
+            # Say so on the glass. `listening()` is the other declared HUD
+            # feature the shipped Brain could never produce — "Hey Juno", the
+            # reassurance cue that the microphone is genuinely open. The Brain
+            # ships no wake-word engine (`hear()` above is a no-op and wake_word
+            # stays dormant), so the honest `source` is NOT "voice": the mic was
+            # opened by the wearer flipping a switch, and the card says so.
+            #
+            # earcon/haptic are switched OFF rather than defaulted on. Both are
+            # device seams the Live Lens cannot honour, and the one card in this
+            # product that earns a sound is a safety tap (`note_acoustic_context`
+            # is the sole veil-piercing path) — a settings toggle is not that.
+            #
+            # veil_ok=False even though this card carries no captured content:
+            # under the Veil the ear stores nothing, so announcing that it is
+            # listening would be the one misleading thing it could draw.
+            try:
+                from ...hud import cards
+                self.brain.push_event(
+                    "listening", cards.listening("tap", earcon=False, haptic=False),
+                    veil_ok=False)
+            except Exception as exc:             # noqa: BLE001 — never block the mic
+                log.warning("[ear] listening card push failed: %s",
+                            type(exc).__name__)
             # Promote ONLY the caps this run genuinely drives — not the whole
             # EAR_CAPS set. make_asr picks Moonshine XOR faster-whisper (never
             # sherpa/onnx), so onnx_speech is never on the ear's path; VAD /

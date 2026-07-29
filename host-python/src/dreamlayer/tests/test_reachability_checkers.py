@@ -214,10 +214,31 @@ class TestTheGlassIsTheONETheBrainCanReach:
         device = hud._drawn_on_glass()
         live = hud._drawn_on_live_lens()
         assert device and live
-        assert live < device, (
-            "the Live Lens is meant to be the SMALLER set — a handful of "
-            "bespoke branches plus a generic fallback. If it caught up with "
-            "halo-lua, check the scan is not matching comments again.")
+        assert len(live) < len(device), (
+            "the Live Lens is meant to be the SMALLER set — bespoke branches "
+            "for what the Brain pushes, plus a generic fallback. If it caught "
+            "up with halo-lua, check the scan is not matching comments again.")
+        # NOT a subset, and the exceptions are the point rather than slack in
+        # the test: a card the Brain pushes but the ORCHESTRATOR never sends has
+        # no reason to exist in halo-lua, so the Live Lens is the only surface
+        # that can draw it. Each one here must be a type the Brain actually
+        # pushes — anything else means a branch was added for a card that never
+        # arrives, which is the same wasted-wiring mistake in the other
+        # direction.
+        lens = hud._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        pushed, _unresolved = hud._pushed_types(reachable)
+        brain_only = live - device
+        assert brain_only, (
+            "no Brain-only card types at all — ConsistencyCard, StasisCard and "
+            "QuestRewardCard are pushed by lens_hosts and drawn by no device "
+            "renderer, so at least those three are expected here.")
+        for ctype in brain_only:
+            assert ctype in pushed or ctype in hud._BRAIN_ONLY_PUSHED, (
+                f"{ctype} has a Live Lens branch but nothing pushes it — "
+                "either wire the push or drop the branch.")
 
     def test_the_generic_fallback_is_not_counted_as_a_drawing(self, hud):
         """`glassEventCard` draws `eyebrow` and `primary` only. Counting it
@@ -288,3 +309,211 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
     def test_orchestrator_seams_land_in_by_design_not_in_the_open_list(self, caps):
         assert caps._by_design("orchestrator/wakeword.py")
         assert not caps._by_design("memory/doc_schema.py")
+
+    def test_the_dormant_set_is_read_from_capabilities_not_hardcoded(self, caps):
+        """`_NOT_WIRED` is the product's own honest-status list. Reading it is
+        what stopped the OPEN bucket printing 19 capabilities as "no reason on
+        file" when 18 of them are named there with the reason written out."""
+        dormant = caps._declared_dormant()
+        assert len(dormant) >= 15, f"only {len(dormant)} parsed — set literal?"
+        for key in ("memory_dedup", "social_graph", "live_interpret"):
+            assert key in dormant, key
+        assert "vector_search" not in dormant     # wired; must stay checkable
+
+    def test_nothing_is_misreported_as_available(self, caps):
+        """The bucket that matters: a seam no Brain path can load, on a
+        capability the catalog will still light up once its extras install.
+        Zero is the only acceptable value — anything here is a false green
+        shown to the wearer."""
+        lens = caps._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        dormant = caps._declared_dormant()
+        bad = []
+        for key, _title, _tier, seam in caps._declared_caps():
+            mods = caps._seam_modules(seam)
+            if not mods or any(m in reachable for m in mods):
+                continue
+            if caps._by_design(seam) or key in dormant:
+                continue
+            bad.append((key, seam))
+        assert not bad, (
+            "capabilities whose seam the Brain cannot load and which are not "
+            f"declared dormant — each is a false green: {bad}")
+
+    def test_the_vector_search_seam_names_the_file_the_brain_opens(self, caps):
+        """The one stale seam string this pass found. `vector_store.py` sits
+        behind the Orchestrator; the Brain's recall paths construct
+        `PersistentAnnIndex` from `memory/ann_index.py`. Naming the wrong file
+        made a shipping capability read as unreachable."""
+        lens = caps._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        seam = next(s for k, _t, _c, s in caps._declared_caps()
+                    if k == "vector_search")
+        mods = caps._seam_modules(seam)
+        assert any(m in reachable for m in mods), (seam, mods)
+
+
+class TestThePushScanKnowsBuiltFromPushed:
+    """The distinction the UNDECLARED bucket turns on.
+
+    Ten card types are built outside `hud/cards.py` by Brain-reachable code.
+    Only the ones handed to `_push`/`push_event` can ever meet the Live Lens's
+    generic renderer; the rest are returned as JSON to the phone, where every
+    field survives. A scan that reported "built" as "pushed" invented seven
+    defects that do not exist.
+    """
+
+    def _reachable(self, hud):
+        lens = hud._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        return reachable
+
+    def test_it_finds_the_pushes_it_can_name(self, hud):
+        pushed, _unresolved = hud._pushed_types(self._reachable(hud))
+        assert "StasisCard" in pushed          # lens_hosts freeze/resume
+        assert "SavedMemoryCard" in pushed     # lens_hosts pin
+        assert "ObjectRecallCard" in pushed    # brain_waypath locate
+
+    def test_json_only_cards_are_not_reported_as_pushed(self, hud):
+        """`QuestCard` and `SocialLensCard` are returned to the phone and never
+        pushed. If they start showing as pushed, the resolver has begun
+        guessing — which is how `WaypathCard` was once reported pushed off a
+        name collision."""
+        pushed, _unresolved = hud._pushed_types(self._reachable(hud))
+        for ctype in ("QuestCard", "SocialLensCard", "WaypathCard"):
+            assert ctype not in pushed, ctype
+
+    def test_an_ambiguous_name_refuses_to_resolve(self, hud):
+        """`to_hud_card` is defined nine times across the tree, returning a
+        different card type each. Resolving it by bare name reported
+        QuestRewardCard as never-pushed and WaypathCard as pushed — both
+        exactly backwards."""
+        fn_types = hud._fn_card_types(self._reachable(hud))
+        assert fn_types.get("to_hud_card", "") == "", (
+            "an ambiguous function name resolved to a single card type")
+        assert fn_types.get("saved_memory") == "SavedMemoryCard"
+
+    def test_the_pusher_is_not_counted_as_a_push_site(self, hud):
+        """`_push`'s own body forwards to `push_event`. Counting that as a call
+        site produced an unresolvable entry on every run."""
+        _pushed, unresolved = hud._pushed_types(self._reachable(hud))
+        assert not any(":800" in u and "lens_hosts" in u for u in unresolved)
+
+    def test_the_blind_spot_is_declared_rather_than_silent(self, hud):
+        """Two real pushes defeat a one-hop resolver. They are listed, not
+        dropped — and each must still be a type something actually builds."""
+        assert hud._BRAIN_ONLY_PUSHED
+        inline = hud._inline_card_types(self._reachable(hud))
+        for ctype in hud._BRAIN_ONLY_PUSHED:
+            assert ctype in inline, f"{ctype} is declared pushed but unbuilt"
+
+
+class TestTheLiveLensDrawsWhatTheBrainPushes:
+    """The Live Lens is the ONLY surface a Brain push reaches. A card type it
+    lacks a branch for is drawn by `glassEventCard` — eyebrow and primary,
+    nothing else — so for these cards a missing branch deletes the answer."""
+
+    def _live_src(self):
+        p = (pathlib.Path(__file__).resolve().parents[1]
+             / "ai_brain" / "server" / "live.py")
+        return p.read_text(encoding="utf-8")
+
+    def test_every_pushed_card_type_has_a_branch(self, hud):
+        lens = hud._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        pushed, _unresolved = hud._pushed_types(reachable)
+        live = hud._drawn_on_live_lens()
+        missing = sorted((set(pushed) | hud._BRAIN_ONLY_PUSHED) - live)
+        assert not missing, (
+            "card types the Brain pushes with no Live Lens branch — each one "
+            f"renders as eyebrow+primary and loses the rest: {missing}")
+
+    def test_the_consistency_branch_draws_the_prior_statement(self):
+        """Candor's whole proposition is the FOOTER — the thing you said
+        before. Drawn without it, the card is an accusation with the evidence
+        removed, which is worse than not drawing it at all."""
+        src = self._live_src()
+        i = src.index("function glassConsistencyCard")
+        body = src[i:i + 2200]
+        assert "c.footer" in body and "prior_summary" in body
+
+    def test_the_drift_branch_draws_decay_and_the_due_date(self):
+        """`decay` and `due` are what make the card actionable; the generic
+        path kept only the state word and the task."""
+        src = self._live_src()
+        i = src.index("function glassDriftCard")
+        body = src[i:i + 2200]
+        assert "c.decay" in body and ("c.due" in body or "c.footer" in body)
+
+    def test_the_stasis_branch_draws_the_freshness_footer(self):
+        """On resume, `footer` is how long the thought has been held — the
+        field that says whether it is still the one you put down."""
+        src = self._live_src()
+        i = src.index("function glassStasisCard")
+        body = src[i:i + 2000]
+        assert "c.footer" in body
+
+    def test_the_reward_branch_names_the_reward(self):
+        """`primary` is "+120 XP"; `detail` carries the rank and level. Without
+        detail the card is a bare number."""
+        src = self._live_src()
+        i = src.index("function glassQuestRewardCard")
+        body = src[i:i + 2200]
+        assert "c.detail" in body
+
+    def test_the_inline_script_still_parses(self):
+        """A 2,700-line inline script with no build step: one stray brace ships
+        a blank Live Lens with no error anywhere on the Python side. Skipped
+        rather than faked when node is unavailable."""
+        import shutil
+        import subprocess
+        import tempfile
+        node = shutil.which("node")
+        if not node:
+            pytest.skip("node not available")
+        src = self._live_src()
+        start = src.index("<script__NONCE__>") + len("<script__NONCE__>")
+        end = src.index("</script>", start)
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+            f.write(src[start:end])
+            path = f.name
+        try:
+            r = subprocess.run([node, "--check", path],
+                               capture_output=True, text=True)
+            assert r.returncode == 0, r.stderr[:2000]
+        finally:
+            pathlib.Path(path).unlink(missing_ok=True)
+
+    def test_a_card_that_says_it_stays_is_not_expired(self):
+        """`dismiss_ms: 0` is the card contract for STAYS UNTIL REPLACED, used
+        by five builders. Every call site passes `c.dismiss_ms || <fallback>`,
+        which turned 0 into the fallback — so a "Listening…" ring vanished
+        after 4.2s with the microphone still open, and the card said the
+        opposite of the truth."""
+        src = self._live_src()
+        i = src.index("function gend(ms)")
+        body = src[i:i + 900]
+        assert "if (ms === 0) return;" in body
+        # …and the two cards that depend on it must not re-introduce the `||`
+        for fn in ("glassListeningCard", "glassCaptionCard"):
+            j = src.index("function " + fn)
+            seg = src[j:src.index("\n}", j)]
+            assert "c.dismiss_ms ||" not in seg, fn
+
+    def test_the_pulse_cannot_outlive_its_card(self):
+        """The Listening ring is the one card here that animates. Its interval
+        has to die when anything else paints the canvas, or it repaints the ring
+        over whichever lens result landed next."""
+        src = self._live_src()
+        i = src.index("function glassCtx()")
+        assert "clearInterval(glassAnim)" in src[i:i + 700]
+        j = src.index("function glassClear()")
+        assert "clearInterval(glassAnim)" in src[j:j + 300]

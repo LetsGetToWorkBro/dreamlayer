@@ -1191,8 +1191,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled", "face_recognition",
-                  "face_auto_enrol"):
+                  "remote_listen_enabled", "captions_enabled",
+                  "face_recognition", "face_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -4540,7 +4540,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Apply a config patch, log notable posture changes, reindex."""
             body = self._body()
             before = (brain.config.model, brain.config.cloud_enabled,
-                      brain.config.network_mode, brain.config.email_enabled)
+                      brain.config.network_mode, brain.config.email_enabled,
+                      brain.config.captions_enabled)
             brain.apply_config(body)
             brain.reindex()
             if "model" in body and brain.config.model != before[0]:
@@ -4551,6 +4552,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 brain.activity.add("privacy", "Incognito on" if brain.config.lan_only else "Incognito off")
             if "email_enabled" in body and brain.config.email_enabled != before[3]:
                 brain.activity.add("config", "Email & iMessage " + ("on" if brain.config.email_enabled else "off"))
+            # Captions put the room's speech on a screen, so the switch belongs
+            # in the tamper-evident record alongside the other posture changes —
+            # a wearer reading their receipt should see when it went on.
+            if "captions_enabled" in body and brain.config.captions_enabled != before[4]:
+                brain.activity.add("privacy", "Live captions "
+                                   + ("on" if brain.config.captions_enabled else "off"))
             self._json(200, {"config": brain.config.public()})
 
         def _post_capabilities(self, path, qs):

@@ -1102,7 +1102,16 @@ const GP = {                      /* palette.lua, verbatim */
 };
 const GT = { lg:17, md:13, sm:10 };            /* typography.lua sizes */
 let glassTimer = null;
+let glassAnim = null, glassPulse = 0;          /* the one animating card: Listening */
+let glassPainting = false;                     /* true only inside the pulse repaint */
 function glassCtx(){
+  /* Any OTHER drawing on this canvas ends the Listening pulse. Placed here
+     rather than in `renderEvent` because pushed cards are not the only thing
+     that paints the glass — every lens result (glassMathCard, glassFindCard, …)
+     comes through its own entry point, and a surviving interval would repaint
+     the ring over whichever of them landed. `glassPainting` is what lets the
+     pulse's own repaint through without cancelling itself. */
+  if (glassAnim && !glassPainting){ clearInterval(glassAnim); glassAnim = null; }
   const cv = $("glass");
   const px = cv.clientWidth * (window.devicePixelRatio || 1);
   if (cv.width !== px) { cv.width = px; cv.height = px; }
@@ -1132,6 +1141,7 @@ function gdiamond(ctx, x, y, d, color){
 }
 function glassClear(){
   clearTimeout(glassTimer);
+  clearInterval(glassAnim); glassAnim = null;   /* or the pulse outlives its card */
   $("glass").classList.remove("on");
 }
 /* draw_object_recall (renderer.lua:596) — geometry verbatim from the device */
@@ -1195,6 +1205,14 @@ function gback(ctx){                              /* the dark emissive disc */
 function gend(ms){                                /* fade the card on + auto-dismiss */
   $("glass").classList.add("on");
   clearTimeout(glassTimer);
+  /* `dismiss_ms: 0` is not "unset" — it is the card contract for STAYS UNTIL
+     REPLACED, and five builders use it deliberately (listening, spoken_caption,
+     forget_last, private_zone, privacy_veil). Every call site here passes
+     `c.dismiss_ms || <fallback>`, which turned 0 into the fallback and expired
+     a "Listening…" ring after 4.2s while the microphone was still open — the
+     card said the opposite of the truth. An explicit 0 now persists; anything
+     falsy-but-absent still takes the caller's fallback. */
+  if (ms === 0) return;
   glassTimer = setTimeout(glassClear, ms || 4200);
 }
 function gwrap(str, n){                           /* soft-wrap to lines of ~n chars */
@@ -1406,6 +1424,288 @@ function glassBriefCard(c){                          /* the morning brief */
   bl.slice(0, 2).forEach((b, i) => gtext(ctx, "· " + (gwrap(String(b), 26)[0] || ""), 128, 166 + i * 15, GP.text_secondary, "sm"));
   gend(c.dismiss_ms || 8000);
 }
+/* ---- the cards a shipped Brain actually pushes -------------------------
+   Everything below exists for one measured reason: `renderEvent` used to
+   dispatch four types and drop the rest into glassEventCard, which draws
+   `eyebrow` and `primary` ONLY. The Brain reaches no other surface — nothing
+   under ai_brain/ can call halo-lua's card transport, which is what
+   test_the_brain_has_no_path_to_the_device_renderer pins — so for these card
+   types the Live Lens IS the glass, and every slot the generic renderer
+   ignored was simply gone.
+   That is not a polish gap; for ConsistencyCard it deleted the proposition.
+   Each branch below names what the generic path was losing. */
+
+function ghex(n, fallback){                          /* themes.py ships 0xRRGGBB ints */
+  return (typeof n === "number" && isFinite(n))
+    ? "#" + (n >>> 0 & 0xFFFFFF).toString(16).padStart(6, "0")
+    : (fallback || GP.text_secondary);
+}
+
+function glassConsistencyCard(c){                    /* YOU SAID DIFFERENT BEFORE */
+  /* The sharpest case in the set. `_consistency_card` (orchestrator/
+     consistency.py) puts the NEW claim in `primary` and THE PRIOR STATEMENT IN
+     `footer` — and the prior statement is the entire proposition. Through
+     glassEventCard this rendered "YOU SAID DIFFERENT BEFORE / <claim>": an
+     accusation with the evidence stripped out, which is worse than silence.
+     ConsistencyCard has no drawing in halo-lua either, so this branch is the
+     only place in the product where Candor's finding is drawn at all.
+     Both statements get equal type weight — the card's job is the comparison,
+     not to lead with either half. */
+  const ctx = glassCtx(); gback(ctx);
+  const col = GP.confidence_low;                     /* attention, not alarm */
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 6;
+  garc(ctx, 128, 128, 104, 0, 360, GP.border_subtle);
+  ctx.restore();
+  gtext(ctx, String(c.eyebrow || "You said different before").toUpperCase().slice(0, 26),
+        128, 44, col, "sm");
+
+  const now = gwrap(String(c.primary || "").trim(), 24).slice(0, 2);
+  now.forEach((ln, i) => gtext(ctx, ln, 128, 84 + i * 16, GP.text_primary, "md"));
+
+  /* the divider is the card: above it is now, below it is then */
+  const y = 84 + Math.max(now.length, 1) * 16 + 12;
+  ctx.beginPath(); ctx.moveTo(80, y); ctx.lineTo(176, y);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "EARLIER", 128, y + 16, GP.text_ghost, "sm");
+
+  const prior = gwrap(String(c.footer || c.prior_summary || "").trim(), 26).slice(0, 3);
+  if (prior.length) prior.forEach((ln, i) => gtext(ctx, ln, 128, y + 36 + i * 15, GP.text_secondary, "sm"));
+  else gtext(ctx, "(no prior statement on file)", 128, y + 36, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 5000);
+}
+
+function glassDriftCard(c){                          /* BEFORE IT SLIPS */
+  /* Geometry mirrors draw_commitment_drift (renderer.lua:843) rather than
+     inventing a second visual language for the same card: a LEFT RAIL whose
+     lit portion is conf*(1-decay), amber until decay >= 0.6 then danger.
+     Through glassEventCard both the rail and the due date vanished, which
+     left "HEALTHY / call Sam" — the state word and the task, with the two
+     things that make it actionable (how stale, by when) dropped. */
+  const ctx = glassCtx(); gback(ctx);
+  const decay = Math.max(0, Math.min(1, Number(c.decay) || 0));
+  const conf  = (typeof c.confidence === "number") ? Math.max(0, Math.min(1, c.confidence)) : 0.5;
+  const col   = ghex(c.state_color, decay >= 0.6 ? "#E05252" : GP.confidence_low);
+
+  const rx = 44, y0 = 68, y1 = 192;
+  ctx.beginPath(); ctx.moveTo(rx, y0); ctx.lineTo(rx, y1);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1.4; ctx.stroke();
+  const liveH = Math.floor((y1 - y0) * conf * (1 - decay));
+  if (liveH > 0){
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.moveTo(rx, y1 - liveH); ctx.lineTo(rx, y1);
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(rx, y1, 3, 0, 2 * Math.PI); ctx.fillStyle = col; ctx.fill();
+
+  gtext(ctx, String(c.eyebrow || c.drift_state || "DRIFT").toUpperCase().slice(0, 18),
+        128, 72, GP.memory_trace, "sm");
+  const task = gwrap(String(c.primary || c.task || "").trim(), 18).slice(0, 2);
+  task.forEach((ln, i) => gtext(ctx, ln, 128, 116 + i * 18, GP.text_primary, "lg"));
+
+  const person = String(c.person || "").trim();
+  if (person){                                       /* the chain-then-name cue */
+    for (let i = 0; i < 3; i++){
+      ctx.beginPath(); ctx.arc(108 + i * 8, 144, 2, 0, 2 * Math.PI);
+      ctx.fillStyle = GP.border_subtle; ctx.fill();
+    }
+    gtext(ctx, "→ " + person.slice(0, 18), 128, 160, GP.memory_trace, "md");
+  }
+  const due = String(c.footer || c.due || "").trim();
+  if (due) gtext(ctx, due.slice(0, 30), 128, 184, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 4500);
+}
+
+function glassJunoReplyCard(c){                      /* ASK IT ANYTHING */
+  /* juno_reply() carries the whole answer in `primary`, and glassEventCard caps
+     it at THREE 24-char lines — an answer of any length was silently truncated
+     mid-sentence with no ellipsis to say so. Six wider lines, and an explicit
+     ellipsis when even that is not enough. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 108, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "JUNO").toUpperCase().slice(0, 18), 128, 56, GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 72); ctx.lineTo(208, 72);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+
+  const all = gwrap(String(c.primary || c.text || "").trim(), 26);
+  const body = all.slice(0, 6);
+  if (body.length){
+    if (all.length > body.length) body[body.length - 1] = body[body.length - 1] + "…";
+    const top = 128 - ((body.length - 1) * 15) / 2 + 8;
+    body.forEach((ln, i) => gtext(ctx, ln, 128, top + i * 15, GP.text_primary, "sm"));
+  } else {
+    gtext(ctx, "…", 128, 128, GP.text_secondary, "md");
+  }
+  gend(c.dismiss_ms || 6000);
+}
+
+function glassPersonContextCard(c){                  /* FACES AT THE RIM */
+  /* person_context() has NO eyebrow and puts the name in `primary`, so through
+     glassEventCard this drew the literal fallback string "JUNO" over the
+     person's name, with `headline` and `detail` — the context, i.e. the entire
+     point of the card — dropped. */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.beginPath(); ctx.arc(128, 118, 58, 0, 2 * Math.PI);
+  ctx.fillStyle = "rgba(44,199,154,.05)"; ctx.fill();
+  ctx.strokeStyle = "rgba(44,199,154,.2)"; ctx.lineWidth = 1; ctx.stroke();
+  gtext(ctx, "AT THE RIM", 128, 52, GP.text_ghost, "sm");
+  gtext(ctx, String(c.primary || c.person || "").slice(0, 22), 128, 108, GP.text_primary, "lg");
+  const head = String(c.headline || "").trim();
+  if (head) gtext(ctx, gwrap(head, 28)[0] || "", 128, 136, GP.memory_trace, "sm");
+  const det = gwrap(String(c.detail || "").trim(), 30).slice(0, 2);
+  det.forEach((ln, i) => gtext(ctx, ln, 128, 158 + i * 15, GP.text_secondary, "sm"));
+  gend(c.dismiss_ms || 3500);
+}
+
+function glassSavedMemoryCard(c){                    /* KEEP A MOMENT */
+  /* The one card the generic path did not mangle — saved_memory() puts its
+     whole payload in `primary`. It gets a branch anyway because a 1200 ms
+     confirmation should read as a confirmation: a closing ring, not a text
+     card that happens to vanish quickly. */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 10;
+  garc(ctx, 128, 128, 46, 0, 360, GP.memory_trace);
+  gdiamond(ctx, 128, 128, 9, GP.memory_trace);
+  ctx.restore();
+  gtext(ctx, String(c.primary || "Held.").slice(0, 20), 128, 186, GP.text_primary, "md");
+  gend(c.dismiss_ms || 1200);
+}
+
+function glassWorldAnchorCard(c){                    /* NOTES ON THE WORLD */
+  /* world_anchor_card() is the only card in the set that ships an `opacity`
+     hint (0.20) — it is a memory ECHO, deliberately dimmer than a live card,
+     and its layout puts every slot low on the disc (y 200-236). glassEventCard
+     drew it at full weight in the centre, i.e. indistinguishable from a live
+     push, and dropped `detail` and the timestamp. */
+  const ctx = glassCtx(); gback(ctx);
+  ctx.save();
+  ctx.globalAlpha = (typeof c.opacity === "number" && c.opacity > 0) ? Math.max(c.opacity, 0.2) : 0.2;
+  garc(ctx, 128, 128, 100, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "MEMORY ECHO").toUpperCase().slice(0, 20), 128, 92, GP.text_ghost, "sm");
+  const sum = gwrap(String(c.primary || c.summary || "").trim(), 26).slice(0, 2);
+  sum.forEach((ln, i) => gtext(ctx, ln, 128, 118 + i * 15, GP.text_secondary, "sm"));
+  const det = String(c.detail || "").trim();
+  if (det) gtext(ctx, gwrap(det, 30)[0] || "", 128, 154, GP.text_ghost, "sm");
+  const ts = String(c.footer || c.ts_label || "").trim();
+  if (ts) gtext(ctx, ts.slice(0, 26), 128, 176, GP.text_ghost, "sm");
+  ctx.restore();
+  gend(c.dismiss_ms || 8000);
+}
+
+function glassStasisCard(c){                         /* HELD / WHERE YOU WERE */
+  /* Pushed on both `freeze` and `resume` (lens_hosts.py:694, 721) and drawn by
+     nothing — not halo-lua, not here. The generic path kept the eyebrow and the
+     held thought but dropped `footer`, which on resume is the FRESHNESS ("held
+     20 minutes ago"): the one field that tells you whether the thought you are
+     picking back up is still the one you put down. Freeze and resume share a
+     drawing and differ only in the direction of the arc — down into the stack,
+     up out of it — because they are one gesture with two ends. */
+  const ctx = glassCtx(); gback(ctx);
+  const eyebrow = String(c.eyebrow || "HELD").toUpperCase();
+  const holding = eyebrow.indexOf("HELD") === 0;
+  ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 7;
+  garc(ctx, 128, 128, 50, holding ? 20 : 200, holding ? 160 : 340, GP.memory_trace);
+  ctx.restore();
+  /* the stack itself: three rungs, brightest at the top of the pile */
+  [0, 1, 2].forEach(i => {
+    ctx.beginPath(); ctx.moveTo(104, 196 + i * 6); ctx.lineTo(152, 196 + i * 6);
+    ctx.strokeStyle = i === 0 ? GP.memory_trace : GP.border_subtle;
+    ctx.lineWidth = 1.2; ctx.stroke();
+  });
+  gtext(ctx, eyebrow.slice(0, 20), 128, 52, GP.memory_trace, "sm");
+  const body = gwrap(String(c.primary || "").trim(), 22).slice(0, 3);
+  if (body.length) body.forEach((ln, i) => gtext(ctx, ln, 128, 110 + i * 16, GP.text_primary, "md"));
+  else gtext(ctx, "nothing held", 128, 118, GP.text_secondary, "sm");
+  const foot = String(c.footer || "").trim();
+  if (foot) gtext(ctx, foot.slice(0, 30), 128, 174, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 5000);
+}
+
+function glassQuestRewardCard(c){                    /* QUEST COMPLETE / LEVEL UP */
+  /* Also pushed (lens_hosts.py:601) and drawn nowhere. `primary` is "+120 XP",
+     so the generic renderer produced a bare number: the eyebrow said LEVEL UP
+     and `detail` — the rank and level you reached — went missing, as did any
+     achievement in `footer`. A reward card that does not name the reward is
+     the one card where losing the trailing fields costs the whole gesture. */
+  const ctx = glassCtx(); gback(ctx);
+  const big = !!(c.new_rank || (Array.isArray(c.achievements) && c.achievements.length));
+  const col = big ? GP.confidence_high : GP.memory_trace;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = big ? 14 : 8;
+  garc(ctx, 128, 118, 54, 0, 360, col);
+  if (big) garc(ctx, 128, 118, 62, 0, 360, GP.border_subtle);
+  ctx.restore();
+  /* rays, only when something was actually unlocked — a plain +XP is quieter */
+  if (big){
+    ctx.strokeStyle = "rgba(184,255,233,.35)"; ctx.lineWidth = 1;
+    for (let a = 0; a < 360; a += 45){
+      const r = a * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(128 + Math.cos(r) * 68, 118 + Math.sin(r) * 68);
+      ctx.lineTo(128 + Math.cos(r) * 78, 118 + Math.sin(r) * 78);
+      ctx.stroke();
+    }
+  }
+  gtext(ctx, String(c.eyebrow || "QUEST COMPLETE").toUpperCase().slice(0, 20), 128, 52, col, "sm");
+  gtext(ctx, String(c.primary || "").slice(0, 16), 128, 116, GP.text_primary, "lg");
+  const det = String(c.detail || "").trim();
+  if (det) gtext(ctx, det.slice(0, 28), 128, 144, GP.memory_trace, "sm");
+  const foot = String(c.footer || "").trim();
+  if (foot) gtext(ctx, gwrap(foot, 30)[0] || "", 128, 186, GP.text_secondary, "sm");
+  gend(c.dismiss_ms || (big ? 6000 : 5000));
+}
+
+function glassListeningCard(c){                      /* HEY JUNO — the mic is open */
+  /* `dismiss_ms` is 0 by contract: the ring belongs on the glass for as long as
+     the microphone is actually open, so it is passed through UNMODIFIED rather
+     than through the usual `|| fallback`.
+
+     `listening()` sets `pulse: true` and its layout names a pulsing ring, and
+     honouring that needs a repaint — a still ring on a card that never expires
+     reads as a frozen screenshot, i.e. as the mic having died. So this is the
+     one card here that animates, on a 100 ms interval that `glassClear` tears
+     down; without that teardown the interval would outlive the card and keep
+     painting over whatever replaced it. */
+  clearInterval(glassAnim);
+  const paint = () => {
+    glassPulse = (glassPulse + 1) % 40;
+    glassPainting = true;
+    const ctx = glassCtx(); gback(ctx);
+    const r = 30 + Math.sin(glassPulse / 40 * 2 * Math.PI) * 3;
+    ctx.save(); ctx.shadowColor = GP.memory_trace; ctx.shadowBlur = 10;
+    garc(ctx, 128, 110, r, 0, 360, GP.memory_trace);
+    ctx.restore();
+    garc(ctx, 128, 110, r + 8, 0, 360, GP.border_subtle);
+    gtext(ctx, String(c.eyebrow || "JUNO").toUpperCase().slice(0, 18), 128, 156, GP.memory_trace, "sm");
+    gtext(ctx, String(c.primary || "Listening…").slice(0, 20), 128, 178, GP.text_primary, "md");
+    if (c.detail) gtext(ctx, String(c.detail).slice(0, 24), 128, 200, GP.text_ghost, "sm");
+    glassPainting = false;
+  };
+  paint();
+  if (c.pulse !== false) glassAnim = setInterval(paint, 100);
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassCaptionCard(c){                        /* LIVE CAPTIONS */
+  /* Also `dismiss_ms: 0` — a caption stays until the next utterance replaces
+     it, which is what makes a stream of them readable. `eyebrow` is the
+     speaker's first name when there is one and "HEARD" when there is not, and
+     the builder has already blanked both fields if the veil closed, so this
+     draws whatever it is handed without a second opinion. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 106, 0, 360, GP.border_subtle);
+  gtext(ctx, String(c.eyebrow || "HEARD").toUpperCase().slice(0, 18), 128, 66, GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 82); ctx.lineTo(208, 82);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  const body = gwrap(String(c.primary || "").trim(), 26).slice(0, 5);
+  if (body.length){
+    const top = 128 - ((body.length - 1) * 15) / 2 + 6;
+    body.forEach((ln, i) => gtext(ctx, ln, 128, top + i * 15, GP.text_primary, "sm"));
+  } else {
+    /* the veil-blanked case: say why it is empty rather than draw a void */
+    gtext(ctx, "captions paused", 128, 128, GP.text_ghost, "sm");
+  }
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -2910,6 +3210,16 @@ function renderEvent(ev){
   else if (t === "MorningBriefCard") glassBriefCard(c);
   else if (t === "PersonDossierCard") glassDossierCard(c);
   else if (t === "ObjectRecallCard") glassObjectRecallCard(c);
+  else if (t === "ConsistencyCard") glassConsistencyCard(c);
+  else if (t === "CommitmentDriftCard") glassDriftCard(c);
+  else if (t === "JunoReplyCard") glassJunoReplyCard(c);
+  else if (t === "PersonContextCard") glassPersonContextCard(c);
+  else if (t === "SavedMemoryCard") glassSavedMemoryCard(c);
+  else if (t === "WorldAnchorCard") glassWorldAnchorCard(c);
+  else if (t === "StasisCard") glassStasisCard(c);
+  else if (t === "QuestRewardCard") glassQuestRewardCard(c);
+  else if (t === "ListeningCard") glassListeningCard(c);
+  else if (t === "SpokenCaptionCard") glassCaptionCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

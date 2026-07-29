@@ -529,6 +529,16 @@ class BrainConfig:
     # owns its own consent. OFF by default; every other gate (the Veil, on-device
     # transcription, PII scrub, nothing-uploaded) is identical to listen_enabled.
     remote_listen_enabled: bool = False
+    # Drawing what was heard on the glass, as it is heard — the "Live captions"
+    # feature. A THIRD opt-in rather than a consequence of the first two, and
+    # the separation is the point: `listen_enabled` means "remember what you
+    # hear", which is private to the wearer's own store and PII-scrubbed before
+    # any write. Captions mean "put the room's speech on a screen", which is a
+    # different exposure and belongs to a different decision — `EarHost.status`
+    # already refuses to echo a transcript back over the wire for exactly this
+    # reason. OFF by default; the Veil suppresses the card the same way it
+    # suppresses the write, and with this off the ear behaves exactly as before.
+    captions_enabled: bool = False
     # -- recognising the people you introduced (ai_brain/server/face_live.py) --
     # OFF on a fresh install, and nothing here ever flips it on. When on, and
     # ONLY when the opt-in `face` pack and its weights are also present, the

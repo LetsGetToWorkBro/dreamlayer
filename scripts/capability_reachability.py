@@ -117,6 +117,35 @@ def _by_design(seam: str) -> str:
     return ""
 
 
+def _declared_dormant() -> set[str]:
+    """The keys `capabilities.py` already declares unwired, via `_NOT_WIRED`.
+
+    Without this, the OPEN bucket was materially dishonest: it printed 19
+    capabilities under "no reason on file" when 18 of them are named in
+    `_NOT_WIRED`, with the reason written out in prose immediately above them
+    ("…are NOT promoted — they need the full Orchestrator path"). Those are not
+    open questions — the product reports them DORMANT to the wearer, which is
+    the correct status for an adapter nothing calls. Conflating them with a
+    genuine discrepancy buried the one entry that mattered.
+
+    Read from the AST rather than imported: this script deliberately never
+    imports the package it audits (importing `dreamlayer` would execute module
+    bodies and could itself pull seams into the closure being measured).
+    """
+    tree = ast.parse((SRC / "capabilities.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(getattr(t, "id", "") == "_NOT_WIRED" for t in node.targets):
+            continue
+        # frozenset({...}) — the set literal is the sole call argument
+        for sub in ast.walk(node.value):
+            if isinstance(sub, ast.Set):
+                return {e.value for e in sub.elts
+                        if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return set()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--verbose", action="store_true",
@@ -129,7 +158,8 @@ def main() -> int:
     _roots, reachable = lens._closure(lens._import_graph(files), known)
 
     caps = _declared_caps()
-    open_gaps, expected, concepts, ok = [], [], [], []
+    dormant_keys = _declared_dormant()
+    open_gaps, dormant, expected, concepts, ok = [], [], [], [], []
     for key, title, tier, seam in caps:
         mods = _seam_modules(seam)
         if not mods:
@@ -138,18 +168,32 @@ def main() -> int:
             ok.append((key, tier, seam))
         elif _by_design(seam):
             expected.append((key, tier, seam, _by_design(seam)))
+        elif key in dormant_keys:
+            dormant.append((key, tier, seam))
         else:
             open_gaps.append((key, tier, seam))
 
     print(f"{len(caps)} declared capabilities · {len(ok)} with a seam the Brain "
           f"can load")
 
-    print(f"\nOPEN — seam not in the Brain's closure and no reason on file "
+    print(f"\nMISREPORTED — seam not loadable, and NOT declared dormant "
           f"({len(open_gaps)})")
-    print("  Either the seam string is stale (it names a file the Brain "
-          "replaced) or\n  the capability is not wired. Opposite fixes; both "
-          "worth knowing.")
+    print("  The catalog will show these as available once their pip extras are\n"
+          "  installed, but no Brain path can load the seam. Either the seam\n"
+          "  string is stale (it names a file the Brain replaced) or the key\n"
+          "  belongs in `_NOT_WIRED`. Opposite fixes; this is the list to read.")
     for key, tier, seam in sorted(open_gaps):
+        print(f"  {key:24} {tier:12} {seam}")
+    if not open_gaps:
+        print("  (none — every unreachable seam is either by design or declared "
+              "dormant)")
+
+    print(f"\ndeclared DORMANT ({len(dormant)}) — an adapter built, nothing "
+          f"calling it")
+    print("  Named in `capabilities.py:_NOT_WIRED`, so the wearer is told "
+          "\"dormant\",\n  not a false green. Honest today; each is real work "
+          "to wire.")
+    for key, tier, seam in sorted(dormant):
         print(f"  {key:24} {tier:12} {seam}")
 
     print(f"\nunreachable BY DESIGN ({len(expected)}) — reaching these would be "
