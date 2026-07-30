@@ -298,3 +298,108 @@ def test_a_junk_heading_degrades_to_no_direction(brain):
         assert fix is not None and fix["heading_deg"] is None, junk
         out = brain.waypath_locate("bike")
         assert "away" in out["detail"], (junk, out)
+
+
+# --- marking a zone ----------------------------------------------------------
+
+class TestMarkingAZone:
+    """"Make here a private zone" — the only ergonomic way to create one.
+
+    A dedicated route rather than raw `private_zones` config writes: a client
+    editing the list wholesale can drop a zone by accident, and nobody is going
+    to hand-enter a coordinate.
+    """
+
+    def test_marking_here_raises_the_shield_immediately(self, brain):
+        brain.note_location(*LONDON)
+        assert brain.incognito_now() is False
+        out = brain.edit_zones("add", "the flat", 150)
+        assert out["ok"] is True
+        assert brain.incognito_now() is True, "the zone did not take effect"
+
+    def test_removing_the_zone_you_stand_in_lifts_the_shield(self, brain):
+        """Editing the LIST can cross the boundary without the wearer moving an
+        inch. Without a re-sync the card and the shield disagree until the next
+        position report."""
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        seen = _pushes(brain)
+        assert brain.edit_zones("remove", "the flat")["ok"] is True
+        assert brain.incognito_now() is False
+        assert seen and seen[-1][1]["type"] == "ReadyCard", (
+            "the glass kept a capture-suspended card for a deleted zone")
+
+    def test_adding_one_announces_it_without_moving(self, brain):
+        brain.note_location(*LONDON)
+        seen = _pushes(brain)
+        brain.edit_zones("add", "the flat", 150)
+        assert seen[-1][1]["type"] == "PrivateZoneCard"
+
+    def test_it_needs_a_position_first(self, brain):
+        """The whole reason this is a route and not a config write."""
+        out = brain.edit_zones("add", "home", 150)
+        assert out["ok"] is False and out["error"] == "no-fix"
+
+    def test_a_useless_radius_is_clamped_not_accepted(self, brain):
+        """A zero radius is a zone that can never match — a shield the wearer
+        thinks they have and does not."""
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "z", 0)
+        assert brain.zone_list()[0]["radius_m"] >= 10
+        assert brain.private_zone_now() == "z"
+
+    def test_the_count_is_capped(self, brain):
+        """Every zone is a haversine on every report, and `incognito_now()` is
+        on the hot path every gate calls."""
+        brain.note_location(*LONDON)
+        for i in range(brain.MAX_PRIVATE_ZONES):
+            assert brain.edit_zones("add", f"z{i}", 50)["ok"] is True
+        out = brain.edit_zones("add", "one-too-many", 50)
+        assert out["ok"] is False and "at most" in out["error"]
+
+    def test_a_duplicate_name_is_refused(self, brain):
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        assert brain.edit_zones("add", "the flat", 150)["ok"] is False
+
+    def test_removing_something_that_is_not_there_is_honest(self, brain):
+        assert brain.edit_zones("remove", "nowhere")["ok"] is False
+        assert brain.edit_zones("wobble", "x")["ok"] is False
+
+    def test_the_list_says_which_one_you_are_in(self, brain):
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        brain.edit_zones("add", "the office", 150)      # same spot, both match
+        brain.note_location(*PARIS)
+        assert all(z["inside"] is False for z in brain.zone_list())
+
+    def test_zones_survive_a_restart(self, brain):
+        import pathlib
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        again = Brain(str(pathlib.Path(brain.cfg_dir)))
+        again.note_location(*LONDON)
+        assert again.private_zone_now() == "the flat"
+        assert again.incognito_now() is True
+
+    def test_the_routes_reach_it(self, brain):
+        from dreamlayer.ai_brain.server import server as srv
+        text = open(srv.__file__, encoding="utf-8").read()
+        assert '"/dreamlayer/zones": _post_zones,' in text
+        assert '"/dreamlayer/zones": _get_zones,' in text
+
+    def test_the_panel_renders_a_zone_name_as_text_not_html(self):
+        """The name is wearer-supplied and the panel renders it back. A zone
+        called `<img onerror=...>` must not execute."""
+        import pathlib
+        panel = (pathlib.Path(srv_dir()) / "panel.py").read_text(encoding="utf-8")
+        i = panel.index("async function refreshZones()")
+        body = panel[i:i + 2200]
+        assert "label.textContent=" in body
+        assert "innerHTML=x.name" not in body and "innerHTML = x.name" not in body
+
+
+def srv_dir():
+    from dreamlayer.ai_brain.server import server as srv
+    import pathlib
+    return pathlib.Path(srv.__file__).parent

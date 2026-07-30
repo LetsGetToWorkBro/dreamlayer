@@ -968,6 +968,104 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # transition, which is the moment that actually changes what is true.
         return q
 
+    MAX_PRIVATE_ZONES = 32
+
+    def edit_zones(self, action: str, name: str = "", radius_m: float = 150.0) -> dict:
+        """Add or remove a private zone. Add uses the CURRENT position.
+
+        A dedicated route rather than raw `private_zones` config writes, for two
+        reasons: a client editing the list wholesale can drop a zone by
+        accident, and nobody is going to hand-enter a coordinate. "Make HERE a
+        private zone" is the only ergonomic way to create one, and it needs a
+        fix the client does not have to know about.
+
+        The count is capped — every zone is a haversine on every position
+        report, and an unbounded list is a slow `incognito_now()` on the hot
+        path every gate calls.
+        """
+        action = (action or "").strip().lower()
+        name = (name or "").strip()[:48]
+        zones = list(getattr(self.config, "private_zones", None) or [])
+        if action == "remove":
+            if not name:
+                return {"ok": False, "error": "which zone?"}
+            keep = [z for z in zones if str((z or {}).get("name") or "").strip().lower()
+                    != name.lower()]
+            if len(keep) == len(zones):
+                return {"ok": False, "error": "no zone by that name"}
+            self.config.private_zones = keep
+            self.save()
+            self.activity.add("privacy", "Removed a private zone")
+            # Leaving the list may lift the shield — re-evaluate and announce,
+            # or the glass keeps a "capture suspended" card for a zone that no
+            # longer exists.
+            self._resync_zone()
+            return {"ok": True, "zones": self.zone_list()}
+        if action != "add":
+            return {"ok": False, "error": f"unknown action: {action}"}
+        if len(zones) >= self.MAX_PRIVATE_ZONES:
+            return {"ok": False,
+                    "error": f"at most {self.MAX_PRIVATE_ZONES} zones"}
+        fix = self.here()
+        if not fix:
+            return {"ok": False, "error": "no-fix",
+                    "detail": "the phone has not reported a position yet"}
+        try:
+            radius = float(radius_m)
+        except (TypeError, ValueError):
+            radius = 150.0
+        # A zero or negative radius is a zone that can never match — a shield
+        # the wearer thinks they have and does not. Clamped, not accepted.
+        radius = max(10.0, min(radius, 5000.0))
+        if any(str((z or {}).get("name") or "").strip().lower() == name.lower()
+               for z in zones) and name:
+            return {"ok": False, "error": "a zone by that name already exists"}
+        zones.append({"name": name or "this area", "lat": fix["lat"],
+                      "lon": fix["lon"], "radius_m": radius})
+        self.config.private_zones = zones
+        self.save()
+        self.activity.add("privacy", "Added a private zone")
+        self._resync_zone()
+        return {"ok": True, "zones": self.zone_list()}
+
+    def zone_list(self) -> list:
+        """The zones, with whether the wearer is inside each right now."""
+        here = self.here()
+        out = []
+        for z in getattr(self.config, "private_zones", None) or []:
+            if not isinstance(z, dict):
+                continue
+            inside = False
+            if here:
+                try:
+                    from .geo import haversine_m
+                    inside = haversine_m(float(z["lat"]), float(z["lon"]),
+                                         here["lat"], here["lon"]) <= float(z["radius_m"])
+                except (KeyError, TypeError, ValueError):
+                    inside = False
+            out.append({"name": z.get("name") or "this area",
+                        "radius_m": z.get("radius_m"),
+                        "lat": z.get("lat"), "lon": z.get("lon"),
+                        "inside": inside})
+        return out
+
+    def _resync_zone(self) -> None:
+        """Re-evaluate zone membership after the LIST changed rather than after
+        the position did, and announce a crossing if one happened.
+
+        Editing zones can cross the boundary without the wearer moving an inch:
+        deleting the zone you are standing in lifts the shield, and adding one
+        raises it. Without this the card and the shield disagree until the next
+        position report."""
+        zone = self.private_zone_now()
+        if zone == self._zone_was:
+            return
+        self._zone_was = zone
+        if zone:
+            self.announce_posture(True, zone=zone)
+        else:
+            self.announce_posture(bool(self.incognito_now()))
+
     def note_location(self, lat, lon, accuracy_m=0.0,
                       heading_deg=None) -> dict:
         """Take a position report and announce any zone the wearer just crossed.
@@ -4687,6 +4785,24 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 b.get("lat"), b.get("lon"), b.get("accuracy_m", 0.0),
                 heading_deg=b.get("heading_deg")))
 
+        def _post_zones(self, path, qs):
+            """Add or remove a private zone.
+
+            `{"action":"add","name":"the flat","radius_m":150}` marks the
+            CURRENT position; `{"action":"remove","name":"the flat"}` drops one.
+            Add needs a position report first — nobody hand-enters a
+            coordinate, which is why this exists rather than raw config writes."""
+            b = self._body()
+            self._json(200, brain.edit_zones(b.get("action", ""),
+                                             b.get("name", ""),
+                                             b.get("radius_m", 150.0)))
+
+        def _get_zones(self, path, qs):
+            """The zones, each with whether you are inside it right now."""
+            self._json(200, {"zones": brain.zone_list(),
+                             "max": brain.MAX_PRIVATE_ZONES,
+                             "has_fix": bool(brain.here())})
+
         def _get_where(self, path, qs):
             """Current fix and zone state, for the phone's own UI. Coarse: the
             zone NAME and whether the shield is up, never the coordinate."""
@@ -4817,6 +4933,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/owed": _get_owed,
             "/dreamlayer/theysaid": _get_they_said,
             "/dreamlayer/where": _get_where,
+            "/dreamlayer/zones": _get_zones,
             "/dreamlayer/their": _get_their_word,
             "/dreamlayer/resurface": _get_resurface,
             "/dreamlayer/forget/last": _get_forget_last,
@@ -5966,6 +6083,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/memories/purge": _post_memories_purge,
             "/dreamlayer/forget/last": _post_forget_last,
             "/dreamlayer/location": _post_location,
+            "/dreamlayer/zones": _post_zones,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,

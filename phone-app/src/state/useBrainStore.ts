@@ -198,6 +198,13 @@ type BrainState = {
 
   // one-glance morning brief synthesized by the Brain
   getBrief: (agenda?: string[]) => Promise<{ text: string; missed?: { texts: number; emails: number } } | null>;
+  /**
+   * Report where the phone is, so private zones can raise the shield and
+   * Waypath can turn a distance into a direction. `heading_deg` is optional and
+   * its absence is meaningful: the Brain reports "152 m away" rather than
+   * inventing a direction from an assumed heading.
+   */
+  postLocation: (fix: { lat: number; lon: number; accuracy_m?: number; heading_deg?: number | null }) => Promise<boolean>;
   // the brief the Brain's scheduler delivered on its own at brief_hour (no compute)
   getLatestBrief: () => Promise<{ text: string; bullets: string[]; ts: number } | null>;
   // the extended "long brief" — sectioned; fetched on demand and kept on the phone
@@ -862,6 +869,32 @@ export const useBrainStore = create<BrainState>((set, get) => ({
       return (await r.json()).items ?? [];
     } catch {
       return [];
+    }
+  },
+
+  postLocation: async (fix) => {
+    // Never in demo mode: a demo must not describe a real place, and a zone
+    // raised from a fake coordinate would silently gag a real Brain.
+    if (get().demoMode) return false;
+    const m = get().macMini;
+    if (!m.connected || !m.url) return false;
+    if (!Number.isFinite(fix?.lat) || !Number.isFinite(fix?.lon)) return false;
+    try {
+      const r = await brainFetch(m, "/dreamlayer/location", {
+        method: "POST",
+        body: JSON.stringify({
+          lat: fix.lat,
+          lon: fix.lon,
+          accuracy_m: fix.accuracy_m ?? 0,
+          // null, not omitted, so "no heading" is explicit on the wire rather
+          // than an absent key the Brain has to guess about.
+          heading_deg: typeof fix.heading_deg === "number" ? fix.heading_deg : null,
+        }),
+      });
+      const j = await r.json();
+      return !!j?.ok;
+    } catch {
+      return false;
     }
   },
 

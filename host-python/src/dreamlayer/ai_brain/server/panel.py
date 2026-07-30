@@ -785,6 +785,15 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
       <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
       <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Private zones &middot; places that record nothing</div>
+      <div class="conn-s">Inside a private zone the Brain captures <b>nothing</b> — it is the same shield Incognito raises, so the ear, captions, answer-ahead, the memory ring and face recall all go quiet together. Needs the phone to be reporting its position (it does that while the app is open). A zone is a point and a radius; you mark one by standing in it.</div>
+      <div id="zoneStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
+      <div id="zoneList" class="conn-s" style="margin-top:6px"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <input id="zoneName" placeholder="name this place" style="flex:1;min-width:130px">
+        <input id="zoneRadius" type="number" min="10" max="5000" value="150" style="width:82px" title="radius in metres">
+        <button id="zoneAdd" onclick="addZone()">Make here private</button>
+      </div></div></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -1870,6 +1879,7 @@ async function load(){
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
   if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
   if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
+  if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
     $("srcSync").checked=!!c.config.sources_sync;
@@ -2107,6 +2117,47 @@ async function saveAnswerAhead(){
   const on=$("answerAhead").checked;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
   toast(on?"Answer ahead on — on-device only":"Answer ahead off");
+}
+async function refreshZones(){
+  const stat=$("zoneStat"), list=$("zoneList");
+  if(!stat) return;
+  let z; try{z=await api("/dreamlayer/zones");}catch(e){stat.textContent="";return;}
+  if(!z){stat.textContent="";return;}
+  const inside=(z.zones||[]).find(x=>x.inside);
+  stat.textContent = !z.has_fix
+    ? "No position yet — open the phone app to report one."
+    : (inside ? ("Inside \u201c"+inside.name+"\u201d — capturing nothing.")
+              : "Position known. Not in a private zone.");
+  const btn=$("zoneAdd"); if(btn) btn.disabled=!z.has_fix;
+  list.innerHTML="";
+  (z.zones||[]).forEach(x=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:8px;align-items:center;margin:3px 0";
+    const label=document.createElement("span");
+    label.style.flex="1";
+    /* textContent, never innerHTML: the name is wearer-supplied and this panel
+       renders it back — a zone called <img onerror=...> must not execute. */
+    label.textContent=x.name+" \u00b7 "+Math.round(x.radius_m)+" m"+(x.inside?" \u00b7 here now":"");
+    const del=document.createElement("button");
+    del.textContent="Remove"; del.onclick=()=>removeZone(x.name);
+    row.appendChild(label); row.appendChild(del); list.appendChild(row);
+  });
+  if(!(z.zones||[]).length){ list.textContent="No zones yet."; }
+}
+async function addZone(){
+  const name=($("zoneName").value||"").trim();
+  const radius=parseFloat($("zoneRadius").value||"150");
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"add",name:name,radius_m:radius})});
+  if(r&&r.ok){ $("zoneName").value=""; toast("Private zone added — capturing nothing here"); }
+  else toast((r&&(r.detail||r.error))||"could not add that zone");
+  refreshZones();
+}
+async function removeZone(name){
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"remove",name:name})});
+  toast(r&&r.ok?"Zone removed":"could not remove that zone");
+  refreshZones();
 }
 async function refreshEarStatus(){
   const el=$("earStat"); if(!el) return;
