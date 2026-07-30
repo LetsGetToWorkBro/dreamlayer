@@ -24,7 +24,7 @@ python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see �
 | | done | open |
 |---|---|---|
 | **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
-| **HUD cards** | **22 of 24** have a Brain-side producer (13 wired this round); all 22 draw properly on the Brain's own surface, and so do the 3 undeclared cards it pushes | **2 cards** — SynesthesiaCard (a phone IMU feed) and TruthLensCard, which is DECLINED not blocked (§1) |
+| **HUD cards** | **23 of 24** have a Brain-side producer (14 wired this round); all 23 draw properly on the Brain's own surface, and so do the 3 undeclared cards it pushes | **TruthLensCard only — DECLINED, not blocked.** The Truth Lens FEATURE ships (outward consistency, `/dreamlayer/theysaid`); the deception gauge does not (§1) |
 | **Capabilities** | 42 of 74 seams loadable; 13 unreachable by design; 18 declared dormant, with reasons | **0 misreported**; the 18 dormant ones are real work, not a labelling gap (§4) |
 
 The single most important thing in this file, because it is the mistake that
@@ -231,9 +231,9 @@ another field arrives gutted, and the checker now prints that as its own
 category rather than folding it into a pass.
 
 ```
-NO BRAIN-SIDE PRODUCER   2 of 24
+NO BRAIN-SIDE PRODUCER   1 of 24  (TruthLensCard — declined, not blocked)
 generic on the Live Lens  0   (was 5 — and a test now keeps it there)
-drawn properly on both   22
+drawn properly on both   23
 UNDECLARED               10   (built by the Brain, absent from demo/catalog.py)
 ```
 

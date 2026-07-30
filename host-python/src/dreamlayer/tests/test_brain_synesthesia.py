@@ -205,3 +205,26 @@ class TestTheCard:
         i = src.index("function glassSynesthesiaCard")
         body = src[i:i + 1400]
         assert "c.description" in body and "DREAM" in body
+
+
+def test_ok_means_exactly_a_non_empty_description(brain):
+    """The invariant the push guard leans on.
+
+    `live.look` pushes on `ok` alone, because the lens sets `ok = bool(phrase)`
+    over an already-stripped phrase — so an extra "and description non-empty"
+    check was the same condition twice, and a mutation deleting it survived
+    every test. That redundancy is removed; this is what makes it safe. If the
+    lens ever returns ok=True with an empty description, the push guard needs
+    its second half back.
+    """
+    brain._backend = _Vision(reply="rain beading on cold glass")
+    wl = brain.world_lens()
+    out = wl.look_lens(_frame(), "synesthesia")
+    assert out["ok"] is bool(out["description"].strip())
+
+    for reply in ("", "   ", "\n", '""'):
+        brain._backend = _Vision(reply=reply)
+        wl = brain.world_lens()
+        out = wl.look_lens(_frame(), "synesthesia")
+        assert out["ok"] is False, reply
+        assert out["description"] == "", reply

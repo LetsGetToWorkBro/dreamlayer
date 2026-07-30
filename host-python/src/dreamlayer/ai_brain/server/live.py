@@ -341,7 +341,14 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
         # (latex, a depth gauge, hit boxes); synesthesia returns a phrase, and a
         # phrase with no card is a string in a network response. `synesthesia_card`
         # has existed the whole time with nothing calling it.
-        if ok and lens == "synesthesia" and (res.get("description") or "").strip():
+        # `ok` alone is the guard, deliberately: the lens sets ok = bool(phrase)
+        # over an already-stripped phrase, so "ok and non-empty description" was
+        # the same condition written twice. A mutation removing the second half
+        # survived every test, which is the signature of a branch that cannot
+        # fail — so it is gone rather than left as untestable defence. The
+        # invariant it leaned on is pinned by
+        # test_ok_means_exactly_a_non_empty_description.
+        if ok and lens == "synesthesia":
             try:
                 from ...hud import cards
                 res["pushed"] = brain.push_event(
