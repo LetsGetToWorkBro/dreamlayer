@@ -198,11 +198,47 @@ class TestTheEdges:
         assert report["ok"] is True
         assert kept in {e.figment.id for e in other.rc.vault.list()}
 
-    def test_the_device_names_itself_distinguishably(self, brain):
-        """`origin` is useless if every device calls itself "device"."""
+    def test_the_device_names_itself_after_its_host(self, brain, monkeypatch):
+        """`origin` is useless if every device calls itself "device" — the wearer
+        has to be able to tell two of their own machines apart in a repertoire
+        listing. Forced, because the earlier version of this ended in `or True`
+        and asserted nothing at all: collapsing the name to a constant survived
+        it."""
+        import socket
+        monkeypatch.setattr(socket, "gethostname", lambda: "kitchen-mini.local")
+        assert brain._sync_peer_name() == "kitchen-mini"
+
+    def test_an_absurd_hostname_is_bounded(self, brain, monkeypatch):
+        import socket
+        monkeypatch.setattr(socket, "gethostname", lambda: "h" * 400)
         name = brain._sync_peer_name()
-        assert name and name != "device" or True    # a hostname may be absent
         assert len(name) <= 32 and name.strip() == name
+
+    def test_a_hostname_that_cannot_be_read_still_yields_a_name(self, brain,
+                                                                monkeypatch):
+        """`origin` is written into every staged record; there is no useful
+        failure mode where it is blank."""
+        import socket
+
+        def _boom():
+            raise OSError("no hostname")
+        monkeypatch.setattr(socket, "gethostname", _boom)
+        assert brain._sync_peer_name() == "device"
+
+    def test_a_shutdown_is_never_swallowed_by_the_blob_guard(self, brain,
+                                                             monkeypatch):
+        """The merge guard is deliberately `except BaseException`, because loro's
+        decoder raises one. That is wide enough to eat a KeyboardInterrupt and
+        report it to the wearer as a bad snapshot, so interrupt and exit are
+        re-raised ahead of it — and dropping that clause survived every other
+        test here."""
+        from dreamlayer.reality_compiler.v2 import vault_sync as vs
+
+        def _interrupt(self, blob):
+            raise KeyboardInterrupt()
+        monkeypatch.setattr(vs.VaultSync, "merge", _interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            brain.sync_merge(b"anything non-empty")
 
 
 class TestTheCapabilityIsHonest:
@@ -279,6 +315,22 @@ class TestTheState:
         assert st["available"] is True
         assert st["figments"] == 1
         assert st["proved"] is False
+
+    def test_it_reports_the_pack_MISSING_when_it_is(self, brain, monkeypatch):
+        """`available` hardcoded to True passed every test that only ran with loro
+        installed — and the panel reads this field to decide whether to say "the
+        Sync pack isn't installed". Getting it wrong means offering a wearer a
+        button that cannot work."""
+        from dreamlayer.reality_compiler.v2 import vault_sync as vs
+        monkeypatch.setattr(vs, "available", False)
+        assert brain.sync_state()["available"] is False
+
+    def test_no_crdt_is_a_reason_not_a_crash(self, brain, monkeypatch):
+        from dreamlayer.reality_compiler.v2 import vault_sync as vs
+        monkeypatch.setattr(vs, "available", False)
+        assert brain.sync_export() == b""
+        out = brain.sync_merge(b"anything")
+        assert out["ok"] is False and out["reason"] == "no-crdt"
 
     def test_proved_follows_a_real_merge(self, brain, other):
         _keep(brain, _figment())
