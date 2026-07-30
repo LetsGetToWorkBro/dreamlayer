@@ -889,12 +889,17 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._ear is None:
             from .ear import EarHost
             self._ear = EarHost(self)
+            # A fresh EarHost starts with the interpreter OFF, so the persisted
+            # setting is pushed in AT CONSTRUCTION rather than after a successful
+            # start. A wearer whose start fails for want of a speech engine, then
+            # installs the pack and retries, must not need a second toggle to get
+            # back the interpreter they already turned on.
+            self._apply_interpret()
         try:
             res = self._ear.start(mic)
         except Exception as exc:                    # noqa: BLE001 — never fatal
             log.error("[ear] start failed: %s", exc)
             res = {"ok": False, "reason": "error", "detail": str(exc)}
-        self._apply_interpret()          # a fresh EarHost starts with it OFF
         self._sync_ear_wired()
         if res.get("ok"):
             self.activity.add("ear", "Listening turned on (on-device voice capture)")
@@ -990,6 +995,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._remote_ear is None:
             from .ear import EarHost
             self._remote_ear = EarHost(self)
+            self._apply_interpret()      # see start_ear: at construction, not
+            #                              after a start that may not succeed
         if self._remote_mic is None:
             from ...orchestrator.capture import RemoteMicSource
             self._remote_mic = RemoteMicSource()
@@ -1001,7 +1008,6 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 return {"ok": False, "reason": "error", "detail": str(exc)}
             if not res.get("ok"):
                 return res                           # e.g. no on-device ASR engine
-            self._apply_interpret()      # a fresh EarHost starts with it OFF
             self._sync_ear_wired()
             self.activity.add("ear", "Phone became the live mic (on-device voice)")
         if pcm:

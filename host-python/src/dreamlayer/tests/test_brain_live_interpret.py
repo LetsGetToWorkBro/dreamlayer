@@ -101,14 +101,45 @@ class TestEveryRefusalSeparately:
         assert calls == [], "a veiled utterance was translated"
         assert pushes == []
 
-    def test_a_gate_that_raises_is_treated_as_veiled(self, brain):
-        """Fails CLOSED, like every other gate in this file. An unknown posture is
-        not a permission."""
+    def test_a_brain_whose_posture_raises_is_treated_as_veiled(self, brain):
+        """Fails CLOSED. An unknown posture is not a permission.
+
+        Caught by `_EarGate` itself here, one layer below — which is exactly why
+        the test below exists as well."""
         ear, calls = _ear(brain)
+
         def _boom():
             raise RuntimeError("posture unreadable")
         brain.incognito_now = _boom
         ear.note_speech_audio([0.1] * 1600, 16000)
+        assert calls == []
+
+    def test_a_GATE_that_raises_is_also_treated_as_veiled(self, brain):
+        """The OUTER try/except, which the test above does not reach.
+
+        `_EarGate.allow_capture` already fails closed on a raising posture, so
+        with only that test a mutation turning this method's `except … return`
+        into a `pass` survived — the utterance would have been translated whenever
+        the gate OBJECT itself was broken rather than the posture behind it.
+        `privacy` is an attribute, so it can be absent, None, or a stub; the gate
+        raising is a real state and its answer must be "no".
+        """
+        ear, calls = _ear(brain)
+        pushes = _pushes(brain)
+
+        class _BrokenGate:
+            def allow_capture(self):
+                raise RuntimeError("gate is broken")
+        ear.privacy = _BrokenGate()
+        ear.note_speech_audio([0.1] * 1600, 16000)     # must not raise
+        assert calls == [], "a broken privacy gate let audio through"
+        assert pushes == []
+
+    def test_a_missing_gate_is_treated_as_veiled(self, brain):
+        """The other shape of the same failure: no gate at all."""
+        ear, calls = _ear(brain)
+        ear.privacy = None
+        ear.note_speech_audio([0.1] * 1600, 16000)     # must not raise
         assert calls == []
 
     def test_no_interpreter_wired_is_a_silent_no_op(self, brain):
@@ -299,15 +330,40 @@ class TestTheCapabilityIsPromotedOnlyByPROOF:
 
 class TestTheOneRosettaLens:
 
-    def test_the_world_lens_wires_an_interpreter_when_the_wheel_is_present(self, brain):
-        """The missing argument. `RosettaLens` was constructed here with
-        `translate_fn` only, so `_interpret` was None and no wearer setting could
-        change it. Mirrors orchestrator.py, which got this right."""
-        from dreamlayer.rosetta_seamless import SeamlessInterpreter
+    def test_the_world_lens_wires_an_interpreter_when_the_wheel_is_present(
+            self, brain, monkeypatch):
+        """The missing argument — the whole of `live_interpret` on the Brain.
+        `RosettaLens` was constructed here with `translate_fn` only, so `_interpret`
+        was None and no wearer setting could change it. Mirrors orchestrator.py,
+        which got this right.
+
+        The wheel's presence is FORCED rather than observed. Asserting
+        `wired is SeamlessInterpreter.available` reads like a test and is vacuous
+        wherever transformers is absent — which is CI and every dev box that has
+        not opted into a multi-gigabyte model: both sides were False, so a mutation
+        deleting the argument entirely passed. Patch the availability instead, and
+        the assertion means something everywhere.
+        """
+        import dreamlayer.rosetta_seamless as RS
+        monkeypatch.setattr(RS.SeamlessInterpreter, "available", True)
+        monkeypatch.setattr(RS, "make_interpret_fn",
+                            lambda *a, **k: (lambda *_a, **_k: "carried across"))
+        brain._world_lens = None                      # force a rebuild
         lens = brain.world_lens().rosetta
-        wired = getattr(lens, "_interpret", None) is not None
-        assert wired is bool(SeamlessInterpreter.available), (
-            "the interpreter must be wired exactly when its wheel is present")
+        assert getattr(lens, "_interpret", None) is not None, (
+            "interpret_fn was not passed to the lens the Brain builds")
+        # and it is the interpreter that actually answers, not a stub name match
+        assert lens.hear([0.1] * 16, 16000, "en").translated == "carried across"
+
+    def test_no_interpreter_is_wired_when_the_wheel_is_absent(self, brain,
+                                                              monkeypatch):
+        """The other direction, so the fix cannot be "always wire something".
+        A fabricated interpreter would report the capability green and then return
+        nothing."""
+        import dreamlayer.rosetta_seamless as RS
+        monkeypatch.setattr(RS.SeamlessInterpreter, "available", False)
+        brain._world_lens = None
+        assert getattr(brain.world_lens().rosetta, "_interpret", None) is None
 
     def test_the_ear_uses_the_same_lens_the_eye_translates_with(self, brain):
         """Not a private second lens. A copy would drift from the one already in
@@ -363,13 +419,32 @@ class TestItIsReachableFromBothSurfaces:
     def test_a_restart_carries_the_setting_into_a_fresh_ear(self, brain):
         """`EarHost.__init__` starts with the interpreter off, so without
         `_apply_interpret` a wearer who had it on, restarted, and turned Listening
-        back on got a silent ear and a switch that claimed otherwise."""
+        back on got a silent ear and a switch that claimed otherwise.
+
+        Goes through `start_ear`, NOT `_apply_interpret` directly: testing the
+        method proves the method, and a mutation deleting the CALL from `start_ear`
+        survived a test that did. The start itself fails here (no speech engine
+        installed) and that is fine — the setting must be applied either way, since
+        a wearer who installs the pack and retries must not need a second toggle.
+        """
         brain.config.interpret_enabled = True
         brain.config.interpret_target = "es"
-        brain._ear = EarHost(brain)
-        brain._apply_interpret()
+        brain.start_ear()
+        assert brain._ear is not None
         assert brain._ear._interpret_on is True
         assert brain._ear._interpret_target == "es"
+
+    def test_the_phone_becoming_the_mic_also_carries_the_setting(self, brain):
+        """The same call site on the remote-ear path. Two places construct an
+        `EarHost`; each needs the setting pushed in."""
+        brain.config.remote_listen_enabled = True
+        brain.config.interpret_enabled = True
+        brain.config.interpret_target = "ko"
+        brain.hear_remote([0.0] * 160)
+        if brain._remote_ear is None:
+            pytest.skip("no on-device ASR engine to open a remote ear")
+        assert brain._remote_ear._interpret_on is True
+        assert brain._remote_ear._interpret_target == "ko"
 
     def test_the_target_language_never_becomes_empty(self, brain):
         for bad in ("", "   ", None):
@@ -379,6 +454,20 @@ class TestItIsReachableFromBothSurfaces:
     def test_an_absurd_target_is_bounded_not_stored_whole(self, brain):
         brain.set_interpret(True, "x" * 200)
         assert len(brain.config.interpret_target) <= 8
+
+    def test_the_EAR_bounds_and_cleans_the_target_itself(self, brain):
+        """`Brain.set_interpret` bounds the CONFIG copy, and `EarHost` bounds its
+        own — two separate assignments, and a test that only checked the config one
+        left the ear's mutable to anything. It is the ear's value that reaches
+        `hear()`, so `str(None)` becoming the language "None" would be a silent
+        fallback to English on every utterance.
+        """
+        ear = EarHost(brain)
+        ear.set_interpret(True, "y" * 200)
+        assert len(ear._interpret_target) <= 8
+        for bad in ("", "   ", None):
+            ear.set_interpret(True, bad)
+            assert ear._interpret_target == "en", bad
 
     def test_the_status_reports_the_four_facts_separately(self, brain):
         """They fail independently: the switch, the pack, whether it has ever
