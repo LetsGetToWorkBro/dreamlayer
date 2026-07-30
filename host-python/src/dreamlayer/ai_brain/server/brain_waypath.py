@@ -135,7 +135,15 @@ class WaypathOps(BrainHost):
                 pushed = self.push_event("object_recall", cards.object_recall({
                     "object": cue.subject,
                     "place": cue.place,
-                    "detail": (cue.text or "") if cue.rel_bearing_deg is not None else "",
+                    # A DIRECTION when a compass heading was known, else the
+                    # DISTANCE alone — never `cue.text` on that path, because it
+                    # is "152m away · at the rack" and `place` is already the
+                    # card's hero, so it would print the place twice at two
+                    # widths (the reason this field was empty to begin with).
+                    "detail": (
+                        (cue.text or "") if cue.rel_bearing_deg is not None
+                        else (f"{round(cue.distance_m)}m away" if cue.distance_m
+                              else "")),
                     "last_seen": _ago(ts),
                     "confidence": 0.9,
                 }), veil_ok=False)

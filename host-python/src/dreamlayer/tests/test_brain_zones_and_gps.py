@@ -199,10 +199,36 @@ class TestWaypathTellsYouWhichWay:
         """The sentence `landing/index.html` promises, finally true."""
         brain._last_fix.set(*LONDON)
         assert brain.waypath_stash("bike", "the north rack")["located"] is True
-        brain._last_fix.set(51.5076, -0.1278)        # ~22 m north of the bike
+        # facing NORTH, and the bike is ~22 m south of the new position
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
         out = brain.waypath_locate("bike")
         assert out["found"] is True
         assert "m" in out["detail"] and "behind" in out["detail"], out
+
+    def test_without_a_compass_it_gives_distance_and_refuses_a_direction(self, brain):
+        """The bug this caught. A bearing computed from coordinates is an
+        ABSOLUTE compass bearing; the `heading_deg=0` default treats it as
+        relative, which silently means "assume the wearer faces north" — so a
+        thing due north of someone facing south was reported as "ahead". A wrong
+        direction stated confidently is worse than no direction, and the distance
+        never needed a compass."""
+        brain._last_fix.set(*LONDON)                 # no heading reported
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5074, -0.1300)
+        out = brain.waypath_locate("bike")
+        assert "away" in out["detail"], out
+        for word in ("left", "right", "ahead", "behind"):
+            assert word not in out["detail"], out
+
+    def test_the_same_position_facing_two_ways_gives_two_answers(self, brain):
+        """…and with a compass it is a real direction, not a fixed one."""
+        brain._last_fix.set(*LONDON)
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5074, -0.1300, heading_deg=90.0)   # facing east
+        east = brain.waypath_locate("bike")["detail"]
+        brain._last_fix.set(51.5074, -0.1300, heading_deg=270.0)  # facing west
+        west = brain.waypath_locate("bike")["detail"]
+        assert "ahead" in east and "behind" in west, (east, west)
 
     def test_the_bearing_is_computed_from_where_you_are_NOW(self, brain):
         """A stored bearing is relative to wherever the wearer was standing when
@@ -210,9 +236,9 @@ class TestWaypathTellsYouWhichWay:
         anchor, two different positions, two different answers."""
         brain._last_fix.set(*LONDON)
         brain.waypath_stash("bike", "the rack")
-        brain._last_fix.set(51.5076, -0.1278)        # north of it
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)   # north of it
         north_of = brain.waypath_locate("bike")["detail"]
-        brain._last_fix.set(51.5072, -0.1278)        # south of it
+        brain._last_fix.set(51.5072, -0.1278, heading_deg=0.0)   # south of it
         south_of = brain.waypath_locate("bike")["detail"]
         assert north_of and south_of and north_of != south_of
 
@@ -230,7 +256,7 @@ class TestWaypathTellsYouWhichWay:
         which is the one thing the card could not say before."""
         brain._last_fix.set(*LONDON)
         brain.waypath_stash("bike", "the rack")
-        brain._last_fix.set(51.5076, -0.1278)
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
         seen = _pushes(brain)
         brain.waypath_locate("bike")
         assert "m" in seen[-1][1]["detail"]
@@ -248,7 +274,7 @@ class TestWaypathTellsYouWhichWay:
         brain._last_fix.set(*LONDON)
         brain.waypath_stash("bike", "the rack")
         again = Brain(str(pathlib.Path(brain.cfg_dir)))
-        again._last_fix.set(51.5076, -0.1278)
+        again._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
         out = again.waypath_locate("bike")
         assert "m" in out["detail"], "lat/lon did not survive the save/load round trip"
 

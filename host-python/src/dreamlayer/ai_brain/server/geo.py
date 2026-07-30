@@ -91,12 +91,22 @@ class LastFix:
         self._lon: Optional[float] = None
         self._acc: float = 0.0
         self._ts: float = 0.0
+        self._heading: Optional[float] = None
 
-    def set(self, lat, lon, accuracy_m=0.0, ts: Optional[float] = None) -> bool:
+    def set(self, lat, lon, accuracy_m=0.0, ts: Optional[float] = None,
+            heading_deg=None) -> bool:
+        """Record a fix. `heading_deg` is the phone's compass bearing, and it is
+        OPTIONAL for a reason: without it, Waypath reports distance and refuses
+        to name a direction, rather than assuming the wearer faces north."""
         if not valid_coord(lat, lon):
             return False
         with self._lock:
             self._lat, self._lon = float(lat), float(lon)
+            try:
+                self._heading = (None if heading_deg is None
+                                 else float(heading_deg) % 360.0)
+            except (TypeError, ValueError):
+                self._heading = None
             try:
                 self._acc = max(0.0, float(accuracy_m or 0.0))
             except (TypeError, ValueError):
@@ -114,6 +124,7 @@ class LastFix:
                 return None
             return {"lat": self._lat, "lon": self._lon,
                     "accuracy_m": self._acc, "ts": self._ts,
+                    "heading_deg": self._heading,
                     "age_s": round(age, 1)}
 
     def clear(self) -> None:
@@ -121,6 +132,7 @@ class LastFix:
             self._lat = self._lon = None
             self._acc = 0.0
             self._ts = 0.0
+            self._heading = None
 
 
 def zone_containing(zones, lat: float, lon: float) -> str:

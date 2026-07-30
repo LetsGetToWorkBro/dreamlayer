@@ -968,7 +968,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # transition, which is the moment that actually changes what is true.
         return q
 
-    def note_location(self, lat, lon, accuracy_m=0.0) -> dict:
+    def note_location(self, lat, lon, accuracy_m=0.0,
+                      heading_deg=None) -> dict:
         """Take a position report and announce any zone the wearer just crossed.
 
         NOT veil-gated, and that is a deliberate exception rather than an
@@ -982,7 +983,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         from .geo import valid_coord
         if not valid_coord(lat, lon):
             return {"ok": False, "error": "not a coordinate"}
-        self._last_fix.set(lat, lon, accuracy_m)
+        self._last_fix.set(lat, lon, accuracy_m, heading_deg=heading_deg)
         zone = self.private_zone_now()
         if zone != self._zone_was:
             entered, self._zone_was = zone, zone
@@ -4682,8 +4683,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             to the shield, so gating this on the shield would latch it up
             forever the first time the wearer walked into one."""
             b = self._body()
-            self._json(200, brain.note_location(b.get("lat"), b.get("lon"),
-                                                b.get("accuracy_m", 0.0)))
+            self._json(200, brain.note_location(
+                b.get("lat"), b.get("lon"), b.get("accuracy_m", 0.0),
+                heading_deg=b.get("heading_deg")))
 
         def _get_where(self, path, qs):
             """Current fix and zone state, for the phone's own UI. Coarse: the

@@ -132,15 +132,35 @@ class WaypathLens:
         if anchor is None:
             return WaypathCue(found=False, subject=subject)
         # A live fix beats a stored bearing: same branch below, fresher inputs.
+        #
+        # THE HEADING IS NOT OPTIONAL FOR A DIRECTION WORD, and the two bearing
+        # sources differ in a way that is easy to conflate:
+        #
+        #   * a STORED `bearing_deg` (the IMU seam) is already RELATIVE to where
+        #     the wearer was facing when they dropped the anchor, so the
+        #     `heading_deg=0` default below is correct for it.
+        #   * a bearing COMPUTED from two coordinates is an ABSOLUTE compass
+        #     bearing. Subtracting a heading of 0 treats it as relative, which
+        #     silently means "assume the wearer faces north" — so a thing due
+        #     north of someone facing south was reported as "ahead". A wrong
+        #     direction stated confidently is worse than no direction at all.
+        #
+        # So the computed path fills `distance_m` ALWAYS and `bearing_deg` only
+        # when a real heading is known. Without one it falls to the
+        # distance-only text below: "152m away · at the rack" is honest, and the
+        # distance was never the part that needed a compass.
         if here and anchor.has_coord():
             try:
                 from ..ai_brain.server.geo import haversine_m, initial_bearing_deg
                 hlat, hlon = float(here["lat"]), float(here["lon"])
                 assert anchor.lat is not None and anchor.lon is not None
+                head = here.get("heading_deg")
+                absolute = initial_bearing_deg(hlat, hlon, anchor.lat, anchor.lon)
                 anchor = replace(
                     anchor,
                     distance_m=haversine_m(hlat, hlon, anchor.lat, anchor.lon),
-                    bearing_deg=initial_bearing_deg(hlat, hlon, anchor.lat, anchor.lon))
+                    bearing_deg=(_normalize(absolute - float(head))
+                                 if head is not None else None))
             except Exception:                     # noqa: BLE001 — a missing fix
                 pass                              # must never cost the answer
         if anchor.has_bearing():
@@ -154,6 +174,16 @@ class WaypathLens:
                 found=True, subject=anchor.subject, distance_m=anchor.distance_m,
                 direction=direction, place=anchor.place,
                 text=f"{dist}m {direction}", rel_bearing_deg=rel)
+        # Distance without a direction: a coordinate but no compass heading.
+        # Reported rather than dropped — "how far" is most of the answer, and
+        # the alternative was inventing a direction from an assumed heading.
+        if anchor.distance_m is not None:
+            dist = round(anchor.distance_m)
+            text = (f"{dist}m away \u00b7 at {anchor.place}" if anchor.place
+                    else f"{dist}m away")
+            return WaypathCue(found=True, subject=anchor.subject,
+                              distance_m=anchor.distance_m, place=anchor.place,
+                              text=text)
         # place-only anchor — the spoken capture path
         text = f"at {anchor.place}" if anchor.place else "somewhere you saved it"
         return WaypathCue(found=True, subject=anchor.subject, place=anchor.place,
