@@ -421,6 +421,62 @@ class TestLoadableIsNotOneState:
                      encoding="utf-8")
         assert caps._public_names(p) == {"Thing"}
 
+    def _stub_lens(self, tmp_path, files: dict):
+        """A `lens` with just the two methods `_referenced_outside` uses, over
+        files this test wrote. Synthetic because the real tree cannot exhibit a
+        near-miss on demand — and a near-miss is the case that matters."""
+        paths = {}
+        for name, body in files.items():
+            p = tmp_path / f"{name}.py"
+            p.write_text(body, encoding="utf-8")
+            paths[name] = p
+
+        class _Lens:
+            @staticmethod
+            def _sources():
+                return list(paths.values())
+
+            @staticmethod
+            def _module_name(p):
+                return p.stem
+        return _Lens
+
+    def test_a_name_that_merely_contains_the_export_is_not_a_reference(
+            self, caps, tmp_path):
+        """`SomeThingElse` is not a use of `Thing`. Without a word boundary the
+        match is a substring search, which can only ever report MORE things as
+        used — so it fails silently, by finding no defects, which is the exact
+        direction this checker has already been wrong in twice.
+
+        All four near-misses, because three separate mutations of that one
+        pattern each survive a test that only covers some of them: a suffix
+        collision (`Thingummy`) needs the TRAILING boundary, a prefix collision
+        (`MyThing`) needs the LEADING one, an infix (`SomeThingElse`) needs
+        either, and a collision on the second exported name (`xhelper`) is what
+        catches an alternation that lost its group — `\\bA|B\\b` anchors only the
+        first alternative and only at the front.
+        """
+        lens = self._stub_lens(tmp_path, {
+            "seam": "class Thing:\n    pass\n\n\ndef helper():\n    pass\n",
+            "caller": ("x = SomeThingElse()\n"
+                       "Thingummy = 1\n"
+                       "y = MyThing\n"
+                       "q = xhelper\n"
+                       "r = helperish(2)\n"),
+        })
+        assert caps._referenced_outside(
+            lens, {"seam", "caller"}, ["seam"]) is False
+
+    def test_a_real_reference_to_the_export_is_found(self, caps, tmp_path):
+        """The control for the test above, so the boundary cannot just be "never
+        matches"."""
+        lens = self._stub_lens(tmp_path, {
+            "seam": "class Thing:\n    pass\n",
+            "caller": "from .seam import Thing\nx = Thing()\n",
+        })
+        assert caps._referenced_outside(
+            lens, {"seam", "caller"}, ["seam"]) is True
+
     def test_the_seam_itself_is_not_counted_as_a_caller(self, caps, closure):
         """A module names what it defines, always. Counting that would make
         every seam self-justifying and the bucket permanently empty."""

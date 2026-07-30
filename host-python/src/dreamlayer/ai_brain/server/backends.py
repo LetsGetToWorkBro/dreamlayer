@@ -761,9 +761,17 @@ def vision_answer(backend: Any, label: str,
 
     A TEXT-ONLY backend declines the same way. Not every tier sees: exo serves
     `/v1/chat/completions` and no images, so `ExoClusterBackend` deliberately has
-    no `vision()`. The check is explicit rather than left to the except clause
-    below, so "this tier cannot see" and "this tier failed" stay distinguishable
-    to a reader — they were already indistinguishable to the caller.
+    no `vision()`.
+
+    NEITHER HALF OF THAT GUARD IS INDEPENDENTLY FALSIFIABLE, and that is worth
+    stating rather than discovering: the broad `except` below already turns both
+    a None backend and a missing method into this same None, so mutations
+    deleting either one survive. They stay because this is a privacy path a
+    person has to be able to audit by reading it, and "no backend" and "a
+    backend that cannot see" are different facts even where the return value
+    isn't. The condition is ENFORCED and tested where it is answered —
+    `_BrainVisionRouter.has_vision`, which decides whether the row claims sight
+    at all.
     """
     if backend is None or not hasattr(backend, "vision"):
         return None

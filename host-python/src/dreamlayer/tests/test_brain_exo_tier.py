@@ -170,6 +170,10 @@ class TestTheTierIsHonestAboutNotSeeing:
         assert not hasattr(ExoClusterBackend(config=_cfg()), "vision")
 
     def test_vision_answer_declines_for_a_text_only_backend(self):
+        """The OUTCOME is the contract, not the mechanism. `vision_answer`'s
+        explicit guard and its broad `except` produce the same None here, so this
+        pins the answer rather than the branch that produced it — see the
+        function's docstring on why both stay."""
         from dreamlayer.ai_brain.server.backends import vision_answer
         assert vision_answer(ExoClusterBackend(config=_cfg()),
                              "a mug", None, "quick") is None
