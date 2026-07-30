@@ -200,14 +200,27 @@ class EarHost:
         # "said"/"saw"/"observed" as FIRSTHAND, and the room ear is not
         # firsthand — it is ambient audio in front of the wearer. Passing
         # "said" here would make the lens claim the wearer witnessed anything
-        # anyone near them mentioned. `speaker` is threaded for the same
-        # reason it is threaded above: nothing populates it today (see the
-        # note above), so it is empty, and Provenance renders "you" rather
-        # than inventing an attribution.
+        # anyone near them mentioned.
+        #
+        # `said_by`, NOT `person`, and the difference is a ledger. `person` is the
+        # SUBJECT of an extracted event — who a promise is made TO — while
+        # `said_by` is who uttered the line. `owed()` returns the wearer's own
+        # commitments by excluding every row that carries `said_by`, so a speaker
+        # arriving in the `person` slot leaves an overheard promise looking like
+        # one the WEARER made: someone else's debt on your list. And `they_said`
+        # matches on `said_by` alone, so the attribution landing in the wrong key
+        # meant "what did Marcus say last time" could never answer from live
+        # capture at all — the whole point of the memory-based Truth Lens.
+        #
+        # This was latent rather than harmless: `speaker` is empty on a shipped
+        # Brain today (no CapturePipeline is built with a resolver), so the bug
+        # bites the moment ANY speaker producer is wired, which is exactly the
+        # next thing anyone would do here. Fixed ahead of that producer, not
+        # after it.
         try:
             ls = self.brain.lenses()
             if ls is not None:
-                ls.ingest_utterance(text, via="heard", person=speaker or "")
+                ls.ingest_utterance(text, via="heard", said_by=speaker or "")
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] lens ingest failed: %s", type(exc).__name__)
         # fold into the temporal knowledge graph too, when one is built
