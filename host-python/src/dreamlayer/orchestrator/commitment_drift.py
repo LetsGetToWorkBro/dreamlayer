@@ -93,6 +93,34 @@ def _classify(decay: float) -> str:
     return "shattered"
 
 
+# The ring kinds that ARE a commitment. Both this engine and `tell.py` used to
+# read `kind="task"` alone — but `pipelines/ingest.py` writes a spoken promise as
+# `kind="promise"` (with `meta` carrying person, task and due), and only a
+# "remind me to…" phrasing as `kind="task"`. So "I'll send Ana the invoice on
+# Friday" — the archetypal thing to track, and the one that names a person and a
+# deadline — was invisible to commitment drift entirely.
+#
+# It stayed invisible because the Orchestrator that owns this engine is never
+# built (decisions/0001), so nothing user-facing depended on it. `BrainLenses.owed`
+# ("what you owe") changed that: it answers a question the wearer ASKED, and an
+# answer that silently omits every promise made to a person is worse than no
+# answer. A promise's meta is a superset of a task's, so nothing downstream
+# needed to change to accept them.
+COMMITMENT_KINDS = ("task", "promise")
+
+
+def _commitments(ring, limit: int):
+    """Recent commitment buckets, newest first, across every commitment kind.
+
+    `ring.latest` filters by ONE kind and then truncates, so it cannot express
+    "tasks and promises" — and calling it twice and concatenating would
+    interleave the two by kind rather than by time. Filtering an unfiltered read
+    keeps the ordering the engine assumes.
+    """
+    return [b for b in ring.latest(limit=limit * 4)
+            if b.event.kind in COMMITMENT_KINDS][:limit]
+
+
 def _parse_due(due_str: str | None, created_ts: float) -> float | None:
     """Very small due-date parser: understands 'Xh', 'Xd', 'tomorrow'."""
     if not due_str:
@@ -208,7 +236,7 @@ class CommitmentDriftEngine:
     def _sync(self) -> None:
         """Pull any new commitment events from the ring into _records."""
         seen_ids = set()
-        for bucket in self.ring.latest(kind="task", limit=200):
+        for bucket in _commitments(self.ring, 200):
             bid = id(bucket)
             seen_ids.add(bid)
             if bid not in self._records:

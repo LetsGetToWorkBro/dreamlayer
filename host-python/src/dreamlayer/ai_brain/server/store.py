@@ -529,6 +529,31 @@ class BrainConfig:
     # owns its own consent. OFF by default; every other gate (the Veil, on-device
     # transcription, PII scrub, nothing-uploaded) is identical to listen_enabled.
     remote_listen_enabled: bool = False
+    # Drawing what was heard on the glass, as it is heard — the "Live captions"
+    # feature. A THIRD opt-in rather than a consequence of the first two, and
+    # the separation is the point: `listen_enabled` means "remember what you
+    # hear", which is private to the wearer's own store and PII-scrubbed before
+    # any write. Captions mean "put the room's speech on a screen", which is a
+    # different exposure and belongs to a different decision — `EarHost.status`
+    # already refuses to echo a transcript back over the wire for exactly this
+    # reason. OFF by default; the Veil suppresses the card the same way it
+    # suppresses the write, and with this off the ear behaves exactly as before.
+    captions_enabled: bool = False
+    # Answering a question the ROOM asked, from your own memory, on your own
+    # glass — the "answer before you speak" feature. A fourth opt-in, off by
+    # default, and separate from captions for the same reason captions are
+    # separate from listening: drawing what was said and ANSWERING it are
+    # different things. The answer is computed strictly on-device (`ask` is
+    # called with `no_cloud=True`), so an overheard question never egresses,
+    # whatever the cloud settings say.
+    answer_ahead_enabled: bool = False
+    # Places where the Brain captures NOTHING — the "Private zones" feature.
+    # Each entry is {name, lat, lon, radius_m}. Inside one, `incognito_now()`
+    # returns True, so every existing gate (the ear, captions, the lens ring,
+    # face recall, ambient pushes) suppresses on the shield it already honours
+    # rather than on a second suppression path that could be wired wrong.
+    # Empty by default; the wearer defines their own.
+    private_zones: list = field(default_factory=list)
     # -- recognising the people you introduced (ai_brain/server/face_live.py) --
     # OFF on a fresh install, and nothing here ever flips it on. When on, and
     # ONLY when the opt-in `face` pack and its weights are also present, the

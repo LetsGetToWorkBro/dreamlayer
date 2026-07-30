@@ -24,8 +24,8 @@ python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see �
 | | done | open |
 |---|---|---|
 | **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
-| **HUD cards** | 9 of 24 have a Brain-side producer (3 wired this round); 4 draw properly on the Brain's own surface | **15 cards nothing in the Brain can produce**, and 5 more that draw degraded (§3) |
-| **Capabilities** | 41 of 74 seams loadable; 13 unreachable by design, with reasons | **19 open questions** (§4) |
+| **HUD cards** | **23 of 24** have a Brain-side producer (14 wired this round); all 23 draw properly on the Brain's own surface, and so do the 3 undeclared cards it pushes | **TruthLensCard only — DECLINED, not blocked.** The Truth Lens FEATURE ships (outward consistency, `/dreamlayer/theysaid`); the deception gauge does not (§1) |
+| **Capabilities** | 42 of 74 seams loadable; 13 unreachable by design; 18 declared dormant, with reasons | **0 misreported**; the 18 dormant ones are real work, not a labelling gap (§4) |
 
 The single most important thing in this file, because it is the mistake that
 keeps repeating: **`lens_reachability.py` reporting a lens as "reachable" is not
@@ -231,10 +231,30 @@ another field arrives gutted, and the checker now prints that as its own
 category rather than folding it into a pass.
 
 ```
-NO BRAIN-SIDE PRODUCER  15 of 24
-generic on the Live Lens 5   (drawn, but degraded to eyebrow+primary)
-drawn properly on both   4
+NO BRAIN-SIDE PRODUCER   1 of 24  (TruthLensCard — declined, not blocked)
+generic on the Live Lens  0   (was 5 — and a test now keeps it there)
+drawn properly on both   23
+UNDECLARED               10   (built by the Brain, absent from demo/catalog.py)
 ```
+
+**The gutted five are fixed, and the checker was also blind to a sixth case.**
+The five that degraded to `eyebrow`+`primary` now have real `renderEvent`
+branches. But the 24 features come from `demo/catalog.py`, so a card the Brain
+pushes that the demo never lists appeared in **no category at all** — and the
+worst-degraded card in the product was exactly that: `ConsistencyCard`, built
+inline in `orchestrator/consistency.py`, pushed by Candor on a live path, drawn
+by neither `halo-lua` nor the Live Lens. Its `footer` carries the prior
+statement, which is Candor's entire proposition, so through `glassEventCard` it
+rendered *"YOU SAID DIFFERENT BEFORE / <your new claim>"* — an accusation with
+the evidence removed. `StasisCard` and `QuestRewardCard` were in the same
+position. All three now have branches, and the checker has an UNDECLARED bucket
+so the next one cannot hide.
+
+That bucket needs one distinction to be worth anything: **built ≠ pushed.**
+Seven of the ten undeclared types are returned as JSON to the phone, where every
+field survives — they never meet a generic renderer. Only the three handed to
+`_push`/`push_event` could be gutted. A first version of the scan reported
+"built" as "pushed" and invented seven defects that do not exist.
 
 **Wired this round**, each with the behavioural test that would catch the
 plausible wrong version:
@@ -244,6 +264,13 @@ plausible wrong version:
 | ObjectRecallCard | a found `waypath_locate` | the answer is in `place`, not `primary` — a hand-rolled lookalike renders "bike" with no answer. Needed a `renderEvent` branch FIRST, or the producer would have shipped a card that echoes the question back |
 | SavedMemoryCard | pinning a held thought | a confirmation that quotes what it kept would push captured speech over the event stream |
 | JunoReplyCard | `/dreamlayer/voice` ask/recall | pushing the caller's string instead of the answer makes this an arbitrary-text-onto-every-glass primitive |
+| ListeningCard | `EarHost.start` opens the mic | `source="voice"` would claim a wake word this Brain does not ship; `dismiss_ms: 0` must survive the renderer or the ring expires while the mic is still open |
+| SpokenCaptionCard | `EarHost.ingest_caption`, behind `captions_enabled` | pushing above the PII scrub draws the unredacted line; inheriting `listen_enabled` turns "remember what you hear" into "put the room on a screen" without anyone deciding to |
+
+`captions_enabled` is a **third** opt-in on purpose, defaulting off.
+`EarHost.status` already refuses to echo a transcript back over the wire, which
+is the same judgement — remembering speech and displaying it are different
+exposures. With it off the ear behaves exactly as it did before.
 
 Two collisions are written into the code as comments rather than left to be
 rediscovered: `/dreamlayer/voice` must push **one card per utterance** (the
@@ -292,7 +319,7 @@ Two traps for whoever continues, both already paid for once:
   as a producer (0 gaps where there were 18), once measuring a renderer the Brain
   cannot reach. `tests/test_reachability_checkers.py` pins both.
 
-### 4. Capabilities — MEASURED, 19 open questions
+### 4. Capabilities — MEASURED, 0 misreported and 18 dormant
 
 It is **74** entries, not ~39. `scripts/capability_reachability.py` measures
 them the same way as the other two checkers, using the field
@@ -302,8 +329,8 @@ exercised however green the meter reads. (`installed()` asks whether a module
 IMPORTS — "is the library on disk", not "does anything here use it".)
 
 ```
-74 declared · 41 seams the Brain can load
-19 OPEN · 13 unreachable by design · 1 documented recipe, no adapter
+74 declared · 42 seams the Brain can load
+0 MISREPORTED · 18 declared dormant · 13 unreachable by design · 1 recipe
 ```
 
 This one **exits 0 on purpose** and its two siblings do not. "A declared lens
@@ -315,21 +342,33 @@ are exactly that — `wake_word`, `speaker_id`, `nlp`, `onnx_speech`, `fs_watch`
 `frame_glasses` (another device), `mlx_train` (the REM job the Brain does not
 run). Wiring those would be the regression.
 
-The 19 open ones need triage, and they split two ways — **the fixes are
-opposite, so do not batch them**:
+**A previous edition of this file said "19 open questions that split two ways
+with opposite fixes". That was the checker's wording and it was wrong** — the
+split was measured and it is 1/18, not a genuine fork:
 
-- **Stale seam string.** `vector_search` points at `memory/vector_store.py`
-  while the Brain's actual vector path is `memory/ann_index.py` (usearch), which
-  `retention_live._ann_for` and the erase path both use. The capability is live
-  and the meter is describing the wrong file. Fix the string.
-- **Genuinely not wired.** `social_graph`, `memory_dedup`, `typed_docs`,
-  `typed_models`, `facial_aus`, `causal_fusion`, `diarization`, `asr_alignment`,
-  `object_tracking`, `live_interpret`, `event_bus`, `skia_render`,
-  `lsl_streams`, `extism_plugins`, `wasm_plugins`, `plugin_entrypoints`,
-  `structured_output`, `typed_pipeline`. Each is a decision: wire it Brain-side
-  or say plainly it is Orchestrator-only and add it to `_BY_DESIGN` with the
-  reason. **Do not silently move one to `_BY_DESIGN` to shrink the list** — that
-  bucket is a claim, and it is the claim the next audit will check.
+- **Stale seam string — exactly one.** `vector_search` pointed at
+  `memory/vector_store.py` while the Brain's actual vector path is
+  `memory/ann_index.py` (usearch), which `server.py:1677`/`2179` and
+  `retention_live._ann_for` all construct. The capability ships; the meter was
+  describing a file the Brain never opens. **Fixed** — the seam now names
+  `ann_index.py`, and a test asserts it stays inside the closure.
+- **The other 18 were never open.** `capabilities.py` already names every one of
+  them in `_NOT_WIRED`, with the reason in prose immediately above (*"…are NOT
+  promoted — they need the full Orchestrator path"*), and the product reports
+  them **dormant** to the wearer rather than a false green. The checker simply
+  did not read that list, so it printed "no reason on file" about eighteen
+  capabilities whose reason was on file. It reads `_NOT_WIRED` now, and the
+  bucket that remains — MISREPORTED, a seam the Brain cannot load on a
+  capability that is *not* declared dormant — is **empty**, with a test that
+  keeps it so.
+
+The 18 are still real work: `social_graph`, `memory_dedup`, `typed_docs`,
+`typed_models`, `facial_aus`, `causal_fusion`, `diarization`, `asr_alignment`,
+`object_tracking`, `live_interpret`, `event_bus`, `skia_render`, `lsl_streams`,
+`extism_plugins`, `wasm_plugins`, `plugin_entrypoints`, `structured_output`,
+`typed_pipeline`. Each is a decision — wire it Brain-side, or move it to
+`_BY_DESIGN` with a reason. **Do not silently move one to `_BY_DESIGN` to shrink
+the list**; that bucket is a claim, and it is the claim the next audit checks.
 
 Note two that are their own conversation: `diarization` and `asr_alignment` are
 speaker attribution, which `ear.py:129-131` records as deliberately absent.

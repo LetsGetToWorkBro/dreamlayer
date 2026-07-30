@@ -17,9 +17,22 @@ become a lie, in two different directions:
     `footer` is where `ConsistencyCard` puts the prior statement, i.e. Candor's
     entire proposition. "It renders something" is not "it renders the card".
 
-Both halves are checked, because either alone is satisfiable while the wearer
-sees nothing. A card is DONE when it has a producer in the Brain's import
-closure AND a renderer branch on the glass.
+  * NOT DECLARED AT ALL. The 24 come from `demo/catalog.py`, so a card the
+    Brain pushes that the demo never lists lands in NEITHER bucket above — and
+    that is not a corner case, it is where the worst-drawn card in the product
+    was hiding. `ConsistencyCard` is built inline in `orchestrator/
+    consistency.py`, pushed by Candor on a live path, and drawn by neither
+    surface; its `footer` is the prior statement, so it rendered an accusation
+    with the evidence removed while every bucket here read clean.
+
+Three halves, then, and the third needs one distinction to be worth anything:
+**built is not pushed.** Most undeclared types are returned as JSON to the
+phone, where every field survives — they never meet a generic renderer and are
+not defects. Only what reaches `_push`/`push_event` can be gutted. A first pass
+conflated the two and manufactured seven defects that do not exist.
+
+A card is DONE when it has a producer in the Brain's import closure AND a
+renderer branch on the surface that producer can actually reach.
 
 WHAT THIS PROVES, AND WHAT IT DOES NOT. Same honest limits as its sibling: a
 producer call site in the closure means the code CAN run, not that it does —
@@ -172,6 +185,181 @@ def _producers(reachable: set, builders: set) -> dict[str, set]:
     return out
 
 
+def _inline_card_types(reachable: set) -> dict[str, set]:
+    """card type → reachable modules that build a card dict OUTSIDE `hud/cards.py`.
+
+    The 24 features come from `demo/catalog.py`, so a card the Brain pushes but
+    the demo never lists is INVISIBLE to every bucket above. That is not
+    hypothetical: `orchestrator/consistency.py:_consistency_card` builds a
+    `ConsistencyCard` inline, the Brain's Candor lens pushes it on a live path,
+    and it appeared in no category of this report — while having no drawing in
+    `halo-lua` OR the Live Lens, which made it the most badly-degraded card in
+    the product and the only one nothing measured.
+
+    Same three exclusions as `_producers`, for the same reasons.
+    """
+    lens = _lens_module()
+    cards_mod = f"{PKG}.hud.cards"
+    out: dict[str, set] = {}
+    for path in lens._sources():
+        mod = lens._module_name(path)
+        if mod not in reachable or mod == cards_mod:
+            continue
+        if any(part in ("demo", "simulator") for part in path.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            for k, v in zip(node.keys, node.values):
+                if (isinstance(k, ast.Constant) and k.value == "type"
+                        and isinstance(v, ast.Constant)
+                        and isinstance(v.value, str)
+                        and v.value.endswith("Card")):
+                    out.setdefault(v.value, set()).add(mod)
+    return out
+
+
+# Card types the Brain demonstrably pushes but `_pushed_types` cannot NAME,
+# because the push site's card expression defeats a one-hop AST resolver. Both
+# entries are verified by reading the call site, and both are listed here rather
+# than left silent so the resolver's blind spot is data instead of a gap:
+#
+#   * ConsistencyCard  — lens_hosts.py:492 `self._push("candor", r.card)`. The
+#     card is an ATTRIBUTE of the engine's result dataclass; naming it would
+#     need real type inference, not a name lookup.
+#   * QuestRewardCard  — lens_hosts.py:601 `card = reward.to_hud_card()`. The
+#     method name is defined nine times across the tree with a different card
+#     type each, so `_fn_card_types` deliberately refuses to resolve it.
+_BRAIN_ONLY_PUSHED = frozenset({"ConsistencyCard", "QuestRewardCard"})
+
+
+def _fn_card_types(reachable: set) -> dict[str, str]:
+    """function name → the card type it returns, across every reachable module.
+
+    Covers both shapes in the tree: a function whose body contains a literal
+    ``"type": "XCard"`` dict, and one that returns a `hud.cards` builder call.
+
+    Keyed by BARE NAME, because a push site calls these as `self._stasis_card` /
+    `cards.saved_memory` / `reward.to_hud_card` and the attribute is all the AST
+    gives us without real type inference. That is sound only where the name is
+    unique, and one name is emphatically not: `to_hud_card` is defined NINE
+    times across the tree, returning a different card type each time. A first
+    version of this resolver keyed on it blindly and reported `QuestRewardCard`
+    as never-pushed and `WaypathCard` as pushed — both exactly backwards, from
+    whichever definition `ast.walk` happened to reach first.
+
+    So a name that resolves to more than one card type maps to ``""`` and stops
+    resolving. Its push sites are then counted as UNRESOLVED and printed as
+    such. An honest unknown is the only safe answer here; guessing produces
+    confident nonsense in both directions.
+    """
+    lens = _lens_module()
+    builder_types = _card_types()
+    out: dict[str, str] = dict(builder_types)
+    seen: dict[str, set] = {k: {v} for k, v in builder_types.items()}
+    for path in lens._sources():
+        if lens._module_name(path) not in reachable:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for node in ast.walk(fn):
+                found = ""
+                if isinstance(node, ast.Dict):
+                    for k, v in zip(node.keys, node.values):
+                        if (isinstance(k, ast.Constant) and k.value == "type"
+                                and isinstance(v, ast.Constant)
+                                and str(v.value).endswith("Card")):
+                            found = v.value
+                elif isinstance(node, ast.Return) and isinstance(node.value, ast.Call):
+                    nm = (getattr(node.value.func, "id", None)
+                          or getattr(node.value.func, "attr", None))
+                    found = builder_types.get(nm or "", "")
+                if found:
+                    seen.setdefault(fn.name, set()).add(found)
+    for name, kinds in seen.items():
+        out[name] = kinds.pop() if len(kinds) == 1 else ""
+    return out
+
+
+def _pushed_types(reachable: set) -> dict[str, set]:
+    """card type → reachable modules that PUSH it to the glass.
+
+    The distinction this makes is the one the whole audit turns on. Nine of the
+    ten undeclared types are built and returned as JSON to the phone, where
+    every field survives — they are not degraded by a generic renderer because
+    they never meet one. Only the types handed to `_push` / `push_event` land on
+    the Live Lens, and only those can be gutted by it. Reporting "built" as if
+    it meant "pushed" would have manufactured seven defects that do not exist.
+
+    Resolution is deliberately one hop: a direct builder call, or a local name
+    assigned from one earlier in the same function. Both shapes occur; anything
+    deeper is reported as unresolved rather than guessed at.
+    """
+    lens = _lens_module()
+    fn_types = _fn_card_types(reachable)
+    out: dict[str, set] = {}
+    unresolved: list[str] = []
+    for path in lens._sources():
+        mod = lens._module_name(path)
+        if mod not in reachable:
+            continue
+        if any(part in ("demo", "simulator") for part in path.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            assigns: dict[str, ast.AST] = {}
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    tgt = node.targets[0]
+                    if isinstance(tgt, ast.Name):
+                        assigns.setdefault(tgt.id, node.value)
+
+            def _resolve(expr, depth=0):
+                if depth > 1 or expr is None:
+                    return ""
+                if isinstance(expr, ast.Call):
+                    nm = (getattr(expr.func, "id", None)
+                          or getattr(expr.func, "attr", None))
+                    return fn_types.get(nm or "", "")
+                if isinstance(expr, ast.Name):
+                    return _resolve(assigns.get(expr.id), depth + 1)
+                return ""
+
+            if fn.name in ("_push", "push_event"):
+                continue          # the fan-out inside the pusher, not a push site
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                nm = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if nm not in ("_push", "push_event"):
+                    continue
+                arg = node.args[1] if len(node.args) >= 2 else next(
+                    (k.value for k in node.keywords if k.arg == "card"), None)
+                if arg is None:
+                    continue      # no card slot at all — a same-named method on
+                                  # something else (brain_rc's deployer), not ours
+                ctype = _resolve(arg)
+                if ctype:
+                    out.setdefault(ctype, set()).add(mod)
+                else:
+                    unresolved.append(f"{mod.replace(PKG + '.', '')}:{node.lineno}")
+    return out, unresolved
+
+
 # The renderer names a card type two ways, and BOTH are a real drawing:
 #   `if card.type == "FactCheckCard"`      — a quoted comparison
 #   `CommitmentDriftCard = function(...)`  — an entry in the DRAW dispatch table
@@ -312,7 +500,39 @@ def main() -> int:
                                             for m in made)[:3])) if args.verbose else ""
         print(f"  {title:28} {ctype}{via}")
 
-    return 1 if (no_producer or no_device) else 0
+    # Cards the Brain can push that the demo catalog never declares. Reported
+    # last because they are the ones no other bucket can see, and unreachability
+    # here is measured the same way: does either surface name the type?
+    declared_types = {types.get(samples.get(k, ""), "") for _f, _t, k in features}
+    inline = {t: m for t, m in _inline_card_types(reachable).items()
+              if t not in declared_types}
+    pushed, unresolved = _pushed_types(reachable)
+    print(f"\nUNDECLARED ({len(inline)}) — built by the Brain, absent from "
+          f"demo/catalog.py, so no bucket above counts them")
+    for ctype, made in sorted(inline.items()):
+        via = ("   via " + ", ".join(sorted(m.replace(PKG + ".", "")
+                                            for m in made)[:2])) if args.verbose else ""
+        if ctype not in pushed and ctype not in _BRAIN_ONLY_PUSHED:
+            print(f"  {ctype:24} not observed pushed — JSON only, so never "
+                  f"generic{via}")
+            continue
+        where = [n for n, s in (("device", device), ("live lens", live)) if ctype in s]
+        print(f"  {ctype:24} PUSHED · drawn on: "
+              f"{', '.join(where) or 'NEITHER — generic only'}{via}")
+    if unresolved:
+        # Printed, never swallowed: each of these is a real push whose card type
+        # this script could not name, so "not observed pushed" above means only
+        # that — not that the card stays off the glass.
+        print(f"  ({len(unresolved)} push site(s) with an unresolvable card "
+              f"expression: {', '.join(sorted(unresolved))})")
+
+    # An undeclared card that is PUSHED and drawn nowhere is the same defect
+    # class as a declared card with no renderer, so it fails the same way. One
+    # that is only ever returned as JSON is not a defect at all.
+    orphan = [t for t in inline
+              if (t in pushed or t in _BRAIN_ONLY_PUSHED)
+              and t not in device and t not in live]
+    return 1 if (no_producer or no_device or orphan) else 0
 
 
 if __name__ == "__main__":

@@ -779,6 +779,21 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <div class="conn-s">Off by default. When on, this Mac's microphone transcribes speech <b>entirely on-device</b> (voice-activity detection → local speech recognition) and folds what it hears into your memory, so you can later ask "what did we decide about the lease?". <b>Nothing is uploaded</b> — audio never leaves this machine. The Veil still wins: while Incognito or in quiet hours it captures nothing. Phone numbers, emails, cards and SSNs are scrubbed before anything is stored (install the <b>Guardian</b> pack for deeper scrubbing of IBANs, passports and the like); names and places are kept. <b>It hears everyone in range</b>, not just you — so use it with consent. Needs the <b>Sharp Ears</b> pack (a local speech engine) and a microphone.</div>
       <div id="earStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="listen" onchange="saveListen()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Live captions &middot; draw what it hears</div>
+      <div class="conn-s">Off by default, and <b>separate from Listening on purpose</b>: remembering what was said and putting it on a screen are different things. With this on, each transcribed line is also drawn on the Live Lens as it is heard. It shows the <b>scrubbed</b> text — the same thing your memory stores, never more — and the Veil suppresses the card exactly as it suppresses the write. Needs Listening on to have anything to draw. <b>Everyone in range appears on that screen</b>, so treat it the way you would a recording light.</div></div>
+      <label class="sw"><input type="checkbox" id="captions" onchange="saveCaptions()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
+      <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
+      <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Private zones &middot; places that record nothing</div>
+      <div class="conn-s">Inside a private zone the Brain captures <b>nothing</b> — it is the same shield Incognito raises, so the ear, captions, answer-ahead, the memory ring and face recall all go quiet together. Needs the phone to be reporting its position (it does that while the app is open). A zone is a point and a radius; you mark one by standing in it.</div>
+      <div id="zoneStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
+      <div id="zoneList" class="conn-s" style="margin-top:6px"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <input id="zoneName" placeholder="name this place" style="flex:1;min-width:130px">
+        <input id="zoneRadius" type="number" min="10" max="5000" value="150" style="width:82px" title="radius in metres">
+        <button id="zoneAdd" onclick="addZone()">Make here private</button>
+      </div></div></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -1862,6 +1877,9 @@ async function load(){
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
+  if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
+  if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
+  if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
     $("srcSync").checked=!!c.config.sources_sync;
@@ -2089,6 +2107,57 @@ async function saveListen(){
   const r=await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({listen_enabled:on})});
   toast(on?"Listening on — on-device, nothing uploaded":"Listening off");
   refreshEarStatus();
+}
+async function saveCaptions(){
+  const on=$("captions").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({captions_enabled:on})});
+  toast(on?"Live captions on — drawn on the Live Lens, scrubbed":"Live captions off");
+}
+async function saveAnswerAhead(){
+  const on=$("answerAhead").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
+  toast(on?"Answer ahead on — on-device only":"Answer ahead off");
+}
+async function refreshZones(){
+  const stat=$("zoneStat"), list=$("zoneList");
+  if(!stat) return;
+  let z; try{z=await api("/dreamlayer/zones");}catch(e){stat.textContent="";return;}
+  if(!z){stat.textContent="";return;}
+  const inside=(z.zones||[]).find(x=>x.inside);
+  stat.textContent = !z.has_fix
+    ? "No position yet — open the phone app to report one."
+    : (inside ? ("Inside \u201c"+inside.name+"\u201d — capturing nothing.")
+              : "Position known. Not in a private zone.");
+  const btn=$("zoneAdd"); if(btn) btn.disabled=!z.has_fix;
+  list.innerHTML="";
+  (z.zones||[]).forEach(x=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:8px;align-items:center;margin:3px 0";
+    const label=document.createElement("span");
+    label.style.flex="1";
+    /* textContent, never innerHTML: the name is wearer-supplied and this panel
+       renders it back — a zone called <img onerror=...> must not execute. */
+    label.textContent=x.name+" \u00b7 "+Math.round(x.radius_m)+" m"+(x.inside?" \u00b7 here now":"");
+    const del=document.createElement("button");
+    del.textContent="Remove"; del.onclick=()=>removeZone(x.name);
+    row.appendChild(label); row.appendChild(del); list.appendChild(row);
+  });
+  if(!(z.zones||[]).length){ list.textContent="No zones yet."; }
+}
+async function addZone(){
+  const name=($("zoneName").value||"").trim();
+  const radius=parseFloat($("zoneRadius").value||"150");
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"add",name:name,radius_m:radius})});
+  if(r&&r.ok){ $("zoneName").value=""; toast("Private zone added — capturing nothing here"); }
+  else toast((r&&(r.detail||r.error))||"could not add that zone");
+  refreshZones();
+}
+async function removeZone(name){
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"remove",name:name})});
+  toast(r&&r.ok?"Zone removed":"could not remove that zone");
+  refreshZones();
 }
 async function refreshEarStatus(){
   const el=$("earStat"); if(!el) return;

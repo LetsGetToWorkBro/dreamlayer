@@ -122,6 +122,39 @@ export default function Layout() {
       /* no native BLE module in this runtime — the link stays demo-only */
     }
   }, []);
+  // Report position (and compass heading) to the Brain while the app is open.
+  // Two features are inert without it and both fail QUIETLY, which is why this
+  // is wired at the root rather than on a screen: private zones cannot raise
+  // the shield without knowing where you are, and Waypath deliberately refuses
+  // to name a direction without a heading (it says "152 m away" instead of
+  // assuming you face north). Foreground only — no background permission is
+  // requested, and none is needed.
+  //
+  // Gated on `connected`: reporting a position to nothing is a battery cost for
+  // no feature, and the reporter is stopped on unpair.
+  const brainConnected = useBrainStore((s) => s.macMini.connected);
+  React.useEffect(() => {
+    if (!brainConnected) return;
+    let reporter: { stop: () => void } | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { startReporting } = require("../src/services/location");
+        const r = await startReporting();
+        // An await that resolves after the effect was torn down must STOP what
+        // it got rather than leak a watcher for the rest of the session.
+        if (cancelled) r.stop();
+        else reporter = r;
+      } catch {
+        /* no expo-location in this runtime — zones and direction stay off */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      reporter?.stop();
+    };
+  }, [brainConnected]);
   React.useEffect(() => {
     if (!hydrated) {
       hydrate();

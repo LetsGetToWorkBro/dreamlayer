@@ -94,7 +94,14 @@ CAPABILITIES: Tuple[Cap, ...] = (
     # --- memory ---------------------------------------------------------------
     Cap("vector_search", "Indexed vector recall over memories", "memory",
         ("sqlite_vec", "chromadb", "lancedb", "usearch"), "memory",
-        "memory/vector_store.py (+chroma/lance/usearch siblings)",
+        # The seam is ann_index.py, NOT vector_store.py. The Brain's own recall
+        # paths construct PersistentAnnIndex directly (server.py:1677, 2179;
+        # retention_live.py:87) — vector_store.py and its chroma/lance/sqlite_vec
+        # siblings sit behind the Orchestrator and no Brain path loads them. The
+        # old string named a file the Brain never opens, which made this cap read
+        # as unreachable in scripts/capability_reachability.py while the feature
+        # in fact ships. Naming the live file is the whole fix (2026-07-29).
+        "memory/ann_index.py (usearch; vector_store.py siblings are Orchestrator-side)",
         gain="baseline scans every memory linearly; this indexes them — recall stays instant at thousands of memories", impact=4, before=3, after=5),
     Cap("local_embeddings", "Real semantic embeddings, offline", "memory",
         ("sentence_transformers",), "memory", "memory/embedder_local.py",

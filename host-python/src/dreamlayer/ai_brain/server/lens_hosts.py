@@ -119,6 +119,7 @@ class BrainLenses:
         self._seeded = False
         self._provenance = None
         self._candor = None
+        self._veritas = None
         self._drift = None
         self._saga = None
         self._stasis = None
@@ -192,7 +193,8 @@ class BrainLenses:
                 pass
 
     def observe(self, kind: str, summary: str, meta=None, ts=None,
-                via: str = "", person: str = "", confidence: float = 0.6) -> bool:
+                via: str = "", person: str = "", confidence: float = 0.6,
+                said_by: str = "") -> bool:
         """Put one statement into the ring.
 
         Veil-gated at the door: while incognito the Brain logs nothing, so the
@@ -235,6 +237,18 @@ class BrainLenses:
                 m.setdefault("via", via)
             if person:
                 m.setdefault("person", person)
+            # `said_by` is WHO UTTERED THIS, and it is a separate key from
+            # `person` because those two mean different things on the same row.
+            # On a raw statement `person` is the speaker; on a promise EXTRACTED
+            # from that statement it is the recipient ("Promise to Ana: …"), and
+            # `ingest_utterance` lets the extracted value win. Reusing it for
+            # "who said it" would make a promise Ana made to Bob read as a
+            # promise BOB made — an attribution the wearer would act on.
+            #
+            # Set unconditionally, never `setdefault`: extraction has no idea who
+            # was speaking, so it must not be able to supply this.
+            if said_by:
+                m["said_by"] = said_by
             self.ring.append(MemoryEvent(kind=str(kind or "memory"),
                                          summary=summary,
                                          confidence=float(confidence),
@@ -246,7 +260,7 @@ class BrainLenses:
             return False
 
     def ingest_utterance(self, text: str, *, via: str = "heard",
-                         person: str = "") -> dict:
+                         person: str = "", said_by: str = "") -> dict:
         """One line of speech in; the ring fed, and Candor's answer out.
 
         This is the caller the lens set never had. `observe()` was the only live
@@ -295,7 +309,7 @@ class BrainLenses:
             log.warning("[lenses] candor on ingest failed: %s",
                         type(exc).__name__)
         kind = "conversation" if via in ("said", "typed") else "heard"
-        if self.observe(kind, text, via=via, person=person):
+        if self.observe(kind, text, via=via, person=person, said_by=said_by):
             out["observed"] += 1
         try:
             from ...pipelines.ingest import extract_events
@@ -306,7 +320,8 @@ class BrainLenses:
                 meta = dict(ev.meta or {})
                 if self.observe(ev.kind, ev.summary, meta=meta, via=via,
                                 person=meta.get("person") or person,
-                                confidence=float(ev.confidence)):
+                                confidence=float(ev.confidence),
+                                said_by=said_by):
                     out["observed"] += 1
         except Exception as exc:                     # noqa: BLE001
             log.warning("[lenses] extract failed: %s", type(exc).__name__)
@@ -783,6 +798,342 @@ class BrainLenses:
             log.warning("[lenses] frames failed: %s", type(exc).__name__)
             return []
 
+    # -- what THEY said, last time -------------------------------------------
+
+    #: Which kind of disagreement this is, as a rank for the card's score dot.
+    #: NOT a probability and never presented as one — `contradicts` returns a
+    #: category, and inventing a percentage from a category is exactly the
+    #: dressed-up-heuristic move the Truth Lens gauge was rejected for.
+    _DISAGREEMENT_RANK = {"negation": 0.9, "antonym": 0.8, "value": 0.7}
+
+    def _by_speaker(self, person: str) -> list:
+        """Ring rows this person is recorded as having SAID.
+
+        Matched on `meta["said_by"]`, never on `meta["person"]`: the latter is
+        the promise RECIPIENT on an extracted row, so keying on it would file
+        "Promise to Ana" under Ana having said it.
+        """
+        want = (person or "").strip().lower()
+        if not want:
+            return []
+        out = []
+        for b in self.ring.latest(limit=RING_CAPACITY):
+            meta = getattr(b.event, "meta", None) or {}
+            if str(meta.get("said_by") or "").strip().lower() == want:
+                out.append(b)
+        return out
+
+    def they_said(self, person: str, claim: str, push: bool = True) -> dict:
+        """Did this person tell you something different last time?
+
+        Truth Lens, reframed. The nine-stage gauge inferred DECEPTION from a
+        bystander's face and voice — an inference with no reliable basis, over
+        stages (`au_detector.process`, `face_embed`) that are documented no-ops.
+        This answers a question that is actually answerable and verifiable:
+        *what did they say before, and does it square with what they just said?*
+        Both sides are quotes the wearer can read and judge. Nothing is inferred
+        about anyone's interior, and no biometric is computed at all.
+
+        ATTRIBUTION IS NEVER GUESSED. `person` is supplied by the caller — the
+        wearer naming who they are talking to — and an empty one is refused
+        rather than resolved. Guessing would mean voiceprinting everyone in
+        earshot, which `ear.py` refuses on purpose; and matching a new claim
+        against a baseline that is not really theirs produces a false accusation
+        about a named individual, which is the failure this whole feature has to
+        avoid to be worth having.
+
+        Compares against THAT PERSON'S rows only. `contradicts()` already
+        refuses pairs whose named subjects are disjoint, but that guards the
+        text; this guards the timeline.
+        """
+        person = (person or "").strip()
+        claim = (claim or "").strip()
+        if not person:
+            return {"fired": False, "reason": "no-attribution",
+                    "detail": "who said it has to be named, never inferred"}
+        if not claim:
+            return {"fired": False, "person": person, "reason": "no-claim"}
+        if not self.privacy.allow_recall():
+            return {"fired": False, "person": person, "reason": "veiled"}
+        try:
+            rows = self._by_speaker(person)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] they_said failed: %s", type(exc).__name__)
+            return {"fired": False, "person": person, "reason": "lens-error"}
+
+        from ...orchestrator.consistency import contradicts
+        for b in rows:                               # newest first
+            prior = (b.event.summary or "").strip()
+            if not prior:
+                continue
+            clash = contradicts(claim, prior)
+            if clash is None:
+                continue
+            out = {"fired": True, "person": person, "claim": claim,
+                   "prior": prior, "reason": clash[0], "detail": clash[1],
+                   "prior_ts": b.ts}
+            if push:
+                from ...hud import cards
+                out["card"] = cards.deviation_alert(
+                    prior_summary=prior, new_summary=claim,
+                    score=self._DISAGREEMENT_RANK.get(clash[0], 0.7),
+                    prior_confidence=float(getattr(b.event, "confidence", 0.0) or 0.0),
+                    new_confidence=0.0)              # unrated: the wearer judges
+                self._push("they_said", out["card"])
+            return out
+        return {"fired": False, "person": person, "claim": claim,
+                "checked": len(rows)}
+
+    def their_word(self, person: str, limit: int = 20) -> dict:
+        """Everything this person told you, and what they promised.
+
+        The other half of "keep track of what people say to you". Promises are
+        separated out because they are the rows with a due date attached and the
+        ones a wearer actually wants back — but they are reported as THEIR
+        promise, from `said_by`, never merged with the wearer's own commitments
+        in `owed()`. Those two must not mix: what you owe and what you are owed
+        are opposite ledgers.
+        """
+        person = (person or "").strip()
+        if not person:
+            return {"person": "", "said": [], "promised": [],
+                    "reason": "no-attribution"}
+        if not self.privacy.allow_recall():
+            return {"person": person, "said": [], "promised": [],
+                    "reason": "veiled"}
+        try:
+            rows = self._by_speaker(person)[:max(1, int(limit))]
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] their_word failed: %s", type(exc).__name__)
+            return {"person": person, "said": [], "promised": []}
+        from ...orchestrator.commitment_drift import _parse_due
+        said, promised = [], []
+        for b in rows:
+            meta = getattr(b.event, "meta", None) or {}
+            row = {"summary": (b.event.summary or "").strip(),
+                   "kind": b.event.kind, "ts": b.ts,
+                   "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
+            if b.event.kind in ("promise", "task"):
+                row["due"] = _due_text(_parse_due(meta.get("due"), b.ts))
+                promised.append(row)
+            else:
+                said.append(row)
+        return {"person": person, "said": said, "promised": promised}
+
+    # -- what you owe, and what is worth resurfacing -------------------------
+
+    def owed(self, push: bool = True, limit: int = 5) -> dict:
+        """Open commitments, most-urgent first — the "What you owe" feature.
+
+        Recorded for a while as blocked on speaker attribution. It is not:
+        `cards.commitment_recall` takes `person` OPTIONALLY (`_d(data,
+        "person")` with no default requirement), and the drift engine already
+        carries one on `event.meta` when a promise named someone. With no
+        attribution the card simply omits the footer, which is the honest
+        rendering of "you owe this" rather than "you owe this to X".
+
+        DISTINCT from Commitment Drift, which is why both exist. Drift FIRES
+        when a promise slips — an interruption you did not ask for. This
+        ANSWERS "what do I owe?" — a question you asked. Same store, opposite
+        directions, so neither displaces the other.
+        """
+        if not self.privacy.allow_recall():
+            return {"items": [], "pushed": 0}
+        try:
+            self.drift.tick()                        # the clock, same as drift_tick
+            # `resolved` is None while open, not False — `is None` rather than
+            # a truth test, so a record resolved at ts 0.0 is not read as open.
+            # …and only the WEARER'S OWN. A commitment carrying `said_by` was
+            # uttered by a named other person, and belongs in `their_word`, not
+            # here: what you owe and what you are owed are opposite ledgers, and
+            # merging them puts someone else's promise on your list of debts.
+            # (Caught by test the day `they_said` landed — `owed()` shipped two
+            # commits earlier with no notion of a speaker at all, so every
+            # attributed promise fell into the wearer's ledger.)
+            rows = [self._drift_json(r) for r in self.drift.all_records()
+                    if r.resolved is None
+                    and not str((r.event.meta or {}).get("said_by") or "").strip()]
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] owed failed: %s", type(exc).__name__)
+            return {"items": [], "pushed": 0}
+        # most urgent first: an overdue promise outranks a distant one, and a
+        # promise with no due date sorts last rather than first — `due_ts` of 0
+        # would otherwise read as "due at the epoch", i.e. maximally overdue.
+        rows.sort(key=lambda r: (r.get("due_ts") or float("inf")))
+        rows = rows[:max(1, int(limit))]
+        pushed = 0
+        if push and rows:
+            from ...hud import cards
+            top = rows[0]
+            self._push("commitment_recall", cards.commitment_recall({
+                "task": top["subject"],
+                "person": top.get("person") or "",
+                "due": _due_text(top.get("due_ts")),
+                "confidence": max(0.0, 1.0 - float(top.get("decay") or 0.0)),
+            }))
+            pushed = 1
+        return {"items": rows, "pushed": pushed}
+
+    def resurface(self, push: bool = True, limit: int = 3) -> dict:
+        """A name or fact worth bringing back now — "It remembers for you".
+
+        Reads the Brain's own FSRS rehearsal store (`brain.rehearsals_due`),
+        which is already the feed the morning brief and the Rehearsal surface
+        use — so this is a new SURFACE for existing state, not a new store.
+        `proactive_memory` also takes `person` optionally, so no attribution is
+        involved: the item's own text is the memory.
+        """
+        if not self.privacy.allow_recall():
+            return {"items": [], "pushed": 0}
+        try:
+            items = self.brain.rehearsals_due(max(1, int(limit))) or []
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] resurface failed: %s", type(exc).__name__)
+            return {"items": [], "pushed": 0}
+        pushed = 0
+        if push and items:
+            from ...hud import cards
+            top = items[0]
+            summary = str(top.get("text") or "").strip()
+            if summary:
+                # `confidence` rides the card's arc. `reps` is how many times
+                # this has been recalled successfully, so it is the honest
+                # signal — a name reviewed six times is one the Brain is surer
+                # of than one seen once. Capped so a long streak never renders
+                # as certainty about a memory the wearer may still have lost.
+                reps = int(top.get("reps") or 0)
+                self._push("proactive_memory", cards.proactive_memory({
+                    "summary": summary,
+                    "person": "",
+                    "confidence": min(0.5 + reps * 0.1, 0.9),
+                }))
+                pushed = 1
+        return {"items": items, "pushed": pushed}
+
+    # -- truth, checked live ------------------------------------------------
+
+    @property
+    def veritas(self):
+        if getattr(self, "_veritas", None) is None:
+            from ...orchestrator.veritas import Veritas
+            self._veritas = Veritas(verify_fn=self._verify_claim)
+        return self._veritas
+
+    def _verify_claim(self, claim: str):
+        """Hand a claim to the wearer's own knowledge tiers.
+
+        `brain.ask` is the router, and it ALREADY owns the egress decision —
+        local model first, cloud only on an explicit opt-in and never while
+        incognito. So this deliberately adds no gate of its own: a second,
+        parallel posture check here is how the two drift apart and one of them
+        starts being wrong.
+        """
+        try:
+            from ..verify import verify_claim
+            return verify_claim(claim, self.brain.ask)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] verify failed: %s", type(exc).__name__)
+            return None
+
+    def fact_check(self, claim: str, push: bool = True) -> dict:
+        """Check a claim against the world — the "Truth, checked live" feature.
+
+        WORLD-ONLY, and that is the whole design decision. `Veritas.check` has
+        two halves: an offline self-contradiction pass over the speaker's
+        earlier lines, and a world check through the verifier. The offline half
+        is *already wired* as Candor (`candor_check`, fired on every ingest),
+        over the same ring and the same `contradicts()` scorer. Running both
+        would push two cards accusing the wearer of the same thing.
+
+        So `prior` is left empty: the self-contradiction loop iterates nothing
+        and control falls straight through to the world check, which is the
+        half nothing else in the shipped Brain performs. Where the two lenses
+        overlap, the better-wired one keeps the job.
+
+        Returns the FactCheck as a dict; `fired` is False for an unverifiable
+        claim, an unreachable tier, or a speaker still inside the cooldown —
+        all three are "nothing worth interrupting for", not errors.
+        """
+        claim = (claim or "").strip()
+        if not claim:
+            return {"fired": False, "claim": ""}
+        if not self.privacy.allow_recall():
+            return {"fired": False, "claim": claim, "reason": "veiled"}
+        import time as _t
+        try:
+            res = self.veritas.check(claim, speaker="", prior=None,
+                                     now=_t.time(), world=True)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] fact_check failed: %s", type(exc).__name__)
+            return {"fired": False, "claim": claim, "reason": "lens-error"}
+        out = {"fired": bool(res.fired), "claim": claim, "verdict": res.verdict,
+               "basis": res.basis, "detail": res.detail,
+               "confidence": round(float(res.confidence), 3), "card": res.card}
+        if res.fired and push and res.card:
+            self._push("fact_check", res.card)
+        return out
+
+    # -- rewind your day ----------------------------------------------------
+
+    def scrub(self, index: int = 0, hours: float | None = None,
+              push: bool = True) -> dict:
+        """Step back through today — the "Rewind your day" HUD feature.
+
+        Recorded for a while as needing "a durable store the Brain lacks",
+        which was wrong: the hot ring already IS the day. It carries a
+        timestamp and a kind per entry and is swept on `retention_hot_hours`
+        (24 h by default), so "everything since the cutoff, newest first" is
+        exactly the scrub timeline and needs nothing new on disk.
+
+        `index` walks that list, 0 = most recent. It is CLAMPED rather than
+        wrapped or rejected: a phone holding a stale index after a retention
+        sweep would otherwise 400 or silently jump to the other end of the
+        day, and the honest answer to "show me node 40 of a 12-node day" is
+        the oldest one.
+
+        The card is pushed only when there is something at that position — an
+        empty ring means an empty day, and `total: 0` says so without drawing
+        a node that does not exist.
+        """
+        if not self.privacy.allow_recall():
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        import time as _t
+        now = _t.time()
+        if hours is None:
+            # the SAME source retention_live._policy reads, so the scrub window
+            # and the sweep that empties it can never drift apart
+            from ...config import CONFIG
+            hours = float(getattr(CONFIG, "retention_hot_hours", 24.0) or 24.0)
+        try:
+            rows = self.ring.since(now - max(0.0, hours) * 3600.0)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[lenses] scrub failed: %s", type(exc).__name__)
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        from .brain_social import _ago as _ts_label
+        rows = sorted(rows, key=lambda b: b.ts, reverse=True)
+        total = len(rows)
+        nodes = [{"summary": (b.event.summary or "").strip(),
+                  "kind": b.event.kind or "object",
+                  "ts": b.ts, "ts_label": _ts_label(b.ts, now),
+                  "confidence": round(float(getattr(b.event, "confidence", 0.0) or 0.0), 3)}
+                 for b in rows]
+        if not total:
+            return {"nodes": [], "total": 0, "index": 0, "pushed": 0}
+        idx = max(0, min(int(index or 0), total - 1))
+        pushed = 0
+        if push:
+            from ...hud import cards
+            n = nodes[idx]
+            # The builder's own signature, not a hand-rolled lookalike: the
+            # drawing reads `index`/`total` to place the progress dot, and a
+            # dict with only {primary, footer} would render a scrubber that
+            # never moves (the `_drift_card` mistake, recorded in HANDOFF).
+            self._push("time_scrub", cards.time_scrub_node(
+                summary=n["summary"], kind=n["kind"], ts_label=n["ts_label"],
+                index=idx, total=total, confidence=n["confidence"] or None))
+            pushed = 1
+        return {"nodes": nodes, "total": total, "index": idx, "pushed": pushed}
+
     @staticmethod
     def _stasis_card(eyebrow: str, primary: str, footer: str) -> dict:
         return {"type": "StasisCard", "dismiss_ms": 5000, "eyebrow": eyebrow,
@@ -908,6 +1259,10 @@ class BrainLenses:
         self._drift = None
         self._provenance = None
         self._candor = None
+        # Veritas holds a PER-SPEAKER COOLDOWN, not memories — but an erase that
+        # left it standing would keep suppressing cards on the strength of a
+        # check about a claim the wearer just deleted.
+        self._veritas = None
         self._premonition = None
         self._weather = None
         return n
