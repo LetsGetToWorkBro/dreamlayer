@@ -511,6 +511,13 @@ _NOT_WIRED = frozenset({
     "causal_fusion", "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
+    # crdt_sync stays listed as the honest DEFAULT and is promoted on a real
+    # merge. `vault_sync.py` was a complete, tested CRDT that nothing constructed,
+    # while the Brain had held the other half the whole time — `self.rc` builds
+    # the Vault it takes. `Brain.sync_export`/`sync_merge` construct it now, over
+    # a file the wearer carries between their own devices: the CRDT makes the
+    # channel irrelevant (merge is commutative, associative, idempotent), which is
+    # exactly why no server has to hold their figments.
     "frame_glasses", "lsl_streams", "mlx_train", "wasm_plugins", "crdt_sync",
     "mesh_range", "extism_plugins", "dashboard", "fs_watch",
     "lan_discovery", "spatial_viz",

@@ -8,7 +8,11 @@ uses, applied to the Brain.
 """
 from __future__ import annotations
 
+import logging
+
 from ._brain_host import BrainHost
+
+log = logging.getLogger("dreamlayer.brain_rc")
 
 
 def _spoken_duration(secs: float) -> str:
@@ -386,3 +390,129 @@ class RCOps(BrainHost):
             self.rc.revoke(self._rc_active)
             self._rc_active = None
         return {"ok": True, "say": "Stopped.", "intent": "timer_cancel"}
+
+    # -- CRDT sync: your repertoire on every device you own, no server ------
+    #
+    # `reality_compiler/v2/vault_sync.py` is a complete, well-tested CRDT and
+    # nothing constructed one. The Brain has had the other half the whole time —
+    # `self.rc = RealityCompilerV2(vault_dir=cfg_dir/"vault")` builds the Vault
+    # that VaultSync takes — so the capability was one surface away.
+    #
+    # The transport is deliberately DUMB: a blob out, a blob in. The CRDT's whole
+    # point is that merge is commutative, associative and idempotent, so the
+    # channel does not have to be reliable, ordered, or even used once — replaying
+    # the same blob twice is a no-op. That is why this needs no protocol, no
+    # session and no server, and why it can ride whatever the wearer already has.
+
+    #: A snapshot is bounded so one request cannot hand over (or accept) an
+    #: unbounded blob. A repertoire is tens of figments of a few KB; 8 MiB is far
+    #: past any real vault and far below a memory problem.
+    MAX_SYNC_BLOB = 8 * 1024 * 1024
+
+    def _vault_sync(self, blob: bytes | None = None):
+        """A VaultSync over the Brain's own vault, or None when loro is absent."""
+        try:
+            from ...reality_compiler.v2 import vault_sync as vs
+        except Exception:                            # noqa: BLE001
+            return None
+        if not getattr(vs, "available", False):
+            return None
+        try:
+            return vs.VaultSync(self.rc.vault, peer=self._sync_peer_name(),
+                                blob=blob)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[sync] could not open the vault CRDT: %s",
+                        type(exc).__name__)
+            return None
+
+    def _sync_peer_name(self) -> str:
+        """What this device calls itself in a figment's `origin`.
+
+        The hostname, because the wearer has to be able to tell two of their own
+        devices apart in a repertoire listing — "device" for both would make the
+        origin field useless the moment sync works. Not identifying: it never
+        leaves the wearer's own machines, which is the entire premise here.
+        """
+        import socket
+        try:
+            name = (socket.gethostname() or "").split(".")[0].strip()
+        except Exception:                            # noqa: BLE001
+            name = ""
+        return (name or "device")[:32]
+
+    def sync_export(self) -> bytes:
+        """This device's repertoire as a CRDT snapshot. b"" when loro is absent.
+
+        Staged first, so the blob carries the vault's CURRENT state — exporting
+        without staging hands a peer whatever was in the doc when it was built,
+        which for a freshly-constructed sync is nothing at all.
+        """
+        s = self._vault_sync()
+        if s is None:
+            return b""
+        try:
+            s.stage()
+            return s.export_bytes()
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[sync] export failed: %s", type(exc).__name__)
+            return b""
+
+    def sync_merge(self, blob: bytes) -> dict:
+        """Merge a peer's snapshot into this vault. Never raises.
+
+        `tampered` is reported rather than swallowed: a figment whose content does
+        not match its embedded hash was mutated somewhere between the two devices,
+        and refusing it silently would leave the wearer believing the exchange
+        was clean.
+        """
+        if not blob:
+            return {"ok": False, "reason": "empty", "detail": "no blob sent"}
+        if len(blob) > self.MAX_SYNC_BLOB:
+            return {"ok": False, "reason": "too-large",
+                    "detail": f"snapshot over {self.MAX_SYNC_BLOB // (1024 * 1024)} MiB"}
+        s = self._vault_sync()
+        if s is None:
+            return {"ok": False, "reason": "no-crdt",
+                    "detail": "install the Sync pack (loro) on this device"}
+        try:
+            report = s.merge(blob)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:                 # noqa: BLE001
+            # BaseException, not Exception, and that is not defensive padding:
+            # loro is a Rust extension and its decoder raises a bare
+            # BaseException ("Decode error: (Invalid import data)"), which an
+            # `except Exception` does NOT catch. A peer's snapshot is untrusted
+            # input arriving over an HTTP route, so four bytes of junk took the
+            # whole request down until this was widened. `vault_sync` learned the
+            # same lesson one layer down, where OverflowError escaped a
+            # ValueError clause. Interrupt and exit are re-raised above so this
+            # never swallows a shutdown.
+            log.warning("[sync] merge refused a blob: %s", type(exc).__name__)
+            return {"ok": False, "reason": "unreadable",
+                    "detail": "that snapshot could not be read"}
+        # Proof, on the same terms as the ear's interpreter and the dream painter:
+        # loro importing says nothing about a real exchange having happened, and a
+        # merge is where the CRDT is genuinely exercised. Set on a merge that READ
+        # the blob — including one that changed nothing, since "already in step" is
+        # a successful sync and the commonest outcome once two devices agree.
+        self._sync_ok = True
+        self.activity.add("sync", "Merged a repertoire snapshot from another device")
+        return {"ok": bool(report.ok), "added": list(report.added),
+                "revoked": list(report.revoked), "unchanged": int(report.unchanged),
+                "tampered": list(report.tampered)}
+
+    def sync_state(self) -> dict:
+        """What the panel needs to describe sync honestly."""
+        try:
+            from ...reality_compiler.v2 import vault_sync as vs
+            have = bool(getattr(vs, "available", False))
+        except Exception:                            # noqa: BLE001
+            have = False
+        try:
+            kept = len([e for e in self.rc.vault.list() if e.active])
+        except Exception:                            # noqa: BLE001
+            kept = 0
+        return {"available": have, "peer": self._sync_peer_name(),
+                "figments": kept, "max_blob": self.MAX_SYNC_BLOB,
+                "proved": bool(getattr(self, "_sync_ok", False))}
