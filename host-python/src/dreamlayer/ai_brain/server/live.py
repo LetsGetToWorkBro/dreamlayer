@@ -336,6 +336,20 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
                     pass
         if ok:
             brain.activity.add("look", f"Looked closer with the {lens} lens")
+        # …and DRAW the one lens whose whole output is a card. The other frontier
+        # lenses return structured fields the Live Lens renders from the JSON
+        # (latex, a depth gauge, hit boxes); synesthesia returns a phrase, and a
+        # phrase with no card is a string in a network response. `synesthesia_card`
+        # has existed the whole time with nothing calling it.
+        if ok and lens == "synesthesia" and (res.get("description") or "").strip():
+            try:
+                from ...hud import cards
+                res["pushed"] = brain.push_event(
+                    "synesthesia",
+                    cards.synesthesia_card(res["description"], confidence=None),
+                    veil_ok=False)
+            except Exception:                       # noqa: BLE001 — a card must
+                res["pushed"] = 0                   # never cost the answer
         return res if isinstance(res, dict) else {"ok": False, "lens": lens}
     try:
         incognito = bool(brain.incognito_now())
@@ -2002,6 +2016,26 @@ function glassPrivateZoneCard(c){                    /* CAPTURE SUSPENDED */
   gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
 }
 
+function glassSynesthesiaCard(c){                    /* DREAM — the scene, in six words */
+  /* The quietest card in the set, and the only one whose entire content is one
+     phrase — so the generic renderer nearly got this one right, and "nearly" is
+     the problem: it stamps its own "JUNO" eyebrow over the card's "DREAM", and
+     centres the text where this card deliberately sits it LOW, under a
+     separator, in the dream palette rather than in primary white.
+
+     No frame, no gauge, no ring. It is a caption, not a readout, and dressing it
+     as data would be a lie about what a vision model just guessed. */
+  const ctx = glassCtx(); gback(ctx);
+  gtext(ctx, String(c.eyebrow || "DREAM").toUpperCase().slice(0, 12), 128, 88,
+        GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(64, 104); ctx.lineTo(192, 104);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  const words = gwrap(String(c.primary || c.description || "").trim(), 22).slice(0, 3);
+  if (words.length) words.forEach((ln, i) => gtext(ctx, ln, 128, 140 + i * 17, GP.text_primary, "md"));
+  else gtext(ctx, "…", 128, 140, GP.text_secondary, "sm");
+  gend(c.dismiss_ms || 4000);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3527,6 +3561,7 @@ function renderEvent(ev){
   else if (t === "AnswerAheadCard") glassAnswerAheadCard(c);
   else if (t === "DeviationAlertCard") glassDeviationCard(c);
   else if (t === "PrivateZoneCard") glassPrivateZoneCard(c);
+  else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

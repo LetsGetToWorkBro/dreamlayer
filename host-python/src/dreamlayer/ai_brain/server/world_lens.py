@@ -23,6 +23,8 @@ blind, never a guess), identical to the on-device gate.
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import os
 import time
@@ -111,6 +113,58 @@ class _BrainVisionRouter:
             except Exception:
                 pass
         return vision_answer(backend, label, frame_to_b64(frame), want)
+
+
+SYNESTHESIA_MAX_WORDS = 6
+
+#: Single-word lead-ins a model uses before the answer. Multi-word preambles are
+#: caught structurally; these are the ones that would otherwise look like the
+#: first word of the phrase itself.
+_PREAMBLE_LEADS = frozenset({"phrase", "answer", "description", "caption",
+                             "scene", "response", "output"})
+
+
+def _six_words(raw: str) -> str:
+    """Fold a model's reply into the phrase the card can actually draw.
+
+    A prompt asking for six words gets six words most of the time, and the rest
+    of the time gets "Sure! Here's a phrase:", a quoted string, a trailing full
+    stop, or three numbered options. None of that is a failure worth showing the
+    wearer — it is the ordinary noise of an instruction-tuned model — so it is
+    cleaned here rather than left for `synesthesia_card` to clip mid-sentence.
+
+    Truncating to six words rather than rejecting a longer reply is deliberate:
+    the first six words of "rain beading on a cold window frame" is still a
+    usable phrase, whereas silence for want of exact obedience means the lens
+    reports nothing on a model that was working fine.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    # A preamble before a colon ("Here's a phrase: rain on glass"). Guarded
+    # twice, because the naive version ate a clock: "6:15 to Brighton" became
+    # "15 to Brighton". A preamble is either MULTI-WORD or one of a few known
+    # lead words — never a bare number.
+    if ":" in text:
+        head, _, tail = text.partition(":")
+        head_s = head.strip()
+        looks_like_preamble = (
+            len(head_s) <= 40 and
+            (" " in head_s or head_s.lower() in _PREAMBLE_LEADS))
+        if tail.strip() and looks_like_preamble:
+            text = tail.strip()
+    # numbered/bulleted lists: take the first item only
+    for line in text.splitlines():
+        line = line.strip().lstrip("-*\u2022 ").strip()
+        line = re.sub(r"^\d+[.)]\s*", "", line)
+        if line:
+            text = line
+            break
+    text = text.strip().strip('"\u201c\u201d\u2018\u2019\'')
+    words = text.split()
+    if len(words) > SYNESTHESIA_MAX_WORDS:
+        words = words[:SYNESTHESIA_MAX_WORDS]
+    return " ".join(words).rstrip(".,;:!").strip()
 
 
 class WorldLensHost:
@@ -449,7 +503,25 @@ class WorldLensHost:
         "segment": ("scene_segment", "Clear Eyes"),
         "sky": ("sky_sense", "Stargazer"),
         "dream": ("dream_style", "Clear Eyes"),
+        # NO PACK, and no capability either. Every other lens here is gated by
+        # an optional wheel with a `Cap(...)` in `capabilities.py`; this one is
+        # gated by the wearer having configured a vision model
+        # (`ollama_vision_model`), which no capability key describes. So the
+        # entry exists to make the lens RECOGNISED, and the branch below returns
+        # its own reason rather than `_need()` — naming a pack that would not
+        # help is worse than saying plainly what is missing.
+        "synesthesia": ("ollama_vision_model", "a configured vision model"),
     }
+
+    #: Six words, and the constraint is in the prompt because it is the whole
+    #: card: `synesthesia_card` clips at 72 characters and renders one hero
+    #: line. A model that answers with a paragraph produces a truncated
+    #: sentence, which reads as a bug rather than as a poem.
+    _SYNESTHESIA_PROMPT = (
+        "Describe this scene as a single evocative phrase of at most six words. "
+        "No punctuation at the end, no quotes, no preamble, no explanation. "
+        "Concrete nouns over abstractions. Answer with the phrase only."
+    )
 
     def look_lens(self, frame, lens: str, args: Optional[dict] = None) -> dict:
         """Run a deliberate look through ONE named lens. Veil-gated (a veiled
@@ -516,6 +588,40 @@ class WorldLensHost:
                                      args.get("when_ts")) or {}
                 return {"ok": bool(data), "lens": "sky", "sky": data,
                         "line": say_sky(data)}
+            if lens == "synesthesia":
+                # "Your inner weather" in the catalogue, and I read that title
+                # as the IMU/biometric Inner Weather lens for most of this audit.
+                # The BUILDER says otherwise: `synesthesia_card(description,
+                # confidence)`, docstring "VLM 6-word poetic scene description".
+                # No IMU is involved at all — it is a caption, and the Brain has
+                # had a vision seam the whole time.
+                # `has_vision` is a METHOD, not a property — `if not
+                # self._router.has_vision` is a bound method and always truthy,
+                # so the guard silently never fired and a Brain with no vision
+                # model fell through to an empty description instead of saying
+                # what it needed. And `has_vision()` only asserts a backend
+                # EXISTS; `describe` is what this lens actually calls, so both
+                # are checked, mirroring `_describe`'s own guard.
+                backend = getattr(self.brain, "_backend", None)
+                if not self._router.has_vision() or not hasattr(backend, "describe"):
+                    return {"ok": False, "lens": "synesthesia",
+                            "reason": "no-vision-model",
+                            "note": "set a vision model (ollama_vision_model) "
+                                    "to describe what you are looking at"}
+                from ...object_lens.vision_recognizer import frame_to_b64
+                b64 = frame_to_b64(frame)
+                if not b64:
+                    return {"ok": False, "lens": "synesthesia",
+                            "reason": "unreadable-frame"}
+                raw = self._describe(self._SYNESTHESIA_PROMPT, b64)
+                phrase = _six_words(raw)
+                # An empty phrase is an honest miss, not an error: `_describe`
+                # returns "" when the posture blocks remote vision, when the
+                # backend has no model, and when the model declines. All three
+                # mean "no description", and none of them should draw a card
+                # saying so.
+                return {"ok": bool(phrase), "lens": "synesthesia",
+                        "description": phrase, "raw_len": len(raw or "")}
             if lens == "dream":
                 # default_stylizer is never None — the neural painter when a MODEL
                 # is provided (DL_DREAM_MODEL → the dream_style cap), else an
