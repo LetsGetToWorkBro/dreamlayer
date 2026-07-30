@@ -283,3 +283,18 @@ class TestWaypathTellsYouWhichWay:
         text = open(srv.__file__, encoding="utf-8").read()
         assert '"/dreamlayer/location": _post_location,' in text
         assert '"/dreamlayer/where": _get_where,' in text
+
+
+def test_a_junk_heading_degrades_to_no_direction(brain):
+    """A hand-rolled client sending `heading_deg: "north"` must lose the
+    DIRECTION, not the fix. `LastFix.set` catches TypeError/ValueError around
+    the float conversion; narrowing that to KeyError let the junk through as an
+    exception on a path whose whole job is to never cost the answer."""
+    brain._last_fix.set(*LONDON)
+    brain.waypath_stash("bike", "the rack")
+    for junk in ("north", object(), [1, 2], {}):
+        assert brain._last_fix.set(51.5074, -0.1300, heading_deg=junk) is True
+        fix = brain.here()
+        assert fix is not None and fix["heading_deg"] is None, junk
+        out = brain.waypath_locate("bike")
+        assert "away" in out["detail"], (junk, out)
