@@ -927,6 +927,43 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                                             "remote_listen_enabled", False))
         return st
 
+    def dream_neural_ready(self) -> bool:
+        """Has the NEURAL dream painter genuinely produced a picture, and can it
+        still? Two conditions, and both are needed.
+
+        Proof (`_dream_neural_ok`, set by the dream lens on a real painting) is
+        what stops onnxruntime's mere presence reading as a working painter — the
+        wheel imports long before a model loads, and a loaded session can still
+        fail on a frame. The path check is what stops the proof outliving the
+        setup: clearing the model path must take the capability back down, because
+        "it worked once this process" is not "it works now".
+        """
+        if not getattr(self, "_dream_neural_ok", False):
+            return False
+        try:
+            return bool(self.world_lens()._dream_model_path())
+        except Exception:                        # noqa: BLE001
+            return False
+
+    def dream_state(self) -> dict:
+        """What the panel needs to describe the painter honestly."""
+        path = str(getattr(self.config, "dream_model_path", "") or "").strip()
+        resolved = ""
+        try:
+            resolved = self.world_lens()._dream_model_path()
+        except Exception:                        # noqa: BLE001
+            resolved = ""
+        import os as _os
+        return {
+            "path": path,
+            # A path that is set but does not resolve is the case worth surfacing:
+            # the wearer thinks the neural painter is on and is getting the wash.
+            "found": bool(resolved),
+            "from_env": bool(_os.environ.get("DL_DREAM_MODEL")),
+            "proved": bool(getattr(self, "_dream_neural_ok", False)),
+            "active": self.dream_neural_ready(),
+        }
+
     def set_interpret(self, on: bool = True, target: str = "") -> dict:
         """Turn the live interpreter on/off across BOTH ears and persist it.
 
@@ -1457,7 +1494,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
-                  "interpret_enabled", "interpret_target",
+                  "interpret_enabled", "interpret_target", "dream_model_path",
                   "private_zones",
                   "face_recognition", "face_auto_enrol"):
             if k in updates:
@@ -2993,6 +3030,18 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_SOCIAL_GRAPH"] = "1"
     except Exception:                           # noqa: BLE001 — never 500 the report
         pass
+    # `dream_style` on the same terms, and PROOF-based for the same reason the
+    # ear's interpreter is: onnxruntime importing says nothing about a model
+    # loading, and a loaded session can still fail on a frame. `_dream_neural_ok`
+    # is set by the lens only after the neural painter has genuinely produced a
+    # picture. It is re-checked against the configured path so removing the model
+    # takes the capability back down — proof that it once worked is not a claim
+    # that it still can.
+    try:
+        if brain.dream_neural_ready():
+            env["DL_WIRED_DREAM_STYLE"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -4479,6 +4528,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
 
+        def _get_dream(self, path, qs):
+            """State of the neural dream painter: the model path, whether it
+            resolves, and whether it has actually painted anything yet."""
+            self._json(200, brain.dream_state())
+
         def _get_social_graph(self, path, qs):
             """The relationship graph built from your recorded meetings.
 
@@ -5075,6 +5129,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/contacts": _get_contacts,
             "/dreamlayer/social/graph": _get_social_graph,
+            "/dreamlayer/dream": _get_dream,
             "/dreamlayer/reminders": _get_reminders,
             "/dreamlayer/rewind": _get_rewind,
             "/dreamlayer/saga": _get_saga,

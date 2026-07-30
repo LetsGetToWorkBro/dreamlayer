@@ -491,11 +491,20 @@ _NOT_WIRED = frozenset({
     # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
     # Live Lens via WorldLensHost.look_lens (?lens=…), each an on-device engine
     # that self-describes when its pack isn't installed — so they report "active"
-    # once installed rather than "dormant". dream_style stays DORMANT: the reach-
-    # able ?lens=dream path only ever runs the dependency-free painterly wash
-    # (no caller constructs the neural stylizer with a model unless DL_DREAM_MODEL
-    # is set), so onnxruntime being importable must NOT light the neural cap green.
-    # coreml_ondevice likewise (a macOS Vision classify backend not on the live path).
+    # once installed rather than "dormant".
+    #
+    # dream_style is now REACHABLE and stays listed here as the honest default.
+    # The model path was `DL_DREAM_MODEL` only — an environment variable the
+    # bundled .app cannot set, so the neural painter was reachable to developers
+    # and to nobody else; it is `config.dream_model_path` too now, settable from
+    # the panel. And the lens used to compute a painting and THROW IT AWAY,
+    # returning `styled: true` with no pixels to a Live Lens that had no case for
+    # it at all, so a dream look ended by drawing the word "done". It returns the
+    # image. Promotion is proof-based (`_dream_neural_ok`, set only after the
+    # NEURAL painter produces a picture) and re-checked against the configured
+    # path, so onnxruntime being importable still must not light this green.
+    # coreml_ondevice remains dormant (a macOS Vision classify backend not on the
+    # live path).
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",

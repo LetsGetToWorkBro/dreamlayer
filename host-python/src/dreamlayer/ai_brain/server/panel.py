@@ -1028,6 +1028,14 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
         <div class="conn-s">Let the Brain read Mail and Messages so a glance can catch a reply you owe.
           Nothing is sent; it stays on this Mac. Saves the moment you flip it.</div></div>
       <label class="sw"><input type="checkbox" id="email" onchange="saveEmail()"><span class="track"></span></label></div>
+    <div class="conn"><div style="flex:1">
+      <div class="conn-t">Dream Mode &middot; the neural painter</div>
+      <div class="conn-s">Dream Mode already paints, with a procedural wash that needs nothing installed. Point this at a fast-neural-style <b>.onnx</b> model and a look through the dream lens comes back as a real painting instead &mdash; your street as Starry Night. Nothing is bundled or downloaded; you supply the file, and it runs <b>entirely on this Mac</b> (the frame is painted here and never sent anywhere). Needs the <b>Clear Eyes</b> pack for the ONNX runtime.
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="dreamModel" placeholder="/path/to/style.onnx" style="flex:1"
+            onkeydown="if(event.key==='Enter')saveDreamModel()">
+          <button class="sm ghost" onclick="saveDreamModel()">Use this model</button></div>
+        <div id="dreamStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div></div>
   </section>
 
   <section>
@@ -1933,6 +1941,10 @@ async function load(){
     $("interpTarget").value=c.config.interpret_target||"en";
     refreshInterpStat();
   }
+  if($("dreamModel")){
+    $("dreamModel").value=c.config.dream_model_path||"";
+    refreshDream();
+  }
   if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
@@ -2044,6 +2056,38 @@ async function loadPeople(){
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
     :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';
   loadCircles();}
+/* The neural dream painter. The path was $DL_DREAM_MODEL only, which the bundled
+   .app has no environment to set — so a shipped feature was reachable to
+   developers and to nobody else. */
+async function saveDreamModel(){
+  await api("/dreamlayer/config",{method:"POST",
+    body:JSON.stringify({dream_model_path:$("dreamModel").value.trim()})});
+  const j=await refreshDream();
+  /* A path that is SET but does not resolve is the case worth saying out loud:
+     the wearer thinks the neural painter is on and is quietly getting the wash. */
+  if(j&&j.path&&!j.found) toast("Saved — but no file at that path");
+  else if(j&&j.path) toast("Neural painter wired");
+  else toast("Neural painter off — the procedural wash still paints");
+}
+async function refreshDream(){
+  const el=$("dreamStat"); if(!el) return null;
+  let j; try{ j=await api("/dreamlayer/dream"); }catch(e){ el.textContent=""; return null; }
+  if(!j){ el.textContent=""; return null; }
+  if(j.from_env&&!$("dreamModel").value)
+    $("dreamModel").placeholder="set by DL_DREAM_MODEL in the environment";
+  if(!j.path&&!j.from_env){
+    el.textContent="No model set — Dream Mode paints with the procedural wash.";
+  }else if(!j.found){
+    el.textContent="That path has no file — still painting with the wash.";
+  }else if(j.active){
+    el.textContent="Working — the neural painter has painted a frame.";
+  }else{
+    /* found but unproved: the file is there and nothing has run through it yet,
+       and it can still fail (a corrupt model loads no session at all). */
+    el.textContent="Model found — it loads on the first dream look.";
+  }
+  return j;
+}
 /* The relationship graph. Two answers, and the difference between them matters:
    shared PEOPLE is a social fact ("you both know Priya"), shared EVENTS is a
    where-from fact ("you were both at the launch"). The server reports them

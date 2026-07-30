@@ -535,11 +535,12 @@ class TestLoadableIsNotOneState:
         promoted = caps._runtime_promoted()
         assert "mic_capture" in promoted, "the EAR_CAPS tuple was not read"
         assert "live_interpret" in promoted
-        assert "social_graph" in promoted, "the literal flag was not read"
+        for key in ("social_graph", "dream_style"):
+            assert key in promoted, f"the literal flag for {key} was not read"
         # and not everything — a set that swallowed the catalogue would empty the
         # inert bucket and hide the real shortlist
         assert "crdt_sync" not in promoted
-        assert "dream_style" not in promoted
+        assert "coreml_ondevice" not in promoted
 
     def test_a_test_setting_a_flag_does_not_count_as_promotion(self, caps):
         """Tests set `DL_WIRED_*` to exercise the meter. Reading those would let a

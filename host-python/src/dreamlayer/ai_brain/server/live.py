@@ -1340,6 +1340,41 @@ function glassSegmentCard(j){                       /* Scene -> lit region wedge
   gtext(ctx, n === 1 ? "region" : "regions", 128, 128, GP.text_secondary, "sm");
   gend(j.dismiss_ms || 4200);
 }
+function glassDreamCard(j){                         /* Dream -> your street, painted */
+  /* The only lens whose entire output is an IMAGE. It used to end a look on the
+     `default:` arm of renderLens — the word "done" — because the Brain returned
+     `styled: true` and no pixels and there was no case for it here. "See the
+     world as a painting" is not deliverable as a boolean.
+
+     Drawn CLIPPED TO THE CIRCLE and cover-cropped, so the painting fills the
+     round display the way the camera does rather than sitting letterboxed in a
+     box. Asynchronous by necessity (an Image decodes off-thread), so the paint
+     happens in onload — and `gend` is called there too, or the card would be
+     scheduled to clear before it had drawn. */
+  const src = String(j.image || "").trim();
+  if (!src){ showHud(j.reason || "nothing to paint", {ms:2400}); return; }
+  const im = new Image();
+  im.onload = () => {
+    const ctx = glassCtx(); gback(ctx);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(128, 128, 118, 0, 2 * Math.PI); ctx.clip();
+    /* cover: scale by the LARGER ratio so no background shows through */
+    const s = Math.max(236 / im.width, 236 / im.height);
+    const w = im.width * s, h = im.height * s;
+    ctx.drawImage(im, 128 - w / 2, 128 - h / 2, w, h);
+    ctx.restore();
+    garc(ctx, 128, 128, 118, 0, 360, GP.border_subtle);
+    /* Name the painter. "procedural" and "neural" are different pictures and the
+       wearer paid for the difference — a model file they supplied — so the glass
+       says which one they are looking at rather than letting the wash pass for
+       the net. */
+    const label = (j.neural ? "NEURAL" : "PAINTERLY");
+    gtext(ctx, label, 128, 232, j.neural ? GP.memory_trace : GP.text_ghost, "sm");
+    gend(j.dismiss_ms || 6000);
+  };
+  im.onerror = () => showHud("the painting could not be drawn", {ms:2400});
+  im.src = "data:image/jpeg;base64," + src;
+}
 function glassSkyCard(j){                           /* Sky -> a named star map */
   const ctx = glassCtx(); gback(ctx);
   const pts = [[96, 80], [150, 72], [120, 100], [170, 110], [88, 120], [138, 130], [112, 150], [160, 146]];
@@ -2839,6 +2874,7 @@ function renderLens(j){
     case "find": glassFindCard(j); break;
     case "segment": glassSegmentCard(j); break;
     case "sky": glassSkyCard(j); break;
+    case "dream": glassDreamCard(j); break;
     default:
       if (j.ok === false) { showHud(j.reason || "look failed", {ms:2600}); return; }
       showHud("done", {ms:1600}); return;

@@ -32,6 +32,14 @@ from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
 
+#: Longest edge of the painting the dream lens sends back, in pixels.
+#:
+#: The picture lands in a 256 px circle on the glass and in a phone viewport at
+#: worst; a few-megapixel frame re-encoded whole would be several megabytes of
+#: base64 over the LAN for something nobody can see the detail of. 640 keeps it
+#: crisp on a retina phone at a fraction of the bytes.
+DREAM_MAX_SIDE = 640
+
 
 def _spoken_miss(spoken: dict) -> str:
     """What to say when a lens the wearer ASKED for ran and found nothing.
@@ -495,6 +503,32 @@ class WorldLensHost:
     # cached on the host (the host itself is cached per-Brain and rebuilt on
     # config change), so a heavy model loads once, not per look.
 
+    def _dream_model_path(self) -> str:
+        """Where the neural painter's ONNX model lives, or "".
+
+        Two sources, and the precedence matches `DL_DISABLE_*` / `disabled_caps`
+        elsewhere in this product: the environment variable is the ops-level
+        override, `config.dream_model_path` is the same switch made DURABLE. The
+        env var was the only source, which meant the capability could not be
+        turned on at all from the bundled .app — it has no environment of its own
+        to edit — so a shipped feature was reachable only by developers.
+
+        A path that does not exist is treated as unset rather than passed down:
+        `DreamStylizer` would silently return None for it, leaving the wearer with
+        the procedural wash and no idea their path was wrong.
+        """
+        import os as _os
+        from pathlib import Path as _Path
+        cfg = getattr(self.brain, "config", None)
+        raw = (_os.environ.get("DL_DREAM_MODEL")
+               or getattr(cfg, "dream_model_path", "") or "").strip()
+        if not raw:
+            return ""
+        try:
+            return raw if _Path(raw).is_file() else ""
+        except OSError:
+            return ""
+
     def _extra(self, name: str):
         """Lazily build + cache a vision_extras reader by name."""
         cache: dict = getattr(self, "_extras_cache", None) or {}
@@ -648,21 +682,42 @@ class WorldLensHost:
                         "description": phrase, "raw_len": len(raw or "")}
             if lens == "dream":
                 # default_stylizer is never None — the neural painter when a MODEL
-                # is provided (DL_DREAM_MODEL → the dream_style cap), else an
-                # always-on painterly wash. So the lens always works; `neural`
-                # tells the caller which ran, and dream_style stays honestly
-                # dormant until a model is actually wired.
-                import os as _os
+                # is provided, else an always-on painterly wash. So the lens always
+                # works; `neural` tells the caller which ran, and dream_style stays
+                # honestly dormant until a model is actually wired.
+                #
+                # THE PAINTING IS RETURNED NOW. This branch used to compute `out`
+                # and throw it away, reporting `styled: true` and no pixels — and
+                # `renderLens` had no "dream" case at all, so the one lens whose
+                # entire output is an IMAGE ended a look by drawing the word
+                # "done". "See the world as a painting" cannot be delivered by a
+                # boolean.
                 from ...dream_mode.dream_style import default_stylizer
-                st = default_stylizer(_os.environ.get("DL_DREAM_MODEL") or None)
+                st = default_stylizer(self._dream_model_path() or None)
                 out = None
                 try:
                     out = st.stylize(frame)
                 except Exception:                    # noqa: BLE001
                     out = None
-                return {"ok": out is not None, "lens": "dream",
+                neural = bool(getattr(st, "ready", False))
+                img = None
+                if out is not None:
+                    from ...object_lens.vision_recognizer import frame_to_b64
+                    img = frame_to_b64(out, max_side=DREAM_MAX_SIDE)
+                if neural and img:
+                    # Proof, not configuration: the capability goes active only
+                    # once the neural painter has genuinely produced a picture.
+                    # A model path that points at a corrupt file loads no session,
+                    # and one that loads can still fail on a frame.
+                    setattr(self.brain, "_dream_neural_ok", True)
+                # `ok` follows the IMAGE, not the array: an encode that fails (no
+                # Pillow) leaves the wearer with nothing to look at, and saying
+                # `ok: true` then would be the same empty success as before.
+                return {"ok": bool(img), "lens": "dream",
                         "styled": out is not None,
-                        "neural": bool(getattr(st, "ready", False))}
+                        "neural": neural,
+                        "painter": getattr(st, "kind", ""),
+                        "image": img or ""}
         except Exception as exc:                     # noqa: BLE001 — a lens never crashes a look
             log.warning("[lens] %s failed: %s", lens, exc)
             return {"ok": False, "lens": lens, "reason": "error"}

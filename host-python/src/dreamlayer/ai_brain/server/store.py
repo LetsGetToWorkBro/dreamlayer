@@ -449,6 +449,13 @@ class BrainConfig:
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
+    # -- dream mode: the neural painter -----------------------------------
+    # Path to a fast-neural-style ONNX model. Nothing is bundled or fetched — the
+    # wearer supplies it — and with none set Dream Mode still paints, using the
+    # dependency-free procedural wash. This existed only as $DL_DREAM_MODEL, an
+    # environment variable, which the bundled .app has no way to set: the neural
+    # painter could not be turned on from any surface the product ships.
+    dream_model_path: str = ""
     # -- live interpreter: someone's foreign speech, voiced back to you ---
     # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
     # opt-in: the microphone is already the wearer's most consequential switch,
