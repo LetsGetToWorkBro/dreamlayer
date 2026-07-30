@@ -148,11 +148,16 @@ def zone_containing(zones, lat: float, lon: float) -> str:
         try:
             if not isinstance(z, dict):
                 continue
-            zlat, zlon = z.get("lat"), z.get("lon")
             radius = float(z.get("radius_m") or 0.0)
-            if radius <= 0 or not valid_coord(zlat, zlon):
+            if radius <= 0 or not valid_coord(z.get("lat"), z.get("lon")):
                 continue
-            if haversine_m(float(zlat), float(zlon), float(lat), float(lon)) <= radius:
+            # Converted AFTER validation rather than narrowed through it: mypy
+            # cannot see that `valid_coord` proves these are floatable, and a
+            # cast would assert something only the reader can check. The
+            # try/except still covers a dict that mutates between the two.
+            zlat = float(z["lat"])
+            zlon = float(z["lon"])
+            if haversine_m(zlat, zlon, float(lat), float(lon)) <= radius:
                 return str(z.get("name") or "this area").strip() or "this area"
         except (TypeError, ValueError):
             continue                              # one bad zone, not the rest
