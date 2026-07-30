@@ -520,16 +520,49 @@ class TestLoadableIsNotOneState:
         leaked = [k for k, _t, _s in buckets["ok"] if k in dormant]
         assert not leaked, (
             f"declared-dormant capabilities counted as working: {leaked}")
-        assert len(buckets["conditional"]) >= 5, (
-            "the loadable-and-dormant bucket emptied out — either the ordering "
+        assert len(buckets["conditional"]) + len(buckets["driven"]) >= 5, (
+            "the loadable-and-dormant buckets emptied out — either the ordering "
             "regressed or `_NOT_WIRED` was gutted")
 
+    def test_runtime_promotion_is_read_from_both_mechanisms(self, caps):
+        """`DL_WIRED_<KEY>` gets set two ways and a checker that knew only one
+        would file a driven capability as inert work-to-do.
+
+        A promoted-caps tuple (`ear.py:EAR_CAPS`) is turned into flags in a loop,
+        so no literal flag name appears anywhere; `social_graph` has no start/stop
+        event to hang a durable flag on and is computed per capability report, as a
+        literal. Both are read."""
+        promoted = caps._runtime_promoted()
+        assert "mic_capture" in promoted, "the EAR_CAPS tuple was not read"
+        assert "live_interpret" in promoted
+        assert "social_graph" in promoted, "the literal flag was not read"
+        # and not everything — a set that swallowed the catalogue would empty the
+        # inert bucket and hide the real shortlist
+        assert "crdt_sync" not in promoted
+        assert "dream_style" not in promoted
+
+    def test_a_test_setting_a_flag_does_not_count_as_promotion(self, caps):
+        """Tests set `DL_WIRED_*` to exercise the meter. Reading those would let a
+        capability look driven because something MOCKED it being driven — the
+        importable-never-called trap wearing a different hat."""
+        src = CAP_SCRIPT.read_text(encoding="utf-8")
+        i = src.index("def _runtime_promoted")
+        assert '"/tests/"' in src[i:i + 2000]
+
+    def test_the_driven_and_inert_buckets_are_disjoint_and_both_populated(self, buckets):
+        """The split is the point. If either side empties, the report has gone back
+        to reporting "loadable and dormant" as one undifferentiated list."""
+        driven = {k for k, _t, _s in buckets["driven"]}
+        inert = {k for k, _t, _s in buckets["conditional"]}
+        assert driven and inert, (driven, inert)
+        assert not (driven & inert)
+
     def test_every_capability_lands_in_exactly_one_bucket(self, buckets):
-        """Five buckets and a headline count only mean something if they
+        """Six buckets and a headline count only mean something if they
         partition the catalogue. A key in two buckets double-counts; a key in
         none disappears from the audit entirely."""
-        names = ("ok", "unconstructed", "conditional", "open_gaps", "dormant",
-                 "expected", "concepts")
+        names = ("ok", "unconstructed", "conditional", "driven", "open_gaps",
+                 "dormant", "expected", "concepts")
         seen: dict = {}
         for name in names:
             for row in buckets[name]:

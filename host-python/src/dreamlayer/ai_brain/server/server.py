@@ -2980,6 +2980,19 @@ def _capability_payload(brain: Brain) -> dict:
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
+    # `social_graph` is promoted HERE rather than by a long-lived flag, because it
+    # has no start/stop event to hang one on the way the ear does — a graph is
+    # simply built and answered on demand. Computed fresh into this local env copy
+    # (never os.environ), so the report cannot go stale in either direction: no
+    # flag to leave set after the last meeting is deleted, and none to forget to
+    # set after the first is recorded. The test is deliberately strict — networkx
+    # present AND a non-empty graph — since networkx over an empty graph answers
+    # every query with nothing, exactly as the fallback does.
+    try:
+        if brain.social_graph_wired():
+            env["DL_WIRED_SOCIAL_GRAPH"] = "1"
+    except Exception:                           # noqa: BLE001 — never 500 the report
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -4466,6 +4479,20 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
 
+        def _get_social_graph(self, path, qs):
+            """The relationship graph built from your recorded meetings.
+
+            `?a=…&b=…` asks what two people have in common and how you get from one
+            to the other; with no names it returns the whole graph. Reports which
+            engine answered, because "communities" means densely-connected clusters
+            with networkx and only connected components without it."""
+            a = (qs.get("a", [""])[0] or "").strip()
+            b = (qs.get("b", [""])[0] or "").strip()
+            if a and b:
+                self._json(200, brain.social_mutual(a, b))
+                return
+            self._json(200, brain.social_graph_state())
+
         def _get_contacts(self, path, qs):
             """Contacts sync state + count pulled from Contacts.app."""
             self._json(200, {"sync": brain.config.contacts_sync,
@@ -5047,6 +5074,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/contacts": _get_contacts,
+            "/dreamlayer/social/graph": _get_social_graph,
             "/dreamlayer/reminders": _get_reminders,
             "/dreamlayer/rewind": _get_rewind,
             "/dreamlayer/saga": _get_saga,

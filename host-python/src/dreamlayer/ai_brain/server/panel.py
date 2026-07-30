@@ -748,6 +748,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <input type="text" id="pTags" placeholder="tags: work,lease" style="max-width:180px">
       <button class="ghost" onclick="addPerson()">Add</button>
     </div>
+    <div class="conn" style="margin-top:16px"><div style="flex:1">
+      <div class="conn-t">How you know each other</div>
+      <div class="conn-s">Built from your <b>recorded meetings</b> &mdash; two people in one room is evidence they have met. Deliberately <b>not</b> from your address book: importing contacts would assert that everyone in it knows everyone else, which is false and would invent the whole graph. Ask what two people have in common, or read the circles below. Needs the <b>Recall</b> pack (networkx) for real community detection; without it the grouping is only "everyone reachable from everyone", which lumps two circles together the moment one person bridges them.</div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="gA" placeholder="one name" style="max-width:180px"
+          onkeydown="if(event.key==='Enter')askMutual()">
+        <input type="text" id="gB" placeholder="and another" style="max-width:180px"
+          onkeydown="if(event.key==='Enter')askMutual()">
+        <button class="sm ghost" onclick="askMutual()">What do they share?</button></div>
+      <div id="gOut" class="conn-s" style="margin-top:8px"></div>
+      <div id="gCircles" class="conn-s" style="margin-top:8px"></div></div></div>
   </section>
 
   <section>
@@ -2031,7 +2042,56 @@ async function loadPeople(){
     const rm=removable?`<button class="sm ghost" onclick='rmPerson(${esc(JSON.stringify(p.name))})'>Remove</button>`:"";
     return `<li><div><div class="q">${esc(p.name)} ${rel} ${badge}</div>`+
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
-    :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';}
+    :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';
+  loadCircles();}
+/* The relationship graph. Two answers, and the difference between them matters:
+   shared PEOPLE is a social fact ("you both know Priya"), shared EVENTS is a
+   where-from fact ("you were both at the launch"). The server reports them
+   separately and so does this. */
+async function askMutual(){
+  const a=$("gA").value.trim(), b=$("gB").value.trim(), out=$("gOut");
+  if(!a||!b){out.textContent="Two names.";return;}
+  let j; try{ j=await api("/dreamlayer/social/graph?a="+encodeURIComponent(a)+
+                          "&b="+encodeURIComponent(b)); }catch(e){ out.textContent=""; return; }
+  if(!j||!j.ok){
+    /* Named but never in a recorded meeting together — said plainly rather than
+       shown as an empty result, which would read as "nothing in common". */
+    const who=(j&&j.unknown||[]).map(esc).join(" and ");
+    out.innerHTML=who?`No recorded meeting includes ${who} yet.`
+                     :esc((j&&j.reason)||"Nothing to compare.");
+    return;
+  }
+  const bits=[];
+  if(j.people&&j.people.length)
+    bits.push("Both know <b>"+j.people.map(esc).join("</b>, <b>")+"</b>");
+  if(j.events&&j.events.length)
+    bits.push("Both at <b>"+j.events.map(esc).join("</b>, <b>")+"</b>");
+  /* The chain reads "Marcus → (the launch) → Priya" — a room is drawn in
+     parentheses so which step is a person and which is a place is never a guess. */
+  if(j.path&&j.path.length>2){
+    const chain=j.path.map(s=>s.kind==="event"?("("+esc(s.id)+")"):("<b>"+esc(s.id)+"</b>"))
+                      .join(" &rarr; ");
+    bits.push("How: "+chain);
+  }
+  out.innerHTML=bits.length?bits.join("<br>"):"Nothing in common yet.";
+}
+async function loadCircles(){
+  const el=$("gCircles"); if(!el) return;
+  let j; try{ j=await api("/dreamlayer/social/graph"); }catch(e){ el.textContent=""; return; }
+  if(!j||!j.count){ el.textContent=""; return; }
+  /* Name the algorithm, because the word "circle" claims more than components can
+     support. Saying "modularity" vs "reachable-from" is the difference between a
+     computed community and a connected blob. */
+  const how=j.communities_engine==="modularity"
+    ? "densely-connected circles"
+    : "groups where everyone is reachable from everyone (install Recall for real circles)";
+  const groups=(j.communities||[]).filter(g=>g.length>1);
+  const listed=groups.length
+    ? groups.map(g=>"<span class=\"tag\">"+g.map(esc).join(" · ")+"</span>").join(" ")
+    : "<i>no one has shared a meeting with anyone else yet</i>";
+  el.innerHTML=`${j.count} ${j.count===1?"person":"people"} across `+
+    `${j.events.length} ${j.events.length===1?"meeting":"meetings"} — ${how}:<br>${listed}`;
+}
 async function addPerson(){const n=$("pName").value.trim();if(!n)return;
   const tags=$("pTags").value.split(",").map(s=>s.trim()).filter(Boolean);
   await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({name:n,note:$("pNote").value.trim(),tags:tags})});

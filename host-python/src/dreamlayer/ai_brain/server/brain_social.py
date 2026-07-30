@@ -680,3 +680,136 @@ class SocialOps(BrainHost):
             return {"intent": intent, "ok": False, "say": ""}
         self._save_people()
         return {"intent": intent, "ok": True, "who": name, "say": say}
+
+    # -- the relationship graph -------------------------------------------
+    #
+    # `social_lens/graph.py` shipped with two queries the fallback dict answered
+    # just as well, and NOTHING built one from the wearer's data — so installing
+    # networkx bought them nothing and the capability read dormant, correctly.
+    # Both halves are fixed: the graph grew the three queries it is for (mutual /
+    # path / communities) and this builds it from what the Brain already knows.
+    #
+    # The SOURCE is meetings, not the contact list. `meetings.json` records
+    # `attendees` per meeting, which is exactly a shared-event edge — two people in
+    # one room is evidence they have met. A contact list is not: importing an
+    # address book asserts that everybody in it knows everybody else, which is
+    # false and would fabricate the whole graph.
+
+    #: Bound on the meetings walked. `sync_contacts` can put hundreds of names in
+    #: people.json and a long-running Brain accumulates meetings without limit; a
+    #: graph query is interactive, so it reads a recent window rather than all of
+    #: history. Also the reason `graph_state` reports `meetings_seen`.
+    MAX_GRAPH_MEETINGS = 500
+
+    def _social_graph(self, limit: int | None = None):
+        """Build the relationship graph from the meeting log. (graph, meetings_seen).
+
+        Rebuilt per call rather than cached: meetings are appended by a live path
+        (`meeting_command`, the ear), and a cached graph would answer "who do we
+        both know" with a picture from before the meeting you just had. Building is
+        a few hundred set operations — cheaper than the staleness.
+        """
+        from ...social_lens.graph import RelationshipGraph
+        g = RelationshipGraph()
+        cap = self.MAX_GRAPH_MEETINGS if limit is None else max(0, int(limit))
+        seen = 0
+        untitled = 0
+        for m in self.meetings(limit=cap):
+            if not isinstance(m, dict):
+                continue
+            who = [str(a).strip() for a in (m.get("attendees") or [])
+                   if str(a).strip()]
+            # FEWER THAN TWO is skipped, not just zero. A meeting you had alone is
+            # not evidence you met anybody, and adding its single attendee as an
+            # edgeless node puts a one-person "circle" in the communities answer —
+            # a graph of who-knows-who has nothing to say about a room with one
+            # person in it.
+            if len(who) < 2:
+                continue
+            seen += 1
+            # The event's NAME is what joins people, so it has to be unique per
+            # meeting unless the meetings really are the same event.
+            #
+            # A shared TITLE is deliberately a shared event: two records called
+            # "standup" are one recurring thing, and "you were both at standup" is
+            # a true and useful answer.
+            #
+            # An untitled meeting makes no such claim, and it cannot be keyed on the
+            # record id either — `MeetingLog.start` derives `id` from
+            # `int(time.time() * 1000)`, so two meetings begun in the same
+            # millisecond SHARE one. That is not hypothetical: it happens on any
+            # scripted or rapid sequence, and the graph then wired two sets of
+            # people into one room they were never in, inventing mutual connections
+            # out of a clock collision. A per-build counter is unique by
+            # construction; the graph is rebuilt per query, so it needs to be
+            # unique within a build and nothing more.
+            untitled += 1
+            event = (str(m.get("title") or "").strip()
+                     or f"an untitled meeting ({untitled})")
+            for name in who:
+                g.met_at(name, event)
+            # Co-attendance is the relationship. Recorded explicitly as well as
+            # through the event node so `connections()` — which only walks
+            # person→person edges — sees it too.
+            for i, a in enumerate(who):
+                for b in who[i + 1:]:
+                    if a != b:
+                        g.relate(a, b, kind="met")
+        return g, seen
+
+    def social_graph_state(self) -> dict:
+        """The whole graph, for the People surface.
+
+        `engine` and `communities_engine` are reported because the answer's MEANING
+        changes with them: without networkx, "communities" is connected components,
+        and two circles joined by one mutual acquaintance are one component and two
+        communities. A surface that showed either as the same thing would be
+        overstating what was computed.
+        """
+        g, seen = self._social_graph()
+        people = g.people()
+        return {
+            "people": people,
+            "events": g.events(),
+            "communities": g.communities(),
+            "engine": "networkx" if g.available else "fallback",
+            "communities_engine": g.communities_engine(),
+            "meetings_seen": seen,
+            "meetings_max": self.MAX_GRAPH_MEETINGS,
+            "count": len(people),
+        }
+
+    def social_mutual(self, a: str, b: str) -> dict:
+        """What two people have in common, and how you get from one to the other."""
+        a, b = str(a or "").strip(), str(b or "").strip()
+        if not a or not b:
+            return {"ok": False, "reason": "two names needed"}
+        g, _seen = self._social_graph()
+        known = set(g.people())
+        missing = [n for n in (a, b) if n not in known]
+        if missing:
+            # Named but not in the graph: they exist as a contact and have never
+            # been in a recorded meeting. Said plainly rather than returned as an
+            # empty result that reads like "nothing in common".
+            return {"ok": False, "reason": "not in any recorded meeting",
+                    "unknown": missing, "a": a, "b": b}
+        m = g.mutual(a, b)
+        return {"ok": True, "a": a, "b": b,
+                "people": m["people"], "events": m["events"],
+                "path": g.path(a, b),
+                "engine": "networkx" if g.available else "fallback"}
+
+    def social_graph_wired(self) -> bool:
+        """Did networkx genuinely answer a query over a NON-EMPTY graph?
+
+        The promotion test for `social_graph`, and stricter than "the wheel
+        imports" on purpose — the same discipline the ear's `live_interpret` uses.
+        networkx being installed over an empty graph means every query returns
+        nothing, so the capability would read active while doing exactly what the
+        fallback does.
+        """
+        try:
+            g, _seen = self._social_graph()
+            return bool(g.available and g.people())
+        except Exception:                          # noqa: BLE001
+            return False

@@ -30,7 +30,7 @@ regression:
 So this prints the list and the reason bucket, and — unlike its two siblings —
 exits 0. A number to argue with beats a gate that fails for a good reason.
 
-Five buckets, and two of them are defects:
+Six buckets, and two of them are defects:
 
   * UNCONSTRUCTED — the seam IS loadable and nothing outside it names anything
     it defines. The capability-level version of the mistake this whole family of
@@ -43,10 +43,14 @@ Five buckets, and two of them are defects:
     `capabilities.py:_NOT_WIRED`. The meter will light it green once its pip
     extras install, and nothing can exercise it. **This is the list to read**,
     and it is empty today.
-  * loadable AND declared DORMANT — importable and `_NOT_WIRED` names it. Two
-    unlike things share this bucket: the ear capabilities are genuinely driven,
-    just conditionally, so "dormant" is the honest DEFAULT rather than a gap;
-    the rest simply have no live surface reaching them.
+  * DRIVEN, dormant only by default — importable, `_NOT_WIRED` names it, AND a
+    live Brain path sets `DL_WIRED_<KEY>` while it genuinely runs. The ear's
+    capabilities go active the moment the microphone opens. Not a gap.
+  * loadable and dormant with NOTHING promoting it — importable, and no live path
+    ever reports it working. Not a false green (the wearer is told dormant) but
+    real work, and the shortlist for it. These two started as one bucket with the
+    difference written in a comment; a checker should compute a distinction that
+    load-bearing, not describe it.
   * declared DORMANT — unreachable and `_NOT_WIRED` says so, so the wearer is
     told "dormant" rather than shown a false green. Honest; still real work.
   * unreachable BY DESIGN — reaching it would be the regression.
@@ -173,6 +177,50 @@ def _declared_dormant() -> set[str]:
     return set()
 
 
+def _runtime_promoted() -> set:
+    """Keys a LIVE Brain path promotes from dormant to active at runtime.
+
+    `wired_now()` reads `DL_WIRED_<KEY>`, which a subsystem sets only while it is
+    genuinely driving the capability. Two mechanisms exist and both are read here,
+    because the difference they encode is the one this bucket used to leave to a
+    prose comment — "some of these are driven, just conditionally; the rest have no
+    live surface at all" is a distinction a checker should COMPUTE, not describe:
+
+      * a promoted-caps tuple (`ear.py:EAR_CAPS`), whose keys the Brain turns into
+        flags in a loop, so no literal flag name appears in the source;
+      * a literal `DL_WIRED_<KEY>` assignment, for a capability with no start/stop
+        event to hang a durable flag on (`social_graph` is computed per report).
+
+    Read from source, never by importing the package — the same rule the rest of
+    this script follows.
+    """
+    keys: set = set()
+    ear = SRC / "ai_brain" / "server" / "ear.py"
+    try:
+        tree = ast.parse(ear.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(getattr(t, "id", "") == "EAR_CAPS" for t in node.targets):
+                continue
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    keys.add(sub.value)
+    except (SyntaxError, OSError):
+        pass
+    # literal flags, anywhere in the package
+    for path in SRC.rglob("*.py"):
+        if "/tests/" in path.as_posix():
+            continue                          # a test setting a flag proves nothing
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in re.finditer(r"DL_WIRED_([A-Z0-9_]+)", text):
+            keys.add(m.group(1).lower())
+    return keys
+
+
 def _public_names(path) -> set:
     """Top-level classes/functions a seam module defines, excluding _private."""
     try:
@@ -235,8 +283,9 @@ def classify(lens=None, reachable=None) -> dict:
 
     caps = _declared_caps()
     dormant_keys = _declared_dormant()
+    promoted_keys = _runtime_promoted()
     open_gaps, dormant, expected, concepts, ok = [], [], [], [], []
-    conditional, unconstructed = [], []
+    conditional, unconstructed, driven = [], [], []
     for key, _title, tier, seam in caps:
         mods = _seam_modules(seam)
         live = [m for m in mods if m in reachable]
@@ -254,7 +303,14 @@ def classify(lens=None, reachable=None) -> dict:
             # over loadability, and "does anything name it" wins over "can it
             # load". Reordering these puts capabilities back in the good column.
             if key in dormant_keys:
-                conditional.append((key, tier, seam))
+                # Declared dormant AND loadable splits again, and the split is the
+                # difference between "conditionally on" and "inert". A capability a
+                # live path PROMOTES at runtime is dormant only as its honest
+                # default — the ear's caps go active the moment the microphone
+                # opens. One with no promoter is dormant permanently, and reading
+                # both from one bucket was how eleven of these looked alike.
+                (driven if key in promoted_keys else conditional).append(
+                    (key, tier, seam))
             elif not _referenced_outside(lens, reachable, live):
                 unconstructed.append((key, tier, seam))
             else:
@@ -268,7 +324,8 @@ def classify(lens=None, reachable=None) -> dict:
 
     return {"caps": caps, "ok": ok, "unconstructed": unconstructed,
             "conditional": conditional, "open_gaps": open_gaps,
-            "dormant": dormant, "expected": expected, "concepts": concepts}
+            "dormant": dormant, "expected": expected, "concepts": concepts,
+            "driven": driven, "promoted_keys": promoted_keys}
 
 
 def main() -> int:
@@ -281,6 +338,7 @@ def main() -> int:
     caps, ok, unconstructed = b["caps"], b["ok"], b["unconstructed"]
     conditional, open_gaps = b["conditional"], b["open_gaps"]
     dormant, expected, concepts = b["dormant"], b["expected"], b["concepts"]
+    driven = b["driven"]
 
     print(f"{len(caps)} declared capabilities · {len(ok)} with a seam the Brain "
           f"loads AND uses")
@@ -295,14 +353,25 @@ def main() -> int:
     if not unconstructed:
         print("  (none)")
 
-    print(f"\nloadable AND declared dormant ({len(conditional)}) — read the "
-          f"`_NOT_WIRED` note")
-    print("  Two different things share this bucket and the comment in\n"
-          "  `capabilities.py` distinguishes them: the ear caps are DRIVEN, just\n"
-          "  conditionally, so `dormant` is the honest DEFAULT; the rest have no\n"
-          "  live surface reaching them at all.")
+    print(f"\nDRIVEN, dormant only by default ({len(driven)}) — a live path "
+          f"promotes these")
+    print("  Loadable, declared dormant, and a Brain path sets DL_WIRED_<KEY> while\n"
+          "  it genuinely drives them — the ear's caps go active the moment the\n"
+          "  microphone opens. `dormant` is the honest DEFAULT here, not a gap. This\n"
+          "  used to be a prose caveat on the bucket below; it is computed now.")
+    for key, tier, seam in sorted(driven):
+        print(f"  {key:24} {tier:12} {seam}")
+    if not driven:
+        print("  (none)")
+
+    print(f"\nloadable, dormant, and NOTHING promotes them ({len(conditional)})")
+    print("  The seam imports and no live path ever reports it working. Not a false\n"
+          "  green — the wearer is told dormant — but each is real work, and this is\n"
+          "  the shortlist for it.")
     for key, tier, seam in sorted(conditional):
         print(f"  {key:24} {tier:12} {seam}")
+    if not conditional:
+        print("  (none)")
 
     print(f"\nMISREPORTED — seam not loadable, and NOT declared dormant "
           f"({len(open_gaps)})")

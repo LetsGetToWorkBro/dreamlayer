@@ -455,6 +455,15 @@ def supported(cap: Cap) -> bool:
 # real. test_capabilities_wired keeps this list honest against the catalog.
 _NOT_WIRED = frozenset({
     # memory: adapters built, never consumed on a live path
+    #
+    # social_graph is the exception now and stays listed for the same reason the
+    # ear caps do — the honest DEFAULT. `RelationshipGraph` grew the three queries
+    # it was named for (mutual / path / communities; before, it held only two that
+    # the no-networkx fallback answered identically, so installing the wheel bought
+    # nothing) and `Brain._social_graph` builds one from the meeting log. It is
+    # promoted in `_capability_payload` when networkx answers over a NON-EMPTY
+    # graph: the wheel over an empty graph returns nothing from every query, which
+    # is exactly what the fallback does, so that must not read green.
     "memory_dedup", "typed_docs", "social_graph",
     # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
     # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
