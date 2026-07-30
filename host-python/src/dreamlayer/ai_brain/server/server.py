@@ -3042,6 +3042,13 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_DREAM_STYLE"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `crdt_sync`, same discipline: loro importing is not a sync. The flag follows
+    # a merge that actually read a peer's snapshot on this process.
+    try:
+        if getattr(brain, "_sync_ok", False):
+            env["DL_WIRED_CRDT_SYNC"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -4528,6 +4535,53 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
 
+        def _get_vault_sync(self, path, qs):
+            """This device's repertoire as a CRDT snapshot, base64 in JSON.
+
+            The blob is the wearer's kept figments, so this is exactly as
+            sensitive as `/backup` and carries the same LOCAL-ONLY rule: a token
+            holder reaching in from off-box can read the Brain, but handing them
+            the whole repertoire in one call is a different kind of access, and
+            the design's premise is that no server ever holds these.
+
+            base64 in JSON rather than raw bytes so it rides the same authenticated
+            JSON path as everything else and a wearer can move it by any channel
+            they like — AirDrop, a QR, a file on a stick."""
+            if not self._from_localhost():
+                self._json(403, {"error": "sync export is local-only"}); return
+            import base64 as _b64
+            blob = brain.sync_export()
+            if not blob:
+                self._json(200, {"ok": False, "reason": "no-crdt",
+                                 "detail": "install the Sync pack (loro)",
+                                 "blob": ""})
+                return
+            self._json(200, {"ok": True, "bytes": len(blob),
+                             "peer": brain._sync_peer_name(),
+                             "blob": _b64.b64encode(blob).decode("ascii")})
+
+        def _post_vault_sync(self, path, qs):
+            """Merge another of your devices' snapshots into this vault.
+
+            `{"blob": "<base64>"}`. Order- and duplicate-independent by
+            construction, so re-posting the same snapshot is a no-op rather than a
+            problem — which is what lets this work over a channel with no
+            protocol at all."""
+            import base64 as _b64
+            b = self._body()
+            raw = b.get("blob") or ""
+            try:
+                blob = _b64.b64decode(raw, validate=True) if raw else b""
+            except Exception:                        # noqa: BLE001 — peer input
+                self._json(200, {"ok": False, "reason": "unreadable",
+                                 "detail": "that snapshot was not valid base64"})
+                return
+            self._json(200, brain.sync_merge(blob))
+
+        def _get_vault_sync_state(self, path, qs):
+            """Whether sync can run here, and how much there is to sync."""
+            self._json(200, brain.sync_state())
+
         def _get_dream(self, path, qs):
             """State of the neural dream painter: the model path, whether it
             resolves, and whether it has actually painted anything yet."""
@@ -5130,6 +5184,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/contacts": _get_contacts,
             "/dreamlayer/social/graph": _get_social_graph,
             "/dreamlayer/dream": _get_dream,
+            "/dreamlayer/vault/sync": _get_vault_sync,
+            "/dreamlayer/vault/sync/state": _get_vault_sync_state,
             "/dreamlayer/reminders": _get_reminders,
             "/dreamlayer/rewind": _get_rewind,
             "/dreamlayer/saga": _get_saga,
@@ -6269,6 +6325,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/location": _post_location,
             "/dreamlayer/zones": _post_zones,
             "/dreamlayer/interpret": _post_interpret,
+            "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,

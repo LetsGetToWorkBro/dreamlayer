@@ -1052,6 +1052,13 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
         <button class="sm ghost" onclick="backup()">Download</button>
         <button class="sm ghost" onclick="document.getElementById('restoreFile').click()">Restore</button>
         <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="restore(event)"></div></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Sync your repertoire across your own devices</div>
+      <div class="conn-s">Your kept Figments &mdash; and, just as importantly, the ones you <b>revoked</b> &mdash; the same on every device you own, with <b>no server holding them</b>. Save a snapshot here, carry it however you like (AirDrop, a stick, a file), and load it on the other device. It is a <b>CRDT</b>, so the exchange cannot go wrong the ordinary ways: send them in either order, send the same one twice, sync A&rarr;B&rarr;A &mdash; the result is identical, and there is never a conflict to resolve by hand. A revocation always beats a re-keep, so a stale device cannot resurrect something you banished, and a Figment altered in transit is refused rather than kept. Needs the <b>Sync</b> pack.
+        <div class="row" style="margin-top:10px">
+          <button class="sm ghost" onclick="syncSave()">Save snapshot</button>
+          <button class="sm ghost" onclick="document.getElementById('syncFile').click()">Load a snapshot</button>
+          <input type="file" id="syncFile" accept="application/json" style="display:none" onchange="syncLoad(event)"></div>
+        <div id="syncStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div></div>
     <div class="conn" style="border-bottom:0"><div><div class="conn-t">Erase</div>
       <div class="conn-s">Clear what the Brain has kept. This can't be undone.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1945,6 +1952,7 @@ async function load(){
     $("dreamModel").value=c.config.dream_model_path||"";
     refreshDream();
   }
+  if($("syncStat")) refreshSync();
   if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
@@ -2056,6 +2064,51 @@ async function loadPeople(){
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
     :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';
   loadCircles();}
+/* Repertoire sync. The transport is deliberately a FILE: the CRDT makes the
+   channel irrelevant (merge is commutative, associative and idempotent), so
+   there is no protocol to get wrong and nothing has to be online at the same
+   time — which is the whole reason no server needs to hold these. */
+async function syncSave(){
+  let r; try{ r=await api("/dreamlayer/vault/sync"); }catch(e){ toast("Sync failed"); return; }
+  if(r&&r.error){ toast("Snapshot is local-only — open localhost"); return; }
+  if(!r||!r.ok){ toast((r&&r.detail)||"Install the Sync pack first"); return; }
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(r)],{type:"application/json"}));
+  a.download="dreamlayer-repertoire-"+(r.peer||"device")+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("Snapshot saved"); refreshSync();
+}
+async function syncLoad(ev){
+  const f=ev.target.files&&ev.target.files[0]; if(!f) return;
+  ev.target.value="";                      /* re-selecting the same file re-fires */
+  let blob;
+  try{ blob=(JSON.parse(await f.text())||{}).blob; }
+  catch(e){ toast("That's not a snapshot file"); return; }
+  if(!blob){ toast("That file has no snapshot in it"); return; }
+  const r=await api("/dreamlayer/vault/sync",{method:"POST",
+    body:JSON.stringify({blob:blob})});
+  if(!r||!r.ok&&!r.tampered){ toast((r&&r.detail)||"That snapshot could not be read"); return; }
+  const bits=[];
+  if(r.added&&r.added.length) bits.push(r.added.length+" added");
+  if(r.revoked&&r.revoked.length) bits.push(r.revoked.length+" revoked");
+  if(r.unchanged) bits.push(r.unchanged+" already in step");
+  /* Tampering is SAID, never swallowed: a Figment whose content no longer
+     matches its hash was altered between the two devices, and a silent refusal
+     would leave the wearer thinking the exchange was clean. */
+  if(r.tampered&&r.tampered.length)
+    toast("Merged, but "+r.tampered.length+" figment(s) were altered in transit and refused");
+  else toast(bits.length?("Merged — "+bits.join(", ")):"Merged — nothing to change");
+  refreshSync(); loadHistory();
+}
+async function refreshSync(){
+  const el=$("syncStat"); if(!el) return;
+  let s; try{ s=await api("/dreamlayer/vault/sync/state"); }catch(e){ el.textContent=""; return; }
+  if(!s){ el.textContent=""; return; }
+  if(!s.available){ el.textContent="The Sync pack isn't installed — nothing to sync with yet."; return; }
+  el.textContent="This device is \""+(s.peer||"device")+"\" · "+(s.figments||0)+
+    " kept figment"+((s.figments===1)?"":"s")+
+    (s.proved?" · a snapshot has been merged here.":" · no snapshot merged here yet.");
+}
 /* The neural dream painter. The path was $DL_DREAM_MODEL only, which the bundled
    .app has no environment to set — so a shipped feature was reachable to
    developers and to nobody else. */

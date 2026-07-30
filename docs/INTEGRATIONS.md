@@ -52,7 +52,8 @@ external, with the exact install command per row. The operator's guide is
 | **sentence-transformers** | Offline default is a real lexical embedder (hashed char-ngrams, morphology-aware) — not the 32-d mock; OpenAI is the cloud option | Neural MiniLM embeddings computed locally, preferred over the lexical default when installed | Memories are semantically searchable **offline and free**, and get sharper with the model — the single biggest win here |
 | **mem0** **[live]** | Passthrough list; duplicates accumulated | Dedup + decay (even in fallback) | Memory stays clean, not noisy |
 | **docarray** | Plain dataclass | Typed multimodal doc schema w/ validation | Structured, validated records |
-| **networkx** | Hand-rolled adjacency dict, basic lookups | Real graph algorithms (paths, centrality, communities) | "How do I know this person / who connects us" becomes answerable |
+| **networkx** **[live]** | The graph held two queries the fallback answered identically, and none of the three it promised | `mutual` / `path` / `communities`, built from your recorded meetings (not your address book), each naming which engine answered | "How do I know this person / who connects us" becomes answerable — with greedy modularity where the wheel is present, and honestly-labelled connected components where it is not |
+| **loro** (CRDT sync) **[live]** | A complete, tested `VaultSync` that nothing constructed — while the Brain had held the `Vault` it takes the whole time | `Brain.sync_export`/`sync_merge`, and a panel that saves and loads a snapshot file | Your kept Figments *and your revocations* the same on every device you own, with no server holding them. Merge is commutative, associative and idempotent, so the channel can be anything you already have — and a revocation always beats a stale device's re-keep |
 
 ### Voice (`voice`, `asr-extra`)
 | Library | Before | After | Why it matters |
