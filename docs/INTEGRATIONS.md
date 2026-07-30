@@ -132,7 +132,7 @@ external, with the exact install command per row. The operator's guide is
 | **skia-python** | HUD rendered with PIL | Optional Skia GPU-accelerated anti-aliased rendering | Crisper strokes/gradients (PIL stays default) |
 | **fastapi / uvicorn** | Brain server was stdlib `http.server` (blocking) | Optional ASGI mirror with async handlers + websockets | Modern async surface *alongside*, not replacing, the simple server |
 | **Ollama / Gemma** **[live]** | Only a generic Ollama backend | Gemma-pinned preset | Convenience for running Gemma locally |
-| **exo** | Single-node inference | Client for an exo cluster | Run a bigger model split across machines you own |
+| **exo** **[live]** | Single-node inference | Selectable model tier (`model: "exo"`) speaking an exo cluster's OpenAI-compatible endpoint, with the same locality check, veil gate and egress receipt the Ollama tier carries | Run a bigger model split across machines you own |
 | **MLX** | Local model never adapted | Optional overnight LoRA fine-tune on Apple silicon | The model gradually learns your world (privacy-gated) |
 | **frame-sdk / noa-assistant** **[live fallback]** | Halo the only display target | Brilliant **Frame** display adapter + formatting patterns | A second hardware target for prototyping |
 | **pairing rate-limit** **[live]** | Nothing stopped brute-forcing pairing codes | In-house lockout limiter | Real anti-brute-force (django-axes is Django-only and didn't fit) |
@@ -147,11 +147,15 @@ external, with the exact install command per row. The operator's guide is
 - **Live improvements today (no install):** mem0 dedup, the PII redactor, the
   Veil-as-type-invariant, answer validation, the typed RC pipeline, the pairing
   rate-limiter, the presence ledger, the event bus, the Frame/LocalRecall
-  fallbacks, and the whole test-infra layer.
+  fallbacks, the exo tier, and the whole test-infra layer.
 - **Capability-latent (one `pip install` away):** the vector stores, real
   embeddings, ASR, the vision/AU/speaker/NLP models, translation, Skia, FastAPI,
-  exo, MLX. Wired, tested against their fallbacks, declared in optional groups,
+  MLX. Wired, tested against their fallbacks, declared in optional groups,
   ready to switch on per-deployment.
+
+  exo used to be listed here and it does not belong: it is a **runtime**, not a
+  pip extra (see DEPLOYMENT.md), and it is now a tier you pick in the panel
+  rather than one waiting on an install.
 - **What did not change:** no existing file, class, or function renamed, deleted,
   or resignatured; no new core dependency; the system runs identically with none
   of this installed.

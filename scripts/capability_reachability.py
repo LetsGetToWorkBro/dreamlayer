@@ -30,15 +30,32 @@ regression:
 So this prints the list and the reason bucket, and — unlike its two siblings —
 exits 0. A number to argue with beats a gate that fails for a good reason.
 
-Three buckets, and only one of them is a defect:
+Five buckets, and two of them are defects:
 
+  * UNCONSTRUCTED — the seam IS loadable and nothing outside it names anything
+    it defines. The capability-level version of the mistake this whole family of
+    checkers is about: an earlier version of this script counted these in the
+    good column, because "in the import closure" answers *can this file load*,
+    not *does anything use it*. `ai_brain/exo_cluster.py` was the case that
+    proved it — importable, in the closure, and `ExoClusterBackend` constructed
+    by nothing but a test.
   * MISREPORTED — a seam the Brain cannot load, on a capability that is NOT in
     `capabilities.py:_NOT_WIRED`. The meter will light it green once its pip
     extras install, and nothing can exercise it. **This is the list to read**,
     and it is empty today.
+  * loadable AND declared DORMANT — importable and `_NOT_WIRED` names it. Two
+    unlike things share this bucket: the ear capabilities are genuinely driven,
+    just conditionally, so "dormant" is the honest DEFAULT rather than a gap;
+    the rest simply have no live surface reaching them.
   * declared DORMANT — unreachable and `_NOT_WIRED` says so, so the wearer is
     told "dormant" rather than shown a false green. Honest; still real work.
   * unreachable BY DESIGN — reaching it would be the regression.
+
+The bucket order matters and it used to be wrong. Loadability was tested FIRST,
+so a seam that was both importable and named in `_NOT_WIRED` never reached the
+dormant branch — eleven capabilities sat in the good column while the product's
+own honesty list said they were unwired. The headline count fell from 42 to 30
+when that was fixed, and 30 is the number that means something.
 
 An earlier version had no dormant bucket and printed eighteen `_NOT_WIRED`
 capabilities as "no reason on file", when the reason was written out in prose
@@ -156,26 +173,92 @@ def _declared_dormant() -> set[str]:
     return set()
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--verbose", action="store_true",
-                    help="also list the capabilities whose seam IS reachable")
-    args = ap.parse_args()
+def _public_names(path) -> set:
+    """Top-level classes/functions a seam module defines, excluding _private."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (SyntaxError, OSError):
+        return set()
+    return {n.name for n in tree.body
+            if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and not n.name.startswith("_")}
 
-    lens = _lens_module()
-    files = lens._sources()
-    known = {lens._module_name(p) for p in files}
-    _roots, reachable = lens._closure(lens._import_graph(files), known)
+
+def _referenced_outside(lens, reachable: set, seam_mods: list) -> bool:
+    """Does any OTHER reachable module name something this seam defines?
+
+    The capability-level version of the mistake this whole audit is about. "The
+    seam is in the import closure" is the same weak claim `lens_reachability.py`
+    warns about in its own header: it says the file CAN be loaded, not that
+    anything uses it. `ai_brain/exo_cluster.py` is the case that proves it —
+    importable, in the closure, honestly reporting state "external", and
+    `ExoClusterBackend` is constructed by nothing, so an exo cluster running on
+    the wearer's LAN would never be reached.
+
+    A name match is weaker than a call graph and deliberately so: a false
+    "referenced" here means the checker stays quiet, which is the same direction
+    the closure test already errs in — this only ever ADDS findings.
+    """
+    by_mod = {lens._module_name(p): p for p in lens._sources()}
+    names: set = set()
+    for m in seam_mods:
+        if m in by_mod:
+            names |= _public_names(by_mod[m])
+    if not names:
+        return True                          # nothing to reference: not a finding
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
+    for mod, path in by_mod.items():
+        if mod not in reachable or mod in seam_mods:
+            continue
+        try:
+            if pattern.search(path.read_text(encoding="utf-8", errors="replace")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def classify(lens=None, reachable=None) -> dict:
+    """Sort every declared capability into its bucket. The whole verdict.
+
+    Split out of `main` so the buckets can be asserted on directly rather than
+    scraped back out of stdout — a checker whose own conclusions are only
+    available as printed text is the least testable shape it could take, and
+    this one has been wrong about its own conclusions twice.
+    """
+    if lens is None:
+        lens = _lens_module()
+    if reachable is None:
+        files = lens._sources()
+        known = {lens._module_name(p) for p in files}
+        _roots, reachable = lens._closure(lens._import_graph(files), known)
 
     caps = _declared_caps()
     dormant_keys = _declared_dormant()
     open_gaps, dormant, expected, concepts, ok = [], [], [], [], []
-    for key, title, tier, seam in caps:
+    conditional, unconstructed = [], []
+    for key, _title, tier, seam in caps:
         mods = _seam_modules(seam)
+        live = [m for m in mods if m in reachable]
         if not mods:
             concepts.append((key, tier, seam))
-        elif any(m in reachable for m in mods):
-            ok.append((key, tier, seam))
+        elif live:
+            # LOADABLE is three states, not one, and collapsing them is how this
+            # script previously reported 42 capabilities in the good column when
+            # eleven of them are named in `_NOT_WIRED` and one is constructed by
+            # nothing. The `elif` chain checked loadability FIRST, so a seam that
+            # is both importable and declared-not-wired never reached the dormant
+            # branch — the importable-never-called trap, in the checker itself.
+            #
+            # ORDER IS THE CONTRACT HERE: the product's own honesty list wins
+            # over loadability, and "does anything name it" wins over "can it
+            # load". Reordering these puts capabilities back in the good column.
+            if key in dormant_keys:
+                conditional.append((key, tier, seam))
+            elif not _referenced_outside(lens, reachable, live):
+                unconstructed.append((key, tier, seam))
+            else:
+                ok.append((key, tier, seam))
         elif _by_design(seam):
             expected.append((key, tier, seam, _by_design(seam)))
         elif key in dormant_keys:
@@ -183,8 +266,43 @@ def main() -> int:
         else:
             open_gaps.append((key, tier, seam))
 
+    return {"caps": caps, "ok": ok, "unconstructed": unconstructed,
+            "conditional": conditional, "open_gaps": open_gaps,
+            "dormant": dormant, "expected": expected, "concepts": concepts}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--verbose", action="store_true",
+                    help="also list the capabilities whose seam IS reachable")
+    args = ap.parse_args()
+
+    b = classify()
+    caps, ok, unconstructed = b["caps"], b["ok"], b["unconstructed"]
+    conditional, open_gaps = b["conditional"], b["open_gaps"]
+    dormant, expected, concepts = b["dormant"], b["expected"], b["concepts"]
+
     print(f"{len(caps)} declared capabilities · {len(ok)} with a seam the Brain "
-          f"can load")
+          f"loads AND uses")
+
+    print(f"\nUNCONSTRUCTED ({len(unconstructed)}) — seam loadable, nothing "
+          f"names what it defines")
+    print("  The capability-level `importable, never called`. In the closure, so\n"
+          "  the old report counted these as reachable; no module outside the\n"
+          "  seam references anything it defines, so no code path can use it.")
+    for key, tier, seam in sorted(unconstructed):
+        print(f"  {key:24} {tier:12} {seam}")
+    if not unconstructed:
+        print("  (none)")
+
+    print(f"\nloadable AND declared dormant ({len(conditional)}) — read the "
+          f"`_NOT_WIRED` note")
+    print("  Two different things share this bucket and the comment in\n"
+          "  `capabilities.py` distinguishes them: the ear caps are DRIVEN, just\n"
+          "  conditionally, so `dormant` is the honest DEFAULT; the rest have no\n"
+          "  live surface reaching them at all.")
+    for key, tier, seam in sorted(conditional):
+        print(f"  {key:24} {tier:12} {seam}")
 
     print(f"\nMISREPORTED — seam not loadable, and NOT declared dormant "
           f"({len(open_gaps)})")

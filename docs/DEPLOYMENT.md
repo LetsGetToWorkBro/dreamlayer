@@ -35,6 +35,9 @@ Notes that keep the table honest:
   rather than `missing` on Linux.
 - **Ollama and exo are runtimes, not pip packages.** No profile installs them —
   run the service and the adapters find it (`--probe` below checks liveness).
+  Both are then chosen in the panel's **Model** section; exo asks for the address
+  of whichever machine in the cluster runs it, and serves text only, so a look
+  reports blind and semantic search stays off on that tier.
 - Two research-grade integrations (**diart**, the **facial-AU** backends) are
   deliberately in no profile; install them manually per their adapters'
   docstrings.

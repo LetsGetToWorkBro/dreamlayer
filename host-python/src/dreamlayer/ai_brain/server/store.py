@@ -444,11 +444,17 @@ def _is_write_denied(path: str) -> bool:
 class BrainConfig:
     """Everything the Brain reads and how it thinks. Editable from the panel."""
     folders: list[str] = field(default_factory=list)   # watched directories
-    model: str = "keyword"          # "keyword" | "ollama" | "mlx" | "api"
+    model: str = "keyword"      # "keyword" | "ollama" | "mlx" | "exo" | "api"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
+    # -- exo cluster: one model across the machines you already own ------
+    # An OpenAI-compatible endpoint served by exo. Text only, so choosing it
+    # leaves the Brain without a vision tier (a look reports blind rather than
+    # guessing); embeddings ride the embedder ladder as they do under MLX.
+    exo_url: str = "http://127.0.0.1:52415"
+    exo_model: str = "llama-3.2-3b"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
     summarize_emails: bool = False  # shorten emails to a glance before relaying
     # network posture (product default = connected): "connected" reaches the

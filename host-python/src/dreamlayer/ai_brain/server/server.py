@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
+    from ..exo_cluster import ExoClusterBackend
     from ..mlx_backend import MLXBackend
 
 import threading
@@ -735,7 +736,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
         if self.config.model == "ollama":
-            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(
+            self._backend: OllamaBackend | MLXBackend | ExoClusterBackend | None = OllamaBackend(
                 self.config, on_egress=self._note_model_egress)
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
@@ -755,6 +756,21 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.index.synthesizer = make_synthesizer(self._backend)
                 self.index.embedder = (self._backend.embed
                                        if self.config.semantic_search else None)
+        elif self.config.model == "exo":
+            # One model spread across the machines the wearer already owns. Text
+            # only: `make_synthesizer` needs just `chat()`, and the vision router
+            # tests for a `vision` method, so a look reports honestly blind
+            # rather than raising into a swallowed AttributeError.
+            #
+            # Embeddings stay off for the same reason MLX leaves them off — exo
+            # serves no embeddings endpoint, so semantic search would silently
+            # degrade to keyword while the panel claimed it was on.
+            from ..exo_cluster import ExoClusterBackend
+            self._backend = ExoClusterBackend(
+                base_url=self.config.exo_url, model=self.config.exo_model,
+                config=self.config, on_egress=self._note_model_egress)
+            self.index.synthesizer = make_synthesizer(self._backend)
+            self.index.embedder = None
         else:
             # keyword AND api: the local index stays a pure keyword retriever.
             # For "api", the first-pass answer is routed to the external agent
@@ -1358,10 +1374,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
         # value — the SSRF endpoint never persists (audit 2026-07-19).
-        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url")
+        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url", "exo_url")
         _prev_urls = {k: getattr(self.config, k, "") for k in _url_fields}
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
+                  "exo_url", "exo_model",
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_provider", "cloud_base_url",
                   "cloud_api_key", "cloud_model", "plan",

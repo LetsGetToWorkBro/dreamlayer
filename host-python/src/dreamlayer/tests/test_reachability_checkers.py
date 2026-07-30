@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import sys
 
 import pytest
 
@@ -294,6 +295,28 @@ def caps():
     return mod
 
 
+@pytest.fixture(scope="module")
+def closure(caps):
+    """(lens module, reachable set) — computed ONCE for this file.
+
+    Walking the import graph over ~390 modules is the expensive part of every
+    test here, and each test that recomputed it paid the full cost again. Held at
+    module scope because the graph is derived from files on disk and no test
+    mutates it.
+    """
+    lens = caps._lens_module()
+    files = lens._sources()
+    _roots, reachable = lens._closure(
+        lens._import_graph(files), {lens._module_name(p) for p in files})
+    return lens, reachable
+
+
+@pytest.fixture(scope="module")
+def buckets(caps, closure):
+    lens, reachable = closure
+    return caps.classify(lens, reachable)
+
+
 class TestTheCapabilityCheckerSeesTheWholeCatalogue:
 
     def test_it_reads_every_declared_capability(self, caps):
@@ -340,41 +363,142 @@ class TestTheCapabilityCheckerSeesTheWholeCatalogue:
             assert key in dormant, key
         assert "vector_search" not in dormant     # wired; must stay checkable
 
-    def test_nothing_is_misreported_as_available(self, caps):
+    def test_nothing_is_misreported_as_available(self, buckets):
         """The bucket that matters: a seam no Brain path can load, on a
         capability the catalog will still light up once its extras install.
         Zero is the only acceptable value — anything here is a false green
         shown to the wearer."""
-        lens = caps._lens_module()
-        files = lens._sources()
-        _roots, reachable = lens._closure(
-            lens._import_graph(files), {lens._module_name(p) for p in files})
-        dormant = caps._declared_dormant()
-        bad = []
-        for key, _title, _tier, seam in caps._declared_caps():
-            mods = caps._seam_modules(seam)
-            if not mods or any(m in reachable for m in mods):
-                continue
-            if caps._by_design(seam) or key in dormant:
-                continue
-            bad.append((key, seam))
-        assert not bad, (
+        assert not buckets["open_gaps"], (
             "capabilities whose seam the Brain cannot load and which are not "
-            f"declared dormant — each is a false green: {bad}")
+            f"declared dormant — each is a false green: {buckets['open_gaps']}")
 
-    def test_the_vector_search_seam_names_the_file_the_brain_opens(self, caps):
+    def test_the_vector_search_seam_names_the_file_the_brain_opens(self, caps, closure):
         """The one stale seam string this pass found. `vector_store.py` sits
         behind the Orchestrator; the Brain's recall paths construct
         `PersistentAnnIndex` from `memory/ann_index.py`. Naming the wrong file
         made a shipping capability read as unreachable."""
-        lens = caps._lens_module()
-        files = lens._sources()
-        _roots, reachable = lens._closure(
-            lens._import_graph(files), {lens._module_name(p) for p in files})
+        _lens, reachable = closure
         seam = next(s for k, _t, _c, s in caps._declared_caps()
                     if k == "vector_search")
         mods = caps._seam_modules(seam)
         assert any(m in reachable for m in mods), (seam, mods)
+
+
+class TestLoadableIsNotOneState:
+    """The correction that dropped the headline from 42 to 30.
+
+    "The seam is in the Brain's import closure" answers *can this file load*.
+    It was being read as *the Brain uses this*, which is the same conflation
+    `lens_reachability.py` warns about in its own header — and the reason this
+    script's good column contained eleven capabilities the product's own
+    `_NOT_WIRED` list calls unwired, plus one whose only class was constructed
+    by nothing but a test.
+    """
+
+    def test_public_names_finds_what_a_seam_defines(self, caps, tmp_path):
+        p = tmp_path / "seam.py"
+        p.write_text("class Thing:\n    pass\n\n\ndef helper():\n    pass\n"
+                     "\n\ndef _private():\n    pass\n", encoding="utf-8")
+        assert caps._public_names(p) == {"Thing", "helper"}
+
+    def test_public_names_skips_underscored_definitions(self, caps, tmp_path):
+        """A `_private` name being referenced elsewhere would not mean the seam
+        is used — it would mean somebody reached inside it."""
+        p = tmp_path / "seam.py"
+        p.write_text("class _Hidden:\n    pass\n", encoding="utf-8")
+        assert caps._public_names(p) == set()
+
+    def test_public_names_survives_a_file_it_cannot_parse(self, caps, tmp_path):
+        p = tmp_path / "broken.py"
+        p.write_text("def (:\n", encoding="utf-8")
+        assert caps._public_names(p) == set()          # no crash, no finding
+
+    def test_nested_definitions_are_not_counted_as_exports(self, caps, tmp_path):
+        """Only module-level names are importable. A method named in another file
+        is a coincidence of vocabulary, not a reference to this seam."""
+        p = tmp_path / "seam.py"
+        p.write_text("class Thing:\n    def method(self):\n        pass\n",
+                     encoding="utf-8")
+        assert caps._public_names(p) == {"Thing"}
+
+    def test_the_seam_itself_is_not_counted_as_a_caller(self, caps, closure):
+        """A module names what it defines, always. Counting that would make
+        every seam self-justifying and the bucket permanently empty."""
+        lens, reachable = closure
+        mods = caps._seam_modules("ai_brain/exo_cluster.py")
+        by_mod = {lens._module_name(p): p for p in lens._sources()}
+        assert mods[0] in by_mod, mods
+        # with the seam as the ONLY reachable module, nothing outside it exists
+        assert caps._referenced_outside(lens, {mods[0]}, mods) is False
+
+    def test_a_seam_defining_nothing_is_not_a_finding(self, caps, closure):
+        """No exported names means no evidence either way. The checker stays
+        quiet rather than inventing a defect out of an absence."""
+        lens, reachable = closure
+        assert caps._referenced_outside(lens, reachable, ["dreamlayer.nope"]) is True
+
+    def test_a_used_seam_is_found_to_be_used(self, caps, closure):
+        """The control. `memory/ann_index.py` defines `PersistentAnnIndex`, which
+        the Brain's recall paths construct — if this reported unconstructed the
+        check would be measuring nothing."""
+        lens, reachable = closure
+        mods = caps._seam_modules("memory/ann_index.py")
+        assert caps._referenced_outside(lens, reachable, mods) is True
+
+    def test_no_capability_is_loadable_and_unconstructed(self, buckets):
+        """`ai_brain/exo_cluster.py` was the whole reason this bucket exists:
+        importable, in the closure, honestly reporting "external" — and
+        `ExoClusterBackend` constructed by nothing but its own unit test, so no
+        Brain path could reach an exo cluster on the wearer's own machines. It is
+        wired to `_wire_model` now; this keeps the next one from hiding."""
+        assert not buckets["unconstructed"], (
+            "capabilities whose seam loads but which nothing names — a green "
+            f"line no code path can reach: {buckets['unconstructed']}")
+
+    def test_the_dormant_declaration_outranks_loadability(self, caps, buckets):
+        """The ordering bug itself. Eleven capabilities are BOTH importable and
+        named in `_NOT_WIRED`; because loadability was tested first they sat in
+        the good column while the product told the wearer they were dormant. The
+        product's own honesty list has to win."""
+        dormant = caps._declared_dormant()
+        leaked = [k for k, _t, _s in buckets["ok"] if k in dormant]
+        assert not leaked, (
+            f"declared-dormant capabilities counted as working: {leaked}")
+        assert len(buckets["conditional"]) >= 5, (
+            "the loadable-and-dormant bucket emptied out — either the ordering "
+            "regressed or `_NOT_WIRED` was gutted")
+
+    def test_every_capability_lands_in_exactly_one_bucket(self, buckets):
+        """Five buckets and a headline count only mean something if they
+        partition the catalogue. A key in two buckets double-counts; a key in
+        none disappears from the audit entirely."""
+        names = ("ok", "unconstructed", "conditional", "open_gaps", "dormant",
+                 "expected", "concepts")
+        seen: dict = {}
+        for name in names:
+            for row in buckets[name]:
+                seen.setdefault(row[0], []).append(name)
+        dupes = {k: v for k, v in seen.items() if len(v) > 1}
+        assert not dupes, f"capabilities in more than one bucket: {dupes}"
+        missing = {k for k, _t, _c, _s in buckets["caps"]} - set(seen)
+        assert not missing, f"capabilities in no bucket at all: {missing}"
+
+    def test_the_headline_counts_only_the_good_bucket(self, caps, buckets,
+                                                      capsys, monkeypatch):
+        """It read "42 with a seam the Brain can load" while eleven of the 42
+        were declared unwired. The printed number has to be the `ok` bucket and
+        nothing else, or the summary line contradicts the detail below it.
+
+        Checked against the actual output rather than the source: the two got out
+        of step once already, which is the only way this can go wrong."""
+        monkeypatch.setattr(sys, "argv", ["capability_reachability.py"])
+        assert caps.main() == 0
+        head = capsys.readouterr().out.splitlines()[0]
+        n = int(head.split()[0])
+        good = int(head.split("·")[1].strip().split()[0])
+        assert n == len(buckets["caps"]), head
+        assert good == len(buckets["ok"]), head
+        assert good < n, "the good column cannot be the whole catalogue"
 
 
 class TestThePushScanKnowsBuiltFromPushed:

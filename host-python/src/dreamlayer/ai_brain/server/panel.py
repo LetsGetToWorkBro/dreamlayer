@@ -932,16 +932,26 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
 
   <section>
     <div class="eyebrow">Intelligence</div><h2>Model</h2>
-    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision — or plug in your own agent (Hermes, OpenClaw, LM Studio, anything OpenAI-compatible) as the brain.</p>
+    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision, spread one bigger model across the machines you already own with exo — or plug in your own agent (Hermes, OpenClaw, LM Studio, anything OpenAI-compatible) as the brain.</p>
     <div class="seg" id="modelSeg">
       <button data-m="keyword" onclick="pickModel('keyword')">Keyword</button>
       <button data-m="ollama" onclick="pickModel('ollama')">Ollama</button>
+      <button data-m="exo" onclick="pickModel('exo')">exo cluster</button>
       <button data-m="api" onclick="pickModel('api')">Your API</button></div>
     <div class="fold" id="ollamaFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s">
       <div class="row" style="margin-top:12px">
         <input type="text" id="ourl" placeholder="http://127.0.0.1:11434" style="max-width:230px">
         <input type="text" id="ochat" placeholder="chat · llama3.2" style="max-width:190px">
         <input type="text" id="ovis" placeholder="vision model" style="max-width:170px"></div>
+    </div>
+    <div class="fold" id="exoFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s">
+      <div class="row" style="margin-top:12px">
+        <input type="text" id="xurl" placeholder="http://127.0.0.1:52415" oninput="renderExoWarn()" style="max-width:230px">
+        <input type="text" id="xmodel" placeholder="model · llama-3.2-3b" style="max-width:200px"></div>
+      <div class="conn-s" style="margin-top:10px">exo serves text, not images — a look reports blind while this tier is chosen,
+        and semantic search stays off (exo has no embeddings endpoint). Point this at whichever machine in the
+        cluster runs <b>exo</b>; the other nodes find each other.</div>
+      <div id="exoWarn"></div>
     </div>
     <div class="fold" id="apiFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .5s var(--ease),opacity .3s,margin .3s">
       <div class="conn" style="margin-top:12px"><div style="flex:1">
@@ -1865,9 +1875,10 @@ async function load(){
   folders.forEach(f=>{fl.innerHTML+=`<li class="folder"><span class="path">${esc(f)}</span>`+
     `<button class="ghost sm" onclick="rmFolder(${esc(JSON.stringify(f))})">Remove</button></li>`;
     dt.innerHTML+=`<option>${esc(f)}</option>`;});
-  const mm=["keyword","ollama","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
+  const mm=["keyword","ollama","exo","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
   $("ourl").value=c.config.ollama_url||"";$("ochat").value=c.config.ollama_chat_model||"";
   $("ovis").value=c.config.ollama_vision_model||"";$("email").checked=!!c.config.email_enabled;
+  $("xurl").value=c.config.exo_url||"";$("xmodel").value=c.config.exo_model||"";
   // primary API brain
   $("aprov").value=c.config.api_provider||"custom";
   $("abase").value=c.config.api_base_url||"";$("amodel").value=c.config.api_model||"";
@@ -2066,8 +2077,14 @@ async function refreshStatus(){
   const phone = s.phone_ago==null ? ["Not paired yet","off"]
     : s.phone_ago<120 ? [`Connected · seen ${s.phone_ago}s ago`,"ok"]
     : [`Paired · last seen ${Math.floor(s.phone_ago/60)}m ago`,"warn"];
+  // Every selectable tier gets its own label. The fallback used to read
+  // "Keyword · active" for ANY non-Ollama choice, so a wearer running their own
+  // API brain — or now an exo cluster — was told no model was loaded.
   const model = s.model==="ollama"
     ? (ollamaOK===true?["Ollama · reachable","ok"]:ollamaOK===false?["Ollama · needs setup","warn"]:["Ollama · checking…","warn"])
+    : s.model==="exo" ? ["exo cluster · active","ok"]
+    : s.model==="mlx" ? ["MLX · on-device","ok"]
+    : s.model==="api" ? ["Your API · active","ok"]
     : ["Keyword · active","ok"];
   const cloudTxt = s.cloud ? (s.cloud_ready?"<b>On · ready</b>":"<b>On · not configured</b>") : "Off";
   const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
@@ -2077,7 +2094,11 @@ async function refreshStatus(){
     sysRow("brain","Brain","<b>Online</b>","ok",
       "Running on this Mac mini — it serves this panel, the Live Lens, and your glasses to devices on your LAN. Nothing leaves it unless you turn the cloud tier on.","advanced","Health & activity")+
     sysRow("model","Model",`<b>${model[0]}</b>`,model[1],
-      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`:"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
+      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`
+       :s.model==="exo"?"One model across your own machines via <b>exo</b> — text answers only, so a look reports blind."
+       :s.model==="mlx"?"Apple-Silicon-native via <b>MLX</b>, running in this process."
+       :s.model==="api"?"Answers route to <b>your own endpoint</b>; the keyword index is the fallback when it can't be reached."
+       :"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
     sysRow("cloud","Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off",
       (s.cloud?(s.cloud_ready?"A cloud provider is wired for the hardest, non-personal asks.":"Turned on but no provider/key is set yet."):"Off — everything runs on-device.")+" Your files, memory, and people never need the cloud.","mind","Wire the cloud tier")+
     sysRow("incognito","Incognito",incogTxt,s.incognito?"warn":"off",
@@ -2219,12 +2240,39 @@ function pickModel(m,silent){modelSel=m;
   document.querySelectorAll("#modelSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
   const f=$("ollamaFields"),on=m==="ollama";
   f.style.maxHeight=on?"200px":"0";f.style.opacity=on?"1":"0";f.style.marginTop=on?"12px":"0";
+  const x=$("exoFields"),xon=m==="exo";
+  if(x){x.style.maxHeight=xon?"320px":"0";x.style.opacity=xon?"1":"0";x.style.marginTop=xon?"12px":"0";
+    if(xon)renderExoWarn();}
   const a=$("apiFields"),aon=m==="api";
   a.style.maxHeight=aon?"900px":"0";a.style.opacity=aon?"1":"0";a.style.marginTop=aon?"12px":"0";
   if(aon){renderApiWarn(); if(!silent) scanAgents();}   // auto-detect on open
   if(!silent&&m==="keyword"){saveModel(true);}
   renderModel();
   if(m==="ollama") checkModel();
+}
+// The same locality verdict the exo backend enforces server-side, shown before
+// you save it. A cluster is normally LAN — which is on-network but still
+// "somebody else's computer", so the receipt records it — and a cluster reached
+// over the internet is egress the veil closes off entirely.
+function renderExoWarn(){const el=$("exoWarn");if(!el)return;
+  const loc=isLocalUrl($("xurl").value.trim());
+  if(loc===true){
+    el.innerHTML='<div class="mstat" style="margin-top:12px"><div class="head"><span class="sdot ok"></span>'+
+      '<b>On your machines</b> &nbsp;<span class="tag privacy">local</span></div>'+
+      '<div class="lead" style="margin:6px 0 0">This cluster is on your device or your network, so questions '+
+      'never leave it and it keeps answering while incognito. A node on the LAN rather than this machine is '+
+      'still recorded on your receipt — the prompt crossed the room.</div></div>';
+  }else if(loc===false){
+    el.innerHTML='<div class="mstat" style="margin-top:12px;border-color:var(--amber)"><div class="head">'+
+      '<span class="sdot warn"></span><b>Remote cluster — your questions leave this device</b> &nbsp;'+
+      '<span class="tag" style="color:var(--amber)">egress</span></div>'+
+      '<div class="lead" style="margin:6px 0 0">This address is not on your network. Every question is sent '+
+      'there, <b>counted and logged as egress</b>, and <b>refused entirely while you\'re incognito or in '+
+      'LAN-only mode</b> (answers fall back to on-device keyword search).</div></div>';
+  }else{
+    el.innerHTML='<div class="conn-s" style="margin-top:12px">Enter the address of the machine running exo. '+
+      'A localhost / LAN address keeps everything on your own hardware.</div>';
+  }
 }
 // EXACT mirror of backends.is_local_endpoint / _LOCAL_NETS. Kept in lockstep so
 // this warning never disagrees with the server's egress accounting. Local =
@@ -2443,7 +2491,8 @@ async function pullModel(name){
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
     ollama_url:$("ourl").value,ollama_chat_model:$("ochat").value,
-    ollama_vision_model:$("ovis").value})});
+    ollama_vision_model:$("ovis").value,
+    exo_url:$("xurl").value,exo_model:$("xmodel").value})});
   if(!silent)toast("Saved"); if(modelSel==="ollama")checkModel(); load();
 }
 async function saveEmail(){   // the email/iMessage switch saves instantly, like the other toggles

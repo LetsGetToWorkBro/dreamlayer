@@ -88,7 +88,22 @@ class _BrainVisionRouter:
     def has_vision(self) -> bool:
         # only a real local vision backend reads images here; cloud text models
         # do not, so has_vision reflects the backend, honestly.
-        return getattr(self._brain, "_backend", None) is not None
+        #
+        # "A backend exists" was too weak a test once a TEXT-ONLY tier could be
+        # selected: `ExoClusterBackend` serves chat and no images, so the answer
+        # was True, `explain` called `backend.vision(...)`, and the AttributeError
+        # was swallowed into a None — a row that advertised itself as able to see
+        # and then silently could not.
+        #
+        # EITHER method counts, and narrowing this to `vision` alone was wrong in
+        # the other direction: two callers read images by two different names —
+        # `explain` calls `vision(label, image_b64, want)`, the Synesthesia lens
+        # calls `describe(prompt, image_b64)` — and the real vision backends
+        # expose both. The question here is "can this backend read an image at
+        # all"; each caller still checks for the method IT needs.
+        backend = getattr(self._brain, "_backend", None)
+        return backend is not None and (hasattr(backend, "vision")
+                                        or hasattr(backend, "describe"))
 
     def explain(self, frame, label, want: str = "quick"):
         from .backends import vision_answer, is_local_endpoint
