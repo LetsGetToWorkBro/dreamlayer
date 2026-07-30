@@ -93,6 +93,24 @@ class TestThePaintingComesBack:
         img = Image.open(io.BytesIO(base64.b64decode(out["image"])))
         assert abs((img.size[0] / img.size[1]) - 4.0) < 0.05, img.size
 
+    def test_the_shared_encoder_still_resizes_NOTHING_by_default(self):
+        """`frame_to_b64` grew `max_side` for this feature, and its other callers
+        feed frames to VISION MODELS.
+
+        A default that bounded them would shrink every image a VLM is asked to
+        recognise — degrading recognition badly and erroring nowhere, so nothing
+        would report it. Changing the default from 0 to 64 survived every test in
+        this file until this one existed: the dream path passes `max_side`
+        explicitly, so its own assertions could not see the change.
+        """
+        np = pytest.importorskip("numpy")
+        Image = pytest.importorskip("PIL.Image")
+        import io
+        from dreamlayer.object_lens.vision_recognizer import frame_to_b64
+        big = np.random.default_rng(11).integers(0, 255, (700, 900, 3), dtype="uint8")
+        img = Image.open(io.BytesIO(base64.b64decode(frame_to_b64(big))))
+        assert img.size == (900, 700), img.size
+
     def test_a_small_frame_is_not_upscaled(self, brain, frame):
         """`max_side` is a ceiling, not a target — blowing a 64 px frame up to 640
         would invent detail that is not there."""
