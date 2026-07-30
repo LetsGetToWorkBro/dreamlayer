@@ -865,6 +865,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         for _e in (self._ear, self._remote_ear):
             if _e is not None and _e.listening:
                 active = active | _e.active_caps
+                # `live_interpret` is NOT in `active_caps`, deliberately. That set
+                # is fixed when the microphone opens, and interpreting is toggled
+                # afterwards — and its honesty bit needs a segment to have come
+                # back genuinely translated, which can only happen later still. So
+                # it is asked for fresh here, every sync.
+                if getattr(_e, "interpreting", False):
+                    active = active | {"live_interpret"}
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
@@ -887,6 +894,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         except Exception as exc:                    # noqa: BLE001 — never fatal
             log.error("[ear] start failed: %s", exc)
             res = {"ok": False, "reason": "error", "detail": str(exc)}
+        self._apply_interpret()          # a fresh EarHost starts with it OFF
         self._sync_ear_wired()
         if res.get("ok"):
             self.activity.add("ear", "Listening turned on (on-device voice capture)")
@@ -913,6 +921,56 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         st["remote_enabled"] = bool(getattr(self.config,
                                             "remote_listen_enabled", False))
         return st
+
+    def set_interpret(self, on: bool = True, target: str = "") -> dict:
+        """Turn the live interpreter on/off across BOTH ears and persist it.
+
+        Both, because the Mac's own microphone and the phone acting as the mic are
+        two `EarHost`s and the wearer set one switch — a toggle that reached only
+        the local ear would look dead to anyone using the Live Lens as their mic,
+        which is the more likely way to use an interpreter at all (it is the ear
+        you take to the conversation).
+
+        Persisted so it survives a restart, and reported back with what is
+        actually true rather than what was asked for.
+        """
+        tgt = (str(target or "").strip()
+               or getattr(self.config, "interpret_target", "en") or "en")
+        self.config.interpret_enabled = bool(on)
+        self.config.interpret_target = tgt[:8]
+        self.save()
+        out: dict = {"ok": True, "on": bool(on), "target": self.config.interpret_target}
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                out = ear.set_interpret(bool(on), self.config.interpret_target)
+        # A capability that just stopped being driven must go dormant now, not at
+        # the next poll — the same reason start/stop_ear both re-sync.
+        self._sync_ear_wired()
+        if on and not out.get("can_interpret"):
+            # Honest, and NOT an error: the switch is legitimately set, it simply
+            # cannot do anything until the pack is installed. The wearer sees the
+            # reason instead of a dead toggle.
+            log.info("[interpret] enabled with no interpreter installed")
+        self.activity.add("ear", "Live interpreter turned %s (%s)"
+                          % ("on" if on else "off", self.config.interpret_target))
+        return out
+
+    def _apply_interpret(self) -> None:
+        """Push the persisted interpreter setting into an ear that just opened.
+
+        Without this the setting was write-only across a restart: `EarHost` is
+        constructed fresh with `_interpret_on = False`, so a wearer who had the
+        interpreter on, restarted the Brain and turned Listening back on would get
+        a silent ear and a panel switch that said it was on.
+        """
+        on = bool(getattr(self.config, "interpret_enabled", False))
+        tgt = getattr(self.config, "interpret_target", "en") or "en"
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                try:
+                    ear.set_interpret(on, tgt)
+                except Exception:                    # noqa: BLE001 — never block
+                    pass
 
     def hear_remote(self, pcm) -> dict:
         """The phone is the live mic: feed a chunk of the audio it captured
@@ -943,6 +1001,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 return {"ok": False, "reason": "error", "detail": str(exc)}
             if not res.get("ok"):
                 return res                           # e.g. no on-device ASR engine
+            self._apply_interpret()      # a fresh EarHost starts with it OFF
             self._sync_ear_wired()
             self.activity.add("ear", "Phone became the live mic (on-device voice)")
         if pcm:
@@ -1392,6 +1451,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
+                  "interpret_enabled", "interpret_target",
                   "private_zones",
                   "face_recognition", "face_auto_enrol"):
             if k in updates:
@@ -1448,6 +1508,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # gate: flip to lan_only and HF_HUB_OFFLINE goes on before the next load.
         if {"network_mode", "quiet_hours"} & set(updates):
             self._apply_model_posture()
+        # The interpreter lives on the EarHosts, not just in config. Without this
+        # the panel's switch persisted and did nothing until the next ear restart —
+        # write-only settings are how a feature looks broken while reading "on".
+        if {"interpret_enabled", "interpret_target"} & set(updates):
+            self._apply_interpret()
+            self._sync_ear_wired()
         # turning a sync on (or changing its filter) → pull immediately
         try:
             if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
@@ -4318,6 +4384,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             alongside the persisted Listening switch."""
             self._json(200, brain.ear_status())
 
+        def _post_interpret(self, path, qs):
+            """Turn the live cross-language interpreter on/off.
+
+            `{"on": true, "target": "en"}` — `target` is the language Juno speaks
+            back IN (the one you understand), not the one being spoken; SeamlessM4T
+            detects the source itself. Rides the ear, so Listening must be on for
+            anything to be heard; this reports `can_interpret: false` with a reason
+            rather than pretending when the pack is absent."""
+            b = self._body()
+            self._json(200, brain.set_interpret(bool(b.get("on", True)),
+                                                str(b.get("target", "") or "")))
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -6101,6 +6179,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/forget/last": _post_forget_last,
             "/dreamlayer/location": _post_location,
             "/dreamlayer/zones": _post_zones,
+            "/dreamlayer/interpret": _post_interpret,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,

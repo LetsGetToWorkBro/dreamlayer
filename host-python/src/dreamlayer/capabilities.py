@@ -462,9 +462,19 @@ _NOT_WIRED = frozenset({
     # DL_WIRED_<KEY> the moment it opens the microphone, so wired_now() promotes
     # them from "dormant" to "active" precisely while listening is on, and they
     # fall back to "dormant" (not a false green) when it's off. They stay listed
-    # here so the DEFAULT (ear off) is the honest "dormant". wake_word (no wake
-    # engine yet), live_interpret (the SeamlessM4T interpreter), asr_alignment
-    # and diarization are NOT promoted — they need the full Orchestrator path.
+    # here so the DEFAULT (ear off) is the honest "dormant".
+    #
+    # live_interpret is the EIGHTH, and it is promoted on a STRICTER test than the
+    # other seven. `EarHost.note_speech_audio` now implements the capture loop's
+    # live-interpreter seam and runs each endpointed segment through SeamlessM4T
+    # (RosettaLens.hear), so the Brain no longer needs the Orchestrator for this.
+    # But the wheel importing does not mean the multi-gigabyte model loaded, so the
+    # flag is set only once a segment has actually come back TRANSLATED — the
+    # `tagger_live` lesson, where a present wheel with no model reported live for a
+    # seam that could only ever return nothing.
+    #
+    # wake_word (no wake engine yet), asr_alignment and diarization are still NOT
+    # promoted — they need the full Orchestrator path.
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
     "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
     "onnx_speech",

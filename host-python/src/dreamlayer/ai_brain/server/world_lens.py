@@ -247,9 +247,18 @@ class WorldLensHost:
         # identical no-op (translate_fn=None) — never a fake translation.
         from ...rosetta import RosettaLens
         from ...rosetta_argos import ArgosTranslator, make_translate_fn
+        # And the EAR half, mirroring orchestrator.py exactly: SeamlessM4T plugs
+        # into `interpret_fn` when the wheel is present (extras `interpreter`),
+        # else None and `hear()` cleanly no-ops. This argument was the whole of
+        # `live_interpret` on the Brain — the parameter existed, the lens was
+        # already constructed here, and it was left at None, so `EarHost`'s
+        # interpreter had nothing to call no matter how the wearer set it.
+        from ...rosetta_seamless import SeamlessInterpreter, make_interpret_fn
         self.rosetta = RosettaLens(
             translate_fn=make_translate_fn() if ArgosTranslator.available else None,
-            engine="argos")
+            engine="argos",
+            interpret_fn=make_interpret_fn() if SeamlessInterpreter.available
+            else None)
         self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
         # Barcode → Open Food Facts → your dietary rules. Only the numeric code

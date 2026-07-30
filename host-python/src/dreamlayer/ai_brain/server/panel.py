@@ -785,6 +785,33 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
     <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
       <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
       <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Live interpreter &middot; their meaning, in your language</div>
+      <div class="conn-s">Off by default. Someone speaks a language you don't; the Brain carries the <b>meaning</b> of each utterance across and puts it on the Live Lens &mdash; and speaks it into your ear if Juno's voice is on. <b>Entirely on-device</b> (Meta's SeamlessM4T runs here); the audio never leaves this machine and no translation service is contacted, whatever your cloud settings say. It reads speech straight into your language in one pass, so there is <b>no transcript of the original</b> to store or show &mdash; only what it meant. The Veil still wins: nothing is interpreted while Incognito, in quiet hours, or inside a private zone. Needs Listening on and the <b>Interpreter</b> pack.
+        <div class="row" style="margin-top:10px">
+          <select id="interpTarget" onchange="saveInterpret()" style="max-width:230px">
+            <option value="en">Answer me in &middot; English</option>
+            <option value="es">Answer me in &middot; Spanish</option>
+            <option value="fr">Answer me in &middot; French</option>
+            <option value="de">Answer me in &middot; German</option>
+            <option value="it">Answer me in &middot; Italian</option>
+            <option value="pt">Answer me in &middot; Portuguese</option>
+            <option value="nl">Answer me in &middot; Dutch</option>
+            <option value="ja">Answer me in &middot; Japanese</option>
+            <option value="zh">Answer me in &middot; Chinese (Mandarin)</option>
+            <option value="ko">Answer me in &middot; Korean</option>
+            <option value="ar">Answer me in &middot; Arabic</option>
+            <option value="ru">Answer me in &middot; Russian</option>
+            <option value="hi">Answer me in &middot; Hindi</option>
+            <option value="el">Answer me in &middot; Greek</option>
+            <option value="he">Answer me in &middot; Hebrew</option>
+            <option value="tr">Answer me in &middot; Turkish</option>
+            <option value="vi">Answer me in &middot; Vietnamese</option>
+            <option value="th">Answer me in &middot; Thai</option>
+            <option value="pl">Answer me in &middot; Polish</option>
+            <option value="uk">Answer me in &middot; Ukrainian</option>
+          </select></div>
+        <div id="interpStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="interpret" onchange="saveInterpret()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Private zones &middot; places that record nothing</div>
       <div class="conn-s">Inside a private zone the Brain captures <b>nothing</b> — it is the same shield Incognito raises, so the ear, captions, answer-ahead, the memory ring and face recall all go quiet together. Needs the phone to be reporting its position (it does that while the app is open). A zone is a point and a radius; you mark one by standing in it.</div>
       <div id="zoneStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
@@ -1890,6 +1917,11 @@ async function load(){
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
   if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
   if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
+  if($("interpret")){
+    $("interpret").checked=!!c.config.interpret_enabled;
+    $("interpTarget").value=c.config.interpret_target||"en";
+    refreshInterpStat();
+  }
   if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
@@ -2138,6 +2170,45 @@ async function saveAnswerAhead(){
   const on=$("answerAhead").checked;
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
   toast(on?"Answer ahead on — on-device only":"Answer ahead off");
+}
+/* The live interpreter. Posts to /dreamlayer/interpret rather than /config because
+   the setting lives on the running EarHosts as well as on disk — a config write
+   alone persisted it and left the open microphone unchanged until the next
+   restart. The route does both and reports what is actually true. */
+async function saveInterpret(){
+  const on=$("interpret").checked, tgt=$("interpTarget").value||"en";
+  let j;
+  try{ j=await api("/dreamlayer/interpret",{method:"POST",
+        body:JSON.stringify({on:on,target:tgt})}); }catch(e){ return; }
+  renderInterpStat(j);
+  /* Never report "on" when it cannot interpret. The switch stays where the wearer
+     put it (it is a real, persisted intent — the pack may arrive later), but the
+     toast says the truth instead of congratulating them. */
+  if(on&&j&&j.can_interpret===false)
+    toast("Saved — but the Interpreter pack isn't installed yet");
+  else toast(on?("Interpreting into "+(j&&j.target?j.target:tgt)):"Interpreter off");
+}
+function renderInterpStat(j){
+  const el=$("interpStat"); if(!el) return;
+  if(!j){ el.textContent=""; return; }
+  if(!j.on){ el.textContent="Off."; return; }
+  if(j.can_interpret===false){
+    el.textContent="On, but the Interpreter pack isn't installed — nothing to translate with yet.";
+    return;
+  }
+  /* `proved` is the honest bit: the wheel being present does not mean the
+     multi-gigabyte model loaded. Until a real utterance has come back translated
+     we say "waiting", not "working". */
+  el.textContent=j.proved
+    ? ("Working — "+(j.interpreted_count||0)+" utterance"+((j.interpreted_count===1)?"":"s")+" carried across.")
+    : "On — the model loads on the first utterance it hears.";
+}
+async function refreshInterpStat(){
+  let e; try{ e=await api("/dreamlayer/ear"); }catch(err){ return; }
+  if(!e) return;
+  renderInterpStat({on:e.interpret, can_interpret:e.can_interpret,
+                    proved:e.interpret_proved, target:e.interpret_target,
+                    interpreted_count:e.interpreted_count});
 }
 async function refreshZones(){
   const stat=$("zoneStat"), list=$("zoneList");

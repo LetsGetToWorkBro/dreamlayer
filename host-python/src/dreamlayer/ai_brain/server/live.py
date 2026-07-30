@@ -950,6 +950,7 @@ _PAGE = r"""<!doctype html>
   <span class="chip" id="hearbtn" role="switch" aria-checked="false" tabindex="0" title="Let the Brain hear and remember — the phone is the mic, transcribed on-device">&#127908; <b id="hearst">listen</b></span>
   <span class="chip" id="rcptbtn" role="button" tabindex="0" title="Verify the privacy receipt on this phone">&#128274; proof</span>
   <span class="chip" id="speakbtn" role="switch" aria-checked="false" tabindex="0" title="Let Juno speak her replies aloud (on-device voice; needs a voice model)">&#128266; <b id="speakst">voice</b></span>
+  <span class="chip" id="interpbtn" role="switch" aria-checked="false" tabindex="0" title="Live interpreter — a foreign speaker's meaning, in your language (needs Listening on)" hidden>&#127760; <b id="interpst">interpret</b></span>
   <span class="chip" id="testbtn" role="button" tabindex="0" title="Push a clearly-labelled SELF-TEST card, to prove the ambient channel works">&#9889; test</span>
   <span class="chip" id="tourbtn" role="button" tabindex="0" title="Show the tour again">?</span>
 </div>
@@ -1725,6 +1726,39 @@ function glassCaptionCard(c){                        /* LIVE CAPTIONS */
     gtext(ctx, "captions paused", 128, 128, GP.text_ghost, "sm");
   }
   gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+}
+
+function glassInterpretCard(c){                      /* LIVE INTERPRETER */
+  /* `LiveCaptionCard`. Distinct from glassCaptionCard even though both are speech
+     on the glass, because the two say different things and the difference matters
+     to a reader mid-conversation: a SpokenCaptionCard is what someone said, and
+     this is what it MEANT in your language. So the eyebrow is the language pair
+     and the body is the translation, in the primary weight — the meaning is not a
+     footnote to a transcript here, it IS the content. `original` is empty by
+     design (SeamlessM4T goes speech→target-text in one pass and never produces a
+     source transcript), so there is deliberately no footer line to draw. */
+  const ctx = glassCtx(); gback(ctx);
+  garc(ctx, 128, 128, 106, 0, 360, GP.border_subtle);
+  const dst = String(c.dst_lang || "").trim().toUpperCase().slice(0, 6);
+  /* "→ EN" rather than "?? → EN": the source language is genuinely unknown here
+     and inventing a code for it would be the one misleading thing on this card. */
+  gtext(ctx, (dst ? "→ " + dst : "INTERPRETED"), 128, 66, GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(48, 82); ctx.lineTo(208, 82);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  const line = String(c.translation || c.primary || "").trim();
+  const body = gwrap(line, 24).slice(0, 5);
+  if (body.length){
+    const top = 128 - ((body.length - 1) * 16) / 2 + 6;
+    body.forEach((ln, i) => gtext(ctx, ln, 128, top + i * 16, GP.text_primary, "md"));
+  } else {
+    gtext(ctx, "interpreter paused", 128, 128, GP.text_ghost, "sm");
+  }
+  gend(typeof c.dismiss_ms === "number" ? c.dismiss_ms : 0);
+  /* AND SAY IT. The feature is "their meaning spoken into your ear" — drawing it
+     silently would be the caption feature over again. `speak()` is the existing
+     Piper path and already refuses when the voice switch is off or the veil is
+     up, so this adds no new way for audio to escape. */
+  if (line) speak(line);
 }
 
 function glassVeilCard(c){                           /* THE SHIELD IS UP */
@@ -3440,9 +3474,81 @@ function stopHearing(keep){
   }
   _hearClose();
 }
-function toggleHearing(){ if (hearOn) stopHearing(); else startHearing(); }
+function toggleHearing(){
+  if (hearOn) stopHearing(); else startHearing();
+  /* the interpreter rides the ear, so its chip appears/vanishes with it */
+  try { refreshInterp(); } catch (e) {}
+}
 $("hearbtn").onclick = toggleHearing;
 $("hearbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") toggleHearing(); };
+
+/* ---- the live interpreter, on the glass ----------------------------------
+   Someone speaks a language you don't; their MEANING arrives on the lens and in
+   your ear, in yours. It rides the ear, so this chip is only offered while
+   Listening is on — an interpreter with no microphone is a switch that cannot do
+   anything, and offering it would be the dead-toggle problem the server side of
+   this feature exists to avoid.
+
+   The target language is the one Juno answers IN — the one you understand. It
+   comes from the Brain's config rather than a picker here: it is set once, in the
+   panel, and re-asking on a lens you use mid-conversation would be the wrong
+   moment for a language menu. */
+let interpOn = false, interpWarned = false, interpTarget = "en", earListening = false;
+function _interpShow(){
+  const el = $("interpbtn");
+  if (!el) return;
+  /* Listening can be the PHONE's mic (hearOn) or the Mac's own — either is an ear
+     the interpreter can ride, so ask the Brain rather than assuming this phone. */
+  const live = hearOn || earListening;
+  el.hidden = !live;
+  if (!live && interpOn) setInterp(false);           /* mic gone → switch is moot */
+}
+function _interpPaint(){
+  const el = $("interpbtn");
+  if (!el) return;
+  el.classList.toggle("on", interpOn);
+  el.setAttribute("aria-checked", interpOn ? "true" : "false");
+  $("interpst").textContent = interpOn ? ("→ " + (interpTarget || "en")) : "interpret";
+}
+/* Hydrate from the Brain rather than assuming this page's own state. Two things
+   are only knowable server-side: whether the MAC's microphone is open (a second
+   ear this phone knows nothing about), and the persisted target language. Called
+   at boot and whenever hearing is toggled — not on the 10 s heartbeat, because
+   nothing here changes without one of those two events. */
+async function refreshInterp(){
+  try {
+    const r = await fetchJSON("/dreamlayer/ear", {headers: HDRS()}, 6000);
+    earListening = !!(r && (r.listening || r.remote_listening));
+    if (r && typeof r.interpret === "boolean") interpOn = r.interpret;
+    if (r && r.interpret_target) interpTarget = r.interpret_target;
+  } catch (e) { /* offline: leave the chip as it is rather than flapping it */ }
+  _interpPaint();
+  _interpShow();
+}
+async function setInterp(on){
+  interpOn = !!on;
+  _interpPaint();
+  try {
+    const r = await fetch("/dreamlayer/interpret", {method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+      body: JSON.stringify({on: interpOn})});
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && j.target) { interpTarget = j.target; }
+    /* Say WHY it can't work rather than sitting on lit. `can_interpret` false means
+       the SeamlessM4T pack isn't installed — the switch is legitimately set and
+       genuinely inert, and a wearer deserves to know which. */
+    if (interpOn && j && j.can_interpret === false && !interpWarned){
+      interpWarned = true;
+      showHud("interpreter pack not installed — nothing to translate with", {ms:3800});
+      interpOn = false;
+    }
+    _interpPaint();
+  } catch (e) {}
+}
+$("interpbtn").onclick = () => setInterp(!interpOn);
+$("interpbtn").onkeydown = e => { if (e.key === " " || e.key === "Enter") setInterp(!interpOn); };
+refreshInterp();
 /* veil + backgrounding release the mic but KEEP the intent, so it resumes when
    the shield lifts / the page returns (mirrors the caption discipline) */
 document.addEventListener("visibilitychange", () => {
@@ -3557,6 +3663,7 @@ function renderEvent(ev){
   else if (t === "QuestRewardCard") glassQuestRewardCard(c);
   else if (t === "ListeningCard") glassListeningCard(c);
   else if (t === "SpokenCaptionCard") glassCaptionCard(c);
+  else if (t === "LiveCaptionCard") glassInterpretCard(c);
   else if (t === "PrivacyVeilCard") glassVeilCard(c);
   else if (t === "ReadyCard") glassReadyCard(c);
   else if (t === "TimeScrubNodeCard") glassScrubCard(c);

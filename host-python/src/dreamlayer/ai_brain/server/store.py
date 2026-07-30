@@ -449,6 +449,14 @@ class BrainConfig:
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
+    # -- live interpreter: someone's foreign speech, voiced back to you ---
+    # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
+    # opt-in: the microphone is already the wearer's most consequential switch,
+    # and interpreting turns each captured utterance into a second on-device model
+    # pass. `interpret_target` is the language Juno speaks back IN — the language
+    # you understand, not the one being spoken.
+    interpret_enabled: bool = False
+    interpret_target: str = "en"
     # -- exo cluster: one model across the machines you already own ------
     # An OpenAI-compatible endpoint served by exo. Text only, so choosing it
     # leaves the Brain without a vision tier (a look reports blind rather than
