@@ -455,6 +455,15 @@ def supported(cap: Cap) -> bool:
 # real. test_capabilities_wired keeps this list honest against the catalog.
 _NOT_WIRED = frozenset({
     # memory: adapters built, never consumed on a live path
+    #
+    # social_graph is the exception now and stays listed for the same reason the
+    # ear caps do — the honest DEFAULT. `RelationshipGraph` grew the three queries
+    # it was named for (mutual / path / communities; before, it held only two that
+    # the no-networkx fallback answered identically, so installing the wheel bought
+    # nothing) and `Brain._social_graph` builds one from the meeting log. It is
+    # promoted in `_capability_payload` when networkx answers over a NON-EMPTY
+    # graph: the wheel over an empty graph returns nothing from every query, which
+    # is exactly what the fallback does, so that must not read green.
     "memory_dedup", "typed_docs", "social_graph",
     # voice: the on-device "ear". Seven of these (voice_vad, local_asr,
     # mic_capture, asr_moonshine, onnx_speech, sound_events, bird_song) are now
@@ -462,9 +471,19 @@ _NOT_WIRED = frozenset({
     # DL_WIRED_<KEY> the moment it opens the microphone, so wired_now() promotes
     # them from "dormant" to "active" precisely while listening is on, and they
     # fall back to "dormant" (not a false green) when it's off. They stay listed
-    # here so the DEFAULT (ear off) is the honest "dormant". wake_word (no wake
-    # engine yet), live_interpret (the SeamlessM4T interpreter), asr_alignment
-    # and diarization are NOT promoted — they need the full Orchestrator path.
+    # here so the DEFAULT (ear off) is the honest "dormant".
+    #
+    # live_interpret is the EIGHTH, and it is promoted on a STRICTER test than the
+    # other seven. `EarHost.note_speech_audio` now implements the capture loop's
+    # live-interpreter seam and runs each endpointed segment through SeamlessM4T
+    # (RosettaLens.hear), so the Brain no longer needs the Orchestrator for this.
+    # But the wheel importing does not mean the multi-gigabyte model loaded, so the
+    # flag is set only once a segment has actually come back TRANSLATED — the
+    # `tagger_live` lesson, where a present wheel with no model reported live for a
+    # seam that could only ever return nothing.
+    #
+    # wake_word (no wake engine yet), asr_alignment and diarization are still NOT
+    # promoted — they need the full Orchestrator path.
     "voice_vad", "local_asr", "wake_word", "mic_capture", "live_interpret",
     "sound_events", "asr_moonshine", "bird_song", "asr_alignment", "diarization",
     "onnx_speech",
@@ -472,11 +491,20 @@ _NOT_WIRED = frozenset({
     # openvocab_find, scene_segment, sky_sense) are now reachable from the phone /
     # Live Lens via WorldLensHost.look_lens (?lens=…), each an on-device engine
     # that self-describes when its pack isn't installed — so they report "active"
-    # once installed rather than "dormant". dream_style stays DORMANT: the reach-
-    # able ?lens=dream path only ever runs the dependency-free painterly wash
-    # (no caller constructs the neural stylizer with a model unless DL_DREAM_MODEL
-    # is set), so onnxruntime being importable must NOT light the neural cap green.
-    # coreml_ondevice likewise (a macOS Vision classify backend not on the live path).
+    # once installed rather than "dormant".
+    #
+    # dream_style is now REACHABLE and stays listed here as the honest default.
+    # The model path was `DL_DREAM_MODEL` only — an environment variable the
+    # bundled .app cannot set, so the neural painter was reachable to developers
+    # and to nobody else; it is `config.dream_model_path` too now, settable from
+    # the panel. And the lens used to compute a painting and THROW IT AWAY,
+    # returning `styled: true` with no pixels to a Live Lens that had no case for
+    # it at all, so a dream look ended by drawing the word "done". It returns the
+    # image. Promotion is proof-based (`_dream_neural_ok`, set only after the
+    # NEURAL painter produces a picture) and re-checked against the configured
+    # path, so onnxruntime being importable still must not light this green.
+    # coreml_ondevice remains dormant (a macOS Vision classify backend not on the
+    # live path).
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",

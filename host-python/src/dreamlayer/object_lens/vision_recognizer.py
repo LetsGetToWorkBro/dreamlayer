@@ -57,10 +57,17 @@ _CURRENCY_RE = re.compile(r"^[A-Za-z]{2,4}$")
 _PII_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w{2,}|(?:\+?\d[\s().-]?){7,15}")
 
 
-def frame_to_b64(frame) -> Optional[str]:
+def frame_to_b64(frame, max_side: int = 0) -> Optional[str]:
     """A frame → JPEG base64 (what a vision model wants). Passes a str straight
     through (already base64); encodes an ndarray/PIL image via Pillow; returns
-    None when it can't (no Pillow, a bad array) so the caller falls back."""
+    None when it can't (no Pillow, a bad array) so the caller falls back.
+
+    `max_side` (0 = leave alone, the default, so no existing caller changes)
+    downscales the longest edge first. Added for the dream lens, which sends its
+    painted frame BACK to the wearer rather than off to a model: a few-megapixel
+    phone frame re-encoded whole is a multi-megabyte base64 string over the LAN
+    for a picture that lands in a 256 px circle.
+    """
     if frame is None:
         return None
     if isinstance(frame, str):
@@ -78,6 +85,14 @@ def frame_to_b64(frame) -> Optional[str]:
             img = Image.fromarray(arr).convert("RGB")
         else:
             img = img.convert("RGB")
+        side = int(max_side or 0)
+        if side > 0 and max(img.size) > side:
+            # LANCZOS, and the ratio is kept: a painting stretched to a square
+            # would be a different picture from the one the wearer looked at.
+            w, h = img.size
+            scale = side / float(max(w, h))
+            img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))),
+                             Image.LANCZOS)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=80)
         return base64.b64encode(buf.getvalue()).decode("ascii")

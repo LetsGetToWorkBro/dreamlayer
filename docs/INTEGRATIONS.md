@@ -129,10 +129,12 @@ external, with the exact install command per row. The operator's guide is
 | **pluggy** | Plugins had to be in-process `register()` callables wired by hand | Entry-point discovery — a plugin ships as a pip package, found automatically | Third parties can distribute plugins via PyPI |
 | **pyee** **[live fallback]** | Mesh events were direct calls, no subscribers | Pub/sub bus; many parts react to one packet, decoupled | Cleaner reactive architecture (Veil contract preserved — nothing published if nothing emitted) |
 | **argostranslate** | RosettaLens with no translator returned text unchanged | Real offline neural translation | The translation lens actually translates, no network |
+| **SeamlessM4T** (transformers) **[live]** | Rosetta translated text you *look at*; the ear half was built and nothing called it | `EarHost.note_speech_audio` implements the capture loop's live-interpreter seam — each endpointed segment goes speech→your-language in one pass, onto the Live Lens and into your ear via Piper | A live interpreter: someone's meaning in your language, entirely on-device. Promoted to `active` only once a segment has genuinely come back translated |
 | **skia-python** | HUD rendered with PIL | Optional Skia GPU-accelerated anti-aliased rendering | Crisper strokes/gradients (PIL stays default) |
+| **onnxruntime** (dream style) **[live]** | The dream lens computed a painting and returned booleans — and the Live Lens had no case for it, so a dream look drew the word "done" | The painted frame comes back as a bounded JPEG and is drawn clipped to the glass; the ONNX model path moved from `$DL_DREAM_MODEL` (unsettable in the bundled .app) to a panel field | Your street actually comes back as a painting. Promoted to `active` only after the neural painter produces a picture, and demoted if the model path stops resolving |
 | **fastapi / uvicorn** | Brain server was stdlib `http.server` (blocking) | Optional ASGI mirror with async handlers + websockets | Modern async surface *alongside*, not replacing, the simple server |
 | **Ollama / Gemma** **[live]** | Only a generic Ollama backend | Gemma-pinned preset | Convenience for running Gemma locally |
-| **exo** | Single-node inference | Client for an exo cluster | Run a bigger model split across machines you own |
+| **exo** **[live]** | Single-node inference | Selectable model tier (`model: "exo"`) speaking an exo cluster's OpenAI-compatible endpoint, with the same locality check, veil gate and egress receipt the Ollama tier carries | Run a bigger model split across machines you own |
 | **MLX** | Local model never adapted | Optional overnight LoRA fine-tune on Apple silicon | The model gradually learns your world (privacy-gated) |
 | **frame-sdk / noa-assistant** **[live fallback]** | Halo the only display target | Brilliant **Frame** display adapter + formatting patterns | A second hardware target for prototyping |
 | **pairing rate-limit** **[live]** | Nothing stopped brute-forcing pairing codes | In-house lockout limiter | Real anti-brute-force (django-axes is Django-only and didn't fit) |
@@ -147,11 +149,15 @@ external, with the exact install command per row. The operator's guide is
 - **Live improvements today (no install):** mem0 dedup, the PII redactor, the
   Veil-as-type-invariant, answer validation, the typed RC pipeline, the pairing
   rate-limiter, the presence ledger, the event bus, the Frame/LocalRecall
-  fallbacks, and the whole test-infra layer.
+  fallbacks, the exo tier, and the whole test-infra layer.
 - **Capability-latent (one `pip install` away):** the vector stores, real
   embeddings, ASR, the vision/AU/speaker/NLP models, translation, Skia, FastAPI,
-  exo, MLX. Wired, tested against their fallbacks, declared in optional groups,
+  MLX. Wired, tested against their fallbacks, declared in optional groups,
   ready to switch on per-deployment.
+
+  exo used to be listed here and it does not belong: it is a **runtime**, not a
+  pip extra (see DEPLOYMENT.md), and it is now a tier you pick in the panel
+  rather than one waiting on an install.
 - **What did not change:** no existing file, class, or function renamed, deleted,
   or resignatured; no new core dependency; the system runs identically with none
   of this installed.

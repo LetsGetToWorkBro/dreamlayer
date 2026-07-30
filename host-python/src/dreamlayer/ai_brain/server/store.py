@@ -444,11 +444,32 @@ def _is_write_denied(path: str) -> bool:
 class BrainConfig:
     """Everything the Brain reads and how it thinks. Editable from the panel."""
     folders: list[str] = field(default_factory=list)   # watched directories
-    model: str = "keyword"          # "keyword" | "ollama" | "mlx" | "api"
+    model: str = "keyword"      # "keyword" | "ollama" | "mlx" | "exo" | "api"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
+    # -- dream mode: the neural painter -----------------------------------
+    # Path to a fast-neural-style ONNX model. Nothing is bundled or fetched — the
+    # wearer supplies it — and with none set Dream Mode still paints, using the
+    # dependency-free procedural wash. This existed only as $DL_DREAM_MODEL, an
+    # environment variable, which the bundled .app has no way to set: the neural
+    # painter could not be turned on from any surface the product ships.
+    dream_model_path: str = ""
+    # -- live interpreter: someone's foreign speech, voiced back to you ---
+    # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
+    # opt-in: the microphone is already the wearer's most consequential switch,
+    # and interpreting turns each captured utterance into a second on-device model
+    # pass. `interpret_target` is the language Juno speaks back IN — the language
+    # you understand, not the one being spoken.
+    interpret_enabled: bool = False
+    interpret_target: str = "en"
+    # -- exo cluster: one model across the machines you already own ------
+    # An OpenAI-compatible endpoint served by exo. Text only, so choosing it
+    # leaves the Brain without a vision tier (a look reports blind rather than
+    # guessing); embeddings ride the embedder ladder as they do under MLX.
+    exo_url: str = "http://127.0.0.1:52415"
+    exo_model: str = "llama-3.2-3b"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
     summarize_emails: bool = False  # shorten emails to a glance before relaying
     # network posture (product default = connected): "connected" reaches the

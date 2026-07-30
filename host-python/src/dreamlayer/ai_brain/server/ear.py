@@ -33,11 +33,18 @@ log = logging.getLogger("dreamlayer.ear")
 # the Brain sets DL_WIRED_<KEY> for each so capabilities.state() reports them
 # "active" (installed → really on); when the ear stops they revert to "dormant".
 # We deliberately do NOT claim the caps this minimal ear does not exercise —
-# wake_word (a wake-word engine), live_interpret (the SeamlessM4T interpreter),
-# diarization and asr_alignment stay dormant until the full Orchestrator path is
-# wired, so the meter never over-reports.
+# wake_word (a wake-word engine), diarization and asr_alignment stay dormant
+# until the full Orchestrator path is wired, so the meter never over-reports.
+#
+# `live_interpret` IS here now, and it is promoted on a stricter test than the
+# others: not "the wheel is installed", not even "an interpreter object exists",
+# but "a segment has actually come back translated" (`_interpret_ok`). That is the
+# `tagger_live` lesson applied — `SoundEventDetector` reported live off a present
+# wheel with no model loaded, so `detect()` could only ever return nothing. The
+# SeamlessM4T model is a multi-gigabyte lazy load that can fail long after the
+# wheel imports, so nothing short of a real translated line proves it runs.
 EAR_CAPS = ("voice_vad", "local_asr", "mic_capture", "asr_moonshine",
-            "onnx_speech", "sound_events", "bird_song")
+            "onnx_speech", "sound_events", "bird_song", "live_interpret")
 
 
 class _EarGate:
@@ -84,6 +91,15 @@ class EarHost:
         self.last_heard = ""
         self.heard_count = 0
         self.active_caps = frozenset()          # the caps THIS run genuinely drives
+        # -- live interpreter state. `_interpret_ok` is the honesty bit: it flips
+        # once a segment has genuinely come back translated, and it is what
+        # promotes the capability. Never reset by a toggle — that a model DID load
+        # and translate on this process stays true when you switch the feature off
+        # and on, and re-proving it would need another utterance.
+        self._interpret_on = False
+        self._interpret_target = "en"
+        self._interpret_ok = False
+        self.interpreted_count = 0
 
     # -- CapturePipeline host contract -------------------------------------
 
@@ -318,6 +334,122 @@ class EarHost:
         except Exception:                            # noqa: BLE001
             return
 
+    # -- the live interpreter: foreign speech, voiced back to you -----------
+    #
+    # This is `live_interpret`, and the whole feature was one missing method. The
+    # capture loop has called `note_speech_audio(segment, sample_rate)` on its host
+    # at every endpointed segment since it was written; `RosettaLens.hear()` has
+    # been able to carry that audio across languages just as long; the Orchestrator
+    # implements the seam (ops_juno_attention.py). The Brain's ear simply did not
+    # have the method, so on the shipped product the hook found nothing callable
+    # and no-op'd — the exact "adapter built, nothing calls it" shape the
+    # reachability audit keeps surfacing, one method wide.
+
+    def _rosetta(self):
+        """The Brain's ONE RosettaLens — the same object the eye translates with.
+
+        Deliberately not a second lens: `world_lens()` builds it with both an
+        Argos `translate_fn` (the eye) and a SeamlessM4T `interpret_fn` (the ear),
+        and a private copy here would drift from the one the object-lens registry
+        already holds. Returns None when the world lens can't be built at all.
+        """
+        try:
+            return getattr(self.brain.world_lens(), "rosetta", None)
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[interpret] no world lens: %s", type(exc).__name__)
+            return None
+
+    def _can_interpret(self) -> bool:
+        """Is an interpreter actually wired? (the wheel is present AND the lens
+        got an `interpret_fn`).
+
+        Deliberately does NOT consult `SeamlessInterpreter.ready`, tempting as
+        that is: `ready` triggers the lazy multi-gigabyte model load, so a status
+        poll would kick off a download. Readiness is proved by use instead —
+        `_interpret_ok`, set when a real segment comes back translated.
+        """
+        lens = self._rosetta()
+        return lens is not None and getattr(lens, "_interpret", None) is not None
+
+    @property
+    def interpreting(self) -> bool:
+        """True only when the interpreter has PROVED itself on this process: the
+        switch is on, the ear is open, and a segment has actually come back
+        translated. This is what promotes `live_interpret` to "active"."""
+        return bool(self._interpret_on and self.listening and self._interpret_ok)
+
+    def set_interpret(self, on: bool = True, target: str = "en") -> dict:
+        """Turn the live interpreter on/off and choose the language Juno answers
+        IN. Reports what is actually true rather than echoing the request, so a
+        wearer who flips it on without the pack installed is told so."""
+        self._interpret_on = bool(on)
+        self._interpret_target = (str(target or "en").strip() or "en")[:8]
+        can = self._can_interpret()
+        return {"ok": True, "on": self._interpret_on,
+                "target": self._interpret_target,
+                "can_interpret": can,
+                "proved": self._interpret_ok,
+                "reason": "" if can else "no-interpreter",
+                "detail": "" if can else ("install the interpreter pack "
+                                          "(SeamlessM4T) to hear a translation"),
+                "interpreted_count": self.interpreted_count}
+
+    def note_speech_audio(self, segment, sample_rate: int = 16000) -> None:
+        """CapturePipeline endpointed a speech segment — carry its MEANING across.
+
+        The transcript has already routed separately through `ingest_caption`, so
+        this path adds the one thing text cannot: the utterance rendered into the
+        wearer's own language. The raw audio is used and dropped; nothing here
+        stores it.
+
+        Veil-gated with a SECOND check even though the pipeline already gates its
+        door: `push_pcm` refuses to accumulate while veiled, but the segment now in
+        hand was accumulated before that and the shield may have come down in
+        between. Fails CLOSED, like every other gate in this file.
+        """
+        if not self._interpret_on:
+            return
+        try:
+            if not self.privacy.allow_capture():
+                return
+        except Exception:                            # noqa: BLE001
+            return                                   # unknown posture → veiled
+        lens = self._rosetta()
+        if lens is None or getattr(lens, "_interpret", None) is None:
+            return
+        try:
+            res = lens.hear(segment, sample_rate, self._interpret_target)
+        except Exception as exc:                     # noqa: BLE001 — never break
+            log.warning("[interpret] hear failed: %s", type(exc).__name__)
+            return
+        line = (getattr(res, "translated", "") or "").strip()
+        if not line:
+            # An empty line is the honest miss: the model declined, is still
+            # loading, or the segment was not speech in another language. NOT a
+            # proof of readiness, so the capability stays dormant.
+            return
+        self._interpret_ok = True
+        self.interpreted_count += 1
+        try:
+            self.brain._sync_ear_wired()             # first line → cap goes active
+        except Exception:                            # noqa: BLE001
+            pass
+        try:
+            from ...hud import cards
+            # `original=""` on purpose. SeamlessM4T does speech→text IN THE TARGET
+            # language in one pass — it never produces a source transcript, and
+            # `RosettaLens.hear` documents `source_text` as empty for exactly that
+            # reason. Putting the ASR transcript there would look like the same
+            # utterance while being a separate engine's guess at it.
+            card = cards.live_caption_card(
+                original="", translation=line,
+                src_lang="", dst_lang=self._interpret_target,
+                privacy=self.privacy)
+            # veil_ok=False: this card is nothing BUT captured speech.
+            self.brain.push_event("interpret", card, veil_ok=False)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[interpret] card push failed: %s", type(exc).__name__)
+
     # -- lifecycle ---------------------------------------------------------
 
     @property
@@ -443,4 +575,12 @@ class EarHost:
         # no need to hand captured content back over the wire (even to a token
         # holder), and the Live Lens credential IS the Brain token. Counts only.
         return {"listening": self.listening,
-                "heard_count": self.heard_count}
+                "heard_count": self.heard_count,
+                # the interpreter, reported as four separate facts because they
+                # fail independently: the switch, the pack, whether it has ever
+                # actually produced a line, and how many.
+                "interpret": self._interpret_on,
+                "interpret_target": self._interpret_target,
+                "can_interpret": self._can_interpret(),
+                "interpret_proved": self._interpret_ok,
+                "interpreted_count": self.interpreted_count}

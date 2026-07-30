@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
+    from ..exo_cluster import ExoClusterBackend
     from ..mlx_backend import MLXBackend
 
 import threading
@@ -735,7 +736,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
         if self.config.model == "ollama":
-            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(
+            self._backend: OllamaBackend | MLXBackend | ExoClusterBackend | None = OllamaBackend(
                 self.config, on_egress=self._note_model_egress)
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
@@ -755,6 +756,21 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.index.synthesizer = make_synthesizer(self._backend)
                 self.index.embedder = (self._backend.embed
                                        if self.config.semantic_search else None)
+        elif self.config.model == "exo":
+            # One model spread across the machines the wearer already owns. Text
+            # only: `make_synthesizer` needs just `chat()`, and the vision router
+            # tests for a `vision` method, so a look reports honestly blind
+            # rather than raising into a swallowed AttributeError.
+            #
+            # Embeddings stay off for the same reason MLX leaves them off — exo
+            # serves no embeddings endpoint, so semantic search would silently
+            # degrade to keyword while the panel claimed it was on.
+            from ..exo_cluster import ExoClusterBackend
+            self._backend = ExoClusterBackend(
+                base_url=self.config.exo_url, model=self.config.exo_model,
+                config=self.config, on_egress=self._note_model_egress)
+            self.index.synthesizer = make_synthesizer(self._backend)
+            self.index.embedder = None
         else:
             # keyword AND api: the local index stays a pure keyword retriever.
             # For "api", the first-pass answer is routed to the external agent
@@ -849,6 +865,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         for _e in (self._ear, self._remote_ear):
             if _e is not None and _e.listening:
                 active = active | _e.active_caps
+                # `live_interpret` is NOT in `active_caps`, deliberately. That set
+                # is fixed when the microphone opens, and interpreting is toggled
+                # afterwards — and its honesty bit needs a segment to have come
+                # back genuinely translated, which can only happen later still. So
+                # it is asked for fresh here, every sync.
+                if getattr(_e, "interpreting", False):
+                    active = active | {"live_interpret"}
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
@@ -866,6 +889,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._ear is None:
             from .ear import EarHost
             self._ear = EarHost(self)
+            # A fresh EarHost starts with the interpreter OFF, so the persisted
+            # setting is pushed in AT CONSTRUCTION rather than after a successful
+            # start. A wearer whose start fails for want of a speech engine, then
+            # installs the pack and retries, must not need a second toggle to get
+            # back the interpreter they already turned on.
+            self._apply_interpret()
         try:
             res = self._ear.start(mic)
         except Exception as exc:                    # noqa: BLE001 — never fatal
@@ -898,6 +927,93 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                                             "remote_listen_enabled", False))
         return st
 
+    def dream_neural_ready(self) -> bool:
+        """Has the NEURAL dream painter genuinely produced a picture, and can it
+        still? Two conditions, and both are needed.
+
+        Proof (`_dream_neural_ok`, set by the dream lens on a real painting) is
+        what stops onnxruntime's mere presence reading as a working painter — the
+        wheel imports long before a model loads, and a loaded session can still
+        fail on a frame. The path check is what stops the proof outliving the
+        setup: clearing the model path must take the capability back down, because
+        "it worked once this process" is not "it works now".
+        """
+        if not getattr(self, "_dream_neural_ok", False):
+            return False
+        try:
+            return bool(self.world_lens()._dream_model_path())
+        except Exception:                        # noqa: BLE001
+            return False
+
+    def dream_state(self) -> dict:
+        """What the panel needs to describe the painter honestly."""
+        path = str(getattr(self.config, "dream_model_path", "") or "").strip()
+        resolved = ""
+        try:
+            resolved = self.world_lens()._dream_model_path()
+        except Exception:                        # noqa: BLE001
+            resolved = ""
+        import os as _os
+        return {
+            "path": path,
+            # A path that is set but does not resolve is the case worth surfacing:
+            # the wearer thinks the neural painter is on and is getting the wash.
+            "found": bool(resolved),
+            "from_env": bool(_os.environ.get("DL_DREAM_MODEL")),
+            "proved": bool(getattr(self, "_dream_neural_ok", False)),
+            "active": self.dream_neural_ready(),
+        }
+
+    def set_interpret(self, on: bool = True, target: str = "") -> dict:
+        """Turn the live interpreter on/off across BOTH ears and persist it.
+
+        Both, because the Mac's own microphone and the phone acting as the mic are
+        two `EarHost`s and the wearer set one switch — a toggle that reached only
+        the local ear would look dead to anyone using the Live Lens as their mic,
+        which is the more likely way to use an interpreter at all (it is the ear
+        you take to the conversation).
+
+        Persisted so it survives a restart, and reported back with what is
+        actually true rather than what was asked for.
+        """
+        tgt = (str(target or "").strip()
+               or getattr(self.config, "interpret_target", "en") or "en")
+        self.config.interpret_enabled = bool(on)
+        self.config.interpret_target = tgt[:8]
+        self.save()
+        out: dict = {"ok": True, "on": bool(on), "target": self.config.interpret_target}
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                out = ear.set_interpret(bool(on), self.config.interpret_target)
+        # A capability that just stopped being driven must go dormant now, not at
+        # the next poll — the same reason start/stop_ear both re-sync.
+        self._sync_ear_wired()
+        if on and not out.get("can_interpret"):
+            # Honest, and NOT an error: the switch is legitimately set, it simply
+            # cannot do anything until the pack is installed. The wearer sees the
+            # reason instead of a dead toggle.
+            log.info("[interpret] enabled with no interpreter installed")
+        self.activity.add("ear", "Live interpreter turned %s (%s)"
+                          % ("on" if on else "off", self.config.interpret_target))
+        return out
+
+    def _apply_interpret(self) -> None:
+        """Push the persisted interpreter setting into an ear that just opened.
+
+        Without this the setting was write-only across a restart: `EarHost` is
+        constructed fresh with `_interpret_on = False`, so a wearer who had the
+        interpreter on, restarted the Brain and turned Listening back on would get
+        a silent ear and a panel switch that said it was on.
+        """
+        on = bool(getattr(self.config, "interpret_enabled", False))
+        tgt = getattr(self.config, "interpret_target", "en") or "en"
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                try:
+                    ear.set_interpret(on, tgt)
+                except Exception:                    # noqa: BLE001 — never block
+                    pass
+
     def hear_remote(self, pcm) -> dict:
         """The phone is the live mic: feed a chunk of the audio it captured
         on-device into the ear. The wearable hears the room you're in, not the
@@ -916,6 +1032,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._remote_ear is None:
             from .ear import EarHost
             self._remote_ear = EarHost(self)
+            self._apply_interpret()      # see start_ear: at construction, not
+            #                              after a start that may not succeed
         if self._remote_mic is None:
             from ...orchestrator.capture import RemoteMicSource
             self._remote_mic = RemoteMicSource()
@@ -1358,10 +1476,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
         # value — the SSRF endpoint never persists (audit 2026-07-19).
-        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url")
+        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url", "exo_url")
         _prev_urls = {k: getattr(self.config, k, "") for k in _url_fields}
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
+                  "exo_url", "exo_model",
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_provider", "cloud_base_url",
                   "cloud_api_key", "cloud_model", "plan",
@@ -1375,6 +1494,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
+                  "interpret_enabled", "interpret_target", "dream_model_path",
                   "private_zones",
                   "face_recognition", "face_auto_enrol"):
             if k in updates:
@@ -1431,6 +1551,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # gate: flip to lan_only and HF_HUB_OFFLINE goes on before the next load.
         if {"network_mode", "quiet_hours"} & set(updates):
             self._apply_model_posture()
+        # The interpreter lives on the EarHosts, not just in config. Without this
+        # the panel's switch persisted and did nothing until the next ear restart —
+        # write-only settings are how a feature looks broken while reading "on".
+        if {"interpret_enabled", "interpret_target"} & set(updates):
+            self._apply_interpret()
+            self._sync_ear_wired()
         # turning a sync on (or changing its filter) → pull immediately
         try:
             if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
@@ -2891,6 +3017,31 @@ def _capability_payload(brain: Brain) -> dict:
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
+    # `social_graph` is promoted HERE rather than by a long-lived flag, because it
+    # has no start/stop event to hang one on the way the ear does — a graph is
+    # simply built and answered on demand. Computed fresh into this local env copy
+    # (never os.environ), so the report cannot go stale in either direction: no
+    # flag to leave set after the last meeting is deleted, and none to forget to
+    # set after the first is recorded. The test is deliberately strict — networkx
+    # present AND a non-empty graph — since networkx over an empty graph answers
+    # every query with nothing, exactly as the fallback does.
+    try:
+        if brain.social_graph_wired():
+            env["DL_WIRED_SOCIAL_GRAPH"] = "1"
+    except Exception:                           # noqa: BLE001 — never 500 the report
+        pass
+    # `dream_style` on the same terms, and PROOF-based for the same reason the
+    # ear's interpreter is: onnxruntime importing says nothing about a model
+    # loading, and a loaded session can still fail on a frame. `_dream_neural_ok`
+    # is set by the lens only after the neural painter has genuinely produced a
+    # picture. It is re-checked against the configured path so removing the model
+    # takes the capability back down — proof that it once worked is not a claim
+    # that it still can.
+    try:
+        if brain.dream_neural_ready():
+            env["DL_WIRED_DREAM_STYLE"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -4301,6 +4452,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             alongside the persisted Listening switch."""
             self._json(200, brain.ear_status())
 
+        def _post_interpret(self, path, qs):
+            """Turn the live cross-language interpreter on/off.
+
+            `{"on": true, "target": "en"}` — `target` is the language Juno speaks
+            back IN (the one you understand), not the one being spoken; SeamlessM4T
+            detects the source itself. Rides the ear, so Listening must be on for
+            anything to be heard; this reports `can_interpret: false` with a reason
+            rather than pretending when the pack is absent."""
+            b = self._body()
+            self._json(200, brain.set_interpret(bool(b.get("on", True)),
+                                                str(b.get("target", "") or "")))
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -4364,6 +4527,25 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "sync": brain.config.calendar_sync,
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
+
+        def _get_dream(self, path, qs):
+            """State of the neural dream painter: the model path, whether it
+            resolves, and whether it has actually painted anything yet."""
+            self._json(200, brain.dream_state())
+
+        def _get_social_graph(self, path, qs):
+            """The relationship graph built from your recorded meetings.
+
+            `?a=…&b=…` asks what two people have in common and how you get from one
+            to the other; with no names it returns the whole graph. Reports which
+            engine answered, because "communities" means densely-connected clusters
+            with networkx and only connected components without it."""
+            a = (qs.get("a", [""])[0] or "").strip()
+            b = (qs.get("b", [""])[0] or "").strip()
+            if a and b:
+                self._json(200, brain.social_mutual(a, b))
+                return
+            self._json(200, brain.social_graph_state())
 
         def _get_contacts(self, path, qs):
             """Contacts sync state + count pulled from Contacts.app."""
@@ -4946,6 +5128,8 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/contacts": _get_contacts,
+            "/dreamlayer/social/graph": _get_social_graph,
+            "/dreamlayer/dream": _get_dream,
             "/dreamlayer/reminders": _get_reminders,
             "/dreamlayer/rewind": _get_rewind,
             "/dreamlayer/saga": _get_saga,
@@ -6084,6 +6268,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/forget/last": _post_forget_last,
             "/dreamlayer/location": _post_location,
             "/dreamlayer/zones": _post_zones,
+            "/dreamlayer/interpret": _post_interpret,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,
