@@ -239,6 +239,20 @@ class TestCommunities:
         assert sizes == sorted(sizes, reverse=True), groups
         assert groups[0][0].startswith("z"), groups
 
+    def test_equal_sized_groups_are_ordered_alphabetically(self, graph):
+        """The tie-break, and the only part of the ordering that is observable on
+        the networkx path.
+
+        `greedy_modularity_communities` already returns largest-first, so the
+        primary key changes nothing there and dropping the whole sort survived a
+        size-only test. It does NOT order equal-sized groups, and it happens to
+        return this pair z-before-a — so the secondary key is what makes the answer
+        stable rather than dependent on networkx's internal iteration order.
+        """
+        graph.relate("za", "zb")
+        graph.relate("aa", "ab")
+        assert graph.communities() == [["aa", "ab"], ["za", "zb"]]
+
     def test_an_empty_graph_has_no_circles(self, graph):
         assert graph.communities() == []
 
