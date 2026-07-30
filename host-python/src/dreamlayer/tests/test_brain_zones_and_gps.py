@@ -382,6 +382,21 @@ class TestMarkingAZone:
         assert again.private_zone_now() == "the flat"
         assert again.incognito_now() is True
 
+    def test_a_REMOVAL_survives_a_restart_too(self, brain):
+        """The direction that matters more. An unpersisted ADD costs the wearer a
+        shield they have to re-mark; an unpersisted REMOVE brings back a zone
+        they deliberately deleted, and gags the Brain at a place they chose to
+        stop gagging it. A mutation dropping only the remove-side `save()`
+        survived until this existed."""
+        import pathlib
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        assert brain.edit_zones("remove", "the flat")["ok"] is True
+        again = Brain(str(pathlib.Path(brain.cfg_dir)))
+        again.note_location(*LONDON)
+        assert again.zone_list() == [], "a deleted zone came back on restart"
+        assert again.incognito_now() is False
+
     def test_the_routes_reach_it(self, brain):
         from dreamlayer.ai_brain.server import server as srv
         text = open(srv.__file__, encoding="utf-8").read()
