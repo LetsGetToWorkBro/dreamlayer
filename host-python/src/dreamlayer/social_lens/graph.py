@@ -59,6 +59,16 @@ class RelationshipGraph:
         self._events.setdefault(event, set()).add(contact_id)
 
     def relate(self, a: str, b: str, kind: str = "knows") -> None:
+        # A self-relation is refused AT THE DOOR rather than filtered out of every
+        # query downstream. `relate(x, x)` makes a self-loop, which is not a
+        # relationship anyone has — it reads as "x has x in common with x" and it
+        # inflates x's degree in the community split. Guarding here let `mutual`
+        # drop a pair-exclusion filter that was unreachable any other way; a
+        # mutation deleting that filter survived every test, which is how it was
+        # found to be dead code rather than a safeguard.
+        if not a or not b or a == b:
+            self.add_person(a or b)
+            return
         self.add_person(a); self.add_person(b)
         if _HAS_NX:
             self._g.add_edge(("p", a), ("p", b), kind=kind)
@@ -123,10 +133,13 @@ class RelationshipGraph:
             return {"people": [], "events": []}
         na, nb = self._neighbours(a), self._neighbours(b)
         both = na & nb
+        # No pair-exclusion filter, and that is deliberate rather than an omission:
+        # for `a` to be its own mutual connection it would have to be its own
+        # neighbour, which only a self-loop can arrange — and `relate` refuses to
+        # make one. `b` is a neighbour of `a` when they know each other directly,
+        # but never of itself, so it cannot survive the intersection either.
         return {
-            # a and b themselves are never their own mutual connection
-            "people": sorted(n[1] for n in both
-                             if n[0] == "p" and n[1] not in (a, b)),
+            "people": sorted(n[1] for n in both if n[0] == "p"),
             "events": sorted(n[1] for n in both if n[0] == "e"),
         }
 

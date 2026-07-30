@@ -82,6 +82,23 @@ class TestMutual:
         graph.relate("ada", "priya")
         assert graph.mutual("marcus", "ada")["people"] == ["priya"]
 
+    def test_a_self_relation_is_refused_at_the_door(self, graph):
+        """Not filtered out of each query — rejected where it would be created.
+
+        `relate(x, x)` makes a self-loop, which is not a relationship anyone has:
+        it would read as "x has x in common with x" and would inflate x's degree in
+        the community split. The person is still recorded; only the nonsense edge is
+        dropped."""
+        graph.relate("marcus", "marcus")
+        assert "marcus" in graph.people()
+        assert graph.connections("marcus") == []
+        assert graph.mutual("marcus", "marcus") == {"people": [], "events": []}
+
+    def test_a_blank_name_creates_no_edge(self, graph):
+        graph.relate("", "")
+        graph.relate("marcus", "")
+        assert graph.connections("marcus") == []
+
     def test_a_person_has_nothing_in_common_with_themselves(self, graph):
         graph.relate("marcus", "priya")
         assert graph.mutual("marcus", "marcus") == {"people": [], "events": []}
@@ -116,15 +133,31 @@ class TestPath:
         assert p[1]["id"] == "the launch"
 
     def test_the_shortest_chain_wins(self, graph):
-        """A long way round exists and must not be the answer. Breadth-first, so
-        the goal is first reached by a shortest route — a depth-first walk would
-        return some path and call it the shortest."""
+        """A long way round exists and must not be the answer."""
         graph.relate("a", "b")
         graph.relate("b", "c")
         graph.relate("c", "d")
         graph.relate("a", "d")                    # the short way
         p = graph.path("a", "d")
         assert [s["id"] for s in p] == ["a", "d"]
+
+    def test_the_search_is_breadth_first_not_depth_first(self, graph):
+        """Shaped so a depth-first walk returns the WRONG answer, not just a
+        differently-ordered one.
+
+        Neighbours are visited in sorted order, so a stack-based walk expands the
+        alphabetically-LAST branch first. Here the long route starts at "z" and the
+        short one at "b": depth-first reaches the target down the three-hop z-branch
+        and reports that as the shortest. A previous version of this test had the
+        goal adjacent to the start, so it was returned before queue order could
+        matter and swapping the queue for a stack survived untouched.
+        """
+        graph.relate("a", "b")
+        graph.relate("b", "t")                    # short: a → b → t
+        graph.relate("a", "z")
+        graph.relate("z", "y")
+        graph.relate("y", "t")                    # long:  a → z → y → t
+        assert [s["id"] for s in graph.path("a", "t")] == ["a", "b", "t"]
 
     def test_unconnected_people_have_no_path(self, graph):
         graph.relate("a", "b")
@@ -139,6 +172,20 @@ class TestPath:
             graph.relate(a, b)
         assert graph.path(names[0], names[-1], max_hops=3) == []
         assert graph.path(names[0], names[1], max_hops=3)
+
+    def test_max_hops_counts_EDGES_and_the_boundary_is_exact(self, graph):
+        """A path of n nodes is n-1 hops, and both sides of the limit are pinned.
+
+        Testing only "10 nodes with max_hops=3 returns nothing" cannot see an
+        off-by-one: an over-count and the correct count both reject a chain that far
+        past the limit. So this uses a chain that sits EXACTLY on it — 4 people,
+        3 hops — which must be returned at max_hops=3 and refused at 2.
+        """
+        for a, b in (("a", "b"), ("b", "c"), ("c", "d")):
+            graph.relate(a, b)
+        exact = graph.path("a", "d", max_hops=3)
+        assert [s["id"] for s in exact] == ["a", "b", "c", "d"]
+        assert graph.path("a", "d", max_hops=2) == []
 
     def test_a_person_has_no_path_to_themselves(self, graph):
         graph.relate("a", "b")
@@ -180,11 +227,17 @@ class TestCommunities:
             "modularity" if graph.available else "components")
 
     def test_bigger_groups_come_first(self, graph):
-        graph.relate("a", "b")
-        graph.relate("b", "c")
-        graph.relate("x", "y")
-        sizes = [len(g) for g in graph.communities()]
-        assert sizes == sorted(sizes, reverse=True)
+        """The SMALL group is named alphabetically first on purpose. With groups
+        "a,b" and "x,y,z" a natural internal ordering can already be size-ordered
+        by luck, so dropping the sort survived; here the unsorted order and the
+        sorted one differ."""
+        graph.relate("aa", "ab")                  # small, but first alphabetically
+        graph.relate("za", "zb")
+        graph.relate("zb", "zc")                  # larger, last alphabetically
+        groups = graph.communities()
+        sizes = [len(g) for g in groups]
+        assert sizes == sorted(sizes, reverse=True), groups
+        assert groups[0][0].startswith("z"), groups
 
     def test_an_empty_graph_has_no_circles(self, graph):
         assert graph.communities() == []
@@ -279,8 +332,16 @@ class TestTheBrainBuildsIt:
         assert "meeting" in out["reason"]
 
     def test_two_names_are_required(self, brain):
+        """And the REASON has to distinguish "you didn't give me two names" from
+        "those two have never met" — both are `ok: False`, so asserting only that
+        let a mutation deleting the guard survive, answering a malformed request
+        with a factual claim about people who were never named."""
+        _meet(brain, "the launch", "Marcus", "Priya")
         for a, b in (("", "Ada"), ("Marcus", ""), ("", "")):
-            assert brain.social_mutual(a, b)["ok"] is False
+            out = brain.social_mutual(a, b)
+            assert out["ok"] is False, (a, b)
+            assert out["reason"] == "two names needed", (a, b, out)
+            assert "unknown" not in out, (a, b, out)
 
     def test_the_meeting_window_is_bounded_and_reported(self, brain):
         """A graph query is interactive and history is unbounded, so it reads a
