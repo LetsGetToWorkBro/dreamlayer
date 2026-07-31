@@ -161,6 +161,38 @@ class TestControls:
             lb.stop()
             reset_source_status()      # module-global: don't leak into others
 
+    def test_status_withholds_denial_detail_from_off_box_callers(self, tmp_path):
+        """`detail` is the raw exception text of the denial and can echo a store
+        path or other on-box state. The on-box panel gets it; an off-box paired
+        phone — authed, but not loopback — gets status+ts only. Same boundary
+        /dreamlayer/model/status draws around Ollama's raw `detail`."""
+        from dreamlayer.ai_brain.server.macos_sources import (
+            imessage_documents, reset_source_status,
+        )
+        import sqlite3 as _sq
+        db = tmp_path / "chat.db"; db.touch()      # exists, so the read is tried
+        reset_source_status()
+        lb = Live(tmp_path)
+        try:
+            def denied_connect(*a, **k):           # the Full-Disk-Access refusal
+                raise _sq.OperationalError(
+                    f"unable to open database file: {db}")
+
+            assert imessage_documents(str(db), connect=denied_connect) == []
+            local = lb.get("/dreamlayer/status")["source_status"]["imessage"]
+            assert local["status"] == "denied" and local["ts"] > 0
+            assert str(db) in local["detail"]      # the panel sees the whole why
+
+            # ...and the same source, read by an off-box caller with the token
+            lb.srv.RequestHandlerClass._from_localhost = lambda self: False
+            off = lb.get("/dreamlayer/status")["source_status"]["imessage"]
+            assert off["status"] == "denied" and off["ts"] > 0   # still actionable
+            assert "detail" not in off                            # but never the path
+            assert str(db) not in json.dumps(off)
+        finally:
+            lb.stop()
+            reset_source_status()
+
     def test_cloud_fallback_logs_egress(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t", cloud_api_key="k", cloud_model="m",
