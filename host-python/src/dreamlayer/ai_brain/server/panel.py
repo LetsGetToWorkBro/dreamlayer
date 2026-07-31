@@ -823,6 +823,11 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
           </select></div>
         <div id="interpStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="interpret" onchange="saveInterpret()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Read the room &middot; how it was said</div>
+      <div class="conn-s">Off by default. Puts the <b>Testimony Thread</b> on the Live Lens after an utterance: nine slots, one per stage of the analysis, drawn only where a stage actually measured something. <b>Two of the nine are real here</b> &mdash; <b>voice stress</b> (pitch, jitter, shimmer, hesitation, pace) from the microphone, and <b>word choice</b> (hedging, first-person, negation, sentence complexity) from the transcript. The <b>micro-expression stages stay empty</b>, deliberately: no action-unit detector backs them on this machine, and an empty slot is the honest drawing.
+        <div class="conn-s" style="margin-top:8px">This reads <b>delivery, not truth</b>. It cannot tell you whether something is a lie &mdash; a nervous person telling the truth and a calm person lying both defeat it. With Voice recall on it compares against <b>that person's own baseline</b> ("unusual for them"), which is worth far more than the absolute read it falls back to; without a name it stays on the conservative stranger path and reads <b>CALIBRATING</b>. Entirely on-device, nothing stored, and the Veil wins &mdash; nothing is read while Incognito, in quiet hours, or inside a private zone. Needs Listening on.</div>
+        <div id="truthStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="truthLens" onchange="saveTruthLens()"><span class="track red"></span></label></div>
     <div class="conn"><div style="flex:1"><div class="conn-t">Voice recall &middot; who said it</div>
       <div class="conn-s">Off by default, and <b>consent-gated</b>. When on, the Brain learns the voices it hears so a remembered line has a name on it &mdash; which is what lets you ask <b>"what did Marcus tell me last time"</b> or "what did he promise". Without it every utterance is stored unattributed, which is how it works today.
         <div id="voiceConsent" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:6px">
@@ -1963,6 +1968,9 @@ async function load(){
   if($("interpret")){
     $("interpret").checked=!!c.config.interpret_enabled;
     $("interpTarget").value=c.config.interpret_target||"en";
+  }
+  if($("truthLens")){
+    $("truthLens").checked=!!c.config.truth_lens_enabled;
     refreshInterpStat();
   }
   if($("dreamModel")){
@@ -2446,6 +2454,35 @@ async function refreshInterpStat(){
   renderInterpStat({on:e.interpret, can_interpret:e.can_interpret,
                     proved:e.interpret_proved, target:e.interpret_target,
                     interpreted_count:e.interpreted_count});
+  renderTruthStat({on:e.truth, proved:e.truth_proved, reads:e.truth_reads,
+                   listening:e.listening||e.remote_listening});
+}
+/* Read the room. Same reason as the interpreter for having its own route rather
+   than a bare /config write: the switch lives on the running EarHosts too, and a
+   config-only write is how a setting reads "on" while doing nothing. */
+async function saveTruthLens(){
+  const on=$("truthLens").checked;
+  let j;
+  try{ j=await api("/dreamlayer/truth",{method:"POST",
+        body:JSON.stringify({on:on})}); }catch(e){ return; }
+  renderTruthStat(j);
+  toast(on?"Reading the room — delivery only, on-device":"Room read off");
+}
+function renderTruthStat(j){
+  const el=$("truthStat"); if(!el) return;
+  if(!j){ el.textContent=""; return; }
+  if(!j.on){ el.textContent="Off."; return; }
+  if(j.listening===false){
+    el.textContent="On, but no microphone is open — turn Listening on and it starts reading.";
+    return;
+  }
+  /* `proved` again: the switch being on, and a gauge having genuinely been drawn
+     from a fused read, are different facts. Most utterances legitimately produce
+     NOTHING (a credible speaker is below the display threshold), so "waiting" is
+     a normal resting state and is worded as one rather than as a fault. */
+  el.textContent=j.proved
+    ? ("Working — "+(j.reads||0)+" read"+((j.reads===1)?"":"s")+" drawn so far.")
+    : "On — nothing drawn yet. Most utterances read as unremarkable and draw nothing.";
 }
 async function refreshZones(){
   const stat=$("zoneStat"), list=$("zoneList");
