@@ -153,6 +153,32 @@ class TestControls:
         finally:
             lb.stop()
 
+    def test_status_surfaces_a_denied_source(self, tmp_path):
+        """A macOS TCC denial has to REACH the panel: /status carries
+        source_status, so a blocked Mail/Calendar read is distinguishable from
+        an empty one instead of being a silent "nothing indexed"."""
+        from dreamlayer.ai_brain.server.macos_sources import (
+            _OsascriptError, read_calendar_events, reset_source_status,
+        )
+        reset_source_status()
+        lb = Live(tmp_path)
+        try:
+            # nothing denied → nothing to shout about (the panel stays clean)
+            assert "calendar" not in lb.get("/dreamlayer/status")["source_status"]
+
+            def denied_reader(script):                 # the Automation refusal
+                raise _OsascriptError(
+                    1, "execution error: Not authorized to send Apple "
+                       "events. (-1743)")
+
+            assert read_calendar_events(None, reader=denied_reader) == []
+            st = lb.get("/dreamlayer/status")["source_status"]
+            assert st["calendar"]["status"] == "denied"
+            assert "Not authorized" in st["calendar"]["detail"]
+        finally:
+            lb.stop()
+            reset_source_status()      # module-global: don't leak into others
+
     def test_cloud_fallback_logs_egress(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()
         BrainConfig(token="t", cloud_api_key="k", cloud_model="m",

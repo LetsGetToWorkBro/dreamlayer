@@ -4445,7 +4445,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, _brain_view_payload(brain))
 
         def _get_status(self, path, qs):
-            """Live Brain status: model, cloud posture, freshness, folders."""
+            """Live Brain status: model, cloud posture, freshness, folders,
+            and the per-source permission state (macOS TCC).
+
+            `source_status()` is what tells a *denied* Mail/Calendar read apart
+            from an empty one; carrying it here lets the panel say "grant
+            access" instead of showing a silent empty. No extra gate: this route
+            already sits behind the token/localhost gate in do_GET, and the map
+            holds only source names + the error text of the denial."""
+            from .macos_sources import source_status
             ago = None
             if brain._last_phone_ts:
                 ago = max(0, int(time.time() - brain._last_phone_ts))
@@ -4468,6 +4476,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "missing": brain.missing_folders(),
                 "email_docs": brain.email_docs,
                 "stats": brain.index.stats(),
+                "source_status": source_status(),
             })
 
         def _get_meetings(self, path, qs):

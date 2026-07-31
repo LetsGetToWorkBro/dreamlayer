@@ -2355,6 +2355,22 @@ function liveChip(state,text){const j=$("liveJuno");
   const f=document.getElementById("favJuno");
   if(f)f.href="/panel-assets/juno_status_tint_"+state+".png";
   const t=$("livetext");if(t)t.textContent=text;}
+/* macOS privacy (TCC) blocks Messages/Mail behind Full Disk Access and
+   Calendar/Contacts/Reminders behind Automation. /dreamlayer/status carries
+   source_status, which tells a DENIED read apart from an empty one — so a
+   blocked source gets a named, actionable hint instead of looking like an
+   empty inbox. Nothing denied → nothing rendered. */
+const SRCPERM={imessage:["Messages","Full Disk Access"],
+               mail:["Mail","Full Disk Access"],
+               calendar:["Calendar","Automation"],
+               contacts:["Contacts","Automation"],
+               reminders:["Reminders","Automation"]};
+function deniedSources(st){
+  return Object.keys(st||{}).filter(k=>(st[k]||{}).status==="denied").sort();}
+function permHint(k){
+  const m=SRCPERM[k];
+  const where="System Settings → Privacy &amp; Security"+(m?" → "+m[1]:"");
+  return `<b>${esc(m?m[0]:k)}</b> — grant access in ${where}`;}
 async function refreshStatus(){
   let s; try{s=await api("/dreamlayer/status");}catch(e){liveChip("offline","Brain offline");return;}
   if(s.error){liveChip("offline","Brain offline");return;}
@@ -2376,6 +2392,8 @@ async function refreshStatus(){
   const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
   const idxAgo=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
   const missList=(s.missing&&s.missing.length)?`<div class="sysd-list">${s.missing.map(m=>esc(m)).join("<br>")}</div>`:"";
+  const blocked=deniedSources(s.source_status);
+  const permList=`<div style="margin:6px 0 8px">${blocked.map(permHint).join("<br>")}</div>`;
   $("sysrows").innerHTML=
     sysRow("brain","Brain","<b>Online</b>","ok",
       "Running on this Mac mini — it serves this panel, the Live Lens, and your glasses to devices on your LAN. Nothing leaves it unless you turn the cloud tier on.","advanced","Health & activity")+
@@ -2394,7 +2412,9 @@ async function refreshStatus(){
     sysRow("index","Memory index",`<b>${s.stats.files}</b> files · <b>${s.stats.passages}</b> passages`,s.stats.files?"ok":"off",
       `Indexed ${idxAgo}${s.email_docs?` · ${s.email_docs} mail/chat docs`:""}. This is what "ask your stuff" searches — point it at more folders to grow it.`,"mind","Folders it reads")+
     ((s.missing&&s.missing.length)?sysRow("folders","⚠ Folders",`<b>${s.missing.length}</b> missing`,"warn",
-      `These folders were indexed before but can't be found now (moved, renamed, or an unplugged drive):${missList}Re-add or remove them so the index stays accurate.`,"mind","Fix folders"):"");
+      `These folders were indexed before but can't be found now (moved, renamed, or an unplugged drive):${missList}Re-add or remove them so the index stays accurate.`,"mind","Fix folders"):"")+
+    (blocked.length?sysRow("permissions","⚠ Permissions",`<b>${blocked.length}</b> blocked`,"warn",
+      `macOS is blocking these — they read as empty until you allow them:${permList}Grant access there, then restart the Brain if the warning doesn't clear on the next read.`):"");
   $("egress").innerHTML=`The cloud has been used <b>${s.cloud_calls||0}</b> time${s.cloud_calls===1?'':'s'} since setup — every one is logged below.`;
   const idxa=s.index_ago==null?"never":s.index_ago<90?"just now":s.index_ago<3600?Math.floor(s.index_ago/60)+"m ago":Math.floor(s.index_ago/3600)+"h ago";
   let info=`Indexed ${idxa}`;
