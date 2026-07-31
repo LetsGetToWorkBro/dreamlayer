@@ -161,29 +161,45 @@ class TestTheProducerScanIsNotVacuous:
         assert f"{hud.PKG}.ai_brain.server.ear" in made.get("hark", set()), (
             "the ear's real HarkCard producer was excluded")
 
-    def test_the_known_gap_is_still_visible(self, hud):
-        """15 of 24 declared cards have no Brain-side producer (was 18 before
-        ObjectRecall, SavedMemory and JunoReply were wired). Every remaining
-        one's producer lives in `orchestrator/ops_*.py`, which the shipped Brain
-        never constructs (`decisions/0001`). This asserts the checker can still
-        SEE that, not that the number is acceptable. As the gap closes this test
-        should fail — read the number, fix the assertion, and keep it pointing
-        at what is still open."""
+    def test_the_gap_is_closed_and_the_scan_could_still_see_one(self, hud):
+        """THE GAP IS CLOSED: all 24 declared cards now have a Brain-side
+        producer. This replaces `test_the_known_gap_is_still_visible`, which
+        asserted a real gap existed and instructed its own retirement — "as the
+        gap closes this test should fail … read the number, fix the assertion".
+        It closed at "Read the room" (`ai_brain/server/truth_live.py`), the last
+        one; it had been 15 of 24, then 1.
+
+        Its job survives it. That test proved the scan was not vacuous by
+        pointing at a gap that happened to exist, which is a proof with a shelf
+        life — the moment the last gap closed, the only evidence that the scan
+        could detect one at all disappeared with it. So the non-vacuity is
+        demonstrated on a SYNTHETIC gap instead: hide a real producer from the
+        reachable set and require the scan to report the card as unproduced.
+        That holds no matter how complete the product gets.
+        """
         made = self._producers(hud)
         samples = hud._sample_builders()
         gap = [t for _, t, k in hud._declared_features()
                if not made.get(samples[k])]
-        assert gap, ("every declared card now has a Brain-side producer — "
-                     "excellent, and this assertion needs retiring")
-        # Repointed as instructed above: "Truth, checked live" gained a producer
-        # (`BrainLenses.fact_check`, world-check half only — Candor already owns
-        # the self-contradiction half). Now pointed at "Read the room", which is
-        # blocked on something structural rather than on nobody having wired it:
-        # TruthLens reads DELIVERY — facial action units and prosody — and that
-        # is the biometric question, not a plumbing job. It will not close by
-        # accident, so this assertion should stay stable.
-        assert "Read the room" in gap, (
-            "truth_gauge gained a producer, or the scan stopped finding gaps")
+        assert not gap, f"a declared card lost its Brain-side producer: {gap}"
+
+        # The synthetic gap: take every builder that IS produced, hide the
+        # modules that produce it, and require the scan to report it unproduced.
+        # Done for all of them rather than one hand-picked builder, because a
+        # single choice ages badly — `hark` looked like the ear's alone and is
+        # in fact pushed by `server.py` too, so removing only the ear proved
+        # nothing. Hiding the full producer set cannot be wrong that way.
+        lens = hud._lens_module()
+        files = lens._sources()
+        known = {lens._module_name(p) for p in files}
+        _roots, reachable = lens._closure(lens._import_graph(files), known)
+        produced = {fn: mods for fn, mods in made.items() if mods}
+        assert produced, "nothing is produced at all; the scan found no call sites"
+        for fn, mods in sorted(produced.items()):
+            blinded = hud._producers(reachable - mods, {fn})
+            assert not blinded[fn], (
+                f"{fn}: the scan still reported a producer after every module "
+                f"that produces it was excluded — it is not reading call sites")
 
     def test_the_cards_just_wired_are_out_of_the_gap(self, hud):
         """The other direction: closing a card has to be visible too, or the
@@ -197,7 +213,8 @@ class TestTheProducerScanIsNotVacuous:
                       "Hey Juno", "Live captions",      # the ear
                       "Always ready", "Privacy Veil",   # the posture pair
                       "Rewind your day",                # the hot ring IS the day
-                      "Truth, checked live"):           # world-check half
+                      "Truth, checked live",            # world-check half
+                      "Read the room"):                 # the last one to close
             assert title in closed, f"{title} lost its Brain-side producer"
 
 

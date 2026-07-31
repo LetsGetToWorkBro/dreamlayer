@@ -94,39 +94,123 @@ class ContactBaseline:
     linguistic_std: dict = field(default_factory=dict)
     sample_count: int = 0
     is_calibrated: bool = False     # True after MIN_CALIBRATION_SAMPLES
+    # PER-CHANNEL sample counts. `sample_count` counts observations that carried
+    # at least one channel; these count the observations that carried THIS one.
+    # Welford's running mean divides the delta by the number of samples that
+    # actually contributed, so a channel present on only some observations must
+    # not be divided by the global count — doing so weights each new reading far
+    # too lightly and the mean crawls toward the truth instead of converging on
+    # it. Default 0 so a baseline persisted before these existed still loads.
+    au_n: int = 0
+    prosody_n: int = 0
+    linguistic_n: int = 0
+    # Welford's running sum of squared deviations from the running mean, per
+    # feature. Without it there is no way to compute a real standard deviation
+    # online, and its absence is what made `*_std` meaningless — see `update`.
+    au_m2: list[float] = field(default_factory=lambda: [0.0] * 17)
+    prosody_m2: dict = field(default_factory=dict)
+    linguistic_m2: dict = field(default_factory=dict)
 
     MIN_CALIBRATION_SAMPLES: int = field(default=10, init=False, repr=False)
 
-    def update(self, au: AUFrame, prosody: ProsodyFrame,
-               linguistic: LinguisticFrame) -> None:
-        """Incremental mean/std update (Welford's online algorithm)."""
-        self.sample_count += 1
-        n = self.sample_count
-        # AU update
-        for i, v in enumerate(au.au_values):
-            delta = v - self.au_mean[i]
-            self.au_mean[i] += delta / n
-            delta2 = v - self.au_mean[i]
-            # Approximate std (simplified)
-            self.au_std[i] = max(0.01, abs(delta * delta2) ** 0.5 if n > 1 else 0.1)
+    def update(self, au: Optional[AUFrame], prosody: Optional[ProsodyFrame],
+               linguistic: Optional[LinguisticFrame]) -> None:
+        """Incremental mean/std update (Welford's online algorithm).
 
-        def upd(mean: dict, std: dict, name: str, v: float) -> None:
+        Every channel is OPTIONAL, and that is the whole point of this signature.
+
+        It used to require all three, and `NarrativeStore.update_baseline`
+        enforced it with `if au is not None and prosody is not None and
+        linguistic is not None`. On any surface without a camera — which is every
+        surface the Brain has — `au` is permanently None, so the baseline never
+        updated, `get_baseline` kept returning None, and `FusionEngine.fuse` took
+        its conservative stranger branch forever. The stranger branch dampens its
+        output to `max(score) * 0.3`, i.e. at most 0.30 against a 0.30 display
+        threshold, so the per-contact personalisation this module advertises
+        ("Known contact: z-scores vs personal baseline → higher accuracy") could
+        never engage and the Truth Lens could never draw a single card.
+
+        Requiring AU was doubly wrong, because `fusion.AU_CHANNEL_REAL` is False:
+        the codebase had already concluded the AU channel is synthetic and must
+        not influence a verdict, and then made learning anything conditional on
+        that same synthetic channel being present. Fusion itself has always
+        treated the channels independently (`if prosody is not None: ... else:
+        0.0`); this now matches.
+
+        A call with no channel at all is a no-op — it must not advance
+        `sample_count`, or a silent conversation would "calibrate" a baseline
+        that has observed nothing and `confidence` (which scales on
+        `sample_count`) would rise on no evidence.
+        """
+        if au is None and prosody is None and linguistic is None:
+            return
+        self.sample_count += 1
+
+        def upd(mean: dict, std: dict, m2: dict, name: str, v: float, n: int) -> None:
+            """One Welford step for one feature.
+
+            `m2` accumulates the sum of squared deviations, which is the whole
+            reason this is Welford's algorithm rather than a running mean with a
+            std-shaped expression next to it. What used to sit here was
+
+                std[name] = max(0.01, abs(delta * (v - m)) ** 0.5)
+
+            — the square root of THIS sample's contribution to the variance, kept
+            in place of the variance itself. It never accumulated, so it did not
+            converge on anything: over fourteen readings of a speaker whose true
+            spread was 2.02 Hz it stored, in order, 0.98, 2.70, 2.10, 1.69, 0.14,
+            2.16, 1.49, 2.23, 1.01, 1.86, 1.54, 1.15, 4.17. A thirty-fold swing,
+            driven entirely by which utterance happened to be most recent.
+
+            Every z-score in `fusion._avg_abs_z` divides by that number, so the
+            "personal baseline" — the accuracy the known-contact path exists to
+            deliver — multiplied the evidence by a random factor. The same
+            utterance from the same person could read as half a sigma or fifteen,
+            and `_known_fuse` turns z into a score via `min(z / 4.0, 1.0)`, so
+            fifteen saturates the channel outright. That is worse than the
+            stranger heuristic it was supposed to improve on: it does not merely
+            fail to personalise, it injects noise while claiming precision.
+            """
             m = mean.get(name, 0.0)
             delta = v - m
             m += delta / n
             mean[name] = m
-            std[name] = max(0.01, abs(delta * (v - m)) ** 0.5 if n > 1 else 0.1)
+            m2[name] = m2.get(name, 0.0) + delta * (v - m)
+            # Sample standard deviation (n-1). The 0.01 floor keeps a genuinely
+            # constant feature from dividing by zero; with a real running
+            # variance it is now a guard rather than, as before, the value the
+            # estimate kept collapsing to.
+            std[name] = (max(0.01, (m2[name] / (n - 1)) ** 0.5) if n > 1
+                         else 0.1)
 
-        for name in ("pitch_mean_hz", "pitch_variance", "jitter_pct",
-                     "shimmer_pct", "hesitation_rate", "pause_ratio",
-                     "speech_rate_norm", "energy_db"):
-            upd(self.prosody_mean, self.prosody_std, name, getattr(prosody, name))
-        for name in ("hedging_rate", "first_person_rate",
-                     "complexity_score", "negation_rate"):
-            upd(self.linguistic_mean, self.linguistic_std, name, getattr(linguistic, name))
+        if au is not None:
+            self.au_n += 1
+            n = self.au_n
+            for i, v in enumerate(au.au_values):
+                delta = v - self.au_mean[i]
+                self.au_mean[i] += delta / n
+                self.au_m2[i] += delta * (v - self.au_mean[i])
+                self.au_std[i] = (max(0.01, (self.au_m2[i] / (n - 1)) ** 0.5)
+                                  if n > 1 else 0.1)
+
+        if prosody is not None:
+            self.prosody_n += 1
+            for name in ("pitch_mean_hz", "pitch_variance", "jitter_pct",
+                         "shimmer_pct", "hesitation_rate", "pause_ratio",
+                         "speech_rate_norm", "energy_db"):
+                upd(self.prosody_mean, self.prosody_std, self.prosody_m2, name,
+                    getattr(prosody, name), self.prosody_n)
+
+        if linguistic is not None:
+            self.linguistic_n += 1
+            for name in ("hedging_rate", "first_person_rate",
+                         "complexity_score", "negation_rate"):
+                upd(self.linguistic_mean, self.linguistic_std,
+                    self.linguistic_m2, name,
+                    getattr(linguistic, name), self.linguistic_n)
 
         # Mark calibrated
-        self.is_calibrated = n >= self.MIN_CALIBRATION_SAMPLES
+        self.is_calibrated = self.sample_count >= self.MIN_CALIBRATION_SAMPLES
 
 
 # ---------------------------------------------------------------------------
@@ -281,18 +365,32 @@ class TruthLensResult:
         entry signature; defaults to the upper face zone (128, 96).
         """
         c = self.credibility
-        stages = self.gauge_stages()
-        return {
-            "type": "TruthLensCard",
-            "dismiss_ms": 5000,
-            "verdict": c.label,
-            "primary": c.label,
-            "confidence": round(c.confidence, 2),
-            "deception_prob": round(c.deception_prob, 2),
-            "stages": stages,
-            "origin": origin or {"x": 128, "y": 96},
-            "is_stranger": c.is_stranger,
-            "footer": self.contact_name or ("Stranger" if c.is_stranger else "Unknown"),
-            "lines": ["TRUTH LENS", c.label,
-                      f"{round(c.deception_prob * 100)}% deception signal"],
-        }
+        # ONE builder for one card type. This used to assemble the dict inline,
+        # which made it a second, independent definition of the TruthLensCard
+        # payload alongside `hud/cards.py:truth_gauge_card` — and the two had
+        # already drifted (different rounding, an `is_stranger` key on one side
+        # only). It also meant the HUD reachability checker, which maps a card
+        # type to the builder that makes it, could not see this path as a
+        # producer at all: "Read the room" read as having no Brain-side producer
+        # while a Brain-side producer was pushing it.
+        #
+        # Imported here rather than at module scope so `truth_lens.schema` stays
+        # importable without pulling the HUD theme stack in behind it.
+        from ..hud.cards import truth_gauge_card
+        card = truth_gauge_card(
+            verdict=c.label,
+            stages=self.gauge_stages(),
+            confidence=round(c.confidence, 2),
+            deception_prob=c.deception_prob,
+            origin=origin,
+            footer=self.contact_name or ("Stranger" if c.is_stranger else "Unknown"),
+        )
+        # The two fields this richer caller adds on top of the plain builder: it
+        # knows whether the read had a personal baseline behind it, and it can
+        # put the number into words for a surface that draws `lines` rather than
+        # the gauge.
+        card["deception_prob"] = round(c.deception_prob, 2)
+        card["is_stranger"] = c.is_stranger
+        card["lines"] = ["TRUTH LENS", c.label,
+                         f"{round(c.deception_prob * 100)}% deception signal"]
+        return card

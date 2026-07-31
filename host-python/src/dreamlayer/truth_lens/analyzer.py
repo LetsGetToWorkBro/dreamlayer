@@ -168,10 +168,40 @@ class TruthLens:
             baseline,
         )
 
+        # Stage 7: LEARN. Predict from the baseline first (above), then fold this
+        # observation into it — ALWAYS, whatever we go on to display.
+        #
+        # This used to sit at the very bottom, after the display gate, and that
+        # ordering broke the feature in two separate ways:
+        #
+        #   * a deadlock. No baseline → `fuse` takes the stranger branch →
+        #     stranger output is dampened to `max(score) * 0.3`, at most 0.30
+        #     against the renderer's 0.30 display threshold → no card → and so
+        #     the baseline was never updated, forever. The known-contact path
+        #     ("z-scores vs personal baseline → higher accuracy", fusion.py's own
+        #     docstring) could not be reached from a cold start by any sequence
+        #     of inputs.
+        #   * a sampling bias, had it ever started. `ContactBaseline` documents
+        #     itself as the contact's "normal, non-stressed state", and learning
+        #     only from displayed reads means learning it exclusively from the
+        #     moments flagged as abnormal — the reference drifts toward the
+        #     anomalies until they stop reading as anomalous at all.
+        #
+        # Learning what someone normally sounds like must not be conditional on
+        # having decided to draw a gauge at them. `assess()` already had this
+        # right, which is why the Orchestrator's Discernment path works.
+        if self._current_contact_id:
+            self._store.update_baseline(
+                self._current_contact_id,
+                self._current_au,
+                self._current_prosody,
+                self._current_linguistic,
+            )
+
         if credibility.confidence < 0.1 and credibility.deception_prob < 0.5:
             return None
 
-        # Stage 7: renderer
+        # Stage 8: renderer
         result = TruthLensResult(
             credibility=credibility,
             contact_id=self._current_contact_id,
@@ -185,20 +215,18 @@ class TruthLens:
         if card is None:
             return None
 
-        # Stage 8: update baseline + log
-        if self._current_contact_id:
-            self._store.update_baseline(
+        # Stage 9: log the anomaly — but only for a judgment we actually MADE.
+        # Deliberately still behind the display gate, unlike the baseline update:
+        # the anomaly log is a record of conclusions about a person, and a read
+        # suppressed for want of confidence is precisely a conclusion we declined
+        # to draw. Writing it down anyway would bank the judgment while sparing
+        # ourselves the honesty of showing it.
+        if self._current_contact_id and credibility.deception_prob > 0.65:
+            self._store.log_anomaly(
                 self._current_contact_id,
-                self._current_au,
-                self._current_prosody,
-                self._current_linguistic,
+                credibility.deception_prob,
+                credibility.dominant_channel,
             )
-            if credibility.deception_prob > 0.65:
-                self._store.log_anomaly(
-                    self._current_contact_id,
-                    credibility.deception_prob,
-                    credibility.dominant_channel,
-                )
 
         self._last_emit = now
         return result

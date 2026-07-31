@@ -26,7 +26,25 @@ class RiverWeather:
         self._roll = None
         if _HAS_RIVER:
             try:
-                self._roll = stats.EWMean(fading_factor=1 - alpha)
+                # `fading_factor` IS alpha, not its complement (issue #551).
+                #
+                # River's own wording — "the closer to 1 the more the statistic
+                # will adapt to recent values" — reads like a decay term, and
+                # `1 - alpha` looks right beside the fallback's
+                # `mean + alpha * (value - mean)`. It is exactly backwards, and
+                # measurably so. Feeding 20 zeros then 10 ones, with the
+                # WeatherBaseline default alpha=0.05:
+                #
+                #     fading_factor=0.95 (what this used to pass)  ->  1.0000
+                #     fading_factor=0.05 (alpha itself)            ->  0.4013
+                #     the in-house fallback at alpha=0.05          ->  0.4013
+                #
+                # So installing river turned the slowest-adapting baseline into
+                # the fastest, the calibrated storm warning stopped firing, and
+                # the capability meter reported the seam `active` throughout —
+                # an optional dependency making the product quietly worse than
+                # its own fallback. The two paths now agree to four decimals.
+                self._roll = stats.EWMean(fading_factor=alpha)
             except Exception as exc:
                 log.error("[weather_river] init failed: %s; running-mean", exc)
                 self._roll = None

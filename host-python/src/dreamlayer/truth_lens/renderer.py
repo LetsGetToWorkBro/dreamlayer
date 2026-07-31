@@ -15,8 +15,26 @@ from typing import Optional
 
 from .schema import TruthLensResult, CredibilityVector
 
-# Minimum deception probability before any overlay is shown
-DISPLAY_THRESHOLD = 0.30
+# Minimum deception probability before any overlay is shown.
+#
+# 0.40 because that is where `CredibilityVector.label` stops saying CREDIBLE. At
+# 0.30 the gate and the vocabulary disagreed, and the 0.30–0.40 band drew a card
+# whose own verdict word was "CREDIBLE" — an overlay announcing that nothing is
+# the matter. On the measured calm case (voice stress 0.40, linguistic 0.325)
+# that lands at 0.365, i.e. an ordinary sentence from an ordinary speaker drew a
+# gauge, and drew it again on the next sentence, and the next. A readout that
+# appears on every utterance is one the wearer learns to stop seeing, which costs
+# them the reads that actually matter.
+#
+# Suppressing the reassuring read here loses nothing, because the caller that
+# genuinely wants it does not come through the renderer: Discernment calls
+# `TruthLens.assess()`, which is documented as deliberately ungated for exactly
+# this reason ("credible delivery is exactly what turns a wrong claim into an
+# honest mistake rather than a lie"). This constant governs the HUD overlay only.
+#
+# Pinned to the vocabulary by test_the_gauge_never_draws_a_reassuring_verdict, so
+# the two cannot drift apart again.
+DISPLAY_THRESHOLD = 0.40
 
 # Minimum confidence before showing a non-grey card
 CONFIDENCE_THRESHOLD = 0.25
