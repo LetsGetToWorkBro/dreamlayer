@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
+    from ..exo_cluster import ExoClusterBackend
     from ..mlx_backend import MLXBackend
 
 import threading
@@ -304,6 +305,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # the Live Lens event bus: the Brain PUSHES ambient cards (a sound-safety
         # tap, the morning brief, a commitment nudge) to connected phones over SSE
         self._event_subs: list = []    # one Queue per connected /live/events stream
+        from .geo import LastFix
+        self._last_fix = LastFix()     # in memory only; never written to disk
+        self._zone_was = ""            # last announced zone, for edge detection
         self._event_lock = threading.Lock()
         # guards _spoken_intent, so a look POPS it in one step (concurrent
         # looks otherwise both saw the same utterance)
@@ -732,7 +736,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
     def _wire_model(self) -> None:
         """Point the index/vision at the configured backend."""
         if self.config.model == "ollama":
-            self._backend: OllamaBackend | MLXBackend | None = OllamaBackend(
+            self._backend: OllamaBackend | MLXBackend | ExoClusterBackend | None = OllamaBackend(
                 self.config, on_egress=self._note_model_egress)
             self.index.synthesizer = make_synthesizer(self._backend)
             self.index.embedder = (self._backend.embed
@@ -752,6 +756,21 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 self.index.synthesizer = make_synthesizer(self._backend)
                 self.index.embedder = (self._backend.embed
                                        if self.config.semantic_search else None)
+        elif self.config.model == "exo":
+            # One model spread across the machines the wearer already owns. Text
+            # only: `make_synthesizer` needs just `chat()`, and the vision router
+            # tests for a `vision` method, so a look reports honestly blind
+            # rather than raising into a swallowed AttributeError.
+            #
+            # Embeddings stay off for the same reason MLX leaves them off — exo
+            # serves no embeddings endpoint, so semantic search would silently
+            # degrade to keyword while the panel claimed it was on.
+            from ..exo_cluster import ExoClusterBackend
+            self._backend = ExoClusterBackend(
+                base_url=self.config.exo_url, model=self.config.exo_model,
+                config=self.config, on_egress=self._note_model_egress)
+            self.index.synthesizer = make_synthesizer(self._backend)
+            self.index.embedder = None
         else:
             # keyword AND api: the local index stays a pure keyword retriever.
             # For "api", the first-pass answer is routed to the external agent
@@ -846,6 +865,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         for _e in (self._ear, self._remote_ear):
             if _e is not None and _e.listening:
                 active = active | _e.active_caps
+                # `live_interpret` is NOT in `active_caps`, deliberately. That set
+                # is fixed when the microphone opens, and interpreting is toggled
+                # afterwards — and its honesty bit needs a segment to have come
+                # back genuinely translated, which can only happen later still. So
+                # it is asked for fresh here, every sync.
+                if getattr(_e, "interpreting", False):
+                    active = active | {"live_interpret"}
         for key in EAR_CAPS:
             flag = "DL_WIRED_" + key.upper()
             if key in active:
@@ -863,6 +889,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._ear is None:
             from .ear import EarHost
             self._ear = EarHost(self)
+            # A fresh EarHost starts with the interpreter OFF, so the persisted
+            # setting is pushed in AT CONSTRUCTION rather than after a successful
+            # start. A wearer whose start fails for want of a speech engine, then
+            # installs the pack and retries, must not need a second toggle to get
+            # back the interpreter they already turned on.
+            self._apply_interpret()
         try:
             res = self._ear.start(mic)
         except Exception as exc:                    # noqa: BLE001 — never fatal
@@ -895,6 +927,93 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                                             "remote_listen_enabled", False))
         return st
 
+    def dream_neural_ready(self) -> bool:
+        """Has the NEURAL dream painter genuinely produced a picture, and can it
+        still? Two conditions, and both are needed.
+
+        Proof (`_dream_neural_ok`, set by the dream lens on a real painting) is
+        what stops onnxruntime's mere presence reading as a working painter — the
+        wheel imports long before a model loads, and a loaded session can still
+        fail on a frame. The path check is what stops the proof outliving the
+        setup: clearing the model path must take the capability back down, because
+        "it worked once this process" is not "it works now".
+        """
+        if not getattr(self, "_dream_neural_ok", False):
+            return False
+        try:
+            return bool(self.world_lens()._dream_model_path())
+        except Exception:                        # noqa: BLE001
+            return False
+
+    def dream_state(self) -> dict:
+        """What the panel needs to describe the painter honestly."""
+        path = str(getattr(self.config, "dream_model_path", "") or "").strip()
+        resolved = ""
+        try:
+            resolved = self.world_lens()._dream_model_path()
+        except Exception:                        # noqa: BLE001
+            resolved = ""
+        import os as _os
+        return {
+            "path": path,
+            # A path that is set but does not resolve is the case worth surfacing:
+            # the wearer thinks the neural painter is on and is getting the wash.
+            "found": bool(resolved),
+            "from_env": bool(_os.environ.get("DL_DREAM_MODEL")),
+            "proved": bool(getattr(self, "_dream_neural_ok", False)),
+            "active": self.dream_neural_ready(),
+        }
+
+    def set_interpret(self, on: bool = True, target: str = "") -> dict:
+        """Turn the live interpreter on/off across BOTH ears and persist it.
+
+        Both, because the Mac's own microphone and the phone acting as the mic are
+        two `EarHost`s and the wearer set one switch — a toggle that reached only
+        the local ear would look dead to anyone using the Live Lens as their mic,
+        which is the more likely way to use an interpreter at all (it is the ear
+        you take to the conversation).
+
+        Persisted so it survives a restart, and reported back with what is
+        actually true rather than what was asked for.
+        """
+        tgt = (str(target or "").strip()
+               or getattr(self.config, "interpret_target", "en") or "en")
+        self.config.interpret_enabled = bool(on)
+        self.config.interpret_target = tgt[:8]
+        self.save()
+        out: dict = {"ok": True, "on": bool(on), "target": self.config.interpret_target}
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                out = ear.set_interpret(bool(on), self.config.interpret_target)
+        # A capability that just stopped being driven must go dormant now, not at
+        # the next poll — the same reason start/stop_ear both re-sync.
+        self._sync_ear_wired()
+        if on and not out.get("can_interpret"):
+            # Honest, and NOT an error: the switch is legitimately set, it simply
+            # cannot do anything until the pack is installed. The wearer sees the
+            # reason instead of a dead toggle.
+            log.info("[interpret] enabled with no interpreter installed")
+        self.activity.add("ear", "Live interpreter turned %s (%s)"
+                          % ("on" if on else "off", self.config.interpret_target))
+        return out
+
+    def _apply_interpret(self) -> None:
+        """Push the persisted interpreter setting into an ear that just opened.
+
+        Without this the setting was write-only across a restart: `EarHost` is
+        constructed fresh with `_interpret_on = False`, so a wearer who had the
+        interpreter on, restarted the Brain and turned Listening back on would get
+        a silent ear and a panel switch that said it was on.
+        """
+        on = bool(getattr(self.config, "interpret_enabled", False))
+        tgt = getattr(self.config, "interpret_target", "en") or "en"
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                try:
+                    ear.set_interpret(on, tgt)
+                except Exception:                    # noqa: BLE001 — never block
+                    pass
+
     def hear_remote(self, pcm) -> dict:
         """The phone is the live mic: feed a chunk of the audio it captured
         on-device into the ear. The wearable hears the room you're in, not the
@@ -913,6 +1032,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if self._remote_ear is None:
             from .ear import EarHost
             self._remote_ear = EarHost(self)
+            self._apply_interpret()      # see start_ear: at construction, not
+            #                              after a start that may not succeed
         if self._remote_mic is None:
             from ...orchestrator.capture import RemoteMicSource
             self._remote_mic = RemoteMicSource()
@@ -955,7 +1076,187 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             if len(self._event_subs) >= MAX_EVENT_SUBS:
                 return None
             self._event_subs.append(q)
+        # DELIBERATELY NOT a posture greeting on this queue. Enqueueing one here
+        # was tried and reverted: a fresh subscription yielding an EMPTY queue is
+        # a contract 21 tests across three files encode on purpose, because it is
+        # what makes "this push reached N streams" checkable at all. Announcing
+        # the posture to a connecting phone is worth something; it is not worth
+        # making every push-counting assertion in the suite conditional on a
+        # greeting. Posture reaches the glass through `announce_posture` on the
+        # transition, which is the moment that actually changes what is true.
         return q
+
+    MAX_PRIVATE_ZONES = 32
+
+    def edit_zones(self, action: str, name: str = "", radius_m: float = 150.0) -> dict:
+        """Add or remove a private zone. Add uses the CURRENT position.
+
+        A dedicated route rather than raw `private_zones` config writes, for two
+        reasons: a client editing the list wholesale can drop a zone by
+        accident, and nobody is going to hand-enter a coordinate. "Make HERE a
+        private zone" is the only ergonomic way to create one, and it needs a
+        fix the client does not have to know about.
+
+        The count is capped — every zone is a haversine on every position
+        report, and an unbounded list is a slow `incognito_now()` on the hot
+        path every gate calls.
+        """
+        action = (action or "").strip().lower()
+        name = (name or "").strip()[:48]
+        zones = list(getattr(self.config, "private_zones", None) or [])
+        if action == "remove":
+            if not name:
+                return {"ok": False, "error": "which zone?"}
+            keep = [z for z in zones if str((z or {}).get("name") or "").strip().lower()
+                    != name.lower()]
+            if len(keep) == len(zones):
+                return {"ok": False, "error": "no zone by that name"}
+            self.config.private_zones = keep
+            self.save()
+            self.activity.add("privacy", "Removed a private zone")
+            # Leaving the list may lift the shield — re-evaluate and announce,
+            # or the glass keeps a "capture suspended" card for a zone that no
+            # longer exists.
+            self._resync_zone()
+            return {"ok": True, "zones": self.zone_list()}
+        if action != "add":
+            return {"ok": False, "error": f"unknown action: {action}"}
+        if len(zones) >= self.MAX_PRIVATE_ZONES:
+            return {"ok": False,
+                    "error": f"at most {self.MAX_PRIVATE_ZONES} zones"}
+        fix = self.here()
+        if not fix:
+            return {"ok": False, "error": "no-fix",
+                    "detail": "the phone has not reported a position yet"}
+        try:
+            radius = float(radius_m)
+        except (TypeError, ValueError):
+            radius = 150.0
+        # A zero or negative radius is a zone that can never match — a shield
+        # the wearer thinks they have and does not. Clamped, not accepted.
+        radius = max(10.0, min(radius, 5000.0))
+        if any(str((z or {}).get("name") or "").strip().lower() == name.lower()
+               for z in zones) and name:
+            return {"ok": False, "error": "a zone by that name already exists"}
+        zones.append({"name": name or "this area", "lat": fix["lat"],
+                      "lon": fix["lon"], "radius_m": radius})
+        self.config.private_zones = zones
+        self.save()
+        self.activity.add("privacy", "Added a private zone")
+        self._resync_zone()
+        return {"ok": True, "zones": self.zone_list()}
+
+    def zone_list(self) -> list:
+        """The zones, with whether the wearer is inside each right now."""
+        here = self.here()
+        out = []
+        for z in getattr(self.config, "private_zones", None) or []:
+            if not isinstance(z, dict):
+                continue
+            inside = False
+            if here:
+                try:
+                    from .geo import haversine_m
+                    inside = haversine_m(float(z["lat"]), float(z["lon"]),
+                                         here["lat"], here["lon"]) <= float(z["radius_m"])
+                except (KeyError, TypeError, ValueError):
+                    inside = False
+            out.append({"name": z.get("name") or "this area",
+                        "radius_m": z.get("radius_m"),
+                        "lat": z.get("lat"), "lon": z.get("lon"),
+                        "inside": inside})
+        return out
+
+    def _resync_zone(self) -> None:
+        """Re-evaluate zone membership after the LIST changed rather than after
+        the position did, and announce a crossing if one happened.
+
+        Editing zones can cross the boundary without the wearer moving an inch:
+        deleting the zone you are standing in lifts the shield, and adding one
+        raises it. Without this the card and the shield disagree until the next
+        position report."""
+        zone = self.private_zone_now()
+        if zone == self._zone_was:
+            return
+        self._zone_was = zone
+        if zone:
+            self.announce_posture(True, zone=zone)
+        else:
+            self.announce_posture(bool(self.incognito_now()))
+
+    def note_location(self, lat, lon, accuracy_m=0.0,
+                      heading_deg=None) -> dict:
+        """Take a position report and announce any zone the wearer just crossed.
+
+        NOT veil-gated, and that is a deliberate exception rather than an
+        oversight. A private zone contributes to `incognito_now()`, so refusing
+        fixes while incognito would mean the Brain could never learn it had
+        LEFT a zone — the shield would latch on the first entry and stay up
+        forever. This is the input that decides the shield; it cannot be gated
+        on the shield's own output. Nothing is stored: the fix lives in memory
+        and dies with the process.
+        """
+        from .geo import valid_coord
+        if not valid_coord(lat, lon):
+            return {"ok": False, "error": "not a coordinate"}
+        self._last_fix.set(lat, lon, accuracy_m, heading_deg=heading_deg)
+        zone = self.private_zone_now()
+        if zone != self._zone_was:
+            entered, self._zone_was = zone, zone
+            # ENTERING draws the zone card; LEAVING hands off to the ordinary
+            # posture announcement, which pushes ReadyCard — and that matters
+            # for the same reason it did for the veil pair: `private_zone_card`
+            # is `dismiss_ms: 0`, so without something replacing it the glass
+            # keeps promising "capture suspended" after capture resumed.
+            if entered:
+                self.announce_posture(True, zone=entered)
+            else:
+                self.announce_posture(bool(self.incognito_now()))
+            try:
+                self.activity.add("privacy", "Entered a private zone"
+                                  if entered else "Left a private zone")
+            except Exception:                       # noqa: BLE001
+                pass
+        return {"ok": True, "zone": zone, "veiled": bool(self.incognito_now())}
+
+    def announce_posture(self, veiled: bool, zone: str = "") -> int:
+        """Draw the privacy shield going up or coming down.
+
+        `privacy_veil()` and `ready()` are both declared HUD features that no
+        shipped Brain could produce — `decisions/0001` at the card layer, and
+        the pair has to be wired TOGETHER rather than one at a time:
+
+          * VEIL UP pushes `veil_ok=True`. This is not borrowing the safety
+            flag loosely — it is the only way the card can exist. `push_event`
+            drops every non-`veil_ok` push while `incognito_now()`, so a card
+            announcing the shield would be suppressed by the shield. It meets
+            the stated bar for the flag: it carries NO captured content (the
+            builder takes no arguments and emits two fixed strings). The flag
+            also stamps `safety: true` on the envelope, which is read only by
+            the server's own queue-eviction policy — no client branches on it.
+
+          * VEIL DOWN pushes `ready()`, and this half is the load-bearing one.
+            PrivacyVeilCard is `dismiss_ms: 0` — stays until replaced — so
+            without something to replace it the glass would keep reading
+            "Nothing is being captured" after capture resumed. A stale card is
+            usually cosmetic; a stale PRIVACY card is a false assurance, which
+            is the worst error this product can make. `ready()` is the honest
+            successor state: the Brain is live again.
+        """
+        from ...hud import cards
+        try:
+            if veiled:
+                # A zone names WHERE the shield came from; a plain veil cannot.
+                # Same `veil_ok=True` and for the same reason — the card would
+                # otherwise be suppressed by the shield it is announcing.
+                card = (cards.private_zone_card(zone) if zone
+                        else cards.privacy_veil())
+                return self.push_event(
+                    "private_zone" if zone else "privacy_veil", card, veil_ok=True)
+            return self.push_event("ready", cards.ready(), veil_ok=False)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[brain] posture card push failed: %s", type(exc).__name__)
+            return 0
 
     def unsubscribe_events(self, q) -> None:
         with self._event_lock:
@@ -1175,10 +1476,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
         # value — the SSRF endpoint never persists (audit 2026-07-19).
-        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url")
+        _url_fields = ("ollama_url", "cloud_base_url", "api_base_url", "exo_url")
         _prev_urls = {k: getattr(self.config, k, "") for k in _url_fields}
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
+                  "exo_url", "exo_model",
                   "email_enabled", "summarize_emails", "cloud_enabled",
                   "network_mode", "cloud_provider", "cloud_base_url",
                   "cloud_api_key", "cloud_model", "plan",
@@ -1191,8 +1493,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "sources_sync", "immich_base_url", "immich_api_key",
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
-                  "remote_listen_enabled", "face_recognition",
-                  "face_auto_enrol"):
+                  "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
+                  "interpret_enabled", "interpret_target", "dream_model_path",
+                  "private_zones",
+                  "face_recognition", "face_auto_enrol",
+                  "voice_recognition", "voice_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -1247,6 +1552,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # gate: flip to lan_only and HF_HUB_OFFLINE goes on before the next load.
         if {"network_mode", "quiet_hours"} & set(updates):
             self._apply_model_posture()
+        # The interpreter lives on the EarHosts, not just in config. Without this
+        # the panel's switch persisted and did nothing until the next ear restart —
+        # write-only settings are how a feature looks broken while reading "on".
+        if {"interpret_enabled", "interpret_target"} & set(updates):
+            self._apply_interpret()
+            self._sync_ear_wired()
         # turning a sync on (or changing its filter) → pull immediately
         try:
             if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
@@ -1278,9 +1589,79 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self.saga_record("incognito")
 
     def incognito_now(self) -> bool:
-        """Effective privacy shield: manual LAN-only OR a quiet-hours window."""
+        """Effective privacy shield: LAN-only, a quiet-hours window, OR a
+        private zone.
+
+        Private zones are a THIRD TERM HERE rather than a suppression path of
+        their own, and that is the whole design. `private_zone_card` says
+        "CAPTURE SUSPENDED · Memory resumes when you leave", and the only way to
+        make that sentence true is for the wearer's existing shield to be up:
+        every gate in the product already consults this one method — the ear,
+        captions, answer-ahead, the lens ring, face recall, ambient pushes —
+        so a zone suppresses all of them at once and none of them had to be
+        taught about zones. A parallel mechanism would be a second thing to keep
+        in step, and the first one it fell out of step with would be a card
+        promising a silence the Brain was not keeping.
+        """
         from .store import in_quiet_hours
-        return self.config.lan_only or in_quiet_hours(self.config.quiet_hours)
+        if self.config.lan_only or in_quiet_hours(self.config.quiet_hours):
+            return True
+        return bool(self.private_zone_now())
+
+    def private_zone_now(self) -> str:
+        """Name of the private zone the wearer is currently inside, else "".
+
+        Fails OPEN, unlike most gates here, and the asymmetry is deliberate: a
+        zone that cannot be evaluated (no fix, a stale fix, malformed config)
+        must not silently veil the Brain forever. The wearer has other, explicit
+        shields; an unreadable geofence that quietly disabled capture would look
+        exactly like the product being broken, with no way to tell.
+        """
+        zones = getattr(self.config, "private_zones", None) or []
+        if not zones:
+            return ""
+        try:
+            fix = self.here()
+            if not fix:
+                return ""
+            from .geo import zone_containing
+            return zone_containing(zones, fix["lat"], fix["lon"])
+        except Exception as exc:                    # noqa: BLE001
+            log.warning("[brain] zone check failed: %s", type(exc).__name__)
+            return ""
+
+    def here(self) -> Optional[dict]:
+        """The wearer's current position, or None.
+
+        Two sources, freshest wins. The phone's own report (POST
+        /dreamlayer/location) is the live one; Dawarich is the fallback for a
+        wearer who already self-hosts a location history and would rather not
+        have the phone push as well. Neither is stored by this method.
+        """
+        fix = self._last_fix.get()
+        if fix:
+            return fix
+        base = getattr(self.config, "dawarich_url", "")
+        if not base:
+            return None
+        try:
+            from ...memory.source_dawarich import default_dawarich
+            from .geo import FIX_MAX_AGE_S, valid_coord
+            src = default_dawarich(base, getattr(self.config, "dawarich_api_key", ""))
+            if src is None:
+                return None
+            last = src.last()
+            if not last or not valid_coord(last.get("lat"), last.get("lon")):
+                return None
+            age = time.time() - float(last.get("ts") or 0.0)
+            if age > FIX_MAX_AGE_S:
+                return None                        # a track point is not a fix
+            return {"lat": float(last["lat"]), "lon": float(last["lon"]),
+                    "accuracy_m": 0.0, "ts": float(last["ts"]),
+                    "age_s": round(age, 1)}
+        except Exception as exc:                    # noqa: BLE001
+            log.debug("[brain] dawarich fix unavailable: %s", type(exc).__name__)
+            return None
 
     def _apply_model_posture(self) -> None:
         """Set the process-wide HF offline flags to match the wearer's posture,
@@ -1483,6 +1864,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             self._face_recall = fr
         return fr
 
+    def voice_recall(self):
+        """Recognising WHO IS SPEAKING, so a memory has an author
+        (ai_brain/server/voice_live.py). Built once and cached, like the face
+        index; the stored voiceprints are read from disk on first use, so a Brain
+        that never listens never loads them. Returns None when it cannot be
+        built, which every caller must read as "no answer", never as "a
+        stranger"."""
+        vr = getattr(self, "_voice_recall", None)
+        if vr is None:
+            try:
+                from .voice_live import VoiceRecall
+                vr = VoiceRecall(self)
+            except Exception:
+                log.warning("voice recall unavailable", exc_info=True)
+                vr = None
+            self._voice_recall = vr
+        return vr
+
     def summarize(self, text: str, max_chars: int = 220) -> str:
         """One-glance summary of a long email. Uses the local model when there
         is one; otherwise clips to the first sentence — never blocks the feed."""
@@ -1639,6 +2038,116 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                             exc_info=True)
                 return {}
         return {}
+
+    def _retriever_for_purge(self):
+        """(Retriever, MemoryDB) over the live store, or (None, None).
+
+        Built exactly as `purge_memories` builds it, so a single "forget that"
+        reaches the same stores an erase-everything does. Sharing the shape is
+        the point: the ANN index is the one that bites — a row deleted while its
+        embedding survives is a memory the wearer was told is gone and that
+        vector search still finds.
+        """
+        import os as _os
+        db_path = str(_memory_db_path(self))
+        if not _os.path.exists(db_path):
+            return None, None
+        from ...memory.ann_index import PersistentAnnIndex
+        from ...memory.db import MemoryDB
+        from ...memory.retrieval import Retriever
+        db = MemoryDB(db_path)
+        dim = db.get_setting("embedder_dim")
+        ann = (PersistentAnnIndex(db_path + ".usearch", int(dim))
+               if PersistentAnnIndex.available and dim else None)
+        return Retriever(db, None, ann), db
+
+    def forget_last_preview(self, push: bool = True) -> dict:
+        """What "forget that" would erase — and the card that asks.
+
+        The FIRST half of a two-step. `forget_last_card` is a declared HUD
+        feature whose own copy is "Hold to confirm • Tap to cancel", so wiring
+        it as a one-way push would have drawn a question with no way to answer
+        it — the shape of half-wiring this project keeps finding. The second
+        half is `forget_memory`, and it requires the id this returns.
+
+        Veil-gated as RECALL, not as capture: naming the last thing you said
+        back to you is a read of the timeline, and under the shield the Brain
+        does not answer reads.
+        """
+        if self.incognito_now():
+            return {"ok": False, "reason": "veiled"}
+        try:
+            _r, db = self._retriever_for_purge()
+            if db is None:
+                return {"ok": False, "reason": "no-store"}
+            rows = db.memories()
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[brain] forget preview failed: %s", type(exc).__name__)
+            return {"ok": False, "reason": "error"}
+        if not rows:
+            return {"ok": False, "reason": "nothing-to-forget"}
+        # newest by id: `created_at` is a string and rows arrive in insert order,
+        # but an explicit max on the primary key does not depend on either.
+        row = max(rows, key=lambda r: int(r.get("id") or 0))
+        label = (row.get("summary") or "").strip()
+        pushed = 0
+        if push and label:
+            try:
+                from ...hud import cards
+                # The card QUOTES the memory, so it is the wearer's own content
+                # going to their own glass — the same class of push as
+                # SavedMemoryCard, and veil-gated the same way.
+                pushed = self.push_event("forget_last",
+                                         cards.forget_last_card(label[:60]),
+                                         veil_ok=False)
+            except Exception:                        # noqa: BLE001
+                pushed = 0
+        return {"ok": True, "id": int(row.get("id") or 0), "label": label,
+                "kind": row.get("kind") or "", "pushed": pushed}
+
+    def forget_memory(self, memory_id) -> dict:
+        """Erase one memory everywhere — the SECOND half of "forget that".
+
+        The caller must name the id `forget_last_preview` returned. That is the
+        confirmation, and it is also a race guard: between the wearer asking and
+        confirming, the ear can land a new utterance, and a confirm that meant
+        "the newest one" would then delete something they never saw.
+
+        Goes through `Retriever.purge_memory`, never `MemoryDB.purge_memory`
+        alone — the row, the ANN vector, any alternate vector store and the REM
+        consolidation bias have to move together, or "forget that" leaves a
+        memory that is gone from the list and still findable by search.
+        """
+        try:
+            mid = int(memory_id)
+        except (TypeError, ValueError):
+            return {"ok": False, "reason": "bad-id"}
+        try:
+            retr, db = self._retriever_for_purge()
+            if db is None:
+                return {"ok": False, "reason": "no-store"}
+            if not any(int(r.get("id") or 0) == mid for r in db.memories()):
+                # Already gone, or never here. Idempotent rather than an error:
+                # a double-confirm from a flaky connection must not read as a
+                # failure to erase.
+                return {"ok": True, "forgotten": 0, "reason": "not-found"}
+            retr.purge_memory(mid)
+        except Exception as exc:                     # noqa: BLE001
+            log.error("[brain] forget failed: %s", exc)
+            return {"ok": False, "reason": "error"}
+        try:
+            self.activity.add("privacy", "Forgot one memory")
+        except Exception:                            # noqa: BLE001
+            pass
+        pushed = 0
+        try:
+            from ...hud import cards
+            pushed = self.push_event("saved_memory",
+                                     cards.saved_memory("Forgotten."),
+                                     veil_ok=False)
+        except Exception:                            # noqa: BLE001
+            pushed = 0
+        return {"ok": True, "forgotten": 1, "pushed": pushed}
 
     def purge_memories(self) -> dict:
         """The phone's "Erase all memories" honored where the memories actually
@@ -2527,6 +3036,50 @@ def _capability_payload(brain: Brain) -> dict:
     env = dict(os.environ)
     for key in brain.config.disabled_caps:
         env.setdefault("DL_DISABLE_" + key.upper(), "1")
+    # `social_graph` is promoted HERE rather than by a long-lived flag, because it
+    # has no start/stop event to hang one on the way the ear does — a graph is
+    # simply built and answered on demand. Computed fresh into this local env copy
+    # (never os.environ), so the report cannot go stale in either direction: no
+    # flag to leave set after the last meeting is deleted, and none to forget to
+    # set after the first is recorded. The test is deliberately strict — networkx
+    # present AND a non-empty graph — since networkx over an empty graph answers
+    # every query with nothing, exactly as the fallback does.
+    try:
+        if brain.social_graph_wired():
+            env["DL_WIRED_SOCIAL_GRAPH"] = "1"
+    except Exception:                           # noqa: BLE001 — never 500 the report
+        pass
+    # `dream_style` on the same terms, and PROOF-based for the same reason the
+    # ear's interpreter is: onnxruntime importing says nothing about a model
+    # loading, and a loaded session can still fail on a frame. `_dream_neural_ok`
+    # is set by the lens only after the neural painter has genuinely produced a
+    # picture. It is re-checked against the configured path so removing the model
+    # takes the capability back down — proof that it once worked is not a claim
+    # that it still can.
+    try:
+        if brain.dream_neural_ready():
+            env["DL_WIRED_DREAM_STYLE"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `crdt_sync`, same discipline: loro importing is not a sync. The flag follows
+    # a merge that actually read a peer's snapshot on this process.
+    try:
+        if getattr(brain, "_sync_ok", False):
+            env["DL_WIRED_CRDT_SYNC"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `speaker_id` — the strictest of the lot, because being wrong here attaches a
+    # real name to the wrong person's words. Promoted only when a speaker model
+    # ACTUALLY LOADED (not merely the speechbrain wheel, whose absence makes
+    # `embed` return a hash of the audio's string form) AND the wearer has
+    # consented AND the switch is on. Any of those missing and the ear runs
+    # unattributed, which is the honest default.
+    try:
+        vr = brain.voice_recall()
+        if vr is not None and vr.enabled and vr.model_available:
+            env["DL_WIRED_SPEAKER_ID"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -3937,6 +4490,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             alongside the persisted Listening switch."""
             self._json(200, brain.ear_status())
 
+        def _post_interpret(self, path, qs):
+            """Turn the live cross-language interpreter on/off.
+
+            `{"on": true, "target": "en"}` — `target` is the language Juno speaks
+            back IN (the one you understand), not the one being spoken; SeamlessM4T
+            detects the source itself. Rides the ear, so Listening must be on for
+            anything to be heard; this reports `can_interpret: false` with a reason
+            rather than pretending when the pack is absent."""
+            b = self._body()
+            self._json(200, brain.set_interpret(bool(b.get("on", True)),
+                                                str(b.get("target", "") or "")))
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -4000,6 +4565,130 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "sync": brain.config.calendar_sync,
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
+
+        def _get_vault_sync(self, path, qs):
+            """This device's repertoire as a CRDT snapshot, base64 in JSON.
+
+            The blob is the wearer's kept figments, so this is exactly as
+            sensitive as `/backup` and carries the same LOCAL-ONLY rule: a token
+            holder reaching in from off-box can read the Brain, but handing them
+            the whole repertoire in one call is a different kind of access, and
+            the design's premise is that no server ever holds these.
+
+            base64 in JSON rather than raw bytes so it rides the same authenticated
+            JSON path as everything else and a wearer can move it by any channel
+            they like — AirDrop, a QR, a file on a stick."""
+            if not self._from_localhost():
+                self._json(403, {"error": "sync export is local-only"}); return
+            import base64 as _b64
+            blob = brain.sync_export()
+            if not blob:
+                self._json(200, {"ok": False, "reason": "no-crdt",
+                                 "detail": "install the Sync pack (loro)",
+                                 "blob": ""})
+                return
+            self._json(200, {"ok": True, "bytes": len(blob),
+                             "peer": brain._sync_peer_name(),
+                             "blob": _b64.b64encode(blob).decode("ascii")})
+
+        def _post_vault_sync(self, path, qs):
+            """Merge another of your devices' snapshots into this vault.
+
+            `{"blob": "<base64>"}`. Order- and duplicate-independent by
+            construction, so re-posting the same snapshot is a no-op rather than a
+            problem — which is what lets this work over a channel with no
+            protocol at all."""
+            import base64 as _b64
+            b = self._body()
+            raw = b.get("blob") or ""
+            try:
+                blob = _b64.b64decode(raw, validate=True) if raw else b""
+            except Exception:                        # noqa: BLE001 — peer input
+                self._json(200, {"ok": False, "reason": "unreadable",
+                                 "detail": "that snapshot was not valid base64"})
+                return
+            self._json(200, brain.sync_merge(blob))
+
+        def _get_vault_sync_state(self, path, qs):
+            """Whether sync can run here, and how much there is to sync."""
+            self._json(200, brain.sync_state())
+
+        def _get_voice(self, path, qs):
+            """Runtime state of voice recall, plus the list of stored voices.
+
+            Counts, names and capability — never a vector. A voiceprint is the
+            biometric itself; the wearer needs to see and manage what is held,
+            not have the templates handed back on every poll."""
+            from .voice_live import CONSENT_TEXT
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"available": False,
+                                 "error": "voice recall unavailable"})
+                return
+            out = dict(vr.status())
+            out["consent_text"] = CONSENT_TEXT
+            out["people"] = vr.people()
+            out["listening"] = bool(getattr(brain.config, "listen_enabled", False))
+            self._json(200, out)
+
+        def _post_voice_consent(self, path, qs):
+            """Accept or revoke voice-recall consent. `{"accept": false}` also
+            ERASES every stored voiceprint — withdrawing consent has to remove
+            what was taken under it, not merely stop taking more."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            if b.get("accept") is False:
+                self._json(200, vr.revoke_consent())
+                return
+            self._json(200, vr.accept_consent(str(b.get("version", "") or "")))
+
+        def _post_voice_name(self, path, qs):
+            """Name an auto-enrolled voice. Body: {contact_id, name}.
+
+            This is the moment `said_by` starts carrying something the lenses can
+            match on — until a voice has a name, `their_word` has nothing to
+            find."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            self._json(200, vr.name_identity(str(b.get("contact_id", "")),
+                                             str(b.get("name", ""))))
+
+        def _post_voice_forget(self, path, qs):
+            """Forget one stored voice, or all of them with `{"all": true}`."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            if b.get("all"):
+                self._json(200, {"ok": True, "erased": vr.forget_all()})
+                return
+            self._json(200, vr.forget(str(b.get("contact_id", ""))))
+
+        def _get_dream(self, path, qs):
+            """State of the neural dream painter: the model path, whether it
+            resolves, and whether it has actually painted anything yet."""
+            self._json(200, brain.dream_state())
+
+        def _get_social_graph(self, path, qs):
+            """The relationship graph built from your recorded meetings.
+
+            `?a=…&b=…` asks what two people have in common and how you get from one
+            to the other; with no names it returns the whole graph. Reports which
+            engine answered, because "communities" means densely-connected clusters
+            with networkx and only connected components without it."""
+            a = (qs.get("a", [""])[0] or "").strip()
+            b = (qs.get("b", [""])[0] or "").strip()
+            if a and b:
+                self._json(200, brain.social_mutual(a, b))
+                return
+            self._json(200, brain.social_graph_state())
 
         def _get_contacts(self, path, qs):
             """Contacts sync state + count pulled from Contacts.app."""
@@ -4408,6 +5097,123 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             if ls is not None:
                 self._json(200, {"frames": ls.frames()})
 
+        def _post_location(self, path, qs):
+            """The phone reports where it is: {lat, lon, accuracy_m}.
+
+            Held in memory only — no row, no index entry, no file. Its whole
+            job is to decide whether a private zone's shield is up and to give
+            Waypath a bearing. Deliberately NOT veil-gated: a zone contributes
+            to the shield, so gating this on the shield would latch it up
+            forever the first time the wearer walked into one."""
+            b = self._body()
+            self._json(200, brain.note_location(
+                b.get("lat"), b.get("lon"), b.get("accuracy_m", 0.0),
+                heading_deg=b.get("heading_deg")))
+
+        def _post_zones(self, path, qs):
+            """Add or remove a private zone.
+
+            `{"action":"add","name":"the flat","radius_m":150}` marks the
+            CURRENT position; `{"action":"remove","name":"the flat"}` drops one.
+            Add needs a position report first — nobody hand-enters a
+            coordinate, which is why this exists rather than raw config writes."""
+            b = self._body()
+            self._json(200, brain.edit_zones(b.get("action", ""),
+                                             b.get("name", ""),
+                                             b.get("radius_m", 150.0)))
+
+        def _get_zones(self, path, qs):
+            """The zones, each with whether you are inside it right now."""
+            self._json(200, {"zones": brain.zone_list(),
+                             "max": brain.MAX_PRIVATE_ZONES,
+                             "has_fix": bool(brain.here())})
+
+        def _get_where(self, path, qs):
+            """Current fix and zone state, for the phone's own UI. Coarse: the
+            zone NAME and whether the shield is up, never the coordinate."""
+            fix = brain.here()
+            self._json(200, {"has_fix": bool(fix),
+                             "age_s": (fix or {}).get("age_s"),
+                             "zone": brain.private_zone_now(),
+                             "veiled": bool(brain.incognito_now()),
+                             "zones": len(getattr(brain.config, "private_zones", []) or [])})
+
+        def _get_they_said(self, path, qs):
+            """Did they tell you something different last time?
+            `?person=Ana&claim=the+deposit+is+1400`.
+
+            `person` is REQUIRED and never inferred — nothing in this product
+            does speaker diarization, and guessing would put a false
+            contradiction against a named individual."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.they_said(qs.get("person", [""])[0],
+                                             qs.get("claim", [""])[0]))
+
+        def _get_their_word(self, path, qs):
+            """Everything this person told you, and what they promised:
+            `?person=Ana`. Their promises are kept separate from yours —
+            what you owe and what you are owed are opposite ledgers."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.their_word(qs.get("person", [""])[0]))
+
+        def _get_owed(self, path, qs):
+            """Open commitments, most-urgent first, and draws the top one.
+
+            Distinct from `/dreamlayer/drift`: drift FIRES when a promise slips
+            (an interruption), this ANSWERS "what do I owe?" (a question)."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.owed())
+
+        def _get_resurface(self, path, qs):
+            """A name or fact worth bringing back now, from the FSRS rehearsal
+            store — a new surface over state the morning brief already reads."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.resurface())
+
+        def _get_forget_last(self, path, qs):
+            """What "forget that" WOULD erase, and the card that asks. Erases
+            nothing — POST the returned id to confirm."""
+            self._json(200, brain.forget_last_preview())
+
+        def _post_forget_last(self, path, qs):
+            """Confirm: erase the memory whose id the GET returned.
+
+            The id echo IS the confirmation, and it is a race guard — the ear
+            can land a new utterance between asking and confirming, and a
+            confirm meaning "the newest" would then erase something unseen."""
+            body = self._body()
+            self._json(200, brain.forget_memory(body.get("id")))
+
+        def _get_factcheck(self, path, qs):
+            """World-check a claim: `?claim=the+wall+fell+in+1975`.
+
+            GET rather than POST because it is a read — it stores nothing. It
+            can reach the wearer's cloud tier, but only through `brain.ask`,
+            which already refuses egress while incognito or with cloud off.
+            `fired: false` covers an unverifiable claim, an unreachable tier
+            and a cooling speaker alike — all "nothing worth interrupting for"."""
+            ls = self._lenses_or_503()
+            if ls is not None:
+                self._json(200, ls.fact_check(qs.get("claim", [""])[0]))
+
+        def _get_scrub(self, path, qs):
+            """Rewind your day: `?index=N` steps back through the hot ring,
+            0 = most recent, and draws that node on the glass. `index` is
+            clamped, not rejected — a phone holding a stale position after a
+            retention sweep gets the oldest node rather than a 400."""
+            ls = self._lenses_or_503()
+            if ls is None:
+                return
+            try:
+                idx = int((qs.get("index", ["0"])[0] or "0").strip())
+            except ValueError:
+                idx = 0
+            self._json(200, ls.scrub(idx))
+
         def _get_premonition(self, path, qs):
             """What usually happens next — only where the pattern is strong
             enough that the model will say so."""
@@ -4447,6 +5253,15 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/drift": _get_drift,
             "/dreamlayer/stasis": _get_stasis,
             "/dreamlayer/premonition": _get_premonition,
+            "/dreamlayer/scrub": _get_scrub,
+            "/dreamlayer/factcheck": _get_factcheck,
+            "/dreamlayer/owed": _get_owed,
+            "/dreamlayer/theysaid": _get_they_said,
+            "/dreamlayer/where": _get_where,
+            "/dreamlayer/zones": _get_zones,
+            "/dreamlayer/their": _get_their_word,
+            "/dreamlayer/resurface": _get_resurface,
+            "/dreamlayer/forget/last": _get_forget_last,
             "/dreamlayer/cloud": _get_cloud,
             "/dreamlayer/memory/file": _get_memory_file,
             "/dreamlayer/history": _get_history,
@@ -4456,6 +5271,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/contacts": _get_contacts,
+            "/dreamlayer/social/graph": _get_social_graph,
+            "/dreamlayer/dream": _get_dream,
+            "/dreamlayer/voice": _get_voice,
+            "/dreamlayer/vault/sync": _get_vault_sync,
+            "/dreamlayer/vault/sync/state": _get_vault_sync_state,
             "/dreamlayer/reminders": _get_reminders,
             "/dreamlayer/rewind": _get_rewind,
             "/dreamlayer/saga": _get_saga,
@@ -4539,8 +5359,14 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
         def _post_config(self, path, qs):
             """Apply a config patch, log notable posture changes, reindex."""
             body = self._body()
+            # The EFFECTIVE posture, not the raw flag: `incognito_now()` is
+            # lan_only OR a quiet-hours window, and a patch that clears lan_only
+            # inside quiet hours does not lift the shield. Reading the flag
+            # would announce a veil-down that did not happen.
+            veiled_before = bool(brain.incognito_now())
             before = (brain.config.model, brain.config.cloud_enabled,
-                      brain.config.network_mode, brain.config.email_enabled)
+                      brain.config.network_mode, brain.config.email_enabled,
+                      brain.config.captions_enabled)
             brain.apply_config(body)
             brain.reindex()
             if "model" in body and brain.config.model != before[0]:
@@ -4551,6 +5377,18 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 brain.activity.add("privacy", "Incognito on" if brain.config.lan_only else "Incognito off")
             if "email_enabled" in body and brain.config.email_enabled != before[3]:
                 brain.activity.add("config", "Email & iMessage " + ("on" if brain.config.email_enabled else "off"))
+            # Captions put the room's speech on a screen, so the switch belongs
+            # in the tamper-evident record alongside the other posture changes —
+            # a wearer reading their receipt should see when it went on.
+            if "captions_enabled" in body and brain.config.captions_enabled != before[4]:
+                brain.activity.add("privacy", "Live captions "
+                                   + ("on" if brain.config.captions_enabled else "off"))
+            # …and say it on the glass, not only in the activity log. Only on a
+            # TRANSITION: re-POSTing the same posture must not re-push a card,
+            # and the panel saves the whole config on every switch.
+            veiled_now = bool(brain.incognito_now())
+            if veiled_now != veiled_before:
+                brain.announce_posture(veiled_now)
             self._json(200, {"config": brain.config.public()})
 
         def _post_capabilities(self, path, qs):
@@ -5561,6 +6399,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/face/forget": _post_face_forget,
             "/dreamlayer/face/consent": _post_face_consent,
             "/dreamlayer/face/name": _post_face_name,
+            "/dreamlayer/voice/consent": _post_voice_consent,
+            "/dreamlayer/voice/name": _post_voice_name,
+            "/dreamlayer/voice/forget": _post_voice_forget,
             "/dreamlayer/lens/observe": _post_lens_observe,
             "/dreamlayer/candor/check": _post_candor_check,
             "/dreamlayer/drift/tend": _post_drift_tend,
@@ -5573,6 +6414,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/social/people": _post_social_people,
             "/dreamlayer/social/people/edit": _post_social_people_edit,
             "/dreamlayer/memories/purge": _post_memories_purge,
+            "/dreamlayer/forget/last": _post_forget_last,
+            "/dreamlayer/location": _post_location,
+            "/dreamlayer/zones": _post_zones,
+            "/dreamlayer/interpret": _post_interpret,
+            "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,
             "/dreamlayer/brief": _post_brief,

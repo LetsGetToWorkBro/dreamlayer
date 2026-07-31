@@ -748,6 +748,17 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <input type="text" id="pTags" placeholder="tags: work,lease" style="max-width:180px">
       <button class="ghost" onclick="addPerson()">Add</button>
     </div>
+    <div class="conn" style="margin-top:16px"><div style="flex:1">
+      <div class="conn-t">How you know each other</div>
+      <div class="conn-s">Built from your <b>recorded meetings</b> &mdash; two people in one room is evidence they have met. Deliberately <b>not</b> from your address book: importing contacts would assert that everyone in it knows everyone else, which is false and would invent the whole graph. Ask what two people have in common, or read the circles below. Needs the <b>Recall</b> pack (networkx) for real community detection; without it the grouping is only "everyone reachable from everyone", which lumps two circles together the moment one person bridges them.</div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="gA" placeholder="one name" style="max-width:180px"
+          onkeydown="if(event.key==='Enter')askMutual()">
+        <input type="text" id="gB" placeholder="and another" style="max-width:180px"
+          onkeydown="if(event.key==='Enter')askMutual()">
+        <button class="sm ghost" onclick="askMutual()">What do they share?</button></div>
+      <div id="gOut" class="conn-s" style="margin-top:8px"></div>
+      <div id="gCircles" class="conn-s" style="margin-top:8px"></div></div></div>
   </section>
 
   <section>
@@ -779,6 +790,65 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <div class="conn-s">Off by default. When on, this Mac's microphone transcribes speech <b>entirely on-device</b> (voice-activity detection → local speech recognition) and folds what it hears into your memory, so you can later ask "what did we decide about the lease?". <b>Nothing is uploaded</b> — audio never leaves this machine. The Veil still wins: while Incognito or in quiet hours it captures nothing. Phone numbers, emails, cards and SSNs are scrubbed before anything is stored (install the <b>Guardian</b> pack for deeper scrubbing of IBANs, passports and the like); names and places are kept. <b>It hears everyone in range</b>, not just you — so use it with consent. Needs the <b>Sharp Ears</b> pack (a local speech engine) and a microphone.</div>
       <div id="earStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="listen" onchange="saveListen()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Live captions &middot; draw what it hears</div>
+      <div class="conn-s">Off by default, and <b>separate from Listening on purpose</b>: remembering what was said and putting it on a screen are different things. With this on, each transcribed line is also drawn on the Live Lens as it is heard. It shows the <b>scrubbed</b> text — the same thing your memory stores, never more — and the Veil suppresses the card exactly as it suppresses the write. Needs Listening on to have anything to draw. <b>Everyone in range appears on that screen</b>, so treat it the way you would a recording light.</div></div>
+      <label class="sw"><input type="checkbox" id="captions" onchange="saveCaptions()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Answer ahead &middot; the room asks, you already know</div>
+      <div class="conn-s">Off by default. When someone asks a question out loud, the Brain looks it up in <b>your own memory</b> and puts the answer on the Live Lens before you have to think of it. <b>Strictly on-device</b> — an overheard question never reaches the cloud, whatever your cloud settings say, because it is answered with the network path switched off. Only fires when the answer is confident enough to be worth reading, and at most one every 20 seconds so a conversation is not answered continuously. Needs Listening on.</div></div>
+      <label class="sw"><input type="checkbox" id="answerAhead" onchange="saveAnswerAhead()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Live interpreter &middot; their meaning, in your language</div>
+      <div class="conn-s">Off by default. Someone speaks a language you don't; the Brain carries the <b>meaning</b> of each utterance across and puts it on the Live Lens &mdash; and speaks it into your ear if Juno's voice is on. <b>Entirely on-device</b> (Meta's SeamlessM4T runs here); the audio never leaves this machine and no translation service is contacted, whatever your cloud settings say. It reads speech straight into your language in one pass, so there is <b>no transcript of the original</b> to store or show &mdash; only what it meant. The Veil still wins: nothing is interpreted while Incognito, in quiet hours, or inside a private zone. Needs Listening on and the <b>Interpreter</b> pack.
+        <div class="row" style="margin-top:10px">
+          <select id="interpTarget" onchange="saveInterpret()" style="max-width:230px">
+            <option value="en">Answer me in &middot; English</option>
+            <option value="es">Answer me in &middot; Spanish</option>
+            <option value="fr">Answer me in &middot; French</option>
+            <option value="de">Answer me in &middot; German</option>
+            <option value="it">Answer me in &middot; Italian</option>
+            <option value="pt">Answer me in &middot; Portuguese</option>
+            <option value="nl">Answer me in &middot; Dutch</option>
+            <option value="ja">Answer me in &middot; Japanese</option>
+            <option value="zh">Answer me in &middot; Chinese (Mandarin)</option>
+            <option value="ko">Answer me in &middot; Korean</option>
+            <option value="ar">Answer me in &middot; Arabic</option>
+            <option value="ru">Answer me in &middot; Russian</option>
+            <option value="hi">Answer me in &middot; Hindi</option>
+            <option value="el">Answer me in &middot; Greek</option>
+            <option value="he">Answer me in &middot; Hebrew</option>
+            <option value="tr">Answer me in &middot; Turkish</option>
+            <option value="vi">Answer me in &middot; Vietnamese</option>
+            <option value="th">Answer me in &middot; Thai</option>
+            <option value="pl">Answer me in &middot; Polish</option>
+            <option value="uk">Answer me in &middot; Ukrainian</option>
+          </select></div>
+        <div id="interpStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="interpret" onchange="saveInterpret()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Voice recall &middot; who said it</div>
+      <div class="conn-s">Off by default, and <b>consent-gated</b>. When on, the Brain learns the voices it hears so a remembered line has a name on it &mdash; which is what lets you ask <b>"what did Marcus tell me last time"</b> or "what did he promise". Without it every utterance is stored unattributed, which is how it works today.
+        <div id="voiceConsent" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:6px">
+          <div id="voiceConsentText" class="conn-s" style="white-space:pre-wrap;margin:0"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="sm" onclick="voiceConsent(true)">I understand &mdash; turn it on</button></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="sm ghost" onclick="refreshVoiceRecall()">Refresh</button>
+          <button class="sm ghost danger" onclick="voiceForgetAll()">Erase every voiceprint</button>
+          <button class="sm ghost danger" onclick="voiceConsent(false)">Withdraw consent</button></div>
+        <div id="voiceStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
+        <ul id="voiceList" style="margin-top:8px"></ul></div>
+      <label class="sw"><input type="checkbox" id="voiceOn" onchange="saveVoice()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Voice auto-enrol</div>
+      <div class="conn-s">Store a voiceprint for <b>every</b> speaker heard, not only people you name &mdash; including bystanders, who have not agreed and cannot agree here. You are accepting that on their behalf. Unnamed voices are erased automatically after 90 days unless you name them.</div>
+      <label class="sw"><input type="checkbox" id="voiceAuto" onchange="saveVoice()"><span class="track red"></span></label></div>
+    <div class="conn"><div><div class="conn-t">Private zones &middot; places that record nothing</div>
+      <div class="conn-s">Inside a private zone the Brain captures <b>nothing</b> — it is the same shield Incognito raises, so the ear, captions, answer-ahead, the memory ring and face recall all go quiet together. Needs the phone to be reporting its position (it does that while the app is open). A zone is a point and a radius; you mark one by standing in it.</div>
+      <div id="zoneStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
+      <div id="zoneList" class="conn-s" style="margin-top:6px"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <input id="zoneName" placeholder="name this place" style="flex:1;min-width:130px">
+        <input id="zoneRadius" type="number" min="10" max="5000" value="150" style="width:82px" title="radius in metres">
+        <button id="zoneAdd" onclick="addZone()">Make here private</button>
+      </div></div></div>
     <div class="conn"><div><div class="conn-t">Phone &amp; glasses</div>
       <div class="conn-s">One code wires the phone, this Brain, and your glasses together. In the app: Brain → Pair a device → scan or paste.</div></div>
       <button id="pairbtn" onclick="pair()">Pair a phone</button></div>
@@ -917,16 +987,26 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
 
   <section>
     <div class="eyebrow">Intelligence</div><h2>Model</h2>
-    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision — or plug in your own agent (Hermes, OpenClaw, LM Studio, anything OpenAI-compatible) as the brain.</p>
+    <p class="lead">Keyword search works with no model at all. Add Ollama on this Mac mini for written answers and vision, spread one bigger model across the machines you already own with exo — or plug in your own agent (Hermes, OpenClaw, LM Studio, anything OpenAI-compatible) as the brain.</p>
     <div class="seg" id="modelSeg">
       <button data-m="keyword" onclick="pickModel('keyword')">Keyword</button>
       <button data-m="ollama" onclick="pickModel('ollama')">Ollama</button>
+      <button data-m="exo" onclick="pickModel('exo')">exo cluster</button>
       <button data-m="api" onclick="pickModel('api')">Your API</button></div>
     <div class="fold" id="ollamaFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s">
       <div class="row" style="margin-top:12px">
         <input type="text" id="ourl" placeholder="http://127.0.0.1:11434" style="max-width:230px">
         <input type="text" id="ochat" placeholder="chat · llama3.2" style="max-width:190px">
         <input type="text" id="ovis" placeholder="vision model" style="max-width:170px"></div>
+    </div>
+    <div class="fold" id="exoFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .3s var(--ease),opacity .25s,margin .3s">
+      <div class="row" style="margin-top:12px">
+        <input type="text" id="xurl" placeholder="http://127.0.0.1:52415" oninput="renderExoWarn()" style="max-width:230px">
+        <input type="text" id="xmodel" placeholder="model · llama-3.2-3b" style="max-width:200px"></div>
+      <div class="conn-s" style="margin-top:10px">exo serves text, not images — a look reports blind while this tier is chosen,
+        and semantic search stays off (exo has no embeddings endpoint). Point this at whichever machine in the
+        cluster runs <b>exo</b>; the other nodes find each other.</div>
+      <div id="exoWarn"></div>
     </div>
     <div class="fold" id="apiFields" style="max-height:0;overflow:hidden;opacity:0;transition:max-height .5s var(--ease),opacity .3s,margin .3s">
       <div class="conn" style="margin-top:12px"><div style="flex:1">
@@ -965,6 +1045,14 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
         <div class="conn-s">Let the Brain read Mail and Messages so a glance can catch a reply you owe.
           Nothing is sent; it stays on this Mac. Saves the moment you flip it.</div></div>
       <label class="sw"><input type="checkbox" id="email" onchange="saveEmail()"><span class="track"></span></label></div>
+    <div class="conn"><div style="flex:1">
+      <div class="conn-t">Dream Mode &middot; the neural painter</div>
+      <div class="conn-s">Dream Mode already paints, with a procedural wash that needs nothing installed. Point this at a fast-neural-style <b>.onnx</b> model and a look through the dream lens comes back as a real painting instead &mdash; your street as Starry Night. Nothing is bundled or downloaded; you supply the file, and it runs <b>entirely on this Mac</b> (the frame is painted here and never sent anywhere). Needs the <b>Clear Eyes</b> pack for the ONNX runtime.
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="dreamModel" placeholder="/path/to/style.onnx" style="flex:1"
+            onkeydown="if(event.key==='Enter')saveDreamModel()">
+          <button class="sm ghost" onclick="saveDreamModel()">Use this model</button></div>
+        <div id="dreamStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div></div>
   </section>
 
   <section>
@@ -981,6 +1069,13 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
         <button class="sm ghost" onclick="backup()">Download</button>
         <button class="sm ghost" onclick="document.getElementById('restoreFile').click()">Restore</button>
         <input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="restore(event)"></div></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Sync your repertoire across your own devices</div>
+      <div class="conn-s">Your kept Figments &mdash; and, just as importantly, the ones you <b>revoked</b> &mdash; the same on every device you own, with <b>no server holding them</b>. Save a snapshot here, carry it however you like (AirDrop, a stick, a file), and load it on the other device. It is a <b>CRDT</b>, so the exchange cannot go wrong the ordinary ways: send them in either order, send the same one twice, sync A&rarr;B&rarr;A &mdash; the result is identical, and there is never a conflict to resolve by hand. A revocation always beats a re-keep, so a stale device cannot resurrect something you banished, and a Figment altered in transit is refused rather than kept. Needs the <b>Sync</b> pack.
+        <div class="row" style="margin-top:10px">
+          <button class="sm ghost" onclick="syncSave()">Save snapshot</button>
+          <button class="sm ghost" onclick="document.getElementById('syncFile').click()">Load a snapshot</button>
+          <input type="file" id="syncFile" accept="application/json" style="display:none" onchange="syncLoad(event)"></div>
+        <div id="syncStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div></div>
     <div class="conn" style="border-bottom:0"><div><div class="conn-t">Erase</div>
       <div class="conn-s">Clear what the Brain has kept. This can't be undone.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1850,9 +1945,10 @@ async function load(){
   folders.forEach(f=>{fl.innerHTML+=`<li class="folder"><span class="path">${esc(f)}</span>`+
     `<button class="ghost sm" onclick="rmFolder(${esc(JSON.stringify(f))})">Remove</button></li>`;
     dt.innerHTML+=`<option>${esc(f)}</option>`;});
-  const mm=["keyword","ollama","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
+  const mm=["keyword","ollama","exo","api"].indexOf(c.config.model)>=0?c.config.model:"keyword";
   $("ourl").value=c.config.ollama_url||"";$("ochat").value=c.config.ollama_chat_model||"";
   $("ovis").value=c.config.ollama_vision_model||"";$("email").checked=!!c.config.email_enabled;
+  $("xurl").value=c.config.exo_url||"";$("xmodel").value=c.config.exo_model||"";
   // primary API brain
   $("aprov").value=c.config.api_provider||"custom";
   $("abase").value=c.config.api_base_url||"";$("amodel").value=c.config.api_model||"";
@@ -1862,6 +1958,20 @@ async function load(){
   const cloud=$("cloud");cloud.checked=!incog&&!!c.config.cloud_enabled;cloud.disabled=incog;
   $("incognito").checked=incog;
   if($("listen")){$("listen").checked=!!c.config.listen_enabled; refreshEarStatus();}
+  if($("captions")){$("captions").checked=!!c.config.captions_enabled;}
+  if($("answerAhead")){$("answerAhead").checked=!!c.config.answer_ahead_enabled;}
+  if($("interpret")){
+    $("interpret").checked=!!c.config.interpret_enabled;
+    $("interpTarget").value=c.config.interpret_target||"en";
+    refreshInterpStat();
+  }
+  if($("dreamModel")){
+    $("dreamModel").value=c.config.dream_model_path||"";
+    refreshDream();
+  }
+  if($("syncStat")) refreshSync();
+  if($("voiceStat")) refreshVoiceRecall();
+  if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
     $("srcSync").checked=!!c.config.sources_sync;
@@ -1970,7 +2080,195 @@ async function loadPeople(){
     const rm=removable?`<button class="sm ghost" onclick='rmPerson(${esc(JSON.stringify(p.name))})'>Remove</button>`:"";
     return `<li><div><div class="q">${esc(p.name)} ${rel} ${badge}</div>`+
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
-    :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';}
+    :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';
+  loadCircles();}
+/* Voice recall. Consent FIRST: the switches post to /config, but flipping one on
+   without an accepted consent version leaves the layer refusing, so the panel
+   shows the consent text rather than letting a wearer flip a dead toggle. */
+async function saveVoice(){
+  const on=$("voiceOn").checked, auto=$("voiceAuto").checked;
+  await api("/dreamlayer/config",{method:"POST",
+    body:JSON.stringify({voice_recognition:on,voice_auto_enrol:auto})});
+  const s=await refreshVoiceRecall();
+  if((on||auto)&&s&&!s.consented) toast("Read and accept the notice first");
+  else toast(on?"Voice recall on":"Voice recall off");
+}
+async function voiceConsent(accept){
+  if(!accept&&!confirm("Withdraw consent? This ERASES every stored voiceprint."))return;
+  const r=await api("/dreamlayer/voice/consent",{method:"POST",
+    body:JSON.stringify({accept:!!accept})});
+  if(accept) toast(r&&r.ok?"Consent recorded":"Consent text changed — reload");
+  else toast("Consent withdrawn — "+((r&&r.erased)||0)+" voiceprint(s) erased");
+  refreshVoiceRecall();
+}
+async function voiceForgetAll(){
+  if(!confirm("Erase every stored voiceprint? Names you gave them go too."))return;
+  const r=await api("/dreamlayer/voice/forget",{method:"POST",body:JSON.stringify({all:true})});
+  toast("Erased "+((r&&r.erased)||0)+" voiceprint(s)"); refreshVoiceRecall();
+}
+async function voiceName(cid){
+  const name=prompt("Who is this?"); if(!name) return;
+  await api("/dreamlayer/voice/name",{method:"POST",
+    body:JSON.stringify({contact_id:cid,name:name})});
+  toast("Named"); refreshVoiceRecall();
+}
+async function voiceForget(cid){
+  await api("/dreamlayer/voice/forget",{method:"POST",body:JSON.stringify({contact_id:cid})});
+  toast("Forgotten"); refreshVoiceRecall();
+}
+async function refreshVoiceRecall(){
+  const el=$("voiceStat"); if(!el) return null;
+  let s; try{ s=await api("/dreamlayer/voice"); }catch(e){ el.textContent=""; return null; }
+  if(!s||s.available===false){ el.textContent=""; return null; }
+  $("voiceOn").checked=!!s.enabled; $("voiceAuto").checked=!!s.auto_enrol;
+  /* The consent text is shown until accepted — a wearer should read the words
+     they are agreeing to, in the place they agree to them. */
+  const box=$("voiceConsent");
+  if(box){ box.style.display=s.consented?"none":"block";
+           $("voiceConsentText").textContent=s.consent_text||""; }
+  const bits=[];
+  if(!s.consented) bits.push("Not consented yet.");
+  /* Say WHICH thing is missing. "The wheel is installed" and "a model loaded"
+     are different, and only the second can identify anyone. */
+  if(!s.model_available) bits.push("No speaker model installed — every utterance stays unattributed.");
+  if(!s.listening) bits.push("Listening is off, so there is nothing to attribute.");
+  bits.push(s.stored+" voice"+(s.stored===1?"":"s")+" stored ("+s.named+" named).");
+  el.textContent=bits.join(" ");
+  const list=$("voiceList");
+  if(list) list.innerHTML=(s.people||[]).map(p=>
+    `<li><div><div class="q">${p.name?esc(p.name):"<i>unnamed</i>"}</div>`+
+    `<div class="a">heard ${p.seen} time${p.seen===1?"":"s"}</div></div>`+
+    `<div style="display:flex;gap:6px">`+
+    `<button class="sm ghost" onclick='voiceName(${esc(JSON.stringify(p.contact_id))})'>${p.name?"Rename":"Name"}</button>`+
+    `<button class="sm ghost danger" onclick='voiceForget(${esc(JSON.stringify(p.contact_id))})'>Forget</button>`+
+    `</div></li>`).join("")||'<li class="empty">No voices stored yet.</li>';
+  return s;
+}
+/* Repertoire sync. The transport is deliberately a FILE: the CRDT makes the
+   channel irrelevant (merge is commutative, associative and idempotent), so
+   there is no protocol to get wrong and nothing has to be online at the same
+   time — which is the whole reason no server needs to hold these. */
+async function syncSave(){
+  let r; try{ r=await api("/dreamlayer/vault/sync"); }catch(e){ toast("Sync failed"); return; }
+  if(r&&r.error){ toast("Snapshot is local-only — open localhost"); return; }
+  if(!r||!r.ok){ toast((r&&r.detail)||"Install the Sync pack first"); return; }
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(r)],{type:"application/json"}));
+  a.download="dreamlayer-repertoire-"+(r.peer||"device")+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("Snapshot saved"); refreshSync();
+}
+async function syncLoad(ev){
+  const f=ev.target.files&&ev.target.files[0]; if(!f) return;
+  ev.target.value="";                      /* re-selecting the same file re-fires */
+  let blob;
+  try{ blob=(JSON.parse(await f.text())||{}).blob; }
+  catch(e){ toast("That's not a snapshot file"); return; }
+  if(!blob){ toast("That file has no snapshot in it"); return; }
+  const r=await api("/dreamlayer/vault/sync",{method:"POST",
+    body:JSON.stringify({blob:blob})});
+  if(!r||!r.ok&&!r.tampered){ toast((r&&r.detail)||"That snapshot could not be read"); return; }
+  const bits=[];
+  if(r.added&&r.added.length) bits.push(r.added.length+" added");
+  if(r.revoked&&r.revoked.length) bits.push(r.revoked.length+" revoked");
+  if(r.unchanged) bits.push(r.unchanged+" already in step");
+  /* Tampering is SAID, never swallowed: a Figment whose content no longer
+     matches its hash was altered between the two devices, and a silent refusal
+     would leave the wearer thinking the exchange was clean. */
+  if(r.tampered&&r.tampered.length)
+    toast("Merged, but "+r.tampered.length+" figment(s) were altered in transit and refused");
+  else toast(bits.length?("Merged — "+bits.join(", ")):"Merged — nothing to change");
+  refreshSync(); loadHistory();
+}
+async function refreshSync(){
+  const el=$("syncStat"); if(!el) return;
+  let s; try{ s=await api("/dreamlayer/vault/sync/state"); }catch(e){ el.textContent=""; return; }
+  if(!s){ el.textContent=""; return; }
+  if(!s.available){ el.textContent="The Sync pack isn't installed — nothing to sync with yet."; return; }
+  el.textContent="This device is \""+(s.peer||"device")+"\" · "+(s.figments||0)+
+    " kept figment"+((s.figments===1)?"":"s")+
+    (s.proved?" · a snapshot has been merged here.":" · no snapshot merged here yet.");
+}
+/* The neural dream painter. The path was $DL_DREAM_MODEL only, which the bundled
+   .app has no environment to set — so a shipped feature was reachable to
+   developers and to nobody else. */
+async function saveDreamModel(){
+  await api("/dreamlayer/config",{method:"POST",
+    body:JSON.stringify({dream_model_path:$("dreamModel").value.trim()})});
+  const j=await refreshDream();
+  /* A path that is SET but does not resolve is the case worth saying out loud:
+     the wearer thinks the neural painter is on and is quietly getting the wash. */
+  if(j&&j.path&&!j.found) toast("Saved — but no file at that path");
+  else if(j&&j.path) toast("Neural painter wired");
+  else toast("Neural painter off — the procedural wash still paints");
+}
+async function refreshDream(){
+  const el=$("dreamStat"); if(!el) return null;
+  let j; try{ j=await api("/dreamlayer/dream"); }catch(e){ el.textContent=""; return null; }
+  if(!j){ el.textContent=""; return null; }
+  if(j.from_env&&!$("dreamModel").value)
+    $("dreamModel").placeholder="set by DL_DREAM_MODEL in the environment";
+  if(!j.path&&!j.from_env){
+    el.textContent="No model set — Dream Mode paints with the procedural wash.";
+  }else if(!j.found){
+    el.textContent="That path has no file — still painting with the wash.";
+  }else if(j.active){
+    el.textContent="Working — the neural painter has painted a frame.";
+  }else{
+    /* found but unproved: the file is there and nothing has run through it yet,
+       and it can still fail (a corrupt model loads no session at all). */
+    el.textContent="Model found — it loads on the first dream look.";
+  }
+  return j;
+}
+/* The relationship graph. Two answers, and the difference between them matters:
+   shared PEOPLE is a social fact ("you both know Priya"), shared EVENTS is a
+   where-from fact ("you were both at the launch"). The server reports them
+   separately and so does this. */
+async function askMutual(){
+  const a=$("gA").value.trim(), b=$("gB").value.trim(), out=$("gOut");
+  if(!a||!b){out.textContent="Two names.";return;}
+  let j; try{ j=await api("/dreamlayer/social/graph?a="+encodeURIComponent(a)+
+                          "&b="+encodeURIComponent(b)); }catch(e){ out.textContent=""; return; }
+  if(!j||!j.ok){
+    /* Named but never in a recorded meeting together — said plainly rather than
+       shown as an empty result, which would read as "nothing in common". */
+    const who=(j&&j.unknown||[]).map(esc).join(" and ");
+    out.innerHTML=who?`No recorded meeting includes ${who} yet.`
+                     :esc((j&&j.reason)||"Nothing to compare.");
+    return;
+  }
+  const bits=[];
+  if(j.people&&j.people.length)
+    bits.push("Both know <b>"+j.people.map(esc).join("</b>, <b>")+"</b>");
+  if(j.events&&j.events.length)
+    bits.push("Both at <b>"+j.events.map(esc).join("</b>, <b>")+"</b>");
+  /* The chain reads "Marcus → (the launch) → Priya" — a room is drawn in
+     parentheses so which step is a person and which is a place is never a guess. */
+  if(j.path&&j.path.length>2){
+    const chain=j.path.map(s=>s.kind==="event"?("("+esc(s.id)+")"):("<b>"+esc(s.id)+"</b>"))
+                      .join(" &rarr; ");
+    bits.push("How: "+chain);
+  }
+  out.innerHTML=bits.length?bits.join("<br>"):"Nothing in common yet.";
+}
+async function loadCircles(){
+  const el=$("gCircles"); if(!el) return;
+  let j; try{ j=await api("/dreamlayer/social/graph"); }catch(e){ el.textContent=""; return; }
+  if(!j||!j.count){ el.textContent=""; return; }
+  /* Name the algorithm, because the word "circle" claims more than components can
+     support. Saying "modularity" vs "reachable-from" is the difference between a
+     computed community and a connected blob. */
+  const how=j.communities_engine==="modularity"
+    ? "densely-connected circles"
+    : "groups where everyone is reachable from everyone (install Recall for real circles)";
+  const groups=(j.communities||[]).filter(g=>g.length>1);
+  const listed=groups.length
+    ? groups.map(g=>"<span class=\"tag\">"+g.map(esc).join(" · ")+"</span>").join(" ")
+    : "<i>no one has shared a meeting with anyone else yet</i>";
+  el.innerHTML=`${j.count} ${j.count===1?"person":"people"} across `+
+    `${j.events.length} ${j.events.length===1?"meeting":"meetings"} — ${how}:<br>${listed}`;
+}
 async function addPerson(){const n=$("pName").value.trim();if(!n)return;
   const tags=$("pTags").value.split(",").map(s=>s.trim()).filter(Boolean);
   await api("/dreamlayer/people",{method:"POST",body:JSON.stringify({name:n,note:$("pNote").value.trim(),tags:tags})});
@@ -2048,8 +2346,14 @@ async function refreshStatus(){
   const phone = s.phone_ago==null ? ["Not paired yet","off"]
     : s.phone_ago<120 ? [`Connected · seen ${s.phone_ago}s ago`,"ok"]
     : [`Paired · last seen ${Math.floor(s.phone_ago/60)}m ago`,"warn"];
+  // Every selectable tier gets its own label. The fallback used to read
+  // "Keyword · active" for ANY non-Ollama choice, so a wearer running their own
+  // API brain — or now an exo cluster — was told no model was loaded.
   const model = s.model==="ollama"
     ? (ollamaOK===true?["Ollama · reachable","ok"]:ollamaOK===false?["Ollama · needs setup","warn"]:["Ollama · checking…","warn"])
+    : s.model==="exo" ? ["exo cluster · active","ok"]
+    : s.model==="mlx" ? ["MLX · on-device","ok"]
+    : s.model==="api" ? ["Your API · active","ok"]
     : ["Keyword · active","ok"];
   const cloudTxt = s.cloud ? (s.cloud_ready?"<b>On · ready</b>":"<b>On · not configured</b>") : "Off";
   const incogTxt = s.incognito ? (s.quiet?"<b>On · quiet hours</b>":"<b>On</b>") : "Off";
@@ -2059,7 +2363,11 @@ async function refreshStatus(){
     sysRow("brain","Brain","<b>Online</b>","ok",
       "Running on this Mac mini — it serves this panel, the Live Lens, and your glasses to devices on your LAN. Nothing leaves it unless you turn the cloud tier on.","advanced","Health & activity")+
     sysRow("model","Model",`<b>${model[0]}</b>`,model[1],
-      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`:"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
+      (s.model==="ollama"?`On-device via <b>Ollama</b> — ${ollamaOK===true?"reachable and answering":ollamaOK===false?"not reachable yet (start Ollama or pull a model)":"checking reachability…"}.`
+       :s.model==="exo"?"One model across your own machines via <b>exo</b> — text answers only, so a look reports blind."
+       :s.model==="mlx"?"Apple-Silicon-native via <b>MLX</b>, running in this process."
+       :s.model==="api"?"Answers route to <b>your own endpoint</b>; the keyword index is the fallback when it can't be reached."
+       :"Keyword mode — fast local matching, no model loaded.")+" This is the intelligence your asks run through.","mind","Choose your model")+
     sysRow("cloud","Cloud",cloudTxt,s.cloud?(s.cloud_ready?"ok":"warn"):"off",
       (s.cloud?(s.cloud_ready?"A cloud provider is wired for the hardest, non-personal asks.":"Turned on but no provider/key is set yet."):"Off — everything runs on-device.")+" Your files, memory, and people never need the cloud.","mind","Wire the cloud tier")+
     sysRow("incognito","Incognito",incogTxt,s.incognito?"warn":"off",
@@ -2089,6 +2397,96 @@ async function saveListen(){
   const r=await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({listen_enabled:on})});
   toast(on?"Listening on — on-device, nothing uploaded":"Listening off");
   refreshEarStatus();
+}
+async function saveCaptions(){
+  const on=$("captions").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({captions_enabled:on})});
+  toast(on?"Live captions on — drawn on the Live Lens, scrubbed":"Live captions off");
+}
+async function saveAnswerAhead(){
+  const on=$("answerAhead").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({answer_ahead_enabled:on})});
+  toast(on?"Answer ahead on — on-device only":"Answer ahead off");
+}
+/* The live interpreter. Posts to /dreamlayer/interpret rather than /config because
+   the setting lives on the running EarHosts as well as on disk — a config write
+   alone persisted it and left the open microphone unchanged until the next
+   restart. The route does both and reports what is actually true. */
+async function saveInterpret(){
+  const on=$("interpret").checked, tgt=$("interpTarget").value||"en";
+  let j;
+  try{ j=await api("/dreamlayer/interpret",{method:"POST",
+        body:JSON.stringify({on:on,target:tgt})}); }catch(e){ return; }
+  renderInterpStat(j);
+  /* Never report "on" when it cannot interpret. The switch stays where the wearer
+     put it (it is a real, persisted intent — the pack may arrive later), but the
+     toast says the truth instead of congratulating them. */
+  if(on&&j&&j.can_interpret===false)
+    toast("Saved — but the Interpreter pack isn't installed yet");
+  else toast(on?("Interpreting into "+(j&&j.target?j.target:tgt)):"Interpreter off");
+}
+function renderInterpStat(j){
+  const el=$("interpStat"); if(!el) return;
+  if(!j){ el.textContent=""; return; }
+  if(!j.on){ el.textContent="Off."; return; }
+  if(j.can_interpret===false){
+    el.textContent="On, but the Interpreter pack isn't installed — nothing to translate with yet.";
+    return;
+  }
+  /* `proved` is the honest bit: the wheel being present does not mean the
+     multi-gigabyte model loaded. Until a real utterance has come back translated
+     we say "waiting", not "working". */
+  el.textContent=j.proved
+    ? ("Working — "+(j.interpreted_count||0)+" utterance"+((j.interpreted_count===1)?"":"s")+" carried across.")
+    : "On — the model loads on the first utterance it hears.";
+}
+async function refreshInterpStat(){
+  let e; try{ e=await api("/dreamlayer/ear"); }catch(err){ return; }
+  if(!e) return;
+  renderInterpStat({on:e.interpret, can_interpret:e.can_interpret,
+                    proved:e.interpret_proved, target:e.interpret_target,
+                    interpreted_count:e.interpreted_count});
+}
+async function refreshZones(){
+  const stat=$("zoneStat"), list=$("zoneList");
+  if(!stat) return;
+  let z; try{z=await api("/dreamlayer/zones");}catch(e){stat.textContent="";return;}
+  if(!z){stat.textContent="";return;}
+  const inside=(z.zones||[]).find(x=>x.inside);
+  stat.textContent = !z.has_fix
+    ? "No position yet — open the phone app to report one."
+    : (inside ? ("Inside \u201c"+inside.name+"\u201d — capturing nothing.")
+              : "Position known. Not in a private zone.");
+  const btn=$("zoneAdd"); if(btn) btn.disabled=!z.has_fix;
+  list.innerHTML="";
+  (z.zones||[]).forEach(x=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:8px;align-items:center;margin:3px 0";
+    const label=document.createElement("span");
+    label.style.flex="1";
+    /* textContent, never innerHTML: the name is wearer-supplied and this panel
+       renders it back — a zone called <img onerror=...> must not execute. */
+    label.textContent=x.name+" \u00b7 "+Math.round(x.radius_m)+" m"+(x.inside?" \u00b7 here now":"");
+    const del=document.createElement("button");
+    del.textContent="Remove"; del.onclick=()=>removeZone(x.name);
+    row.appendChild(label); row.appendChild(del); list.appendChild(row);
+  });
+  if(!(z.zones||[]).length){ list.textContent="No zones yet."; }
+}
+async function addZone(){
+  const name=($("zoneName").value||"").trim();
+  const radius=parseFloat($("zoneRadius").value||"150");
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"add",name:name,radius_m:radius})});
+  if(r&&r.ok){ $("zoneName").value=""; toast("Private zone added — capturing nothing here"); }
+  else toast((r&&(r.detail||r.error))||"could not add that zone");
+  refreshZones();
+}
+async function removeZone(name){
+  const r=await api("/dreamlayer/zones",{method:"POST",
+    body:JSON.stringify({action:"remove",name:name})});
+  toast(r&&r.ok?"Zone removed":"could not remove that zone");
+  refreshZones();
 }
 async function refreshEarStatus(){
   const el=$("earStat"); if(!el) return;
@@ -2150,12 +2548,39 @@ function pickModel(m,silent){modelSel=m;
   document.querySelectorAll("#modelSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
   const f=$("ollamaFields"),on=m==="ollama";
   f.style.maxHeight=on?"200px":"0";f.style.opacity=on?"1":"0";f.style.marginTop=on?"12px":"0";
+  const x=$("exoFields"),xon=m==="exo";
+  if(x){x.style.maxHeight=xon?"320px":"0";x.style.opacity=xon?"1":"0";x.style.marginTop=xon?"12px":"0";
+    if(xon)renderExoWarn();}
   const a=$("apiFields"),aon=m==="api";
   a.style.maxHeight=aon?"900px":"0";a.style.opacity=aon?"1":"0";a.style.marginTop=aon?"12px":"0";
   if(aon){renderApiWarn(); if(!silent) scanAgents();}   // auto-detect on open
   if(!silent&&m==="keyword"){saveModel(true);}
   renderModel();
   if(m==="ollama") checkModel();
+}
+// The same locality verdict the exo backend enforces server-side, shown before
+// you save it. A cluster is normally LAN — which is on-network but still
+// "somebody else's computer", so the receipt records it — and a cluster reached
+// over the internet is egress the veil closes off entirely.
+function renderExoWarn(){const el=$("exoWarn");if(!el)return;
+  const loc=isLocalUrl($("xurl").value.trim());
+  if(loc===true){
+    el.innerHTML='<div class="mstat" style="margin-top:12px"><div class="head"><span class="sdot ok"></span>'+
+      '<b>On your machines</b> &nbsp;<span class="tag privacy">local</span></div>'+
+      '<div class="lead" style="margin:6px 0 0">This cluster is on your device or your network, so questions '+
+      'never leave it and it keeps answering while incognito. A node on the LAN rather than this machine is '+
+      'still recorded on your receipt — the prompt crossed the room.</div></div>';
+  }else if(loc===false){
+    el.innerHTML='<div class="mstat" style="margin-top:12px;border-color:var(--amber)"><div class="head">'+
+      '<span class="sdot warn"></span><b>Remote cluster — your questions leave this device</b> &nbsp;'+
+      '<span class="tag" style="color:var(--amber)">egress</span></div>'+
+      '<div class="lead" style="margin:6px 0 0">This address is not on your network. Every question is sent '+
+      'there, <b>counted and logged as egress</b>, and <b>refused entirely while you\'re incognito or in '+
+      'LAN-only mode</b> (answers fall back to on-device keyword search).</div></div>';
+  }else{
+    el.innerHTML='<div class="conn-s" style="margin-top:12px">Enter the address of the machine running exo. '+
+      'A localhost / LAN address keeps everything on your own hardware.</div>';
+  }
 }
 // EXACT mirror of backends.is_local_endpoint / _LOCAL_NETS. Kept in lockstep so
 // this warning never disagrees with the server's egress accounting. Local =
@@ -2374,7 +2799,8 @@ async function pullModel(name){
 async function saveModel(silent){
   await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({model:modelSel,
     ollama_url:$("ourl").value,ollama_chat_model:$("ochat").value,
-    ollama_vision_model:$("ovis").value})});
+    ollama_vision_model:$("ovis").value,
+    exo_url:$("xurl").value,exo_model:$("xmodel").value})});
   if(!silent)toast("Saved"); if(modelSel==="ollama")checkModel(); load();
 }
 async function saveEmail(){   // the email/iMessage switch saves instantly, like the other toggles

@@ -33,11 +33,18 @@ log = logging.getLogger("dreamlayer.ear")
 # the Brain sets DL_WIRED_<KEY> for each so capabilities.state() reports them
 # "active" (installed → really on); when the ear stops they revert to "dormant".
 # We deliberately do NOT claim the caps this minimal ear does not exercise —
-# wake_word (a wake-word engine), live_interpret (the SeamlessM4T interpreter),
-# diarization and asr_alignment stay dormant until the full Orchestrator path is
-# wired, so the meter never over-reports.
+# wake_word (a wake-word engine), diarization and asr_alignment stay dormant
+# until the full Orchestrator path is wired, so the meter never over-reports.
+#
+# `live_interpret` IS here now, and it is promoted on a stricter test than the
+# others: not "the wheel is installed", not even "an interpreter object exists",
+# but "a segment has actually come back translated" (`_interpret_ok`). That is the
+# `tagger_live` lesson applied — `SoundEventDetector` reported live off a present
+# wheel with no model loaded, so `detect()` could only ever return nothing. The
+# SeamlessM4T model is a multi-gigabyte lazy load that can fail long after the
+# wheel imports, so nothing short of a real translated line proves it runs.
 EAR_CAPS = ("voice_vad", "local_asr", "mic_capture", "asr_moonshine",
-            "onnx_speech", "sound_events", "bird_song")
+            "onnx_speech", "sound_events", "bird_song", "live_interpret")
 
 
 class _EarGate:
@@ -80,9 +87,19 @@ class EarHost:
         self._lock = threading.RLock()
         self._bird = None
         self._bird_built = False
+        self._last_answer_ts = 0.0
         self.last_heard = ""
         self.heard_count = 0
         self.active_caps = frozenset()          # the caps THIS run genuinely drives
+        # -- live interpreter state. `_interpret_ok` is the honesty bit: it flips
+        # once a segment has genuinely come back translated, and it is what
+        # promotes the capability. Never reset by a toggle — that a model DID load
+        # and translate on this process stays true when you switch the feature off
+        # and on, and re-proving it would need another utterance.
+        self._interpret_on = False
+        self._interpret_target = "en"
+        self._interpret_ok = False
+        self.interpreted_count = 0
 
     # -- CapturePipeline host contract -------------------------------------
 
@@ -121,6 +138,34 @@ class EarHost:
             pass
         self.last_heard = text
         self.heard_count += 1
+        # …and DRAW it, when the wearer has asked for captions. `spoken_caption`
+        # is a declared HUD feature ("Live captions") that no shipped Brain
+        # could produce: `hud/cards.py` has built the card all along and nothing
+        # reachable ever called it, so the glass stayed blank while the ear
+        # heard everything — decisions/0001 at the card layer, the same shape as
+        # the ObjectRecall gap.
+        #
+        # Three things make this safe to wire rather than merely possible:
+        #   * its OWN opt-in. Remembering speech and displaying it are different
+        #     exposures; `captions_enabled` defaults False, so an existing
+        #     wearer who turned Listening on gets no new behaviour.
+        #   * the redacted text, not the raw. This runs AFTER the PII scrub
+        #     above, so the card carries what the store carries and never more.
+        #   * `privacy=self.privacy` handed to the builder, which blanks both
+        #     speaker and body if the gate reads shut between the check above
+        #     and here — the builder fails closed on its own.
+        # The text is never logged; only ever drawn (test_logging_discipline).
+        try:
+            if getattr(self.brain.config, "captions_enabled", False):
+                from ...hud import cards
+                self.brain.push_event(
+                    "caption",
+                    cards.spoken_caption(speaker or "", text, privacy=self.privacy),
+                    veil_ok=False)
+        except Exception as exc:                 # noqa: BLE001 — a card must never
+            log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and ANSWER it, when the room asked a question and the Brain knows.
+        self._answer_ahead(text)
         name = "heard" if not speaker else f"heard:{speaker}"
         # The room ear does NOT steer the lens, and cannot be made to safely.
         #
@@ -155,14 +200,27 @@ class EarHost:
         # "said"/"saw"/"observed" as FIRSTHAND, and the room ear is not
         # firsthand — it is ambient audio in front of the wearer. Passing
         # "said" here would make the lens claim the wearer witnessed anything
-        # anyone near them mentioned. `speaker` is threaded for the same
-        # reason it is threaded above: nothing populates it today (see the
-        # note above), so it is empty, and Provenance renders "you" rather
-        # than inventing an attribution.
+        # anyone near them mentioned.
+        #
+        # `said_by`, NOT `person`, and the difference is a ledger. `person` is the
+        # SUBJECT of an extracted event — who a promise is made TO — while
+        # `said_by` is who uttered the line. `owed()` returns the wearer's own
+        # commitments by excluding every row that carries `said_by`, so a speaker
+        # arriving in the `person` slot leaves an overheard promise looking like
+        # one the WEARER made: someone else's debt on your list. And `they_said`
+        # matches on `said_by` alone, so the attribution landing in the wrong key
+        # meant "what did Marcus say last time" could never answer from live
+        # capture at all — the whole point of the memory-based Truth Lens.
+        #
+        # This was latent rather than harmless: `speaker` is empty on a shipped
+        # Brain today (no CapturePipeline is built with a resolver), so the bug
+        # bites the moment ANY speaker producer is wired, which is exactly the
+        # next thing anyone would do here. Fixed ahead of that producer, not
+        # after it.
         try:
             ls = self.brain.lenses()
             if ls is not None:
-                ls.ingest_utterance(text, via="heard", person=speaker or "")
+                ls.ingest_utterance(text, via="heard", said_by=speaker or "")
         except Exception as exc:                 # noqa: BLE001
             log.warning("[ear] lens ingest failed: %s", type(exc).__name__)
         # fold into the temporal knowledge graph too, when one is built
@@ -176,6 +234,88 @@ class EarHost:
             self.brain.activity.add("ear", "Heard and remembered an utterance")
         except Exception:                        # noqa: BLE001
             pass
+
+    # -- the answer before you speak ---------------------------------------
+
+    #: wh-openers that make a line a question without a "?" — ASR punctuation is
+    #: unreliable and a transcript often arrives with none at all.
+    _WH = ("who", "what", "when", "where", "why", "how", "which", "whose",
+           "did", "do", "does", "is", "are", "was", "were", "can", "could",
+           "will", "would", "should", "have", "has", "had")
+    _ANSWER_MIN_CONFIDENCE = 0.35
+    _ANSWER_MIN_GAP_S = 20.0
+
+    @classmethod
+    def _is_question(cls, text: str) -> bool:
+        """Is this line a question worth trying to answer?
+
+        Deliberately narrow. Every false positive spends a memory search and
+        risks a card, and the wearer cannot un-see one — so a bare "what?" or
+        "really?" must not qualify. Four or more words, and either explicit
+        punctuation or an interrogative opener.
+        """
+        t = (text or "").strip()
+        words = t.lower().split()
+        if len(words) < 4:
+            return False
+        if t.endswith("?"):
+            return True
+        return words[0].strip(",.").rstrip("'") in cls._WH
+
+    def _answer_ahead(self, text: str) -> None:
+        """Answer a question the room just asked, from the wearer's own memory.
+
+        `answer_ahead`'s own docstring is "a question the room just asked you,
+        with the answer already pulled from your knowledge" — it was recorded as
+        blocked on "a predicted question the premonition lens does not produce",
+        which was a mis-read of the title. Nothing needs predicting: the
+        question arrives in the transcript.
+
+        Four gates, and each is answering a specific objection:
+
+          * ITS OWN OPT-IN, off by default. Remembering, drawing and ANSWERING
+            what the room says are three different exposures.
+          * `no_cloud=True`, unconditionally. This is the one that matters. The
+            wearer typing a question chose to ask it and may egress; a bystander's
+            overheard sentence chose nothing, so it must never leave the device
+            whatever the cloud settings say. Not read from config — passed as a
+            constant, so no configuration can turn it off.
+          * A CONFIDENCE FLOOR. `ask` falls through tiers and will return a weak
+            keyword-index hit for almost anything; drawing that would put a
+            confident-looking wrong answer on the glass mid-conversation.
+          * A RATE LIMIT. A conversation is mostly questions. Without this the
+            glass would answer continuously, which is both useless and the
+            fastest way to make a wearer switch the feature off.
+
+        This is NOT the lens-steering the note above forbids, and the difference
+        is worth stating rather than assuming: steering changed what the Brain
+        CAPTURED, persistently, from a bystander's words. This changes only what
+        the wearer momentarily sees, on their own display, with nothing stored
+        and nothing sent. Same input, different blast radius.
+        """
+        try:
+            if not getattr(self.brain.config, "answer_ahead_enabled", False):
+                return
+            if not self._is_question(text):
+                return
+            import time as _t
+            now = _t.time()
+            if now - float(getattr(self, "_last_answer_ts", 0.0)) < self._ANSWER_MIN_GAP_S:
+                return
+            ans = self.brain.ask(text, no_cloud=True)
+            if ans is None or ans.is_empty():
+                return
+            if float(getattr(ans, "confidence", 0.0) or 0.0) < self._ANSWER_MIN_CONFIDENCE:
+                return
+            self._last_answer_ts = now
+            from ...hud import cards
+            self.brain.push_event("answer_ahead", cards.answer_ahead(
+                question=text, answer=ans.text,
+                speaker="",                      # never attributed: see above
+                source=getattr(ans, "tier", "") or ""), veil_ok=False)
+        except Exception as exc:                 # noqa: BLE001 — never cost the
+            log.warning("[ear] answer-ahead failed: %s",   # utterance its memory
+                        type(exc).__name__)
 
     def note_acoustic_context(self, tags) -> None:
         """World-sound hook (CapturePipeline calls it with the tagger's tags): a
@@ -206,6 +346,146 @@ class EarHost:
             self.brain.push_event("hark", card, veil_ok=urgent)
         except Exception:                            # noqa: BLE001
             return
+
+    def _voice_seam(self):
+        """(embedder, resolver, enrolled_names) for the CapturePipeline, or
+        (None, None, None) when voice recall is off, unconsented, or has no
+        model.
+
+        All three are returned together on purpose. A pipeline given an embedder
+        but no resolver computes a biometric of everyone in earshot and does
+        nothing with it — the worst of both — and one given a resolver with no
+        embedder never calls it. They are one decision, so they are one call.
+        """
+        try:
+            vr = self.brain.voice_recall()
+        except Exception as exc:                     # noqa: BLE001
+            log.info("[ear] no voice recall: %s", type(exc).__name__)
+            return None, None, None
+        if vr is None or not vr.enabled or not vr.model_available:
+            return None, None, None
+        try:
+            names = [p["name"] for p in vr.people() if p.get("name")]
+            return vr._get_embedder(), vr.resolver(), names
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[ear] voice seam failed: %s", type(exc).__name__)
+            return None, None, None
+
+    # -- the live interpreter: foreign speech, voiced back to you -----------
+    #
+    # This is `live_interpret`, and the whole feature was one missing method. The
+    # capture loop has called `note_speech_audio(segment, sample_rate)` on its host
+    # at every endpointed segment since it was written; `RosettaLens.hear()` has
+    # been able to carry that audio across languages just as long; the Orchestrator
+    # implements the seam (ops_juno_attention.py). The Brain's ear simply did not
+    # have the method, so on the shipped product the hook found nothing callable
+    # and no-op'd — the exact "adapter built, nothing calls it" shape the
+    # reachability audit keeps surfacing, one method wide.
+
+    def _rosetta(self):
+        """The Brain's ONE RosettaLens — the same object the eye translates with.
+
+        Deliberately not a second lens: `world_lens()` builds it with both an
+        Argos `translate_fn` (the eye) and a SeamlessM4T `interpret_fn` (the ear),
+        and a private copy here would drift from the one the object-lens registry
+        already holds. Returns None when the world lens can't be built at all.
+        """
+        try:
+            return getattr(self.brain.world_lens(), "rosetta", None)
+        except Exception as exc:                     # noqa: BLE001
+            log.debug("[interpret] no world lens: %s", type(exc).__name__)
+            return None
+
+    def _can_interpret(self) -> bool:
+        """Is an interpreter actually wired? (the wheel is present AND the lens
+        got an `interpret_fn`).
+
+        Deliberately does NOT consult `SeamlessInterpreter.ready`, tempting as
+        that is: `ready` triggers the lazy multi-gigabyte model load, so a status
+        poll would kick off a download. Readiness is proved by use instead —
+        `_interpret_ok`, set when a real segment comes back translated.
+        """
+        lens = self._rosetta()
+        return lens is not None and getattr(lens, "_interpret", None) is not None
+
+    @property
+    def interpreting(self) -> bool:
+        """True only when the interpreter has PROVED itself on this process: the
+        switch is on, the ear is open, and a segment has actually come back
+        translated. This is what promotes `live_interpret` to "active"."""
+        return bool(self._interpret_on and self.listening and self._interpret_ok)
+
+    def set_interpret(self, on: bool = True, target: str = "en") -> dict:
+        """Turn the live interpreter on/off and choose the language Juno answers
+        IN. Reports what is actually true rather than echoing the request, so a
+        wearer who flips it on without the pack installed is told so."""
+        self._interpret_on = bool(on)
+        self._interpret_target = (str(target or "en").strip() or "en")[:8]
+        can = self._can_interpret()
+        return {"ok": True, "on": self._interpret_on,
+                "target": self._interpret_target,
+                "can_interpret": can,
+                "proved": self._interpret_ok,
+                "reason": "" if can else "no-interpreter",
+                "detail": "" if can else ("install the interpreter pack "
+                                          "(SeamlessM4T) to hear a translation"),
+                "interpreted_count": self.interpreted_count}
+
+    def note_speech_audio(self, segment, sample_rate: int = 16000) -> None:
+        """CapturePipeline endpointed a speech segment — carry its MEANING across.
+
+        The transcript has already routed separately through `ingest_caption`, so
+        this path adds the one thing text cannot: the utterance rendered into the
+        wearer's own language. The raw audio is used and dropped; nothing here
+        stores it.
+
+        Veil-gated with a SECOND check even though the pipeline already gates its
+        door: `push_pcm` refuses to accumulate while veiled, but the segment now in
+        hand was accumulated before that and the shield may have come down in
+        between. Fails CLOSED, like every other gate in this file.
+        """
+        if not self._interpret_on:
+            return
+        try:
+            if not self.privacy.allow_capture():
+                return
+        except Exception:                            # noqa: BLE001
+            return                                   # unknown posture → veiled
+        lens = self._rosetta()
+        if lens is None or getattr(lens, "_interpret", None) is None:
+            return
+        try:
+            res = lens.hear(segment, sample_rate, self._interpret_target)
+        except Exception as exc:                     # noqa: BLE001 — never break
+            log.warning("[interpret] hear failed: %s", type(exc).__name__)
+            return
+        line = (getattr(res, "translated", "") or "").strip()
+        if not line:
+            # An empty line is the honest miss: the model declined, is still
+            # loading, or the segment was not speech in another language. NOT a
+            # proof of readiness, so the capability stays dormant.
+            return
+        self._interpret_ok = True
+        self.interpreted_count += 1
+        try:
+            self.brain._sync_ear_wired()             # first line → cap goes active
+        except Exception:                            # noqa: BLE001
+            pass
+        try:
+            from ...hud import cards
+            # `original=""` on purpose. SeamlessM4T does speech→text IN THE TARGET
+            # language in one pass — it never produces a source transcript, and
+            # `RosettaLens.hear` documents `source_text` as empty for exactly that
+            # reason. Putting the ASR transcript there would look like the same
+            # utterance while being a separate engine's guess at it.
+            card = cards.live_caption_card(
+                original="", translation=line,
+                src_lang="", dst_lang=self._interpret_target,
+                privacy=self.privacy)
+            # veil_ok=False: this card is nothing BUT captured speech.
+            self.brain.push_event("interpret", card, veil_ok=False)
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[interpret] card push failed: %s", type(exc).__name__)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -250,14 +530,50 @@ class EarHost:
                 except Exception:                # noqa: BLE001
                     self._bird = None
             vad = default_vad()
+            # Who is speaking — the producer `said_by` never had. Only wired
+            # when the wearer has consented AND a real speaker model loaded;
+            # `voice_recall()` returns (None, None, None) otherwise and the
+            # pipeline runs exactly as it does today, unattributed.
+            #
+            # `enrolled_speakers` is handed over so `voice_guard` can do its job
+            # rather than being bypassed: it decides whether a computed
+            # embedding is RETAINED, and a name that is not on this list is a
+            # stranger whose vector is dropped. Auto-enrol widens the list — it
+            # does not remove the check.
+            speaker, resolver, enrolled = self._voice_seam()
             pipe = CapturePipeline(self, vad=vad, asr=asr,
-                                   tagger=tagger, bird=self._bird)
+                                   tagger=tagger, bird=self._bird,
+                                   speaker=speaker, speaker_resolver=resolver,
+                                   enrolled_speakers=enrolled)
             try:
                 pipe.start(mic)
             except Exception as exc:             # noqa: BLE001 — a dead mic isn't fatal
                 log.error("[ear] mic open failed: %s", exc)
                 return {"ok": False, "reason": "mic-error", "detail": str(exc)}
             self._pipe = pipe
+            # Say so on the glass. `listening()` is the other declared HUD
+            # feature the shipped Brain could never produce — "Hey Juno", the
+            # reassurance cue that the microphone is genuinely open. The Brain
+            # ships no wake-word engine (`hear()` above is a no-op and wake_word
+            # stays dormant), so the honest `source` is NOT "voice": the mic was
+            # opened by the wearer flipping a switch, and the card says so.
+            #
+            # earcon/haptic are switched OFF rather than defaulted on. Both are
+            # device seams the Live Lens cannot honour, and the one card in this
+            # product that earns a sound is a safety tap (`note_acoustic_context`
+            # is the sole veil-piercing path) — a settings toggle is not that.
+            #
+            # veil_ok=False even though this card carries no captured content:
+            # under the Veil the ear stores nothing, so announcing that it is
+            # listening would be the one misleading thing it could draw.
+            try:
+                from ...hud import cards
+                self.brain.push_event(
+                    "listening", cards.listening("tap", earcon=False, haptic=False),
+                    veil_ok=False)
+            except Exception as exc:             # noqa: BLE001 — never block the mic
+                log.warning("[ear] listening card push failed: %s",
+                            type(exc).__name__)
             # Promote ONLY the caps this run genuinely drives — not the whole
             # EAR_CAPS set. make_asr picks Moonshine XOR faster-whisper (never
             # sherpa/onnx), so onnx_speech is never on the ear's path; VAD /
@@ -309,4 +625,12 @@ class EarHost:
         # no need to hand captured content back over the wire (even to a token
         # holder), and the Live Lens credential IS the Brain token. Counts only.
         return {"listening": self.listening,
-                "heard_count": self.heard_count}
+                "heard_count": self.heard_count,
+                # the interpreter, reported as four separate facts because they
+                # fail independently: the switch, the pack, whether it has ever
+                # actually produced a line, and how many.
+                "interpret": self._interpret_on,
+                "interpret_target": self._interpret_target,
+                "can_interpret": self._can_interpret(),
+                "interpret_proved": self._interpret_ok,
+                "interpreted_count": self.interpreted_count}

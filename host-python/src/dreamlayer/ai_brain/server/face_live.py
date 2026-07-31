@@ -81,6 +81,7 @@ import os
 import sys
 import threading
 import time
+import uuid
 
 log = logging.getLogger("dreamlayer.face")
 
@@ -310,6 +311,38 @@ class FaceRecall:
             return False
         return self.model_available
 
+    def _ask_consent(self, context: str) -> None:
+        """Draw the consent prompt — the "Ask first" HUD feature.
+
+        `consent_required_card` has existed the whole time and nothing a shipped
+        Brain could reach ever called it, so a face operation refused for want of
+        consent returned `{"known": false, "reason": "no-consent"}` as JSON and
+        the glass stayed blank. The wearer got silence where the product promises
+        a question.
+
+        Two things this deliberately is NOT:
+
+          * not a consent MECHANISM. Acceptance is still `POST
+            /dreamlayer/face/consent` against a versioned text, and the refusal
+            above already returned before the embedder ran. This draws the state;
+            it cannot grant anything, and the card's "Hold to allow" is a pointer
+            to that route rather than a second path into it.
+          * not veil-piercing. `veil_ok=False`: under the shield nothing is being
+            captured, so there is no access to ask about, and the veil branch
+            returns before this is ever reached.
+
+        `context` names WHICH operation was refused, because "Allow access?" with
+        no object is a prompt the wearer cannot answer.
+        """
+        try:
+            from ...hud import cards
+            self.brain.push_event("consent_required",
+                                  cards.consent_required_card(context),
+                                  veil_ok=False)
+        except Exception as exc:                     # noqa: BLE001 — a card must
+            log.warning("[face] consent card push failed: %s",   # never cost the
+                        type(exc).__name__)                      # refusal itself
+
     def status(self) -> dict:
         """What the panel shows. Counts and capability only — never a name,
         never a vector."""
@@ -355,6 +388,7 @@ class FaceRecall:
         if not self.privacy.allow_capture():
             return {"known": False, "reason": "veiled"}
         if not self.consented:
+            self._ask_consent("recognising a face in view")
             return {"known": False, "reason": "no-consent",
                     "consent_required": CONSENT_VERSION}
         if not bool(getattr(self.brain.config, "face_recognition", False)):
@@ -409,7 +443,14 @@ class FaceRecall:
         wearer can name them later with `name_identity`.
         """
         from ...social_lens.schema import ContactRecord
-        cid = f"auto-{int(time.time() * 1000)}-{len(template) % 97}"
+        # UUID, not a millisecond timestamp. `auto-{ms}-{len(template) % 97}`
+        # looks unique and is not: every template from one model has the SAME
+        # length, so the second term is a constant, and two faces enrolled inside
+        # the same millisecond get the same id — the second silently REPLACING
+        # the first. One person's biometric overwritten by another's, and the
+        # wearer would see a face they had met vanish. Found while building the
+        # voice store, which was copied from here and inherited it.
+        cid = f"auto-{uuid.uuid4().hex[:16]}"
         with self._lock:
             index = self._get_index()
             index.add(ContactRecord(contact_id=cid, name="",
@@ -504,6 +545,7 @@ class FaceRecall:
         if not self.privacy.allow_capture():
             return {"ok": False, "error": "veiled"}
         if not self.consented:
+            self._ask_consent("remembering this face")
             return {"ok": False, "error": "consent not accepted",
                     "consent_required": CONSENT_VERSION}
         if not bool(getattr(self.brain.config, "face_recognition", False)):

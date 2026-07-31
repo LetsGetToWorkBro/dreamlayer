@@ -444,11 +444,32 @@ def _is_write_denied(path: str) -> bool:
 class BrainConfig:
     """Everything the Brain reads and how it thinks. Editable from the panel."""
     folders: list[str] = field(default_factory=list)   # watched directories
-    model: str = "keyword"          # "keyword" | "ollama" | "mlx" | "api"
+    model: str = "keyword"      # "keyword" | "ollama" | "mlx" | "exo" | "api"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_chat_model: str = "llama3.2"
     ollama_vision_model: str = "llama3.2-vision"
     ollama_embed_model: str = "nomic-embed-text"
+    # -- dream mode: the neural painter -----------------------------------
+    # Path to a fast-neural-style ONNX model. Nothing is bundled or fetched — the
+    # wearer supplies it — and with none set Dream Mode still paints, using the
+    # dependency-free procedural wash. This existed only as $DL_DREAM_MODEL, an
+    # environment variable, which the bundled .app has no way to set: the neural
+    # painter could not be turned on from any surface the product ships.
+    dream_model_path: str = ""
+    # -- live interpreter: someone's foreign speech, voiced back to you ---
+    # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
+    # opt-in: the microphone is already the wearer's most consequential switch,
+    # and interpreting turns each captured utterance into a second on-device model
+    # pass. `interpret_target` is the language Juno speaks back IN — the language
+    # you understand, not the one being spoken.
+    interpret_enabled: bool = False
+    interpret_target: str = "en"
+    # -- exo cluster: one model across the machines you already own ------
+    # An OpenAI-compatible endpoint served by exo. Text only, so choosing it
+    # leaves the Brain without a vision tier (a look reports blind rather than
+    # guessing); embeddings ride the embedder ladder as they do under MLX.
+    exo_url: str = "http://127.0.0.1:52415"
+    exo_model: str = "llama-3.2-3b"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
     summarize_emails: bool = False  # shorten emails to a glance before relaying
     # network posture (product default = connected): "connected" reaches the
@@ -529,6 +550,31 @@ class BrainConfig:
     # owns its own consent. OFF by default; every other gate (the Veil, on-device
     # transcription, PII scrub, nothing-uploaded) is identical to listen_enabled.
     remote_listen_enabled: bool = False
+    # Drawing what was heard on the glass, as it is heard — the "Live captions"
+    # feature. A THIRD opt-in rather than a consequence of the first two, and
+    # the separation is the point: `listen_enabled` means "remember what you
+    # hear", which is private to the wearer's own store and PII-scrubbed before
+    # any write. Captions mean "put the room's speech on a screen", which is a
+    # different exposure and belongs to a different decision — `EarHost.status`
+    # already refuses to echo a transcript back over the wire for exactly this
+    # reason. OFF by default; the Veil suppresses the card the same way it
+    # suppresses the write, and with this off the ear behaves exactly as before.
+    captions_enabled: bool = False
+    # Answering a question the ROOM asked, from your own memory, on your own
+    # glass — the "answer before you speak" feature. A fourth opt-in, off by
+    # default, and separate from captions for the same reason captions are
+    # separate from listening: drawing what was said and ANSWERING it are
+    # different things. The answer is computed strictly on-device (`ask` is
+    # called with `no_cloud=True`), so an overheard question never egresses,
+    # whatever the cloud settings say.
+    answer_ahead_enabled: bool = False
+    # Places where the Brain captures NOTHING — the "Private zones" feature.
+    # Each entry is {name, lat, lon, radius_m}. Inside one, `incognito_now()`
+    # returns True, so every existing gate (the ear, captions, the lens ring,
+    # face recall, ambient pushes) suppresses on the shield it already honours
+    # rather than on a second suppression path that could be wired wrong.
+    # Empty by default; the wearer defines their own.
+    private_zones: list = field(default_factory=list)
     # -- recognising the people you introduced (ai_brain/server/face_live.py) --
     # OFF on a fresh install, and nothing here ever flips it on. When on, and
     # ONLY when the opt-in `face` pack and its weights are also present, the
@@ -553,6 +599,20 @@ class BrainConfig:
     # in-app. Off by default and gated behind consent. The wearer accepts this
     # risk explicitly; see face_live.CONSENT_TEXT for what they are told.
     face_auto_enrol: bool = False
+    # -- voice recall: who is speaking, so a memory can be attributed -----
+    # The same three switches as faces, for the same reason and with the same
+    # shape: a voiceprint is a biometric identifier exactly as a face template
+    # is. This is what fills `said_by`, which is what lets "what did Marcus say
+    # last time" answer from the room instead of only from typing.
+    #
+    # Rides the ear (needs listen_enabled): with no microphone open there is no
+    # speech to attribute, so this is a second opt-in on top of an opt-in.
+    voice_recognition: bool = False
+    voice_consent_version: str = ""
+    # Auto-enrol: store a voiceprint for EVERY speaker heard, not only people
+    # the wearer named — bystanders included, who have not agreed and cannot
+    # agree in-app. Off by default and gated behind consent.
+    voice_auto_enrol: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

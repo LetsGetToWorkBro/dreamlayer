@@ -13,10 +13,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from typing import TYPE_CHECKING, Callable, Optional
-
-if TYPE_CHECKING:
-    from ..mlx_backend import MLXBackend
+from typing import Any, Callable, Optional
 
 from ..schema import Answer
 
@@ -742,8 +739,13 @@ def api_test(config, http_post: Optional[Callable] = None) -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def make_synthesizer(backend: OllamaBackend | MLXBackend) -> Callable:
-    """Turn retrieved passages into a written answer via the chat model."""
+def make_synthesizer(backend: Any) -> Callable:
+    """Turn retrieved passages into a written answer via the chat model.
+
+    Typed by the one method it uses rather than by a union of backend classes:
+    the union had to be widened for every new tier (MLX, then exo) even though
+    the body only ever calls `chat(prompt)->str`, which is the actual contract.
+    """
     def synth(query: str, passages: list[tuple[str, str]]) -> str:
         context = "\n\n".join(f"[{name}] {text}" for name, text in passages)
         prompt = (f"Answer the question using only the notes below. Cite "
@@ -753,10 +755,25 @@ def make_synthesizer(backend: OllamaBackend | MLXBackend) -> Callable:
     return synth
 
 
-def vision_answer(backend: OllamaBackend | MLXBackend | None, label: str,
+def vision_answer(backend: Any, label: str,
                   image_b64: Optional[str], want: str) -> Optional[Answer]:
-    """Explain an object. With no backend, return None (the tier declines)."""
-    if backend is None:
+    """Explain an object. With no backend, return None (the tier declines).
+
+    A TEXT-ONLY backend declines the same way. Not every tier sees: exo serves
+    `/v1/chat/completions` and no images, so `ExoClusterBackend` deliberately has
+    no `vision()`.
+
+    NEITHER HALF OF THAT GUARD IS INDEPENDENTLY FALSIFIABLE, and that is worth
+    stating rather than discovering: the broad `except` below already turns both
+    a None backend and a missing method into this same None, so mutations
+    deleting either one survive. They stay because this is a privacy path a
+    person has to be able to audit by reading it, and "no backend" and "a
+    backend that cannot see" are different facts even where the return value
+    isn't. The condition is ENFORCED and tested where it is answered —
+    `_BrainVisionRouter.has_vision`, which decides whether the row claims sight
+    at all.
+    """
+    if backend is None or not hasattr(backend, "vision"):
         return None
     try:
         text = backend.vision(label, image_b64, want)

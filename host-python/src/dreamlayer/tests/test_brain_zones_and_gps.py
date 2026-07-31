@@ -1,0 +1,420 @@
+"""Private zones, and the coordinate that makes Waypath tell you a direction.
+
+Both features needed the same missing input — where the wearer is — and neither
+could have it, so both sat unbuilt for opposite-looking reasons.
+
+PRIVATE ZONES are wired as a THIRD TERM in `incognito_now()` rather than as a
+suppression path of their own. `private_zone_card` says "CAPTURE SUSPENDED ·
+Memory resumes when you leave", and the only way to make that sentence true is
+to raise the shield every gate in the product already consults. A parallel
+mechanism would be a second thing to keep in step, and the first gate it fell
+out of step with would be a card promising a silence the Brain was not keeping.
+
+WAYPATH already computed "12 m to your left" — `WaypathLens.locate` has had the
+bearing branch since it was written, and `landing/index.html` promises it in
+those words. Nothing ever populated `bearing_deg`/`distance_m`, which are
+documented as an IMU seam the Brain does not have. A coordinate needs no IMU,
+and unlike a stored bearing it stays true after the wearer moves.
+"""
+from __future__ import annotations
+
+import tempfile
+
+import pytest
+
+from dreamlayer.ai_brain.server import geo
+from dreamlayer.ai_brain.server.server import Brain
+
+LONDON = (51.5074, -0.1278)
+PARIS = (48.8566, 2.3522)
+
+
+@pytest.fixture
+def brain():
+    return Brain(tempfile.mkdtemp())
+
+
+def _pushes(brain):
+    seen = []
+    brain.push_event = lambda kind, card=None, veil_ok=False: (
+        seen.append((kind, card, veil_ok)) or 1)
+    return seen
+
+
+def _zone(name="home", at=LONDON, radius=150):
+    return {"name": name, "lat": at[0], "lon": at[1], "radius_m": radius}
+
+
+# --- the arithmetic ----------------------------------------------------------
+
+class TestTheMaths:
+
+    def test_distance_is_metres_not_degrees(self):
+        d = geo.haversine_m(*LONDON, *PARIS)
+        assert 330_000 < d < 350_000, d          # London→Paris ≈ 344 km
+
+    def test_bearing_is_clockwise_from_north(self):
+        assert abs(geo.initial_bearing_deg(0.0, 0.0, 1.0, 0.0) - 0.0) < 0.5    # N
+        assert abs(geo.initial_bearing_deg(0.0, 0.0, 0.0, 1.0) - 90.0) < 0.5   # E
+        assert abs(geo.initial_bearing_deg(1.0, 0.0, 0.0, 0.0) - 180.0) < 0.5  # S
+
+    def test_null_island_is_not_a_location(self):
+        """A phone with no fix reports (0, 0), which is a real point in the Gulf
+        of Guinea — accepting it would put a private zone there."""
+        assert geo.valid_coord(*LONDON) is True
+        assert geo.valid_coord(0.0, 0.0) is False
+        assert geo.valid_coord(91.0, 0.0) is False
+        assert geo.valid_coord("north", None) is False
+
+    def test_a_stale_fix_is_no_fix(self):
+        """A stale fix must not hold a zone's shield up after the wearer has
+        driven away from it."""
+        f = geo.LastFix()
+        f.set(*LONDON, ts=0.0)
+        assert f.get() is None
+        f.set(*LONDON)
+        assert f.get() is not None
+
+    def test_a_zone_with_no_radius_is_skipped_not_treated_as_a_point(self):
+        """A zone that can never match is a shield the wearer thinks they have
+        and does not."""
+        assert geo.zone_containing([{"name": "x", "lat": 51.5074, "lon": -0.1278}],
+                                   *LONDON) == ""
+        assert geo.zone_containing([_zone()], *LONDON) == "home"
+
+    def test_one_malformed_zone_does_not_lose_the_rest(self):
+        zones = [{"name": "bad", "lat": "north", "lon": None, "radius_m": 100},
+                 _zone("home")]
+        assert geo.zone_containing(zones, *LONDON) == "home"
+
+
+# --- the shield --------------------------------------------------------------
+
+class TestTheShieldIsReal:
+
+    def test_inside_a_zone_the_brain_is_incognito(self, brain):
+        """Not a flag the card reads — the actual shield every gate consults."""
+        brain.config.private_zones = [_zone()]
+        brain._last_fix.set(*LONDON)
+        assert brain.private_zone_now() == "home"
+        assert brain.incognito_now() is True
+
+    def test_the_ear_actually_stops_capturing_inside_one(self, brain):
+        """The claim on the card, tested through a real gate rather than
+        asserted. If this passes and the card still says "capture suspended",
+        the card is telling the truth."""
+        from dreamlayer.ai_brain.server.ear import EarHost
+        brain.config.private_zones = [_zone()]
+        brain._last_fix.set(*LONDON)
+        ear = EarHost(brain)
+        ear.ingest_caption("something said inside the zone")
+        assert ear.heard_count == 0
+
+    def test_leaving_lifts_it(self, brain):
+        brain.config.private_zones = [_zone()]
+        brain._last_fix.set(*LONDON)
+        assert brain.incognito_now() is True
+        brain._last_fix.set(*PARIS)
+        assert brain.private_zone_now() == ""
+        assert brain.incognito_now() is False
+
+    def test_no_fix_fails_OPEN_not_closed(self, brain):
+        """The one gate here that deliberately fails open. An unreadable
+        geofence that quietly disabled capture forever would look exactly like
+        the product being broken, with no way to tell — and the wearer has
+        other, explicit shields."""
+        brain.config.private_zones = [_zone()]
+        assert brain.here() is None
+        assert brain.private_zone_now() == ""
+        assert brain.incognito_now() is False
+
+    def test_no_zones_configured_costs_nothing(self, brain):
+        brain._last_fix.set(*LONDON)
+        assert brain.private_zone_now() == ""
+        assert brain.incognito_now() is False
+
+
+# --- the card ----------------------------------------------------------------
+
+class TestTheCard:
+
+    def test_entering_draws_the_zone_by_name(self, brain):
+        brain.config.private_zones = [_zone("the flat")]
+        seen = _pushes(brain)
+        brain.note_location(*LONDON)
+        kind, card, veil_ok = seen[-1]
+        assert kind == "private_zone" and card["type"] == "PrivateZoneCard"
+        assert card["detail"] == "the flat"       # a shield with no place named
+        assert "resumes when you leave" in card["footer"]
+
+    def test_the_card_pierces_the_shield_it_announces(self, brain):
+        """Same trap as PrivacyVeilCard: with the default gate the card is
+        suppressed by the very state it is reporting."""
+        brain.config.private_zones = [_zone()]
+        seen = _pushes(brain)
+        brain.note_location(*LONDON)
+        assert seen[-1][2] is True
+
+    def test_leaving_replaces_the_card(self, brain):
+        """`private_zone_card` is `dismiss_ms: 0`. Without something replacing
+        it the glass keeps promising "capture suspended" after capture resumed —
+        a stale privacy card is a false assurance."""
+        brain.config.private_zones = [_zone()]
+        brain.note_location(*LONDON)
+        seen = _pushes(brain)
+        brain.note_location(*PARIS)
+        assert seen[-1][1]["type"] == "ReadyCard"
+
+    def test_it_announces_only_on_a_crossing(self, brain):
+        """A phone reports continuously. Re-drawing the card on every fix would
+        make the glass unusable inside a zone."""
+        brain.config.private_zones = [_zone()]
+        brain.note_location(*LONDON)
+        seen = _pushes(brain)
+        for _ in range(5):
+            brain.note_location(51.5074, -0.1279)   # still inside
+        assert seen == []
+
+    def test_location_intake_is_not_veil_gated(self, brain):
+        """The deliberate exception. A zone contributes to the shield, so gating
+        this on the shield would latch it up forever the first time the wearer
+        walked into one — they could never be seen to leave."""
+        brain.config.private_zones = [_zone()]
+        brain.note_location(*LONDON)
+        assert brain.incognito_now() is True
+        out = brain.note_location(*PARIS)            # accepted while veiled
+        assert out["ok"] is True and out["zone"] == ""
+        assert brain.incognito_now() is False
+
+    def test_a_junk_coordinate_is_refused(self, brain):
+        assert brain.note_location(0.0, 0.0)["ok"] is False
+        assert brain.note_location("north", None)["ok"] is False
+
+
+# --- waypath -----------------------------------------------------------------
+
+class TestWaypathTellsYouWhichWay:
+
+    def test_a_stashed_thing_gets_a_direction_and_a_distance(self, brain):
+        """The sentence `landing/index.html` promises, finally true."""
+        brain._last_fix.set(*LONDON)
+        assert brain.waypath_stash("bike", "the north rack")["located"] is True
+        # facing NORTH, and the bike is ~22 m south of the new position
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
+        out = brain.waypath_locate("bike")
+        assert out["found"] is True
+        assert "m" in out["detail"] and "behind" in out["detail"], out
+
+    def test_without_a_compass_it_gives_distance_and_refuses_a_direction(self, brain):
+        """The bug this caught. A bearing computed from coordinates is an
+        ABSOLUTE compass bearing; the `heading_deg=0` default treats it as
+        relative, which silently means "assume the wearer faces north" — so a
+        thing due north of someone facing south was reported as "ahead". A wrong
+        direction stated confidently is worse than no direction, and the distance
+        never needed a compass."""
+        brain._last_fix.set(*LONDON)                 # no heading reported
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5074, -0.1300)
+        out = brain.waypath_locate("bike")
+        assert "away" in out["detail"], out
+        for word in ("left", "right", "ahead", "behind"):
+            assert word not in out["detail"], out
+
+    def test_the_same_position_facing_two_ways_gives_two_answers(self, brain):
+        """…and with a compass it is a real direction, not a fixed one."""
+        brain._last_fix.set(*LONDON)
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5074, -0.1300, heading_deg=90.0)   # facing east
+        east = brain.waypath_locate("bike")["detail"]
+        brain._last_fix.set(51.5074, -0.1300, heading_deg=270.0)  # facing west
+        west = brain.waypath_locate("bike")["detail"]
+        assert "ahead" in east and "behind" in west, (east, west)
+
+    def test_the_bearing_is_computed_from_where_you_are_NOW(self, brain):
+        """A stored bearing is relative to wherever the wearer was standing when
+        they dropped it, and is worthless the moment they walk away. Same
+        anchor, two different positions, two different answers."""
+        brain._last_fix.set(*LONDON)
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)   # north of it
+        north_of = brain.waypath_locate("bike")["detail"]
+        brain._last_fix.set(51.5072, -0.1278, heading_deg=0.0)   # south of it
+        south_of = brain.waypath_locate("bike")["detail"]
+        assert north_of and south_of and north_of != south_of
+
+    def test_no_fix_still_answers_with_the_place(self, brain):
+        """Best-effort by design: without a coordinate the wearer still gets
+        "at the hall table", exactly as before."""
+        out = brain.waypath_stash("keys", "the hall table")
+        assert out["located"] is False
+        found = brain.waypath_locate("keys")
+        assert found["found"] is True and found["place"] == "the hall table"
+
+    def test_the_card_gets_the_direction_only_when_there_is_one(self, brain):
+        """`detail` used to be forced empty because `cue.text` was "at <place>"
+        and would print the place twice. With a bearing it is "22m behind you",
+        which is the one thing the card could not say before."""
+        brain._last_fix.set(*LONDON)
+        brain.waypath_stash("bike", "the rack")
+        brain._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
+        seen = _pushes(brain)
+        brain.waypath_locate("bike")
+        assert "m" in seen[-1][1]["detail"]
+
+        b2 = Brain(tempfile.mkdtemp())
+        seen2 = _pushes(b2)
+        b2.waypath_stash("keys", "the hall table")
+        b2.waypath_locate("keys")
+        assert seen2[-1][1]["detail"] == "", "the place was printed twice"
+
+    def test_coordinates_survive_a_restart(self, brain):
+        """An anchor that forgets where it was on the next Brain start drops
+        straight back to the place-only path — the bug this fixes."""
+        import pathlib
+        brain._last_fix.set(*LONDON)
+        brain.waypath_stash("bike", "the rack")
+        again = Brain(str(pathlib.Path(brain.cfg_dir)))
+        again._last_fix.set(51.5076, -0.1278, heading_deg=0.0)
+        out = again.waypath_locate("bike")
+        assert "m" in out["detail"], "lat/lon did not survive the save/load round trip"
+
+    def test_the_routes_reach_it(self, brain):
+        from dreamlayer.ai_brain.server import server as srv
+        text = open(srv.__file__, encoding="utf-8").read()
+        assert '"/dreamlayer/location": _post_location,' in text
+        assert '"/dreamlayer/where": _get_where,' in text
+
+
+def test_a_junk_heading_degrades_to_no_direction(brain):
+    """A hand-rolled client sending `heading_deg: "north"` must lose the
+    DIRECTION, not the fix. `LastFix.set` catches TypeError/ValueError around
+    the float conversion; narrowing that to KeyError let the junk through as an
+    exception on a path whose whole job is to never cost the answer."""
+    brain._last_fix.set(*LONDON)
+    brain.waypath_stash("bike", "the rack")
+    for junk in ("north", object(), [1, 2], {}):
+        assert brain._last_fix.set(51.5074, -0.1300, heading_deg=junk) is True
+        fix = brain.here()
+        assert fix is not None and fix["heading_deg"] is None, junk
+        out = brain.waypath_locate("bike")
+        assert "away" in out["detail"], (junk, out)
+
+
+# --- marking a zone ----------------------------------------------------------
+
+class TestMarkingAZone:
+    """"Make here a private zone" — the only ergonomic way to create one.
+
+    A dedicated route rather than raw `private_zones` config writes: a client
+    editing the list wholesale can drop a zone by accident, and nobody is going
+    to hand-enter a coordinate.
+    """
+
+    def test_marking_here_raises_the_shield_immediately(self, brain):
+        brain.note_location(*LONDON)
+        assert brain.incognito_now() is False
+        out = brain.edit_zones("add", "the flat", 150)
+        assert out["ok"] is True
+        assert brain.incognito_now() is True, "the zone did not take effect"
+
+    def test_removing_the_zone_you_stand_in_lifts_the_shield(self, brain):
+        """Editing the LIST can cross the boundary without the wearer moving an
+        inch. Without a re-sync the card and the shield disagree until the next
+        position report."""
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        seen = _pushes(brain)
+        assert brain.edit_zones("remove", "the flat")["ok"] is True
+        assert brain.incognito_now() is False
+        assert seen and seen[-1][1]["type"] == "ReadyCard", (
+            "the glass kept a capture-suspended card for a deleted zone")
+
+    def test_adding_one_announces_it_without_moving(self, brain):
+        brain.note_location(*LONDON)
+        seen = _pushes(brain)
+        brain.edit_zones("add", "the flat", 150)
+        assert seen[-1][1]["type"] == "PrivateZoneCard"
+
+    def test_it_needs_a_position_first(self, brain):
+        """The whole reason this is a route and not a config write."""
+        out = brain.edit_zones("add", "home", 150)
+        assert out["ok"] is False and out["error"] == "no-fix"
+
+    def test_a_useless_radius_is_clamped_not_accepted(self, brain):
+        """A zero radius is a zone that can never match — a shield the wearer
+        thinks they have and does not."""
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "z", 0)
+        assert brain.zone_list()[0]["radius_m"] >= 10
+        assert brain.private_zone_now() == "z"
+
+    def test_the_count_is_capped(self, brain):
+        """Every zone is a haversine on every report, and `incognito_now()` is
+        on the hot path every gate calls."""
+        brain.note_location(*LONDON)
+        for i in range(brain.MAX_PRIVATE_ZONES):
+            assert brain.edit_zones("add", f"z{i}", 50)["ok"] is True
+        out = brain.edit_zones("add", "one-too-many", 50)
+        assert out["ok"] is False and "at most" in out["error"]
+
+    def test_a_duplicate_name_is_refused(self, brain):
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        assert brain.edit_zones("add", "the flat", 150)["ok"] is False
+
+    def test_removing_something_that_is_not_there_is_honest(self, brain):
+        assert brain.edit_zones("remove", "nowhere")["ok"] is False
+        assert brain.edit_zones("wobble", "x")["ok"] is False
+
+    def test_the_list_says_which_one_you_are_in(self, brain):
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        brain.edit_zones("add", "the office", 150)      # same spot, both match
+        brain.note_location(*PARIS)
+        assert all(z["inside"] is False for z in brain.zone_list())
+
+    def test_zones_survive_a_restart(self, brain):
+        import pathlib
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        again = Brain(str(pathlib.Path(brain.cfg_dir)))
+        again.note_location(*LONDON)
+        assert again.private_zone_now() == "the flat"
+        assert again.incognito_now() is True
+
+    def test_a_REMOVAL_survives_a_restart_too(self, brain):
+        """The direction that matters more. An unpersisted ADD costs the wearer a
+        shield they have to re-mark; an unpersisted REMOVE brings back a zone
+        they deliberately deleted, and gags the Brain at a place they chose to
+        stop gagging it. A mutation dropping only the remove-side `save()`
+        survived until this existed."""
+        import pathlib
+        brain.note_location(*LONDON)
+        brain.edit_zones("add", "the flat", 150)
+        assert brain.edit_zones("remove", "the flat")["ok"] is True
+        again = Brain(str(pathlib.Path(brain.cfg_dir)))
+        again.note_location(*LONDON)
+        assert again.zone_list() == [], "a deleted zone came back on restart"
+        assert again.incognito_now() is False
+
+    def test_the_routes_reach_it(self, brain):
+        from dreamlayer.ai_brain.server import server as srv
+        text = open(srv.__file__, encoding="utf-8").read()
+        assert '"/dreamlayer/zones": _post_zones,' in text
+        assert '"/dreamlayer/zones": _get_zones,' in text
+
+    def test_the_panel_renders_a_zone_name_as_text_not_html(self):
+        """The name is wearer-supplied and the panel renders it back. A zone
+        called `<img onerror=...>` must not execute."""
+        import pathlib
+        panel = (pathlib.Path(srv_dir()) / "panel.py").read_text(encoding="utf-8")
+        i = panel.index("async function refreshZones()")
+        body = panel[i:i + 2200]
+        assert "label.textContent=" in body
+        assert "innerHTML=x.name" not in body and "innerHTML = x.name" not in body
+
+
+def srv_dir():
+    from dreamlayer.ai_brain.server import server as srv
+    import pathlib
+    return pathlib.Path(srv.__file__).parent

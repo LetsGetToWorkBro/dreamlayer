@@ -30,6 +30,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -e ".[dev,verify,sync]"   # verify→crosshair proofs, sync→loro CRDT
+          # networkx on its own, NOT via the `memory` extra that declares it — that
+          # extra also pulls chromadb, sentence-transformers and lancedb, which is
+          # minutes of CI for one pure-Python graph library. It is here because the
+          # relationship graph's networkx branches (greedy modularity in
+          # particular — the whole point of the `social_graph` capability) are
+          # `importorskip`-gated, so without it they were never executed by ANY
+          # run: a green suite that had not tested the primary path.
+          pip install "networkx>=3,<4"
 
       - name: "Lint — ruff (pyflakes: dead imports/vars, undefined names)"
         # The high-signal static-analysis gate. Config in pyproject

@@ -52,7 +52,8 @@ external, with the exact install command per row. The operator's guide is
 | **sentence-transformers** | Offline default is a real lexical embedder (hashed char-ngrams, morphology-aware) — not the 32-d mock; OpenAI is the cloud option | Neural MiniLM embeddings computed locally, preferred over the lexical default when installed | Memories are semantically searchable **offline and free**, and get sharper with the model — the single biggest win here |
 | **mem0** **[live]** | Passthrough list; duplicates accumulated | Dedup + decay (even in fallback) | Memory stays clean, not noisy |
 | **docarray** | Plain dataclass | Typed multimodal doc schema w/ validation | Structured, validated records |
-| **networkx** | Hand-rolled adjacency dict, basic lookups | Real graph algorithms (paths, centrality, communities) | "How do I know this person / who connects us" becomes answerable |
+| **networkx** **[live]** | The graph held two queries the fallback answered identically, and none of the three it promised | `mutual` / `path` / `communities`, built from your recorded meetings (not your address book), each naming which engine answered | "How do I know this person / who connects us" becomes answerable — with greedy modularity where the wheel is present, and honestly-labelled connected components where it is not |
+| **loro** (CRDT sync) **[live]** | A complete, tested `VaultSync` that nothing constructed — while the Brain had held the `Vault` it takes the whole time | `Brain.sync_export`/`sync_merge`, and a panel that saves and loads a snapshot file | Your kept Figments *and your revocations* the same on every device you own, with no server holding them. Merge is commutative, associative and idempotent, so the channel can be anything you already have — and a revocation always beats a stale device's re-keep |
 
 ### Voice (`voice`, `asr-extra`)
 | Library | Before | After | Why it matters |
@@ -82,7 +83,7 @@ external, with the exact install command per row. The operator's guide is
 | **LibreFace / py-feat / facetorch / OpenFace-3** | AU frame passed through untouched — no micro-expression signal | Real facial action-unit / expression detection | The credibility/truth lens gets real input instead of nothing |
 | **whisperX (prosody)** | No pitch/timing signal | Word-timed prosody into the analyzer | Tone becomes a readable channel |
 | **dowhy** | Credibility channels combined by fixed weighted heuristics | Causal inference over them | Principled fusion instead of guessed weights |
-| **speechbrain (ECAPA)** | "Voice vector" was a hash — couldn't tell speakers apart | Real 192-dim speaker embeddings | "Who said this" genuinely works |
+| **speechbrain (ECAPA)** **[live]** | The embedder existed and nothing constructed it, so `meta["said_by"]` was never set and "who said this" worked only for lines the wearer typed | `ai_brain/server/voice_live.py` — a consented voice index mirroring the face one: versioned consent, auto-enrol, naming, erase, and the same unnamed-TTL sweep. It fills `said_by`, which is what `their_word` / `they_said` match on | "What did Marcus tell me last time" answers from the room. Declines entirely unless a model actually LOADED — the hash fallback would attach real names to the wrong people's words |
 | **spaCy** | Names / (subject, verb, deadline) pulled by regex, broke on real sentences | Real NER + dependency parsing | Reliable who/what/when extraction — the backbone of commitment tracking |
 | **river** **[partly live]** | Static ranking / sampling | Online learning that adapts per-user in real time | TasteLens learns *your* taste; InnerWeather adapts |
 | **human-learn** | Persona classification was identity (no-op) | Interactive human-in-the-loop classifier | Tune the persona model by example |
@@ -129,10 +130,12 @@ external, with the exact install command per row. The operator's guide is
 | **pluggy** | Plugins had to be in-process `register()` callables wired by hand | Entry-point discovery — a plugin ships as a pip package, found automatically | Third parties can distribute plugins via PyPI |
 | **pyee** **[live fallback]** | Mesh events were direct calls, no subscribers | Pub/sub bus; many parts react to one packet, decoupled | Cleaner reactive architecture (Veil contract preserved — nothing published if nothing emitted) |
 | **argostranslate** | RosettaLens with no translator returned text unchanged | Real offline neural translation | The translation lens actually translates, no network |
+| **SeamlessM4T** (transformers) **[live]** | Rosetta translated text you *look at*; the ear half was built and nothing called it | `EarHost.note_speech_audio` implements the capture loop's live-interpreter seam — each endpointed segment goes speech→your-language in one pass, onto the Live Lens and into your ear via Piper | A live interpreter: someone's meaning in your language, entirely on-device. Promoted to `active` only once a segment has genuinely come back translated |
 | **skia-python** | HUD rendered with PIL | Optional Skia GPU-accelerated anti-aliased rendering | Crisper strokes/gradients (PIL stays default) |
+| **onnxruntime** (dream style) **[live]** | The dream lens computed a painting and returned booleans — and the Live Lens had no case for it, so a dream look drew the word "done" | The painted frame comes back as a bounded JPEG and is drawn clipped to the glass; the ONNX model path moved from `$DL_DREAM_MODEL` (unsettable in the bundled .app) to a panel field | Your street actually comes back as a painting. Promoted to `active` only after the neural painter produces a picture, and demoted if the model path stops resolving |
 | **fastapi / uvicorn** | Brain server was stdlib `http.server` (blocking) | Optional ASGI mirror with async handlers + websockets | Modern async surface *alongside*, not replacing, the simple server |
 | **Ollama / Gemma** **[live]** | Only a generic Ollama backend | Gemma-pinned preset | Convenience for running Gemma locally |
-| **exo** | Single-node inference | Client for an exo cluster | Run a bigger model split across machines you own |
+| **exo** **[live]** | Single-node inference | Selectable model tier (`model: "exo"`) speaking an exo cluster's OpenAI-compatible endpoint, with the same locality check, veil gate and egress receipt the Ollama tier carries | Run a bigger model split across machines you own |
 | **MLX** | Local model never adapted | Optional overnight LoRA fine-tune on Apple silicon | The model gradually learns your world (privacy-gated) |
 | **frame-sdk / noa-assistant** **[live fallback]** | Halo the only display target | Brilliant **Frame** display adapter + formatting patterns | A second hardware target for prototyping |
 | **pairing rate-limit** **[live]** | Nothing stopped brute-forcing pairing codes | In-house lockout limiter | Real anti-brute-force (django-axes is Django-only and didn't fit) |
@@ -147,11 +150,15 @@ external, with the exact install command per row. The operator's guide is
 - **Live improvements today (no install):** mem0 dedup, the PII redactor, the
   Veil-as-type-invariant, answer validation, the typed RC pipeline, the pairing
   rate-limiter, the presence ledger, the event bus, the Frame/LocalRecall
-  fallbacks, and the whole test-infra layer.
+  fallbacks, the exo tier, and the whole test-infra layer.
 - **Capability-latent (one `pip install` away):** the vector stores, real
   embeddings, ASR, the vision/AU/speaker/NLP models, translation, Skia, FastAPI,
-  exo, MLX. Wired, tested against their fallbacks, declared in optional groups,
+  MLX. Wired, tested against their fallbacks, declared in optional groups,
   ready to switch on per-deployment.
+
+  exo used to be listed here and it does not belong: it is a **runtime**, not a
+  pip extra (see DEPLOYMENT.md), and it is now a tier you pick in the panel
+  rather than one waiting on an install.
 - **What did not change:** no existing file, class, or function renamed, deleted,
   or resignatured; no new core dependency; the system runs identically with none
   of this installed.

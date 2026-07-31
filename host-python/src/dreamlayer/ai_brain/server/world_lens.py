@@ -23,12 +23,22 @@ blind, never a guess), identical to the on-device gate.
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import os
 import time
 from typing import Optional
 
 log = logging.getLogger("dreamlayer.world_lens")
+
+#: Longest edge of the painting the dream lens sends back, in pixels.
+#:
+#: The picture lands in a 256 px circle on the glass and in a phone viewport at
+#: worst; a few-megapixel frame re-encoded whole would be several megabytes of
+#: base64 over the LAN for something nobody can see the detail of. 640 keeps it
+#: crisp on a retina phone at a fraction of the bytes.
+DREAM_MAX_SIDE = 640
 
 
 def _spoken_miss(spoken: dict) -> str:
@@ -86,7 +96,22 @@ class _BrainVisionRouter:
     def has_vision(self) -> bool:
         # only a real local vision backend reads images here; cloud text models
         # do not, so has_vision reflects the backend, honestly.
-        return getattr(self._brain, "_backend", None) is not None
+        #
+        # "A backend exists" was too weak a test once a TEXT-ONLY tier could be
+        # selected: `ExoClusterBackend` serves chat and no images, so the answer
+        # was True, `explain` called `backend.vision(...)`, and the AttributeError
+        # was swallowed into a None — a row that advertised itself as able to see
+        # and then silently could not.
+        #
+        # EITHER method counts, and narrowing this to `vision` alone was wrong in
+        # the other direction: two callers read images by two different names —
+        # `explain` calls `vision(label, image_b64, want)`, the Synesthesia lens
+        # calls `describe(prompt, image_b64)` — and the real vision backends
+        # expose both. The question here is "can this backend read an image at
+        # all"; each caller still checks for the method IT needs.
+        backend = getattr(self._brain, "_backend", None)
+        return backend is not None and (hasattr(backend, "vision")
+                                        or hasattr(backend, "describe"))
 
     def explain(self, frame, label, want: str = "quick"):
         from .backends import vision_answer, is_local_endpoint
@@ -111,6 +136,58 @@ class _BrainVisionRouter:
             except Exception:
                 pass
         return vision_answer(backend, label, frame_to_b64(frame), want)
+
+
+SYNESTHESIA_MAX_WORDS = 6
+
+#: Single-word lead-ins a model uses before the answer. Multi-word preambles are
+#: caught structurally; these are the ones that would otherwise look like the
+#: first word of the phrase itself.
+_PREAMBLE_LEADS = frozenset({"phrase", "answer", "description", "caption",
+                             "scene", "response", "output"})
+
+
+def _six_words(raw: str) -> str:
+    """Fold a model's reply into the phrase the card can actually draw.
+
+    A prompt asking for six words gets six words most of the time, and the rest
+    of the time gets "Sure! Here's a phrase:", a quoted string, a trailing full
+    stop, or three numbered options. None of that is a failure worth showing the
+    wearer — it is the ordinary noise of an instruction-tuned model — so it is
+    cleaned here rather than left for `synesthesia_card` to clip mid-sentence.
+
+    Truncating to six words rather than rejecting a longer reply is deliberate:
+    the first six words of "rain beading on a cold window frame" is still a
+    usable phrase, whereas silence for want of exact obedience means the lens
+    reports nothing on a model that was working fine.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    # A preamble before a colon ("Here's a phrase: rain on glass"). Guarded
+    # twice, because the naive version ate a clock: "6:15 to Brighton" became
+    # "15 to Brighton". A preamble is either MULTI-WORD or one of a few known
+    # lead words — never a bare number.
+    if ":" in text:
+        head, _, tail = text.partition(":")
+        head_s = head.strip()
+        looks_like_preamble = (
+            len(head_s) <= 40 and
+            (" " in head_s or head_s.lower() in _PREAMBLE_LEADS))
+        if tail.strip() and looks_like_preamble:
+            text = tail.strip()
+    # numbered/bulleted lists: take the first item only
+    for line in text.splitlines():
+        line = line.strip().lstrip("-*\u2022 ").strip()
+        line = re.sub(r"^\d+[.)]\s*", "", line)
+        if line:
+            text = line
+            break
+    text = text.strip().strip('"\u201c\u201d\u2018\u2019\'')
+    words = text.split()
+    if len(words) > SYNESTHESIA_MAX_WORDS:
+        words = words[:SYNESTHESIA_MAX_WORDS]
+    return " ".join(words).rstrip(".,;:!").strip()
 
 
 class WorldLensHost:
@@ -178,9 +255,18 @@ class WorldLensHost:
         # identical no-op (translate_fn=None) — never a fake translation.
         from ...rosetta import RosettaLens
         from ...rosetta_argos import ArgosTranslator, make_translate_fn
+        # And the EAR half, mirroring orchestrator.py exactly: SeamlessM4T plugs
+        # into `interpret_fn` when the wheel is present (extras `interpreter`),
+        # else None and `hear()` cleanly no-ops. This argument was the whole of
+        # `live_interpret` on the Brain — the parameter existed, the lens was
+        # already constructed here, and it was left at None, so `EarHost`'s
+        # interpreter had nothing to call no matter how the wearer set it.
+        from ...rosetta_seamless import SeamlessInterpreter, make_interpret_fn
         self.rosetta = RosettaLens(
             translate_fn=make_translate_fn() if ArgosTranslator.available else None,
-            engine="argos")
+            engine="argos",
+            interpret_fn=make_interpret_fn() if SeamlessInterpreter.available
+            else None)
         self.object_lens.registry.register(LabelProvider(self.dietary, self.ring))
         self.object_lens.registry.register(RosettaProvider(self.rosetta))
         # Barcode → Open Food Facts → your dietary rules. Only the numeric code
@@ -417,6 +503,32 @@ class WorldLensHost:
     # cached on the host (the host itself is cached per-Brain and rebuilt on
     # config change), so a heavy model loads once, not per look.
 
+    def _dream_model_path(self) -> str:
+        """Where the neural painter's ONNX model lives, or "".
+
+        Two sources, and the precedence matches `DL_DISABLE_*` / `disabled_caps`
+        elsewhere in this product: the environment variable is the ops-level
+        override, `config.dream_model_path` is the same switch made DURABLE. The
+        env var was the only source, which meant the capability could not be
+        turned on at all from the bundled .app — it has no environment of its own
+        to edit — so a shipped feature was reachable only by developers.
+
+        A path that does not exist is treated as unset rather than passed down:
+        `DreamStylizer` would silently return None for it, leaving the wearer with
+        the procedural wash and no idea their path was wrong.
+        """
+        import os as _os
+        from pathlib import Path as _Path
+        cfg = getattr(self.brain, "config", None)
+        raw = (_os.environ.get("DL_DREAM_MODEL")
+               or getattr(cfg, "dream_model_path", "") or "").strip()
+        if not raw:
+            return ""
+        try:
+            return raw if _Path(raw).is_file() else ""
+        except OSError:
+            return ""
+
     def _extra(self, name: str):
         """Lazily build + cache a vision_extras reader by name."""
         cache: dict = getattr(self, "_extras_cache", None) or {}
@@ -449,7 +561,25 @@ class WorldLensHost:
         "segment": ("scene_segment", "Clear Eyes"),
         "sky": ("sky_sense", "Stargazer"),
         "dream": ("dream_style", "Clear Eyes"),
+        # NO PACK, and no capability either. Every other lens here is gated by
+        # an optional wheel with a `Cap(...)` in `capabilities.py`; this one is
+        # gated by the wearer having configured a vision model
+        # (`ollama_vision_model`), which no capability key describes. So the
+        # entry exists to make the lens RECOGNISED, and the branch below returns
+        # its own reason rather than `_need()` — naming a pack that would not
+        # help is worse than saying plainly what is missing.
+        "synesthesia": ("ollama_vision_model", "a configured vision model"),
     }
+
+    #: Six words, and the constraint is in the prompt because it is the whole
+    #: card: `synesthesia_card` clips at 72 characters and renders one hero
+    #: line. A model that answers with a paragraph produces a truncated
+    #: sentence, which reads as a bug rather than as a poem.
+    _SYNESTHESIA_PROMPT = (
+        "Describe this scene as a single evocative phrase of at most six words. "
+        "No punctuation at the end, no quotes, no preamble, no explanation. "
+        "Concrete nouns over abstractions. Answer with the phrase only."
+    )
 
     def look_lens(self, frame, lens: str, args: Optional[dict] = None) -> dict:
         """Run a deliberate look through ONE named lens. Veil-gated (a veiled
@@ -516,23 +646,78 @@ class WorldLensHost:
                                      args.get("when_ts")) or {}
                 return {"ok": bool(data), "lens": "sky", "sky": data,
                         "line": say_sky(data)}
+            if lens == "synesthesia":
+                # "Your inner weather" in the catalogue, and I read that title
+                # as the IMU/biometric Inner Weather lens for most of this audit.
+                # The BUILDER says otherwise: `synesthesia_card(description,
+                # confidence)`, docstring "VLM 6-word poetic scene description".
+                # No IMU is involved at all — it is a caption, and the Brain has
+                # had a vision seam the whole time.
+                # `has_vision` is a METHOD, not a property — `if not
+                # self._router.has_vision` is a bound method and always truthy,
+                # so the guard silently never fired and a Brain with no vision
+                # model fell through to an empty description instead of saying
+                # what it needed. And `has_vision()` only asserts a backend
+                # EXISTS; `describe` is what this lens actually calls, so both
+                # are checked, mirroring `_describe`'s own guard.
+                backend = getattr(self.brain, "_backend", None)
+                if not self._router.has_vision() or not hasattr(backend, "describe"):
+                    return {"ok": False, "lens": "synesthesia",
+                            "reason": "no-vision-model",
+                            "note": "set a vision model (ollama_vision_model) "
+                                    "to describe what you are looking at"}
+                from ...object_lens.vision_recognizer import frame_to_b64
+                b64 = frame_to_b64(frame)
+                if not b64:
+                    return {"ok": False, "lens": "synesthesia",
+                            "reason": "unreadable-frame"}
+                raw = self._describe(self._SYNESTHESIA_PROMPT, b64)
+                phrase = _six_words(raw)
+                # An empty phrase is an honest miss, not an error: `_describe`
+                # returns "" when the posture blocks remote vision, when the
+                # backend has no model, and when the model declines. All three
+                # mean "no description", and none of them should draw a card
+                # saying so.
+                return {"ok": bool(phrase), "lens": "synesthesia",
+                        "description": phrase, "raw_len": len(raw or "")}
             if lens == "dream":
                 # default_stylizer is never None — the neural painter when a MODEL
-                # is provided (DL_DREAM_MODEL → the dream_style cap), else an
-                # always-on painterly wash. So the lens always works; `neural`
-                # tells the caller which ran, and dream_style stays honestly
-                # dormant until a model is actually wired.
-                import os as _os
+                # is provided, else an always-on painterly wash. So the lens always
+                # works; `neural` tells the caller which ran, and dream_style stays
+                # honestly dormant until a model is actually wired.
+                #
+                # THE PAINTING IS RETURNED NOW. This branch used to compute `out`
+                # and throw it away, reporting `styled: true` and no pixels — and
+                # `renderLens` had no "dream" case at all, so the one lens whose
+                # entire output is an IMAGE ended a look by drawing the word
+                # "done". "See the world as a painting" cannot be delivered by a
+                # boolean.
                 from ...dream_mode.dream_style import default_stylizer
-                st = default_stylizer(_os.environ.get("DL_DREAM_MODEL") or None)
+                st = default_stylizer(self._dream_model_path() or None)
                 out = None
                 try:
                     out = st.stylize(frame)
                 except Exception:                    # noqa: BLE001
                     out = None
-                return {"ok": out is not None, "lens": "dream",
+                neural = bool(getattr(st, "ready", False))
+                img = None
+                if out is not None:
+                    from ...object_lens.vision_recognizer import frame_to_b64
+                    img = frame_to_b64(out, max_side=DREAM_MAX_SIDE)
+                if neural and img:
+                    # Proof, not configuration: the capability goes active only
+                    # once the neural painter has genuinely produced a picture.
+                    # A model path that points at a corrupt file loads no session,
+                    # and one that loads can still fail on a frame.
+                    setattr(self.brain, "_dream_neural_ok", True)
+                # `ok` follows the IMAGE, not the array: an encode that fails (no
+                # Pillow) leaves the wearer with nothing to look at, and saying
+                # `ok: true` then would be the same empty success as before.
+                return {"ok": bool(img), "lens": "dream",
                         "styled": out is not None,
-                        "neural": bool(getattr(st, "ready", False))}
+                        "neural": neural,
+                        "painter": getattr(st, "kind", ""),
+                        "image": img or ""}
         except Exception as exc:                     # noqa: BLE001 — a lens never crashes a look
             log.warning("[lens] %s failed: %s", lens, exc)
             return {"ok": False, "lens": lens, "reason": "error"}

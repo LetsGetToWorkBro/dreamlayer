@@ -27,14 +27,18 @@ class WaypathOps(BrainHost):
                 self.waypath.remember(
                     a.get("subject", ""), bearing_deg=a.get("bearing_deg"),
                     distance_m=a.get("distance_m"), place=a.get("place", ""),
-                    ts=a.get("ts"))
+                    ts=a.get("ts"), lat=a.get("lat"), lon=a.get("lon"))
             except Exception:
                 continue
 
     def _save_waypath(self) -> None:
         try:
+            # lat/lon go to disk with the rest: an anchor that forgets WHERE it
+            # was on the next Brain restart drops straight back to the
+            # place-only path, which is the bug this feature exists to fix.
             anchors = [{"subject": a.subject, "bearing_deg": a.bearing_deg,
-                        "distance_m": a.distance_m, "place": a.place, "ts": a.ts}
+                        "distance_m": a.distance_m, "place": a.place, "ts": a.ts,
+                        "lat": a.lat, "lon": a.lon}
                        for a in self.waypath.anchors()]
             # atomic: the server is threaded, and a torn write would silently
             # lose every anchor on the next load. A FIXED tmp name is not enough
@@ -55,18 +59,42 @@ class WaypathOps(BrainHost):
         place = (place or "").strip()
         if not subject:
             return {"intent": "stash", "ok": False, "say": "Left what where?"}
-        self.waypath.remember_place(subject, place)
+        # Pin the COORDINATE too, when the Brain has a current fix. This is what
+        # `landing/index.html` has always promised — "recalled as direction and
+        # distance: '12 m to your left'" — and what `WaypathLens.locate`'s
+        # bearing branch has always been able to render. Nothing populated it:
+        # `bearing_deg`/`distance_m` are documented as an IMU seam, and the
+        # Brain has no IMU. A coordinate needs none.
+        #
+        # Best-effort by design: no fix means a place-only anchor, exactly as
+        # before, and the wearer still gets "at the north rack".
+        lat = lon = None
+        try:
+            fix = self.here()
+            if fix:
+                lat, lon = fix["lat"], fix["lon"]
+        except Exception:                            # noqa: BLE001
+            pass
+        self.waypath.remember_place(subject, place, lat=lat, lon=lon)
         self._save_waypath()
         say = (f"Got it — your {subject} is at {place}." if place
                else f"Got it — I'll remember your {subject}.")
         return {"intent": "stash", "ok": True, "say": say,
-                "subject": subject, "place": place}
+                "subject": subject, "place": place,
+                "located": bool(lat is not None)}
 
-    def waypath_locate(self, subject: str) -> dict:
+    def waypath_locate(self, subject: str, heading_deg: float = 0.0) -> dict:
         subject = (subject or "").strip()
         if not subject:
             return {"intent": "locate", "ok": False, "say": "Find what?"}
-        cue = self.waypath.locate(subject)
+        # The current fix turns a stored coordinate into a LIVE bearing. Without
+        # it `locate` falls through to the place-only text, which is what it did
+        # for every wearer before this.
+        try:
+            here = self.here()
+        except Exception:                            # noqa: BLE001
+            here = None
+        cue = self.waypath.locate(subject, heading_deg=heading_deg, here=here)
         if not cue.found:
             return {"intent": "locate", "ok": False, "found": False,
                     "say": f"I don't have a spot saved for your {subject} yet."}
@@ -80,9 +108,15 @@ class WaypathOps(BrainHost):
         #   * the `cue.place` guard — `waypath_stash` accepts an empty place, and
         #     `waypath.locate` then says "somewhere you saved it" with `place=""`.
         #     The card's HERO SLOT is `place`, so that pushes a blank answer.
-        #   * `detail=""` — Brain-side anchors are place-only (no IMU seam), so
-        #     `cue.text` is literally "at <place>". Passing it would print the
-        #     place twice, clipped to two different widths.
+        #   * `detail` — this used to be forced empty, because Brain-side
+        #     anchors were place-only and `cue.text` was literally "at <place>",
+        #     so passing it printed the place twice at two different widths.
+        #     That stopped being true when anchors gained coordinates: with a
+        #     current fix `cue.text` is now "22m behind you", which is the one
+        #     thing the card could not say before and the thing
+        #     `landing/index.html` has always promised. So it is passed WHEN A
+        #     BEARING WAS COMPUTED and suppressed otherwise — the duplicate is
+        #     still a duplicate on the place-only path.
         #   * `confidence=0.9` rather than None — `renderer.lua` initialises the
         #     confidence arc to MEDIUM and only overrides it when a value is
         #     present, so None renders as a hedge rather than as neutral. 0.9 is
@@ -101,7 +135,15 @@ class WaypathOps(BrainHost):
                 pushed = self.push_event("object_recall", cards.object_recall({
                     "object": cue.subject,
                     "place": cue.place,
-                    "detail": "",
+                    # A DIRECTION when a compass heading was known, else the
+                    # DISTANCE alone — never `cue.text` on that path, because it
+                    # is "152m away · at the rack" and `place` is already the
+                    # card's hero, so it would print the place twice at two
+                    # widths (the reason this field was empty to begin with).
+                    "detail": (
+                        (cue.text or "") if cue.rel_bearing_deg is not None
+                        else (f"{round(cue.distance_m)}m away" if cue.distance_m
+                              else "")),
                     "last_seen": _ago(ts),
                     "confidence": 0.9,
                 }), veil_ok=False)
