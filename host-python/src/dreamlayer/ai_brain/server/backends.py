@@ -414,6 +414,9 @@ _LOCAL_AGENT_PROBES = (
     {"label": "KoboldCpp", "provider": "custom",
      "base_url": "http://localhost:5001/v1",
      "models_url": "http://localhost:5001/v1/models"},
+    {"label": "Msty", "provider": "custom",
+     "base_url": "http://localhost:10000/v1",
+     "models_url": "http://localhost:10000/v1/models"},
 )
 
 
