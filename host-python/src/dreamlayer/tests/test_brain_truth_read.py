@@ -27,7 +27,6 @@ import statistics
 
 import pytest
 
-from dreamlayer.truth_lens.narrative_store import NarrativeStore
 from dreamlayer.truth_lens.schema import (
     AUFrame, ContactBaseline, LinguisticFrame, ProsodyFrame,
 )
