@@ -8,7 +8,7 @@ import { typography } from "../theme/typography";
 import { radius, space } from "../theme/spacing";
 import { hardShadow } from "../theme/shadow";
 import { useEntrance } from "../anim";
-import { motion } from "../theme/motion";
+import { motionDuration } from "../theme/motion";
 import { Tappable } from "./Tappable";
 import { Pinstripe } from "./Pinstripe";
 
@@ -63,8 +63,10 @@ export function Card({
   const [shut, setShut] = React.useState(false);
 
   const toggleShade = () => {
-    if (!motion.reduceMotion) {
-      LayoutAnimation.configureNext(LayoutAnimation.create(200, "easeInEaseOut", "opacity"));
+    // reduce motion collapses the roll-up to 0ms — the window just is shut
+    const ms = motionDuration(200);
+    if (ms > 0) {
+      LayoutAnimation.configureNext(LayoutAnimation.create(ms, "easeInEaseOut", "opacity"));
     }
     setShut((v) => !v);
   };
@@ -80,8 +82,11 @@ export function Card({
       {framed ? (
         <Pressable
           onPress={shadeable ? toggleShade : undefined}
-          accessibilityRole={shadeable ? "button" : undefined}
-          accessibilityLabel={shadeable ? `${title} — WindowShade` : undefined}
+          // A shadeable bar is a control (and says whether the window is
+          // rolled up); an inert one is still the window's title, so it
+          // announces as a heading rather than an unlabeled group.
+          accessibilityRole={shadeable ? "button" : "header"}
+          accessibilityLabel={shadeable ? `${title} — WindowShade` : title}
           accessibilityState={shadeable ? { expanded: !shut } : undefined}
           style={[s.tbar, shut ? s.tbarShut : null]}
         >

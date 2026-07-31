@@ -79,7 +79,10 @@ export function MenuBar() {
       </Tappable>
       <Text style={s.name}>DreamLayer</Text>
       <View style={{ flex: 1 }} />
-      <Text style={s.clock}>{time}</Text>
+      {/* the clock reads as a bare "4:05 PM" out of context — say what it is.
+          Deliberately NOT a live region: it ticks every 20s and would talk
+          over whatever the user is actually reading. */}
+      <Text style={s.clock} accessibilityLabel={`Time, ${time}`}>{time}</Text>
     </View>
   );
 }

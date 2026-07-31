@@ -43,13 +43,20 @@ export function ScreenHeader({
       <View style={s.bar}>
         <Pinstripe />
         {canBack ? (
-          <Tappable onPress={() => router.back()} accessibilityLabel="Back" style={s.backBtn}>
+          <Tappable
+            onPress={() => router.back()}
+            accessibilityLabel="Back"
+            accessibilityHint="Returns to the previous screen"
+            style={s.backBtn}
+          >
             <Text style={s.backGlyph}>‹</Text>
           </Tappable>
         ) : (
           <View style={s.close} />
         )}
-        <Text style={s.title} numberOfLines={1}>{title}</Text>
+        {/* the window title is this screen's heading — screen-reader users
+            navigate by heading, so say so rather than leaving it plain text */}
+        <Text style={s.title} accessibilityRole="header" numberOfLines={1}>{title}</Text>
         {right ? <View style={s.right}>{right}</View> : <View style={s.zoom} />}
       </View>
       {subtitle ? <Text style={[typography.body, s.subtitle]}>{subtitle}</Text> : null}
