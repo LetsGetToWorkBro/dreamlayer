@@ -1496,7 +1496,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "dream_model_path",
                   "private_zones",
-                  "face_recognition", "face_auto_enrol"):
+                  "face_recognition", "face_auto_enrol",
+                  "voice_recognition", "voice_auto_enrol"):
             if k in updates:
                 # a secret field echoed back as its "set" mask means "unchanged":
                 # don't clobber the real key with the sentinel (public() masks
@@ -1862,6 +1863,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 fr = None
             self._face_recall = fr
         return fr
+
+    def voice_recall(self):
+        """Recognising WHO IS SPEAKING, so a memory has an author
+        (ai_brain/server/voice_live.py). Built once and cached, like the face
+        index; the stored voiceprints are read from disk on first use, so a Brain
+        that never listens never loads them. Returns None when it cannot be
+        built, which every caller must read as "no answer", never as "a
+        stranger"."""
+        vr = getattr(self, "_voice_recall", None)
+        if vr is None:
+            try:
+                from .voice_live import VoiceRecall
+                vr = VoiceRecall(self)
+            except Exception:
+                log.warning("voice recall unavailable", exc_info=True)
+                vr = None
+            self._voice_recall = vr
+        return vr
 
     def summarize(self, text: str, max_chars: int = 220) -> str:
         """One-glance summary of a long email. Uses the local model when there
@@ -3047,6 +3066,18 @@ def _capability_payload(brain: Brain) -> dict:
     try:
         if getattr(brain, "_sync_ok", False):
             env["DL_WIRED_CRDT_SYNC"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `speaker_id` — the strictest of the lot, because being wrong here attaches a
+    # real name to the wrong person's words. Promoted only when a speaker model
+    # ACTUALLY LOADED (not merely the speechbrain wheel, whose absence makes
+    # `embed` return a hash of the audio's string form) AND the wearer has
+    # consented AND the switch is on. Any of those missing and the ear runs
+    # unattributed, which is the honest default.
+    try:
+        vr = brain.voice_recall()
+        if vr is not None and vr.enabled and vr.model_available:
+            env["DL_WIRED_SPEAKER_ID"] = "1"
     except Exception:                           # noqa: BLE001
         pass
     packs = packs_report(env=env)
@@ -4582,6 +4613,64 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Whether sync can run here, and how much there is to sync."""
             self._json(200, brain.sync_state())
 
+        def _get_voice(self, path, qs):
+            """Runtime state of voice recall, plus the list of stored voices.
+
+            Counts, names and capability — never a vector. A voiceprint is the
+            biometric itself; the wearer needs to see and manage what is held,
+            not have the templates handed back on every poll."""
+            from .voice_live import CONSENT_TEXT
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"available": False,
+                                 "error": "voice recall unavailable"})
+                return
+            out = dict(vr.status())
+            out["consent_text"] = CONSENT_TEXT
+            out["people"] = vr.people()
+            out["listening"] = bool(getattr(brain.config, "listen_enabled", False))
+            self._json(200, out)
+
+        def _post_voice_consent(self, path, qs):
+            """Accept or revoke voice-recall consent. `{"accept": false}` also
+            ERASES every stored voiceprint — withdrawing consent has to remove
+            what was taken under it, not merely stop taking more."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            if b.get("accept") is False:
+                self._json(200, vr.revoke_consent())
+                return
+            self._json(200, vr.accept_consent(str(b.get("version", "") or "")))
+
+        def _post_voice_name(self, path, qs):
+            """Name an auto-enrolled voice. Body: {contact_id, name}.
+
+            This is the moment `said_by` starts carrying something the lenses can
+            match on — until a voice has a name, `their_word` has nothing to
+            find."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            self._json(200, vr.name_identity(str(b.get("contact_id", "")),
+                                             str(b.get("name", ""))))
+
+        def _post_voice_forget(self, path, qs):
+            """Forget one stored voice, or all of them with `{"all": true}`."""
+            vr = brain.voice_recall()
+            if vr is None:
+                self._json(200, {"ok": False, "error": "voice recall unavailable"})
+                return
+            b = self._body()
+            if b.get("all"):
+                self._json(200, {"ok": True, "erased": vr.forget_all()})
+                return
+            self._json(200, vr.forget(str(b.get("contact_id", ""))))
+
         def _get_dream(self, path, qs):
             """State of the neural dream painter: the model path, whether it
             resolves, and whether it has actually painted anything yet."""
@@ -5184,6 +5273,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/contacts": _get_contacts,
             "/dreamlayer/social/graph": _get_social_graph,
             "/dreamlayer/dream": _get_dream,
+            "/dreamlayer/voice": _get_voice,
             "/dreamlayer/vault/sync": _get_vault_sync,
             "/dreamlayer/vault/sync/state": _get_vault_sync_state,
             "/dreamlayer/reminders": _get_reminders,
@@ -6309,6 +6399,9 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/face/forget": _post_face_forget,
             "/dreamlayer/face/consent": _post_face_consent,
             "/dreamlayer/face/name": _post_face_name,
+            "/dreamlayer/voice/consent": _post_voice_consent,
+            "/dreamlayer/voice/name": _post_voice_name,
+            "/dreamlayer/voice/forget": _post_voice_forget,
             "/dreamlayer/lens/observe": _post_lens_observe,
             "/dreamlayer/candor/check": _post_candor_check,
             "/dreamlayer/drift/tend": _post_drift_tend,

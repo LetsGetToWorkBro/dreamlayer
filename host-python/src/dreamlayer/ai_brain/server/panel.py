@@ -823,6 +823,23 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
           </select></div>
         <div id="interpStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="interpret" onchange="saveInterpret()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Voice recall &middot; who said it</div>
+      <div class="conn-s">Off by default, and <b>consent-gated</b>. When on, the Brain learns the voices it hears so a remembered line has a name on it &mdash; which is what lets you ask <b>"what did Marcus tell me last time"</b> or "what did he promise". Without it every utterance is stored unattributed, which is how it works today.
+        <div id="voiceConsent" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:6px">
+          <div id="voiceConsentText" class="conn-s" style="white-space:pre-wrap;margin:0"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="sm" onclick="voiceConsent(true)">I understand &mdash; turn it on</button></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="sm ghost" onclick="refreshVoiceRecall()">Refresh</button>
+          <button class="sm ghost danger" onclick="voiceForgetAll()">Erase every voiceprint</button>
+          <button class="sm ghost danger" onclick="voiceConsent(false)">Withdraw consent</button></div>
+        <div id="voiceStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
+        <ul id="voiceList" style="margin-top:8px"></ul></div>
+      <label class="sw"><input type="checkbox" id="voiceOn" onchange="saveVoice()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Voice auto-enrol</div>
+      <div class="conn-s">Store a voiceprint for <b>every</b> speaker heard, not only people you name &mdash; including bystanders, who have not agreed and cannot agree here. You are accepting that on their behalf. Unnamed voices are erased automatically after 90 days unless you name them.</div>
+      <label class="sw"><input type="checkbox" id="voiceAuto" onchange="saveVoice()"><span class="track red"></span></label></div>
     <div class="conn"><div><div class="conn-t">Private zones &middot; places that record nothing</div>
       <div class="conn-s">Inside a private zone the Brain captures <b>nothing</b> — it is the same shield Incognito raises, so the ear, captions, answer-ahead, the memory ring and face recall all go quiet together. Needs the phone to be reporting its position (it does that while the app is open). A zone is a point and a radius; you mark one by standing in it.</div>
       <div id="zoneStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div>
@@ -1953,6 +1970,7 @@ async function load(){
     refreshDream();
   }
   if($("syncStat")) refreshSync();
+  if($("voiceStat")) refreshVoiceRecall();
   if($("zoneList")){refreshZones();}
   // memory sources
   if($("srcSync")){
@@ -2064,6 +2082,68 @@ async function loadPeople(){
       `<div class="a">${detail} ${tags} ${debts}</div></div>${rm}</li>`;}).join("")
     :'<li class="empty">No one yet — introduce people, sync your Contacts, or meet someone on your Halo.</li>';
   loadCircles();}
+/* Voice recall. Consent FIRST: the switches post to /config, but flipping one on
+   without an accepted consent version leaves the layer refusing, so the panel
+   shows the consent text rather than letting a wearer flip a dead toggle. */
+async function saveVoice(){
+  const on=$("voiceOn").checked, auto=$("voiceAuto").checked;
+  await api("/dreamlayer/config",{method:"POST",
+    body:JSON.stringify({voice_recognition:on,voice_auto_enrol:auto})});
+  const s=await refreshVoiceRecall();
+  if((on||auto)&&s&&!s.consented) toast("Read and accept the notice first");
+  else toast(on?"Voice recall on":"Voice recall off");
+}
+async function voiceConsent(accept){
+  if(!accept&&!confirm("Withdraw consent? This ERASES every stored voiceprint."))return;
+  const r=await api("/dreamlayer/voice/consent",{method:"POST",
+    body:JSON.stringify({accept:!!accept})});
+  if(accept) toast(r&&r.ok?"Consent recorded":"Consent text changed — reload");
+  else toast("Consent withdrawn — "+((r&&r.erased)||0)+" voiceprint(s) erased");
+  refreshVoiceRecall();
+}
+async function voiceForgetAll(){
+  if(!confirm("Erase every stored voiceprint? Names you gave them go too."))return;
+  const r=await api("/dreamlayer/voice/forget",{method:"POST",body:JSON.stringify({all:true})});
+  toast("Erased "+((r&&r.erased)||0)+" voiceprint(s)"); refreshVoiceRecall();
+}
+async function voiceName(cid){
+  const name=prompt("Who is this?"); if(!name) return;
+  await api("/dreamlayer/voice/name",{method:"POST",
+    body:JSON.stringify({contact_id:cid,name:name})});
+  toast("Named"); refreshVoiceRecall();
+}
+async function voiceForget(cid){
+  await api("/dreamlayer/voice/forget",{method:"POST",body:JSON.stringify({contact_id:cid})});
+  toast("Forgotten"); refreshVoiceRecall();
+}
+async function refreshVoiceRecall(){
+  const el=$("voiceStat"); if(!el) return null;
+  let s; try{ s=await api("/dreamlayer/voice"); }catch(e){ el.textContent=""; return null; }
+  if(!s||s.available===false){ el.textContent=""; return null; }
+  $("voiceOn").checked=!!s.enabled; $("voiceAuto").checked=!!s.auto_enrol;
+  /* The consent text is shown until accepted — a wearer should read the words
+     they are agreeing to, in the place they agree to them. */
+  const box=$("voiceConsent");
+  if(box){ box.style.display=s.consented?"none":"block";
+           $("voiceConsentText").textContent=s.consent_text||""; }
+  const bits=[];
+  if(!s.consented) bits.push("Not consented yet.");
+  /* Say WHICH thing is missing. "The wheel is installed" and "a model loaded"
+     are different, and only the second can identify anyone. */
+  if(!s.model_available) bits.push("No speaker model installed — every utterance stays unattributed.");
+  if(!s.listening) bits.push("Listening is off, so there is nothing to attribute.");
+  bits.push(s.stored+" voice"+(s.stored===1?"":"s")+" stored ("+s.named+" named).");
+  el.textContent=bits.join(" ");
+  const list=$("voiceList");
+  if(list) list.innerHTML=(s.people||[]).map(p=>
+    `<li><div><div class="q">${p.name?esc(p.name):"<i>unnamed</i>"}</div>`+
+    `<div class="a">heard ${p.seen} time${p.seen===1?"":"s"}</div></div>`+
+    `<div style="display:flex;gap:6px">`+
+    `<button class="sm ghost" onclick='voiceName(${esc(JSON.stringify(p.contact_id))})'>${p.name?"Rename":"Name"}</button>`+
+    `<button class="sm ghost danger" onclick='voiceForget(${esc(JSON.stringify(p.contact_id))})'>Forget</button>`+
+    `</div></li>`).join("")||'<li class="empty">No voices stored yet.</li>';
+  return s;
+}
 /* Repertoire sync. The transport is deliberately a FILE: the CRDT makes the
    channel irrelevant (merge is commutative, associative and idempotent), so
    there is no protocol to get wrong and nothing has to be online at the same

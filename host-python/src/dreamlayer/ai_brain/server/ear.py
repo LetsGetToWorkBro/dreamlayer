@@ -347,6 +347,30 @@ class EarHost:
         except Exception:                            # noqa: BLE001
             return
 
+    def _voice_seam(self):
+        """(embedder, resolver, enrolled_names) for the CapturePipeline, or
+        (None, None, None) when voice recall is off, unconsented, or has no
+        model.
+
+        All three are returned together on purpose. A pipeline given an embedder
+        but no resolver computes a biometric of everyone in earshot and does
+        nothing with it — the worst of both — and one given a resolver with no
+        embedder never calls it. They are one decision, so they are one call.
+        """
+        try:
+            vr = self.brain.voice_recall()
+        except Exception as exc:                     # noqa: BLE001
+            log.info("[ear] no voice recall: %s", type(exc).__name__)
+            return None, None, None
+        if vr is None or not vr.enabled or not vr.model_available:
+            return None, None, None
+        try:
+            names = [p["name"] for p in vr.people() if p.get("name")]
+            return vr._get_embedder(), vr.resolver(), names
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[ear] voice seam failed: %s", type(exc).__name__)
+            return None, None, None
+
     # -- the live interpreter: foreign speech, voiced back to you -----------
     #
     # This is `live_interpret`, and the whole feature was one missing method. The
@@ -506,8 +530,21 @@ class EarHost:
                 except Exception:                # noqa: BLE001
                     self._bird = None
             vad = default_vad()
+            # Who is speaking — the producer `said_by` never had. Only wired
+            # when the wearer has consented AND a real speaker model loaded;
+            # `voice_recall()` returns (None, None, None) otherwise and the
+            # pipeline runs exactly as it does today, unattributed.
+            #
+            # `enrolled_speakers` is handed over so `voice_guard` can do its job
+            # rather than being bypassed: it decides whether a computed
+            # embedding is RETAINED, and a name that is not on this list is a
+            # stranger whose vector is dropped. Auto-enrol widens the list — it
+            # does not remove the check.
+            speaker, resolver, enrolled = self._voice_seam()
             pipe = CapturePipeline(self, vad=vad, asr=asr,
-                                   tagger=tagger, bird=self._bird)
+                                   tagger=tagger, bird=self._bird,
+                                   speaker=speaker, speaker_resolver=resolver,
+                                   enrolled_speakers=enrolled)
             try:
                 pipe.start(mic)
             except Exception as exc:             # noqa: BLE001 — a dead mic isn't fatal
