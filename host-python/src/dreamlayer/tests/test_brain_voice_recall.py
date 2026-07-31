@@ -67,6 +67,52 @@ def _wired(brain, *, auto=True, on=True):
 
 class TestTheHashFallbackNeverIdentifies:
 
+    def test_the_gate_itself_rejects_a_wheel_with_no_model(self, brain,
+                                                           monkeypatch):
+        """THE line this whole file turns on, exercised through `_get_embedder`.
+
+        Every other test here injects `_embedder` directly and therefore skips
+        the construction that does the checking — so deleting the check survived
+        all of them. `ECAPASpeaker.available` is True whenever speechbrain
+        imports; `_model` is None when the checkpoint failed to load, and in that
+        state `embed()` silently returns a hash of the audio's string form. A
+        wheel is not a model, and only a model may identify a person.
+        """
+        from dreamlayer.ai_brain.server import voice_live as V
+
+        class _WheelNoModel:
+            available = True
+            _model = None                            # imported, never loaded
+
+            def embed(self, audio, key=None):
+                raise AssertionError("the hash fallback must never be reached")
+
+        monkeypatch.setattr("dreamlayer.orchestrator.speaker_ecapa.ECAPASpeaker",
+                            _WheelNoModel)
+        vr = V.VoiceRecall(brain)
+        brain.config.voice_recognition = True
+        brain.config.voice_auto_enrol = True
+        brain.config.voice_consent_version = CONSENT_VERSION
+        assert vr.model_available is False
+        assert vr.identify("marcus")["reason"] == "no-voice-model"
+        assert vr.status()["stored"] == 0
+
+    def test_the_gate_accepts_a_model_that_did_load(self, brain, monkeypatch):
+        """The other direction, so the gate cannot just be "always refuse"."""
+        from dreamlayer.ai_brain.server import voice_live as V
+
+        class _Loaded(_FakeModel):
+            available = True
+
+        monkeypatch.setattr("dreamlayer.orchestrator.speaker_ecapa.ECAPASpeaker",
+                            _Loaded)
+        vr = V.VoiceRecall(brain)
+        brain.config.voice_recognition = True
+        brain.config.voice_auto_enrol = True
+        brain.config.voice_consent_version = CONSENT_VERSION
+        assert vr.model_available is True
+        assert vr.identify("marcus")["known"] is True
+
     def test_no_loaded_model_means_no_identification(self, brain):
         """The wheel being absent is not the test — a model having LOADED is.
         `available` is True whenever speechbrain imports, while `embed` still
@@ -136,6 +182,25 @@ class TestConsentGatesEverything:
         vr = VoiceRecall(brain)
         brain.config.voice_auto_enrol = True
         assert vr.auto_enrol is False
+
+    def test_the_recognition_switch_alone_is_not_enough_either(self, brain):
+        """`enabled` is asserted DIRECTLY, because `identify` checks consent
+        before it checks `enabled` — so removing consent from `enabled` changed
+        nothing there and survived. It matters elsewhere: the ear's seam and the
+        capability flag both read `enabled` and neither re-checks consent."""
+        vr = VoiceRecall(brain)
+        brain.config.voice_recognition = True
+        assert vr.enabled is False, "the switch bypassed consent"
+        brain.config.voice_consent_version = CONSENT_VERSION
+        assert vr.enabled is True
+
+    def test_an_unconsented_switch_hands_the_ear_no_seam(self, brain):
+        """The consequence of the line above, at the place that would matter."""
+        from dreamlayer.ai_brain.server.ear import EarHost
+        vr = _wired(brain)
+        brain.config.voice_consent_version = ""
+        brain._voice_recall = vr
+        assert EarHost(brain)._voice_seam() == (None, None, None)
 
     def test_revoking_consent_ERASES_the_voiceprints(self, brain):
         """Withdrawing consent has to remove what was taken under it. Stopping
@@ -241,6 +306,53 @@ class TestIdentifying:
     def test_the_switch_being_off_stops_it(self, brain):
         vr = _wired(brain, on=False)
         assert vr.identify("marcus")["reason"] == "off"
+
+
+class TestTheComparisonIsActuallyCosine:
+    """`ECAPASpeaker.similarity` is a bare dot product and `embed` returns
+    UN-NORMALISED model output, so using it would make the threshold scale with
+    how loud someone spoke. The normalisation happens where the comparison does,
+    and these use non-unit vectors — with unit vectors, cosine and dot product
+    are identical and dropping the normalisation survives everything.
+    """
+
+    def test_loudness_does_not_change_the_verdict(self, brain):
+        """The same direction at ten times the magnitude is the same speaker.
+        As a raw dot product this scores 10.0 and as cosine it scores 1.0 —
+        both above threshold, so the MISS case below is the one that bites."""
+        vr = _wired(brain, auto=False)
+        vr._people["m"] = {"name": "Marcus", "vec": [10.0, 0.0, 0.0],
+                           "auto": False, "seen": 1, "first_ts": 0, "last_ts": 0}
+        out = vr.identify("marcus")                  # embeds to [1, 0, 0]
+        assert out["known"] is True
+        assert out["confidence"] <= 1.0, "not a cosine — it exceeded 1"
+
+    def test_a_quietly_spoken_match_is_still_a_match(self, brain):
+        """The failure a dot product causes, in the direction that loses people.
+
+        These two vectors point 60° apart — cosine 0.5, comfortably over the 0.40
+        threshold — but both are small, so the raw dot product is 0.1, UNDER it.
+        A dot product would therefore call this pair strangers purely because
+        they spoke quietly, and with auto-enrol on it would store the same person
+        again as a new speaker every time the room got quiet.
+        """
+        vr = _wired(brain, auto=False)
+        vr._people["m"] = {"name": "Marcus", "vec": [0.2, 0.0, 0.0],
+                           "auto": False, "seen": 1, "first_ts": 0, "last_ts": 0}
+
+        class _Quiet(_FakeModel):
+            def embed(self, audio, key=None):
+                return [0.1, 0.1732, 0.0]            # 60° from [1,0,0], and tiny
+        vr._embedder = _Quiet()
+        out = vr.identify("whoever")
+        assert out["known"] is True, out
+        assert out["name"] == "Marcus"
+        assert out["confidence"] == pytest.approx(0.5, abs=0.01)
+
+    def test_cosine_is_scale_invariant(self):
+        from dreamlayer.ai_brain.server.voice_live import _cosine
+        assert _cosine([1.0, 0.0], [5.0, 0.0]) == pytest.approx(1.0)
+        assert _cosine([3.0, 0.0], [0.0, 7.0]) == pytest.approx(0.0)
 
 
 class TestNamingIsWhatMakesItUseful:
