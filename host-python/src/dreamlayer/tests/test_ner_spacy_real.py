@@ -4,11 +4,12 @@ against the REAL spaCy pipeline (issue #454).
 `social_lens/ner_spacy.py` and `orchestrator/commitment_nlp.py` both lazy-import
 spaCy (the `nlp` capability, `intelligence` extra) and both degrade to a regex
 extractor when it is absent. spaCy is not in the dev extras and the pipeline it
-needs — `en_core_web_sm`, ~12 MB — is not a pip dependency at all, so every
-existing test of these two modules (test_integration_seams_pr2.py, and the
-`_regex_extract` half of test_commitment_drift.py) exercises the FALLBACK. The
-branch the capability table advertises — "baseline pulls names/promises with
-regex that breaks on real sentences; this parses them properly" — had no test.
+needs — `en_core_web_sm`, ~12 MB — is not a pip dependency at all. So the only
+two tests either module had, `test_commitment_nlp_fallback` and
+`test_ner_and_diarize_fallback` in test_integration_seams_pr2.py, exercise the
+regex fallback — they say so in their names. The branch the capability table
+advertises — "baseline pulls names/promises with regex that breaks on real
+sentences; this parses them properly" — had no test at all.
 
 This is the follow-up in the real-path series (#396/#428/#432/#417) and keeps
 their shape: `importorskip` for the optional package, a clean skip with the
@@ -25,9 +26,9 @@ wasn't installed" cannot read as green.
 
 Every real-path assertion is DIFFERENTIAL: it names what the regex fallback
 produces on the same input, so the test measures what spaCy buys rather than
-just that spaCy ran. Run `_forced_fallback` (bottom of the file) to see the
-same inputs through the regex path — those are the values the asserts above it
-must never accept.
+just that spaCy ran. The last test drives the same four inputs through the regex
+path with the pipeline dropped, so the values every assert above it must never
+accept are written down and executed rather than described.
 """
 from __future__ import annotations
 
@@ -177,8 +178,9 @@ def test_the_weekday_and_the_company_are_not_people(ner, fallbacks):
 
 
 def test_the_org_the_regex_path_has_no_concept_of(ner, fallbacks):
-    """`orgs()` has no heuristic at all — its fallback is a bare `[]` (ner_spacy
-    .py:44). So a non-empty result here is only reachable through the real NER,
+    """`orgs()` has no heuristic at all — every path out of it that is not the
+    NER returns a bare `[]`. So a non-empty result here is only reachable
+    through the real NER,
     and the ORG span is one the token-level heuristic could not have assembled
     even in principle."""
     assert ner.orgs(TWO_TOKEN_NAME) == ["Overpass Studio"]
