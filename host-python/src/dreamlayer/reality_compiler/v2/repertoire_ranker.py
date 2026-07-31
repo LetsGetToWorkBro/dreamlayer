@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+import zlib
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -33,6 +34,37 @@ except ImportError:
 W_COMPLETION, W_TIME, W_FREQUENCY = 0.4, 0.35, 0.25
 _FREQ_K = 4.0                 # deploys for the frequency term to reach ~0.5
 _TIME_SIGMA = 2.0             # hours: width of the time-of-day fit kernel
+#: How many buckets the completion model's single feature is spread over.
+_BUCKETS = 997
+
+
+def _bucket(key: str) -> int:
+    """A stable bucket for `key` — the completion model's ONLY feature (#553).
+
+    NOT `hash(key) % 997`. Python randomises `hash()` of a string per process
+    (PEP 456), so the same figment landed in a different bucket every run and the
+    ranking changed between runs over identical history. That directly
+    contradicted this module's own docstring promise above — "Deterministic, and
+    rebuildable from the Vault history (`hydrate`) so it survives a restart" —
+    because `hydrate` faithfully replayed the history into buckets that no longer
+    meant what they had meant when the model learned them.
+
+    `zlib.crc32` is stdlib, seed-independent and stable across versions and
+    platforms. Not cryptographic, and it does not need to be: the only
+    requirement for a feature-hashing bucket is that a key maps to the same
+    bucket forever.
+    """
+    return zlib.crc32(str(key).encode("utf-8")) % _BUCKETS
+
+#: How far the online model must move off its 0.5 prior before it is allowed to
+#: override the per-figment running mean (#552). A logistic regression over one
+#: hashed-id feature needs many samples per bucket; until it has them it answers
+#: ~0.5 for everything, which is not a neutral answer but an erasure of the only
+#: direct evidence there is. Deliberately small — the model should win as soon as
+#: it genuinely knows anything, and 0.05 is far below any learned signal while
+#: sitting well above the 0.0075 the six-banish case produced.
+_MODEL_MIN_CONFIDENCE = 0.05
+
 _COMPLETION_ALPHA = 0.3       # EMA step for the running-mean fallback
 
 
@@ -95,7 +127,7 @@ class RepertoireRanker:
             st.outcomes += 1
             if self._model is not None:
                 try:
-                    self._model.learn_one({"k": hash(figment_id) % 997}, int(reached))
+                    self._model.learn_one({"k": _bucket(figment_id)}, int(reached))
                 except Exception:
                     pass
             st.completion += _COMPLETION_ALPHA * (reached - st.completion)
@@ -112,11 +144,30 @@ class RepertoireRanker:
     # -- scoring -------------------------------------------------------------
 
     def completion_rate(self, figment_id: str) -> float:
+        """How often this figment gets finished rather than banished.
+
+        The river model is consulted only once it has actually LEARNED something
+        (issue #552). It is a global learner over a single hashed-id feature, so
+        for a figment with a short history it returns its 0.5 prior — and a prior
+        is not neutral here, it ERASES evidence. `st.completion` is a running mean
+        of this exact figment's own outcomes: after six banishes it sits near 0,
+        which is the truth, while the model still said 0.4925. Consulted
+        unconditionally, the model turned a figment the wearer had killed six
+        times into a 0.697 score, over the 0.55 bar, and `suggest()` offered it —
+        the precise thing its docstring rules out.
+
+        So the model has to beat the prior before it may override direct
+        evidence. That is the same rule the rest of this codebase applies to
+        optional capabilities: a seam earns its place by demonstrably working, not
+        by being importable.
+        """
         st = self._stat(figment_id)
         if self._model is not None and st.outcomes:
             try:
-                return float(self._model.predict_proba_one(
-                    {"k": hash(figment_id) % 997}).get(1, st.completion))
+                p = float(self._model.predict_proba_one(
+                    {"k": _bucket(figment_id)}).get(1, st.completion))
+                if abs(p - 0.5) >= _MODEL_MIN_CONFIDENCE:
+                    return p
             except Exception:
                 pass
         return st.completion

@@ -7,8 +7,34 @@ per-label preference, so `rerank()` still adapts without the dep.
 """
 from __future__ import annotations
 import logging
+import zlib
 
 log = logging.getLogger("dreamlayer.taste_river")
+
+#: How many buckets the single model feature is spread over.
+_BUCKETS = 997
+
+
+def _bucket(key: str) -> int:
+    """A stable bucket for `key` — the model's ONLY feature (issue #553).
+
+    NOT `hash(key) % 997`. Python randomises `hash()` of a string per process
+    (PEP 456), so the same key landed in a different bucket on every run:
+
+        seed=0  -> alpha=258  beta=164  gamma=89
+        seed=42 -> alpha=632  beta=879  gamma=193
+
+    With the bucket as the sole feature, everything the model learned about a
+    key in one process was attributed to a different key's bucket in the next —
+    so the ranking changed between runs over identical history, and the learned
+    state was not merely unstable but meaningless across a restart.
+
+    `zlib.crc32` is stdlib, seed-independent and stable across versions and
+    platforms. It is not a cryptographic hash and does not need to be: this is a
+    feature-hashing bucket, where the only requirement is that the same key maps
+    to the same bucket forever.
+    """
+    return zlib.crc32(str(key).encode("utf-8")) % _BUCKETS
 
 try:
     from river import linear_model, preprocessing, compose  # type: ignore
@@ -35,7 +61,7 @@ class RiverTasteRanker:
         """Record that item `key` was chosen (True) or passed over (False)."""
         if self._model is not None:
             try:
-                self._model.learn_one({"k": hash(key) % 997}, int(chosen))
+                self._model.learn_one({"k": _bucket(key)}, int(chosen))
                 return
             except Exception as exc:
                 log.warning("[taste_river] learn failed: %s; running-mean", exc)
@@ -45,7 +71,7 @@ class RiverTasteRanker:
     def score(self, key: str) -> float:
         if self._model is not None:
             try:
-                return float(self._model.predict_proba_one({"k": hash(key) % 997}).get(1, 0.5))
+                return float(self._model.predict_proba_one({"k": _bucket(key)}).get(1, 0.5))
             except Exception:
                 pass
         return self._prefs.get(key, 0.5)
