@@ -19,7 +19,7 @@ the seams marked.
 | Endpoint | Auth | Returns |
 |---|---|---|
 | `/` | none | the control panel (HTML; token injected only on localhost) |
-| `/dreamlayer/status` | token | live state: model, cloud, cloud_ready, cloud_calls, incognito, quiet, phone_ago, index_ago, missing folders, index stats |
+| `/dreamlayer/status` | token | live state: model, cloud, cloud_ready, cloud_calls, incognito, quiet, phone_ago, index_ago, missing folders, index stats, `source_status` (per-source macOS permission state: `ok` / `denied`) |
 | `/dreamlayer/config` | token | full config (token and cloud key masked) plus index stats and the `plan` summary |
 | `/dreamlayer/health` | token | version, index disk size, Ollama latency, uptime |
 | `/dreamlayer/history` | token | unified activity feed (asks plus folder / upload / cloud / pair events) |

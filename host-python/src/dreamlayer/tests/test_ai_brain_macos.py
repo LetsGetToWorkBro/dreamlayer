@@ -203,6 +203,25 @@ class TestPermissionDenialsAreObservable:
         assert any(r.levelname == "WARNING" and "calendar" in r.getMessage()
                    for r in caplog.records)
 
+    def test_panel_hints_at_the_grant_for_a_denied_source(self):
+        """The panel turns a denied source into an ACTIONABLE hint: it names
+        the System Settings pane that actually holds the grant (Full Disk
+        Access for the Messages/Mail stores, Automation for the AppleScript
+        apps), and renders nothing at all while every source is ok."""
+        from dreamlayer.ai_brain.server.panel import render_panel
+        page = render_panel("tok")
+        compact = "".join(page.split())          # whitespace-insensitive checks
+        # the hint names the action AND the exact place it happens
+        assert "grant access in" in page
+        assert "System Settings → Privacy &amp; Security" in page
+        assert "Full Disk Access" in page and "Automation" in page
+        # every one of the five TCC-gated sources maps to a settings pane
+        for src in ("imessage", "mail", "calendar", "contacts", "reminders"):
+            assert f'{src}:["' in compact
+        # ...and the row is built from /status, only when something IS denied
+        assert "deniedSources(s.source_status)" in compact
+        assert "blocked.length?sysRow(" in compact
+
     def test_osascript_out_raises_on_nonzero_denial(self, monkeypatch):
         """The AppleScript reader must not read a non-zero exit as empty output:
         it raises _OsascriptError, and a -1743 stderr classifies as a denial."""
