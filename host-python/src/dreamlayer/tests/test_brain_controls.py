@@ -4,9 +4,11 @@ semantic search, quiet hours, retention, and the draft→approve→send guard.""
 from __future__ import annotations
 
 import json
+import pathlib
 import threading
 import time
 import urllib.request
+from email.message import EmailMessage
 
 from dreamlayer.ai_brain.server import Brain, make_brain_server
 from dreamlayer.ai_brain.server.store import (
@@ -17,6 +19,22 @@ from dreamlayer.ai_brain.server.index import FileIndex
 
 def _op():
     return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _mail_store(tmp) -> pathlib.Path:
+    """A two-account Apple Mail store: ~/Library/Mail/V<n>/<account>/…/*.emlx."""
+    root = tmp / "Mail"
+    for account, subject, body in (("Work", "Lease renewal", "sign by Friday"),
+                                   ("Personal", "Holiday plans", "flights booked")):
+        box = root / "V10" / account / "INBOX.mbox" / "Data" / "Messages"
+        box.mkdir(parents=True)
+        m = EmailMessage()
+        m["From"] = f"{account.lower()}@x.co"; m["Subject"] = subject
+        m["Date"] = "Mon, 1 Jan 2026"
+        m.set_content(body)
+        raw = m.as_bytes()
+        (box / "1.emlx").write_bytes(f"{len(raw)}\n".encode() + raw)
+    return root
 
 
 class Live:
@@ -519,6 +537,88 @@ class TestControls:
         from dreamlayer.ai_brain.server.macos_sources import list_calendars
         names = list_calendars(reader=lambda script: "Work, Family, Birthdays")
         assert names == ["Work", "Family", "Birthdays"]
+
+    # -- Mail account scope: the calendar_names pattern, for Mail -----------
+
+    def test_mail_scope_respects_selected_accounts(self, tmp_path):
+        from dreamlayer.ai_brain.server.macos_sources import mail_documents
+        root = _mail_store(tmp_path)
+        subjects = [t for t, _ in mail_documents(
+            str(root), config=BrainConfig(mail_accounts=["Work"]))]
+        assert any("Lease" in s for s in subjects)          # the chosen account
+        assert not any("Holiday" in s for s in subjects)    # the other one, out
+        # naming the other account flips exactly which side is indexed
+        other = [t for t, _ in mail_documents(
+            str(root), config=BrainConfig(mail_accounts=["Personal"]))]
+        assert any("Holiday" in s for s in other)
+        assert not any("Lease" in s for s in other)
+
+    def test_mail_scope_empty_list_indexes_every_account(self, tmp_path):
+        """`[]` must be byte-for-byte today's behavior — the whole privacy
+        argument is that this only ever NARROWS what is indexed."""
+        from dreamlayer.ai_brain.server.macos_sources import mail_documents
+        root = _mail_store(tmp_path)
+        unscoped = mail_documents(str(root))                # no config at all
+        assert mail_documents(str(root), config=BrainConfig()) == unscoped
+        assert mail_documents(str(root),
+                              config=BrainConfig(mail_accounts=[])) == unscoped
+        subjects = [t for t, _ in unscoped]
+        assert any("Lease" in s for s in subjects)
+        assert any("Holiday" in s for s in subjects)
+
+    def test_mail_scope_filters_the_live_feed_too(self, tmp_path, monkeypatch):
+        """The glasses' feed reads the same store, so it honors the same scope —
+        otherwise an unindexed account still reaches the wearer's eyes."""
+        from dreamlayer.ai_brain.server import macos_sources as mac
+        monkeypatch.setattr(mac, "MAIL_ROOT", str(_mail_store(tmp_path)))
+        assert sorted(m["subject"] for m in mac._recent_mail(20)) == \
+            ["Holiday plans", "Lease renewal"]
+        scoped = mac._recent_mail(20, config=BrainConfig(mail_accounts=["Work"]))
+        assert [m["subject"] for m in scoped] == ["Lease renewal"]
+
+    def test_mail_scope_reaches_both_public_entry_points(self, tmp_path, monkeypatch):
+        """The scope is only real if the two functions the Brain actually calls
+        pass the config down — collect_documents (index) and recent_messages
+        (the glasses' feed). Both are macOS-gated, hence the platform patch."""
+        from dreamlayer.ai_brain.server import macos_sources as mac
+        monkeypatch.setattr(mac, "MAIL_ROOT", str(_mail_store(tmp_path)))
+        monkeypatch.setattr(mac.platform, "system", lambda: "Darwin")
+        cfg = BrainConfig(mail_accounts=["Work"])
+        # the feed reads MAIL_ROOT at call time, so this is the real filter
+        assert [m["subject"] for m in mac.recent_messages(cfg, 20)] == ["Lease renewal"]
+        # collect_documents binds the store path as a default arg, so pin the
+        # wiring instead: the wearer's config must reach the mail reader at all
+        seen = []
+        monkeypatch.setattr(mac, "mail_documents",
+                            lambda *a, config=None, **kw: seen.append(config) or [])
+        mac.collect_documents(cfg)
+        assert seen == [cfg]
+
+    def test_list_mail_accounts_names_the_account_dirs(self, tmp_path):
+        from dreamlayer.ai_brain.server.macos_sources import list_mail_accounts
+        root = _mail_store(tmp_path)
+        (root / "V10" / "MailData").mkdir()          # Mail's own state, not an account
+        assert list_mail_accounts(str(root)) == ["Personal", "Work"]
+        assert list_mail_accounts(str(tmp_path / "nope")) == []
+
+    def test_mail_accounts_read_write_and_panel_wiring(self, tmp_path):
+        lb = Live(tmp_path)
+        try:
+            lb.brain._mail_account_lister = lambda: ["Work", "Personal"]
+            r = lb.get("/dreamlayer/mail/accounts")
+            assert r["items"] == ["Work", "Personal"]
+            assert r["selected"] == []                   # [] = all, out of the box
+            lb.post("/dreamlayer/config", {"mail_accounts": ["Work"]})
+            assert lb.brain.config.mail_accounts == ["Work"]
+            assert lb.get("/dreamlayer/mail/accounts")["selected"] == ["Work"]
+            # and it persists across a restart, like every other config field
+            assert Brain(lb.brain.cfg_dir).config.mail_accounts == ["Work"]
+        finally:
+            lb.stop()
+        from dreamlayer.ai_brain.server.panel import render_panel
+        html = render_panel(token="t")
+        assert 'id="mailPick"' in html and 'id="mailList"' in html
+        assert "/dreamlayer/mail/accounts" in html and "mail_accounts" in html
 
     def test_toggle_on_pulls_immediately(self, tmp_path):
         cfg = tmp_path / "cfg"; cfg.mkdir()

@@ -471,6 +471,10 @@ class BrainConfig:
     exo_url: str = "http://127.0.0.1:52415"
     exo_model: str = "llama-3.2-3b"
     email_enabled: bool = False     # macOS Mail / iMessage read (Phase 3 seam)
+    # Which Mail accounts the read covers, by their directory name under
+    # ~/Library/Mail/V<n>/. [] = every account (today's behavior), so this only
+    # ever NARROWS what is indexed. Same shape and semantics as calendar_names.
+    mail_accounts: list[str] = field(default_factory=list)   # [] = all accounts
     summarize_emails: bool = False  # shorten emails to a glance before relaying
     # network posture (product default = connected): "connected" reaches the
     # internet + cloud; "lan_only" is the advanced home-only mode.

@@ -206,6 +206,56 @@ def parse_emlx(raw: bytes) -> dict:
 # touching the whole tree on a large store.
 _MAIL_SCAN_CAP_FACTOR = 8
 
+# Mail keeps one directory per account below a versioned root:
+# ~/Library/Mail/V10/<account>/INBOX.mbox/…/1.emlx
+_MAIL_VERSION_DIR = re.compile(r"V\d+")
+
+
+def _mail_account_of(path: Path, root: Path) -> str:
+    """The Mail account an .emlx belongs to — its directory name below `root`,
+    skipping Mail's `V<n>` version directory. "" when the message doesn't sit
+    under an account directory at all (a flat fixture tree, say)."""
+    try:
+        parts = Path(path).relative_to(root).parts
+    except ValueError:
+        return ""
+    if parts and _MAIL_VERSION_DIR.fullmatch(parts[0]):
+        parts = parts[1:]
+    return parts[0] if len(parts) > 1 else ""
+
+
+def _mail_account_filter(config, root: Path) -> Optional[Callable[[Path], bool]]:
+    """A path predicate for `config.mail_accounts`, or None when the list is
+    empty. None (not a predicate that says yes) so `[] = all accounts` runs the
+    exact scan it ran before this filter existed."""
+    selected = {n for n in (getattr(config, "mail_accounts", []) or [])}
+    if not selected:
+        return None
+    return lambda p: _mail_account_of(p, root) in selected
+
+
+def list_mail_accounts(mail_root: str = MAIL_ROOT) -> list[str]:
+    """The Mail account directory names available to scope to (the panel's
+    picker). [] when there is no Mail store to read."""
+    root = Path(mail_root).expanduser()
+    if not root.is_dir():
+        return []
+    names: set[str] = set()
+    try:
+        tops = [d for d in os.scandir(root) if d.is_dir(follow_symlinks=False)]
+    except OSError:
+        return []
+    for top in tops:
+        if not _MAIL_VERSION_DIR.fullmatch(top.name):
+            continue
+        try:
+            for acct in os.scandir(top.path):
+                if acct.is_dir(follow_symlinks=False) and acct.name != "MailData":
+                    names.add(acct.name)
+        except OSError:
+            continue
+    return sorted(names)
+
 
 def _scan_emlx(root: Path):
     """Yield (path, mtime) for .emlx files, visiting the most-recently-modified
@@ -238,10 +288,15 @@ def _scan_emlx(root: Path):
 
 
 def _newest_emlx(root: Path, limit: int,
-                 scan: Optional[Callable] = None):
+                 scan: Optional[Callable] = None,
+                 keep: Optional[Callable[[Path], bool]] = None):
     """The newest `limit` .emlx paths by mtime, considering at most
     `limit * _MAIL_SCAN_CAP_FACTOR` candidates (so a huge Mail store doesn't
-    make every reindex O(all mail)). Returns (paths, denied_exc_or_None)."""
+    make every reindex O(all mail)). Returns (paths, denied_exc_or_None).
+
+    `keep` (when given) drops candidates before the heap — that is the account
+    scope, and it is applied INSIDE the cap so scoping can't make a reindex walk
+    the whole store looking for enough matches."""
     if limit <= 0:
         return [], None
     it = (scan or _scan_emlx)(root)
@@ -250,6 +305,8 @@ def _newest_emlx(root: Path, limit: int,
     denied = None
     try:
         for seq, (path, mtime) in enumerate(islice(it, cap)):
+            if keep is not None and not keep(path):
+                continue
             if len(heap) < limit:
                 heapq.heappush(heap, (mtime, seq, path))
             elif mtime > heap[0][0]:
@@ -261,12 +318,15 @@ def _newest_emlx(root: Path, limit: int,
 
 
 def mail_documents(mail_root: str = MAIL_ROOT, limit: int = 200,
-                   scan: Optional[Callable] = None
+                   scan: Optional[Callable] = None, config=None
                    ) -> list[tuple[str, str]]:
+    """Recent Mail as index documents, restricted to `config.mail_accounts`
+    when that list is non-empty (empty = every account)."""
     root = Path(mail_root).expanduser()
     if not root.is_dir():
         return []
-    files, denied = _newest_emlx(root, limit, scan)
+    files, denied = _newest_emlx(root, limit, scan,
+                                 _mail_account_filter(config, root))
     if denied is not None:
         _record_denied("mail", denied)
     docs = []
@@ -295,7 +355,7 @@ def collect_documents(config) -> list[tuple[str, str]]:
         return []
     docs = []
     docs += imessage_documents()
-    docs += mail_documents()
+    docs += mail_documents(config=config)
     return docs
 
 
@@ -309,7 +369,7 @@ def recent_messages(config=None, limit: int = 20) -> list[dict]:
     surface: {channel, who, from_me, text, subject?, ts}. [] off macOS."""
     if platform.system() != "Darwin":
         return []
-    out = _recent_imessages(limit) + _recent_mail(limit)
+    out = _recent_imessages(limit) + _recent_mail(limit, config=config)
     out.sort(key=lambda m: m.get("ts", 0), reverse=True)
     return out[:limit]
 
@@ -344,11 +404,15 @@ def _recent_imessages(limit: int, connect: Optional[Callable] = None) -> list[di
     return out
 
 
-def _recent_mail(limit: int, scan: Optional[Callable] = None) -> list[dict]:
+def _recent_mail(limit: int, scan: Optional[Callable] = None,
+                 config=None) -> list[dict]:
+    """The newest mail for the live feed, restricted to `config.mail_accounts`
+    when that list is non-empty (empty = every account)."""
     root = Path(MAIL_ROOT).expanduser()
     if not root.is_dir():
         return []
-    files, denied = _newest_emlx(root, limit, scan)
+    files, denied = _newest_emlx(root, limit, scan,
+                                 _mail_account_filter(config, root))
     if denied is not None:
         _record_denied("mail", denied)
     out = []
