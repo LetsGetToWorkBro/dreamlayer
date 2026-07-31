@@ -55,8 +55,8 @@ UNSEEN = [f"unseen-{i}" for i in range(8)]
 
 class _PoisonedPrefs(dict[str, float]):
     """The running-mean ledger, pre-loaded with the OPPOSITE preference and
-    recording every write. Seeding goes through `dict.update` at construction so
-    the poison itself is not counted as a fallback write."""
+    recording every write. The poison is seeded through `dict.__init__`, so it is
+    not itself counted as a fallback write."""
 
     def __init__(self, poison: dict[str, float]):
         super().__init__(poison)
@@ -95,8 +95,8 @@ class _RealPathSpy:
     def fallback_writes(self) -> list[tuple[str, float]]:
         return self.prefs.writes
 
-    def teach(self, history=HISTORY) -> None:
-        for key, chosen in history:
+    def teach(self) -> None:
+        for key, chosen in HISTORY:
             self.ranker.observe(key, chosen)
 
 
