@@ -100,6 +100,14 @@ class EarHost:
         self._interpret_target = "en"
         self._interpret_ok = False
         self.interpreted_count = 0
+        # -- "Read the room": the credibility read over this ear's conversation.
+        # Per-ear, because the Mac's mic and the phone streaming in are two
+        # different rooms and TruthLens carries rolling per-conversation state.
+        # Constructed eagerly (it is a few attributes; the nine-stage lens inside
+        # is lazy) so `set_truth` can be pushed in before the mic ever opens,
+        # exactly like the interpreter's persisted setting.
+        from .truth_live import TruthRead
+        self.truth = TruthRead(brain)
 
     # -- CapturePipeline host contract -------------------------------------
 
@@ -164,6 +172,15 @@ class EarHost:
                     veil_ok=False)
         except Exception as exc:                 # noqa: BLE001 — a card must never
             log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and READ THE ROOM, when the wearer has asked for that. Fed the
+        # redacted text for the same reason captions are: what the gauge reasons
+        # over is what the store holds, never more. `speaker` keys the
+        # per-contact baseline, so the read is "unusual FOR THIS PERSON" once the
+        # speaker seam has a name, and the conservative stranger path otherwise.
+        try:
+            self.truth.note_transcript(text, speaker or "")
+        except Exception as exc:                     # noqa: BLE001 — a gauge must
+            log.warning("[truth] read failed: %s", type(exc).__name__)   # never
         # …and ANSWER it, when the room asked a question and the Brain knows.
         self._answer_ahead(text)
         name = "heard" if not speaker else f"heard:{speaker}"
@@ -172,12 +189,16 @@ class EarHost:
         # It used to call brain.note_spoken_intent() for every utterance it heard,
         # so a bystander saying "how far is that" redirected the wearer's next look.
         # The obvious guard — skip utterances attributed to someone else — is
-        # worthless here: nothing in this product ever populates `speaker`. No
-        # production CapturePipeline is built with a `speaker` or a
-        # `speaker_resolver`, so the attribution is always empty and a guard on it
-        # can never fire. Knowing who spoke would mean voiceprinting everyone in
-        # earshot, which is exactly what voice_guard exists to forbid without
-        # consent — so this is a limit to state, not a check to fake.
+        # still not enough, and the reason has CHANGED since it was written: back
+        # then no production CapturePipeline was built with a `speaker_resolver`,
+        # so `speaker` was always empty and a guard on it could never fire. The
+        # speaker seam (`_voice_seam`, voice_live.py) now populates it whenever
+        # the wearer has consented and a real model loaded — but only for people
+        # who are ENROLLED. Everyone else in earshot still arrives unattributed,
+        # which is exactly what voice_guard requires, so an empty label cannot be
+        # read as "the wearer said it" and the guard would fire on the wrong half.
+        #
+        # The lens stays steered only from the deliberate path either way.
         #
         # The lens is steered only from the deliberate path: the wearer holding the
         # Live Lens with captions on, which POSTs its own phrase to /live/intent.
@@ -432,18 +453,34 @@ class EarHost:
                 "interpreted_count": self.interpreted_count}
 
     def note_speech_audio(self, segment, sample_rate: int = 16000) -> None:
-        """CapturePipeline endpointed a speech segment — carry its MEANING across.
+        """CapturePipeline endpointed a speech segment — the raw-audio hook.
 
-        The transcript has already routed separately through `ingest_caption`, so
-        this path adds the one thing text cannot: the utterance rendered into the
-        wearer's own language. The raw audio is used and dropped; nothing here
-        stores it.
+        TWO consumers, each with its own switch, and the audio is what neither
+        can get from the transcript:
+
+          * the live interpreter, which renders the utterance into the wearer's
+            own language (`_interpret_on`);
+          * the Truth Lens's voice-stress channel, which measures HOW it was
+            said — pitch, jitter, shimmer, hesitation (`truth.enabled`).
+
+        The Truth Lens is fed FIRST and unconditionally of the interpreter,
+        because it used to sit behind `if not self._interpret_on: return` while
+        being a completely separate feature — a wearer who wanted the room read
+        and no translation would have got silence, and the reason would have
+        been a shared early return rather than anything they set.
+
+        The raw audio is used and dropped; nothing here stores it.
 
         Veil-gated with a SECOND check even though the pipeline already gates its
         door: `push_pcm` refuses to accumulate while veiled, but the segment now in
         hand was accumulated before that and the shield may have come down in
-        between. Fails CLOSED, like every other gate in this file.
+        between. Fails CLOSED, like every other gate in this file. (`TruthRead`
+        re-checks the same way, for the same reason, on its own side.)
         """
+        try:
+            self.truth.note_audio(segment, sample_rate)
+        except Exception as exc:                     # noqa: BLE001 — never break
+            log.warning("[truth] audio note failed: %s", type(exc).__name__)
         if not self._interpret_on:
             return
         try:
@@ -633,4 +670,15 @@ class EarHost:
                 "interpret_target": self._interpret_target,
                 "can_interpret": self._can_interpret(),
                 "interpret_proved": self._interpret_ok,
-                "interpreted_count": self.interpreted_count}
+                "interpreted_count": self.interpreted_count,
+                # …and the room read, on the same principle: the switch and
+                # whether it has ever genuinely produced a gauge are separate
+                # facts, and only the second one means the feature works.
+                "truth": self.truth.enabled,
+                "truth_proved": self.truth.proved,
+                "truth_reads": self.truth.read_count}
+
+    def set_truth(self, on: bool = True) -> dict:
+        """Turn the room read on/off for THIS ear. Mirrors `set_interpret`: the
+        Brain owns persistence and pushes the setting into every ear."""
+        return self.truth.set_enabled(on)

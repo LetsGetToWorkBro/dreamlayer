@@ -895,6 +895,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             # installs the pack and retries, must not need a second toggle to get
             # back the interpreter they already turned on.
             self._apply_interpret()
+            self._apply_truth_lens()
         try:
             res = self._ear.start(mic)
         except Exception as exc:                    # noqa: BLE001 — never fatal
@@ -925,6 +926,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                                       and self._remote_ear.listening)
         st["remote_enabled"] = bool(getattr(self.config,
                                             "remote_listen_enabled", False))
+        # The room read's persisted opt-in, alongside the runtime facts the ear
+        # already reported — so the switch and what it is actually doing can
+        # disagree honestly (opted in, but no microphone open yet).
+        st["truth_enabled"] = bool(getattr(self.config,
+                                           "truth_lens_enabled", False))
         return st
 
     def dream_neural_ready(self) -> bool:
@@ -1014,6 +1020,41 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 except Exception:                    # noqa: BLE001 — never block
                     pass
 
+    def set_truth_lens(self, on: bool = True) -> dict:
+        """Turn "Read the room" on/off across BOTH ears and persist it.
+
+        Both ears for the same reason the interpreter reaches both: the Mac's own
+        microphone and the phone acting as the mic are two `EarHost`s and the
+        wearer set one switch. The phone is the more likely one here — it is the
+        ear you carry into the conversation you actually wanted read.
+        """
+        self.config.truth_lens_enabled = bool(on)
+        self.save()
+        out: dict = {"ok": True, "on": bool(on)}
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                try:
+                    out = ear.set_truth(bool(on))
+                except Exception:                    # noqa: BLE001 — never block
+                    pass
+        self.activity.add("ear", "Room read turned %s" % ("on" if on else "off"))
+        return out
+
+    def _apply_truth_lens(self) -> None:
+        """Push the persisted room-read setting into an ear that just opened.
+
+        Same write-only-setting trap `_apply_interpret` exists to close: a fresh
+        `EarHost` builds its `TruthRead` switched OFF, so without this a wearer
+        who had the read on, restarted, and turned Listening back on would get a
+        silent gauge under a switch that said it was running."""
+        on = bool(getattr(self.config, "truth_lens_enabled", False))
+        for ear in (self._ear, self._remote_ear):
+            if ear is not None:
+                try:
+                    ear.set_truth(on)
+                except Exception:                    # noqa: BLE001 — never block
+                    pass
+
     def hear_remote(self, pcm) -> dict:
         """The phone is the live mic: feed a chunk of the audio it captured
         on-device into the ear. The wearable hears the room you're in, not the
@@ -1033,7 +1074,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             from .ear import EarHost
             self._remote_ear = EarHost(self)
             self._apply_interpret()      # see start_ear: at construction, not
-            #                              after a start that may not succeed
+            self._apply_truth_lens()     # after a start that may not succeed
         if self._remote_mic is None:
             from ...orchestrator.capture import RemoteMicSource
             self._remote_mic = RemoteMicSource()
@@ -1494,7 +1535,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "home_assistant_url", "home_assistant_token",
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
-                  "interpret_enabled", "interpret_target", "dream_model_path",
+                  "interpret_enabled", "interpret_target", "truth_lens_enabled",
+                  "dream_model_path",
                   "private_zones",
                   "face_recognition", "face_auto_enrol",
                   "voice_recognition", "voice_auto_enrol"):
@@ -1558,6 +1600,11 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         if {"interpret_enabled", "interpret_target"} & set(updates):
             self._apply_interpret()
             self._sync_ear_wired()
+        # Same trap, same fix: the room read lives on the EarHosts too, so a
+        # config POST that only wrote the flag would persist a switch that did
+        # nothing until the next ear restart.
+        if "truth_lens_enabled" in updates:
+            self._apply_truth_lens()
         # turning a sync on (or changing its filter) → pull immediately
         try:
             if updates.get("calendar_sync") or ("calendar_names" in updates and self.config.calendar_sync):
@@ -4502,6 +4549,17 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, brain.set_interpret(bool(b.get("on", True)),
                                                 str(b.get("target", "") or "")))
 
+        def _post_truth(self, path, qs):
+            """Turn "Read the room" on/off.
+
+            `{"on": true}`. Rides the ear, so Listening must be on for anything to
+            be heard. Reads DELIVERY — voice stress and word choice — and never
+            claims to read a face: the micro-expression stages have no detector
+            behind them and draw as empty slots, which the returned `channels`
+            states outright rather than leaving to be inferred from the gauge."""
+            b = self._body()
+            self._json(200, brain.set_truth_lens(bool(b.get("on", True))))
+
         def _get_cloud(self, path, qs):
             """Cloud tier view (provider, posture, egress)."""
             self._json(200, _cloud_view_payload(brain))
@@ -6418,6 +6476,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/location": _post_location,
             "/dreamlayer/zones": _post_zones,
             "/dreamlayer/interpret": _post_interpret,
+            "/dreamlayer/truth": _post_truth,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,

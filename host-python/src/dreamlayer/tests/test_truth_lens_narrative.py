@@ -65,11 +65,45 @@ class TestNarrativeStore:
             update(ns, "alice")
         assert not ns.get_baseline("alice").is_calibrated
 
-    def test_partial_frames_do_not_update(self):
-        """update_baseline requires all three modalities before it commits."""
+    def test_partial_frames_DO_update(self):
+        """Whatever channels arrived are learned from — the inverse of what this
+        test used to assert.
+
+        It pinned "update_baseline requires all three modalities before it
+        commits", which was the bug rather than the contract. `au` is
+        permanently None on every surface the Brain has (no camera, and
+        `fusion.AU_CHANNEL_REAL` is False in any case), so the all-three rule
+        meant no baseline was EVER written on the product: `get_baseline`
+        answered None forever, `fuse` took its stranger branch forever, and the
+        known-contact path fusion.py advertises was unreachable code.
+
+        Requiring the synthetic AU channel to be present before anything could
+        be learned was the contradiction at the heart of it — the same channel
+        the codebase had already decided must not influence a verdict.
+        """
         ns = NarrativeStore()
         ns.update_baseline("alice", au=make_au(), prosody=None, linguistic=None)
-        assert ns.get_baseline("alice") is None
+        bl = ns.get_baseline("alice")
+        assert bl is not None, "an AU-only observation taught the baseline nothing"
+        assert bl.sample_count == 1 and bl.au_n == 1
+        assert bl.prosody_n == 0 and bl.linguistic_n == 0
+
+        # The case that actually matters on this product: no camera at all.
+        ns.update_baseline("bob", au=None, prosody=make_prosody(),
+                           linguistic=make_linguistic())
+        bob = ns.get_baseline("bob")
+        assert bob is not None, (
+            "a Brain with a microphone and no camera could not learn a baseline")
+        assert bob.prosody_n == 1 and bob.linguistic_n == 1 and bob.au_n == 0
+
+    def test_an_empty_observation_teaches_nothing(self):
+        """The other side of accepting partial frames: no channel at all must
+        NOT advance the sample count. `confidence` scales on `sample_count`, so
+        a silent conversation would otherwise calibrate a baseline that has
+        observed nothing and raise confidence on no evidence."""
+        ns = NarrativeStore()
+        ns.update_baseline("dave", au=None, prosody=None, linguistic=None)
+        assert ns.get_baseline("dave") is None
 
     def test_prosody_baseline_stored(self):
         ns = NarrativeStore()

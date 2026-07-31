@@ -1120,7 +1120,14 @@ function renderPanel(panel){
 const GP = {                      /* palette.lua, verbatim */
   text_primary:"#ECF0F1", text_secondary:"#A8B8C0", text_ghost:"#58686F",
   memory_trace:"#00FFAA", border_subtle:"#2A3C44",
-  confidence_low:"#FFAA00", confidence_med:"#00FFAA", confidence_high:"#B8FFE9"
+  confidence_low:"#FFAA00", confidence_med:"#00FFAA", confidence_high:"#B8FFE9",
+  /* the Testimony Thread's two directions (palette.lua:34-35, 71-72). Bright =
+     the newest stage, dim = older testimony that has cooled — the device makes
+     temporal order a visible bit and the glass has to as well or the thread
+     reads as one undifferentiated ring. */
+  accent_success:"#56D364", accent_attention:"#E06B52",
+  accent_success_dim:"#2E7A3C", accent_attention_dim:"#7A3A2C",
+  background:"#040806"
 };
 const GT = { lg:17, md:13, sm:10 };            /* typography.lua sizes */
 let glassTimer = null;
@@ -2110,6 +2117,96 @@ function glassSynesthesiaCard(c){                    /* DREAM — the scene, in 
   if (words.length) words.forEach((ln, i) => gtext(ctx, ln, 128, 140 + i * 17, GP.text_primary, "md"));
   else gtext(ctx, "…", 128, 140, GP.text_secondary, "sm");
   gend(c.dismiss_ms || 4000);
+}
+
+function glassTestimonyCard(c){          /* TRUTH — the Testimony Thread ("Read the room") */
+  /* renderer.lua:draw_testimony, geometry verbatim: nine 40-degree slots at
+     r=64 accumulating clockwise from 12 o'clock in pipeline order (face, au,
+     voice, prosody, linguistic, narrative, fusion, aggregate, verdict).
+
+     Why this card gets a bespoke renderer rather than the generic fallback: the
+     generic one draws `primary`, which here is a single word — "CREDIBLE",
+     "CALIBRATING", "ELEVATED". That word without its thread is the one reading
+     this card must never give, because the thread is where the card says WHICH
+     stages actually measured anything. Two of the nine are real on a Brain
+     (voice, linguistic); the micro-expression stages are empty because no
+     action-unit detector backs them. Drawing the verdict alone would present a
+     two-channel delivery read as a nine-stage analysis — the exact overclaim the
+     empty-slot convention exists to prevent. `insufficient` draws NOTHING, and
+     the gap is the message. */
+  const ctx = glassCtx(); gback(ctx);
+  const R = 64, SLOT = 40, TEAR = 3;
+  const stages = Array.isArray(c.stages) ? c.stages : [];
+
+  /* slot boundary ticks — the compass rose of the pipeline. Ordinal
+     addressability without labels: you can count round to which stage is torn. */
+  for (let i = 0; i < 9; i++){
+    const rad = (-90 + i * SLOT) * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(128 + (R - 2) * Math.cos(rad), 128 + (R - 2) * Math.sin(rad));
+    ctx.lineTo(128 + (R + 2) * Math.cos(rad), 128 + (R + 2) * Math.sin(rad));
+    ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  /* the thread. The device animates accumulation over `thread_t`; a pushed card
+     on the glass arrives settled, so every stage draws at full extent and the
+     LAST one with data is the bright one. */
+  let newest = -1;
+  for (let i = 0; i < 9 && i < stages.length; i++){
+    if (stages[i] && stages[i].direction && stages[i].direction !== "insufficient") newest = i;
+  }
+  for (let i = 0; i < 9 && i < stages.length; i++){
+    const st = stages[i]; if (!st) continue;
+    const dir = st.direction || "insufficient";
+    if (dir === "insufficient") continue;           /* an honest empty slot */
+    const conf = Math.max(0, Math.min(1, Number(st.confidence) || 0));
+    const a0 = -90 + i * SLOT + 2;
+    const span = conf * (SLOT - 4);
+    if (span <= 1) continue;
+    const bright = (i >= newest);
+    const col = dir === "truthful"
+      ? (bright ? GP.accent_success   : GP.accent_success_dim)
+      : (bright ? GP.accent_attention : GP.accent_attention_dim);
+    if (dir === "truthful"){
+      garc(ctx, 128, 128, R, a0, a0 + span, col);
+    } else {
+      /* torn: three dashes with radial jitter — the thread visibly fails to
+         hold there. Same shape the device draws, so the two surfaces agree. */
+      const dash = span / 4, off = [-TEAR, TEAR, -TEAR];
+      for (let d = 0; d < 3; d++){
+        const da0 = a0 + d * (dash + dash / 2);
+        const da1 = Math.min(da0 + dash, a0 + span);
+        if (da1 > da0) garc(ctx, 128, 128, R + off[d], da0, da1, col);
+      }
+    }
+  }
+
+  /* verdict in its capsule — the reading of the card, weighted like one */
+  const verdict = String(c.verdict || c.primary || "").toUpperCase().slice(0, 14);
+  const halfW = Math.max(26, Math.round(verdict.length * 5.5) + 10);
+  ctx.fillStyle = GP.background;
+  ctx.fillRect(128 - halfW, 112, halfW * 2, 33);
+  ctx.beginPath();
+  ctx.moveTo(128 - halfW + 16, 112); ctx.lineTo(128 + halfW - 16, 112);
+  ctx.moveTo(128 - halfW + 16, 144); ctx.lineTo(128 + halfW - 16, 144);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+  garc(ctx, 128 - halfW + 16, 128, 16,  90, 270, GP.border_subtle);
+  garc(ctx, 128 + halfW - 16, 128, 16, -90,  90, GP.border_subtle);
+  gtext(ctx, verdict, 128, 128, GP.text_primary, "lg");
+
+  /* confidence dot, exactly the device's three bands */
+  if (c.confidence !== null && c.confidence !== undefined){
+    const cf = Number(c.confidence) || 0;
+    ctx.beginPath(); ctx.arc(128, 154, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = cf >= 0.75 ? GP.confidence_high
+                  : cf >= 0.40 ? GP.confidence_med : GP.confidence_low;
+    ctx.fill();
+  }
+  /* who it is about, when the speaker is known — the device draws this from the
+     same field. "Stranger" is the honest value, not a blank. */
+  const who = String(c.footer || "").slice(0, 22);
+  if (who) gtext(ctx, who, 128, 178, GP.text_ghost, "sm");
+  gend(c.dismiss_ms || 5000);
 }
 
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
@@ -3712,6 +3809,7 @@ function renderEvent(ev){
   else if (t === "DeviationAlertCard") glassDeviationCard(c);
   else if (t === "PrivateZoneCard") glassPrivateZoneCard(c);
   else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);
+  else if (t === "TruthLensCard") glassTestimonyCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

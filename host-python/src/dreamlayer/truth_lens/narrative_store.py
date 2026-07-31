@@ -51,12 +51,24 @@ class NarrativeStore:
         prosody: Optional[ProsodyFrame],
         linguistic: Optional[LinguisticFrame],
     ) -> ContactBaseline:
-        """Incrementally update baseline with new data. Creates if absent."""
+        """Incrementally update baseline with new data. Creates if absent.
+
+        Learns from WHATEVER channels arrived, rather than only from a complete
+        set. The all-three requirement that used to live here meant a surface
+        with no camera — every surface the Brain has — never calibrated a
+        baseline at all, so `get_baseline` answered None forever and the fusion
+        engine's whole known-contact path was dead code in production. See
+        `ContactBaseline.update` for the full account; the two guards were the
+        same bug written twice, so both are gone.
+
+        A call carrying no channel still saves nothing: `update` no-ops on it and
+        there is no reason to write an unchanged baseline back to the store.
+        """
         baseline = self.get_baseline(contact_id)
         if baseline is None:
             baseline = ContactBaseline(contact_id=contact_id)
 
-        if au is not None and prosody is not None and linguistic is not None:
+        if au is not None or prosody is not None or linguistic is not None:
             baseline.update(au, prosody, linguistic)
             self.save_baseline(baseline)
 

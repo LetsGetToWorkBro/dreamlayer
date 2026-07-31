@@ -613,6 +613,25 @@ class BrainConfig:
     # the wearer named — bystanders included, who have not agreed and cannot
     # agree in-app. Off by default and gated behind consent.
     voice_auto_enrol: bool = False
+    # -- the Truth Lens read ("Read the room") ---------------------------
+    # A declared HUD feature the shipped Brain could never produce: the card
+    # builder, the nine-stage pipeline and the device's Testimony Thread have all
+    # existed the whole time, and the only `TruthLens(...)` in the tree lives in
+    # the Orchestrator, which no Brain constructs (decisions/0001). So the phone
+    # never saw it at all.
+    #
+    # Rides the ear (needs listen_enabled), so it is a SECOND opt-in on top of an
+    # opt-in — and deliberately its own switch rather than a rider on captions,
+    # because remembering what was said and rendering a credibility read about
+    # the person saying it are very different exposures.
+    #
+    # What it reads is DELIVERY, and only the two channels the Brain can honestly
+    # measure: voice stress from the microphone and hedging/pronoun/complexity
+    # markers from the transcript. The micro-expression channel stays off
+    # (`fusion.AU_CHANNEL_REAL is False`) because no real action-unit detector
+    # backs it, so it contributes nothing to the verdict and draws as an honest
+    # empty slot rather than as evidence.
+    truth_lens_enabled: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts
