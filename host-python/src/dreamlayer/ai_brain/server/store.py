@@ -599,6 +599,20 @@ class BrainConfig:
     # in-app. Off by default and gated behind consent. The wearer accepts this
     # risk explicitly; see face_live.CONSENT_TEXT for what they are told.
     face_auto_enrol: bool = False
+    # -- voice recall: who is speaking, so a memory can be attributed -----
+    # The same three switches as faces, for the same reason and with the same
+    # shape: a voiceprint is a biometric identifier exactly as a face template
+    # is. This is what fills `said_by`, which is what lets "what did Marcus say
+    # last time" answer from the room instead of only from typing.
+    #
+    # Rides the ear (needs listen_enabled): with no microphone open there is no
+    # speech to attribute, so this is a second opt-in on top of an opt-in.
+    voice_recognition: bool = False
+    voice_consent_version: str = ""
+    # Auto-enrol: store a voiceprint for EVERY speaker heard, not only people
+    # the wearer named — bystanders included, who have not agreed and cannot
+    # agree in-app. Off by default and gated behind consent.
+    voice_auto_enrol: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts

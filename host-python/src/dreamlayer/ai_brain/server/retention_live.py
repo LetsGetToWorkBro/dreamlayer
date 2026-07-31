@@ -187,6 +187,18 @@ def sweep_retention(brain) -> dict:
                 fr.sweep_unnamed(policy.warm_days))
         except Exception as exc:                     # noqa: BLE001
             log.warning("[retention] unnamed-face sweep failed: %s", exc)
+    # Unnamed VOICES age out on the same window and for the same reason. A
+    # voiceprint of someone the wearer never named is a stranger the microphone
+    # happened to hear; a store of those growing without bound is the shape of
+    # thing the retention policy exists to prevent, and it would be strange for
+    # the two biometrics to expire on different rules.
+    vr = getattr(brain, "_voice_recall", None)
+    if vr is not None:
+        try:
+            report["unnamed_voices_dropped"] = int(
+                vr.sweep_unnamed(policy.warm_days))
+        except Exception as exc:                     # noqa: BLE001
+            log.warning("[retention] unnamed-voice sweep failed: %s", exc)
     ring = _hot_ring(brain)
     if ring is not None:
         try:

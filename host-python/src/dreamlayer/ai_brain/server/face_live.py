@@ -81,6 +81,7 @@ import os
 import sys
 import threading
 import time
+import uuid
 
 log = logging.getLogger("dreamlayer.face")
 
@@ -442,7 +443,14 @@ class FaceRecall:
         wearer can name them later with `name_identity`.
         """
         from ...social_lens.schema import ContactRecord
-        cid = f"auto-{int(time.time() * 1000)}-{len(template) % 97}"
+        # UUID, not a millisecond timestamp. `auto-{ms}-{len(template) % 97}`
+        # looks unique and is not: every template from one model has the SAME
+        # length, so the second term is a constant, and two faces enrolled inside
+        # the same millisecond get the same id — the second silently REPLACING
+        # the first. One person's biometric overwritten by another's, and the
+        # wearer would see a face they had met vanish. Found while building the
+        # voice store, which was copied from here and inherited it.
+        cid = f"auto-{uuid.uuid4().hex[:16]}"
         with self._lock:
             index = self._get_index()
             index.add(ContactRecord(contact_id=cid, name="",
