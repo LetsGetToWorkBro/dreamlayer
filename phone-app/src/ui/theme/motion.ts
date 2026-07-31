@@ -6,8 +6,41 @@ export const motion = {
   breath: 2400,
   onboarding: 500,
   easeOut: "cubic-bezier(0.16, 1, 0.3, 1)" as const,
+  /** The OS "reduce motion" setting, mirrored here. Read it; write it only
+   * through setReduceMotion() so subscribers hear about the change. */
   reduceMotion: false,
 };
+
+/* ------------------------------------------------------- reduce motion --
+ * One flag, one writer, one place to subscribe. The OS value is read once
+ * (and then watched) by useReduceMotion() in ../anim — every consumer reads
+ * it from here rather than calling AccessibilityInfo itself, so a test can
+ * drive the whole app's motion with setReduceMotion(true) and nothing has to
+ * mock react-native. */
+
+const reduceMotionListeners = new Set<(on: boolean) => void>();
+
+/** The single write seam for the reduce-motion flag. No-op when unchanged. */
+export function setReduceMotion(on: boolean): void {
+  if (motion.reduceMotion === on) return;
+  motion.reduceMotion = on;
+  // copy first: a listener may unsubscribe itself while we notify
+  for (const fn of [...reduceMotionListeners]) fn(on);
+}
+
+/** Listen for reduce-motion changes. Returns the unsubscribe. */
+export function subscribeReduceMotion(fn: (on: boolean) => void): () => void {
+  reduceMotionListeners.add(fn);
+  return () => {
+    reduceMotionListeners.delete(fn);
+  };
+}
+
+/** How long an animation may actually run for: 0 — land on the end value now —
+ * when the user asked for less motion, otherwise the timing you asked for. */
+export function motionDuration(ms: number): number {
+  return motion.reduceMotion ? 0 : ms;
+}
 
 /**
  * Meridian motion — timing parity with the glasses.
