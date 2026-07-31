@@ -116,6 +116,27 @@ class TestOneClickDiscovery:
         assert u1 == "http://localhost:4891/v1/chat/completions"
         assert u2 == "http://localhost:5001/v1/chat/completions"
 
+    def test_discover_finds_msty(self):
+        # Msty (:10000) exposes an OpenAI-compatible /v1/models endpoint; a
+        # running instance must be discovered with its model list.
+        def fake(url, timeout):
+            if "10000" in url:
+                return {"data": [{"id": "gemma3:1b"}]}      # Msty up
+            raise ConnectionError("down")                     # everyone else off
+        found = {a["label"]: a for a in discover_local_agents(getter=fake)}
+        assert set(found) == {"Msty"}
+        assert found["Msty"]["provider"] == "custom"
+        assert found["Msty"]["base_url"] == "http://localhost:10000/v1"
+        assert found["Msty"]["models"] == ["gemma3:1b"]
+        # discovered endpoint is localhost → on-device by construction
+        assert all(is_local_endpoint(a["base_url"]) for a in found.values())
+
+    def test_msty_base_url_does_not_double_the_v1_segment(self):
+        # the /v1-suffixed base_url discovery hands back must resolve to a single
+        # /v1 segment, not /v1/v1/chat/completions
+        _, url, _, _ = _build_request("custom", "http://localhost:10000/v1", "m", "", "q")
+        assert url == "http://localhost:10000/v1/chat/completions"
+
     def test_discover_empty_when_nothing_running(self):
         def down(url, timeout):
             raise OSError("refused")
