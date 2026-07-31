@@ -369,10 +369,12 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         # readers return [] anywhere else — there is no Windows equivalent to
         # read, and that absence is reported honestly, never stubbed)
         from .macos_sources import (read_contacts, read_reminders,
-                                    list_reminder_lists)
+                                    list_reminder_lists, list_mail_accounts)
         self._contacts_reader = read_contacts
         self._reminders_reader = read_reminders
         self._reminder_lister = list_reminder_lists
+        # the Mail accounts the panel's scope picker offers ([] = all)
+        self._mail_account_lister = list_mail_accounts
         self._sig = None
         self._last_phone_ts = 0.0        # last authed request from off-box (the phone)
         self._started_ts = time.time()
@@ -1513,6 +1515,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         with self._intent_lock:
             self._spoken_intent = None
 
+    def list_mail_accounts(self) -> list:
+        """The Mail accounts available to scope to (for the panel's picker)."""
+        try:
+            return self._mail_account_lister()
+        except Exception:
+            return []
+
     def apply_config(self, updates: dict) -> None:
         # Capture the prior model-endpoint URLs so a patch that points one at
         # link-local / cloud-metadata space is rejected by reverting to the prior
@@ -1522,7 +1531,8 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         for k in ("model", "ollama_url", "ollama_chat_model",
                   "ollama_vision_model", "ollama_embed_model",
                   "exo_url", "exo_model",
-                  "email_enabled", "summarize_emails", "cloud_enabled",
+                  "email_enabled", "mail_accounts", "summarize_emails",
+                  "cloud_enabled",
                   "network_mode", "cloud_provider", "cloud_base_url",
                   "cloud_api_key", "cloud_model", "plan",
                   "api_provider", "api_base_url", "api_key", "api_model",
@@ -4624,6 +4634,12 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                              "selected": brain.config.calendar_names,
                              "last_sync": brain.last_calendar_sync})
 
+        def _get_mail_accounts(self, path, qs):
+            """Available Mail accounts + the current scope (for the picker)."""
+            self._json(200, {"items": brain.list_mail_accounts(),
+                             "enabled": brain.config.email_enabled,
+                             "selected": brain.config.mail_accounts})
+
         def _get_vault_sync(self, path, qs):
             """This device's repertoire as a CRDT snapshot, base64 in JSON.
 
@@ -5328,6 +5344,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
             "/dreamlayer/calendars": _get_calendars,
+            "/dreamlayer/mail/accounts": _get_mail_accounts,
             "/dreamlayer/contacts": _get_contacts,
             "/dreamlayer/social/graph": _get_social_graph,
             "/dreamlayer/dream": _get_dream,

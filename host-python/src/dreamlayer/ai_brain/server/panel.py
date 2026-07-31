@@ -1050,6 +1050,10 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
         <div class="conn-s">Let the Brain read Mail and Messages so a glance can catch a reply you owe.
           Nothing is sent; it stays on this Mac. Saves the moment you flip it.</div></div>
       <label class="sw"><input type="checkbox" id="email" onchange="saveEmail()"><span class="track"></span></label></div>
+    <div id="mailPick" style="display:none;margin:2px 0 10px">
+      <div class="conn-s" style="margin:0 0 6px">Which mail accounts <span id="mailAllHint"></span></div>
+      <div id="mailList" class="row" style="flex-wrap:wrap;gap:10px"></div>
+    </div>
     <div class="conn"><div style="flex:1">
       <div class="conn-t">Dream Mode &middot; the neural painter</div>
       <div class="conn-s">Dream Mode already paints, with a procedural wash that needs nothing installed. Point this at a fast-neural-style <b>.onnx</b> model and a look through the dream lens comes back as a real painting instead &mdash; your street as Starry Night. Nothing is bundled or downloaded; you supply the file, and it runs <b>entirely on this Mac</b> (the frame is painted here and never sent anywhere). Needs the <b>Clear Eyes</b> pack for the ONNX runtime.
@@ -2008,6 +2012,7 @@ async function load(){
   $("msgCard").style.display=c.config.email_enabled?"":"none";
   $("summarize").checked=!!c.config.summarize_emails;
   if(c.config.email_enabled) loadMessages();
+  loadMailAccounts();
   renderPlan(c.plan);
   refreshStatus(); loadHistory(); loadHealth(); loadAgenda(); loadPeople(); loadCalendars();
   loadContactsSync(); loadReminders(); loadCaps(); loadReceipt(); refreshVoice();
@@ -2849,6 +2854,21 @@ async function saveEmail(){   // the email/iMessage switch saves instantly, like
     body:JSON.stringify({email_enabled:$("email").checked})});
   toast($("email").checked?"Reading email & iMessage":"Email & iMessage off"); load();
 }
+// Mail account scope — same shape as the calendar picker: every box ticked
+// means "all", which is stored as the empty list.
+async function loadMailAccounts(){let r;try{r=await api("/dreamlayer/mail/accounts");}catch(e){return;}
+  const accts=r.items||[], sel=r.selected||[];
+  $("mailPick").style.display=(r.enabled && accts.length>1)?"":"none";
+  $("mailAllHint").textContent=sel.length?"":"(all)";
+  $("mailList").innerHTML=accts.map(a=>{const on=sel.length===0||sel.includes(a);
+    return `<label class="tog" style="display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer">`+
+      `<input type="checkbox" ${on?"checked":""} onchange="toggleMailAccount()" style="accent-color:var(--memory)"> ${esc(a)}</label>`;}).join("");}
+async function toggleMailAccount(){const boxes=[...$("mailList").querySelectorAll("input")];
+  const accts=boxes.map(b=>b.parentElement.textContent.trim());
+  let sel=[];boxes.forEach((b,i)=>{if(b.checked)sel.push(accts[i]);});
+  if(sel.length===accts.length)sel=[];            // all ticked = "all" = empty
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({mail_accounts:sel})});
+  toast("Mail accounts updated");loadMailAccounts();}
 async function ask(){const q=$("q").value.trim();if(!q)return;
   $("answer").innerHTML='<div class="ans"><div class="shimmer"></div><div class="shimmer s2"></div></div>';
   const r=await api("/dreamlayer/brain/ask",{method:"POST",body:JSON.stringify({query:q})});
