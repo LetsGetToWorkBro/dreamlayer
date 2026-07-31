@@ -152,10 +152,16 @@ class TestItReadsOnlyWhatItCanActuallyMeasure:
     """The claim the surface makes has to match the evidence behind it."""
 
     def test_the_micro_expression_stages_draw_as_empty(self):
-        """`fusion.AU_CHANNEL_REAL` is False — no action-unit detector backs the
-        AU channel. The face/au rings must therefore read `insufficient`, which
-        the gauge draws as an absent slot. A card claiming a nine-stage read
-        while measuring two channels is the overclaim this whole audit is about.
+        """The face/au rings must read `insufficient`, which the gauge draws as
+        an absent slot. A card claiming a nine-stage read while measuring two
+        channels is the overclaim this whole audit is about.
+
+        The reason here is the simplest one available: nothing feeds a camera
+        frame to a Brain-side `TruthLens`, so `au_frame` is None and the stages
+        have nothing to report. `fusion.AU_CHANNEL_REAL` is a SECOND, independent
+        guard covering the case where a frame does arrive — pinned separately by
+        `test_an_au_frame_cannot_move_the_verdict`, because this assertion holds
+        either way and so proves nothing about that flag.
         """
         b = FakeBrain()
         tr = _read(b)
@@ -180,6 +186,48 @@ class TestItReadsOnlyWhatItCanActuallyMeasure:
         for name in ("voice", "prosody", "linguistic"):
             assert stages[name]["direction"] != "insufficient", (
                 f"{name} measured nothing on a real segment")
+
+    def test_an_au_frame_cannot_move_the_verdict(self):
+        """The guard the empty-slot assertion does NOT cover: if an action-unit
+        frame ever does arrive, it must still contribute nothing while
+        `AU_CHANNEL_REAL` is False.
+
+        `au_detector` produces frame-hash noise rather than measured action
+        units, so a synthetic channel driving a credibility verdict about a
+        person is the specific harm. Fusing with and without a maximal AU frame
+        must give byte-identical answers — on both the stranger and the
+        known-contact path, since they weight the channel separately.
+        """
+        from dreamlayer.truth_lens.fusion import AU_CHANNEL_REAL, FusionEngine
+        assert AU_CHANNEL_REAL is False, (
+            "the AU channel was switched on — it needs a REAL action-unit "
+            "detector first, and this test plus the card's empty slots and the "
+            "panel copy all have to change together")
+        f = FusionEngine()
+        prosody = ProsodyFrame(pitch_mean_hz=180.0, pitch_variance=90.0,
+                               jitter_pct=6.0, shimmer_pct=7.0,
+                               hesitation_rate=2.0, pause_ratio=0.4,
+                               speech_rate_norm=1.4, energy_db=-12.0)
+        ling = LinguisticFrame(hedging_rate=0.3, first_person_rate=0.3,
+                               complexity_score=0.5, negation_rate=0.1,
+                               word_count=20)
+        loud_au = AUFrame(au_values=[1.0] * 17, face_confidence=1.0)
+
+        baseline = ContactBaseline(contact_id="marcus")
+        for _ in range(12):
+            baseline.update(loud_au, prosody, ling)
+
+        for label, bl in (("stranger", None), ("known", baseline)):
+            without = f.fuse(None, prosody, ling, bl)
+            with_au = f.fuse(loud_au, prosody, ling, bl)
+            assert with_au.deception_prob == without.deception_prob, (
+                f"{label}: a synthetic AU frame moved the verdict")
+            assert with_au.confidence == without.confidence, (
+                f"{label}: a synthetic AU frame inflated confidence")
+            assert with_au.micro_expression_z == 0.0, (
+                f"{label}: a synthetic AU z-score reached the card")
+            assert with_au.dominant_channel != "micro_expression", (
+                f"{label}: the card would headline a channel that measured nothing")
 
     def test_the_status_states_its_channels(self):
         from dreamlayer.ai_brain.server.truth_live import TruthRead

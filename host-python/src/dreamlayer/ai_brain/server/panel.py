@@ -1971,8 +1971,12 @@ async function load(){
   }
   if($("truthLens")){
     $("truthLens").checked=!!c.config.truth_lens_enabled;
-    refreshInterpStat();
   }
+  /* One /dreamlayer/ear read feeds BOTH status lines (the interpreter's and the
+     room read's), so it is called once here rather than from inside either
+     switch's block — hanging it off one element would make the other line go
+     stale whenever that element happened to be absent. */
+  refreshInterpStat();
   if($("dreamModel")){
     $("dreamModel").value=c.config.dream_model_path||"";
     refreshDream();
