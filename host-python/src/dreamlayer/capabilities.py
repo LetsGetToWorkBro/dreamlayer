@@ -194,7 +194,7 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("structured_output", "Schema-constrained LLM intent parsing", "structured",
         ("outlines", "instructor"), "structured",
         "reality_compiler/intent_parser_llm.py",
-        gain="a wired local model already restates free-form speech into the closed grammar; these constrain the model AT GENERATION so a malformed suggestion can't be produced in the first place", impact=2, before=4, after=4.5),
+        gain="a wired local model already restates free-form speech into the closed grammar, and the model server already constrains that restatement to the fifteen behaviours at generation (Ollama's own schema field); these two libraries would each need something this path does not have — a sampler in this process, or an OpenAI client object — so installing them adds nothing here", impact=1, before=4.5, after=4.6),
     Cap("typed_models", "Veil-as-type-invariant memory records", "structured",
         ("pydantic",), "structured", "memory/models_pydantic.py",
         gain="baseline guard is a runtime check; this makes a veiled memory impossible to even construct", impact=3, before=3.5, after=5),

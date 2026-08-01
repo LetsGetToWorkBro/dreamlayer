@@ -101,11 +101,16 @@ class TestTheGainMatchesTheBaseline:
             f"{key} scores its working baseline at {c.before}, as if absent")
         assert c.before < c.after <= 5
 
-    def test_structured_output_stayed_the_model_for_the_others(self):
+    def test_structured_output_no_longer_sells_what_it_cannot_deliver(self):
+        """It used to promise these libraries "constrain the model AT
+        GENERATION so a malformed suggestion can't be produced in the first
+        place". That is now true and delivered by the MODEL SERVER's own schema
+        field, with no dependency — so the sentence described a benefit the
+        install cannot add. See decisions/0007."""
         gain = _cap("structured_output").gain.lower()
-        assert "already" in gain
-        assert "at generation" in gain, (
-            "the one honest gain of the three lost the specific delta it names")
+        assert "already" in gain, "it must name what the baseline already does"
+        assert "adds nothing here" in gain, (
+            "the gain still reads as a benefit installing the extras provides")
 
     def test_the_deleted_one_is_not_back(self):
         assert "causal_fusion" not in _BY_KEY, (

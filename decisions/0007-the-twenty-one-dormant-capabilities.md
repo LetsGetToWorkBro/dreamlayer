@@ -79,16 +79,8 @@ not on preference.
   working card with a black square, under the floor an optional dependency owes.
   Corrected in place; see `tests/test_skia_seam_claims.py`.
 
-* **`structured_output`** — the seam is LIVE (`brain_rc.py` builds
-  `LLMIntentParser` on the compose path) and `outlines`/`instructor` are both
-  installed; they are simply never called. Wiring them is not a line change:
-  `outlines` constrains a local sampler and needs direct model access, while the
-  suggester here is `backend.chat(prompt) -> str`, an Ollama HTTP call;
-  `instructor` patches an OpenAI-compatible *client*, and there is no client
-  object to patch. Either path restructures how the Brain talks to its local
-  model — on a path that already works, whose current design already guarantees
-  schema-legality by parsing the model's restatement with the deterministic
-  matchers. The gain would be fewer fallbacks, not correctness.
+* **`structured_output`** — see the 2026-08-01 update below: settled, and the
+  thing it was for is built without either library.
 
 * **`plugin_entrypoints`** — the safe API now exists (discovery no longer
   imports; loading takes an explicit policy). What it lacks is a policy worth
@@ -226,6 +218,52 @@ the guard now lives in `MeshEventBus`, where it covers both paths.
 Both are promoted from proof, never from a wheel being importable: a real
 ByteTrack that has actually been handed a centroid, and a circle live on this
 Brain right now.
+
+## Update — 2026-08-01, `structured_output` (group D): settled, still dormant
+
+Judgement asked for and given. **Neither library gets wired, and the thing they
+were wanted for is now built without them.**
+
+Why not, concretely:
+
+* `outlines` constrains a sampler **in this process**. The model on this path is
+  `backend.chat(prompt) -> str`, an HTTP POST to Ollama. There is no sampler
+  here to constrain.
+* `instructor` patches an OpenAI-compatible **client object**. There is none;
+  creating one means adding an HTTP client dependency to reach a server the
+  Brain already talks to directly.
+* Worse than either: both return a *validated structured object*, which on this
+  path means the model CHOOSING the behaviour. `intent_parser_llm`'s whole
+  design principle is that "the model only suggests; the deterministic matcher
+  decides". Handing it a typed `BehaviorIntent` inverts that, on the one path
+  the reality compiler's safety story rests on.
+
+What the capability was actually for — a restatement that cannot land outside
+the closed grammar — is now delivered by the **model server's own** schema
+field: `_gen` passes a JSON Schema whose `behaviour` is an enum of the fifteen
+phrasings `IntentParser` reads, so the sampler cannot emit a sixteenth. The
+deterministic matcher still decides, no dependency was added, and a server that
+ignores `format` is simply asked again unconstrained — the floor an optional
+path owes.
+
+Two consequences recorded in code, not only here:
+
+* The seam no longer *imports* `instructor`/`outlines`. Both were probes behind
+  a gate that had already been removed as wrong (they gated a path neither
+  library takes part in), and a module holding a second copy of the capability
+  catalogue's dependency claim is a second thing that can be wrong — it already
+  was.
+* The catalogue's `gain` string used to promise these libraries "constrain the
+  model AT GENERATION so a malformed suggestion can't be produced in the first
+  place". That is now true and free, so the sentence described a benefit the
+  install cannot add. Rewritten to say so, ending "installing them adds nothing
+  here", with `tests/test_capability_gain_honesty.py` pinning it.
+
+The capability stays in `_NOT_WIRED` — not moved to `_BY_DESIGN`, because the
+rule that bucket encodes is about the Brain/Orchestrator split and does not
+apply. It reports `dormant`, `wires_on_install` is False, and the wearer's
+install hint reads "installs the library; nothing calls it yet", which is
+exactly the truth.
 
 ## Consequences
 

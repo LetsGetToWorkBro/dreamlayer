@@ -114,24 +114,27 @@ class TestTheModelActuallyHelps:
 
 
 class TestItDoesNotNeedLibrariesItNeverCalls:
-    def test_the_model_path_runs_without_instructor_or_outlines(self, monkeypatch):
-        """`available` reports the structured extras for the capability meter;
-        it is not a precondition for using a model the wearer already wired."""
-        monkeypatch.setattr(LLMIntentParser, "available", False)
+    def test_the_model_path_runs_with_nothing_else_installed(self):
         got = _kind(LLMIntentParser(llm=lambda _t: "stopwatch"),
                     "track how long I've been running")
-        assert got == "StopwatchIntent", (
-            "the model path is gated on libraries it does not call")
+        assert got == "StopwatchIntent"
 
-    def test_neither_library_is_actually_invoked(self):
-        """If this ever starts failing, the seam has grown a real dependency and
-        the `noqa: F401` on both imports (and this test) should go."""
+    def test_the_seam_does_not_even_import_them(self):
+        """It used to import both to decide whether the model path could run,
+        and called neither. A module holding a second copy of the capability
+        catalogue's dependency claim is a second thing that can be wrong — and
+        it WAS wrong, gating a working path on libraries with no part in it.
+
+        If this starts failing, the seam has grown a real dependency and the
+        judgement recorded in decisions/0007 needs revisiting, not deleting."""
         import pathlib
         from dreamlayer.reality_compiler import intent_parser_llm as m
         src = pathlib.Path(m.__file__).read_text(encoding="utf-8")
-        body = src.split("def _llm_parse", 1)[1]
+        code = "\n".join(ln for ln in src.splitlines()
+                         if not ln.lstrip().startswith("#"))
+        code = code.split('"""', 2)[-1]         # past the module docstring
         for lib in ("instructor", "outlines"):
-            assert lib not in body, f"_llm_parse now uses {lib}; update the gate"
+            assert f"import {lib}" not in code
 
 
 class TestNothingTheWearerSaidIsLogged:
@@ -264,3 +267,146 @@ class TestTheSuggesterIsGated:
         out = _brain(tmp_path, _Backend(explode=True)).rc_compose(
             "a 5 minute countdown that pulses at the end")
         assert out["ok"] is True, "a dead model took Ask Juno down with it"
+
+
+# --------------------------------------------------------------------------
+# constrained restatement — what `structured_output` was for
+# --------------------------------------------------------------------------
+
+class _SchemaBackend:
+    """A model server that honours `format`: it answers JSON when constrained
+    and prose when not, and records which it was asked for."""
+
+    def __init__(self, constrained=None, loose="", schema_ok=True):
+        self.constrained, self.loose = constrained, loose
+        self.schema_ok, self.calls = schema_ok, []
+
+    def chat(self, prompt, schema=None):
+        self.calls.append(schema)
+        if schema is not None:
+            return self.constrained if self.schema_ok else ""
+        return self.loose
+
+
+class TestTheRestatementIsConstrained:
+    """`outlines` needs the sampler in THIS process and the model here is an
+    HTTP call; `instructor` patches an OpenAI client object that does not exist
+    on this path; and either would have had the model CHOOSE the behaviour,
+    which `intent_parser_llm`'s design explicitly forbids. Constraining the
+    server's own sampler leaves the deterministic matcher deciding — the whole
+    safety story — and needs no dependency at all."""
+
+    def test_a_constrained_answer_becomes_a_command(self, tmp_path):
+        be = _SchemaBackend(constrained='{"behaviour":"round timer",'
+                                        '"amount":5,"unit":"minutes"}')
+        out = _brain(tmp_path, be).rc_compose("count me down for a five minute round")
+        assert out["ok"] is True
+        assert be.calls[0] is not None            # constrained on the first ask
+        assert len(be.calls) == 1                 # …and never asked twice
+
+    def test_the_schema_names_every_phrasing_the_matcher_reads(self, tmp_path):
+        from dreamlayer.ai_brain.server.server import Brain
+        parser = IntentParser()
+        for phrase in Brain._RESTATE_SCHEMA["properties"]["behaviour"]["enum"]:
+            # Every enum member must be a phrasing the deterministic matcher
+            # actually accepts, or the constraint guarantees an answer the
+            # regex then rejects — worse than not constraining at all.
+            assert _kind(parser, phrase) != "miss", phrase
+
+    def test_a_server_that_ignores_format_is_asked_again_plainly(self, tmp_path):
+        be = _SchemaBackend(schema_ok=False, loose="stopwatch")
+        out = _brain(tmp_path, be).rc_compose("track how long I've been running")
+        assert out["ok"] is True
+        assert [c is not None for c in be.calls] == [True, False]
+
+    def test_prose_from_a_server_that_ignored_format_is_not_trusted(self, tmp_path):
+        # A server without `format` answers prose to the constrained ask too.
+        # Treating that as the structured answer would skip the retry AND feed
+        # the matcher something the enum never vetted.
+        be = _SchemaBackend(constrained="Sure! Here's a stopwatch for you.",
+                            loose="stopwatch")
+        out = _brain(tmp_path, be).rc_compose("track how long I've been running")
+        assert out["ok"] is True and len(be.calls) == 2
+
+    def test_a_behaviour_outside_the_enum_is_refused(self, tmp_path):
+        from dreamlayer.ai_brain.server.server import Brain
+        assert Brain._restatement_of('{"behaviour":"launch the missiles"}') == ""
+
+    def test_a_backend_with_the_old_signature_still_works(self, tmp_path):
+        # `chat(prompt)` — every backend written before the schema existed.
+        be = _Backend("stopwatch")
+        assert _brain(tmp_path, be).rc_compose(
+            "track how long I've been running")["ok"] is True
+
+    def test_the_floor_holds_when_both_asks_are_useless(self, tmp_path):
+        be = _SchemaBackend(constrained="{}", loose="")
+        raw = "3 minute round timer"                    # the regex can read it
+        assert _brain(tmp_path, be).rc_compose(raw)["ok"] is True
+
+
+class TestRestatementComposition:
+    def _of(self, reply):
+        from dreamlayer.ai_brain.server.server import Brain
+        return Brain._restatement_of(reply)
+
+    def test_a_bare_behaviour_needs_no_number(self):
+        assert self._of('{"behaviour":"stopwatch"}') == "stopwatch"
+
+    def test_a_duration_is_kept(self):
+        assert self._of('{"behaviour":"round timer","amount":3,'
+                        '"unit":"minutes"}') == "round timer 3 minutes"
+
+    def test_a_null_amount_is_dropped(self):
+        assert self._of('{"behaviour":"counter","amount":null,'
+                        '"unit":null}') == "counter"
+
+    def test_a_nonsense_amount_is_dropped_not_raised(self):
+        assert self._of('{"behaviour":"counter","amount":"lots"}') == "counter"
+
+    def test_a_zero_or_negative_amount_is_dropped(self):
+        assert self._of('{"behaviour":"counter","amount":0}') == "counter"
+        assert self._of('{"behaviour":"counter","amount":-4}') == "counter"
+
+    def test_a_unit_outside_the_two_is_dropped(self):
+        assert self._of('{"behaviour":"counter","amount":7,'
+                        '"unit":"parsecs"}') == "counter 7"
+
+    def test_anything_that_is_not_an_object_is_refused(self):
+        for reply in ("", "not json", "[1,2,3]", '"stopwatch"', "null"):
+            assert self._of(reply) == ""
+
+
+class TestTheSchemaReachesTheWire:
+    def test_the_backend_puts_format_on_the_request(self):
+        from dreamlayer.ai_brain.server.backends import OllamaBackend
+
+        class Cfg:
+            ollama_url = "http://127.0.0.1:11434"
+            ollama_chat_model = "llama3"
+            network_mode = "auto"
+            cloud_enabled = True
+        sent = {}
+
+        def post(url, payload):
+            sent.update(payload)
+            return {"response": '{"behaviour":"stopwatch"}'}
+        be = OllamaBackend(Cfg(), http_post=post)
+        assert be.chat("hi", schema={"type": "object"}) == \
+            '{"behaviour":"stopwatch"}'
+        assert sent["format"] == {"type": "object"}
+
+    def test_no_schema_means_no_format_field(self):
+        from dreamlayer.ai_brain.server.backends import OllamaBackend
+
+        class Cfg:
+            ollama_url = "http://127.0.0.1:11434"
+            ollama_chat_model = "llama3"
+            network_mode = "auto"
+            cloud_enabled = True
+        sent = {}
+
+        def post(url, payload):
+            sent.update(payload)
+            return {"response": "stopwatch"}
+        OllamaBackend(Cfg(), http_post=post).chat("hi")
+        assert "format" not in sent
