@@ -126,6 +126,31 @@ def test_nightly_mlx_noop_and_veil():
     assert t._collect(_Ring(), privacy=_Veil(False)) == []
 
 
+def test_nightly_mlx_present_reports_not_implemented(monkeypatch):
+    """With mlx present and examples collected, train_nightly must not claim a
+    success for training that never ran (#582)."""
+    import sys
+    import types
+
+    import dreamlayer.rem.nightly_mlx as nightly_mlx
+    from dreamlayer.rem.nightly_mlx import MlxNightlyTrainer
+
+    class _Ring:
+        def memories(self):
+            return [{"summary": "lease due friday"}, {"summary": "call maya"}]
+
+    fake_mlx_lm = types.ModuleType("mlx_lm")
+    fake_mlx_lm.lora = types.ModuleType("mlx_lm.lora")
+    monkeypatch.setattr(nightly_mlx, "_HAS_MLX", True)
+    monkeypatch.setitem(sys.modules, "mlx_lm", fake_mlx_lm)
+
+    s = MlxNightlyTrainer().train_nightly(_Ring(), privacy=_Veil(True))
+    assert s.trained is False
+    assert s.adapter_path is None
+    assert s.examples == 2
+    assert "not implemented" in s.reason
+
+
 # --- bridge/frame_sdk + noa_patterns: records payloads without the SDK --------
 def test_frame_display_and_noa_patterns():
     from dreamlayer.bridge.frame_sdk import FrameDisplay
