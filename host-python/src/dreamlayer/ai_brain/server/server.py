@@ -439,6 +439,20 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         from ...orchestrator.waypath import WaypathLens
         self.waypath = WaypathLens()
         self._load_waypath()
+        # …and the half that never existed: an anchor dropped because the
+        # glasses SAW you walk away from something, not because you narrated
+        # it. The ambient look loop feeds this (live._trail_frame); the tracker
+        # is optional and gives it stable identity when supervision is
+        # installed — `SupervisionTracker` has taken a centroid list since it
+        # was written and nothing in the tree ever produced one.
+        from ...orchestrator.object_trail import ObjectTrail
+        tracker = None
+        try:
+            from ...dream_mode.track_supervision import SupervisionTracker
+            tracker = SupervisionTracker()
+        except Exception:                              # noqa: BLE001
+            pass
+        self.object_trail = ObjectTrail(tracker=tracker)
         # Reality Compiler v2 (the Rehearsal paradigm, docs/RC_V2_*.md): the
         # phone performs a behavior as beats; the Brain infers → verifies →
         # signs → hot-swaps a Figment. The vault (signed, on-device storage)
@@ -2324,6 +2338,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
         import os as _os
         n = self.waypath.forget_all()
         self._save_waypath()
+        # The trail is held only in memory, but it is a list of the wearer's
+        # things and where they were — erase-everything has to reach it too, or
+        # the next departure re-anchors what was just wiped.
+        try:
+            self.object_trail.forget_all()
+        except Exception:                            # noqa: BLE001
+            pass
         # The memory DB, through the real cascade. Wired exactly the way
         # `_ember_burn` wires it, so vectors and the ANN index go too — a row
         # deleted while its embedding survives is a memory you can still find.
@@ -3246,6 +3267,16 @@ def _capability_payload(brain: Brain) -> dict:
         from ...plugins.extism_plugin_host import live_guests as _extism_live
         if _extism_live() > 0:
             env["DL_WIRED_EXTISM_PLUGINS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `object_tracking` — supervision importing is not a tracked object, and
+    # neither is a ByteTrack that was constructed and never handed a centroid
+    # (which is what it was for as long as nothing produced any). The flag
+    # follows the ambient trail having actually keyed a sighting by track id,
+    # through the real library rather than its centroid fallback.
+    try:
+        if brain.object_trail.tracking_live():
+            env["DL_WIRED_OBJECT_TRACKING"] = "1"
     except Exception:                           # noqa: BLE001
         pass
     packs = packs_report(env=env)

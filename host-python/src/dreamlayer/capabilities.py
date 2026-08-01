@@ -631,6 +631,9 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # format existed for the store to route: each flag follows a guest loaded in
     # THAT runtime right now, not the wheel being importable.
     "wasm_plugins", "extism_plugins",
+    # …and `object_tracking` once the ambient look loop produced the centroids
+    # `SupervisionTracker` had always taken and never been given.
+    "object_tracking",
 })
 
 
