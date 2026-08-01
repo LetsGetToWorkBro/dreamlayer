@@ -142,6 +142,18 @@ class TestTheVeil:
         _ambient(brain, 3)
         assert brain.waypath.locate("keys").found is False
 
+    def test_a_departure_during_the_veil_is_not_anchored(self, brain, ladder):
+        # The leak this closes: a trail built BEFORE the veil, with the scene
+        # changing while it is up. If the trail ran at all under the shield,
+        # that thing would depart and land an anchor for a moment the wearer
+        # was promised left no record.
+        ladder.rows = [("keys", 0.9, None), ("notebook", 0.8, None)]
+        _ambient(brain, 3)
+        brain.config.network_mode = "lan_only"       # the shield goes up
+        ladder.rows = [("notebook", 0.8, None)]      # …and the keys go away
+        _ambient(brain, 4)
+        assert brain.waypath.locate("keys").found is False
+
     def test_an_unreadable_posture_anchors_nothing(self, brain, ladder,
                                                    monkeypatch):
         monkeypatch.setattr(type(brain), "incognito_now",

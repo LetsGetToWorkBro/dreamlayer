@@ -266,6 +266,31 @@ class TestTheTrail:
         d, = out[-1]
         assert d.neighbours == ()
 
+    def test_one_of_two_identical_things_is_not_beside_itself(self):
+        # The case the label filter exists for: two mugs are two trails but ONE
+        # label, so the one that leaves would be told it was "beside the mug" —
+        # itself.
+        t = ObjectTrail(tracker=FakeTracker(), now_fn=Clock())
+        two = [("mug", 0.9, (0.2, 0.2)), ("mug", 0.9, (0.8, 0.8))]
+        t.observe(two)
+        t.observe(two)
+        one = [("mug", 0.9, (0.2, 0.2))]
+        t.observe(one)
+        out = t.observe(one)
+        assert [d.neighbours for d in out] == [()]
+
+    def test_a_frame_with_no_place_does_not_wipe_the_one_it_had(self):
+        # The ambient loop supplies a place only when the Brain knows one, so
+        # most frames carry none. Overwriting unconditionally would erase the
+        # spot on the very next frame and leave the anchor placeless.
+        t = ObjectTrail(now_fn=Clock())
+        mug = [("mug", 0.9, None)]
+        t.observe(mug, place="the kitchen")
+        t.observe(mug)                        # no place this frame
+        t.observe(mug)
+        out = _feed(t, [[], []])[-1]
+        assert [(d.label, d.place) for d in out] == [("mug", "the kitchen")]
+
     def test_the_place_follows_the_thing_not_the_wearer(self):
         # Once it is gone, the place it was left in must not follow the wearer
         # down the hall.

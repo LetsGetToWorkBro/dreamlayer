@@ -133,6 +133,15 @@ class TestTheTraffic:
         circle.pulse("a", "weather", {"state": 0.8})
         assert circle.pulse("a")["members"] == []
 
+    def test_your_own_packet_never_reaches_your_inbox(self, circle):
+        # Belt and braces over the mesh's own self-drop: an inbox is bounded,
+        # and a member filling their own with echoes would evict the circle's
+        # real packets to make room for nothing.
+        _formed(circle)
+        circle.pulse("a", "weather", {"state": 0.8})
+        assert circle._sessions["a"]["inbox"] == []
+        assert circle.pulse("a")["heard"] == 0
+
     def test_everyone_in_the_circle_hears_it(self, circle):
         out = circle.form("a")
         circle.join("b", "", out["code"])

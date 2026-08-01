@@ -435,13 +435,13 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
         # spam "saw X" or auto-egress a frame to a configured remote VLM. A
         # deliberate tap (not ambient, shield down) escalates to the full lens.
         out = _local_look(brain, arr, ledger=not ambient)
-        if ambient and not incognito:
-            # The passive loop is the only surface that sees the same scene
-            # more than once, so it is the only one that can notice a thing
-            # LEAVING — which is what turns "where are my keys" from a question
-            # only the wearer's own narration could answer into one the glasses
-            # can. Never under the shield: an anchor is a record.
-            _trail_frame(brain, arr)
+        # The veil first, and as the OTHER BRANCH rather than a second `if`.
+        # Written as two independent conditions, "clear the trail" and "run the
+        # trail" were one edit away from both being true on a veiled frame, and
+        # a departure computed then would anchor a thing to a moment the shield
+        # promised would leave no record. Mutually exclusive by structure is
+        # the only version of that guarantee that does not depend on reading
+        # two conditions together.
         if incognito:
             out["local_only"] = True            # the shield is up — say so
             # And the shield DROPS any speech still waiting to steer a look.
@@ -461,6 +461,13 @@ def world_look(brain, arr, ambient: bool = False, cues: "dict | None" = None,
                 brain.object_trail.forget_all()
             except Exception:                   # noqa: BLE001
                 pass
+        elif ambient:
+            # The passive loop is the only surface that sees the same scene
+            # more than once, so it is the only one that can notice a thing
+            # LEAVING — which is what turns "where are my keys" from a question
+            # only the wearer's own narration could answer into one the glasses
+            # can answer for them.
+            _trail_frame(brain, arr)
         return _with_min_panel(out)
     wl = None
     degraded = False        # the smart path ERRORED (vs. legitimately found nothing)
