@@ -228,6 +228,19 @@ class Orchestrator(
         self.retriever = Retriever(self.db, self.embedder,
                                    ann=self._build_ann(db_path))
         self.privacy   = PrivacyGate()
+        # Make the Veil a TYPE INVARIANT on the memory store, not a convention
+        # (`typed_models`). Every capture write in `ops_ingest`/`ops_stasis`
+        # already checks `allow_capture()` first, so this fires on nothing that
+        # exists — it is a tripwire for the write site that forgets, and the
+        # refusal comes from `models_pydantic.MemoryEvent` being unconstructible
+        # rather than from another `if`. Attached here rather than at the
+        # `MemoryDB(db_path)` above because the gate does not exist yet there.
+        #
+        # Deliberately the ORCHESTRATOR only: the Brain's captures go to the hot
+        # ring and the index, and its single `add_memory` caller is the ember
+        # TOMBSTONE — a record that something was burned, which must be written
+        # while veiled precisely because it is not captured content.
+        self.db.set_privacy(self.privacy)
         self.proactive = ProactiveEngine(self.db, privacy=self.privacy)
 
         # Cold-start arc: a real install (persistent DB) earns proactive

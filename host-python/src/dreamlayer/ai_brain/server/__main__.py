@@ -62,6 +62,14 @@ def main(argv=None) -> int:
                     help="never start the https Live Lens listener")
     ap.add_argument("--tls-port", type=int, default=0,
                     help="https port (default: --port + 1)")
+    # A live status panel in the terminal instead of one static block at
+    # startup. OFF by default and deliberately so: a bare launch must print
+    # exactly what it always has (the address, the folder count, the token
+    # line), which is what the installer, the docs and the launch tests all
+    # read. Needs `rich` (extras group `infra`); without it the panel degrades
+    # to a plain status line on the same interval rather than failing.
+    ap.add_argument("--dashboard", action="store_true",
+                    help="live status panel in the terminal (needs the `infra` pack)")
     args = ap.parse_args(argv)
 
     # opt-in structured logging (DL_LOG_JSON=1 → one JSON line per record);
@@ -144,6 +152,26 @@ def main(argv=None) -> int:
         print(f"  token: {'set' if brain.config.token else '(none — loopback only)'}   "
               f"model: {brain.config.model}")
     print("  Ctrl-C to stop.")
+    if args.dashboard:
+        from ..dashboard_rich import Dashboard, start_dashboard
+        if not Dashboard.available:
+            print("  ⚠ --dashboard wants the `rich` package "
+                  "(pip install 'dreamlayer[infra]') — plain status lines instead.")
+        dash = start_dashboard(brain, port=args.port,
+                               **({"https": tls_port} if tls_port else {}))
+        # Proof, not configuration. `rich` being importable is not evidence the
+        # panel draws — a console with no terminal to write to falls through to
+        # the plain line with `available` still True. So the capability is
+        # promoted only once a table has genuinely been drawn, and the check
+        # runs after the first tick rather than at start-up.
+        if dash is not None:
+            import threading as _th
+
+            def _promote():
+                import os as _os
+                if dash.rich_renders > 0:
+                    _os.environ["DL_WIRED_DASHBOARD"] = "1"
+            _th.Timer(2.0, _promote).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
