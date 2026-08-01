@@ -13,7 +13,25 @@ class MemoryDB:
     serialized behind one reentrant lock. Without this a spoken commitment
     captured off-thread raised deep in add_commitment and was silently lost.
     """
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", privacy=None):
+        # `privacy` makes the Veil a TYPE INVARIANT on the write path rather
+        # than a convention every caller has to remember (`typed_models`).
+        #
+        # Today every site that writes a memory checks `allow_capture()` first,
+        # and this store checks nothing — the guarantee rests entirely on nobody
+        # ever forgetting. That is the same shape as `person_guard`/`voice_guard`
+        # before they were centralised: a rule enforced at N call sites is a rule
+        # that holds until the N+1th.
+        #
+        # With a gate supplied, `add_memory` builds a
+        # `models_pydantic.MemoryEvent(allowed=gate.allow_capture())` before it
+        # writes, and that type refuses to exist when capture is disallowed. The
+        # write then cannot happen — not because the caller checked, but because
+        # the record cannot be constructed.
+        #
+        # Default None keeps today's behaviour byte-for-byte, so no existing
+        # caller or test changes; it is a tripwire the Brain opts into.
+        self._privacy = privacy
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         # Whether a DELETE scrubs the freed page or leaves the plaintext in the
@@ -74,7 +92,52 @@ class MemoryDB:
             return [self._scrub_tree(v, _depth + 1) for v in obj]
         return obj
 
+    def set_privacy(self, gate) -> None:
+        """Attach the Veil gate after construction.
+
+        The Orchestrator builds its `MemoryDB` before its `PrivacyGate` exists
+        (`_init_core` vs the gate a few lines later), and reordering that spine
+        for this would be a bigger change than the guarantee is worth. An
+        explicit setter beats reaching into `_privacy` from outside.
+        """
+        self._privacy = gate
+
+    def _veil_check(self, kind, summary, confidence) -> None:
+        """Refuse a write the Veil forbids, by CONSTRUCTING the record type.
+
+        The check is `MemoryEvent(...)` raising, not an `if` — that is the whole
+        point of `memory/models_pydantic.py`, whose first line is "a MemoryEvent
+        literally cannot be constructed with allowed=False". Routing the write
+        through it means the invariant lives in one type instead of in every
+        caller's memory.
+
+        No-op without a gate, so nothing that exists today changes.
+
+        Fails CLOSED on an unreadable posture, like every other gate in this
+        product: a trust signal that cannot be read is a veiled one, and the
+        write is refused rather than allowed on the benefit of the doubt.
+
+        Raises rather than dropping quietly, deliberately. A silent refusal here
+        would be a memory the wearer believes was kept and was not — worse than
+        the exception, which reaches whatever already wraps the caller. Every
+        production write site is veil-checked already, so this is a tripwire for
+        a NEW site that forgot, not a path expected to fire.
+        """
+        if self._privacy is None:
+            return
+        from .models_pydantic import MemoryEvent
+        try:
+            allowed = bool(self._privacy.allow_capture())
+        except Exception:                          # noqa: BLE001 — unreadable → veiled
+            allowed = False
+        # Deliberately NOT passing `summary`: the summary is captured content and
+        # this object exists only to be refused or discarded. Nothing is gained
+        # by copying the wearer's words into a validation record.
+        MemoryEvent(kind=str(kind or "Note"), confidence=float(confidence or 0.0),
+                    allowed=allowed)
+
     def add_memory(self, kind, summary, embedding=None, confidence=0.5, place_id=None, meta=None) -> int:
+        self._veil_check(kind, summary, confidence)
         summary = self._scrub(summary)
         # `meta` is caller text too, and `IngestPipeline.ingest` puts the whole
         # utterance in it (`meta["task"]`), so a card number scrubbed out of
