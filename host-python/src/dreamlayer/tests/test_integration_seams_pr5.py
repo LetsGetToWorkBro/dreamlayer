@@ -21,7 +21,7 @@ class _Clock:
 def test_hookspecs_load_into():
     from dreamlayer.plugins import hookspecs
 
-    assert isinstance(hookspecs.discover_entrypoint_plugins(), list)
+    assert isinstance(hookspecs.discover_entrypoints(), list)
 
     class _Reg:
         def __init__(self): self.loaded = []

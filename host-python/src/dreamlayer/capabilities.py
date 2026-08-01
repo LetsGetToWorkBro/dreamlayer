@@ -44,9 +44,9 @@ PROFILES: dict[str, Tuple[str, ...]] = {
     "profile-halo":  ("hardware",),
     "profile-phone": ("memory", "voice", "structured", "llm"),
     "profile-mac":   ("memory", "voice", "asr-extra", "structured", "llm",
-                      "intelligence", "vision", "causal", "infra", "privacy",
+                      "intelligence", "vision", "infra", "privacy",
                       "platform"),
-    "profile-cloud": ("structured", "llm", "intelligence", "causal", "privacy"),
+    "profile-cloud": ("structured", "llm", "intelligence", "privacy"),
 }
 
 # kinds: "python"  = a pip library, probed by import name
@@ -276,11 +276,6 @@ CAPABILITIES: Tuple[Cap, ...] = (
         ("ultralytics",), "vision", "object_lens/vision_extras.py",
         gain="baseline has boxes only; this gives pixel-accurate masks for the glance target and scene density", impact=1, before=0, after=3.5),
 
-    # --- causal ---------------------------------------------------------------------
-    Cap("causal_fusion", "Causal inference over credibility channels", "intelligence",
-        ("dowhy",), "causal", "truth_lens/causal_fusion.py",
-        gain="baseline fuses credibility channels with fixed weights; this infers causally", impact=2, before=3, after=4),
-
     # --- infra ------------------------------------------------------------------------
     Cap("dashboard", "Live TUI status dashboard", "infra",
         ("rich",), "infra", "ai_brain/dashboard_rich.py",
@@ -336,9 +331,9 @@ CAPABILITIES: Tuple[Cap, ...] = (
     Cap("skia_render", "GPU-crisp HUD rasterizing", "platform",
         ("skia",), "platform", "hud/render_skia.py",
         gain="baseline PIL rendering is solid; this adds GPU-crisp strokes if you want them", impact=1, before=3.5, after=4),
-    Cap("asgi_server", "Async FastAPI mirror of the Brain", "platform",
+    Cap("asgi_server", "ASGI adapter for your own dispatch", "platform",
         ("fastapi",), "platform", "ai_brain/server_fastapi.py",
-        gain="baseline stdlib server works; this adds async handlers + websockets alongside it", impact=2, before=3.5, after=4),
+        gain="the Brain's own server is the stdlib one and stays that way; this wires a dispatch function YOU write to FastAPI, with the auth and error envelope handled", impact=1, before=3.5, after=3.5),
     Cap("frame_glasses", "Brilliant Frame as a second display", "platform",
         ("frame_sdk",), "platform", "bridge/frame_sdk.py",
         gain="baseline targets Halo only; this lights up a Brilliant Frame too", impact=2, before=0, after=3.5,
@@ -521,7 +516,7 @@ _NOT_WIRED = frozenset({
     "coreml_ondevice", "dream_style",
     # intelligence / structured: adapters wired only in tests
     "speaker_id", "persona_tuning", "object_tracking", "facial_aus",
-    "causal_fusion", "structured_output", "typed_models", "typed_pipeline",
+    "structured_output", "typed_models", "typed_pipeline",
     # platform / infra: no live loader / surface reaches these
     "plugin_entrypoints", "event_bus", "skia_render", "asgi_server",
     # crdt_sync stays listed as the honest DEFAULT and is promoted on a real
@@ -749,7 +744,7 @@ PACKS: Tuple[Pack, ...] = (
          ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
          "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing, and a painterly dream-mode lens.",
-         ("vision", "intelligence", "causal", "dream-style"), "~3–5 GB", 4),
+         ("vision", "intelligence", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
          "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
          ("privacy", "structured"), "~300 MB", 3),

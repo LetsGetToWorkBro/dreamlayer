@@ -362,12 +362,16 @@ split was measured and it is 1/18, not a genuine fork:
   capability that is *not* declared dormant — is **empty**, with a test that
   keeps it so.
 
-The 18 are still real work: `social_graph`, `memory_dedup`, `typed_docs`,
-`typed_models`, `facial_aus`, `causal_fusion`, `diarization`, `asr_alignment`,
+The list is still real work: `social_graph`, `memory_dedup`, `typed_docs`,
+`typed_models`, `facial_aus`, `diarization`, `asr_alignment`,
 `object_tracking`, `live_interpret`, `event_bus`, `skia_render`, `lsl_streams`,
 `extism_plugins`, `wasm_plugins`, `plugin_entrypoints`, `structured_output`,
-`typed_pipeline`. Each is a decision — wire it Brain-side, or move it to
-`_BY_DESIGN` with a reason. **Do not silently move one to `_BY_DESIGN` to shrink
+`typed_pipeline`. (`causal_fusion` was the nineteenth and is gone —
+decisions/0006: it imported dowhy purely as a flag, never called it, and read
+three attributes the credibility channels do not have. Dropping a seam is a
+third valid answer, and the one to reach for when the adapter would be worse
+than the fallback it shadows.) Each is a decision — wire it Brain-side, or move
+it to `_BY_DESIGN` with a reason. **Do not silently move one to `_BY_DESIGN` to shrink
 the list**; that bucket is a claim, and it is the claim the next audit checks.
 
 Note two that are their own conversation: `diarization` and `asr_alignment` are
