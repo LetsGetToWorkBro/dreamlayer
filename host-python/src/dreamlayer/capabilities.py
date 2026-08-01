@@ -646,6 +646,15 @@ _RUNS_ON_HUB = {
                                                       # on mem0 truly loading
     "mesh_range": "orchestrator/ops_confluence.py",   # the LoRa mesh, which is
                                                       # a glasses radio
+    # The odd one out, and worth the extra sentence. `MemoryEvent` is
+    # constructed in SHARED code — `MemoryDB._veil_check`, named below — but
+    # only once a gate is attached, and the Orchestrator is the only thing that
+    # attaches one (`self.db.set_privacy(self.privacy)`). The Brain builds
+    # `MemoryDB` in four places and all four are READ or PURGE paths; its single
+    # write site is the ember burn's tombstone, which must not be veil-refused
+    # or the burn would be left half-done. So the invariant is live on the hub
+    # and inert here — "nothing calls it" was the wrong answer for this one too.
+    "typed_models": "memory/db.py",
 }
 
 

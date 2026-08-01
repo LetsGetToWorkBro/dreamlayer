@@ -148,9 +148,24 @@ class TestSomeOfThemDoRunJustNotHere:
         src = (pathlib.Path(cap.__file__).parent / site).read_text(encoding="utf-8")
         seam = pathlib.Path(cap.__file__).parent / c.seam
         import ast as _ast
-        names = {n.name for n in _ast.parse(seam.read_text(encoding="utf-8")).body
-                 if isinstance(n, (_ast.ClassDef, _ast.FunctionDef))
-                 and not n.name.startswith("_")}
+        # Walk into top-level `if` blocks, not just `tree.body`. Every optional
+        # seam in this tree defines its type under `if _HAS_X:` with an
+        # equivalent dataclass in the `else` — so a body-only scan finds nothing
+        # in exactly the modules this set is about (`models_pydantic` was the
+        # one that caught it).
+        def _public(node, out):
+            for n in getattr(node, "body", []):
+                if isinstance(n, (_ast.ClassDef, _ast.FunctionDef)):
+                    if not n.name.startswith("_"):
+                        out.add(n.name)
+                elif isinstance(n, _ast.If):
+                    _public(n, out)
+                    for sub in n.orelse:
+                        _public(_ast.Module(body=[sub], type_ignores=[]), out)
+            return out
+
+        names = _public(_ast.parse(seam.read_text(encoding="utf-8")), set())
+        assert names, f"no public names parsed out of {c.seam}"
         assert any(f"{n}(" in src for n in names), (
             f"{site} no longer constructs anything from {c.seam}")
 
@@ -377,3 +392,51 @@ class TestTheCLISaysItToo:
         assert svc, "no service capabilities — update this test"
         for c in svc:
             assert cap._hint(c) == c.note, c.key
+
+
+class TestTypedModelsIsLiveOnTheHubAndInertHere:
+    """The claim behind `typed_models` sitting in `_RUNS_ON_HUB`, asserted from
+    both ends rather than from a file name.
+
+    Unlike the other two hub entries, its seam is constructed in SHARED code —
+    `MemoryDB._veil_check` — so pointing at an orchestrator file would have been
+    false. What makes it hub-only is who ATTACHES THE GATE: without one,
+    `_veil_check` returns before constructing anything.
+    """
+
+    def test_the_invariant_really_does_refuse_a_veiled_write(self):
+        import pathlib as _p
+        import tempfile
+        from dreamlayer.memory.db import MemoryDB
+        from dreamlayer.memory.models_pydantic import PrivacyViolation
+
+        class _Shut:
+            def allow_capture(self):
+                return False
+
+        db = MemoryDB(str(_p.Path(tempfile.mkdtemp()) / "m.db"))
+        db.set_privacy(_Shut())
+        with pytest.raises(PrivacyViolation):
+            db.add_memory("Note", "a secret")
+
+    def test_without_a_gate_the_type_is_never_constructed(self):
+        """Which is exactly the Brain's situation, and why it reads dormant."""
+        import pathlib as _p
+        import tempfile
+        from dreamlayer.memory.db import MemoryDB
+        db = MemoryDB(str(_p.Path(tempfile.mkdtemp()) / "m.db"))
+        assert db._privacy is None
+        assert db.add_memory("Note", "written freely") > 0
+
+    def test_the_orchestrator_attaches_one_and_the_brain_does_not(self):
+        root = pathlib.Path(cap.__file__).parent
+        hub = (root / "orchestrator" / "orchestrator.py").read_text(encoding="utf-8")
+        assert "set_privacy(self.privacy)" in hub, (
+            "the hub stopped arming the veil invariant — typed_models is no "
+            "longer live anywhere and must leave _RUNS_ON_HUB")
+        brain = [p for p in (root / "ai_brain").rglob("*.py")]
+        armed = [str(p) for p in brain
+                 if "set_privacy(" in p.read_text(encoding="utf-8", errors="ignore")]
+        assert not armed, (
+            "the Brain now arms the veil invariant too — typed_models is live "
+            f"here and should move out of _RUNS_ON_HUB: {armed}")
