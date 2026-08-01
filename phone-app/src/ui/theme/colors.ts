@@ -17,7 +17,13 @@ export const colors = {
   surface:          "#DDDDDD",  // window / control face (the 3D grey)
   surfaceElevated:  "#FFFFFF",  // white content wells, inputs, list rows
   textPrimary:      "#141414",  // ink — titles, answers
-  textSecondary:    "#4A5054",  // secondary ink — captions, supporting copy
+  textSecondary:    "#42484C",  // secondary ink — captions, supporting copy
+                                // (#565, second instance: was #4A5054, which
+                                // is 6.02:1 on `surface` but only 4.12:1 on
+                                // `background` — and a ScreenHeader subtitle
+                                // draws exactly there, on the Screen root.
+                                // #42484C is 4.68:1 on background, 6.83:1 on
+                                // surface.)
   accentMemory:     "#0B6B52",  // deep brand teal — legible on light; "on"
   accentAttention:  "#B3402E",  // coral ink — promises, incognito, "look here"
   accentSuccess:    "#1E7A3C",  // confirmations, live (darkened for light bg)
