@@ -178,10 +178,23 @@ CAPABILITIES: Tuple[Cap, ...] = (
         gain="baseline can't split speakers live; this tracks who is talking in real time", impact=3, before=0, after=3.5),
 
     # --- structured output / llm ------------------------------------------------
+    # `gain` REWORDED, and the baseline raised. It used to promise "understands
+    # free-form speech" — which is now what the wearer's own local model does on
+    # the `rc_compose` path, with neither of these wheels installed: the seam
+    # asks the model to restate the request in the closed grammar and folds the
+    # answer back through the deterministic matchers. Telling someone to install
+    # two libraries for something they already have is the same dishonesty as
+    # reporting a dormant capability active, one step upstream.
+    #
+    # What these two would genuinely add is constraint at GENERATION time — the
+    # model unable to emit a token outside the schema, rather than emitting
+    # freely and being corrected afterwards. `intent_parser_llm` defers that
+    # deliberately ("full logit-level constraint is a model-time concern"), so
+    # the honest `before` is now high and the remaining `after` gap is small.
     Cap("structured_output", "Schema-constrained LLM intent parsing", "structured",
         ("outlines", "instructor"), "structured",
         "reality_compiler/intent_parser_llm.py",
-        gain="baseline parses intents with regex on fixed phrasings; this understands free-form speech, schema-safe", impact=4, before=2, after=4.5),
+        gain="a wired local model already restates free-form speech into the closed grammar; these constrain the model AT GENERATION so a malformed suggestion can't be produced in the first place", impact=2, before=4, after=4.5),
     Cap("typed_models", "Veil-as-type-invariant memory records", "structured",
         ("pydantic",), "structured", "memory/models_pydantic.py",
         gain="baseline guard is a runtime check; this makes a veiled memory impossible to even construct", impact=3, before=3.5, after=5),

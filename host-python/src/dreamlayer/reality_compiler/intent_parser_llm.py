@@ -63,24 +63,70 @@ class LLMIntentParser:
         self._llm = llm
 
     def parse(self, text: str) -> BehaviorIntent:
-        # No model wired, or neither structured lib present → deterministic path.
-        if self._llm is None or not self.available:
+        """Messy speech → a schema-legal BehaviorIntent, or ValueError.
+
+        The model path runs whenever a model is wired. It deliberately does NOT
+        also require instructor/outlines: `_llm_parse` never calls either of
+        them — the two imports above are probes for the capability meter and
+        carry `noqa: F401` saying so — so gating on them meant a wearer who had
+        wired a local model still got the bare regex parser until they installed
+        two libraries that do nothing on this path. `available` still reports
+        whether the structured extras are present, because that is what the
+        capability meter asks it; it is no longer a precondition for using the
+        model the wearer already has.
+        """
+        if self._llm is None:
             return self._regex.parse(text)
         try:
             return self._llm_parse(text)
-        except Exception as exc:  # any structured-output failure → safe fallback
-            log.warning("[intent_parser_llm] structured parse failed: %s; regex", exc)
+        except ValueError:
+            # "Not one of the 15" — the ORDINARY outcome, not a failure. It is
+            # already the deterministic parser's own verdict on both the
+            # restatement and the raw text, so re-running it here would just
+            # raise the same error a second time. Re-raised untouched: the caller
+            # (`rc_compose`) turns it into the worked-examples reply.
+            #
+            # Deliberately NOT logged. The old handler caught this alongside real
+            # errors and logged `exc`, whose message embeds the text verbatim —
+            # and the text is the wearer's own description of a lens they want.
+            # The logging-discipline rule is that captured content is drawn,
+            # never logged.
+            raise
+        except Exception as exc:  # a genuine suggester/transport fault
+            log.warning("[intent_parser_llm] suggester failed: %s; regex",
+                        type(exc).__name__)
             return self._regex.parse(text)
 
     def _llm_parse(self, text: str) -> BehaviorIntent:
-        """Constrained-generation path. Kept minimal and provider-agnostic: the
-        injected `llm` is expected to return a JSON object naming one of the 15
-        behaviours; we defer final shaping to the existing regex matchers, which
-        already produce a validated BehaviorIntent, guaranteeing schema-legal
-        output even from a free-form model. (Full logit-level constraint is a
-        model-time concern; this seam keeps the host dependency-light.)"""
-        hint = self._llm(text) or ""
-        # Prefer the model's phrasing, but validate through the deterministic
-        # matchers so the return type is always a legal BehaviorIntent.
-        combined = f"{text} {hint}".strip()
-        return self._regex.parse(combined if hint else text)
+        """Ask the model to restate the request in the closed grammar, then let
+        the deterministic matchers decide — so the return value is always a
+        schema-legal `BehaviorIntent` no matter what the model said.
+
+        THE RESTATEMENT IS PARSED FIRST, ALONE. This used to concatenate —
+        `self._regex.parse(f"{text} {hint}")` — which let the original phrasing's
+        noise outvote the model's restatement, because the matchers run in a
+        fixed order and the first one to match wins. Measured:
+
+            "I want to keep score during the match, tap to add a point"
+              model restates    → "points marker"
+              concatenated      → SimpleCounterIntent   (the raw text won)
+              restatement alone → PointsMarkerIntent    (correct)
+
+        So the optional model, once wired, produced the same answer the regex
+        gave on its own — its entire contribution erased by the concatenation.
+
+        Falling back to the raw text when the restatement does not parse is what
+        makes this a FLOOR rather than a gamble: the model can only add a reading
+        the regex could not reach, never take one away. Both failing raises, which
+        is exactly what the regex-only path does today.
+        """
+        hint = (self._llm(text) or "").strip()
+        if hint:
+            try:
+                return self._regex.parse(hint)
+            except ValueError:
+                # The model answered something outside the grammar. Not an error
+                # worth surfacing — it is the ordinary case for a small local
+                # model, and the wearer's own words are still there to try.
+                log.debug("[intent_parser_llm] restatement did not parse; raw text")
+        return self._regex.parse(text)
