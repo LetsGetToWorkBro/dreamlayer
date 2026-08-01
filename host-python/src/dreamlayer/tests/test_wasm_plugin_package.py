@@ -516,9 +516,14 @@ class TestPluginHost:
         h = self._host(tmp_path, pkg)
         assert h.start()
         assert h.build_rows({"label": "mug"})
-        # …and the line it wrote never carries the guest's own text.
-        said = [r for r in caplog.records if "says" in r.getMessage()]
-        assert said and "mug" not in said[-1].getMessage()
+        # …and the line it wrote never carries the guest's own text — nor the
+        # plugin's name, which rides the `extra={}` redaction seam instead of
+        # the message string (the ONE path logging_setup scrubs).
+        said = [r for r in caplog.records if "guest said" in r.getMessage()]
+        assert said
+        assert "mug" not in said[-1].getMessage()
+        assert "wasm-demo" not in said[-1].getMessage()
+        assert said[-1].plugin == "demo" and said[-1].chars == 15
 
     def test_a_declared_capability_links_under_the_manifest_name(self, tmp_path):
         # The author writes `network`; the WIT interface is `net`. Without the

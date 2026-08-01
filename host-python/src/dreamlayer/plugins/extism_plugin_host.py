@@ -112,8 +112,13 @@ class ExtismPluginHost:
         except Exception as exc:                     # noqa: BLE001
             # Only the exception KIND — the message is the guest's, and the
             # logging discipline keeps third-party text out of log lines.
-            log.warning("[extism-plugin] %s failed to start: %s",
-                        self.name, type(exc).__name__)
+        # The plugin name goes through `extra={}` — the ONE redaction seam
+        # (logging_setup.JsonLineFormatter) — not into the message string,
+        # which is emitted verbatim. It is the wearer's own package name and
+        # NAME_RE keeps it to [a-z0-9-], never a person's; the discipline is
+        # not to make the reader check that at every call site.
+            log.warning("[extism-plugin] failed to start",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
             if self.health is not None:
                 try:
                     self.health.record_failure(f"plugin:{self.name}", exc)
@@ -138,8 +143,8 @@ class ExtismPluginHost:
             orchestrator.object_lens.registry.register(GuestProvider(self))
             registered["object_providers"] = 1
         except Exception as exc:                     # noqa: BLE001
-            log.warning("[extism-plugin] %s could not register: %s",
-                        self.name, type(exc).__name__)
+            log.warning("[extism-plugin] could not register",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
         return registered
 
     def build_rows(self, sighting: dict) -> List[dict]:
@@ -157,13 +162,13 @@ class ExtismPluginHost:
             if not out:
                 return []                            # "nothing to say"
             if len(out) > RESPONSE_CAP:
-                log.warning("[extism-plugin] %s returned an over-long response",
-                            self.name)
+                log.warning("[extism-plugin] over-long response",
+                            extra={"plugin": self.name})
                 return []
             rows = json.loads(out.decode("utf-8", "replace")).get("rows") or []
         except Exception as exc:                     # noqa: BLE001
-            log.warning("[extism-plugin] %s build failed: %s",
-                        self.name, type(exc).__name__)
+            log.warning("[extism-plugin] build failed",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
             return []
         out_rows = []
         for r in rows[:MAX_ROWS]:

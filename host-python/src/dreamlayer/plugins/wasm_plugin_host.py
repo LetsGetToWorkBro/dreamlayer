@@ -149,11 +149,15 @@ class WasmComponentPluginHost:
             _LIVE.add(self)
             return True
         except Exception as exc:                     # noqa: BLE001
-            # The name is the wearer's own package name, not third-party text
-            # off the wire, but the exception message is the guest's — so only
-            # the KIND is logged, matching plugins/hookspecs.py.
-            log.warning("[wasm-plugin] %s failed to start: %s",
-                        self.name, type(exc).__name__)
+            # Only the exception KIND, never its message: that text is the
+            # guest's (plugins/hookspecs.py sets the precedent).
+        # The plugin name goes through `extra={}` — the ONE redaction seam
+        # (logging_setup.JsonLineFormatter) — not into the message string,
+        # which is emitted verbatim. It is the wearer's own package name and
+        # NAME_RE keeps it to [a-z0-9-], never a person's; the discipline is
+        # not to make the reader check that at every call site.
+            log.warning("[wasm-plugin] failed to start",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
             if self.health is not None:
                 try:
                     self.health.record_failure(f"plugin:{self.name}", exc)
@@ -189,7 +193,8 @@ class WasmComponentPluginHost:
                 return None
             # A plugin's log line is third-party text: kept to a length, and
             # never interpolated into the message (logging discipline).
-            log.info("[wasm-plugin] %s says %d chars", self.name, len(line[:2000]))
+            log.info("[wasm-plugin] guest said something",
+                     extra={"plugin": self.name, "chars": len(line[:2000])})
             return None                              # `log` is a void import
 
         return {"log": _log}
@@ -213,8 +218,8 @@ class WasmComponentPluginHost:
             orchestrator.object_lens.registry.register(GuestProvider(self))
             registered["object_providers"] = 1
         except Exception as exc:                     # noqa: BLE001
-            log.warning("[wasm-plugin] %s could not register: %s",
-                        self.name, type(exc).__name__)
+            log.warning("[wasm-plugin] could not register",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
         return registered
 
     def build_rows(self, sighting: dict) -> List[dict]:
@@ -239,14 +244,14 @@ class WasmComponentPluginHost:
             if not isinstance(n, int) or n <= 0:
                 return []                            # "nothing to say"
             if n > RESPONSE_CAP:
-                log.warning("[wasm-plugin] %s returned an over-long response",
-                            self.name)
+                log.warning("[wasm-plugin] over-long response",
+                            extra={"plugin": self.name})
                 return []
             body = host.read_str(ptr, n)
             rows = json.loads(body).get("rows") or []
         except Exception as exc:                     # noqa: BLE001
-            log.warning("[wasm-plugin] %s build failed: %s",
-                        self.name, type(exc).__name__)
+            log.warning("[wasm-plugin] build failed",
+                        extra={"plugin": self.name, "err": type(exc).__name__})
             return []
         out = []
         for r in rows[:MAX_ROWS]:
