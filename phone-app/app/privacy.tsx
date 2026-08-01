@@ -153,12 +153,23 @@ export default function Privacy() {
   const [zoneErr, setZoneErr] = React.useState("");
   const [adding, setAdding] = React.useState(false);
   const [quiet, setQuiet] = React.useState("");
+  const [retain, setRetain] = React.useState("0");
 
   React.useEffect(() => {
     if (connected) void st.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected]);
   React.useEffect(() => { setQuiet(st.quietHours); }, [st.quietHours]);
+  React.useEffect(() => { setRetain(String(st.retentionDays)); }, [st.retentionDays]);
+
+  /* Parsed here rather than sent as a string: the Brain type-checks config
+     writes against the CURRENT value's type, so `"30"` is a 400, not a 30. A
+     field the wearer cannot have meant (letters, a negative) is read as 0 —
+     "keep everything" — which is the safe direction to be wrong in. */
+  const saveRetain = () => {
+    const n = Math.max(0, parseInt(retain, 10) || 0);
+    void st.setRetentionDays(n);
+  };
 
   const addZone = async () => {
     setAdding(true);
@@ -300,6 +311,32 @@ export default function Privacy() {
               : `Your Brain refused that: ${st.lastError}`}
           </Text>
         ) : null}
+      </Card>
+
+      {/* --------------------------------------------------------- forget --- */}
+      <Section label="Forgetting" />
+      <Card>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>
+          Drop kept memories once they reach this age. Leave it at{" "}
+          <Text style={{ color: colors.textPrimary }}>0</Text> to keep everything forever — which is the default,
+          and is a choice rather than an absence of one.
+        </Text>
+        <TextInput
+          value={retain}
+          onChangeText={setRetain}
+          onSubmitEditing={saveRetain}
+          onBlur={saveRetain}
+          keyboardType="number-pad"
+          placeholder="0"
+          placeholderTextColor={colors.textSecondary}
+          accessibilityLabel="Keep memories for this many days"
+          style={[s.input, { marginTop: space.lg }]}
+        />
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
+          {st.retentionDays > 0
+            ? `Anything older than ${st.retentionDays} days is dropped.`
+            : "Nothing is dropped on age."}
+        </Text>
       </Card>
 
       {/* ---------------------------------------------------------- faces --- */}

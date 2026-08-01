@@ -110,6 +110,21 @@ describe("zones", () => {
   });
 });
 
+describe("forgetting", () => {
+  it("says plainly that keeping everything is the default", async () => {
+    seed({ retentionDays: 0 });
+    await render(<Privacy />);
+    expect(screen.getByText(/is a choice rather than an absence of one/i)).toBeTruthy();
+    expect(screen.getByText("Nothing is dropped on age.")).toBeTruthy();
+  });
+
+  it("states the cut-off when there is one", async () => {
+    seed({ retentionDays: 30 });
+    await render(<Privacy />);
+    expect(screen.getByText("Anything older than 30 days is dropped.")).toBeTruthy();
+  });
+});
+
 describe("biometrics", () => {
   it("renders the Brain's own consent words, not a paraphrase", async () => {
     seed();
@@ -185,5 +200,28 @@ describe("the button is wired to the store", () => {
       fireEvent.press(screen.getByLabelText("Make here a private zone"));
     });
     expect(addZoneHere).toHaveBeenCalledWith("the studio");
+  });
+
+  it("sends retention as a NUMBER, since the Brain type-checks the field", async () => {
+    /* `{"retention_days": "30"}` is a 400 — the Brain checks a patch against
+       the current value's type, precisely so a string cannot be stored and
+       break every later read. Parsing belongs on this side of the wire. */
+    const setRetentionDays = jest.fn(async () => true);
+    seed({ setRetentionDays: setRetentionDays as never });
+    await render(<Privacy />);
+    const field = screen.getByLabelText("Keep memories for this many days");
+    await act(async () => { fireEvent.changeText(field, "30"); });
+    await act(async () => { fireEvent(field, "blur"); });
+    expect(setRetentionDays).toHaveBeenCalledWith(30);
+  });
+
+  it("reads nonsense as keep-everything rather than as a cut-off", async () => {
+    const setRetentionDays = jest.fn(async () => true);
+    seed({ setRetentionDays: setRetentionDays as never });
+    await render(<Privacy />);
+    const field = screen.getByLabelText("Keep memories for this many days");
+    await act(async () => { fireEvent.changeText(field, "-9 weeks"); });
+    await act(async () => { fireEvent(field, "blur"); });
+    expect(setRetentionDays).toHaveBeenCalledWith(0);
   });
 });
