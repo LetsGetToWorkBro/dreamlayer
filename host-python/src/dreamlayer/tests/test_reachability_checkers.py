@@ -31,6 +31,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
+import textwrap
 
 import pytest
 
@@ -216,6 +217,293 @@ class TestTheProducerScanIsNotVacuous:
                       "Truth, checked live",            # world-check half
                       "Read the room"):                 # the last one to close
             assert title in closed, f"{title} lost its Brain-side producer"
+
+
+class TestThePushScanResolvesTheLocalShapes:
+    """Issue #578: the push scan's unresolved list was dominated by LOCAL
+    shapes a one-hop resolver can name exactly, without inference.
+
+    Each test runs on a SYNTHETIC module written to `tmp_path` and handed to
+    the scan through a stub lens — the same idiom as `_stub_lens` further
+    down — so the tests pin the resolver's shapes and cannot go stale with
+    unrelated product edits. Every assertion is scoped to that synthetic
+    module: nothing here claims anything about the real tree, whose
+    remaining-unresolved set is pinned separately in
+    `TestTheUnresolvedPushCountIsPinned`.
+    """
+
+    def _scan(self, hud, tmp_path, monkeypatch, body: str):
+        """Run `_pushed_types` over ONE synthetic module, as its only source."""
+        p = tmp_path / "synthetic_host.py"
+        p.write_text(textwrap.dedent(body), encoding="utf-8")
+
+        class _Lens:
+            @staticmethod
+            def _sources():
+                return [p]
+
+            @staticmethod
+            def _module_name(_p):
+                return "synthetic.host"
+
+        monkeypatch.setattr(hud, "_lens_module", lambda: _Lens)
+        return hud._pushed_types({"synthetic.host"})
+
+    def test_a_constant_keyed_subscript_assignment_resolves(
+            self, hud, tmp_path, monkeypatch):
+        """The `lens_hosts.py:882` shape: `out["card"] = builder(...)` then
+        `self._push(k, out["card"])`. The old `assigns` pass recorded only
+        bare-name targets, so this push scanned as unresolvable; a constant
+        string key is the same one-hop assignment."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            def synthetic_deviation_alert(**kw):
+                return {"type": "SyntheticSubscriptCard", "primary": "x"}
+
+
+            class Host:
+                def check(self, push=True):
+                    out = {"fired": True}
+                    if push:
+                        out["card"] = synthetic_deviation_alert(
+                            prior_summary="a", new_summary="b")
+                        self._push("they_said", out["card"])
+                    return out
+        """)
+        assert pushed.get("SyntheticSubscriptCard") == {"synthetic.host"}, (
+            "the synthetic module's subscript-assigned push did not resolve: "
+            f"pushed={pushed}")
+        assert unresolved == [], (
+            "the synthetic module's subscript-assigned push was still counted "
+            f"unresolved: {unresolved}")
+
+    def test_a_to_hud_card_with_a_constructed_receiver_resolves(
+            self, hud, tmp_path, monkeypatch):
+        """The `lens_hosts.py:616` shape with a LOCALLY EXACT receiver:
+        `reward = QuestReward()` in the same function makes the receiver's
+        class a name lookup, so the class-qualified `to_hud_card` map can
+        answer. The decoy class is load-bearing: `to_hud_card` is defined
+        nine times in the real tree with a different card type each, and the
+        bare-name map must stay void — resolution goes through the receiver.
+        """
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            class QuestReward:
+                def to_hud_card(self):
+                    return {"type": "SyntheticRewardCard", "primary": "x"}
+
+
+            class Waypoint:
+                def to_hud_card(self):
+                    return {"type": "SyntheticDecoyCard", "primary": "y"}
+
+
+            class Host:
+                def complete(self, subject):
+                    reward = QuestReward()
+                    card = reward.to_hud_card()
+                    self._push("quest_reward", card)
+        """)
+        assert pushed.get("SyntheticRewardCard") == {"synthetic.host"}, (
+            "the synthetic module's constructed-receiver to_hud_card push did "
+            f"not resolve: pushed={pushed}")
+        assert "SyntheticDecoyCard" not in pushed, (
+            "the synthetic scan confused the two to_hud_card definitions — "
+            "it resolved by bare name, not by receiver class")
+        assert unresolved == [], (
+            "the synthetic module's constructed-receiver to_hud_card push was "
+            f"still counted unresolved: {unresolved}")
+
+    def test_a_to_hud_card_with_a_same_file_produced_receiver_resolves(
+            self, hud, tmp_path, monkeypatch):
+        """The issue's stopping point, applied to the receiver: `reward =
+        _make_reward()` where `_make_reward` is defined in the SAME FILE and
+        its return is a constructor call. That is still a name lookup, so the
+        class-qualified map may answer."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            class Reward:
+                def to_hud_card(self):
+                    return {"type": "SyntheticFactoryCard", "primary": "x"}
+
+
+            class Decoy:
+                def to_hud_card(self):
+                    return {"type": "SyntheticDecoyCard", "primary": "y"}
+
+
+            def _make_reward():
+                return Reward()
+
+
+            class Host:
+                def complete(self):
+                    reward = _make_reward()
+                    card = reward.to_hud_card()
+                    self._push("quest_reward", card)
+        """)
+        assert pushed.get("SyntheticFactoryCard") == {"synthetic.host"}, (
+            "the synthetic module's same-file-produced-receiver to_hud_card "
+            f"push did not resolve: pushed={pushed}")
+        assert "SyntheticDecoyCard" not in pushed, (
+            "the synthetic scan confused the two to_hud_card definitions — "
+            "it resolved by bare name, not by receiver class")
+        assert unresolved == [], (
+            "the synthetic module's same-file-produced-receiver to_hud_card "
+            f"push was still counted unresolved: {unresolved}")
+
+    def test_a_to_hud_card_with_a_cross_module_receiver_stays_unresolved(
+            self, hud, tmp_path, monkeypatch):
+        """The other half of the stopping point: `reward = saga.complete(...)`
+        is a producing call defined in ANOTHER module (the real :616 shape),
+        and following it is real type inference, not a name lookup. The scan
+        must report the site unresolved rather than guess — this pins that
+        refusal, so it passes on both the old and the new resolver."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            class QuestReward:
+                def to_hud_card(self):
+                    return {"type": "SyntheticRewardCard", "primary": "x"}
+
+
+            class Decoy:
+                def to_hud_card(self):
+                    return {"type": "SyntheticDecoyCard", "primary": "y"}
+
+
+            class Host:
+                def complete(self, saga):
+                    reward = saga.complete("x")
+                    card = reward.to_hud_card()
+                    self._push("quest_reward", card)
+        """)
+        assert not pushed, (
+            "the synthetic scan guessed a card type through a cross-module "
+            f"receiver: {pushed}")
+        assert [u.split(":")[0] for u in unresolved] == ["synthetic.host"], (
+            "the synthetic module's cross-module-receiver push was not "
+            f"reported unresolved: {unresolved}")
+
+    def test_an_ifexp_names_every_resolvable_branch(
+            self, hud, tmp_path, monkeypatch):
+        """The `server.py:1297` shape — the one the issue did not name:
+        `card = (cards.private_zone_card(zone) if zone else
+        cards.privacy_veil())`. `_pushed_types` is existential — it maps a
+        card type to the modules that CAN push it — so each resolvable branch
+        is a truthful observation and both must be recorded."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            def synthetic_zone_card(zone):
+                return {"type": "SyntheticZoneCard", "primary": "x"}
+
+
+            def synthetic_veil_card():
+                return {"type": "SyntheticVeilCard", "primary": "x"}
+
+
+            class Host:
+                def posture(self, zone=None):
+                    card = (synthetic_zone_card(zone) if zone
+                            else synthetic_veil_card())
+                    self._push("private_zone" if zone else "privacy_veil", card)
+        """)
+        assert pushed.get("SyntheticZoneCard") == {"synthetic.host"}, (
+            "the synthetic module's IfExp push lost its True branch: "
+            f"pushed={pushed}")
+        assert pushed.get("SyntheticVeilCard") == {"synthetic.host"}, (
+            "the synthetic module's IfExp push lost its False branch: "
+            f"pushed={pushed}")
+        assert unresolved == [], (
+            "the synthetic module's fully-resolvable IfExp push was still "
+            f"counted unresolved: {unresolved}")
+
+    def test_an_ifexp_with_an_opaque_branch_is_reported_and_kept(
+            self, hud, tmp_path, monkeypatch):
+        """The honest-unknown half of the IfExp rule: a branch that cannot be
+        named keeps the site on the unresolved list, but the branch that CAN
+        be named is still recorded — naming one branch must neither silence
+        the other nor erase it."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            def synthetic_zone_card(zone):
+                return {"type": "SyntheticZoneCard", "primary": "x"}
+
+
+            class Host:
+                def posture(self, zone=None, fallback=None):
+                    card = (synthetic_zone_card(zone) if zone else fallback)
+                    self._push("posture", card)
+        """)
+        assert pushed.get("SyntheticZoneCard") == {"synthetic.host"}, (
+            "the synthetic module's half-resolvable IfExp push lost the "
+            f"branch it could name: pushed={pushed}")
+        assert [u.split(":")[0] for u in unresolved] == ["synthetic.host"], (
+            "the synthetic module's half-resolvable IfExp push was not "
+            f"reported unresolved: {unresolved}")
+
+    def test_a_push_of_a_function_parameter_stays_unresolved(
+            self, hud, tmp_path, monkeypatch):
+        """The planted non-vacuity pin the issue demands, mirroring the real
+        self-test path (`server.py`: `card = dict(card)` where `card` is a
+        function PARAMETER). The card arrives inter-procedurally, so no local
+        resolver can name it; the scan must SAY SO rather than invent an
+        answer. This pins a preserved property — it passes on the old resolver
+        too — and its bite is proven by mutation: a `_resolve` that returns a
+        type for everything makes the report more confident and less correct,
+        and this is the test that fails when that happens."""
+        pushed, unresolved = self._scan(hud, tmp_path, monkeypatch, """
+            class Host:
+                def selftest(self, card):
+                    card = dict(card)
+                    card["selftest"] = True
+                    self._push("selftest", card)
+        """)
+        assert [u.split(":")[0] for u in unresolved] == ["synthetic.host"], (
+            "the synthetic module's planted parameter-card push was not "
+            f"reported unresolved: {unresolved}")
+        assert not pushed, (
+            "the synthetic scan invented a card type for a push whose card "
+            f"is a function parameter: {pushed}")
+
+
+class TestTheUnresolvedPushCountIsPinned:
+    """Issue #578's ratchet: "whatever is left should keep printing, but the
+    count should be asserted so it cannot silently grow."
+
+    EXACT equality, deliberately, in both directions. Growth fails — a blind
+    spot nobody notices getting bigger is worse than one everybody can see.
+    Shrink fails too, and that is the point: when the resolver learns a new
+    shape this test SHOULD fail — read the number, verify each remaining
+    site genuinely cannot be resolved locally, then move the pin DOWN
+    deliberately. The same instruction this file's retired
+    `test_the_known_gap_is_still_visible` carried: "as the gap closes this
+    test should fail … read the number, fix the assertion".
+
+    Line numbers are stripped from the comparison: they rot with unrelated
+    edits — this file's own history proves it — while the count and the
+    modules are the substance. This test is scoped to the REAL tree; the
+    resolver shapes themselves are pinned on synthetic modules in
+    `TestThePushScanResolvesTheLocalShapes`.
+    """
+
+    def test_the_real_tree_leaves_exactly_these_unresolved_sites(self, hud):
+        lens = hud._lens_module()
+        files = lens._sources()
+        _roots, reachable = lens._closure(
+            lens._import_graph(files), {lens._module_name(p) for p in files})
+        _pushed, unresolved = hud._pushed_types(reachable)
+        assert len(unresolved) == 6, (
+            f"the REAL tree's unresolved push-site count changed "
+            f"({len(unresolved)} != 6): {sorted(unresolved)} — if the resolver "
+            "improved, verify each remaining site genuinely cannot be resolved "
+            "locally and move this pin DOWN; if it grew, find what regressed")
+        modules = sorted({u.rsplit(":", 1)[0] for u in unresolved})
+        assert modules == [
+            "ai_brain.server.intro_live",    # heard() returns the offer OR the
+                                             # kept card — genuinely undecided
+            "ai_brain.server.lens_hosts",    # candor/veritas/saga: the producing
+                                             # calls live in other modules
+            "ai_brain.server.server",        # the self-test's function-parameter
+                                             # card (inter-procedural)
+            "ai_brain.server.truth_live",    # _push(result) — a TruthLens
+                                             # result, not a card
+        ], (
+            "the REAL tree's unresolved push sites moved modules: "
+            f"{modules} (from {sorted(unresolved)})")
 
 
 class TestTheGlassIsTheONETheBrainCanReach:
