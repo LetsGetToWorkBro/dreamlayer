@@ -25,7 +25,7 @@ python3 scripts/capability_reachability.py   # diagnostic; always exits 0, see �
 |---|---|---|
 | **Lenses** | 25 of 28 loadable; the seven hosted ones are called, routed and on a phone screen; Scholar wired | Lucid Recall, Timbre (biometric — §1), Yesterlight |
 | **HUD cards** | **23 of 24** have a Brain-side producer (14 wired this round); all 23 draw properly on the Brain's own surface, and so do the 3 undeclared cards it pushes | **TruthLensCard only — DECLINED, not blocked.** The Truth Lens FEATURE ships (outward consistency, `/dreamlayer/theysaid`); the deception gauge does not (§1) |
-| **Capabilities** | 42 of 74 seams loadable; 13 unreachable by design; 18 declared dormant, with reasons | **0 misreported**; the 18 dormant ones are real work, not a labelling gap (§4) |
+| **Capabilities** | 31 of 73 with a seam the Brain loads AND uses; 16 more driven (promoted at runtime from proof); 12 unreachable by design; 13 declared dormant, with reasons | **0 misreported, 0 unconstructed**; the dormant ones are real work, classified by blocker in `decisions/0007` (§4) |
 
 The single most important thing in this file, because it is the mistake that
 keeps repeating: **`lens_reachability.py` reporting a lens as "reachable" is not
@@ -319,7 +319,7 @@ Two traps for whoever continues, both already paid for once:
   as a producer (0 gaps where there were 18), once measuring a renderer the Brain
   cannot reach. `tests/test_reachability_checkers.py` pins both.
 
-### 4. Capabilities — MEASURED, 0 misreported and 18 dormant
+### 4. Capabilities — MEASURED, 0 misreported and 13 dormant
 
 It is **74** entries, not ~39. `scripts/capability_reachability.py` measures
 them the same way as the other two checkers, using the field
@@ -329,8 +329,10 @@ exercised however green the meter reads. (`installed()` asks whether a module
 IMPORTS — "is the library on disk", not "does anything here use it".)
 
 ```
-74 declared · 42 seams the Brain can load
-0 MISREPORTED · 18 declared dormant · 13 unreachable by design · 1 recipe
+73 declared · 31 with a seam the Brain loads AND uses
+0 UNCONSTRUCTED · 0 MISREPORTED · 16 driven (promoted at runtime)
+4 dormant with nothing promoting them · 9 declared dormant
+12 unreachable by design · 1 recipe
 ```
 
 This one **exits 0 on purpose** and its two siblings do not. "A declared lens
@@ -364,9 +366,21 @@ split was measured and it is 1/18, not a genuine fork:
 
 The list is still real work: `social_graph`, `memory_dedup`, `typed_docs`,
 `typed_models`, `facial_aus`, `diarization`, `asr_alignment`,
-`object_tracking`, `live_interpret`, `event_bus`, `skia_render`, `lsl_streams`,
-`extism_plugins`, `wasm_plugins`, `plugin_entrypoints`, `structured_output`,
-`typed_pipeline`. (`causal_fusion` was the nineteenth and is gone —
+`live_interpret`, `skia_render`, `lsl_streams`, `plugin_entrypoints`,
+`typed_pipeline`. **Read `decisions/0007` before re-raising any of them** — it
+classifies all twenty-one by what is actually blocking each, with runnable
+checks, and five of the entries above are a dependency that will not install
+here rather than work anyone has declined to do.
+
+Four have since been built and are promoted at runtime: `wasm_plugins` and
+`extism_plugins` (a `.wasm` package format and the two guest runtimes it
+reaches), `object_tracking` (the ambient look loop produces the centroids
+`SupervisionTracker` had always taken and never been given), and `event_bus`
+(GhostMode circles can be formed at all — `MeshEventBus` wraps a `MeshManager`
+nothing had ever constructed). `structured_output` is settled and stays
+dormant, with the reason written down.
+
+(`causal_fusion` was the nineteenth and is gone —
 decisions/0006: it imported dowhy purely as a flag, never called it, and read
 three attributes the credibility channels do not have. Dropping a seam is a
 third valid answer, and the one to reach for when the adapter would be worse
