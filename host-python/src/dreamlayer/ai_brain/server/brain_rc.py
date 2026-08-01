@@ -144,21 +144,91 @@ class RCOps(BrainHost):
             self._rc_active = None
         return {"ok": True, **self.rc_repertoire()}
 
+    #: What the model is asked to do. NOT "build me a lens" — restate the
+    #: request in the closed grammar the deterministic matcher already reads.
+    #: The narrower the ask, the more usable a small local model's answer is,
+    #: and the answer is only ever a SUGGESTION: `LLMIntentParser` folds it back
+    #: through the regex matchers, so nothing the model says can produce a
+    #: behaviour outside the 15, and `budgets.verify()` still gates deployment.
+    _COMPOSE_RESTATE = (
+        "Rewrite the request below as ONE short command naming exactly one of "
+        "these behaviours: round timer, interval timer, stopwatch, counter, "
+        "points marker, battery warning, teleprompter, coaching cue, next "
+        "class, subtitles, habit reminder, react timer, gesture repeater, "
+        "speaker indicator. Keep any duration or count the request mentions. "
+        "Answer with the command only — no explanation, no quotes.\n\n"
+        "Request: ")
+
+    def _compose_suggester(self):
+        """The model that turns messy phrasing into the closed grammar, or None.
+
+        None — the deterministic parser alone — whenever anything is off:
+
+          * no local backend wired (there is nothing to ask);
+          * the veil is up, or the posture cannot be read (fail CLOSED). The
+            wearer's description of a lens is their own words, and a REMOTE
+            `ollama_url` receiving them is egress like any other; rather than
+            count it, this path simply declines and stays deterministic, which
+            costs the wearer a nicety and never a surprise upload.
+
+        `chat` failing returns "" so `LLMIntentParser` falls straight through to
+        the regex path — a dead model must not break "Ask Juno".
+        """
+        backend = getattr(self, "_backend", None)
+        if backend is None or not hasattr(backend, "chat"):
+            return None
+        from .backends import is_local_endpoint
+        url = getattr(getattr(self, "config", None), "ollama_url", "") or ""
+        if url and not is_local_endpoint(url):
+            return None                       # off-box model → don't send words
+        try:
+            if self.incognito_now():
+                return None
+        except Exception:                     # noqa: BLE001 — unreadable → veiled
+            return None
+
+        def suggest(text: str) -> str:
+            try:
+                return backend.chat(self._COMPOSE_RESTATE + text) or ""
+            except Exception as exc:          # noqa: BLE001 — never break compose
+                log.debug("[rc] compose suggestion failed: %s", type(exc).__name__)
+                return ""
+        return suggest
+
+    def _compose(self, text: str):
+        """Parse → lift → budget-verify, with the local model allowed to restate.
+
+        Mirrors `RealityCompilerV2.compile_text` exactly except for which parser
+        produces the intent, and then hands off to `compile_intent` so the lift,
+        the proof and the run-through are the SAME code — not a second copy that
+        can drift from the one every other caller uses.
+        """
+        from ...reality_compiler.intent_parser_llm import LLMIntentParser
+        intent = LLMIntentParser(llm=self._compose_suggester()).parse(text)
+        return self.rc.compile_intent(intent)
+
     def rc_compose(self, prompt: str) -> dict:
         """Ask Juno: turn a plain-English description of a lens into a figment.
 
-        The builder's "Ask Juno" box (INNOVATION_SESSION Category 1). We run the
-        offline intent parser — no cloud, no model needed — lift it to a figment
-        and budget-verify it *here* before it ever reaches the editor. The result
-        is returned but NOT deployed: it lands in the builder for the author to
-        preview, paint on, and tweak, then Deploy re-checks the proof again.
+        The builder's "Ask Juno" box (INNOVATION_SESSION Category 1). Lifted to a
+        figment and budget-verified *here* before it ever reaches the editor. The
+        result is returned but NOT deployed: it lands in the builder for the
+        author to preview, paint on, and tweak, then Deploy re-checks the proof.
+
+        The wearer's LOCAL model now gets to restate the request in the closed
+        grammar first (`LLMIntentParser`), which is the difference between the
+        box understanding "count down five minutes and buzz at the end" and
+        answering with the five worked examples below. It is a suggestion only —
+        the deterministic matcher decides, so no phrasing the model invents can
+        reach a behaviour outside the 15 — and with no model wired this is
+        byte-for-byte the offline parser it has always been.
         """
         text = (prompt or "").strip()
         if not text:
             return {"ok": False, "unmatched": True,
                     "error": "Tell Juno what the lens should do."}
         try:
-            result = self.rc.compile_text(text)
+            result = self._compose(text)
         except ValueError:
             return {"ok": False, "unmatched": True,
                     "error": "Juno couldn't turn that into a lens yet.",
