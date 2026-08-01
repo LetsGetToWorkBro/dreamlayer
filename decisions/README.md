@@ -81,3 +81,4 @@ between this directory and a pile of free text.
 | [0003](0003-person-guard-mug-false-positive.md) | accepted-risk | Presidio tags `"mug"` as a PERSON, and we ship it |
 | [0004](0004-presidio-real-tests-did-not-exist.md) | refuted | Issue #528's Presidio tests were not being skipped — they did not exist |
 | [0005](0005-vector-store-ranking-unreachable.md) | refuted | `VectorStore` ranking is unreachable — but not for the reason first given |
+| [0006](0006-causal-fusion-was-a-fixed-heuristic.md) | accepted-risk | `causal_fusion` inferred nothing causally and returned None either way — dropped |

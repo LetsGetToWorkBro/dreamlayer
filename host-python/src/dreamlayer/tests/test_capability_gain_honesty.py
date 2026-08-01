@@ -83,14 +83,23 @@ class TestTheGainMatchesTheBaseline:
         assert "yet" in gain, (
             f"{key} does not say the delta is unclaimed by anything in the tree")
 
-    @pytest.mark.parametrize("key", ["typed_pipeline", "persona_tuning"])
-    def test_the_score_does_not_promise_a_jump_nothing_delivers(self, key):
-        """`before`/`after` drive the panel's impact ordering, so a capability
-        that changes nothing today must not sort above one that does."""
+    @pytest.mark.parametrize("key,floor", [("typed_pipeline", 4.0),
+                                           ("persona_tuning", 3.0)])
+    def test_the_baseline_is_not_scored_as_if_it_were_absent(self, key, floor):
+        """`before` was the actual lie, not the delta.
+
+        These two were scored 2.5 and 0 — "barely there" and "does not exist" —
+        for baselines that trace a pipeline and apply a classification rule with
+        no dependency installed. `after` staying strictly greater is correct and
+        is the catalogue's own invariant (test_pack_install_ux): the pair scores
+        the POTENTIAL once wired, which is how every dormant entry is scored.
+        Setting them equal to signal "changes nothing today" broke that, and
+        said something the numbers are not for.
+        """
         c = _cap(key)
-        assert c.after == c.before, (
-            f"{key} claims {c.before}→{c.after} for an install that changes "
-            "no behaviour in this tree")
+        assert c.before >= floor, (
+            f"{key} scores its working baseline at {c.before}, as if absent")
+        assert c.before < c.after <= 5
 
     def test_structured_output_stayed_the_model_for_the_others(self):
         gain = _cap("structured_output").gain.lower()

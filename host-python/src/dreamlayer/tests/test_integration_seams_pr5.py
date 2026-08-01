@@ -79,13 +79,17 @@ def test_render_skia_falls_back():
 # --- ai_brain/server_fastapi: import-safe; app iff fastapi present ------------
 def test_server_fastapi_optional():
     from dreamlayer.ai_brain import server_fastapi
-    app = server_fastapi.make_app(lambda route, body: {"ok": True})
+    # `token` is keyword-only with no default now: this call USED to read
+    # `make_app(handler)` and quietly built an unauthenticated app, which is the
+    # defect the signature change closes. Passing one here is not ceremony — it
+    # is the test agreeing that forgetting it should not compile.
+    app = server_fastapi.make_app(lambda route, body: {"ok": True}, token="t")
     if server_fastapi.available:
         assert app is not None
     else:
         assert app is None
         with pytest.raises(RuntimeError):
-            server_fastapi.serve(lambda r, b: {})
+            server_fastapi.serve(lambda r, b: {}, token="t")
 
 
 # --- ai_brain/gemma_backend: injectable transport, safe on failure ------------

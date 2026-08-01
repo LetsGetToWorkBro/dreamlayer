@@ -70,8 +70,14 @@ class TestItNoLongerClaimsToMirrorTheBrain:
         cap = next(c for c in CAPABILITIES if c.key == "asgi_server")
         assert "mirror" not in cap.title.lower()
         assert "mirror" not in cap.gain.lower()
-        # …and it no longer claims the Brain gets better by installing it
-        assert cap.after <= cap.before
+        # …and the gain says whose routes these are. `before`/`after` are NOT
+        # the place to say "changes nothing today" — the catalogue's own
+        # invariant (test_pack_install_ux) requires a strict improvement, and
+        # the pair scores the potential once wired, exactly like every other
+        # dormant entry. Setting them equal broke that and said something the
+        # numbers are not for.
+        assert "you write" in cap.gain.lower() or "you supply" in cap.gain.lower()
+        assert cap.before < cap.after
 
     def test_the_claim_it_refuted_is_still_true_of_the_tree(self):
         """If a `handler(route, body)` dispatch ever DOES appear, this file's
