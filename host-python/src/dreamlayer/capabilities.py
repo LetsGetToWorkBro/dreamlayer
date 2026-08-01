@@ -632,8 +632,10 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # THAT runtime right now, not the wheel being importable.
     "wasm_plugins", "extism_plugins",
     # …and `object_tracking` once the ambient look loop produced the centroids
-    # `SupervisionTracker` had always taken and never been given.
-    "object_tracking",
+    # `SupervisionTracker` had always taken and never been given, and
+    # `event_bus` once a GhostMode circle could be formed at all — its
+    # `MeshEventBus` wraps a `MeshManager` nothing had ever constructed.
+    "object_tracking", "event_bus",
 })
 
 

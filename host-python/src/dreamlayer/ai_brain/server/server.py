@@ -3279,6 +3279,16 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_OBJECT_TRACKING"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `event_bus` — a `MeshEventBus` exists only around a MeshManager that has
+    # joined a circle, and until GhostMode was reachable nothing ever joined
+    # one. The flag follows a circle live on this Brain right now, so it goes
+    # back down when the evening ends.
+    try:
+        from .live_circle import room as _circle_room
+        if _circle_room(brain).members_live() > 0:
+            env["DL_WIRED_EVENT_BUS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])
@@ -5952,6 +5962,47 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, room(brain).gift(str(b.get("sid", "")),
                                              b.get("colors") or []))
 
+        def _post_circle_form(self, path, qs):
+            """GhostMode: start a circle and get the three-word code to say to
+            the room. The real confluence.mesh.MeshManager underneath — group
+            keys, HMAC'd packets, replay and stranger rejection — which nothing
+            in the tree had ever constructed, so this headline was unreachable
+            from every surface a wearer has."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).form(str(b.get("sid", ""))))
+
+        def _post_circle_join(self, path, qs):
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).join(str(b.get("sid", "")),
+                                             str(b.get("group", "")),
+                                             str(b.get("code", ""))))
+
+        def _post_circle_leave(self, path, qs):
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).leave(str(b.get("sid", ""))))
+
+        def _post_circle_alias(self, path, qs):
+            """Name a pulse locally — "that one is Maya". Never crosses: the
+            mesh carries anonymous member ids and nothing else."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).alias(str(b.get("sid", "")),
+                                              str(b.get("member", "")),
+                                              str(b.get("name", ""))))
+
+        def _post_circle_pulse(self, path, qs):
+            """One beat into the circle: my feeling out, everyone's in, plus the
+            differentially-private summary of how the room feels. The veil
+            silences the sending half completely."""
+            from .live_circle import room
+            b = self._body()
+            self._json(200, room(brain).pulse(
+                str(b.get("sid", "")), str(b.get("kind", "weather")),
+                b.get("body") or {}))
+
         def _post_live_weather(self, path, qs):
             """One dream-cadence weather beat: my state+palette in, MY sky's
             frames out (merged blend / split seam / solo) — the real
@@ -6672,6 +6723,11 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/live/confluence/accept": _post_conf_accept,
             "/dreamlayer/live/confluence/dissolve": _post_conf_dissolve,
             "/dreamlayer/live/confluence/gift": _post_conf_gift,
+            "/dreamlayer/live/circle/form": _post_circle_form,
+            "/dreamlayer/live/circle/join": _post_circle_join,
+            "/dreamlayer/live/circle/leave": _post_circle_leave,
+            "/dreamlayer/live/circle/alias": _post_circle_alias,
+            "/dreamlayer/live/circle/pulse": _post_circle_pulse,
             "/dreamlayer/live/weather": _post_live_weather,
             "/dreamlayer/downloads/cancel": _post_downloads_cancel,
             "/dreamlayer/discoveries": _post_discoveries,

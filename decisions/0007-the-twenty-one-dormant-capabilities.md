@@ -18,7 +18,9 @@ is an afternoon each, and the count going down is a matter of effort.*
 
 ## Verdict
 
-For 4 of the 21 that is roughly true and the work is real. For the other 17 the
+For 4 of the 21 that is roughly true and the work is real — all four are now
+built, and each took a feature rather than a wire (see the updates). For the
+other 17 the
 blocker is not effort — it is a missing producer, a missing consumer, a
 dependency that will not install, or a claimed interface the seam does not fit.
 Wiring most of them means BUILDING THE OTHER HALF, which is a feature decision,
@@ -39,8 +41,8 @@ tree for a construction outside the seam and outside `tests/`.
 
 | capability | what is missing |
 |---|---|
-| `event_bus` | `MeshManager` is constructed nowhere in the tree. `MeshEventBus` wraps one; with no mesh there are no packets to fan out. |
-| `object_tracking` | Nothing emits per-frame centroids. `SupervisionTracker.update(centroids)` is referenced only by its own tests, and its natural partner `LostFoundScene` keys its ledger by LABEL rather than tracked identity — and is not constructed either. |
+| `event_bus` | ~~`MeshManager` is constructed nowhere in the tree.~~ **Built — see the update below.** |
+| `object_tracking` | ~~Nothing emits per-frame centroids.~~ **Built — see the update below.** |
 | `wasm_plugins` | ~~Needs a `.wasm`-guest package format.~~ **Built — see the update below.** |
 | `extism_plugins` | ~~The same missing format, a second runtime.~~ **Built — see the update below.** |
 
@@ -112,7 +114,7 @@ Per group, and each is cheap:
 
 ```
 A: grep -rn "MeshManager(" host-python/src --include=*.py | grep -v tests
-   → a construction outside confluence/mesh.py means event_bus is wireable
+   → answered: ai_brain/server/live_circle.py constructs one per member
 C: python -c "import whisperx"    (etc.)
    → an importable dependency moves that row from C into the real work
 D: grep -n "def register" -A 3 host-python/src/dreamlayer/hud/renderer.py
@@ -181,6 +183,49 @@ Three things had to differ from its sibling and none of them were guessed:
 
 Both capabilities are promoted from their own live count (`live_guests()` per
 runtime), never each other's: a wearer running one is not running the other.
+
+## Update — 2026-08-01, `object_tracking` and `event_bus` (group A, rows 1–2)
+
+Both were "a missing producer", both were features to design, and in both cases
+the half that existed was the one nobody could reach.
+
+**`object_tracking`.** `SupervisionTracker.update([(cx, cy), …])` has taken a
+centroid list since it was written and nothing in the tree ever produced one —
+`YoloClassifier.__call__` throws the geometry away because the Object Lens wants
+one subject. `detect()` now returns every box with a normalised centroid, and
+`detections()` fans the whole ladder onto one shape: a localising rung gives
+positions, every other rung gives one label with `centroid=None` rather than a
+fabricated centre point, which would have made every label-only rung report an
+object that never moves at the same spot forever.
+
+The consumer is `orchestrator/object_trail.py`, and the design question it
+answers is the one this entry warned about — the obvious feature (detect a thing
+being SET DOWN) cannot be built honestly, because only one rung can localise
+anything, so motion-that-stops would be silently dead on most Brains.
+DEPARTURE needs no geometry, works on every rung, and gets better with a
+localiser instead of requiring one. It feeds `WaypathLens`, whose own docstring
+had always claimed anchors were dropped "when it sees where you left something"
+while every anchor in fact came from the wearer narrating one aloud.
+
+**`event_bus`.** `MeshEventBus` wraps a `MeshManager`, and
+`Orchestrator._init_confluence_plugins` sets `self.mesh = None` with the comment
+"attached by the app layer when a circle is formed". No app layer ever formed
+one, so GhostMode — a headline of the product, with a normative protocol
+document — was unreachable from every surface a wearer has.
+`ai_brain/server/live_circle.py` is the room, built as the exact sibling of
+`live_confluence.py`: the Brain as the pre-hardware meeting point, over the real
+primitives, adding no crypto and no receive rule of its own.
+
+One defect fell out that only a live subscriber could reach: `_MiniEmitter` (the
+dependency-free fallback) catches a raising listener and pyee's `EventEmitter`
+does not, so with the optional dependency INSTALLED one bad subscriber broke a
+mesh beat that had already been signed and sent. That is the floor principle
+inverted — an optional dependency doing less than the fallback it replaces — and
+the guard now lives in `MeshEventBus`, where it covers both paths.
+
+Both are promoted from proof, never from a wheel being importable: a real
+ByteTrack that has actually been handed a centroid, and a circle live on this
+Brain right now.
 
 ## Consequences
 
