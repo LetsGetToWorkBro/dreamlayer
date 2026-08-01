@@ -2209,6 +2209,77 @@ function glassTestimonyCard(c){          /* TRUTH — the Testimony Thread ("Rea
   gend(c.dismiss_ms || 5000);
 }
 
+function glassIntroCard(c){        /* NAME CAPTURE — the offer, and the keep */
+  /* Two card types, one drawing, because they are the same moment one beat
+     apart: "REMEMBER THEM? Maya" and "KEPT Maya". The only structural
+     difference is that the offer is a QUESTION — it gets the two affordances,
+     and it gets the countdown, because an offer that expires silently after
+     12s looks like the glasses ignored you.
+
+     The name is the hero line and nothing else competes with it. This card
+     exists so a wearer can read one word and decide. */
+  const offer = (c.type === "IntroOfferCard");
+  const ctx = glassCtx(); gback(ctx);
+  gtext(ctx, String(c.eyebrow || (offer ? "REMEMBER THEM?" : "KEPT")).toUpperCase().slice(0, 16),
+        128, 74, offer ? GP.confidence_low : GP.memory_trace, "sm");
+  ctx.beginPath(); ctx.moveTo(56, 88); ctx.lineTo(200, 88);
+  ctx.strokeStyle = GP.border_subtle; ctx.lineWidth = 1; ctx.stroke();
+
+  const name = String(c.primary || "").trim();
+  gtext(ctx, name.slice(0, 18), 128, 118, GP.text_primary, "lg");
+  const det = gwrap(String(c.detail || ""), 30).slice(0, 2);
+  det.forEach((ln, i) => gtext(ctx, ln, 128, 144 + i * 14, GP.text_secondary, "sm"));
+
+  if (offer){
+    /* A shrinking arc for the offer's own life. It expires by itself after 12s
+       and the wearer should be able to SEE that rather than discover it when
+       the name is gone. */
+    const ms = Number(c.dismiss_ms) || 12000;
+    const t0 = Date.now();
+    clearInterval(glassAnim);
+    glassAnim = setInterval(() => {
+      const left = 1 - Math.min(1, (Date.now() - t0) / ms);
+      if (left <= 0){ clearInterval(glassAnim); glassAnim = null; return; }
+      garc(ctx, 128, 128, 104, -90, -90 + 360 * left, GP.border_subtle);
+    }, 120);
+    introAsk(name);
+  } else {
+    gtext(ctx, String(c.footer || "").slice(0, 34), 128, 186, GP.text_ghost, "sm");
+  }
+  gend(c.dismiss_ms || (offer ? 12000 : 5000));
+}
+
+let introNotice = null;
+function introAsk(name){
+  /* The two answers as REAL buttons. The glass is a canvas with no hit-testing,
+     so painting "KEEP / SKIP" on it would be an affordance that does nothing —
+     worse than not offering one. `notice()` is how this page already takes a
+     decision from the wearer (camera prompts, brain-unreachable), so the keep
+     rides the mechanism that already works.
+
+     Only one offer can be live at a time (the Brain holds a single pending
+     offer), so a second introduction replaces the first rather than stacking. */
+  if (introNotice) { try { introNotice.remove(); } catch (e) {} introNotice = null; }
+  const send = async (action, n) => {
+    try { introNotice = null; n.remove(); } catch (e) {}
+    try {
+      const r = await fetch("/dreamlayer/intro", {
+        method: "POST",
+        headers: Object.assign({"Content-Type": "application/json"}, HDRS()),
+        body: JSON.stringify({action: action})});
+      const j = await r.json();
+      if (action === "confirm" && !j.ok)
+        showHud([j.reason === "the offer expired" ? "too slow — ask again"
+                                                  : "couldn't keep that"], {ms: 2200});
+    } catch (e) { showHud(["brain unreachable"], {ms: 2200}); }
+  };
+  introNotice = notice("REMEMBER THEM?",
+    "<p><b>" + String(name).replace(/[<>&]/g, "") + "</b> introduced themselves. " +
+    "Keeping the name writes it to your own People list on this device — nothing leaves.</p>",
+    [{label: "Keep", fn: n => send("confirm", n)},
+     {label: "Skip", fn: n => send("dismiss", n)}]);
+}
+
 function glassEventCard(c){                          /* any pushed card with no bespoke renderer */
   const ctx = glassCtx(); gback(ctx);
   garc(ctx, 128, 108, 44, 0, 360, GP.border_subtle);
@@ -3810,6 +3881,7 @@ function renderEvent(ev){
   else if (t === "PrivateZoneCard") glassPrivateZoneCard(c);
   else if (t === "SynesthesiaCard") glassSynesthesiaCard(c);
   else if (t === "TruthLensCard") glassTestimonyCard(c);
+  else if (t === "IntroOfferCard" || t === "IntroKeptCard") glassIntroCard(c);
   else glassEventCard(c);              /* any future card type still shows something */
 }
 

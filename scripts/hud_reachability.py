@@ -234,7 +234,14 @@ def _inline_card_types(reachable: set) -> dict[str, set]:
 #   * QuestRewardCard  — lens_hosts.py:601 `card = reward.to_hud_card()`. The
 #     method name is defined nine times across the tree with a different card
 #     type each, so `_fn_card_types` deliberately refuses to resolve it.
-_BRAIN_ONLY_PUSHED = frozenset({"ConsistencyCard", "QuestRewardCard"})
+#   * IntroOfferCard   — intro_live.py `card = cap.heard(text)` then
+#     `self._push(card)`. `IntroductionCapture.heard` returns EITHER the offer
+#     card or (under `intro_auto_keep`) the kept one, so the resolver's refusal
+#     is correct rather than a shortfall: the type genuinely is not decided at
+#     that line. Its sibling `IntroKeptCard` resolves on the `confirm()` path,
+#     where the card is a dict literal.
+_BRAIN_ONLY_PUSHED = frozenset({"ConsistencyCard", "QuestRewardCard",
+                                "IntroOfferCard"})
 
 
 def _fn_card_types(reachable: set) -> dict[str, str]:
@@ -300,9 +307,22 @@ def _pushed_types(reachable: set) -> dict[str, set]:
     the Live Lens, and only those can be gutted by it. Reporting "built" as if
     it meant "pushed" would have manufactured seven defects that do not exist.
 
-    Resolution is deliberately one hop: a direct builder call, or a local name
-    assigned from one earlier in the same function. Both shapes occur; anything
-    deeper is reported as unresolved rather than guessed at.
+    Resolution is deliberately one hop: a direct builder call, a dict literal
+    naming its own `"type"`, or a local name assigned from either one earlier in
+    the same function. All three shapes occur; anything deeper is reported as
+    unresolved rather than guessed at.
+
+    WHICH ARGUMENT holds the card is read from the pusher's own signature, not
+    assumed. The dominant shape is `push_event(kind, card)`, so a first version
+    took `args[1]` and treated a one-argument call as "not our `_push` at all"
+    — the escape hatch that lets `brain_rc`'s unrelated deployer `push_event(name)`
+    through. But `IntroHost._push(card)` and `TruthRead._push(result)` are one
+    argument AND ours, so both were skipped in silence: not resolved, not even
+    counted as unresolved. A blind spot that reports nothing is the one failure
+    mode this whole file exists to prevent, so the rule is now: if the enclosing
+    module DEFINES the `_push`/`push_event` being called and that definition
+    takes exactly one parameter after `self`, the single argument is the card.
+    `brain_rc` defines no such method, so it still falls out.
     """
     lens = _lens_module()
     fn_types = _fn_card_types(reachable)
@@ -318,6 +338,15 @@ def _pushed_types(reachable: set) -> dict[str, set]:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
+        # Pushers this module defines itself, and how many parameters each takes
+        # after `self`. Read per module rather than globally: the point is that
+        # the call and the definition are the same code.
+        local_pusher_arity: dict[str, int] = {}
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name in ("_push", "push_event")):
+                params = [a.arg for a in node.args.args if a.arg != "self"]
+                local_pusher_arity[node.name] = len(params)
         for fn in ast.walk(tree):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -335,6 +364,16 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                     nm = (getattr(expr.func, "id", None)
                           or getattr(expr.func, "attr", None))
                     return fn_types.get(nm or "", "")
+                if isinstance(expr, ast.Dict):
+                    # A card built inline at the push site names its own type;
+                    # reading the literal is not inference, it is reading.
+                    for k, v in zip(expr.keys, expr.values):
+                        if (isinstance(k, ast.Constant) and k.value == "type"
+                                and isinstance(v, ast.Constant)
+                                and isinstance(v.value, str)
+                                and v.value.endswith("Card")):
+                            return v.value
+                    return ""
                 if isinstance(expr, ast.Name):
                     return _resolve(assigns.get(expr.id), depth + 1)
                 return ""
@@ -347,8 +386,14 @@ def _pushed_types(reachable: set) -> dict[str, set]:
                 nm = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
                 if nm not in ("_push", "push_event"):
                     continue
-                arg = node.args[1] if len(node.args) >= 2 else next(
-                    (k.value for k in node.keywords if k.arg == "card"), None)
+                if len(node.args) >= 2:
+                    arg = node.args[1]                # push_event(kind, card)
+                elif len(node.args) == 1 and local_pusher_arity.get(nm) == 1:
+                    arg = node.args[0]                # _push(card), ours by
+                                                      # this module's own signature
+                else:
+                    arg = next((k.value for k in node.keywords
+                                if k.arg == "card"), None)
                 if arg is None:
                     continue      # no card slot at all — a same-named method on
                                   # something else (brain_rc's deployer), not ours

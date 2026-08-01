@@ -823,6 +823,14 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
           </select></div>
         <div id="interpStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
       <label class="sw"><input type="checkbox" id="interpret" onchange="saveInterpret()"><span class="track red"></span></label></div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">Name capture &middot; &ldquo;Hi, I&rsquo;m Maya&rdquo;</div>
+      <div class="conn-s">Off by default. Someone introduces themselves out loud and the glass asks <b>&ldquo;Remember them?&rdquo;</b> &mdash; tap Keep and the name joins your People list on this device. <b>Hearing a name saves nothing</b>: the offer expires by itself after 12 seconds and nothing is written unless you say so.
+        <div class="conn-s" style="margin-top:8px">Only a <b>closed grammar</b> of self-introductions captures anything &mdash; &ldquo;my name is&hellip;&rdquo;, &ldquo;I&rsquo;m&hellip;&rdquo;, &ldquo;this is&hellip;&rdquo;, &ldquo;call me&hellip;&rdquo;. Ordinary conversation produces nothing, which is what keeps the boundary at people who <b>chose</b> to give you their name rather than everyone within earshot. A name heard while Incognito is neither kept nor offered. Needs Listening on.</div>
+        <div class="row" style="margin-top:10px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="introAuto" onchange="saveIntroAuto()"><span class="track red"></span></label>
+          <span class="conn-s" style="margin:0">Keep without asking me &mdash; a heard introduction is saved immediately, no confirm step</span></div>
+        <div id="introStat" class="conn-s" style="margin-top:6px;color:var(--muted)"></div></div>
+      <label class="sw"><input type="checkbox" id="introCapture" onchange="saveIntroCapture()"><span class="track red"></span></label></div>
     <div class="conn"><div style="flex:1"><div class="conn-t">Read the room &middot; how it was said</div>
       <div class="conn-s">Off by default. Puts the <b>Testimony Thread</b> on the Live Lens after an utterance: nine slots, one per stage of the analysis, drawn only where a stage actually measured something. <b>Two of the nine are real here</b> &mdash; <b>voice stress</b> (pitch, jitter, shimmer, hesitation, pace) from the microphone, and <b>word choice</b> (hedging, first-person, negation, sentence complexity) from the transcript. The <b>micro-expression stages stay empty</b>, deliberately: no action-unit detector backs them on this machine, and an empty slot is the honest drawing.
         <div class="conn-s" style="margin-top:8px">This reads <b>delivery, not truth</b>. It cannot tell you whether something is a lie &mdash; a nervous person telling the truth and a calm person lying both defeat it. With Voice recall on it compares against <b>that person's own baseline</b> ("unusual for them"), which is worth far more than the absolute read it falls back to; without a name it stays on the conservative stranger path and reads <b>CALIBRATING</b>. Entirely on-device, nothing stored, and the Veil wins &mdash; nothing is read while Incognito, in quiet hours, or inside a private zone. Needs Listening on.</div>
@@ -1976,6 +1984,10 @@ async function load(){
   if($("truthLens")){
     $("truthLens").checked=!!c.config.truth_lens_enabled;
   }
+  if($("introCapture")){
+    $("introCapture").checked=!!c.config.intro_capture_enabled;
+    $("introAuto").checked=!!c.config.intro_auto_keep;
+  }
   /* One /dreamlayer/ear read feeds BOTH status lines (the interpreter's and the
      room read's), so it is called once here rather than from inside either
      switch's block — hanging it off one element would make the other line go
@@ -2485,6 +2497,7 @@ async function refreshInterpStat(){
                     interpreted_count:e.interpreted_count});
   renderTruthStat({on:e.truth, proved:e.truth_proved, reads:e.truth_reads,
                    listening:e.listening||e.remote_listening});
+  refreshIntroStat();
 }
 /* Read the room. Same reason as the interpreter for having its own route rather
    than a bare /config write: the switch lives on the running EarHosts too, and a
@@ -2496,6 +2509,32 @@ async function saveTruthLens(){
         body:JSON.stringify({on:on})}); }catch(e){ return; }
   renderTruthStat(j);
   toast(on?"Reading the room — delivery only, on-device":"Room read off");
+}
+async function saveIntroCapture(){
+  const on=$("introCapture").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({intro_capture_enabled:on})});
+  toast(on?"Listening for introductions — nothing saved without a tap":"Name capture off");
+  refreshIntroStat();
+}
+async function saveIntroAuto(){
+  const on=$("introAuto").checked;
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({intro_auto_keep:on})});
+  /* Named plainly. This is the one switch here that writes a name without the
+     wearer confirming it in the moment, so the toast says so rather than a
+     cheerful "on". */
+  toast(on?"Heard introductions will be kept WITHOUT asking":"Back to asking first");
+  refreshIntroStat();
+}
+async function refreshIntroStat(){
+  const el=$("introStat"); if(!el) return;
+  let j; try{ j=await api("/dreamlayer/intro"); }catch(e){ el.textContent=""; return; }
+  if(!j||!j.enabled){ el.textContent="Off."; return; }
+  if(j.listening===false){ el.textContent="On, but no microphone is open — turn Listening on."; return; }
+  const kept=j.kept||0, offered=j.offered||0;
+  el.textContent = offered
+    ? (kept+" kept of "+offered+" name"+(offered===1?"":"s")+" offered."
+       + (j.auto_keep?" Keeping without asking.":""))
+    : "On — listening for someone to introduce themselves.";
 }
 function renderTruthStat(j){
   const el=$("truthStat"); if(!el) return;

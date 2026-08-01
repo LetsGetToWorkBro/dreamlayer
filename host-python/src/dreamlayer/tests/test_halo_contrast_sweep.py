@@ -215,16 +215,19 @@ ENFORCED: list[tuple[str, str, str]] = [
     # --- on `surface` (behind a MAT.PANE glass pane/capsule) ---
     ("JunoReply/AnswerAhead/FactCheck/Hark/Scholar/Taste bodies; Message/Upcoming/"
      "Here/PersonDossier/SpokenCaption/MorningBrief primaries; TruthLens verdict "
-     "capsule; GlanceChoice labels; non-privacy layout rows; fallback card title",
+     "capsule; GlanceChoice labels; Intro name; non-privacy layout rows; "
+     "fallback card title",
      "text_primary", "surface"),
     ("world_rows (Scholar/Taste/Message/MorningBrief); GlanceChoice scene; "
      "Message body; PersonDossier detail; non-privacy layout rows; fallback detail",
      "text_secondary", "surface"),
     ("ObjectRecall object label; CommitmentRecall due (glass capsule); "
      "PersonContext name", "memory_trace", "surface"),
-    ("JunoReply 'JUNO'; AnswerAhead/Listening eyebrows; world_bed eyebrows",
+    ("JunoReply 'JUNO'; AnswerAhead/Listening eyebrows; world_bed eyebrows; "
+     "IntroOffer 'REMEMBER THEM?' + countdown ring",
      "accent_memory", "surface"),
-    ("JunoReply 'JUNO' (action kind)", "accent_success", "surface"),
+    ("JunoReply 'JUNO' (action kind); IntroKept 'KEPT'",
+     "accent_success", "surface"),
     ("FactCheck eyebrow (self_contradiction)", "accent_attention", "surface"),
     ("FactCheck eyebrow (disputed); Hark 'LISTEN' (urgent); Upcoming eyebrow/detail "
      "(<= 5 min)", "warning_amber", "surface"),

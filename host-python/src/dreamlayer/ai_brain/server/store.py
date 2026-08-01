@@ -636,6 +636,18 @@ class BrainConfig:
     # backs it, so it contributes nothing to the verdict and draws as an honest
     # empty slot rather than as evidence.
     truth_lens_enabled: bool = False
+    # -- Name Capture: "Hi, I'm Maya", remembered -------------------------
+    # The reason most people say they want glasses like these. Rides the ear
+    # (needs listen_enabled), so it is a SECOND opt-in on top of an opt-in.
+    #
+    # Hearing a name saves NOTHING: it stages an offer that expires by itself
+    # after 12s and asks. Only a deliberate confirm writes a person.
+    intro_capture_enabled: bool = False
+    # …and the third switch, stated separately because it is the only one that
+    # can write a name without the wearer confirming it in the moment. A closed
+    # grammar of self-introductions still gates it — ambient chatter never
+    # captures anything — but "kept without being asked" deserves its own yes.
+    intro_auto_keep: bool = False
     # -- optional capabilities (dreamlayer/capabilities.py) --------------
     # keys the panel switched OFF — the persisted twin of DL_DISABLE_<KEY>,
     # so the bundled app remembers the choice across restarts
