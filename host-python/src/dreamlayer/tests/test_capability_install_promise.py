@@ -329,3 +329,51 @@ class TestTheMeterOnlyRisesWhenSomethingStartsWorking:
         stats = cap.power_stats()
         assert stats["fully"] == (stats["power_total"] > 0
                                   and stats["power"] >= stats["power_total"])
+
+
+class TestTheCLISaysItToo:
+    """`python -m dreamlayer.capabilities` prints a column headed "switch on
+    with" — the promise in its most explicit form anywhere in the product. A
+    bare pip command under that header, for a capability nothing calls, is
+    simply false: the install succeeds and the row moves "missing" → "dormant".
+    """
+
+    def test_a_live_capability_gets_a_clean_command(self):
+        """The hedge must not spread to rows where the command is the truth."""
+        for key in ("vector_search", "voice_vad", "dashboard"):
+            c = cap._BY_KEY.get(key)
+            if c is None or c.kind == "service":
+                continue
+            hint = cap._hint(c)
+            assert hint.startswith("pip install")
+            assert "nothing calls it" not in hint, key
+
+    def test_an_inert_one_says_the_install_will_not_call_it(self):
+        for key in ("typed_docs", "typed_pipeline", "persona_tuning"):
+            c = cap._BY_KEY.get(key)
+            if c is None:
+                continue
+            hint = cap._hint(c)
+            assert "nothing calls it yet" in hint, key
+            # …and still carries the command, because extras are SHARED and the
+            # same wheel may switch on a different capability that does run
+            assert "pip install" in hint or "manual install" in hint, key
+
+    def test_a_hub_one_says_where_instead_of_offering_a_command(self):
+        """Nothing typed on THIS machine switches these on, and nothing is
+        broken either — a pip command would be the wrong answer twice."""
+        for key in cap._RUNS_ON_HUB:
+            c = cap._BY_KEY.get(key)
+            if c is None:
+                continue
+            hint = cap._hint(c)
+            assert hint == "runs on your glasses, not here", key
+            assert "pip install" not in hint, key
+
+    def test_a_service_still_reports_its_own_note(self):
+        """Services are configured, not installed — the earlier branch owns
+        them and must keep doing so."""
+        svc = [c for c in cap.CAPABILITIES if c.kind == "service"]
+        assert svc, "no service capabilities — update this test"
+        for c in svc:
+            assert cap._hint(c) == c.note, c.key

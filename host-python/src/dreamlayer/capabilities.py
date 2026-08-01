@@ -1027,11 +1027,28 @@ def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
 # --- CLI: python -m dreamlayer.capabilities ---------------------------------------
 
 def _hint(cap: Cap) -> str:
+    """What to type to switch this on — or why typing anything will not.
+
+    The column this fills is headed "switch on with", which is the promise in
+    its most explicit form anywhere in the product. For a capability with no
+    live caller, a pip command under that header is simply false: the install
+    succeeds and the row moves from "missing" to "dormant". Two capabilities are
+    a third case again — they run on the glasses hub, so nothing typed on THIS
+    machine switches them on and nothing is broken either.
+    """
     if cap.kind == "service":
         return cap.note
+    if runs_on(cap) == "hub":
+        return "runs on your glasses, not here"
     if cap.extra is None:
-        return cap.note or "manual install"
-    return f'pip install "dreamlayer[{cap.extra}]"'
+        base = cap.note or "manual install"
+    else:
+        base = f'pip install "dreamlayer[{cap.extra}]"'
+    if not wires_on_install(cap):
+        # Still printed: extras are shared, so the same wheel may switch on a
+        # different capability that does have a live path.
+        return f"{base}  (installs the library; nothing calls it yet)"
+    return base
 
 
 def _print_plain(rows: list[dict], env: Optional[dict] = None) -> None:
