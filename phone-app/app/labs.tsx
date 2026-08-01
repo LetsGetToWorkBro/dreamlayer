@@ -31,17 +31,20 @@ const GROUPS: { section: string; rows: Row[] }[] = [
     rows: [
       { route: "/waypath", labelKey: "settings.waypathLink" },
       { route: "/packs", labelKey: "settings.feelLink" },
+      { route: "/confluence", labelKey: "settings.confluenceLink" },
     ],
   },
   {
     section: "The layer",
     rows: [
+      { route: "/rehearsal", labelKey: "settings.rehearsalLink" },
       { route: "/terminal", labelKey: "settings.terminalLink" },
     ],
   },
   {
     section: "Your brain",
     rows: [
+      { route: "/listening", labelKey: "settings.listeningLink" },
       { route: "/brain-tiers", labelKey: "settings.brainTierLink" },
       { route: "/capabilities", labelKey: "settings.capabilitiesLink" },
       { route: "/cloud", labelKey: "settings.cloudLink" },

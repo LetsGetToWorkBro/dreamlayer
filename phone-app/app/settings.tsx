@@ -280,6 +280,14 @@ export default function Settings() {
             />
           }
         />
+        {/* The rest of the ear — captions, the interpreter, the room read and
+            Name Capture — used to be reachable only from the Mac's own web
+            panel. This is the way in from the phone. */}
+        <TouchableOpacity onPress={() => router.push("/listening")} style={s.linkRow}>
+          <Text style={[typography.body, { color: colors.accentMemory }]}>
+            {t("settings.listeningLink")}
+          </Text>
+        </TouchableOpacity>
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 14, marginBottom: 2 }]}>
           {t("settings.alsoWakeBy")}
         </Text>
