@@ -148,7 +148,15 @@ def _declared_caps() -> list[tuple[str, str, tuple[str, ...], str]]:
             if kw.arg == "seam" and isinstance(kw.value, ast.Constant):
                 seam = kw.value.value
         if key and modules is not None:
-            out.append((key, title or "", modules, seam or ""))
+            # `str(...)` rather than passing these through: `ast.Constant.value`
+            # is typed as the union of every literal type, and mypy will not
+            # narrow it to `str` across the `args` list above — so without the
+            # coercion the return type is a union tuple and this function does
+            # not typecheck. Every value that reaches here is already a string
+            # (a `Cap` with a non-string key/title/seam would be a different
+            # bug), so this makes the declared signature true rather than
+            # changing what is returned.
+            out.append((str(key), str(title or ""), modules, str(seam or "")))
     return out
 
 
