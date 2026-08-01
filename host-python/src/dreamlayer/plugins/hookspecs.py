@@ -110,8 +110,14 @@ def load_entrypoint(ep):
     try:
         return ep.load()
     except Exception as exc:
-        log.warning("[hookspecs] skipping plugin %r: %s",
-                    getattr(ep, "name", ep), exc)
+        # Neither the entry point's NAME nor the exception text goes in the
+        # message. Both are third-party strings — the name comes from an
+        # installed package's metadata and the message from its import — so a
+        # package can choose what appears in this host's logs. The kind of
+        # failure is what a maintainer acts on; `discover_entrypoints()` is
+        # right there for anyone who wants the list.
+        log.warning("[hookspecs] an entry-point plugin failed to import: %s",
+                    type(exc).__name__)
         return None
 
 
@@ -164,9 +170,11 @@ def load_into(registry, plugins: List | None = None,
     batch = list(plugins or [])
     eps = discover_entrypoints()
     if eps and allow_entrypoints is None:
+        # A COUNT, not the names — same reason as above. The point of this line
+        # is that the omission is visible rather than silent, and a count does
+        # that without putting package-controlled text in the log.
         log.info("[hookspecs] %d entry-point plugin(s) advertised and NOT "
-                 "loaded (no policy given): %s", len(eps),
-                 ", ".join(str(getattr(e, "name", e)) for e in eps))
+                 "loaded (no policy given)", len(eps))
     elif eps:
         decide = (lambda _ep: True) if allow_entrypoints is True else allow_entrypoints
         for ep in eps:
@@ -174,8 +182,8 @@ def load_into(registry, plugins: List | None = None,
                 if not decide(ep):
                     continue
             except Exception as exc:                 # a policy that raises
-                log.warning("[hookspecs] policy failed for %r: %s",
-                            getattr(ep, "name", ep), exc)
+                log.warning("[hookspecs] entry-point policy raised %s",
+                            type(exc).__name__)
                 continue                             # …refuses, never admits
             obj = load_entrypoint(ep)
             if obj is not None:
@@ -186,5 +194,8 @@ def load_into(registry, plugins: List | None = None,
             if registry.load(p):
                 loaded += 1
         except Exception as exc:
-            log.warning("[hookspecs] load failed for %r: %s", p, exc)
+            # `p`'s repr and `exc`'s text are both third-party — see
+            # `load_entrypoint`. The kind is what a maintainer acts on.
+            log.warning("[hookspecs] a plugin failed to register: %s",
+                        type(exc).__name__)
     return loaded
