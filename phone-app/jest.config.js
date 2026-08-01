@@ -40,6 +40,10 @@ module.exports = {
       preset: "jest-expo",
       roots: ["<rootDir>/src", "<rootDir>/app"],
       testMatch: ["**/__tests__/**/*.test.tsx"],
+      // NB the component timeout is raised in setup-rntl.ts via jest.setTimeout,
+      // NOT here: `testTimeout` is a root-level jest option and setting it
+      // inside a project entry is silently rejected with a validation warning
+      // (jest 29). See that file for why it is raised at all (#569).
       setupFilesAfterEnv: ["<rootDir>/src/testing/setup-rntl.ts"],
       moduleNameMapper: {
         "^@react-native-async-storage/async-storage$":

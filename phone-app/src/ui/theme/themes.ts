@@ -49,7 +49,12 @@ const midnightColors: ColorSet = {
   surface:          "#3E4044",  // window / control face (the 3D charcoal)
   surfaceElevated:  "#292B2E",  // dark content wells, inputs, list rows
   textPrimary:      "#E6E8E9",  // pale ink — titles, answers
-  textSecondary:    "#9FA6AA",  // secondary ink — captions, supporting copy
+  textSecondary:    "#A8AFB3",  // secondary ink — captions, supporting copy
+                                // (#565: was #9FA6AA, 4.21:1 on the #3E4044
+                                // face — under the 4.5:1 WCAG AA floor for
+                                // normal text. #A8AFB3 is 4.67:1, and still
+                                // far below primary ink at 8.45:1 so it
+                                // reads as secondary rather than promoted.)
   accentMemory:     "#2FD4C4",  // the brand teal's dark-chip voice — "on"
   accentAttention:  "#E06B52",  // coral, dark-legible (the Halo coral)
   accentSuccess:    "#56D364",  // confirmations, live (dark-legible)
@@ -72,7 +77,7 @@ const midnightPlatinum: PlatinumSet = {
   dk:       "#0E0F10",   // deep shadow
   frame:    "#000000",   // the hard 1px window frame — non-negotiable
   ink:      "#E6E8E9",
-  ink2:     "#9FA6AA",
+  ink2:     "#A8AFB3",   // 4.67:1 on `face` — see textSecondary (#565)
   ink3:     "#7C8388",   // dimmest ink (menu disabled)
   tealInk:  "#2FD4C4",   // text-safe teal on dark = the brand's chip teal
   teal:     "#2FD4C4",   // bright teal, unchanged — it was born for dark
