@@ -915,7 +915,13 @@ class TestTheRealPathElsewhereIsFollowed:
             self, dep, tmp_path):
         """`from . import helper` that nothing references is itself just
         another probe. Following it would launder a probe-only module into the
-        indirect bucket through a file the seam never calls."""
+        indirect bucket through a file the seam never calls — the protective
+        property is NOT-INDIRECT, and it holds.
+
+        The precise bucket here is "elsewhere", not "probe": helper.py is real
+        code that genuinely imports and uses the dep, so 'nothing anywhere
+        uses it' would be false — the use is simply unreachable from the seam
+        (the import that would reach it is itself never referenced)."""
         by_mod = _by_mod(tmp_path, {
             "pkg.seam": "import fakelib  # noqa: F401\n"
                         "from . import helper  # noqa: F401\n",
@@ -923,7 +929,10 @@ class TestTheRealPathElsewhereIsFollowed:
                           "def engine():\n    return Engine()\n",
         })
         bucket, why = dep._classify_module("fakelib", ["pkg.seam"], by_mod, {})
-        assert bucket == "probe", why
+        assert bucket == "elsewhere", (
+            f"the unreferenced intermediate import must NOT launder this into "
+            f"indirect — got {bucket} ({why})")
+        assert "pkg.helper" in why
 
 
 class TestPiiRedactionIsNotCriedWolfOn:
@@ -941,13 +950,21 @@ class TestPiiRedactionIsNotCriedWolfOn:
         assert rows[0][1] == "presidio_analyzer"
         assert "nlp_setup" in rows[0][3], rows[0][3]
 
-    def test_deleting_the_real_use_flips_it_to_probe_only_and_back(
+    def test_deleting_the_real_use_flips_it_off_indirect_and_back(
             self, dep, tmp_path):
         """The mutation check, both directions. The real use is the
         `from .. import nlp_setup` import plus the `nlp_setup.analyzer_engine()`
-        call in the seam. Deleting them must flip `presidio_analyzer` to
-        probe-only — a checker that still says "indirect" is not reading call
-        sites — and restoring the file must flip it back."""
+        call in the seam. Deleting them must flip `presidio_analyzer` OFF the
+        indirect bucket — a checker that still says "indirect" is not reading
+        call sites — and restoring the file must flip it back.
+
+        The truthful post-mutation bucket is "elsewhere", not "probe":
+        nlp_setup.py still genuinely imports and calls AnalyzerEngine (its
+        other caller, person_guard.py, is untouched by this mutation), so
+        "nothing anywhere uses it" would be false — the use is simply no
+        longer reachable from THIS seam. The assertion therefore pins the
+        more precise verdict; what the mutation must prove is unchanged:
+        delete the call and the verdict moves, restore it and it returns."""
         seam = "dreamlayer.memory.pii_presidio"
         by_mod = dep._package_modules()
         real = by_mod[seam]
@@ -966,7 +983,9 @@ class TestPiiRedactionIsNotCriedWolfOn:
         by_mod[seam] = p
         bucket, why = dep._classify_module(
             "presidio_analyzer", [seam], by_mod, {})
-        assert bucket == "probe", f"with the real use deleted: {bucket} ({why})"
+        assert bucket == "elsewhere", \
+            f"with the real use deleted: {bucket} ({why})"
+        assert "nlp_setup" in why, why
 
         by_mod[seam] = real
         bucket, why = dep._classify_module(
@@ -1006,10 +1025,11 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
 
     def test_every_declared_module_lands_in_exactly_one_bucket(
             self, dep, dep_buckets):
-        """Three buckets only mean something if they partition the declared
+        """The buckets only mean something if they partition the declared
         modules. A (cap, module) pair in two buckets double-counts; a pair in
         none disappears from the audit entirely."""
-        rows = [r for name in ("used", "indirect", "probe", "no_seam")
+        rows = [r for name in ("used", "indirect", "elsewhere", "probe",
+                               "no_seam")
                 for r in dep_buckets[name]]
         declared = sorted((k, m) for k, _t, mods, _s in dep._declared_caps()
                           for m in mods)
@@ -1021,8 +1041,8 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
         concept seam and it declares no modules."""
         assert not dep_buckets["no_seam"], dep_buckets["no_seam"]
 
-    def test_the_headline_counts_all_three_buckets(self, dep, dep_buckets,
-                                                   capsys, monkeypatch):
+    def test_the_headline_counts_every_bucket(self, dep, dep_buckets,
+                                              capsys, monkeypatch):
         """Checked against the actual output rather than the source: the two
         got out of step once already in the sibling checker, which is the only
         way this can go wrong."""
@@ -1032,6 +1052,118 @@ class TestTheDependencyCheckerSeesTheWholeCatalogue:
         total = int(head.split()[0])
         n_used = int(head.split("·")[1].strip().split()[0])
         assert total == sum(len(dep_buckets[k])
-                            for k in ("used", "indirect", "probe", "no_seam"))
+                            for k in ("used", "indirect", "elsewhere",
+                                      "probe", "no_seam"))
         assert n_used == len(dep_buckets["used"]), head
         assert n_used < total, "the used column cannot be the whole catalogue"
+
+
+class TestUsedElsewhereOffTheSeamsPath:
+    """The bucket the first draft lacked. A declared module can be genuinely
+    used by real package code the DECLARED SEAM never reaches — calling that
+    "probe only" is demonstrably false (the use exists) and calling it "used"
+    is dishonest about what installing it buys (the seam never gets there)."""
+
+    def test_use_in_an_unreachable_sibling_is_elsewhere_not_probe(
+            self, dep, tmp_path):
+        """The seam only probes; a sibling the seam never imports genuinely
+        uses the dep. Neither "used" (not the seam) nor "probe" (the use is
+        real) — the verdict must be the honest middle."""
+        by_mod = _by_mod(tmp_path, {
+            "pkg.seam": "import deadlib  # noqa: F401\n\n_FLAG = True\n",
+            "pkg.store": "from deadlib import Engine\n\n\n"
+                         "def build():\n    return Engine()\n",
+        })
+        bucket, why = dep._classify_module("deadlib", ["pkg.seam"], by_mod, {})
+        assert bucket == "elsewhere", why
+        assert "pkg.store" in why
+
+    def test_the_vector_search_siblings_are_elsewhere_not_probe_only(
+            self, dep, dep_buckets):
+        """The live case: chromadb / lancedb / sqlite_vec back FULL store
+        implementations (chroma_store.py, lance_store.py, vector_store.py)
+        that the declared seam (ann_index.py) never reaches and nothing in
+        production constructs. 'probe only — nothing anywhere uses it' was
+        demonstrably false for them; the evidence must name the real user."""
+        elsewhere = {(k, m): w for k, m, _s, w in dep_buckets["elsewhere"]}
+        for entry, user in ((("vector_search", "chromadb"), "chroma_store"),
+                            (("vector_search", "lancedb"), "lance_store"),
+                            (("vector_search", "sqlite_vec"), "vector_store")):
+            assert entry in elsewhere, (
+                f"{entry} left the elsewhere bucket; buckets: "
+                f"{ {k: len(v) for k, v in dep_buckets.items()} }")
+            assert user in elsewhere[entry], elsewhere[entry]
+
+    def test_probe_only_now_means_nothing_anywhere_by_construction(
+            self, dep, dep_buckets):
+        """The probe bucket's label — 'referenced by no code path anywhere in
+        the package' — is only true because the elsewhere bucket exists. Pin
+        it: no probe row may have a package module that uses the dep."""
+        by_mod = dep._package_modules()
+        cache: dict = {}
+        for key, module, _seam, _why in dep_buckets["probe"]:
+            users = dep._used_elsewhere_off_seam(module, by_mod, cache)
+            assert not users, (
+                f"({key}, {module}) is labelled probe-only but "
+                f"{users} references it — it belongs in the elsewhere bucket")
+
+
+class TestKnownLimitationsModuleGranularity:
+    """These tests PIN THE CURRENT, LIMITED behaviour — each documents a shape
+    the checker gets WRONG, so a future fix must retire the pin deliberately
+    rather than silently change the verdict. The names say 'limitation'; the
+    docstrings say what the truthful answer would be. Do not 'fix' these by
+    editing the expected value to match a still-wrong checker."""
+
+    def test_limitation_cross_function_use_is_laundered_to_indirect(
+            self, dep, tmp_path):
+        """TRUTH: probe-only. The seam's only call is helper.foo(); the dep is
+        used only in helper.bar(), which nothing calls, so installing it
+        changes nothing on any path the seam takes. The checker works at
+        MODULE granularity ('the seam calls somewhere into helper, and helper
+        uses the dep somewhere') and so reports indirect. A symbol-level call
+        graph would be needed to say otherwise; that trade was considered and
+        rejected, so the limitation is pinned instead."""
+        by_mod = _by_mod(tmp_path, {
+            "pkg.seam": "import deadlib  # noqa: F401\n"
+                        "from . import helper\n\n\n"
+                        "def go():\n    return helper.foo()\n",
+            "pkg.helper": "from deadlib import Engine\n\n\n"
+                          "def foo():\n    return 1\n\n\n"
+                          "def bar():\n    return Engine()\n",
+        })
+        bucket, why = dep._classify_module("deadlib", ["pkg.seam"], by_mod, {})
+        assert bucket == "indirect", (
+            "LIMITATION PIN changed — if the checker now says 'probe' it "
+            f"became symbol-aware; retire this pin. Got: {bucket} ({why})")
+
+    def test_limitation_a_dead_code_reference_counts_as_a_call(
+            self, dep, tmp_path):
+        """TRUTH: probe-only. `if False: helper.foo()` never runs, but
+        'references' is syntactic — any ast.Name load anywhere in the file
+        counts, including unreachable code — so the dead reference launders
+        the dep into indirect."""
+        by_mod = _by_mod(tmp_path, {
+            "pkg.seam": "import deadlib  # noqa: F401\n"
+                        "from . import helper\n"
+                        "if False:\n    helper.foo()\n",
+            "pkg.helper": "from deadlib import Engine\n\n\n"
+                          "def engine():\n    return Engine()\n",
+        })
+        bucket, why = dep._classify_module("deadlib", ["pkg.seam"], by_mod, {})
+        assert bucket == "indirect", (
+            "LIMITATION PIN changed — if the checker now says 'probe' it "
+            f"learned reachability; retire this pin. Got: {bucket} ({why})")
+
+    def test_limitation_a_shadowed_binding_counts_as_use(self, dep, tmp_path):
+        """TRUTH: probe-only. Every load of `thing` resolves to the function
+        PARAMETER, never to the import — the binding is a pure probe. The
+        checker does no scope analysis, so the shadowed name reads as use."""
+        by_mod = _by_mod(tmp_path, {
+            "pkg.seam": "from deadlib import thing  # noqa: F401\n\n\n"
+                        "def go(thing):\n    return thing\n",
+        })
+        bucket, why = dep._classify_module("deadlib", ["pkg.seam"], by_mod, {})
+        assert bucket == "used", (
+            "LIMITATION PIN changed — if the checker now says 'probe' it "
+            f"grew scope analysis; retire this pin. Got: {bucket} ({why})")
