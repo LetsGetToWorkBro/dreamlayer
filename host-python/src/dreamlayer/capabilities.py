@@ -754,10 +754,21 @@ def power_stats(env: Optional[dict] = None) -> dict:
             continue
         if st == "unsupported":
             continue                              # can't be had on this machine
-        if st == "dormant":
-            continue                              # installed but not wired to a
-            #                                       live path — must not pad the
-            #                                       meter (it delivers nothing yet)
+        # THE DENOMINATOR MUST NOT MOVE WHEN A STATE DOES. Excluding on the
+        # current state (`st == "dormant"`) meant the total shrank the moment
+        # something was installed, so installing a capability that delivers
+        # nothing still raised the percent — measured at 7% → 9% with all 26
+        # inert ones installed and the numerator unchanged at 11. It cut the
+        # other way too: an ear capability installed with Listening OFF reads
+        # dormant and left the denominator, so switching the microphone on moved
+        # both halves of the fraction at once.
+        #
+        # So the exclusion is a property of the CAPABILITY, not of its state:
+        # anything that can never reach "active" is out of the meter entirely,
+        # and everything that can stays in whether it is on or not. The percent
+        # then only rises when something actually starts working.
+        if not wires_on_install(c):
+            continue
         total += 1
         power_total += c.impact
         bucket = by_tier.setdefault(

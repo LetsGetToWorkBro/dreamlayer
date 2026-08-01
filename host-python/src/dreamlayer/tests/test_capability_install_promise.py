@@ -245,3 +245,87 @@ class TestAPackDoesNotSellAnInertCapability:
         about a feature the wearer's glasses use would be the wrong hedge."""
         p = next(x for x in cap.PACKS if x.key == "recall")
         assert "GLASSES" in p.tagline or "glasses" in p.tagline
+
+
+class TestTheMeterOnlyRisesWhenSomethingStartsWorking:
+    """The awakening meter is a fraction, and the denominator used to move.
+
+    `power_stats` excluded a capability on its current STATE — `dormant` was
+    skipped — so the total shrank the moment something was installed. Installing
+    a capability that delivers nothing therefore raised the percent: measured at
+    7% → 9% across all 26 inert entries, with the numerator unchanged at 11. The
+    wearer downloads libraries, switches on nothing, and the meter congratulates
+    them.
+
+    It cut the other way too. An ear capability installed with Listening OFF
+    reads `dormant` and left the denominator, so switching the microphone on
+    moved both halves of the fraction at once — a jump bigger than the thing
+    that caused it.
+
+    The exclusion is now a property of the CAPABILITY: anything that can never
+    reach "active" is out of the meter entirely, and everything that can stays
+    in whether it is currently on or not.
+    """
+
+    @staticmethod
+    def _with_installed(keys):
+        real = cap.installed
+        cap.installed = lambda c: True if c.key in keys else real(c)  # type: ignore[assignment]
+        try:
+            return cap.power_stats()
+        finally:
+            cap.installed = real                                      # type: ignore[assignment]
+
+    def test_installing_an_inert_capability_moves_nothing(self):
+        inert = {c.key for c in cap.CAPABILITIES if not cap.wires_on_install(c)}
+        assert inert, "nothing is inert — update this test"
+        before = cap.power_stats()
+        after = self._with_installed(inert)
+        assert after["power_total"] == before["power_total"], (
+            "the denominator moved when a capability that delivers nothing was "
+            "installed")
+        assert after["power"] == before["power"]
+        assert after["percent"] == before["percent"]
+
+    def test_no_inert_capability_is_in_the_denominator_at_all(self):
+        """Not merely 'it does not move' — it must not be counted, or a wearer
+        could never reach 100% on a machine where those libraries are absent."""
+        counted = 0
+        for c in cap.CAPABILITIES:
+            if c.kind not in ("python", "darwin") or not cap.supported(c):
+                continue
+            if not cap.wires_on_install(c):
+                counted += 1
+        stats = cap.power_stats()
+        assert stats["total"] + counted >= stats["total"]
+        # the meter's own total must exclude every one of them
+        live = [c for c in cap.CAPABILITIES
+                if c.kind in ("python", "darwin") and cap.supported(c)
+                and cap.wires_on_install(c)]
+        assert stats["total"] == len(live)
+
+    def test_the_denominator_does_not_move_when_a_runtime_flag_flips(self):
+        """The mirrored half: promoting an ear capability must change the
+        numerator only."""
+        env = {"DL_WIRED_VOICE_VAD": "1", "DL_WIRED_LOCAL_ASR": "1"}
+        off = cap.power_stats()
+        on = cap.power_stats(env)
+        assert on["power_total"] == off["power_total"]
+        assert on["power"] >= off["power"]
+
+    def test_a_promoted_capability_is_still_counted_while_it_is_off(self):
+        """It CAN reach active — turn Listening on — so it belongs in the
+        denominator whether or not the microphone is open right now."""
+        from dreamlayer.ai_brain.server.ear import EAR_CAPS
+        for key in EAR_CAPS:
+            c = cap._BY_KEY.get(key)
+            if c is None or c.kind not in ("python", "darwin"):
+                continue
+            assert cap.wires_on_install(c) is True, key
+
+    def test_full_still_means_every_power_on(self):
+        """`fully` drives "fully awakened" copy. Shrinking the denominator was
+        also a way to reach it without switching anything on."""
+        stats = cap.power_stats()
+        assert stats["fully"] == (stats["power_total"] > 0
+                                  and stats["power"] >= stats["power_total"])
