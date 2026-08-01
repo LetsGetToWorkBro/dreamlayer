@@ -41,8 +41,8 @@ tree for a construction outside the seam and outside `tests/`.
 |---|---|
 | `event_bus` | `MeshManager` is constructed nowhere in the tree. `MeshEventBus` wraps one; with no mesh there are no packets to fan out. |
 | `object_tracking` | Nothing emits per-frame centroids. `SupervisionTracker.update(centroids)` is referenced only by its own tests, and its natural partner `LostFoundScene` keys its ledger by LABEL rather than tracked identity — and is not constructed either. |
-| `wasm_plugins` | Needs a `.wasm`-guest package format. `store.py`'s own docstring already names the component host as *"the forward path a `.wasm`-guest package format targets"*; today's plugins ship Python module code. |
-| `extism_plugins` | The same missing format, a second runtime. |
+| `wasm_plugins` | ~~Needs a `.wasm`-guest package format.~~ **Built — see the update below.** |
+| `extism_plugins` | ~~The same missing format, a second runtime.~~ **Built — see the update below.** |
 
 ### B — Orchestrator or simulator by design (5)
 
@@ -122,6 +122,65 @@ D: grep -n "def register" -A 3 host-python/src/dreamlayer/hud/renderer.py
 For the whole entry: `python -m dreamlayer.capabilities` and the counts in
 `capability_reachability.py`. If wired rises above 39 without this file
 changing, the file is stale.
+
+## Update — 2026-08-01, `wasm_plugins` (group A, row 3)
+
+Built, and the entry's own framing held: it was a FEATURE to design, not a wire.
+What it took was three separate blockers, and the first two would each have made
+the third worthless on its own — which is exactly the failure mode this file is
+about.
+
+1. **No package format.** `manifest.kind` now selects `"python"` or `"wasm"`;
+   the payload lands as `<module>.wasm` and rides in `source` as base64 so the
+   checksum and signature rules are untouched. `kind` is INSIDE
+   `signing_payload()`, because flipping it chooses which host runs the code —
+   the same as choosing the sandbox.
+2. **The gate refused every wasm package.** Base64 is not Python, so
+   `scan_source` answered `syntax error: cannot assign to expression` for all of
+   them. Routing them in `store.py` was necessary and not sufficient: they could
+   never reach the loader. `plugins/wasm_scan.py` reads the module's import and
+   export sections directly — no runtime, because the gate runs at install time
+   on machines that have none — and `validate.scan_wasm` refuses a guest reaching
+   past its manifest, naming the capability the author would have to declare.
+3. **The host could not pass a guest a string.** `log`, which the WIT calls "the
+   minimum a plugin needs to speak to the host at all", received two integers
+   and had no way to read the bytes they pointed at. `read_mem`/`write_mem` are
+   bounds-checked against the guest's live memory size and refuse rather than
+   clamp.
+
+Two bugs fell out that were not in this entry's ledger at all, both only
+reachable once a guest actually ran: `_wrap` returned `0` from every host
+function, so granting a VOID capability (`log`, `cards`) trapped the guest with
+"callback produced results when it shouldn't"; and `granted` was handed raw
+manifest names, so `network` never linked `net` and `log` linked for no one.
+
+The capability is now in `_PROMOTED_AT_RUNTIME`, not removed from `_NOT_WIRED`:
+wasmtime importing is not a guest. `DL_WIRED_WASM_PLUGINS` follows
+`wasm_plugin_host.live_guests() > 0` — a `.wasm` package instantiated right now
+— so removing the plugin takes the capability back down.
+
+`extism_plugins` (row 4) was blocked on "the same missing format", and with the
+format built the rest was one `kind`. `manifest.kind == "extism"` ships the same
+`.wasm` on disk under the Extism runtime, which links NO host functions at all —
+incapable rather than inspected. `extism_host.py` had been complete, tested and
+bounded for months with exactly one caller: its own tests. It was never missing
+a runtime; nothing on disk was ever an Extism guest.
+
+Three things had to differ from its sibling and none of them were guessed:
+
+* The gate reads a different namespace. An Extism guest imports
+  `extism:host/env` (the PDK's `alloc`/`store_u8`/`output_set`), which under the
+  component host's rules reads as "outside the host surface" — so `scan_wasm`
+  takes the runtime's namespace as a parameter. It is the STRICTER check of the
+  two: there is no capability to declare, because there is no power to grant.
+* No `memory` or `dl_alloc` export to insist on; the PDK owns both sides.
+* The smoke test is a real call, because Extism constructs its plugin per call
+  and has no instantiate step. An EMPTY reply is not a failure — `{}` is not a
+  sighting, and "nothing to say about this one" is the answer a good provider
+  gives most of the time.
+
+Both capabilities are promoted from their own live count (`live_guests()` per
+runtime), never each other's: a wearer running one is not running the other.
 
 ## Consequences
 

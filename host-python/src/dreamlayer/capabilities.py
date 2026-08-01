@@ -625,8 +625,12 @@ _PROMOTED_AT_RUNTIME = frozenset({
     # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
     "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
     "sound_events", "bird_song", "live_interpret",
-    # …and these five, each from its own live path (DL_WIRED_<KEY>)
+    # …and these six, each from its own live path (DL_WIRED_<KEY>)
     "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
+    # `wasm_plugins` and `extism_plugins` joined them once a `.wasm` package
+    # format existed for the store to route: each flag follows a guest loaded in
+    # THAT runtime right now, not the wheel being importable.
+    "wasm_plugins", "extism_plugins",
 })
 
 

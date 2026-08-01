@@ -114,6 +114,51 @@ def capability_function_names() -> dict:
     return {"log": {"log"}, "fs": {"fs_read"},
             "net": {"net_get"}, "cards": {"show_card"}}
 
+
+#: Manifest capability name → WIT interface name, where the two vocabularies
+#: disagree. A manifest's ``requires`` speaks the one every plugin uses
+#: (``package.KNOWN_CAPABILITIES``: `network`, `fs`, `cards`…) and the WIT
+#: contract names the same power `net`. Translating here rather than teaching
+#: the manifest a second vocabulary is the whole point: a wasm author and a
+#: Python author declare the SAME word for the same grant, one gate checks it
+#: against what the device can hand out, and `dreamlayer.wit` stays the formal
+#: contract it is without being bent to match an unrelated list.
+_CAPABILITY_ALIASES = {"network": "net"}
+
+#: Linked for every guest, declared or not. `log` is the one interface that
+#: carries no authority: the host writes its OWN line, bounded, and never the
+#: guest's bytes (see wasm_plugin_host._impls). The WIT calls it "the minimum a
+#: plugin needs to speak to the host at all", and a plugin that cannot say
+#: anything cannot be debugged by the person who installed it.
+ALWAYS_GRANTED = frozenset({"log"})
+
+
+def granted_interfaces(requires) -> set:
+    """The WIT interfaces a manifest's ``requires`` actually grants.
+
+    Unknown names are dropped rather than raising: ``requires`` legitimately
+    carries capabilities that mean nothing to a wasm guest (`object_lens`,
+    `glance`), because it is the same field a Python package uses.
+    """
+    known = set(capability_function_names())
+    out = set(ALWAYS_GRANTED)
+    for cap in requires or ():
+        wit = _CAPABILITY_ALIASES.get(cap, cap)
+        if wit in known:
+            out.add(wit)
+    return out
+
+
+def capability_of_function(fname: str) -> str:
+    """The MANIFEST capability a plugin must declare to import `fname`, or ""
+    for a name no capability grants. The inverse of the two maps above, so an
+    error message names the word the author would have to write."""
+    reverse = {wit: cap for cap, wit in _CAPABILITY_ALIASES.items()}
+    for wit, funcs in capability_function_names().items():
+        if fname in funcs:
+            return reverse.get(wit, wit)
+    return ""
+
 try:  # optional dep — wasmtime-py, in the `platform` extra (capability: wasm_plugins)
     import wasmtime  # type: ignore
     _HAS_WASMTIME = True
@@ -157,6 +202,28 @@ def available() -> bool:
 
 class CapabilityError(RuntimeError):
     """A plugin imports a host power its manifest never declared."""
+
+
+class MemoryUnavailable(RuntimeError):
+    """The guest exports no linear memory, so a (ptr, len) cannot be resolved."""
+
+
+class MemoryOutOfBounds(RuntimeError):
+    """A (ptr, len) from the guest runs past its own linear memory."""
+
+
+def needs_memory(fn):
+    """Mark a host-function impl as wanting the host as its first argument.
+
+    Opt-in rather than inferred: an impl's arity is not a reliable signal (a
+    `log` impl legitimately takes two ints), and guessing would silently change
+    what an existing impl receives. Marked impls are called `fn(host, *args)`
+    and can use `host.read_str(ptr, n)`.
+
+        impls={"log": needs_memory(lambda host, ptr, n: print(host.read_str(ptr, n)))}
+    """
+    fn._dl_wants_host = True            # type: ignore[attr-defined]
+    return fn
 
 
 class ResourceLimitError(RuntimeError):
@@ -268,14 +335,90 @@ class WasmCapabilityHost:
         self._inst = linker.instantiate(self.store, self.module)
         return self._inst
 
+    # -- guest linear memory -------------------------------------------------
+    #
+    # The WIT contract passes strings as `(ptr, len)` "into guest linear
+    # memory", and until now the host gave an impl no way to resolve one: `log`
+    # — described in the contract as "the minimum a plugin needs to speak to the
+    # host at all" — received two integers and could not read the bytes they
+    # pointed at. So the two string-passing capabilities of the four
+    # (`log`, `show_card`) could not carry anything.
+    #
+    # These accessors close that, and every one of them is BOUNDS-CHECKED
+    # against the guest's current memory size. A guest is untrusted by
+    # construction here; a ptr/len it chose must never be able to walk the
+    # host's process, and `data_ptr`-style raw access would let it.
+
+    def memory(self):
+        """The guest's exported linear memory, or None if it exports none."""
+        if self._inst is None:
+            return None
+        return self._inst.exports(self.store).get("memory")
+
+    def read_mem(self, ptr: int, length: int) -> bytes:
+        """`length` bytes at `ptr` in guest memory. Raises on an out-of-bounds
+        span rather than clamping — a guest handing over a bad ptr/len is a bug
+        or an attack, and silently returning fewer bytes would hide both."""
+        mem = self.memory()
+        if mem is None:
+            raise MemoryUnavailable("the guest exports no memory")
+        ptr, length = int(ptr), int(length)
+        if ptr < 0 or length < 0:
+            raise MemoryOutOfBounds(f"negative span ptr={ptr} len={length}")
+        size = mem.data_len(self.store)
+        if ptr + length > size:
+            raise MemoryOutOfBounds(
+                f"span ptr={ptr} len={length} runs past guest memory ({size})")
+        return bytes(mem.read(self.store, ptr, ptr + length))
+
+    def write_mem(self, ptr: int, data: bytes) -> int:
+        """Write `data` at `ptr`. Same bounds rule. Returns the byte count."""
+        mem = self.memory()
+        if mem is None:
+            raise MemoryUnavailable("the guest exports no memory")
+        ptr = int(ptr)
+        if ptr < 0:
+            raise MemoryOutOfBounds(f"negative ptr={ptr}")
+        size = mem.data_len(self.store)
+        if ptr + len(data) > size:
+            raise MemoryOutOfBounds(
+                f"write ptr={ptr} len={len(data)} runs past guest memory ({size})")
+        mem.write(self.store, data, ptr)
+        return len(data)
+
+    def read_str(self, ptr: int, length: int) -> str:
+        """UTF-8 at `ptr`, replacing undecodable bytes rather than raising: the
+        bytes come from an untrusted guest, and a malformed string is that
+        guest's problem to see in a log line, not a host-side exception."""
+        return self.read_mem(ptr, length).decode("utf-8", "replace")
+
     def _wrap(self, cap: str, fname: str):
         impl = self.impls.get(fname)
+        wants_host = bool(getattr(impl, "_dl_wants_host", False))
+        # Result arity decides what a host function may hand back, and getting
+        # it wrong traps the GUEST — "callback produced results when it
+        # shouldn't" — from inside a host call, which reads like the plugin's
+        # fault and is not. The stub returned 0 unconditionally, so granting a
+        # void capability (`log`, `cards`) with no implementation trapped every
+        # guest that used it; and an impl that returned a value for a void
+        # function trapped it too, which is easy to do by accident (`return 0`,
+        # or any expression-bodied lambda).
+        returns = _SIGNATURES.get(fname, (0, 0))[1] > 0
 
         def host_fn(*args):
             self.calls.append((cap, fname, args))
+            out = None
             if impl is not None:
-                return impl(*args)
-            return 0                     # safe default for i32-returning stubs
+                # `needs_memory`-marked impls get the host first, so they can
+                # resolve a (ptr, len) through the bounds-checked accessors
+                # above. Unmarked impls keep the plain signature they had.
+                out = impl(self, *args) if wants_host else impl(*args)
+            if not returns:
+                return None              # void: anything else is a guest trap
+            try:
+                return int(out)          # i32 result; None/garbage → the stub's 0
+            except (TypeError, ValueError):
+                return 0
 
         return host_fn
 

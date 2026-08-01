@@ -113,6 +113,57 @@ validate`), off on the install path. The hardening path, now built:
   the subprocess jail (which confines from the outside); this enforces from the
   inside. Available when `wasmtime` is installed (`platform` extra).
 
+#### Shipping a WASM plugin
+
+A package declares `"kind": "wasm"` in its manifest and ships `<module>.wasm`
+beside it, where `<module>` is the first half of `entry` (`demo:dl_build` →
+`demo.wasm`, and `dl_build` is the export the host calls). `kind` travels
+*inside* the signing payload, because flipping it chooses which host runs the
+code — which is the same as choosing the sandbox.
+
+The guest exports three things:
+
+| export | signature | meaning |
+|---|---|---|
+| `dl_alloc` | `(size: i32) -> i32` | reserve a buffer, return its offset |
+| *build* | `(ptr, len, cap: i32) -> i32` | read the sighting JSON at `(ptr, len)`, write the reply into the same buffer (capacity `cap`), return its length — negative for "nothing to say" |
+| `memory` | | linear memory, so the host can reach the buffer |
+
+The reply is `{"rows": [{"label": …, "detail": …}, …]}` and becomes `PanelRow`s
+on the object lens, indistinguishable downstream from a Python plugin's.
+
+Capabilities use the same vocabulary as any other manifest: declare `network`
+to import `net_get`, `cards` for `show_card`, `fs` for `fs_read`. `log` is
+linked for every guest — it carries no authority, since the host writes its own
+line and never the guest's bytes. The gate reads the module's import section at
+**install** time and refuses a guest reaching past its manifest; the runtime
+re-checks with wasmtime's own parser before the guest runs.
+
+```bash
+dreamlayer plugins validate .    # reads the imports, then instantiates the guest
+dreamlayer plugins pack .
+dreamlayer plugins install . --brain http://localhost:8765
+```
+
+A wasm package counts as a kernel boundary on its own, so it loads under the
+fail-closed default on a Mac or Windows Brain where no bwrap/nsjail exists and
+a Python package is refused outright.
+
+#### `"kind": "extism"` — the same payload, the stricter runtime
+
+Extism inverts the capability model instead of enforcing it: `functions=[]`,
+`wasi=False`, `allowed_hosts=[]`, so the guest has **no** host functions at
+all — not "declares none", *has* none. It cannot even log. In exchange, a
+plugin written in Rust, Go or JS with the standard Extism PDK works with no
+DreamLayer-specific ABI: the export named by `entry` receives the sighting JSON
+as its input and returns `{"rows": […]}` as its output, and the PDK owns the
+memory on both sides (no `dl_alloc`, no `memory` export).
+
+The gate checks the same two questions against Extism's own namespace: every
+import must come from `extism:host/env`, and the entry export must exist. Which
+runtime a package gets is the author's choice, declared in `kind` and signed
+with it — they know which ABI they compiled against.
+
 ### API v2 — what a plugin may do
 
 A plugin declaring `"api": "2"` gets, in addition to `register(ctx)`:

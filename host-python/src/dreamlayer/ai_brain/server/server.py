@@ -3228,6 +3228,26 @@ def _capability_payload(brain: Brain) -> dict:
             env["DL_WIRED_SPEAKER_ID"] = "1"
     except Exception:                           # noqa: BLE001
         pass
+    # `wasm_plugins`, same rule again: wasmtime importing is not a guest. The
+    # flag follows a `.wasm` package that is instantiated RIGHT NOW in the
+    # in-process component host — capability-enforced, zero ambient authority —
+    # because that is the only condition under which the tier is in use. Remove
+    # the plugin and the capability goes back down.
+    try:
+        from ...plugins.wasm_plugin_host import live_guests
+        if live_guests() > 0:
+            env["DL_WIRED_WASM_PLUGINS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
+    # `extism_plugins` — the second WASM runtime, same rule and its own count,
+    # because the two hosts confine differently and a wearer running one is not
+    # running the other.
+    try:
+        from ...plugins.extism_plugin_host import live_guests as _extism_live
+        if _extism_live() > 0:
+            env["DL_WIRED_EXTISM_PLUGINS"] = "1"
+    except Exception:                           # noqa: BLE001
+        pass
     packs = packs_report(env=env)
     for p in packs:                             # overlay live install progress
         job = _PACK_JOBS.get(p["key"])

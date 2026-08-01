@@ -49,9 +49,22 @@ def _card_type(name: str) -> str:
 def _load_package(path_str: str):
     """Resolve a CLI target to a PluginPackage: a plugin dir, or a packaged
     ``.json`` ({manifest, source})."""
-    from dreamlayer.sdk import PluginManifest, PluginPackage, package_from_dir
+    from dreamlayer.sdk import (PluginManifest, PluginPackage,
+                                package_from_dir, package_from_wasm_dir)
     p = Path(path_str)
     if p.is_dir():
+        # A wasm project says so in its manifest, and says it in the one field
+        # that also travels inside the signature — so `validate`, `pack`,
+        # `install` and `dev --watch` all follow the same declaration the store
+        # will route on, rather than each guessing from the files present.
+        meta = p / "manifest.json"
+        if meta.exists():
+            try:
+                kind = json.loads(meta.read_text(encoding="utf-8")).get("kind")
+            except Exception:                    # noqa: BLE001 — a broken
+                kind = None                      # manifest is the loader's news
+            if str(kind or "").strip().lower() in ("wasm", "extism"):
+                return package_from_wasm_dir(p)
         return package_from_dir(p)
     if p.is_file() and p.suffix == ".json":
         d = json.loads(p.read_text(encoding="utf-8"))
@@ -379,9 +392,14 @@ def cmd_preview(args) -> int:
 
 def _watch_sig(d: Path):
     sig = []
-    for f in ("plugin.py", "plugin.json"):
+    # `manifest.json` + every `.wasm` alongside it, so the dev loop notices a
+    # recompiled guest — a watcher that only knows about Python would sit still
+    # through the one edit a wasm author actually makes.
+    for f in ("plugin.py", "plugin.json", "manifest.json"):
         p = d / f
         sig.append(p.stat().st_mtime if p.exists() else 0.0)
+    for p in sorted(d.glob("*.wasm")):
+        sig.append(p.stat().st_mtime)
     return tuple(sig)
 
 
