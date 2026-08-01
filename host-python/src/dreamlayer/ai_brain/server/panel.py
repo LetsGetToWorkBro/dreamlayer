@@ -1178,6 +1178,31 @@ if(d)document.documentElement.classList.add("midnight");}catch(e){}})();</script
       <div class="row"><button onclick="prepReport()">Prepare report</button></div>
       <div id="repOut" style="margin-top:8px"></div>
     </div>
+    <div class="conn"><div style="flex:1"><div class="conn-t">What may interrupt you</div>
+      <div class="conn-s">These seven have been switches in the phone&rsquo;s Settings since launch and reached <b>nothing</b> &mdash; each one wrote the phone&rsquo;s own storage and stopped there. Five are now enforced here, at the single funnel every card goes through; the two <b>wake</b> settings are stored here and pulled by the glasses, which is the only thing that can act on them. <b>Focus is not the Veil</b>: it hushes interruptions and leaves capture running.
+        <div class="row" style="margin-top:10px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="proCards" onchange="saveInterrupts()"><span class="track"></span></label>
+          <span class="conn-s" style="margin:0"><b>Proactive cards</b> &mdash; surface the right card unasked</span></div>
+        <div class="row" style="margin-top:8px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="proAlerts" onchange="saveInterrupts()"><span class="track"></span></label>
+          <span class="conn-s" style="margin:0"><b>A tap on the shoulder</b> &mdash; let Juno speak up when it matters</span></div>
+        <div class="row" style="margin-top:8px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="focusMode" onchange="saveInterrupts()"><span class="track red"></span></label>
+          <span class="conn-s" style="margin:0"><b>Focus mode</b> &mdash; cards, captions and pop-ups hush; capture keeps running</span></div>
+        <div class="conn-s" style="margin-top:10px">Which cues may surface:</div>
+        <div class="row" style="margin-top:6px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="cueEvent" onchange="saveInterrupts()"><span class="track"></span></label>
+          <span class="conn-s" style="margin:0">Events &mdash; &ldquo;leave in 8 min&rdquo;</span></div>
+        <div class="row" style="margin-top:6px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="cuePerson" onchange="saveInterrupts()"><span class="track"></span></label>
+          <span class="conn-s" style="margin:0">People &mdash; who is in front of you</span></div>
+        <div class="row" style="margin-top:6px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="cuePlace" onchange="saveInterrupts()"><span class="track"></span></label>
+          <span class="conn-s" style="margin:0">Places &mdash; what you left here</span></div>
+        <div class="row" style="margin-top:10px">
+          <label class="sw" style="margin:0"><input type="checkbox" id="factCheck" onchange="saveInterrupts()"><span class="track red"></span></label>
+          <span class="conn-s" style="margin:0"><b>Live fact-checker</b> &mdash; as people talk, check what is said against the world. Off by default: it is the only one here that spends a verifier pass per utterance. Needs Listening on.</span></div>
+      </div></div></div>
     <div class="conn" style="margin-top:6px"><div><div class="conn-t">Quiet hours</div>
       <div class="conn-s">Auto-incognito during this window — cloud off, capture paused. Blank to disable.</div></div>
       <input type="text" id="quiet" placeholder="22:00-07:00" style="max-width:140px"></div>
@@ -1984,6 +2009,15 @@ async function load(){
   if($("truthLens")){
     $("truthLens").checked=!!c.config.truth_lens_enabled;
   }
+  if($("proCards")){
+    $("proCards").checked=c.config.proactive_cards!==false;
+    $("proAlerts").checked=c.config.proactive_alerts!==false;
+    $("focusMode").checked=!!c.config.focus_mode;
+    $("cueEvent").checked=c.config.cue_event!==false;
+    $("cuePerson").checked=c.config.cue_person!==false;
+    $("cuePlace").checked=c.config.cue_place!==false;
+    $("factCheck").checked=!!c.config.fact_check_enabled;
+  }
   if($("introCapture")){
     $("introCapture").checked=!!c.config.intro_capture_enabled;
     $("introAuto").checked=!!c.config.intro_auto_keep;
@@ -2509,6 +2543,20 @@ async function saveTruthLens(){
         body:JSON.stringify({on:on})}); }catch(e){ return; }
   renderTruthStat(j);
   toast(on?"Reading the room — delivery only, on-device":"Room read off");
+}
+async function saveInterrupts(){
+  /* One write for the whole group. Unlike the ear switches these do not each
+     need a live-apply hop — `push_event` reads the config on every card — so a
+     single patch is both correct and one round trip instead of seven. */
+  await api("/dreamlayer/config",{method:"POST",body:JSON.stringify({
+    proactive_cards:$("proCards").checked,
+    proactive_alerts:$("proAlerts").checked,
+    focus_mode:$("focusMode").checked,
+    cue_event:$("cueEvent").checked,
+    cue_person:$("cuePerson").checked,
+    cue_place:$("cuePlace").checked,
+    fact_check_enabled:$("factCheck").checked})});
+  toast($("focusMode").checked?"Focus mode — interruptions hushed, capture still running":"Saved");
 }
 async function saveIntroCapture(){
   const on=$("introCapture").checked;

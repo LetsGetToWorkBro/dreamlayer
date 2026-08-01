@@ -13,11 +13,13 @@ def test_au_backends_passthrough():
         assert B().process(None) is None
 
 
-def test_prosody_and_causal_fallback():
+def test_prosody_fallback():
+    """`causal_fusion` used to be asserted here too. It was dropped
+    (decisions/0006): it imported dowhy purely as a flag, never called it, and
+    read three attributes the credibility channels do not have — so it returned
+    None whether or not the dependency was installed."""
     from dreamlayer.truth_lens.prosody_whisperx import WhisperXProsody
-    from dreamlayer.truth_lens.causal_fusion import CausalFusion
     assert WhisperXProsody().word_timings("nope.wav") == []
-    assert CausalFusion().assess() is None            # no dowhy → None
 
 
 # --- orchestrator: ECAPA hash embed; commitment/taste/persona fallbacks ------

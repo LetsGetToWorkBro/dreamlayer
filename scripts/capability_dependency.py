@@ -54,7 +54,8 @@ Four buckets:
     The dependency itself is dead weight. NOTE what this bucket does NOT
     establish: "installing the extra changes no behaviour". Most seams gate
     on the probe, so installing can flip behaviour that still owes nothing
-    to the library — `causal_fusion.assess()` returns a fixed heuristic
+    to the library — `structured_output` probes `instructor`/`outlines`
+    and then parses the hint with its own code
     score once dowhy is present, a score computed without dowhy;
     `structured_output` once REFUSED to answer without two libraries it
     never called. Read the gate before concluding.
@@ -395,10 +396,11 @@ def main() -> int:
           "  references it. The DEPENDENCY is dead weight. What this list does\n"
           "  NOT prove is 'installing it changes no behaviour': most of these\n"
           "  seams gate on the probe, so installing flips behaviour that still\n"
-          "  owes nothing to the library — `causal_fusion.assess()` answers\n"
-          "  with a fixed heuristic once dowhy is present (a score computed\n"
-          "  without dowhy), and `structured_output` once REFUSED to answer\n"
-          "  without two libraries it never called. Read the gate, not just\n"
+          "  owes nothing to the library — `structured_output` once REFUSED\n"
+          "  to answer without two libraries it never called, and\n"
+          "  `causal_fusion` returned a fixed heuristic once dowhy was\n"
+          "  present (a score computed entirely without it; dropped in\n"
+          "  decisions/0006). Read the gate, not just\n"
           "  the meter. Some entries are already-admitted dormancy, not new\n"
           "  discoveries: coreml_ondevice (docs/AUDIT_2026-07-14.md calls the\n"
           "  backend a dead placeholder; capabilities.py declares it unwired)\n"

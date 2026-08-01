@@ -1308,6 +1308,68 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
             except ValueError:
                 pass
 
+    # ---------------------------------------------------------------- what
+    # may interrupt you. Classified by KIND at the one funnel every card goes
+    # through, rather than by a flag threaded through twenty call sites — the
+    # threading is how a new push site ends up ungated without anyone noticing.
+
+    #: Cards the Brain surfaces UNASKED. "Proactive cards" in the phone's own
+    #: words: "let the glasses surface the right card unasked — events,
+    #: arrivals, people". Everything not in here is a response to something the
+    #: wearer did (pinning a memory, freezing a thought, asking to rewind) or a
+    #: feature they switched on that is now doing its job, and suppressing
+    #: either would be answering a question with silence.
+    PROACTIVE_KINDS = frozenset({
+        "proactive_memory", "commitment_recall", "commitment_drift", "brief",
+        "object_recall", "they_said", "candor", "hark",
+    })
+
+    #: …and which of the three cue kinds each belongs to, for the app's picker.
+    #: `hark` is deliberately absent: it is the tap-on-the-shoulder tier and has
+    #: its own switch, so filing it under a cue would give it two masters.
+    CUE_OF_KIND = {
+        "brief": "event", "commitment_recall": "event",
+        "commitment_drift": "event",
+        "proactive_memory": "person", "they_said": "person", "candor": "person",
+        "object_recall": "place",
+    }
+
+    #: Focus mode hushes more than the proactive set — the phone says "cards,
+    #: captions, and pop-ups hush; capture keeps running (unlike incognito)".
+    #: So the live feeds join the list, and only DIRECT RESPONSES survive:
+    #: ready, saved_memory, forget_last, consent_required, stasis, quest_reward,
+    #: time_scrub. Capture is untouched either way, which is the whole
+    #: difference between this and the Veil.
+    FOCUS_HUSHED = PROACTIVE_KINDS | frozenset({
+        "caption", "interpret", "truth", "answer_ahead", "fact_check", "intro",
+        "listening",
+    })
+
+    def _may_interrupt(self, kind: str) -> bool:
+        """Is the wearer accepting this kind of interruption right now?
+
+        Fails OPEN, unlike the Veil, and the asymmetry is the point: an
+        unreadable *preference* must not silence a smoke alarm, while an
+        unreadable *posture* must not leak. Getting these two backwards is how a
+        privacy control becomes a reliability bug or the reverse.
+        """
+        try:
+            cfg = self.config
+            if getattr(cfg, "focus_mode", False) and kind in self.FOCUS_HUSHED:
+                return False
+            if kind not in self.PROACTIVE_KINDS:
+                return True
+            if not getattr(cfg, "proactive_cards", True):
+                return False
+            if kind == "hark":
+                return bool(getattr(cfg, "proactive_alerts", True))
+            cue = self.CUE_OF_KIND.get(kind)
+            if cue is not None:
+                return bool(getattr(cfg, f"cue_{cue}", True))
+            return True
+        except Exception:                            # noqa: BLE001 — see above
+            return True
+
     def push_event(self, kind: str, card=None, veil_ok: bool = False) -> int:
         """Fan a card out to every connected Live Lens. Veil-gated by default:
         an ambient push (the morning brief, a memory nudge) is SUPPRESSED while
@@ -1321,6 +1383,13 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 if self.incognito_now():
                     return 0
             except Exception:                        # noqa: BLE001 — unreadable → drop
+                return 0
+            # …and then the wearer's interruption preferences. AFTER the Veil,
+            # never instead of it: a preference is about attention, the Veil is
+            # about the record, and a card allowed by one still has to clear the
+            # other. `veil_ok` skips both — a categorical safety alert is not a
+            # notification the wearer opted out of.
+            if not self._may_interrupt(kind):
                 return 0
         ev: dict = {"kind": kind, "safety": bool(veil_ok)}
         if isinstance(card, dict):
@@ -1547,6 +1616,9 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
                   "intro_capture_enabled", "intro_auto_keep",
+                  "proactive_cards", "proactive_alerts", "focus_mode",
+                  "cue_event", "cue_person", "cue_place",
+                  "fact_check_enabled", "wake_sources", "wake_feedback",
                   "dream_model_path",
                   "private_zones",
                   "face_recognition", "face_auto_enrol",
@@ -4575,6 +4647,36 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             """Optional-capability install/enable state."""
             self._json(200, _capability_payload(brain))
 
+        def _get_juno(self, path, qs):
+            """How Juno may be woken, and how she says she is listening.
+
+            The Brain wakes nothing — the glasses hub does — so this route
+            exists so the hub can PULL what the wearer chose on their phone. It
+            is the same direction `ops_juno_attention.py` already reads
+            `/dreamlayer/brief/latest` in, and it is why these two settings are
+            persisted here rather than being invented as a Brain behaviour they
+            are not.
+
+            `interrupts` rides along because it is the same question asked of
+            the other surface: what is this wearer willing to be interrupted by
+            right now. The Brain enforces those itself at `push_event`; they are
+            reported so the hub's own cards can agree with the Brain's.
+            """
+            cfg = brain.config
+            self._json(200, {
+                "wake_sources": list(getattr(cfg, "wake_sources", []) or []),
+                "wake_feedback": list(getattr(cfg, "wake_feedback", []) or []),
+                "interrupts": {
+                    "proactive_cards": bool(getattr(cfg, "proactive_cards", True)),
+                    "proactive_alerts": bool(getattr(cfg, "proactive_alerts", True)),
+                    "focus_mode": bool(getattr(cfg, "focus_mode", False)),
+                    "cue_event": bool(getattr(cfg, "cue_event", True)),
+                    "cue_person": bool(getattr(cfg, "cue_person", True)),
+                    "cue_place": bool(getattr(cfg, "cue_place", True)),
+                    "fact_check": bool(getattr(cfg, "fact_check_enabled", False)),
+                },
+            })
+
         def _get_ear(self, path, qs):
             """Live state of the always-on ear (opt-in voice capture): whether
             it's enabled, whether the microphone is actually open, and how much
@@ -5381,6 +5483,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/health": _get_health,
             "/dreamlayer/capabilities": _get_capabilities,
             "/dreamlayer/ear": _get_ear,
+            "/dreamlayer/juno": _get_juno,
             "/dreamlayer/face": _get_face,
             "/dreamlayer/lenses": _get_lenses,
             "/dreamlayer/provenance": _get_provenance,

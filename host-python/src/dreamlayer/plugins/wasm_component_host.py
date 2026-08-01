@@ -206,7 +206,12 @@ class WasmCapabilityHost:
         if hasattr(self.store, "set_fuel"):
             self.store.set_fuel(fuel)       # wasmtime-py >= 14
         else:                               # pragma: no cover - old wasmtime
-            self.store.add_fuel(fuel)
+            # `add_fuel` is gone from current wasmtime, so a direct call does
+            # not typecheck against the installed stubs even though this branch
+            # only runs where it exists. Reached through getattr so the legacy
+            # path stays honest instead of being deleted or silenced with an
+            # ignore that would also hide a real error on the line.
+            getattr(self.store, "add_fuel")(fuel)
         self.store.set_limits(memory_size=memory_bytes)   # StoreLimits: memory cap
         self.module = wasmtime.Module(self.engine, wasm)
         self._inst = None
@@ -214,7 +219,11 @@ class WasmCapabilityHost:
 
     @classmethod
     def from_wat(cls, wat: str, granted, impls=None, **limits):
-        return cls(wasmtime.wat2wasm(wat), granted, impls, **limits)
+        # `wat2wasm` answers a bytearray; `Module` and this constructor both
+        # want bytes. It worked by luck — wasmtime accepts either — but the
+        # signature said otherwise, which is the kind of drift that turns into
+        # a real failure the first time someone hashes or pins the module.
+        return cls(bytes(wasmtime.wat2wasm(wat)), granted, impls, **limits)
 
     # -- the enforcement ------------------------------------------------------
     def _granted_funcs(self) -> dict:

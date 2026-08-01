@@ -89,7 +89,6 @@ face = ["insightface>=0.7,<1", "onnxruntime>=1.17,<2"]
 # fallback: the Brain sings a code, the phone catches it out of the air. Opt-in,
 # tiny; absent the wheel the pairing QR path is unchanged.
 soundlink = ["ggwave>=0.4,<1"]
-causal   = ["dowhy>=0.11,<1"]
 # serverless, conflict-free multi-device Vault sync (reality_compiler/v2/vault_sync.py)
 sync     = ["loro>=1.0,<2"]
 infra    = ["rich>=14,<16", "watchdog>=6,<7", "zeroconf>=0.150,<1", "datasette>=0.65,<1", "rerun-sdk>=0.34,<1"]
@@ -107,8 +106,8 @@ platform = ["pluggy>=1,<2", "pyee>=13,<14", "argostranslate>=1,<2", "skia-python
 #     tests/test_capabilities.py asserts these stay in sync with capabilities.py. ---
 profile-halo  = ["dreamlayer[hardware]"]                       # bridge host next to the glasses: BLE only
 profile-phone = ["dreamlayer[memory,voice,structured,llm]"]    # pocket hub: local recall + STT, no heavy vision
-profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,causal,infra,privacy,platform]"]  # the full Brain
-profile-cloud = ["dreamlayer[structured,llm,intelligence,causal,privacy]"]  # remote runner: reasoning, no device/local-model stack
+profile-mac   = ["dreamlayer[memory,voice,asr-extra,structured,llm,intelligence,vision,infra,privacy,platform]"]  # the full Brain
+profile-cloud = ["dreamlayer[structured,llm,intelligence,privacy]"]  # remote runner: reasoning, no device/local-model stack
 
 [tool.uv]
 # The brilliant-msg extras (glasses-bridge host: pillow>=11) and the

@@ -20,7 +20,15 @@ except ImportError:
 if _HAS_DOCARRAY:
     class MemoryDoc(BaseDoc):  # type: ignore[misc]
         kind: str = "Note"
-        summary: str = ""
+        # `summary` deliberately SHADOWS `BaseDoc.summary()`, docarray's
+        # pretty-printer. The name is not ours to choose: `summary` is the
+        # column every store, card builder and lens in this tree reads, and
+        # `to_row()` below has to emit it. Renaming the field to keep a debug
+        # helper would put a translation layer between this schema and the one
+        # the Brain actually uses, which is the whole thing this module exists
+        # to avoid. Losing `doc.summary()` costs a REPL convenience; losing the
+        # key would cost the contract.
+        summary: str = ""  # type: ignore[assignment]
         embedding: Optional[NdArray] = None  # type: ignore[valid-type]
         place_id: Optional[str] = None
         created_at: str = ""

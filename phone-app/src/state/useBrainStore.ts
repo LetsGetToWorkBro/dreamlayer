@@ -222,8 +222,10 @@ type BrainState = {
   setProactiveAlerts: (on: boolean) => void;
   setFactCheck: (on: boolean) => void;
   setAnswerAhead: (on: boolean) => void;
-  /** Read back the switches the BRAIN owns (not the phone's own prefs), so a
-   *  change made on the Mac panel or the Listening screen is reflected here. */
+  /** Read back every switch the BRAIN owns (not the phone's own prefs), so a
+   *  change made on the Mac panel or another screen is reflected here. Twelve
+   *  of them: answer-ahead, the live fact-checker, proactive cards, proactive
+   *  alerts, focus mode, the three cues, and the wake source/feedback sets. */
   hydrateBrainOwned: () => Promise<void>;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; say?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
@@ -713,37 +715,60 @@ export const useBrainStore = create<BrainState>((set, get) => ({
   setProactiveCards: (on) => {
     set({ proactiveCards: on });
     persist(get());
+    pushConfig(get, set, { proactive_cards: on });
   },
 
   setFocus: (on) => {
     set({ focus: on });
     persist(get());
     if (on) get().recordSaga("focus"); // unlock the Deep Focus badge
+    pushConfig(get, set, { focus_mode: on });
   },
 
   setCue: (kind, on) => {
-    set({ cues: { ...get().cues, [kind]: on } });
+    const cues = { ...get().cues, [kind]: on };
+    set({ cues });
     persist(get());
+    // One key per cue rather than a list: the Brain gates by cue at its own
+    // `push_event`, and a whole-list write is how a client drops a cue by
+    // accident when two switches move close together.
+    pushConfig(get, set, { [`cue_${kind}`]: on });
   },
 
   setWakeSource: (source, on) => {
-    set({ wakeSources: { ...get().wakeSources, [source]: on } });
+    const wakeSources = { ...get().wakeSources, [source]: on };
+    set({ wakeSources });
     persist(get());
+    // A LIST, not a per-source flag: the Brain only stores these so the glasses
+    // hub can pull them, and the hub applies a set. An empty list is a real
+    // answer — "no way to wake me by gesture" — and must survive the round trip
+    // as itself rather than as "unset".
+    pushConfig(get, set, {
+      wake_sources: (Object.keys(wakeSources) as (keyof typeof wakeSources)[])
+        .filter((k) => wakeSources[k]),
+    });
   },
 
   setWakeFeedback: (kind, on) => {
-    set({ wakeFeedback: { ...get().wakeFeedback, [kind]: on } });
+    const wakeFeedback = { ...get().wakeFeedback, [kind]: on };
+    set({ wakeFeedback });
     persist(get());
+    pushConfig(get, set, {
+      wake_feedback: (Object.keys(wakeFeedback) as (keyof typeof wakeFeedback)[])
+        .filter((k) => wakeFeedback[k]),
+    });
   },
 
   setProactiveAlerts: (on) => {
     set({ proactiveAlerts: on });
     persist(get());
+    pushConfig(get, set, { proactive_alerts: on });
   },
 
   setFactCheck: (on) => {
     set({ factCheck: on });
     persist(get());
+    pushConfig(get, set, { fact_check_enabled: on });
   },
 
   hydrateBrainOwned: async () => {
@@ -755,8 +780,44 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     try {
       const j = await (await brainFetch(m, "/dreamlayer/config")).json();
       const c = (j && j.config) || {};
-      if (typeof c.answer_ahead_enabled === "boolean") {
-        set({ answerAhead: c.answer_ahead_enabled });
+      const next: Record<string, unknown> = {};
+      const bools: [string, string][] = [
+        ["answer_ahead_enabled", "answerAhead"],
+        ["fact_check_enabled", "factCheck"],
+        ["proactive_cards", "proactiveCards"],
+        ["proactive_alerts", "proactiveAlerts"],
+        ["focus_mode", "focus"],
+      ];
+      for (const [wire, local] of bools) {
+        if (typeof c[wire] === "boolean") next[local] = c[wire];
+      }
+      // Cues arrive as three keys and live here as one object, so they are
+      // rebuilt from what the Brain reports rather than merged key by key —
+      // a half-applied cue set is a picker showing a state nothing holds.
+      const cueKeys = ["cue_event", "cue_person", "cue_place"] as const;
+      if (cueKeys.every((k) => typeof c[k] === "boolean")) {
+        next.cues = { event: c.cue_event, person: c.cue_person, place: c.cue_place };
+      }
+      // …and the wake settings arrive as LISTS, which is what the glasses hub
+      // applies. An empty list is a real answer ("nothing wakes me by
+      // gesture"); only a missing key leaves the local value alone.
+      if (Array.isArray(c.wake_sources)) {
+        next.wakeSources = {
+          voice: c.wake_sources.includes("voice"),
+          tap: c.wake_sources.includes("tap"),
+          gaze: c.wake_sources.includes("gaze"),
+          raise: c.wake_sources.includes("raise"),
+        };
+      }
+      if (Array.isArray(c.wake_feedback)) {
+        next.wakeFeedback = {
+          visual: c.wake_feedback.includes("visual"),
+          audio: c.wake_feedback.includes("audio"),
+          haptic: c.wake_feedback.includes("haptic"),
+        };
+      }
+      if (Object.keys(next).length) {
+        set(next as never);
         persist(get());
       }
     } catch {

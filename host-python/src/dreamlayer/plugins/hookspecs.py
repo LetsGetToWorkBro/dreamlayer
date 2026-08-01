@@ -50,13 +50,30 @@ class DreamlayerHooks:
         """Called once at load with the host's PluginContext."""
 
 
-def discover_entrypoint_plugins() -> List:
-    """Return plugin objects advertised by installed packages under
-    ENTRY_POINT_GROUP. Each is expected to expose `register(ctx)` (a
-    SimplePlugin, a module, or any object base.PluginRegistry.load accepts).
+def discover_entrypoints() -> List:
+    """Return the entry points advertised under ENTRY_POINT_GROUP — WITHOUT
+    importing any of them.
 
-    Uses stdlib importlib.metadata — works with or without pluggy. Failures to
-    load a single entry point are isolated and logged, never fatal.
+    This used to be `discover_entrypoint_plugins()` and it called `ep.load()`
+    on everything it found, which is where the problem was: **loading an entry
+    point IS importing it**, so third-party module code ran in-process, with the
+    host user's full authority, at DISCOVERY time — before any policy could look
+    at it.
+
+    That is not a small gap next to what this repo already does. `PluginStore.
+    load_installed` validates a package, checks it against a registered
+    publisher key or a first-party content-hash pin, and drops anything
+    unvouched into a WASM or subprocess jail, with `require_sandbox` to refuse
+    outright when no real sandbox exists. Discovery by entry point walked
+    straight past every one of those steps, and the module's own docstring
+    described it as reaching "the SAME `register(ctx)` surface" — which is true
+    of the registration step and silent about the authority step, the only one
+    that matters here.
+
+    The setuptools convention cannot be made safe by ordering, because there is
+    no "before" to inspect: the import is the load. So the split is the fix —
+    this half enumerates, `load_entrypoint` imports, and the caller has to say
+    which entry points earned it.
     """
     found: List = []
     try:
@@ -75,44 +92,110 @@ def discover_entrypoint_plugins() -> List:
         log.warning("[hookspecs] entry-point scan failed: %s", exc)
         return found
 
-    for ep in group:
-        try:
-            found.append(ep.load())
-        except Exception as exc:
-            log.warning("[hookspecs] skipping plugin %r: %s", getattr(ep, "name", ep), exc)
-    return found
+    # The entry points themselves, unimported. `ep.value` names the module and
+    # attribute a load WOULD execute, which is exactly what a policy needs to
+    # decide on — and what the old version threw away by importing first.
+    return list(group)
 
 
-def make_pluggy_manager():
+def load_entrypoint(ep):
+    """Import ONE entry point and return the plugin object, or None.
+
+    Separated from discovery so that importing third-party code is a decision
+    somebody makes rather than a side effect of looking. Callers are expected to
+    have checked `ep.value` against whatever they trust — a registered
+    publisher, a first-party pin, an explicit allow-list from the wearer —
+    before calling this, because after this line the code has run.
+    """
+    try:
+        return ep.load()
+    except Exception as exc:
+        # Neither the entry point's NAME nor the exception text goes in the
+        # message. Both are third-party strings — the name comes from an
+        # installed package's metadata and the message from its import — so a
+        # package can choose what appears in this host's logs. The kind of
+        # failure is what a maintainer acts on; `discover_entrypoints()` is
+        # right there for anyone who wants the list.
+        log.warning("[hookspecs] an entry-point plugin failed to import: %s",
+                    type(exc).__name__)
+        return None
+
+
+def make_pluggy_manager(load_entrypoints: bool = False):
     """Build a pluggy PluginManager registered with DreamlayerHooks, or None
-    when pluggy is not installed. Callers that want the plain path use
-    `discover_entrypoint_plugins()` + `PluginRegistry.load_all`.
+    when pluggy is not installed.
+
+    `load_entrypoints` defaults to False for the same reason `load_into` does:
+    `pm.load_setuptools_entrypoints` imports every advertised package, and it
+    used to be called unconditionally here — so merely asking for a manager ran
+    third-party code. Building the manager and populating it are now two
+    decisions, and only the second one executes anything.
     """
     if not _HAS_PLUGGY:
         return None
     pm = pluggy.PluginManager("dreamlayer")
     pm.add_hookspecs(DreamlayerHooks)
-    try:
-        pm.load_setuptools_entrypoints(ENTRY_POINT_GROUP)
-    except Exception as exc:  # pragma: no cover - env dependent
-        log.warning("[hookspecs] setuptools entrypoint load failed: %s", exc)
+    if load_entrypoints:
+        try:
+            pm.load_setuptools_entrypoints(ENTRY_POINT_GROUP)
+        except Exception as exc:  # pragma: no cover - env dependent
+            log.warning("[hookspecs] setuptools entrypoint load failed: %s", exc)
     return pm
 
 
 available = _HAS_PLUGGY
 
 
-def load_into(registry, plugins: List | None = None) -> int:
-    """Discover entry-point plugins (plus any explicitly `plugins`) and load
-    them into an existing `plugins.base.PluginRegistry`. Returns the count
-    loaded. Zero host edits: this just feeds base.py's own loader.
+def load_into(registry, plugins: List | None = None,
+              allow_entrypoints=None) -> int:
+    """Load plugins into an existing `plugins.base.PluginRegistry`.
+
+    `plugins` are objects the caller already holds and has already decided
+    about. Entry points are DIFFERENT and are off by default: importing one
+    executes third-party code in-process, so this will not do it on the caller's
+    behalf just because a package advertised itself.
+
+    `allow_entrypoints` is the decision, and it has to be made explicitly:
+
+      * ``None`` (default) — enumerate nothing. Any advertised entry points are
+        logged by name so the omission is visible rather than silent.
+      * a callable ``(ep) -> bool`` — the policy. Called with the unimported
+        entry point, whose ``.value`` names the module that would run.
+      * ``True`` — import everything advertised. Only correct where every
+        installed package has already been read and vouched for, which is the
+        same posture `PluginStore.load_installed(isolate="trusted")` names.
+
+    Returns the count loaded.
     """
-    batch = list(plugins or []) + discover_entrypoint_plugins()
+    batch = list(plugins or [])
+    eps = discover_entrypoints()
+    if eps and allow_entrypoints is None:
+        # A COUNT, not the names — same reason as above. The point of this line
+        # is that the omission is visible rather than silent, and a count does
+        # that without putting package-controlled text in the log.
+        log.info("[hookspecs] %d entry-point plugin(s) advertised and NOT "
+                 "loaded (no policy given)", len(eps))
+    elif eps:
+        decide = (lambda _ep: True) if allow_entrypoints is True else allow_entrypoints
+        for ep in eps:
+            try:
+                if not decide(ep):
+                    continue
+            except Exception as exc:                 # a policy that raises
+                log.warning("[hookspecs] entry-point policy raised %s",
+                            type(exc).__name__)
+                continue                             # …refuses, never admits
+            obj = load_entrypoint(ep)
+            if obj is not None:
+                batch.append(obj)
     loaded = 0
     for p in batch:
         try:
             if registry.load(p):
                 loaded += 1
         except Exception as exc:
-            log.warning("[hookspecs] load failed for %r: %s", p, exc)
+            # `p`'s repr and `exc`'s text are both third-party — see
+            # `load_entrypoint`. The kind is what a maintainer acts on.
+            log.warning("[hookspecs] a plugin failed to register: %s",
+                        type(exc).__name__)
     return loaded
