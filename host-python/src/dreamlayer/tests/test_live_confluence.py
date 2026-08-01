@@ -13,6 +13,8 @@ import threading
 import urllib.error
 import urllib.request
 
+import pytest
+
 from dreamlayer.ai_brain.server import Brain, make_brain_server
 from dreamlayer.ai_brain.server.live_confluence import LiveConfluence, room
 from dreamlayer.ai_brain.server.store import BrainConfig
@@ -268,9 +270,22 @@ class TestRefuteFixes:
     def test_double_propose_then_accepting_the_first_code_is_clean(self, tmp_path):
         # refute 2026-07-21: the stale offer survived a re-propose; accepting
         # its code hit BondManager.confirm's KeyError → an unhandled 500.
+        #
+        # The re-propose has to mint a DIFFERENT code or this test asserts the
+        # opposite of what it means: a code is two words from a 26-word list, so
+        # one draw in 676 repeats the first one, the "stale" code matches the
+        # live offer, `accept` correctly succeeds, and the run goes red for the
+        # right behaviour. Measured as a real intermittent — it failed once in a
+        # full-suite run and passed five reruns of the file. Looping is not
+        # papering over a race: the property under test is that a REPLACED
+        # offer's code stops working, which needs the two codes to differ.
         conf = room(_brain(tmp_path))
         first = conf.propose("a")["code"]
-        conf.propose("a")                                # re-propose replaces
+        for _ in range(50):
+            if conf.propose("a")["code"] != first:       # re-propose replaces
+                break
+        else:                                            # pragma: no cover
+            pytest.fail("50 re-proposes all repeated the first code")
         out = conf.accept("b", first)                    # old code: plain error
         assert "error" in out and "KeyError" not in str(out)
         assert conf.accept("b", conf.propose("a")["code"]) == {"ok": True}

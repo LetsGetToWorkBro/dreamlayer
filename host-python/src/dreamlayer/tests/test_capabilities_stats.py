@@ -32,16 +32,29 @@ def test_dormant_state_for_installed_but_unwired(monkeypatch):
 
 
 def test_dormant_caps_do_not_inflate_the_awakening_meter(monkeypatch):
-    # with EVERYTHING importable, the meter must credit only wired caps — a
-    # dormant cap delivers nothing, so it can't pad power/percent.
+    # with EVERYTHING importable, the meter must credit only caps that are
+    # actually ON — a dormant cap delivers nothing, so it can't pad power.
+    #
+    # The DENOMINATOR is a different question, and this test used to conflate
+    # them: it excluded on the current state, so the total shrank the moment
+    # something was installed and installing a capability that delivers nothing
+    # raised the percent. The denominator is now a property of the CAPABILITY —
+    # everything that CAN reach active is in it, on or off — so the numerator is
+    # the only half that moves. That includes the runtime-promoted caps here:
+    # they can be switched on (open the microphone), they just are not right now.
     monkeypatch.setattr(C, "installed", lambda cap: True)
     monkeypatch.setattr(C, "supported", lambda cap: True)
     stats = C.power_stats()
     wired_installable = [c for c in C.CAPABILITIES
                          if c.kind in ("python", "darwin") and c.key not in C._NOT_WIRED]
-    assert stats["total"] == len(wired_installable)          # denominator excludes dormant
-    assert stats["unlocked"] == len(wired_installable)       # all wired are active here
+    can_wake = [c for c in C.CAPABILITIES
+                if c.kind in ("python", "darwin") and C.wires_on_install(c)]
+    assert stats["total"] == len(can_wake)                   # everything that CAN be on
+    assert stats["unlocked"] == len(wired_installable)       # …and only what IS on
     assert stats["power"] == sum(c.impact for c in wired_installable)
+    assert stats["power"] < stats["power_total"], (
+        "with the ear off, the promoted caps must sit in the denominator "
+        "unclaimed rather than being removed from it")
 
 
 def test_llm_router_is_wired_now():
@@ -125,12 +138,17 @@ def test_only_pack_installable_caps_gate_the_meter():
     s = C.power_stats(env={})
     # power_total counts only installable caps this machine supports (<= all installable)
     assert s["power_total"] <= installable
-    # and never includes a manual cap's impact — nor a dormant (installed but
-    # not-yet-wired) cap's, which delivers nothing and must not pad the meter
+    # and never includes a manual cap's impact — nor the impact of anything that
+    # can never reach "active", which would hold the percent below 100 forever.
+    #
+    # Keyed on the CAPABILITY, not on `state(...)`: a state-keyed denominator
+    # moves when a state does, which is how installing a library that delivers
+    # nothing used to raise the percent (7% → 9% across all 26, numerator
+    # unchanged).
     assert s["power_total"] == sum(
         c.impact for c in C.CAPABILITIES
         if c.kind in ("python", "darwin")
-        and C.state(c, env={}) not in ("unsupported", "dormant"))
+        and C.supported(c) and C.wires_on_install(c))
 
 
 def test_level_climbs_monotonically_with_percent():

@@ -46,7 +46,14 @@ export default function Capabilities() {
     load();
   }, [load]);
 
-  const canLearn = learnable();
+  const allLearnable = learnable();
+  // Two different offers, and conflating them is what made the copy false.
+  const canLearn = allLearnable.filter((c) => c.wires_on_install !== false);
+  // …and of the rest, the ones that DO run — on the glasses. Lumping them in
+  // with "nothing calls this" would deny a feature the wearer uses every day.
+  const onGlasses = allLearnable.filter((c) => c.runs_on === "hub");
+  const builtNotWired = allLearnable.filter(
+    (c) => c.wires_on_install === false && c.runs_on !== "hub");
 
   return (
     <Screen>
@@ -74,7 +81,33 @@ export default function Capabilities() {
                 Install the matching profile on your Mac to switch these on — the phone never installs code.
               </Text>
             </>
-          ) : loaded ? (
+          ) : null}
+          {onGlasses.length ? (
+            <>
+              <Section label="These run on your glasses" first={!canLearn.length} />
+              {onGlasses.map((c) => (
+                <CapRow key={c.key} c={c} />
+              ))}
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
+                Your glasses build these on a live path. Your Brain is a different machine and does not — so
+                they read as inactive here even though you are using them.
+              </Text>
+            </>
+          ) : null}
+          {builtNotWired.length ? (
+            <>
+              <Section label="Built, but nothing calls them yet" first={!canLearn.length && !onGlasses.length} />
+              {builtNotWired.map((c) => (
+                <CapRow key={c.key} c={c} />
+              ))}
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: space.sm }]}>
+                These are written and tested, and no live path reaches them — so installing the library would
+                add it and change nothing you can see. They are listed because they are real work someone can
+                finish, not because there is something for you to do.
+              </Text>
+            </>
+          ) : null}
+          {!canLearn.length && !builtNotWired.length && !onGlasses.length && loaded ? (
             <EmptyState glyph="◉" title="Fully equipped" hint="Every capability the Brain knows about is switched on." />
           ) : null}
         </ScrollView>

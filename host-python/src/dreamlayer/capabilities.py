@@ -604,6 +604,72 @@ def tiers() -> list[dict]:
     return [{"key": k, "title": t, "blurb": b} for (k, t, b) in TIERS]
 
 
+#: Capabilities in `_NOT_WIRED` that a RUNNING subsystem promotes to "active"
+#: by setting `DL_WIRED_<KEY>`. For these, "missing" really does mean "install
+#: the extra and switch the feature on, and it works" — the eight the ear drives
+#: (ear.EAR_CAPS), plus five promoted from their own live paths.
+#:
+#: Everything ELSE in `_NOT_WIRED` has no such path, and that is the distinction
+#: this set exists to draw. The panel renders a `missing` capability as a
+#: `pip install "dreamlayer[extra]"` command with a Copy button — so for a cap
+#: with no promotion path, the wearer copies a command, waits for a download,
+#: and lands on "installed · not active yet". Twelve capabilities did exactly
+#: that. The command is still shown (extras are shared, and the library may
+#: switch on a DIFFERENT cap that does have a path), but `wires_on_install`
+#: rides along so the surface can say what installing will and will not do.
+#:
+#: Kept here rather than imported from `ear.py` because `capabilities.py` must
+#: stay importable with nothing else loaded — it is what the panel calls to find
+#: out whether anything is loadable at all.
+_PROMOTED_AT_RUNTIME = frozenset({
+    # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
+    "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
+    "sound_events", "bird_song", "live_interpret",
+    # …and these five, each from its own live path (DL_WIRED_<KEY>)
+    "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
+})
+
+
+#: Capabilities that ARE wired — on the glasses hub, not on the Brain.
+#:
+#: `_NOT_WIRED` is a statement about the BRAIN, which is the machine running the
+#: capabilities page. That makes "dormant" correct here and the reason wrong: a
+#: wearer reading "the adapter is built and nothing calls it" concludes the
+#: feature does not exist, when it runs on the glasses every day.
+#:
+#: Each entry names the constructor, so the claim is checkable rather than
+#: remembered — `test_capability_install_promise` asserts the call site is still
+#: there, and the entry has to be removed or moved when it stops being.
+_RUNS_ON_HUB = {
+    "memory_dedup": "orchestrator/orchestrator.py",   # Mem0Layer, on the live
+                                                      # LucidRecall path, gated
+                                                      # on mem0 truly loading
+    "mesh_range": "orchestrator/ops_confluence.py",   # the LoRa mesh, which is
+                                                      # a glasses radio
+}
+
+
+def runs_on(cap: Cap) -> str:
+    """Where this capability actually runs: "brain", "hub", or "" for a seam
+    nothing constructs anywhere yet."""
+    if cap.key in _RUNS_ON_HUB:
+        return "hub"
+    if cap.key in _NOT_WIRED and cap.key not in _PROMOTED_AT_RUNTIME:
+        return ""
+    return "brain"
+
+
+def wires_on_install(cap: Cap) -> bool:
+    """Would installing this capability's extra actually switch it on?
+
+    True for everything outside `_NOT_WIRED` (installing IS the wiring), and for
+    the `_NOT_WIRED` entries a running subsystem promotes. False for a dormant
+    adapter with no live caller — where installing buys the library and leaves
+    the feature exactly where it was.
+    """
+    return cap.key not in _NOT_WIRED or cap.key in _PROMOTED_AT_RUNTIME
+
+
 def report(env: Optional[dict] = None) -> list[dict]:
     """Every capability as a panel row, GROUPED by display tier in page order
     (stable within a tier), so the panel's contiguous-group rendering holds no
@@ -615,6 +681,14 @@ def report(env: Optional[dict] = None) -> list[dict]:
         "seam": c.seam, "kind": c.kind, "flag": c.flag_env, "note": c.note,
         "gain": c.gain, "impact": c.impact,
         "before": c.before, "after": c.after,
+        # …and whether installing it would actually turn it on. See
+        # `_PROMOTED_AT_RUNTIME`: twelve capabilities offered a pip command that
+        # could only ever land on "installed · not active yet".
+        "wires_on_install": wires_on_install(c),
+        # …and WHERE it runs, because "nothing calls it" and "it runs on your
+        # glasses, not here" are different answers and only one of them is true
+        # of `memory_dedup` and `mesh_range`.
+        "runs_on": runs_on(c),
     } for c in CAPABILITIES]
     rows.sort(key=lambda r: _TIER_ORDER.get(str(r["tier"]), len(TIERS)))
     return rows
@@ -680,10 +754,21 @@ def power_stats(env: Optional[dict] = None) -> dict:
             continue
         if st == "unsupported":
             continue                              # can't be had on this machine
-        if st == "dormant":
-            continue                              # installed but not wired to a
-            #                                       live path — must not pad the
-            #                                       meter (it delivers nothing yet)
+        # THE DENOMINATOR MUST NOT MOVE WHEN A STATE DOES. Excluding on the
+        # current state (`st == "dormant"`) meant the total shrank the moment
+        # something was installed, so installing a capability that delivers
+        # nothing still raised the percent — measured at 7% → 9% with all 26
+        # inert ones installed and the numerator unchanged at 11. It cut the
+        # other way too: an ear capability installed with Listening OFF reads
+        # dormant and left the denominator, so switching the microphone on moved
+        # both halves of the fraction at once.
+        #
+        # So the exclusion is a property of the CAPABILITY, not of its state:
+        # anything that can never reach "active" is out of the meter entirely,
+        # and everything that can stays in whether it is on or not. The percent
+        # then only rises when something actually starts working.
+        if not wires_on_install(c):
+            continue
         total += 1
         power_total += c.impact
         bucket = by_tier.setdefault(
@@ -737,16 +822,22 @@ class Pack:
 
 PACKS: Tuple[Pack, ...] = (
     Pack("recall", "Total Recall",
-         "Semantic memory that actually understands — indexed, deduped, searchable by meaning, fully offline.",
+         "Semantic memory that actually understands — indexed, searchable by meaning, "
+         "fully offline. (Near-duplicate merging rides along as a library: your "
+         "GLASSES use it, this Mac does not.)",
          ("memory",), "~2–4 GB", 5, recommended=True),
     Pack("ears", "Sharp Ears",
          "Local speech: neural voice detection, on-device transcription, and Juno speaking in her own cloned voice. Audio never leaves this Mac.",
          ("voice", "asr-extra", "voice-clone"), "~2–4 GB", 4),
     Pack("eyes", "Clear Eyes",
-         "Perception: object recognition, identity-stable tracking, real voice fingerprints, proper language parsing, and a painterly dream-mode lens.",
+         "Perception: object recognition, real voice fingerprints, proper language "
+         "parsing, and a painterly dream-mode lens — working today. The "
+         "identity-stable tracker ships as a library; nothing feeds it frames yet.",
          ("vision", "intelligence", "dream-style"), "~3–5 GB", 4),
     Pack("guardian", "Guardian",
-         "Deeper privacy and provenance: in-context PII scrubbing, Ed25519 signatures, structured cancellation.",
+         "Deeper privacy and provenance: in-context PII scrubbing and Ed25519 "
+         "signatures — working today. Structured cancellation and the typed-record "
+         "adapters come with it as libraries, for surfaces still being wired.",
          ("privacy", "structured"), "~300 MB", 3),
     Pack("operator", "Operator",
          "Operations toolkit: pair a phone by sound and route across any LLM provider — working today — plus the libraries for LAN discovery, live dashboards, a sandboxed WASM plugin host, off-grid mesh and conflict-free sync as those surfaces come online.",
@@ -936,11 +1027,28 @@ def probe_service(cap: Cap, timeout: float = 1.5) -> bool:
 # --- CLI: python -m dreamlayer.capabilities ---------------------------------------
 
 def _hint(cap: Cap) -> str:
+    """What to type to switch this on — or why typing anything will not.
+
+    The column this fills is headed "switch on with", which is the promise in
+    its most explicit form anywhere in the product. For a capability with no
+    live caller, a pip command under that header is simply false: the install
+    succeeds and the row moves from "missing" to "dormant". Two capabilities are
+    a third case again — they run on the glasses hub, so nothing typed on THIS
+    machine switches them on and nothing is broken either.
+    """
     if cap.kind == "service":
         return cap.note
+    if runs_on(cap) == "hub":
+        return "runs on your glasses, not here"
     if cap.extra is None:
-        return cap.note or "manual install"
-    return f'pip install "dreamlayer[{cap.extra}]"'
+        base = cap.note or "manual install"
+    else:
+        base = f'pip install "dreamlayer[{cap.extra}]"'
+    if not wires_on_install(cap):
+        # Still printed: extras are shared, so the same wheel may switch on a
+        # different capability that does have a live path.
+        return f"{base}  (installs the library; nothing calls it yet)"
+    return base
 
 
 def _print_plain(rows: list[dict], env: Optional[dict] = None) -> None:
