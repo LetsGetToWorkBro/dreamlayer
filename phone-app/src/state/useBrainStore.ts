@@ -222,6 +222,9 @@ type BrainState = {
   setProactiveAlerts: (on: boolean) => void;
   setFactCheck: (on: boolean) => void;
   setAnswerAhead: (on: boolean) => void;
+  /** Read back the switches the BRAIN owns (not the phone's own prefs), so a
+   *  change made on the Mac panel or the Listening screen is reflected here. */
+  hydrateBrainOwned: () => Promise<void>;
   sendVoice: (text: string) => Promise<{ intent: string; answer?: string; say?: string; text?: string; to?: string; subject?: string }>;
   getCalendar: () => Promise<CalendarEvent[]>;
   addEvent: (e: { title: string; ts: number; place?: string }) => Promise<CalendarEvent[]>;
@@ -743,9 +746,32 @@ export const useBrainStore = create<BrainState>((set, get) => ({
     persist(get());
   },
 
+  hydrateBrainOwned: async () => {
+    const m = get().macMini;
+    if (!m.connected || !m.url) return;
+    // Nothing is invented here: a key the Brain does not report leaves the
+    // local value alone rather than becoming `false`, which would draw an older
+    // Brain's missing feature as one the wearer had switched off.
+    try {
+      const j = await (await brainFetch(m, "/dreamlayer/config")).json();
+      const c = (j && j.config) || {};
+      if (typeof c.answer_ahead_enabled === "boolean") {
+        set({ answerAhead: c.answer_ahead_enabled });
+        persist(get());
+      }
+    } catch {
+      /* unreachable → keep what we last knew */
+    }
+  },
+
   setAnswerAhead: (on) => {
+    // Answer-ahead is a BRAIN setting (`answer_ahead_enabled`), not a phone
+    // preference — and for a long time this setter only wrote AsyncStorage, so
+    // the switch in Settings moved, persisted, survived a restart and never
+    // reached the Brain. The feature stayed off forever while reading "on".
     set({ answerAhead: on });
     persist(get());
+    pushConfig(get, set, { answer_ahead_enabled: on });
   },
 
   sendVoice: async (text) => {
@@ -1047,5 +1073,16 @@ useConnectionStore.getState().onReconnect(() => {
     useBrainStore.getState().flushOutbox();
   } catch {
     /* never let a drain error break the connection machine */
+  }
+  // …and the moment to READ BACK the switches the Brain owns. `answerAhead` is
+  // the Brain's `answer_ahead_enabled`, changeable from the Mac's own panel and
+  // from the Listening screen, so a locally-persisted copy drifts the moment it
+  // is touched anywhere else — and a Settings switch showing the opposite of
+  // what the Brain is doing is worse than no switch. Drain first, then read, so
+  // a queued patch is never overwritten by the state it was about to change.
+  try {
+    useBrainStore.getState().hydrateBrainOwned();
+  } catch {
+    /* a failed read leaves the last known value, never a fabricated one */
   }
 });
