@@ -1706,9 +1706,14 @@ function capRight(it){
        shown, because extras are SHARED and the same wheel may switch on a
        different capability that does have a live path; what changes is that the
        row says which of the two is happening. */
-    const inert=it.wires_on_install===false
-      ? ` <span class="sstate" title="The adapter is built, but no live path calls it yet — installing adds the library and leaves this feature where it is.">· installing won\u2019t switch it on yet</span>`
-      : "";
+    /* …and two of them are not inert at all — they run on the GLASSES. Saying
+       "nothing calls it" about a feature the wearer's hub uses every day is its
+       own wrong answer, so where it runs is the first thing checked. */
+    const inert=it.runs_on==="hub"
+      ? ` <span class="sstate" title="This runs on the glasses hub, which builds it on a live path. The Brain is a different machine and does not.">\u00b7 runs on your glasses, not here</span>`
+      : (it.wires_on_install===false
+        ? ` <span class="sstate" title="The adapter is built, but no live path calls it yet — installing adds the library and leaves this feature where it is.">\u00b7 installing won\u2019t switch it on yet</span>`
+        : "");
     if(CAPFROZEN&&!CAPINSTALL) return info+`<span class="sstate">not in this build — runs on a source install</span>`+inert;
     if(CAPFROZEN) return info+`<span class="sstate">add with a pack ↓</span>`+inert;   // frozen but installable — packs are the one-click unit
     return info+`<code style="font-size:11px">${esc(cmd)}</code> <button class="ghost sm" onclick="copyCap(${esc(JSON.stringify(cmd))})">Copy</button>`+inert;

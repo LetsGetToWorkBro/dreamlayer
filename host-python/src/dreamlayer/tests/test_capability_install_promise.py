@@ -126,3 +126,59 @@ class TestBothSurfacesCarryIt:
         if not store.exists():
             pytest.skip("phone-app not in this checkout")
         assert "wires_on_install?: boolean" in store.read_text(encoding="utf-8")
+
+
+class TestSomeOfThemDoRunJustNotHere:
+    """`_NOT_WIRED` is a statement about the BRAIN, which is the machine running
+    the capabilities page. For two entries that makes "dormant" correct and the
+    REASON wrong — they are wired on the glasses hub, and a wearer told "nothing
+    calls this" would conclude a feature they use every day does not exist."""
+
+    def test_the_hub_set_is_not_empty_and_is_inside_not_wired(self):
+        assert cap._RUNS_ON_HUB
+        assert set(cap._RUNS_ON_HUB) <= cap._NOT_WIRED
+
+    @pytest.mark.parametrize("key,site", sorted(cap._RUNS_ON_HUB.items()))
+    def test_each_names_a_constructor_that_is_still_there(self, key, site):
+        """The claim is checkable rather than remembered: if the hub stops
+        building it, this fails and the entry has to move."""
+        c = cap._BY_KEY.get(key)
+        if c is None:
+            pytest.skip(f"{key} is no longer declared")
+        src = (pathlib.Path(cap.__file__).parent / site).read_text(encoding="utf-8")
+        seam = pathlib.Path(cap.__file__).parent / c.seam
+        import ast as _ast
+        names = {n.name for n in _ast.parse(seam.read_text(encoding="utf-8")).body
+                 if isinstance(n, (_ast.ClassDef, _ast.FunctionDef))
+                 and not n.name.startswith("_")}
+        assert any(f"{n}(" in src for n in names), (
+            f"{site} no longer constructs anything from {c.seam}")
+
+    def test_runs_on_partitions_cleanly(self):
+        for c in cap.CAPABILITIES:
+            where = cap.runs_on(c)
+            assert where in ("brain", "hub", ""), (c.key, where)
+            if where == "hub":
+                assert c.key in cap._RUNS_ON_HUB
+            if where == "":
+                assert c.key in cap._NOT_WIRED
+
+    def test_both_surfaces_say_where_rather_than_denying_it(self):
+        panel = (pathlib.Path(cap.__file__).parent / "ai_brain" / "server"
+                 / "panel.py").read_text(encoding="utf-8")
+        body = panel.split('if(it.state==="missing"){', 1)[1][:2200]
+        assert 'it.runs_on==="hub"' in body
+        assert "runs on your glasses, not here" in body
+        # …and the hub branch is checked FIRST, or a hub capability would be
+        # labelled inert by the branch above it
+        assert body.index('it.runs_on==="hub"') < body.index("wires_on_install===false")
+
+        root = pathlib.Path(cap.__file__).parents[3] / "phone-app"
+        screen = root / "app" / "capabilities.tsx"
+        if not screen.exists():
+            pytest.skip("phone-app not in this checkout")
+        text = screen.read_text(encoding="utf-8")
+        assert 'runs_on === "hub"' in text
+        assert "These run on your glasses" in text
+        # a hub capability must not also appear under "nothing calls them yet"
+        assert 'runs_on !== "hub"' in text

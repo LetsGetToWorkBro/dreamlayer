@@ -36,6 +36,11 @@ export type CapItem = {
    *  `!== false` reads that as "assume it wires", which matches how every
    *  capability behaved before the field existed. */
   wires_on_install?: boolean;
+  /** Where it actually runs: "brain", "hub", or "" for a seam nothing
+   *  constructs anywhere yet. `memory_dedup` and `mesh_range` are wired on the
+   *  glasses hub, so "nothing calls it" would be the wrong answer about a
+   *  feature the wearer uses every day. */
+  runs_on?: string;
 };
 
 type CapState = {

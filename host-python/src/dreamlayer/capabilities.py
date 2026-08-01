@@ -630,6 +630,35 @@ _PROMOTED_AT_RUNTIME = frozenset({
 })
 
 
+#: Capabilities that ARE wired — on the glasses hub, not on the Brain.
+#:
+#: `_NOT_WIRED` is a statement about the BRAIN, which is the machine running the
+#: capabilities page. That makes "dormant" correct here and the reason wrong: a
+#: wearer reading "the adapter is built and nothing calls it" concludes the
+#: feature does not exist, when it runs on the glasses every day.
+#:
+#: Each entry names the constructor, so the claim is checkable rather than
+#: remembered — `test_capability_install_promise` asserts the call site is still
+#: there, and the entry has to be removed or moved when it stops being.
+_RUNS_ON_HUB = {
+    "memory_dedup": "orchestrator/orchestrator.py",   # Mem0Layer, on the live
+                                                      # LucidRecall path, gated
+                                                      # on mem0 truly loading
+    "mesh_range": "orchestrator/ops_confluence.py",   # the LoRa mesh, which is
+                                                      # a glasses radio
+}
+
+
+def runs_on(cap: Cap) -> str:
+    """Where this capability actually runs: "brain", "hub", or "" for a seam
+    nothing constructs anywhere yet."""
+    if cap.key in _RUNS_ON_HUB:
+        return "hub"
+    if cap.key in _NOT_WIRED and cap.key not in _PROMOTED_AT_RUNTIME:
+        return ""
+    return "brain"
+
+
 def wires_on_install(cap: Cap) -> bool:
     """Would installing this capability's extra actually switch it on?
 
@@ -656,6 +685,10 @@ def report(env: Optional[dict] = None) -> list[dict]:
         # `_PROMOTED_AT_RUNTIME`: twelve capabilities offered a pip command that
         # could only ever land on "installed · not active yet".
         "wires_on_install": wires_on_install(c),
+        # …and WHERE it runs, because "nothing calls it" and "it runs on your
+        # glasses, not here" are different answers and only one of them is true
+        # of `memory_dedup` and `mesh_range`.
+        "runs_on": runs_on(c),
     } for c in CAPABILITIES]
     rows.sort(key=lambda r: _TIER_ORDER.get(str(r["tier"]), len(TIERS)))
     return rows
