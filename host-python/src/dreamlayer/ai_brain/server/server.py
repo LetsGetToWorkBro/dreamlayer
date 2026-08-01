@@ -1546,6 +1546,7 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                   "dawarich_url", "dawarich_api_key", "listen_enabled",
                   "remote_listen_enabled", "captions_enabled", "answer_ahead_enabled",
                   "interpret_enabled", "interpret_target", "truth_lens_enabled",
+                  "intro_capture_enabled", "intro_auto_keep",
                   "dream_model_path",
                   "private_zones",
                   "face_recognition", "face_auto_enrol",
@@ -1920,6 +1921,24 @@ class Brain(RCOps, CalendarOps, SocialOps, ReminderOps, WaypathOps, SourceOps):
                 fr = None
             self._face_recall = fr
         return fr
+
+    def intro(self):
+        """Name Capture (ai_brain/server/intro_live.py) — the constructor
+        `scripts/lens_reachability.py` reported missing. Built once and cached,
+        because the PENDING OFFER lives on it: a fresh instance per utterance
+        would drop every offer the moment it was made. Returns None when it
+        cannot be built, which callers read as "no capture", never as "no name
+        was said"."""
+        ih = getattr(self, "_intro", None)
+        if ih is None:
+            try:
+                from .intro_live import IntroHost
+                ih = IntroHost(self)
+            except Exception:
+                log.warning("name capture unavailable", exc_info=True)
+                ih = None
+            self._intro = ih
+        return ih
 
     def voice_recall(self):
         """Recognising WHO IS SPEAKING, so a memory has an author
@@ -4575,6 +4594,32 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, brain.set_interpret(bool(b.get("on", True)),
                                                 str(b.get("target", "") or "")))
 
+        def _post_intro(self, path, qs):
+            """Decide a staged introduction: `{"action": "confirm"|"dismiss"}`.
+
+            The consent step. Hearing a name only ever OFFERS; this is the
+            deliberate keep, driven by a tap on the card. Extra fields
+            (company, role, notes, email) ride along to seed the dossier."""
+            b = self._body()
+            ih = brain.intro()
+            if ih is None:
+                self._json(200, {"ok": False, "reason": "unavailable"})
+                return
+            if str(b.get("action", "confirm")) == "dismiss":
+                self._json(200, ih.dismiss())
+                return
+            extra = {k: b[k] for k in ("company", "role", "notes", "email")
+                     if isinstance(b.get(k), str) and b[k].strip()}
+            self._json(200, ih.confirm(**extra))
+
+        def _get_intro(self, path, qs):
+            """Name Capture state: the switches, whether an offer is live, and
+            how many names have been offered and kept. Counts only — the name on
+            a live offer is already on the wearer's own glass."""
+            ih = brain.intro()
+            self._json(200, ih.status() if ih is not None
+                       else {"enabled": False, "reason": "unavailable"})
+
         def _post_truth(self, path, qs):
             """Turn "Read the room" on/off.
 
@@ -5359,6 +5404,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/rehearsal": _get_rehearsal,
             "/dreamlayer/calendar": _get_calendar,
             "/dreamlayer/people": _get_people,
+            "/dreamlayer/intro": _get_intro,
             "/dreamlayer/calendars": _get_calendars,
             "/dreamlayer/mail/accounts": _get_mail_accounts,
             "/dreamlayer/contacts": _get_contacts,
@@ -6510,6 +6556,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             "/dreamlayer/zones": _post_zones,
             "/dreamlayer/interpret": _post_interpret,
             "/dreamlayer/truth": _post_truth,
+            "/dreamlayer/intro": _post_intro,
             "/dreamlayer/vault/sync": _post_vault_sync,
             "/dreamlayer/ember/tend": _post_ember_tend,
             "/dreamlayer/ember/burn": _post_ember_burn,

@@ -1817,6 +1817,60 @@ local function draw_ember_graduated(card, sc, enter_t, exit_t, idle_t)
 end
 
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- IntroOfferCard / IntroKeptCard — Name Capture.
+-- Someone said their name. The offer ASKS and expires by itself; the kept card
+-- STATES the saved fact. One drawing, because they are the same moment a beat
+-- apart — the eyebrow and the ring say which.
+--
+-- The name is the hero and nothing competes with it: this card exists so the
+-- wearer can read one word and decide. The offer draws a countdown ring for the
+-- twelve seconds it has to live, so an offer that lapses looks like a timer
+-- running out rather than the glasses ignoring you.
+-- ---------------------------------------------------------------------------
+local function draw_introduction(card, sc, enter_t, exit_t, idle_t)
+  local offer  = (card.type == "IntroOfferCard")
+  -- The memory teal while it is still a question, the success green once it is
+  -- kept. Not `confidence_low`: an offer is not a weak read, it is a pending
+  -- decision — and that token is a geometry ink the contrast sweep has never
+  -- measured as text (test_halo_contrast_sweep.py GEOMETRY_ONLY).
+  local accent = offer and P.accent_memory or P.accent_success
+  local r = floor(60 * sc)
+  if r < 1 then return end
+
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) and exit_t == 0 then
+    MAT.glass_disc(CX, CY, floor(74 * sc), MAT.PANE, 4)
+  end
+  arc(CX, CY, r, 0, 360, P.border_subtle, 28)
+
+  -- the offer's own life, draining clockwise from 12. `dismiss_ms` is the
+  -- authority (hud/cards.py sets it from OFFER_TTL_S), so the ring and the
+  -- card's actual expiry cannot drift apart.
+  if offer and idle_t then
+    local ttl  = tonumber(card.dismiss_ms) or 12000
+    local left = 1 - math.min(1, idle_t / ttl)
+    if left > 0 then arc(CX, CY, r, -90, -90 + 360 * left, accent, 20) end
+  elseif not offer then
+    arc(CX, CY, r, 0, 360, accent, 20)
+  end
+
+  if layer_ok(enter_t, A.STAGGER_EYEBROW_MS) then
+    text(card.eyebrow or (offer and "REMEMBER THEM?" or "KEPT"),
+         CX, CY - 34, accent, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_PRIMARY_MS) then
+    local name = card.primary or ""
+    text(name, CX, CY - 2, P.text_primary,
+         T.fit_size(name, 120, { "hero", "xl", "lg" }))
+  end
+  if layer_ok(enter_t, A.STAGGER_DETAIL_MS) and card.detail then
+    text(card.detail, CX, CY + 28, P.text_secondary, "sm")
+  end
+  if layer_ok(enter_t, A.STAGGER_FOOTER_MS) and card.footer then
+    text(card.footer, CX, CY + 52, P.text_ghost, "sm")
+  end
+end
+
 -- Dispatch table
 -- Each entry: function(card, sc, enter_t, exit_t, idle_t)
 -- sc      = effective scale factor (0→1 for enter, 1→0 for exit)
@@ -1828,6 +1882,8 @@ local DRAW = {
   ReadyCard             = function(c,sc,et,xt,it) draw_ready(sc,et,xt)                    end,
   JunoColorsCard        = function(c,sc,et,xt,it) draw_juno_colors(et)                    end,
   SavedMemoryCard       = function(c,sc,et,xt,it) draw_saved_memory(c,sc,et,xt,it)        end,
+  IntroOfferCard        = function(c,sc,et,xt,it) draw_introduction(c,sc,et,xt,it)        end,
+  IntroKeptCard         = function(c,sc,et,xt,it) draw_introduction(c,sc,et,xt,it)        end,
   QueryListeningCard    = function(c,sc,et,xt,it) draw_query_listening(sc,et,it)           end,
   LoadingCard           = function(c,sc,et,xt,it) draw_loading(sc,et,it)                  end,
   ObjectRecallCard      = function(c,sc,et,xt,it) draw_object_recall(c,sc,et,xt)          end,

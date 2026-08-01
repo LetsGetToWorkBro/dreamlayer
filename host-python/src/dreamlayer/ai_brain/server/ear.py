@@ -172,6 +172,17 @@ class EarHost:
                     veil_ok=False)
         except Exception as exc:                 # noqa: BLE001 — a card must never
             log.warning("[ear] caption push failed: %s", type(exc).__name__)
+        # …and CATCH A NAME, when someone introduced themselves. Only a closed
+        # grammar of self-introductions ("my name is …", "I'm …") captures
+        # anything, so ordinary chatter produces nothing — and hearing a name
+        # SAVES nothing: it stages an offer that expires by itself and asks.
+        # Fed the redacted text like the rest of this method.
+        try:
+            ih = self.brain.intro()
+            if ih is not None:
+                ih.heard(text)
+        except Exception as exc:                 # noqa: BLE001 — a name must
+            log.warning("[intro] heard failed: %s", type(exc).__name__)  # never
         # …and READ THE ROOM, when the wearer has asked for that. Fed the
         # redacted text for the same reason captions are: what the gauge reasons
         # over is what the store holds, never more. `speaker` keys the

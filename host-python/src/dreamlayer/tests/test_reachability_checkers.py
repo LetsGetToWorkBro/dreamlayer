@@ -657,12 +657,53 @@ class TestThePushScanKnowsBuiltFromPushed:
         assert not any(":800" in u and "lens_hosts" in u for u in unresolved)
 
     def test_the_blind_spot_is_declared_rather_than_silent(self, hud):
-        """Two real pushes defeat a one-hop resolver. They are listed, not
+        """The real pushes that defeat a one-hop resolver are listed, not
         dropped — and each must still be a type something actually builds."""
         assert hud._BRAIN_ONLY_PUSHED
         inline = hud._inline_card_types(self._reachable(hud))
         for ctype in hud._BRAIN_ONLY_PUSHED:
             assert ctype in inline, f"{ctype} is declared pushed but unbuilt"
+
+    def test_a_one_argument_pusher_is_not_skipped_in_silence(self, hud):
+        """The shape that hid two whole push sites.
+
+        `push_event(kind, card)` is the dominant signature, so the resolver read
+        `args[1]` and treated a ONE-argument call as "not our pusher" — the
+        escape hatch for `brain_rc`'s unrelated deployer. But `IntroHost._push(card)`
+        and `TruthRead._push(result)` are one argument and ours, so both fell
+        through it: not resolved, not reported, invisible. Which argument holds
+        the card is now read from the pusher's own definition in the same module.
+        """
+        pushed, unresolved = hud._pushed_types(self._reachable(hud))
+        assert "IntroKeptCard" in pushed, (
+            "a one-argument `self._push(card)` was dropped again")
+        assert any("truth_live" in u for u in unresolved), (
+            "TruthRead._push takes a RESULT, not a card — it cannot be named, "
+            "so it must at least be counted")
+
+    def test_the_deployers_same_named_method_is_still_not_a_push(self, hud):
+        """`brain_rc` calls `.push_event(name)` on a deployer that has nothing
+        to do with the glass. The new rule keys on the module DEFINING a pusher
+        of that arity, and brain_rc defines none, so it stays out."""
+        _pushed, unresolved = hud._pushed_types(self._reachable(hud))
+        assert not any("brain_rc" in u for u in unresolved)
+
+    def test_a_card_built_inline_at_the_push_site_resolves(self, hud):
+        """Reading a literal `"type"` is reading, not inference — and it is the
+        only reason `IntroKeptCard` can be named at all, since the function that
+        hands it over (`confirm`) builds the dict right there rather than
+        calling a `hud/cards.py` builder."""
+        pushed, _u = hud._pushed_types(self._reachable(hud))
+        assert pushed.get("IntroKeptCard") == {
+            "dreamlayer.ai_brain.server.intro_live"}
+
+    def test_the_ambiguous_intro_site_still_refuses(self, hud):
+        """`IntroductionCapture.heard` returns the offer card OR the kept one
+        depending on `intro_auto_keep`, so the type genuinely is not decided at
+        that line. Declared in `_BRAIN_ONLY_PUSHED`, never guessed."""
+        _pushed, unresolved = hud._pushed_types(self._reachable(hud))
+        assert any("intro_live" in u for u in unresolved)
+        assert "IntroOfferCard" in hud._BRAIN_ONLY_PUSHED
 
 
 class TestTheLiveLensDrawsWhatTheBrainPushes:
