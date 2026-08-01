@@ -68,17 +68,21 @@ def brain_status(brain, **extra) -> dict:
         except Exception:                          # noqa: BLE001 — display only
             return default
 
-    cfg = getattr(brain, "config", None)
+    # Read through `brain` rather than binding `cfg = getattr(brain, "config",
+    # None)` first: that binds `Any | None`, and mypy then rejects every
+    # `cfg.model` even though `_try` catches the AttributeError at runtime.
+    # A Brain with no `config` is already handled — it reads "?" like any other
+    # unanswerable field.
     status = {
-        "model": _try(lambda: cfg.model or "(none)"),
-        "folders": _try(lambda: str(len(cfg.folders))),
+        "model": _try(lambda: brain.config.model or "(none)"),
+        "folders": _try(lambda: str(len(brain.config.folders))),
         "files": _try(lambda: str(brain.index.stats()["files"])),
-        "token": _try(lambda: "set" if cfg.token else "(none)"),
+        "token": _try(lambda: "set" if brain.config.token else "(none)"),
         # The veil belongs on a status panel more than anything else here: it is
         # the one piece of state that changes what the Brain is ALLOWED to do,
         # and a wearer glancing at the terminal should be able to see it.
         "veil": _try(lambda: "UP" if brain.incognito_now() else "down"),
-        "cloud calls": _try(lambda: str(cfg.cloud_calls)),
+        "cloud calls": _try(lambda: str(brain.config.cloud_calls)),
     }
     ear = _try(lambda: brain.ear_status(), None)
     if isinstance(ear, dict):
