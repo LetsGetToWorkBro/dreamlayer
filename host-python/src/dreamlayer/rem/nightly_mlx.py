@@ -69,13 +69,14 @@ class MlxNightlyTrainer:
             return TrainSummary(trained=False, reason="no capturable examples",
                                 examples=0)
         try:
-            # Real path: hand `examples` to mlx-lm's LoRA trainer and write the
-            # adapter to `self.adapter_dir`. Kept behind the import guard so the
-            # module imports and tests run without the macOS-only runtime.
+            # The LoRA training step is not implemented yet: nothing below
+            # invokes a trainer or writes an adapter, so report the work as
+            # not done rather than claim a success that never ran. The import
+            # probe stays as the mlx-lm availability gate.
             from mlx_lm import lora as _lora  # type: ignore  # noqa: F401
-            path = self.adapter_dir or "~/.dreamlayer/lora"
-            return TrainSummary(trained=True, reason="ok", examples=len(examples),
-                                adapter_path=path)
+            return TrainSummary(trained=False,
+                                reason="training not implemented",
+                                examples=len(examples))
         except Exception as exc:
             log.warning("[nightly_mlx] train failed: %s", exc)
             return TrainSummary(trained=False, reason=f"error: {exc}",
