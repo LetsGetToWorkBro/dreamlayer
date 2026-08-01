@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from dreamlayer import nlp_setup
 
 
@@ -19,14 +21,47 @@ class _R:
         self.stderr = stderr
 
 
-def test_model_present_is_false_and_safe_without_the_model():
-    # spaCy (and/or its model) is an optional extra, absent here → False, no raise.
+def test_model_present_is_false_and_safe_without_the_model(monkeypatch):
+    """The fail-safe contract, not the machine it runs on (#556).
+
+    This used to be `assert nlp_setup.model_present() is False`, which asserts
+    that the optional model is ABSENT — true in CI, and false for any
+    contributor who followed `nlp_setup`'s own instructions and ran
+    `python -m spacy download en_core_web_sm`. The function was right; the test
+    was pinning the environment.
+
+    What is actually promised is "spaCy absent or any probe error → False", and
+    that is checkable everywhere: force the import to fail and require False.
+    """
+    monkeypatch.setitem(sys.modules, "spacy", None)   # `import spacy` now raises
     assert nlp_setup.model_present() is False
 
 
-def test_analyzer_engine_is_none_and_safe_without_presidio():
-    # presidio absent (or model missing) → None, never a raise into the caller.
+def test_model_present_answers_truthfully_when_spacy_is_there():
+    """The other half, and the half the old assertion made unreachable: when
+    spaCy IS importable the answer must track reality rather than being
+    hard-coded either way. Skips when the extra is absent, which is what a
+    test about installed behaviour should do."""
+    spacy = pytest.importorskip("spacy")
+    got = nlp_setup.model_present()
+    assert got is bool(spacy.util.is_package(nlp_setup.SPACY_MODEL))
+    assert isinstance(got, bool)
+
+
+def test_analyzer_engine_is_none_and_safe_without_presidio(monkeypatch):
+    """Same correction, same reason. Asserting `is None` unconditionally pins
+    "presidio is not installed", which stops being true the moment anyone runs
+    `pip install 'dreamlayer[privacy]'`. The contract is that a missing or
+    broken presidio yields None instead of raising into the caller."""
+    monkeypatch.setitem(sys.modules, "presidio_analyzer", None)
     assert nlp_setup.analyzer_engine() is None
+
+
+def test_analyzer_engine_never_raises_whatever_is_installed():
+    """The environment-independent invariant: this function is documented as
+    "Never raises into the caller", so call it as-is and require only that it
+    returns something or nothing without blowing up."""
+    nlp_setup.analyzer_engine()          # must not raise, whatever is present
 
 
 def test_download_reports_missing_spacy(monkeypatch):
