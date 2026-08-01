@@ -30,7 +30,7 @@ they expose the filesystem, secrets, or hand out pairing material.
 | Endpoint | Auth | Returns |
 |---|---|---|
 | `/` | — | the control panel (HTML) |
-| `/dreamlayer/status` | token | live state: model, cloud, incognito, phone-last-seen, index, missing folders, cloud egress count |
+| `/dreamlayer/status` | token | live state: model, cloud, incognito, phone-last-seen, index, missing folders, cloud egress count, per-source permission state (`source_status`) |
 | `/dreamlayer/config` | token | full config (token + cloud key masked) + index stats |
 | `/dreamlayer/health` | token | version, index disk size, Ollama latency, uptime |
 | `/dreamlayer/history` | token | unified activity feed (asks + folder/upload/cloud/pair events) |

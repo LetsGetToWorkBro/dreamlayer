@@ -4445,7 +4445,22 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
             self._json(200, _brain_view_payload(brain))
 
         def _get_status(self, path, qs):
-            """Live Brain status: model, cloud posture, freshness, folders."""
+            """Live Brain status: model, cloud posture, freshness, folders,
+            and the per-source permission state (macOS TCC).
+
+            `source_status()` is what tells a *denied* Mail/Calendar read apart
+            from an empty one; carrying it here lets the panel say "grant
+            access" instead of showing a silent empty."""
+            from .macos_sources import source_status
+            # `detail` is the raw exception text of the denial
+            # (`f"{type(exc).__name__}: {exc}"`) and can echo a store path or
+            # other on-box state; the on-box panel gets it, but an off-box
+            # paired phone gets status+ts only, so nothing about this machine's
+            # layout leaves the box. Same split as /dreamlayer/model/status.
+            local = self._from_localhost()
+            sources = {k: {"status": v.get("status"), "ts": v.get("ts", 0),
+                           **({"detail": v.get("detail", "")} if local else {})}
+                       for k, v in source_status().items()}
             ago = None
             if brain._last_phone_ts:
                 ago = max(0, int(time.time() - brain._last_phone_ts))
@@ -4468,6 +4483,7 @@ def make_brain_server(brain: Brain, host: str = "127.0.0.1",
                 "missing": brain.missing_folders(),
                 "email_docs": brain.email_docs,
                 "stats": brain.index.stats(),
+                "source_status": sources,
             })
 
         def _get_meetings(self, path, qs):
