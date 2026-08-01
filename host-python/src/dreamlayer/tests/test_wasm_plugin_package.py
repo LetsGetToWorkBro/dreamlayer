@@ -504,6 +504,40 @@ class TestPluginHost:
         assert h.build_rows({"label": "mug"}) == [
             {"label": "from wasm", "detail": "zero ambient authority"}]
 
+    def test_a_guest_that_speaks_to_the_host_starts(self, tmp_path, caplog):
+        # `requires` is manifest vocabulary and the host links WIT interfaces.
+        # Handing the raw list over grants `log` to nobody, so a guest that
+        # merely logs fails to instantiate — and every test using a guest that
+        # imports nothing would still pass.
+        import logging
+        caplog.set_level(logging.INFO, logger="dreamlayer.wasm_plugin_host")
+        pkg = package(imports=[LOG_IMPORT],
+                      calls=["local.get $ptr local.get $len call $log"])
+        h = self._host(tmp_path, pkg)
+        assert h.start()
+        assert h.build_rows({"label": "mug"})
+        # …and the line it wrote never carries the guest's own text.
+        said = [r for r in caplog.records if "says" in r.getMessage()]
+        assert said and "mug" not in said[-1].getMessage()
+
+    def test_a_declared_capability_links_under_the_manifest_name(self, tmp_path):
+        # The author writes `network`; the WIT interface is `net`. Without the
+        # translation the guest is refused for importing what it declared.
+        pkg = package(imports=[NET_IMPORT],
+                      calls=["i32.const 1 call $net_get drop"],
+                      requires=("object_lens", "network"))
+        h = self._host(tmp_path, pkg, requires=("object_lens", "network"))
+        assert h.start()
+        assert h.build_rows({"label": "mug"})
+
+    def test_an_undeclared_capability_is_still_refused(self, tmp_path):
+        # The control: the translation must widen the vocabulary, not the grant.
+        pkg = package(imports=[NET_IMPORT],
+                      calls=["i32.const 1 call $net_get drop"],
+                      requires=("object_lens",))
+        assert self._host(tmp_path, pkg, requires=("object_lens",)).start() \
+            is False
+
     def test_nothing_to_say_is_no_rows(self, tmp_path):
         h = self._host(tmp_path, package(ret=-1))
         assert h.start()
