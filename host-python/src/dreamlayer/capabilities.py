@@ -604,6 +604,43 @@ def tiers() -> list[dict]:
     return [{"key": k, "title": t, "blurb": b} for (k, t, b) in TIERS]
 
 
+#: Capabilities in `_NOT_WIRED` that a RUNNING subsystem promotes to "active"
+#: by setting `DL_WIRED_<KEY>`. For these, "missing" really does mean "install
+#: the extra and switch the feature on, and it works" — the eight the ear drives
+#: (ear.EAR_CAPS), plus five promoted from their own live paths.
+#:
+#: Everything ELSE in `_NOT_WIRED` has no such path, and that is the distinction
+#: this set exists to draw. The panel renders a `missing` capability as a
+#: `pip install "dreamlayer[extra]"` command with a Copy button — so for a cap
+#: with no promotion path, the wearer copies a command, waits for a download,
+#: and lands on "installed · not active yet". Twelve capabilities did exactly
+#: that. The command is still shown (extras are shared, and the library may
+#: switch on a DIFFERENT cap that does have a path), but `wires_on_install`
+#: rides along so the surface can say what installing will and will not do.
+#:
+#: Kept here rather than imported from `ear.py` because `capabilities.py` must
+#: stay importable with nothing else loaded — it is what the panel calls to find
+#: out whether anything is loadable at all.
+_PROMOTED_AT_RUNTIME = frozenset({
+    # ai_brain/server/ear.py EAR_CAPS — set while the microphone is open
+    "voice_vad", "local_asr", "mic_capture", "asr_moonshine", "onnx_speech",
+    "sound_events", "bird_song", "live_interpret",
+    # …and these five, each from its own live path (DL_WIRED_<KEY>)
+    "crdt_sync", "dashboard", "dream_style", "social_graph", "speaker_id",
+})
+
+
+def wires_on_install(cap: Cap) -> bool:
+    """Would installing this capability's extra actually switch it on?
+
+    True for everything outside `_NOT_WIRED` (installing IS the wiring), and for
+    the `_NOT_WIRED` entries a running subsystem promotes. False for a dormant
+    adapter with no live caller — where installing buys the library and leaves
+    the feature exactly where it was.
+    """
+    return cap.key not in _NOT_WIRED or cap.key in _PROMOTED_AT_RUNTIME
+
+
 def report(env: Optional[dict] = None) -> list[dict]:
     """Every capability as a panel row, GROUPED by display tier in page order
     (stable within a tier), so the panel's contiguous-group rendering holds no
@@ -615,6 +652,10 @@ def report(env: Optional[dict] = None) -> list[dict]:
         "seam": c.seam, "kind": c.kind, "flag": c.flag_env, "note": c.note,
         "gain": c.gain, "impact": c.impact,
         "before": c.before, "after": c.after,
+        # …and whether installing it would actually turn it on. See
+        # `_PROMOTED_AT_RUNTIME`: twelve capabilities offered a pip command that
+        # could only ever land on "installed · not active yet".
+        "wires_on_install": wires_on_install(c),
     } for c in CAPABILITIES]
     rows.sort(key=lambda r: _TIER_ORDER.get(str(r["tier"]), len(TIERS)))
     return rows

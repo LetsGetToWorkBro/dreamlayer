@@ -26,6 +26,16 @@ export type CapItem = {
   impact: number;
   profiles: string[];
   extra: string | null;
+  /** Would installing this actually switch it on?
+   *
+   *  False for a capability whose adapter is built and whose live caller does
+   *  not exist yet: the install adds the library and leaves the feature exactly
+   *  where it was. Twelve of them were being listed under "your Brain can also
+   *  learn to" with "install the matching profile to switch these on" — which
+   *  is the one thing installing would not do. Absent on an older Brain, and
+   *  `!== false` reads that as "assume it wires", which matches how every
+   *  capability behaved before the field existed. */
+  wires_on_install?: boolean;
 };
 
 type CapState = {
