@@ -14,7 +14,9 @@
  *      renderer for the *following* test — so the multi-press cycling check runs
  *      last, where there is nothing after it to corrupt. */
 import React from "react";
+import { AccessibilityInfo } from "react-native";
 import { render, fireEvent, cleanup } from "@testing-library/react-native";
+import { setReduceMotion } from "../ui/theme/motion";
 
 // Spy on the earcon engine so a tap can be asserted without pulling in expo-audio
 // (a no-op under jest anyway). jest.mock is hoisted above imports, so its factory
@@ -24,9 +26,11 @@ jest.mock("../services/sound", () => ({ playEarcon: (...a: unknown[]) => mockPla
 
 import { Juno } from "../ui/components/Juno";
 
+const JUNO_LABEL = "Juno, the DreamLayer assistant";
+
 describe("Juno", () => {
   beforeEach(() => mockPlayEarcon.mockClear());
-  afterEach(async () => { await cleanup(); });
+  afterEach(async () => { await cleanup(); jest.restoreAllMocks(); setReduceMotion(false); });
 
   it("renders with an accessibility label", async () => {
     const { getByLabelText } = await render(<Juno width={240} state="idle" />);
@@ -48,6 +52,40 @@ describe("Juno", () => {
     expect(mockPlayEarcon).toHaveBeenCalledTimes(1);
     expect(mockPlayEarcon).toHaveBeenLastCalledWith("hey");   // first family in the cycle
     expect(onSpeak).toHaveBeenLastCalledWith("hey.");         // the matching caption
+  });
+
+  // a11y: tapping her does something, so she must announce as a control —
+  // and her mood, which the aura carries visually, has to be said out loud
+  it("announces as a button when she is tappable", async () => {
+    const { getByRole } = await render(<Juno width={240} state="idle" />);
+    const her = getByRole("button");
+    expect(her.props.accessibilityHint).toBe("Plays one of Juno's cues");
+  });
+
+  it("is not a control when she cannot be tapped", async () => {
+    const { queryByRole } = await render(<Juno width={240} state="idle" speakOnTap={false} />);
+    expect(queryByRole("button")).toBeNull();
+  });
+
+  it("carries her state as the image's accessibility value", async () => {
+    const { getByLabelText } = await render(<Juno width={240} state="thinking" />);
+    const img = getByLabelText(JUNO_LABEL);
+    expect(img.props.accessibilityRole).toBe("image");
+    expect(img.props.accessibilityValue).toEqual({ text: "thinking" });
+  });
+
+  it("holds still on a frame under reduce motion", async () => {
+    jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+    setReduceMotion(true);
+    const { getByLabelText } = await render(<Juno width={240} state="idle" />);
+    // the still poster is a plain RN Image; her animated clip is expo-image
+    expect(getByLabelText(JUNO_LABEL).type).toBe("Image");
+  });
+
+  it("plays her clip when motion is allowed", async () => {
+    jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(false);
+    const { getByLabelText } = await render(<Juno width={240} state="idle" />);
+    expect(getByLabelText(JUNO_LABEL).type).toMatch(/ExpoImage/);
   });
 
   it("does not speak when speakOnTap is false", async () => {

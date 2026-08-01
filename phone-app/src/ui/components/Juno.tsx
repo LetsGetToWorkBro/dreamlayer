@@ -15,13 +15,14 @@
 //   <Juno width={300} state="thinking" />
 import React, { useEffect, useRef, useState } from "react";
 import {
-  View, Text, Pressable, Animated, Easing, StyleSheet, AccessibilityInfo, Platform, Image as RNImage,
+  View, Text, Pressable, Animated, Easing, StyleSheet, Platform, Image as RNImage,
   type ViewStyle, type StyleProp,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
 import { useTheme, makeThemedStyles } from "../theme/useTheme";
 import type { Theme } from "../theme/useTheme";
+import { useReduceMotion } from "../anim";
 import { playEarcon } from "../../services/sound";
 
 export type JunoState = "idle" | "thinking" | "success";
@@ -46,6 +47,10 @@ const auraByState = ({ colors }: Theme): Record<JunoState, string> => ({
 });
 
 const CLIP_W = 400, CLIP_H = 226;   // the clip's intrinsic (landscape) size
+
+/** What a screen reader calls her. One constant — the animated clip and the
+ * reduce-motion still are the same character. */
+const JUNO_LABEL = "Juno, the DreamLayer assistant";
 
 const ANIM = require("../../../assets/juno.webp");   // animated true-alpha loop
 const STILL = require("../../../assets/juno.png");    // still poster
@@ -72,13 +77,9 @@ export function Juno({
   const aura = auraByState(theme)[state] ?? colors.accentMemory;
   const h = Math.round(width * CLIP_H / CLIP_W);   // preserve the clip's aspect
 
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((v) => { if (alive) setReduce(!!v); });
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", (v) => setReduce(!!v));
-    return () => { alive = false; sub?.remove?.(); };
-  }, []);
+  // the OS setting, through the app's one seam (src/ui/anim.ts) rather than a
+  // second AccessibilityInfo subscription of her own
+  const reduce = useReduceMotion();
 
   // Ambient motion — the clip carries her body; these carry the mood.
   const float = useRef(new Animated.Value(0)).current;   // 0..1 gentle bob
@@ -128,7 +129,14 @@ export function Juno({
     <View style={[{ width, height: h, alignItems: "center", justifyContent: "center" }, style]}>
       {/* Caption — a Platinum speech well that appears when she speaks, then fades. */}
       {caption ? (
-        <View pointerEvents="none" style={styles.capWrap}>
+        <View
+          pointerEvents="none"
+          style={styles.capWrap}
+          // what she just said is a status readout: announce it when it
+          // appears instead of leaving it as silent decoration
+          accessibilityLiveRegion="polite"
+          accessibilityRole="text"
+        >
           <View style={styles.capBubble}>
             <Text style={styles.capText}>{caption}</Text>
           </View>
@@ -142,13 +150,17 @@ export function Juno({
       </Animated.View>
 
       {/* Juno herself — the animated clip, gently floating. Still poster under
-          reduce-motion. Tapping her (when speakOnTap) fires a cue + caption; the
-          Pressable is accessible={false} so her image stays the single labeled
-          node screen readers announce. */}
+          reduce-motion. Tapping her (when speakOnTap) fires a cue + caption —
+          so when she is tappable she must announce as a button; when she is
+          not, the Pressable stays out of the a11y tree entirely and her image
+          remains the single labeled node (she sits inside someone else's
+          touchable in that case). */}
       <Pressable
         testID="juno-tap"
         onPress={speak}
-        accessible={false}
+        accessible={speakOnTap}
+        accessibilityRole={speakOnTap ? "button" : undefined}
+        accessibilityHint={speakOnTap ? "Plays one of Juno's cues" : undefined}
         hitSlop={8}
       >
         <Animated.View style={{ transform: [{ translateY }], ...(glow || {}) }}>
@@ -170,9 +182,11 @@ export function Juno({
               </Svg>
             </View>
           ) : null}
+          {/* her mood is carried by the aura tint alone, which is nothing to a
+              screen reader — carry it as the image's value instead */}
           {reduce
-            ? <RNImage source={STILL} accessibilityLabel="Juno, the DreamLayer assistant" resizeMode="contain" style={{ width, height: h }} />
-            : <ExpoImage source={ANIM} accessibilityLabel="Juno, the DreamLayer assistant" contentFit="contain" autoplay style={{ width, height: h }} />}
+            ? <RNImage source={STILL} accessibilityRole="image" accessibilityLabel={JUNO_LABEL} accessibilityValue={{ text: state }} resizeMode="contain" style={{ width, height: h }} />
+            : <ExpoImage source={ANIM} accessibilityRole="image" accessibilityLabel={JUNO_LABEL} accessibilityValue={{ text: state }} contentFit="contain" autoplay style={{ width, height: h }} />}
         </Animated.View>
       </Pressable>
     </View>
